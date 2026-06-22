@@ -142,7 +142,7 @@ fn collab_formula_shift_on_insert_row_propagates() {
     let b_sv = engine_b.encode_state_vector();
     let delta = engine_a.encode_diff(&b_sv).expect("A encode_diff(B.sv)");
     engine_b
-        .apply_sync_update(&delta)
+        .apply_sync_update_legacy(&delta)
         .expect("B apply_sync_update");
 
     // 6. B post-condition: after applying A's structural delta, B's own

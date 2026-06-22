@@ -350,7 +350,7 @@ fn apply_sync_update_syncs_remote_runtime_calculation_settings_before_cell_recal
         .encode_diff(&engine_b_state_vector)
         .expect("encode A to B diff");
     let (_patches, result) = engine_b
-        .apply_sync_update(&delta)
+        .apply_sync_update_legacy(&delta)
         .expect("apply A to B diff");
 
     assert!(

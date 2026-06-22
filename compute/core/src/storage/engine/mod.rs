@@ -94,6 +94,7 @@ use crate::mirror::CellMirror;
 
 pub(in crate::storage::engine) use grid_indexing::build_grid_from_yrs_for_sheet;
 use mutation_coordinator::MutationCoordinator;
+use snapshot_types::SyncApplyOperationContextWire;
 use settings::EngineSettings;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
@@ -148,6 +149,10 @@ pub struct YrsComputeEngine {
     /// `_update_subscription` to keep the observer alive for the engine's
     /// lifetime — dropping it would silently detach the observer.
     pub(crate) update_buffer: std::sync::Arc<update_buffer::UpdateBuffer>,
+
+    /// Sync apply context currently being applied to Yrs and rebuilt into
+    /// runtime state.
+    pub(crate) active_sync_context: Option<SyncApplyOperationContextWire>,
 
     /// Lifetime anchor for the `update_v1` subscription. Dropping this
     /// removes the observer from the yrs Doc; we keep it alive for the

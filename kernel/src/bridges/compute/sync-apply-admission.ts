@@ -8,6 +8,11 @@ import type {
   SyncUpdateProvenance,
   SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
+import type {
+  SyncApplyOperationContextWire,
+  VersionOperationContextWire,
+  VersionSyncOperationContextWire,
+} from './compute-types.gen';
 
 const ADMITTED_SYNC_APPLY_CONTEXT: unique symbol = Symbol('AdmittedSyncApplyContext');
 const admittedSyncApplyContexts = new WeakSet<object>();
@@ -71,6 +76,14 @@ export function assertAdmittedSyncApplyContext(
   if (typeof context !== 'object' || !admittedSyncApplyContexts.has(context)) {
     throw new SyncApplyAdmissionError(command, 'provenance.invalidContext');
   }
+}
+
+export function toSyncApplyOperationContextWire(
+  context: AdmittedSyncApplyContext,
+): SyncApplyOperationContextWire {
+  return {
+    operationContext: toVersionOperationContextWire(context.operationContext),
+  };
 }
 
 function createSyncOperationContext(
@@ -205,4 +218,59 @@ function commitGroupingForProvenance(
     return 'blockedUnknownRemote';
   }
   return 'pendingRemote';
+}
+
+function toVersionOperationContextWire(
+  context: VersionOperationContext,
+): VersionOperationContextWire {
+  return {
+    operationId: context.operationId,
+    kind: context.kind,
+    author: { ...context.author },
+    createdAt: context.createdAt,
+    ...(context.workbookId !== undefined ? { workbookId: context.workbookId } : {}),
+    ...(context.sheetIds ? { sheetIds: [...context.sheetIds] } : {}),
+    domainIds: [...context.domainIds],
+    ...(context.groupId !== undefined ? { groupId: context.groupId } : {}),
+    capturePolicy: context.capturePolicy,
+    writeAdmissionMode: context.writeAdmissionMode,
+    ...(context.clientRequestId !== undefined ? { clientRequestId: context.clientRequestId } : {}),
+    ...(context.collaboration
+      ? { collaboration: toVersionSyncOperationContextWire(context.collaboration) }
+      : {}),
+  };
+}
+
+function toVersionSyncOperationContextWire(
+  context: NonNullable<VersionOperationContext['collaboration']>,
+): VersionSyncOperationContextWire {
+  return {
+    sourceKind: context.sourceKind,
+    originKind: context.originKind,
+    ...(context.stableOriginId !== undefined ? { stableOriginId: context.stableOriginId } : {}),
+    ...(context.providerId !== undefined ? { providerId: context.providerId } : {}),
+    ...(context.providerKind !== undefined ? { providerKind: context.providerKind } : {}),
+    ...(context.authorityRef !== undefined ? { authorityRef: context.authorityRef } : {}),
+    ...(context.roomId !== undefined ? { roomId: context.roomId } : {}),
+    ...(context.epoch !== undefined ? { epoch: context.epoch } : {}),
+    ...(context.updateId !== undefined ? { updateId: context.updateId } : {}),
+    ...(context.sequence !== undefined ? { sequence: context.sequence } : {}),
+    payloadHash: context.payloadHash,
+    ...(context.provenancePayloadHash !== undefined
+      ? { provenancePayloadHash: context.provenancePayloadHash }
+      : {}),
+    trustStatus: context.trustStatus,
+    authorState: context.authorState,
+    ...(context.remoteSessionId !== undefined ? { remoteSessionId: context.remoteSessionId } : {}),
+    ...(context.correlationId !== undefined ? { correlationId: context.correlationId } : {}),
+    ...(context.causationIds ? { causationIds: [...context.causationIds] } : {}),
+    replay: context.replay,
+    system: context.system,
+    commitGrouping: context.commitGrouping,
+    validationDiagnosticCount: context.validationDiagnosticCount,
+    ...(context.exclusionReason !== undefined ? { exclusionReason: context.exclusionReason } : {}),
+    ...(context.exclusionSubreason !== undefined
+      ? { exclusionSubreason: context.exclusionSubreason }
+      : {}),
+  };
 }

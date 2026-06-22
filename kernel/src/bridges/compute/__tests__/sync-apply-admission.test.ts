@@ -8,9 +8,12 @@ import type { BridgeTransport } from '@rust-bridge/client';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 
 import { ComputeCore } from '../compute-core';
-import type { MutationResult } from '../compute-types.gen';
+import type { MutationResult, SyncApplyMutationMetadataWire } from '../compute-types.gen';
 import type { MutationAdmissionDiagnostic } from '../mutation-admission';
-import { createAdmittedSyncApplyContext } from '../sync-apply-admission';
+import {
+  createAdmittedSyncApplyContext,
+  toSyncApplyOperationContextWire,
+} from '../sync-apply-admission';
 
 (globalThis as any).window = {};
 
@@ -24,6 +27,12 @@ function mutationResult(): MutationResult {
       metrics: {},
     },
   } as MutationResult;
+}
+
+function syncMutationMetadata(result = mutationResult()): SyncApplyMutationMetadataWire {
+  return {
+    mutationResult: result,
+  } as SyncApplyMutationMetadataWire;
 }
 
 function makeMockContext(
@@ -143,7 +152,7 @@ describe('sync apply admission', () => {
   it('rejects raw sync mutations without admitted provenance context before transport', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
 
@@ -164,7 +173,7 @@ describe('sync apply admission', () => {
   it('rejects forged sync admission context objects before transport', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
     const forged = {
@@ -193,7 +202,7 @@ describe('sync apply admission', () => {
   it('admits raw sync mutations with a branded sync provenance context', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
     const payloadHash = '1'.repeat(64);
@@ -205,6 +214,7 @@ describe('sync apply admission', () => {
     expect(transport.call).toHaveBeenCalledWith('compute_apply_sync_update', {
       docId: 'test-doc',
       update: new Uint8Array([1]),
+      syncContext: toSyncApplyOperationContextWire(syncApplyContext),
     });
     expect(syncApplyContext.operationContext).toMatchObject({
       kind: 'sync-import',
@@ -231,13 +241,14 @@ describe('sync apply admission', () => {
   it('maps verified live provider provenance into a pending remote operation context', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), mutationResult()]),
+      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
     const payloadHash = '3'.repeat(64);
     const syncApplyContext = makeVerifiedProviderContext(payloadHash);
 
     await core.syncApply(new Uint8Array([3]), syncApplyContext);
+    const wireContext = toSyncApplyOperationContextWire(syncApplyContext);
 
     expect(syncApplyContext.operationContext).toMatchObject({
       kind: 'sync-import',
@@ -265,6 +276,30 @@ describe('sync apply admission', () => {
         commitGrouping: 'pendingRemote',
       },
     });
+    expect(wireContext.operationContext.collaboration).toMatchObject({
+      sourceKind: 'providerLiveInbound',
+      originKind: 'provider',
+      stableOriginId: 'provider-stable-1',
+      providerId: 'provider-stable-1',
+      providerKind: 'test-provider',
+      authorityRef: 'authority-1',
+      epoch: 'epoch-1',
+      updateId: 'remote-update-1',
+      sequence: '7',
+      payloadHash,
+      provenancePayloadHash: '2'.repeat(64),
+      trustStatus: 'verified',
+      authorState: 'singleRemote',
+      remoteSessionId: 'remote-session-1',
+      correlationId: 'correlation-1',
+      causationIds: ['cause-1'],
+      replay: false,
+      system: false,
+      commitGrouping: 'pendingRemote',
+      validationDiagnosticCount: 0,
+    });
+    expect(() => JSON.stringify(wireContext)).not.toThrow();
+    expect(JSON.stringify(wireContext)).not.toContain('7n');
     expect(diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'versioning.admission.missing-context' }),
     );

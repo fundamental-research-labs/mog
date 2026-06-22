@@ -317,3 +317,64 @@ fn emit_bridge_system_mutation_method() {
     assert!(ts.contains("this.core.mutateSystem('compute_complete_deferred_hydration', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_complete_deferred_hydration', { docId: this.core.docId }), undefined, admissionOptions)"));
     assert!(!ts.contains("mutatePublic('compute_complete_deferred_hydration'"));
 }
+
+#[test]
+fn emit_bridge_sync_apply_metadata_uses_system_mutation_unwrap() {
+    let api = TsApi {
+        services: vec![TsService {
+            rust_name: "YrsComputeEngine".into(),
+            key: Some(ServiceKey {
+                param_name: "doc_id".into(),
+            }),
+            fn_prefix: Some("compute".into()),
+            methods: vec![TsMethod {
+                rust_name: "apply_sync_update".into(),
+                access: MethodAccess::Write,
+                params: vec![
+                    TsParam {
+                        rust_name: "update".into(),
+                        ts_type: TsType::Uint8Array,
+                        is_parse: false,
+                    },
+                    TsParam {
+                        rust_name: "sync_context".into(),
+                        ts_type: TsType::Named("SyncApplyOperationContextWire".into()),
+                        is_parse: true,
+                    },
+                ],
+                return_type: TsType::Tuple(vec![
+                    TsType::Uint8Array,
+                    TsType::Named("SyncApplyMutationMetadataWire".into()),
+                ]),
+                is_fallible: true,
+                skip_platforms: vec![],
+            }],
+        }],
+    };
+    let config = ImportConfig {
+        groups: vec![ImportGroup {
+            from: "./types".into(),
+            types: vec![
+                TypeImport {
+                    local_name: "MutationResult".into(),
+                    imported_name: None,
+                },
+                TypeImport {
+                    local_name: "SyncApplyMutationMetadataWire".into(),
+                    imported_name: None,
+                },
+                TypeImport {
+                    local_name: "SyncApplyOperationContextWire".into(),
+                    imported_name: None,
+                },
+            ],
+        }],
+    };
+    let ts = emit_bridge(&api, Some(&config), None);
+
+    assert!(ts.contains(
+        "applySyncUpdate(update: Uint8Array, syncContext: SyncApplyOperationContextWire, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;"
+    ));
+    assert!(ts.contains("this.core.mutateSystem('compute_apply_sync_update', async () => { const [viewportPatchesBinary, metadata] = await this.core.transport.call<[Uint8Array, SyncApplyMutationMetadataWire]>('compute_apply_sync_update', { docId: this.core.docId, update, syncContext }); return [viewportPatchesBinary, metadata.mutationResult] as [Uint8Array, MutationResult]; }, undefined, admissionOptions)"));
+    assert!(!ts.contains("this.core.query(this.core.transport.call<[Uint8Array, SyncApplyMutationMetadataWire]>('compute_apply_sync_update'"));
+}

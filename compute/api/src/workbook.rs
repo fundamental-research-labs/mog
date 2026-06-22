@@ -219,7 +219,7 @@ impl Workbook {
     ) -> Result<snapshot_types::MutationResult, ComputeApiError> {
         let update = update.to_vec();
         self.dispatch
-            .call_engine(move |e| e.apply_sync_update(&update))
+            .call_engine(move |e| e.apply_sync_update_legacy(&update))
             .and_then(|r| {
                 r.map(|(_vp, mutation)| mutation)
                     .map_err(ComputeApiError::from)

@@ -417,6 +417,7 @@ fn all_snapshot_files_parse_without_error() {
         "settings.rs",
         "init.rs",
         "object_ops.rs",
+        "versioning/mod.rs",
     ] {
         let source = read_snapshot_source(filename);
         let result = generate_types_from_source(&source, &config);
@@ -666,6 +667,7 @@ fn generate_combined() {
         format!("{}/{}", base, mutation_source_files()[4]),
         format!("{}/{}", base, mutation_source_files()[5]),
         format!("{}/{}", base, mutation_source_files()[6]),
+        format!("{}/snapshot-types/src/versioning/mod.rs", base),
         format!("{}/snapshot-types/src/viewport.rs", base),
         format!("{}/snapshot-types/src/settings.rs", base),
         format!("{}/snapshot-types/src/scenario.rs", base),

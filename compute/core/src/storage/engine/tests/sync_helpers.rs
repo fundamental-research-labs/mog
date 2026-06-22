@@ -81,7 +81,7 @@ pub(super) fn sync_a_to_b_diff(
 ) -> MutationResult {
     let b_sv = compute_collab::encode_state_vector(engine_b.storage().doc());
     let a_diff = compute_collab::encode_diff(engine_a.storage().doc(), &b_sv).unwrap();
-    let (_, result) = engine_b.apply_sync_update(&a_diff).unwrap();
+    let (_, result) = engine_b.apply_sync_update_legacy(&a_diff).unwrap();
     result
 }
 

@@ -29,7 +29,17 @@ fn accepts_mutation_admission_options(pattern: BridgePattern) -> bool {
 pub fn is_binary_mutation_return(ty: &TsType) -> bool {
     matches!(ty, TsType::Tuple(elems) if elems.len() == 2
         && elems[0] == TsType::Uint8Array
-        && matches!(&elems[1], TsType::Named(n) if n == "MutationResult"))
+        && matches!(&elems[1], TsType::Named(n) if is_mutation_payload_type(n)))
+}
+
+fn is_mutation_payload_type(name: &str) -> bool {
+    matches!(name, "MutationResult" | "SyncApplyMutationMetadataWire")
+}
+
+fn is_sync_apply_metadata_return(ty: &TsType) -> bool {
+    matches!(ty, TsType::Tuple(elems) if elems.len() == 2
+        && elems[0] == TsType::Uint8Array
+        && matches!(&elems[1], TsType::Named(n) if n == "SyncApplyMutationMetadataWire"))
 }
 
 /// Classify how a bridge method should be wrapped based on its access level and return type.
@@ -91,6 +101,9 @@ pub(crate) fn bridge_return_type(method: &TsMethod, pattern: BridgePattern) -> S
             if let TsType::Tuple(elems) = &method.return_type
                 && elems.len() == 2
             {
+                if is_sync_apply_metadata_return(&method.return_type) {
+                    return "MutationResult".to_string();
+                }
                 return elems[1].to_ts_string();
             }
             // Fallback (shouldn't happen if classify is correct)
@@ -117,11 +130,15 @@ pub(crate) fn collect_named_from_bridge(api: &TsApi) -> std::collections::BTreeS
             }
             match pattern {
                 BridgePattern::Mutate | BridgePattern::SystemMutate => {
-                    // Only collect from the unwrapped type (second tuple element)
+                    // Collect from the wire payload plus the exposed mutation result
+                    // type for wrappers such as SyncApplyMutationMetadataWire.
                     if let TsType::Tuple(elems) = &method.return_type
                         && elems.len() == 2
                     {
                         collect_named_from_type(&elems[1], &mut names);
+                        if is_sync_apply_metadata_return(&method.return_type) {
+                            names.insert("MutationResult".to_string());
+                        }
                     }
                 }
                 _ => {
@@ -333,16 +350,23 @@ pub fn emit_bridge_class_method(
     };
 
     let call_expr = format!("this.core.transport.call<{wire_type}>('{command_name}', {args_str})");
+    let mutation_call_expr = if is_sync_apply_metadata_return(&method.return_type) {
+        format!(
+            "async () => {{ const [viewportPatchesBinary, metadata] = await {call_expr}; return [viewportPatchesBinary, metadata.mutationResult] as [Uint8Array, MutationResult]; }}"
+        )
+    } else {
+        format!("() => {call_expr}")
+    };
 
     let body = match pattern {
         BridgePattern::Mutate => {
             format!(
-                "this.core.mutatePublic('{command_name}', () => {call_expr}, undefined, admissionOptions)"
+                "this.core.mutatePublic('{command_name}', {mutation_call_expr}, undefined, admissionOptions)"
             )
         }
         BridgePattern::SystemMutate => {
             format!(
-                "this.core.mutateSystem('{command_name}', () => {call_expr}, undefined, admissionOptions)"
+                "this.core.mutateSystem('{command_name}', {mutation_call_expr}, undefined, admissionOptions)"
             )
         }
         BridgePattern::Query => format!("this.core.query({})", call_expr),

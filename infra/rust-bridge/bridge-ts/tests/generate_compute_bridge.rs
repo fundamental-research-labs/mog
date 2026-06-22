@@ -223,6 +223,8 @@ fn build_import_config() -> ImportConfig {
                     ti("MergeRegion"),
                     ti("MoveTarget"),
                     ti("MutationResult"),
+                    ti("SyncApplyMutationMetadataWire"),
+                    ti("SyncApplyOperationContextWire"),
                     ti("NameValidationResult"),
                     ti("NamedRangeUpdate"),
                     ti("OutlineConfig"),

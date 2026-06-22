@@ -63,6 +63,25 @@ fn classify_system_write_with_binary_mutation() {
 }
 
 #[test]
+fn classify_system_write_with_sync_apply_metadata_as_binary_mutation() {
+    let method = TsMethod {
+        rust_name: "apply_sync_update".into(),
+        access: MethodAccess::Write,
+        params: vec![],
+        return_type: TsType::Tuple(vec![
+            TsType::Uint8Array,
+            TsType::Named("SyncApplyMutationMetadataWire".into()),
+        ]),
+        is_fallible: false,
+        skip_platforms: vec![],
+    };
+    assert_eq!(
+        classify_bridge_pattern(&method),
+        BridgePattern::SystemMutate
+    );
+}
+
+#[test]
 fn classify_ui_state_format_write_as_system_mutation() {
     let method = TsMethod {
         rust_name: "set_format_for_ranges_ui_state".into(),
@@ -195,6 +214,15 @@ fn is_binary_mutation_return_false_mutation_metadata() {
         TsType::Named("MutationMetadata".into()),
     ]);
     assert!(!is_binary_mutation_return(&ty));
+}
+
+#[test]
+fn is_binary_mutation_return_true_sync_apply_metadata() {
+    let ty = TsType::Tuple(vec![
+        TsType::Uint8Array,
+        TsType::Named("SyncApplyMutationMetadataWire".into()),
+    ]);
+    assert!(is_binary_mutation_return(&ty));
 }
 
 #[test]

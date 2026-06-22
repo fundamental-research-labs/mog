@@ -139,7 +139,7 @@ fn sync_bidirectional(engine_a: &mut YrsComputeEngine, engine_b: &mut YrsCompute
         .encode_diff(&sv_b)
         .expect("encode_diff A->B must succeed");
     engine_b
-        .apply_sync_update(&diff_a_to_b)
+        .apply_sync_update_legacy(&diff_a_to_b)
         .expect("apply_sync_update A->B must succeed");
 
     // B -> A
@@ -148,7 +148,7 @@ fn sync_bidirectional(engine_a: &mut YrsComputeEngine, engine_b: &mut YrsCompute
         .encode_diff(&sv_a)
         .expect("encode_diff B->A must succeed");
     engine_a
-        .apply_sync_update(&diff_b_to_a)
+        .apply_sync_update_legacy(&diff_b_to_a)
         .expect("apply_sync_update B->A must succeed");
 }
 
@@ -172,7 +172,7 @@ fn sync_via_authoritative_doc(engines: &mut [YrsComputeEngine]) {
         compute_collab::apply_update(&server, &local_diff).expect("server apply local diff");
         let server_diff = compute_collab::encode_diff(&server, &local_sv).expect("server diff");
         engine
-            .apply_sync_update(&server_diff)
+            .apply_sync_update_legacy(&server_diff)
             .expect("apply server diff to pusher");
     }
 
@@ -180,7 +180,7 @@ fn sync_via_authoritative_doc(engines: &mut [YrsComputeEngine]) {
         let local_sv = engine.encode_state_vector();
         let server_diff = compute_collab::encode_diff(&server, &local_sv).expect("pull diff");
         engine
-            .apply_sync_update(&server_diff)
+            .apply_sync_update_legacy(&server_diff)
             .expect("apply pulled server diff");
     }
 }
@@ -327,10 +327,10 @@ fn named_range_endpoint_ids_remain_partitioned_after_sync_rebuild() {
     // Replaying the baseline state exercises the sync rebuild path that used
     // to replace ComputeCore and drop the participant-partitioned allocator.
     engine_a
-        .apply_sync_update(&full_state)
+        .apply_sync_update_legacy(&full_state)
         .expect("A baseline replay");
     engine_b
-        .apply_sync_update(&full_state)
+        .apply_sync_update_legacy(&full_state)
         .expect("B baseline replay");
 
     engine_a

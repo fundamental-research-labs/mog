@@ -54,7 +54,7 @@ fn provider_refresh_replay_round_trip_through_engine() {
 
     // Apply session A's full-state bytes through the production sync path.
     engine_b
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("session B apply_sync_update must succeed");
 
     // Post-attach: lifecycle reads `get_all_sheet_ids()` to decide
@@ -108,7 +108,7 @@ fn provider_refresh_replay_materializes_range_backed_values() {
 
     let (mut engine_b, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     engine_b
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("session B apply_sync_update must accept range-backed full state");
 
     let sheet_b = cell_types::SheetId::from_uuid_str(
@@ -164,7 +164,7 @@ fn provider_refresh_replay_preserves_range_backed_values_after_structural_update
     let diff = compute_collab::encode_diff(engine_a.storage().doc(), &b_sv)
         .expect("encode structural diff");
     engine_b
-        .apply_sync_update(&diff)
+        .apply_sync_update_legacy(&diff)
         .expect("session B apply structural sync update");
 
     let a1 = engine_b.get_cell_value(&sheet_b, 0, 0);
@@ -230,11 +230,11 @@ fn provider_refresh_replay_incremental_updates_through_engine() {
     // incremental update entry in Provider order.
     let (mut engine_b, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     engine_b
-        .apply_sync_update(&engine_a_snapshot)
+        .apply_sync_update_legacy(&engine_a_snapshot)
         .expect("session B apply_sync_update (snapshot) must succeed");
     for update in &updates {
         engine_b
-            .apply_sync_update(update)
+            .apply_sync_update_legacy(update)
             .expect("session B apply_sync_update (incremental) must succeed");
     }
 
@@ -297,11 +297,11 @@ fn provider_refresh_replay_does_not_require_empty_session_baseline_before_later_
     let (mut session_b, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     let session_b_baseline = compute_collab::encode_full_state(session_b.storage().doc());
     session_b
-        .apply_sync_update(&session_a_snapshot)
+        .apply_sync_update_legacy(&session_a_snapshot)
         .expect("session B replay snapshot");
     for update in &session_a_updates {
         session_b
-            .apply_sync_update(update)
+            .apply_sync_update_legacy(update)
             .expect("session B replay update");
     }
 
@@ -325,14 +325,14 @@ fn provider_refresh_replay_does_not_require_empty_session_baseline_before_later_
     // snapshot/update log and Session B's edit updates is sufficient.
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&session_a_snapshot)
+        .apply_sync_update_legacy(&session_a_snapshot)
         .expect("replay snapshot");
     for update in &session_a_updates {
-        replayed.apply_sync_update(update).expect("replay seed");
+        replayed.apply_sync_update_legacy(update).expect("replay seed");
     }
     for update in &edit_updates {
         replayed
-            .apply_sync_update(update)
+            .apply_sync_update_legacy(update)
             .expect("replay edit without empty baseline");
     }
     let value = replayed.get_cell_value(&sheet_id, 0, 0);
@@ -342,7 +342,7 @@ fn provider_refresh_replay_does_not_require_empty_session_baseline_before_later_
     );
 
     replayed
-        .apply_sync_update(&session_b_baseline)
+        .apply_sync_update_legacy(&session_b_baseline)
         .expect("replay empty session B baseline");
     let value = replayed.get_cell_value(&sheet_id, 0, 0);
     assert!(

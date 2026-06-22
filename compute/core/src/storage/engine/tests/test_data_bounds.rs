@@ -51,7 +51,7 @@ fn sync_into(source: &YrsComputeEngine, target: &mut YrsComputeEngine) {
     let sv = target.encode_state_vector();
     let update = source.encode_diff(&sv).expect("encode_diff");
     target
-        .apply_sync_update(&update)
+        .apply_sync_update_legacy(&update)
         .expect("apply_sync_update");
 }
 

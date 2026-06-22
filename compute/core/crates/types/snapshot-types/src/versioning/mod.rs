@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::MutationResult;
+
 mod sha256;
 
 pub const SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION: &str = "semantic-workbook-state.v1";
@@ -70,6 +72,285 @@ pub enum VersionDomainCapabilityState {
     OpaquePreserved,
     #[serde(rename = "opaque-blocking")]
     OpaqueBlocking,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionOperationKindWire {
+    Mutation,
+    SemanticOperation,
+    DerivedOutputPromotion,
+    SyncImport,
+    SyncExport,
+    Merge,
+    Revert,
+    Review,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CapturePolicyWire {
+    CommitEligible,
+    Excluded,
+    DerivedOnly,
+    RootCreation,
+    HistoryGap,
+    ShadowOnly,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionWriteAdmissionModeWire {
+    Capture,
+    ShadowOnly,
+    CaptureDisabledNoHistory,
+    CaptureSuspendedWithGap,
+    Block,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionActorKindWire {
+    User,
+    Service,
+    System,
+    Migration,
+    Automation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionAuthorWire {
+    pub author_id: String,
+    pub actor_kind: VersionActorKindWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionSyncSourceKindWire {
+    ProviderReplay,
+    ProviderLiveInbound,
+    ProviderMixedInbound,
+    CollaborationHydration,
+    CollaborationLiveRemote,
+    CollaborationMixedRemote,
+    ImportHydration,
+    SystemRepair,
+    LegacyRawUnknown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionSyncOriginKindWire {
+    Provider,
+    Room,
+    Import,
+    System,
+    LegacyRaw,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionSyncTrustStatusWire {
+    Verified,
+    TrustedLocalSystem,
+    Unverified,
+    LegacyRaw,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionSyncAuthorStateWire {
+    SingleRemote,
+    MixedRemote,
+    Unknown,
+    Agent,
+    System,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionSyncCommitGroupingWire {
+    None,
+    PendingRemote,
+    ExcludedLifecycle,
+    BlockedMissingRedactionKey,
+    BlockedMixedRemote,
+    BlockedUnknownRemote,
+    BlockedUnverified,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionSyncOperationContextWire {
+    pub source_kind: VersionSyncSourceKindWire,
+    pub origin_kind: VersionSyncOriginKindWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stable_origin_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provider_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub room_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<String>,
+    pub payload_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance_payload_hash: Option<String>,
+    pub trust_status: VersionSyncTrustStatusWire,
+    pub author_state: VersionSyncAuthorStateWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub causation_ids: Vec<String>,
+    pub replay: bool,
+    pub system: bool,
+    pub commit_grouping: VersionSyncCommitGroupingWire,
+    pub validation_diagnostic_count: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclusion_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclusion_subreason: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionOperationContextWire {
+    pub operation_id: String,
+    pub kind: VersionOperationKindWire,
+    pub author: VersionAuthorWire,
+    pub created_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workbook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sheet_ids: Vec<String>,
+    pub domain_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_id: Option<String>,
+    pub capture_policy: CapturePolicyWire,
+    pub write_admission_mode: VersionWriteAdmissionModeWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collaboration: Option<VersionSyncOperationContextWire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncApplyOperationContextWire {
+    pub operation_context: VersionOperationContextWire,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SyncProvenanceApplyEvaluationStatus {
+    NotEvaluated,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncProvenanceApplyReport {
+    pub applied_context: SyncApplyOperationContextWire,
+    pub pending_segment_status: SyncProvenanceApplyEvaluationStatus,
+    pub pending_segment_ids: Vec<String>,
+    pub batch_durability_status: SyncProvenanceApplyEvaluationStatus,
+}
+
+impl SyncProvenanceApplyReport {
+    pub fn not_evaluated(applied_context: SyncApplyOperationContextWire) -> Self {
+        Self {
+            applied_context,
+            pending_segment_status: SyncProvenanceApplyEvaluationStatus::NotEvaluated,
+            pending_segment_ids: Vec::new(),
+            batch_durability_status: SyncProvenanceApplyEvaluationStatus::NotEvaluated,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncApplyMutationMetadataWire {
+    pub mutation_result: MutationResult,
+    pub provenance_report: SyncProvenanceApplyReport,
+}
+
+impl SyncApplyMutationMetadataWire {
+    pub fn not_evaluated(
+        mutation_result: MutationResult,
+        applied_context: SyncApplyOperationContextWire,
+    ) -> Self {
+        Self {
+            mutation_result,
+            provenance_report: SyncProvenanceApplyReport::not_evaluated(applied_context),
+        }
+    }
+}
+
+impl SyncApplyOperationContextWire {
+    pub fn legacy_raw(payload_hash: String) -> Self {
+        let operation_id = format!("sync:legacyRawUnknown:{payload_hash}");
+        Self {
+            operation_context: VersionOperationContextWire {
+                operation_id,
+                kind: VersionOperationKindWire::SyncImport,
+                author: VersionAuthorWire {
+                    author_id: "sync:unknown:legacyRaw".to_string(),
+                    actor_kind: VersionActorKindWire::System,
+                    display_name: None,
+                    client_id: None,
+                    session_id: None,
+                },
+                created_at: "1970-01-01T00:00:00.000Z".to_string(),
+                workbook_id: None,
+                sheet_ids: Vec::new(),
+                domain_ids: vec!["runtime-diagnostics".to_string()],
+                group_id: None,
+                capture_policy: CapturePolicyWire::Excluded,
+                write_admission_mode: VersionWriteAdmissionModeWire::CaptureDisabledNoHistory,
+                client_request_id: None,
+                collaboration: Some(VersionSyncOperationContextWire {
+                    source_kind: VersionSyncSourceKindWire::LegacyRawUnknown,
+                    origin_kind: VersionSyncOriginKindWire::LegacyRaw,
+                    stable_origin_id: None,
+                    provider_id: None,
+                    provider_kind: None,
+                    authority_ref: None,
+                    room_id: None,
+                    epoch: None,
+                    update_id: None,
+                    sequence: None,
+                    payload_hash,
+                    provenance_payload_hash: None,
+                    trust_status: VersionSyncTrustStatusWire::LegacyRaw,
+                    author_state: VersionSyncAuthorStateWire::Unknown,
+                    remote_session_id: None,
+                    correlation_id: None,
+                    causation_ids: Vec::new(),
+                    replay: false,
+                    system: true,
+                    commit_grouping: VersionSyncCommitGroupingWire::ExcludedLifecycle,
+                    validation_diagnostic_count: 0,
+                    exclusion_reason: Some("legacyRawUnknown".to_string()),
+                    exclusion_subreason: None,
+                }),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -667,6 +667,26 @@ export interface CameraData {
   error?: string;
 }
 
+export interface CanonicalCellValue {
+  valueKind: string;
+  canonicalValue?: unknown;
+  digest?: ObjectDigest;
+}
+
+export interface CanonicalDirectFormat {
+  properties?: Record<string, unknown>;
+  digest?: ObjectDigest;
+}
+
+export interface CanonicalFormula {
+  normalizedFormula: string;
+  dependencyObjectIds?: string[];
+  volatile: boolean;
+  digest?: ObjectDigest;
+}
+
+export type CapturePolicyWire = "commitEligible" | "excluded" | "derivedOnly" | "rootCreation" | "historyGap" | "shadowOnly";
+
 export interface CategoryLabelFormatData {
   formatCode?: string;
   points?: CategoryPointLabelFormatData[];
@@ -3138,6 +3158,12 @@ export interface NumberGrouping {
   interval: number;
 }
 
+export interface ObjectDigest {
+  algorithm: VersionObjectDigestAlgorithm;
+  value: string;
+  byteLength?: number;
+}
+
 export interface ObjectFill {
   type: FillType;
   color?: string;
@@ -4479,6 +4505,96 @@ export interface SelectionAggregates {
   max: number | null;
 }
 
+export interface SemanticCellState {
+  objectId: string;
+  sheetId: string;
+  row: number;
+  column: number;
+  value?: CanonicalCellValue;
+  formula?: CanonicalFormula;
+  directFormat?: CanonicalDirectFormat;
+  digest?: ObjectDigest;
+}
+
+export interface SemanticChange {
+  changeId: string;
+  kind: SemanticChangeKind;
+  domainId: string;
+  objectId: string;
+  objectKind: SemanticObjectKind;
+  beforeDigest?: ObjectDigest;
+  afterDigest?: ObjectDigest;
+}
+
+export type SemanticChangeKind = "added" | "removed" | "updated";
+
+export interface SemanticCompletenessDiagnostic {
+  severity: SemanticDiagnosticSeverity;
+  code: string;
+  domainId: string;
+  domainClass: VersionDomainClass;
+  capabilityState: VersionDomainCapabilityState;
+  status: SemanticDomainCoverageStatus;
+  message?: string;
+  objectIds?: string[];
+}
+
+export type SemanticDiagnosticSeverity = "info" | "warning" | "error";
+
+export interface SemanticDomainCoverage {
+  domainId: string;
+  domainClass: VersionDomainClass;
+  capabilityState: VersionDomainCapabilityState;
+  status: SemanticDomainCoverageStatus;
+  diagnostics?: SemanticCompletenessDiagnostic[];
+}
+
+export type SemanticDomainCoverageStatus = "complete" | "derived" | "excluded" | "transient" | "unsupported" | "opaque-preserved" | "opaque-blocking";
+
+export interface SemanticDomainState {
+  domainId: string;
+  domainClass: VersionDomainClass;
+  capabilityState: VersionDomainCapabilityState;
+  objects?: Record<string, SemanticObjectDigest>;
+}
+
+export interface SemanticObjectDigest {
+  objectId: string;
+  objectKind: SemanticObjectKind;
+  domainId: string;
+  digest: ObjectDigest;
+}
+
+export type SemanticObjectKind = "workbook" | "sheet" | "cell" | "cell-value" | "cell-formula" | "direct-format" | "domain-attachment";
+
+export interface SemanticSheetState {
+  sheetId: string;
+  name: string;
+  cells: Record<string, SemanticCellState>;
+  digest?: ObjectDigest;
+}
+
+export interface SemanticWorkbookDiff {
+  beforeDigest: ObjectDigest;
+  afterDigest: ObjectDigest;
+  changes: SemanticChange[];
+  coverage?: SemanticDomainCoverage[];
+  diagnostics?: SemanticCompletenessDiagnostic[];
+}
+
+export interface SemanticWorkbookState {
+  schemaVersion: string;
+  workbookId?: string;
+  domains: Record<string, SemanticDomainState>;
+  sheets: Record<string, SemanticSheetState>;
+}
+
+export interface SemanticWorkbookStateEnvelope {
+  state: SemanticWorkbookState;
+  stateDigest: ObjectDigest;
+  coverage?: SemanticDomainCoverage[];
+}
+
 export interface SerializedFloatingObjectGroup {
   id: string;
   sheetId: string;
@@ -5311,6 +5427,24 @@ export interface SubtotalResult {
   affectedRange: SheetRange;
 }
 
+export interface SyncApplyMutationMetadataWire {
+  mutationResult: MutationResult;
+  provenanceReport: SyncProvenanceApplyReport;
+}
+
+export interface SyncApplyOperationContextWire {
+  operationContext: VersionOperationContextWire;
+}
+
+export type SyncProvenanceApplyEvaluationStatus = "notEvaluated";
+
+export interface SyncProvenanceApplyReport {
+  appliedContext: SyncApplyOperationContextWire;
+  pendingSegmentStatus: SyncProvenanceApplyEvaluationStatus;
+  pendingSegmentIds: string[];
+  batchDurabilityStatus: SyncProvenanceApplyEvaluationStatus;
+}
+
 export interface Table {
   id: string;
   ooxmlTableId?: number;
@@ -5991,6 +6125,77 @@ export interface ValueFilter {
   included: CellValue[];
   includeBlanks: boolean;
 }
+
+export type VersionActorKindWire = "user" | "service" | "system" | "migration" | "automation";
+
+export interface VersionAuthorWire {
+  authorId: string;
+  actorKind: VersionActorKindWire;
+  displayName?: string;
+  clientId?: string;
+  sessionId?: string;
+}
+
+export type VersionDomainCapabilityState = "not-started" | "contracted" | "supported" | "derived" | "excluded" | "opaque-preserved" | "opaque-blocking";
+
+export type VersionDomainClass = "authored" | "derived" | "transient" | "packageFidelity" | "secret" | "external";
+
+export type VersionObjectDigestAlgorithm = "sha256" | "sha512" | "blake3" | "opaque";
+
+export interface VersionOperationContextWire {
+  operationId: string;
+  kind: VersionOperationKindWire;
+  author: VersionAuthorWire;
+  createdAt: string;
+  workbookId?: string;
+  sheetIds?: string[];
+  domainIds: string[];
+  groupId?: string;
+  capturePolicy: CapturePolicyWire;
+  writeAdmissionMode: VersionWriteAdmissionModeWire;
+  clientRequestId?: string;
+  collaboration?: VersionSyncOperationContextWire;
+}
+
+export type VersionOperationKindWire = "mutation" | "semantic-operation" | "derived-output-promotion" | "sync-import" | "sync-export" | "merge" | "revert" | "review";
+
+export type VersionSyncAuthorStateWire = "singleRemote" | "mixedRemote" | "unknown" | "agent" | "system";
+
+export type VersionSyncCommitGroupingWire = "none" | "pendingRemote" | "excludedLifecycle" | "blockedMissingRedactionKey" | "blockedMixedRemote" | "blockedUnknownRemote" | "blockedUnverified";
+
+export interface VersionSyncOperationContextWire {
+  sourceKind: VersionSyncSourceKindWire;
+  originKind: VersionSyncOriginKindWire;
+  stableOriginId?: string;
+  providerId?: string;
+  providerKind?: string;
+  authorityRef?: string;
+  roomId?: string;
+  epoch?: string;
+  updateId?: string;
+  sequence?: string;
+  payloadHash: string;
+  provenancePayloadHash?: string;
+  trustStatus: VersionSyncTrustStatusWire;
+  authorState: VersionSyncAuthorStateWire;
+  remoteSessionId?: string;
+  correlationId?: string;
+  causationIds?: string[];
+  replay: boolean;
+  system: boolean;
+  commitGrouping: VersionSyncCommitGroupingWire;
+  validationDiagnosticCount: number;
+  exclusionReason?: string;
+  exclusionSubreason?: string;
+}
+
+export type VersionSyncOriginKindWire = "provider" | "room" | "import" | "system" | "legacyRaw";
+
+export type VersionSyncSourceKindWire = "providerReplay" | "providerLiveInbound" | "providerMixedInbound" | "collaborationHydration" | "collaborationLiveRemote" | "collaborationMixedRemote" | "importHydration" | "systemRepair" | "legacyRawUnknown";
+
+export type VersionSyncTrustStatusWire = "verified" | "trustedLocalSystem" | "unverified" | "legacyRaw";
+
+export type VersionWriteAdmissionModeWire = "capture" | "shadowOnly" | "captureDisabledNoHistory" | "captureSuspendedWithGap" | "block";
 
 export type VerticalAlign = "top" | "middle" | "bottom" | "justified" | "distributed";
 

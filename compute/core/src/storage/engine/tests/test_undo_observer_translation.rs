@@ -377,7 +377,7 @@ fn sync_move_sheet_emits_order_sheet_change() {
     let b_sv = engine_b.encode_state_vector();
     let delta = engine_a.encode_diff(&b_sv).expect("encode_diff(B.sv)");
     let (_patches, result) = engine_b
-        .apply_sync_update(&delta)
+        .apply_sync_update_legacy(&delta)
         .expect("apply_sync_update");
 
     // B's MutationResult must contain Order SheetChange entries.

@@ -52,7 +52,10 @@ import {
   type MutationTuple,
   runSystemMutation,
 } from './mutation-admission';
-import type { AdmittedSyncApplyContext } from './sync-apply-admission';
+import {
+  toSyncApplyOperationContextWire,
+  type AdmittedSyncApplyContext,
+} from './sync-apply-admission';
 
 import type {
   ColumnSchemaWire,
@@ -71,6 +74,7 @@ import type {
   RecalcValidationAnnotation,
   RecalcValidationError,
   SheetSettingsChange,
+  SyncApplyMutationMetadataWire,
   UndoState,
 } from './compute-types.gen';
 
@@ -1768,11 +1772,18 @@ export class ComputeCore {
     if (!this.isInitialized && update.length > 0) {
       this.coordinatorRegistry.markHydrationDeficit();
     }
-    const result = await this.mutateSystem('compute_apply_sync_update', () =>
-      this.transport.call<MutationTuple>('compute_apply_sync_update', {
-        docId: this.docId,
-        update,
-      }),
+    const result = await this.mutateSystem(
+      'compute_apply_sync_update',
+      async () => {
+        const [viewportPatchesBinary, metadata] = await this.transport.call<
+          [Uint8Array, SyncApplyMutationMetadataWire]
+        >('compute_apply_sync_update', {
+          docId: this.docId,
+          update,
+          syncContext: toSyncApplyOperationContextWire(syncApplyContext),
+        });
+        return [viewportPatchesBinary, metadata.mutationResult] as MutationTuple;
+      },
       undefined,
       {
         operationContext: syncApplyContext?.operationContext,

@@ -68,7 +68,7 @@ fn deferred_xlsx_full_hydration_provider_replay_restores_imported_values() {
 
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("provider replay should accept deferred-hydrated full state");
 
     let sheet_id = SheetId::from_uuid_str(
@@ -116,7 +116,7 @@ fn deferred_xlsx_provider_replay_preserves_style_only_empty_cell_fill() {
 
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("provider replay should accept deferred-hydrated full state");
 
     let replayed_sheet_id = SheetId::from_uuid_str(
@@ -167,7 +167,7 @@ fn deferred_xlsx_provider_replay_preserves_named_range_formula_semantics() {
 
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("provider replay should accept deferred-hydrated full state");
 
     let replayed_sheet_id = SheetId::from_uuid_str(
@@ -207,7 +207,7 @@ fn deferred_xlsx_critical_provider_replay_restores_imported_values() {
 
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&persisted_bytes)
+        .apply_sync_update_legacy(&persisted_bytes)
         .expect("provider replay should accept deferred critical state");
 
     let sheet_id = SheetId::from_uuid_str(
@@ -292,11 +292,11 @@ fn deferred_xlsx_provider_replay_keeps_imported_values_after_later_edit_log() {
 
     let (mut replayed, _) = YrsComputeEngine::from_snapshot(WorkbookSnapshot::default()).unwrap();
     replayed
-        .apply_sync_update(&persisted_snapshot)
+        .apply_sync_update_legacy(&persisted_snapshot)
         .expect("provider replay should accept imported full-state snapshot");
     for update in &update_log {
         replayed
-            .apply_sync_update(update)
+            .apply_sync_update_legacy(update)
             .expect("provider replay should accept post-import update log entry");
     }
 

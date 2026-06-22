@@ -305,6 +305,7 @@ export const NAPI_SERDE_PARAM_INDICES: Record<string, number[]> = {
   'compute_apply_calculated_formulas_to_row': [2],
   'compute_apply_changes': [0],
   'compute_apply_filter': [0],
+  'compute_apply_sync_update': [1],
   'compute_auto_fill': [0, 1],
   'compute_auto_fill_preview': [0, 1],
   'compute_auto_fit_column_and_set': [0],

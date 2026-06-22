@@ -21,6 +21,7 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import { projectReviewAccessDiffValue } from '../../document/version-store/review-access-projection';
+import { validateRefName } from '../../document/version-store/ref-name';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -52,7 +53,7 @@ type NormalizedDiffCommitish =
     }
   | {
       readonly kind: 'ref';
-      readonly name: 'HEAD' | VersionMainRefName;
+      readonly name: VersionRefSelector;
     };
 
 type NormalizedDiffOptions = {
@@ -748,7 +749,7 @@ function providerErrorDiagnostic(
 function unsupportedRefDiagnostic(selector: string): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_PERMISSION_DENIED',
-    'This version diff slice can resolve only HEAD or refs/heads/main refs.',
+    'This version diff slice can resolve only HEAD or public refs/heads/<branch> refs.',
     {
       severity: 'error',
       recoverability: 'unsupported',
@@ -847,9 +848,13 @@ function degradedDiffPage(
   };
 }
 
-function normalizePublicRefSelector(value: unknown): 'HEAD' | VersionMainRefName | null {
+function normalizePublicRefSelector(value: unknown): VersionRefSelector | null {
   if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
   if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
+  if (typeof value === 'string' && value.startsWith('refs/heads/')) {
+    const parsed = validateRefName(value.slice('refs/heads/'.length));
+    if (parsed.ok) return value as VersionRefName;
+  }
   return null;
 }
 

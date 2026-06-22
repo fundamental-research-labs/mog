@@ -20,6 +20,8 @@ import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version
 
 const DOCUMENT_ID = 'vc10-xlsx-import-root';
 const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-clean-export';
+const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export';
+const METADATA_REIMPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-reimport';
 const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
 
 beforeEach(async () => {
@@ -175,6 +177,69 @@ describe('WorkbookVersion XLSX import root', () => {
       await imported.handle.dispose().catch(() => {});
     }
   });
+
+  it('can opt in to redacted Mog version metadata sidecar export', async () => {
+    const xlsxBytes = await createSourceXlsx();
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: xlsxBytes },
+      {
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected XLSX import success: ${imported.error?.message}`);
+    }
+
+    let wb: Workbook | undefined;
+    try {
+      wb = await imported.handle.workbook({
+        versioning: withVersionManifest({
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        }),
+      });
+
+      const head = await wb.version.getHead();
+      expect(head).toMatchObject({ ok: true });
+      if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+
+      const exported = await wb.toXlsx({ contextStripped: true, versionMetadata: 'include' });
+      expect(findMogVersionMetadataEvidence(exported)).toEqual([
+        'customXml/mog-version-metadata.xml',
+      ]);
+      expect(readMogVersionMetadata(exported)).toMatchObject({
+        schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        head: {
+          commitId: head.value.id,
+          refName: 'refs/heads/main',
+        },
+        redaction: {
+          policy: 'commit-and-document-only',
+          omitted: expect.arrayContaining(['rawWorkbookBytes', 'agentTraces', 'credentials']),
+        },
+      });
+
+      const reimported = await DocumentFactory.createFromXlsx(
+        { type: 'bytes', data: exported },
+        {
+          documentId: METADATA_REIMPORT_DOCUMENT_ID,
+          environment: 'headless',
+          userTimezone: 'UTC',
+        },
+      );
+      expect(reimported.success).toBe(true);
+      await reimported.handle?.dispose().catch(() => {});
+    } finally {
+      await wb?.close('skipSave').catch(() => {});
+      await imported.handle.dispose().catch(() => {});
+    }
+  });
 });
 
 async function createSourceXlsx(): Promise<Uint8Array> {
@@ -246,11 +311,19 @@ function findMogVersionMetadataEvidence(xlsxBytes: Uint8Array): string[] {
   return evidence;
 }
 
+function readMogVersionMetadata(xlsxBytes: Uint8Array): Record<string, unknown> {
+  const xml = readZipArchive(xlsxBytes).readText('customXml/mog-version-metadata.xml');
+  expect(xml).toBeTruthy();
+  if (!xml) throw new Error('missing Mog version metadata sidecar');
+  const json = xml.match(/<json>(.*)<\/json>/)?.[1];
+  if (!json) throw new Error('missing Mog version metadata JSON payload');
+  return JSON.parse(unescapeXml(json)) as Record<string, unknown>;
+}
+
 function isMogVersionMetadataPackagePart(entryName: string): boolean {
   const normalized = normalizePackageText(entryName);
   return (
-    normalized === 'docprops/custom.xml' ||
-    normalized.startsWith('customxml/') ||
+    normalized === 'customxml/mog-version-metadata.xml' ||
     containsMogVersionMetadataMarker(normalized)
   );
 }
@@ -269,6 +342,14 @@ function containsMogVersionMetadataMarker(value: string): boolean {
 
 function normalizePackageText(value: string): string {
   return value.replace(/^\/+/, '').toLowerCase();
+}
+
+function unescapeXml(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, '>')
+    .replace(/&lt;/g, '<')
+    .replace(/&amp;/g, '&');
 }
 
 function readZipArchive(bytes: Uint8Array): {

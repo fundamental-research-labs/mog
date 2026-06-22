@@ -53,6 +53,7 @@ import type {
 } from './types';
 import type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
 import type { CultureInfo } from '@mog/types-culture/types';
+import type { WorkbookXlsxExportOptions } from './workbook/xlsx-export';
 import type {
   WorkbookHistory,
   WorkbookVersion,
@@ -137,6 +138,7 @@ export type {
 } from './workbook/version';
 export type * from './workbook/version-proposal';
 export type * from './workbook/version-review';
+export type { WorkbookXlsxExportOptions } from './workbook/xlsx-export';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {
@@ -574,11 +576,11 @@ export interface Workbook {
   /**
    * Export the workbook as XLSX binary data.
    *
-   * `contextStripped` is an internal import/export verification mode that
-   * disables imported RoundTripContext preservation so corpus gates can prove
-   * modeled facts do not depend on stale source package bytes.
+   * Default export omits Mog-owned version metadata. Pass
+   * `versionMetadata: "include"` to write a redacted Mog sidecar with the
+   * current version head.
    */
-  toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array>;
+  toXlsx(options?: WorkbookXlsxExportOptions): Promise<Uint8Array>;
 
   /**
    * Import sheets from XLSX data.

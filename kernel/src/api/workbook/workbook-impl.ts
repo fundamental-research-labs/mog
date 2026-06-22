@@ -39,6 +39,7 @@ import type {
   SheetRangeRequest,
   Workbook,
   WorkbookEvent,
+  WorkbookXlsxExportOptions,
   WorkbookInternal,
   WorkbookSettings,
   WorkbookSettingsPatch,
@@ -129,6 +130,7 @@ import {
   normalizeWorkbookSavePath,
 } from './save-errors';
 import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
+import { maybeAddMogVersionMetadataToXlsx } from './xlsx-version-metadata';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -1490,7 +1492,7 @@ export class WorkbookImpl implements WorkbookInternal {
   // Import / Export
   // ===========================================================================
 
-  async toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array> {
+  async toXlsx(options?: WorkbookXlsxExportOptions): Promise<Uint8Array> {
     this._ensureNotDisposed();
     await this.ctx.awaitMaterialized?.('allSheets');
     await assertWorkbookXlsxExportDomainSupportManifest(this.ctx);
@@ -1587,9 +1589,11 @@ export class WorkbookImpl implements WorkbookInternal {
       if (!bridge.exportToXlsxBytesContextStripped) {
         throw new Error('context-stripped XLSX export is not available on this compute bridge');
       }
-      return bridge.exportToXlsxBytesContextStripped();
+      const bytes = await bridge.exportToXlsxBytesContextStripped();
+      return maybeAddMogVersionMetadataToXlsx(this.ctx, this.version, bytes, options);
     }
-    return this.ctx.computeBridge.exportToXlsxBytes();
+    const bytes = await this.ctx.computeBridge.exportToXlsxBytes();
+    return maybeAddMogVersionMetadataToXlsx(this.ctx, this.version, bytes, options);
   }
 
   async insertWorksheets(

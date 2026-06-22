@@ -22,6 +22,7 @@ export type {
   WorkbookLinkView,
   WorkbookExternalLinkUsageView,
   WorkbookExternalPackageArtifactView,
+  WorkbookXlsxExportOptions,
   CopyWorkbookLinkSourceResult,
   PersistedLinkTarget,
   PersistedWorkbookLinkRecord,

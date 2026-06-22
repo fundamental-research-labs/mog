@@ -112,6 +112,7 @@ export type {
   VersionRedactedValue,
   WorkbookVersionReviewApprovalEvidence,
   WorkbookVersionReviewApprovalTarget,
+  WorkbookXlsxExportOptions,
   VersionRedactionClass,
   VersionRef,
   VersionRefListResult,

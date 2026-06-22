@@ -4726,7 +4726,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array>;",
+      "signature": "toXlsx(options?: WorkbookXlsxExportOptions): Promise<Uint8Array>;",
       "typeText": "Promise<Uint8Array>",
       "compatibility": [],
       "source": {
@@ -4837,7 +4837,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>;",
+      "signature": "acceptProposal(\n    input: AcceptAgentProposalInput,\n  ): Promise<VersionResult<AgentProposalAcceptResult>>;",
       "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
       "compatibility": [],
       "source": {
@@ -4989,7 +4989,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
@@ -5066,7 +5066,7 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "disposeProposalWorkspace(\n    input: DisposeProposalWorkspaceInput,\n  ): Promise<VersionResult<{ readonly disposed: true }>>;",
-      "typeText": "Promise<VersionResult<{ readonly disposed: true }>>",
+      "typeText": "Promise<VersionResult<{readonly disposed:true}>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5236,7 +5236,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {
@@ -5293,7 +5293,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
+      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
       "compatibility": [],
       "source": {
@@ -5388,7 +5388,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
+      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeResult>>",
       "compatibility": [],
       "source": {
@@ -24018,7 +24018,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array>;",
+      "signature": "toXlsx(options?: WorkbookXlsxExportOptions): Promise<Uint8Array>;",
       "typeText": "Promise<Uint8Array>",
       "compatibility": [],
       "source": {
@@ -24129,7 +24129,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>;",
+      "signature": "acceptProposal(\n    input: AcceptAgentProposalInput,\n  ): Promise<VersionResult<AgentProposalAcceptResult>>;",
       "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
       "compatibility": [],
       "source": {
@@ -24281,7 +24281,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
@@ -24358,7 +24358,7 @@
       "visibility": "public",
       "asyncModel": "promise",
       "signature": "disposeProposalWorkspace(\n    input: DisposeProposalWorkspaceInput,\n  ): Promise<VersionResult<{ readonly disposed: true }>>;",
-      "typeText": "Promise<VersionResult<{ readonly disposed: true }>>",
+      "typeText": "Promise<VersionResult<{readonly disposed:true}>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24528,7 +24528,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {
@@ -24585,7 +24585,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
+      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
       "compatibility": [],
       "source": {
@@ -24680,7 +24680,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
+      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeResult>>",
       "compatibility": [],
       "source": {

@@ -829,6 +829,9 @@ function createDocumentHandle(
               }
             : undefined,
         });
+        await lifecycle.rustDocument?.installAppliedSyncUpdateIdentityStoreFromProvider(
+          resolvedVersioning.versioning?.provider,
+        );
         return createWorkbookFromConfig({
           ctx: context,
           eventBus: context.eventBus,

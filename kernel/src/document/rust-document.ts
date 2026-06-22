@@ -52,6 +52,7 @@ import {
   type SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
 import type { ComputeBridge } from '../bridges/compute/compute-bridge';
+import { createAdmittedSyncApplyContext } from '../bridges/compute/sync-apply-admission';
 import type {
   Provider,
   ProviderAttachMode,
@@ -60,6 +61,13 @@ import type {
   ProviderCheckpointResult,
   ProviderDocApplyUpdateMetadata,
 } from './providers/provider';
+import {
+  completeAppliedSyncUpdateIdentity,
+  openAppliedSyncUpdateIdentityStoreFromProvider,
+  prepareAppliedSyncUpdateIdentityBeforeApply,
+  type AppliedSyncUpdateIdentityStore,
+  type AppliedSyncUpdateIdentityPreApplyRejectionReason,
+} from './applied-sync-update-identity-wiring';
 import type { WriteGate } from './write-gate';
 import { touchDoc } from './providers/indexeddb-meta';
 import { slog } from '../lib/slog';
@@ -82,8 +90,8 @@ export interface ProviderInboundUpdateResult {
 
 export type ProviderInboundUpdateReason =
   | 'document-destroyed'
-  | 'duplicate-update-id'
   | 'provenance-validation-failed'
+  | AppliedSyncUpdateIdentityPreApplyRejectionReason
   | `unknown-provider: ${string}`
   | `unsupported-payload-kind: ${ProviderInboundUpdateEnvelopeAny['payloadKind']}`
   | `stale-epoch: ${string} < ${string}`;
@@ -157,6 +165,8 @@ export interface RustDocumentOptions {
    * rely on `lastActiveDocId` always being a user-visible doc.
    */
   internal?: boolean;
+  /** Optional document-scoped identity store for verified live sync updates. */
+  appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
 }
 
 /**
@@ -207,6 +217,7 @@ export class RustDocument {
   /** Engine-init options that the constructor caches for `initialize`. */
   private readonly initialSnapshot?: Record<string, unknown>;
   private readonly yrsState?: Uint8Array;
+  private appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
   /**
    * Full-state diff captured after the bridge reaches STARTED but before
    * Provider attach/replay for document-local structs written before the
@@ -326,6 +337,7 @@ export class RustDocument {
     this.internal = options.internal ?? false;
     this.initialSnapshot = options.initialSnapshot;
     this.yrsState = options.yrsState;
+    this.appliedSyncUpdateIdentityStore = options.appliedSyncUpdateIdentityStore;
 
     // Engine init runs immediately — `ready` resolves when status reaches
     // 'ready'. `subscribeUpdateV1` is wired *after* engine init so the
@@ -607,6 +619,11 @@ export class RustDocument {
     }
   }
 
+  async installAppliedSyncUpdateIdentityStoreFromProvider(provider: unknown): Promise<void> {
+    const store = await openAppliedSyncUpdateIdentityStoreFromProvider(provider);
+    if (store) this.appliedSyncUpdateIdentityStore = store;
+  }
+
   /**
    * Detach a Provider from this document. Idempotent if the Provider was
    * never attached. Awaits the Provider's `detach()` so its final flush
@@ -656,7 +673,7 @@ export class RustDocument {
       };
     }
 
-    if (this._inboundUpdateLog.has(envelope.updateId)) {
+    if (!this.appliedSyncUpdateIdentityStore && this._inboundUpdateLog.has(envelope.updateId)) {
       return { status: 'rejected', updateId: envelope.updateId, reason: 'duplicate-update-id' };
     }
 
@@ -696,6 +713,25 @@ export class RustDocument {
       validationDiagnostics: validation.diagnostics,
     };
 
+    const admittedContext = createAdmittedSyncApplyContext(metadata);
+    const identityDecision = await prepareAppliedSyncUpdateIdentityBeforeApply({
+      store: this.appliedSyncUpdateIdentityStore,
+      admittedContext,
+      inboundUpdateAlreadySeen: this._inboundUpdateLog.has(envelope.updateId),
+    });
+    if (identityDecision.status === 'duplicate') {
+      return { status: 'duplicate', updateId: envelope.updateId, provenance };
+    }
+    if (identityDecision.status === 'rejected') {
+      return {
+        status: 'rejected',
+        updateId: envelope.updateId,
+        reason: identityDecision.reason,
+        provenance,
+      };
+    }
+    const identityReservation = identityDecision.reservation;
+
     this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
     try {
       const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
@@ -703,6 +739,10 @@ export class RustDocument {
       await doc.applyUpdate(envelope.payload, metadata);
     } finally {
       this._currentUpdateOrigin = 'local';
+    }
+
+    if (identityReservation) {
+      await completeAppliedSyncUpdateIdentity(identityReservation);
     }
 
     this._inboundUpdateLog.add(envelope.updateId);

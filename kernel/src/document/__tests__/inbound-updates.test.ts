@@ -21,6 +21,16 @@ import {
 } from '@mog-sdk/types-document/storage';
 import { RustDocument } from '../rust-document';
 import type { Provider, ProviderDocApplyUpdateMetadata } from '../providers/provider';
+import { createAdmittedSyncApplyContext } from '../../bridges/compute/sync-apply-admission';
+import {
+  appliedSyncUpdateIdentityKeyMaterialForOperationContext,
+  type AppliedSyncUpdateIdentityStore,
+} from '../version-store/applied-sync-update-identity-store';
+import {
+  InMemoryVersionDocumentProviderBackend,
+  createInMemoryVersionStoreProvider,
+  type VersionDocumentScope,
+} from '../version-store/provider';
 
 // ---------------------------------------------------------------------------
 // Stub bridge (same pattern as orchestrator tests)
@@ -81,7 +91,9 @@ function makeStubBridge(): StubBridge {
   };
 }
 
-async function makeOrchestrator(): Promise<{ doc: RustDocument; bridge: StubBridge }> {
+async function makeOrchestrator(options: {
+  readonly appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
+} = {}): Promise<{ doc: RustDocument; bridge: StubBridge }> {
   const bridge = makeStubBridge();
   const doc = new RustDocument({
     docId: 'inbound-test-doc',
@@ -89,6 +101,7 @@ async function makeOrchestrator(): Promise<{ doc: RustDocument; bridge: StubBrid
     computeBridge: bridge as unknown as any,
     internal: true,
     skipPersistenceLoad: true,
+    appliedSyncUpdateIdentityStore: options.appliedSyncUpdateIdentityStore,
   });
   await doc.ready;
   return { doc, bridge };
@@ -102,6 +115,12 @@ const storageScope = {
     documentId: 'inbound-test-doc',
   },
 } as const;
+
+const versionDocumentScope: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'inbound-test-doc',
+  principalScope: 'principal-1',
+};
 
 function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
@@ -401,6 +420,108 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
     });
   });
 
+  describe('applied sync update identity', () => {
+    it('reserves and completes verified live identities through applyProviderUpdate', async () => {
+      const versionProvider = createInMemoryVersionStoreProvider({
+        documentScope: versionDocumentScope,
+        backend: new InMemoryVersionDocumentProviderBackend(),
+        durability: 'inbound-update-test-double',
+      });
+      const store = await versionProvider.openAppliedSyncUpdateIdentityStore();
+      const { doc, bridge } = await makeOrchestrator();
+      await doc.installAppliedSyncUpdateIdentityStoreFromProvider(versionProvider);
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x10, 0x20]),
+        updateId: 'applied-identity-live-1',
+      });
+
+      const result1 = await doc.applyProviderUpdate(envelope);
+
+      expect(result1.status).toBe('applied');
+      expect(bridge.admissions).toHaveLength(1);
+      const identityKey = await appliedIdentityKeyForAdmission(bridge.admissions[0]!);
+      await expect(store.readByIdentityKey(identityKey)).resolves.toMatchObject({
+        status: 'found',
+        record: {
+          identityKey,
+          payloadHash: envelope.payloadHash,
+          state: 'applied',
+          terminal: { status: 'applied' },
+          operationContext: {
+            collaboration: {
+              sourceKind: 'providerLiveInbound',
+              commitGrouping: 'pendingRemote',
+              updateId: envelope.updateId,
+            },
+          },
+        },
+      });
+
+      const result2 = await doc.applyProviderUpdate(envelope);
+
+      expect(result2.status).toBe('duplicate');
+      expect(bridge.admissions).toHaveLength(1);
+
+      await doc.destroy();
+    });
+
+    it('rejects identity payload conflicts before syncApply', async () => {
+      const store = await createInMemoryVersionStoreProvider({
+        documentScope: versionDocumentScope,
+        backend: new InMemoryVersionDocumentProviderBackend(),
+        durability: 'inbound-update-test-double',
+      }).openAppliedSyncUpdateIdentityStore();
+      const { doc, bridge } = await makeOrchestrator({ appliedSyncUpdateIdentityStore: store });
+      const providerA = makeRecordingProvider('ProviderA');
+      await doc.attachProvider(providerA);
+      const syncApply = jest.spyOn(bridge, 'syncApply');
+
+      const envelope = makeV2Envelope({
+        payload: new Uint8Array([0x21, 0x22]),
+        updateId: 'applied-identity-conflict-1',
+      });
+      const admittedContext = createAdmittedSyncApplyContext({
+        source: 'provider-inbound',
+        docId: 'inbound-test-doc',
+        envelopeVersion: envelope.schemaVersion,
+        providerRefId: envelope.providerRefId,
+        providerEpoch: envelope.providerEpoch,
+        updateId: envelope.updateId,
+        payloadHash: envelope.payloadHash,
+        provenance: envelope.provenance,
+        validationDiagnostics: [],
+      });
+      const { identityKey } = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+        admittedContext.operationContext,
+      );
+      await expect(
+        store.reserveIdentity({
+          identityKey,
+          operationContext: {
+            ...admittedContext.operationContext,
+            collaboration: {
+              ...admittedContext.operationContext.collaboration!,
+              payloadHash: '4'.repeat(64),
+            },
+          },
+          createdAt: '2026-06-21T00:00:01.000Z',
+        }),
+      ).resolves.toMatchObject({ status: 'reserved' });
+
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result.status).toBe('rejected');
+      expect(result).toHaveProperty('reason', 'applied-sync-update-identity-conflict');
+      expect(syncApply).not.toHaveBeenCalled();
+      expect(bridge.admissions).toHaveLength(0);
+
+      await doc.destroy();
+    });
+  });
+
   describe('stale epoch', () => {
     it('rejects updates with a stale epoch', async () => {
       const { doc } = await makeOrchestrator();
@@ -628,3 +749,13 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
     });
   });
 });
+
+async function appliedIdentityKeyForAdmission(
+  metadata: ProviderDocApplyUpdateMetadata,
+): Promise<string> {
+  const admittedContext = createAdmittedSyncApplyContext(metadata);
+  const { identityKey } = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+    admittedContext.operationContext,
+  );
+  return identityKey;
+}

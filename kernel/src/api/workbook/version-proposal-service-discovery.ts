@@ -14,8 +14,7 @@ export type AttachedVersionProposalService = {
 };
 
 export function hasAttachedVersionProposalService(ctxOrServices: unknown): boolean {
-  const service = getAttachedVersionProposalService(ctxOrServices);
-  return Boolean(service && PROPOSAL_OPERATIONS.every((method) => service[method]));
+  return Boolean(getAttachedVersionProposalService(ctxOrServices));
 }
 
 export function getAttachedVersionProposalService(
@@ -24,7 +23,6 @@ export function getAttachedVersionProposalService(
   const services = getAttachedVersionServices(ctxOrServices);
   if (!isRecord(services)) return null;
 
-  const proposalService: AttachedVersionProposalService = {};
   for (const candidate of [
     { value: services.proposalService },
     { value: services.versionProposalService },
@@ -35,10 +33,14 @@ export function getAttachedVersionProposalService(
     { value: services.publicService },
     { value: services },
   ]) {
-    bindProposalMethods(candidate.value, proposalService, candidate.getProposalById === true);
+    const proposalService = createProposalService(
+      candidate.value,
+      candidate.getProposalById === true,
+    );
+    if (isCompleteProposalService(proposalService)) return proposalService;
   }
 
-  return Object.keys(proposalService).length > 0 ? proposalService : null;
+  return null;
 }
 
 function getAttachedVersionServices(ctxOrServices: unknown): unknown {
@@ -67,6 +69,23 @@ function bindProposalMethods(
     }
     target[operation] = ((input: unknown) => method(input)) as never;
   }
+}
+
+function createProposalService(
+  value: unknown,
+  getProposalById: boolean,
+): AttachedVersionProposalService | null {
+  const proposalService: AttachedVersionProposalService = {};
+  bindProposalMethods(value, proposalService, getProposalById);
+  return Object.keys(proposalService).length > 0 ? proposalService : null;
+}
+
+function isCompleteProposalService(
+  service: AttachedVersionProposalService | null,
+): service is AttachedVersionProposalService {
+  return Boolean(
+    service && PROPOSAL_OPERATIONS.every((operation) => typeof service[operation] === 'function'),
+  );
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {

@@ -24,7 +24,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormulaReferenceDiagnostic } from '@mog-sdk/contracts/api';
 
-import { useUIStore, useUIStoreApi } from '../../infra/context';
+import { useFeatureGate, useUIStore, useUIStoreApi } from '../../infra/context';
 import { dispatch } from '../../actions';
 import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
 import { useSelectionActions } from '../../hooks/selection/use-selection-actions';
@@ -92,6 +92,7 @@ function SidePanelImpl() {
   const uiStore = useUIStoreApi();
   const deps = useActionDependencies();
   const sidePanelContent = useUIStore((s) => s.sidePanelContent);
+  const versionControlEnabled = useFeatureGate('capabilities', 'versionControl');
 
   const setCommentsPanelVisible = useUIStore((s) => s.setCommentsPanelVisible);
 
@@ -119,7 +120,7 @@ function SidePanelImpl() {
   if (sidePanelContent === 'formula-references') {
     return <FormulaReferenceDiagnosticsPanel onClose={handleClose} />;
   }
-  if (sidePanelContent === 'version-history') {
+  if (sidePanelContent === 'version-history' && versionControlEnabled) {
     return <VersionHistoryPanel onClose={handleClose} />;
   }
 
@@ -159,13 +160,15 @@ function SidePanelImpl() {
         >
           Accessibility
         </button>
-        <button
-          type="button"
-          onClick={handleOpenVersionHistory}
-          className="w-full text-left px-3 py-2 rounded text-body-sm text-ss-text hover:bg-ss-surface-hover"
-        >
-          Version History
-        </button>
+        {versionControlEnabled ? (
+          <button
+            type="button"
+            onClick={handleOpenVersionHistory}
+            className="w-full text-left px-3 py-2 rounded text-body-sm text-ss-text hover:bg-ss-surface-hover"
+          >
+            Version History
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleOpenExtensions}

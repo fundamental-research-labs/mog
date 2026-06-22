@@ -504,39 +504,44 @@ function buildCapabilityStates(
       true,
       'version.surfaceStatus.storageUnavailable',
     );
+  const storageOrHostDisabled = (capability: VersionCapability): VersionCapabilityState =>
+    hostDenied(capability) ? disabledByHostCapability(capability) : storageDisabled(capability);
+  const deferredOrHostDisabled = (
+    capability: VersionCapability,
+    dependency: VersionCapabilityDependency,
+    reason: string,
+    code: VersionDiagnostic['code'],
+  ): VersionCapabilityState =>
+    hostDenied(capability)
+      ? disabledByHostCapability(capability)
+      : disabledCapability(diagnostics, capability, dependency, reason, false, code);
   if (!storageReady) {
     return {
-      'version:read': storageDisabled('version:read'),
-      'version:diff': storageDisabled('version:diff'),
-      'version:commit': storageDisabled('version:commit'),
-      'version:branch': storageDisabled('version:branch'),
-      'version:checkout': storageDisabled('version:checkout'),
-      'version:reviewRead': storageDisabled('version:reviewRead'),
-      'version:reviewWrite': storageDisabled('version:reviewWrite'),
-      'version:proposal': disabledCapability(
-        diagnostics,
+      'version:read': storageOrHostDisabled('version:read'),
+      'version:diff': storageOrHostDisabled('version:diff'),
+      'version:commit': storageOrHostDisabled('version:commit'),
+      'version:branch': storageOrHostDisabled('version:branch'),
+      'version:checkout': storageOrHostDisabled('version:checkout'),
+      'version:reviewRead': storageOrHostDisabled('version:reviewRead'),
+      'version:reviewWrite': storageOrHostDisabled('version:reviewWrite'),
+      'version:proposal': deferredOrHostDisabled(
         'version:proposal',
         'VC-05',
         'Agent proposal workflows require branch-scoped materialization plumbing from a later slice.',
-        false,
         'version.surfaceStatus.proposalUnavailable',
       ),
-      'version:mergePreview': storageDisabled('version:mergePreview'),
-      'version:mergeApply': storageDisabled('version:mergeApply'),
-      'version:revert': disabledCapability(
-        diagnostics,
+      'version:mergePreview': storageOrHostDisabled('version:mergePreview'),
+      'version:mergeApply': storageOrHostDisabled('version:mergeApply'),
+      'version:revert': deferredOrHostDisabled(
         'version:revert',
         'upstreamRevertContract',
         'Authored revert is reserved until an upstream revert contract exists.',
-        false,
         'version.surfaceStatus.revertUnavailable',
       ),
-      'version:provenance': disabledCapability(
-        diagnostics,
+      'version:provenance': deferredOrHostDisabled(
         'version:provenance',
         'VC-09',
         'Remote provenance enrichment from VC-09 is not attached.',
-        false,
         'version.surfaceStatus.provenanceUnavailable',
       ),
     };

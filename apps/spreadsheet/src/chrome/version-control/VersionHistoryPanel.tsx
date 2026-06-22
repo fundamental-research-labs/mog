@@ -147,7 +147,7 @@ export function VersionHistoryPanelContent({
     <aside
       data-testid="panel-version-history"
       role="complementary"
-      aria-label="Version history"
+      aria-label="Version control"
       className="flex flex-col w-[320px] max-w-[calc(100vw-24px)] h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
     >
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-ss-border bg-ss-surface-secondary shrink-0">
@@ -203,12 +203,37 @@ export function VersionHistoryPanelContent({
           <div className="flex flex-col gap-4 p-4">
             <VersionStatusSummary data={data} />
             <CapabilitySummary surface={data.surface} />
+            <ProposalSurfaceStatus surface={data.surface} />
             <CommitList commits={data.commits} />
             {diagnostics.length > 0 ? <DiagnosticsBlock diagnostics={diagnostics} /> : null}
           </div>
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function ProposalSurfaceStatus({
+  surface,
+}: {
+  readonly surface?: VersionSurfaceStatus;
+}): React.JSX.Element | null {
+  const proposalState = surface?.capabilities['version:proposal'];
+  if (!proposalState || proposalState.enabled) return null;
+
+  return (
+    <section
+      className="border border-ss-border rounded-sm px-3 py-2 bg-ss-surface-secondary"
+      aria-label="Proposal status"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-body-sm font-medium text-ss-text">Proposal review</span>
+        <span className="text-[11px] leading-none uppercase text-ss-text-tertiary">
+          Unavailable
+        </span>
+      </div>
+      <div className="mt-1 text-body-sm text-ss-text-secondary">{proposalState.reason}</div>
+    </section>
   );
 }
 

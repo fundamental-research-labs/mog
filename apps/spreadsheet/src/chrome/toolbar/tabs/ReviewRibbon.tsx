@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { History as VersionHistoryIcon } from 'lucide-react';
-import { dispatch, useUIStore, useWorkbook } from '../../../internal-api';
+import { dispatch, useFeatureGate, useUIStore } from '../../../internal-api';
 
 import {
   ACCESSIBILITY_COLLAPSE_CONFIG,
@@ -195,9 +195,9 @@ function ReadOnlyIcon() {
 // =============================================================================
 
 export function ReviewRibbon() {
-  const wb = useWorkbook();
   const deps = useActionDependencies();
   const { hasComments } = useComments();
+  const versionControlEnabled = useFeatureGate('capabilities', 'versionControl');
 
   // UI store state for "Show All Comments" toggle (read only - writes via dispatch)
   const showAllComments = useUIStore((s) => s.showAllComments);
@@ -317,11 +317,13 @@ export function ReviewRibbon() {
     keyTipRegistry.register({ key: 'W', tabId: 'review', elementId: 'review-protect-workbook' });
     cleanups.push(() => keyTipRegistry.unregister('W', 'review'));
 
-    keyTipRegistry.register({ key: 'V', tabId: 'review', elementId: 'review-version-history' });
-    cleanups.push(() => keyTipRegistry.unregister('V', 'review'));
+    if (versionControlEnabled) {
+      keyTipRegistry.register({ key: 'V', tabId: 'review', elementId: 'review-version-history' });
+      cleanups.push(() => keyTipRegistry.unregister('V', 'review'));
+    }
 
     return () => cleanups.forEach((c) => c());
-  }, []);
+  }, [versionControlEnabled]);
 
   return (
     <>
@@ -460,22 +462,24 @@ export function ReviewRibbon() {
         </div>
       </ToolbarGroup>
 
-      <ToolbarGroup
-        label="Version"
-        collapseConfig={DEFAULT_COLLAPSE_CONFIG}
-        dropdownIcon={<VersionHistoryIcon size={16} strokeWidth={1.75} />}
-      >
-        <RibbonButton
-          id="review-version-history"
-          layout="vertical"
-          height="full"
-          icon={<VersionHistoryIcon size={16} strokeWidth={1.75} />}
-          label={'Version\nHistory'}
-          onClick={handleOpenVersionHistory}
-          title="Version History"
-          aria-label="Version History"
-        />
-      </ToolbarGroup>
+      {versionControlEnabled ? (
+        <ToolbarGroup
+          label="Version"
+          collapseConfig={DEFAULT_COLLAPSE_CONFIG}
+          dropdownIcon={<VersionHistoryIcon size={16} strokeWidth={1.75} />}
+        >
+          <RibbonButton
+            id="review-version-history"
+            layout="vertical"
+            height="full"
+            icon={<VersionHistoryIcon size={16} strokeWidth={1.75} />}
+            label={'Version\nHistory'}
+            onClick={handleOpenVersionHistory}
+            title="Version History"
+            aria-label="Version History"
+          />
+        </ToolbarGroup>
+      ) : null}
 
       {/* 5. Protect Group - R1: Renamed from "Changes" to "Protect" (Excel terminology) */}
       {/* Excel shows Protect Sheet and Protect Workbook as large buttons side by side */}

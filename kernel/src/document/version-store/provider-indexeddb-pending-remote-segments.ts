@@ -12,8 +12,9 @@ import {
   type PendingRemoteSegmentStore,
   type ReservePendingRemoteSegmentInput,
   clonePendingRemoteSegmentRecord,
+  comparePendingRemoteSegmentRecords,
   isPendingRemoteSegmentRecord,
-  pendingRemoteSegmentIdentityForOperationContext,
+  pendingRemoteSegmentReservationRecord,
   pendingRemoteSegmentStorageKey,
   pendingRemoteSegmentTerminalsEqual,
   pendingRemoteSegmentsEquivalent,
@@ -65,7 +66,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
   ): Promise<PendingRemoteSegmentReserveResult> {
     let record: PendingRemoteSegmentRecord;
     try {
-      record = this.recordFromInput(input);
+      record = await this.recordFromInput(input);
     } catch {
       return {
         status: 'failed',
@@ -279,16 +280,13 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
     await done;
   }
 
-  private recordFromInput(input: ReservePendingRemoteSegmentInput): PendingRemoteSegmentRecord {
-    return clonePendingRemoteSegmentRecord({
-      ...input,
-      schemaVersion: 1,
-      recordKind: 'pendingRemoteSegment',
+  private recordFromInput(
+    input: ReservePendingRemoteSegmentInput,
+  ): Promise<PendingRemoteSegmentRecord> {
+    return pendingRemoteSegmentReservationRecord({
       namespaceKey: this.namespaceKey,
       documentScopeKey: this.documentScopeKey,
-      syncIdentity: pendingRemoteSegmentIdentityForOperationContext(input.operationContext),
-      state: 'pending',
-      updatedAt: input.createdAt,
+      input,
     });
   }
 }
@@ -380,7 +378,7 @@ function findByStateInStore(
       }
       cursor.continue();
     };
-  });
+  }).then((records) => [...records].sort(comparePendingRemoteSegmentRecords));
 }
 
 function conflictReserve(

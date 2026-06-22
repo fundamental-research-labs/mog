@@ -6,6 +6,8 @@ import {
   reservePersistedPendingRemoteSegment,
   pendingRemoteSegmentKeyMaterialForOperationContext,
   validatePendingRemoteSegmentObjects,
+  type PendingRemoteSegmentId,
+  type PendingRemoteSegmentIdempotencyKey,
   type PendingRemoteSegmentOperationContext,
   type ReservePendingRemoteSegmentInput,
 } from '../pending-remote-segment-store';
@@ -222,6 +224,80 @@ describe('pending remote segment store', () => {
     });
   });
 
+  it('rejects pending remote reservations with mismatched durable key material', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      durability: 'memory',
+    });
+    const namespace = await initializeProvider(provider);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    const mismatchedIdempotencyKey =
+      `pending-remote:sha256:${'9'.repeat(64)}` as PendingRemoteSegmentIdempotencyKey;
+    const mismatchedSegmentId =
+      `pending-remote-segment:sha256:${'8'.repeat(64)}` as PendingRemoteSegmentId;
+
+    await expect(
+      store.reserveSegment({
+        ...fixture.input,
+        idempotencyKey: mismatchedIdempotencyKey,
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      record: null,
+      diagnostics: [{ code: 'VERSION_INVALID_OPTIONS' }],
+    });
+    await expect(store.readByIdempotencyKey(mismatchedIdempotencyKey)).resolves.toMatchObject({
+      status: 'missing',
+    });
+
+    await expect(
+      store.reserveSegment({
+        ...fixture.input,
+        pendingRemoteSegmentId: mismatchedSegmentId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      record: null,
+      diagnostics: [{ code: 'VERSION_INVALID_OPTIONS' }],
+    });
+    await expect(store.readBySegmentId(mismatchedSegmentId)).resolves.toMatchObject({
+      status: 'missing',
+    });
+  });
+
+  it('lists pending remote segments deterministically by reservation identity', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      durability: 'memory',
+    });
+    const namespace = await initializeProvider(provider);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const later = await pendingSegmentFixture(namespace, {
+      createdAt: '2026-06-21T00:00:02.000Z',
+      payloadHash: '5'.repeat(64),
+      updateId: 'remote-update-2',
+    });
+    const earlier = await pendingSegmentFixture(namespace, {
+      createdAt: '2026-06-21T00:00:01.000Z',
+      payloadHash: '6'.repeat(64),
+      updateId: 'remote-update-3',
+    });
+
+    await expect(store.reserveSegment(later.input)).resolves.toMatchObject({ status: 'created' });
+    await expect(store.reserveSegment(earlier.input)).resolves.toMatchObject({
+      status: 'created',
+    });
+
+    const listed = await store.listByState('pending');
+    expect(listed.status).toBe('success');
+    if (listed.status !== 'success') throw new Error('expected pending segment list success');
+    expect(listed.records.map((record) => record.pendingRemoteSegmentId)).toEqual([
+      earlier.input.pendingRemoteSegmentId,
+      later.input.pendingRemoteSegmentId,
+    ]);
+  });
+
   it('does not reserve a persisted pending remote segment before referenced objects are durable', async () => {
     const provider = createInMemoryVersionStoreProvider({
       documentScope: DOCUMENT_SCOPE,
@@ -414,9 +490,17 @@ type PendingSegmentFixture = {
 
 async function pendingSegmentFixture(
   namespace: VersionGraphNamespace,
-  options: { readonly includeSnapshotRoot?: boolean } = {},
+  options: {
+    readonly createdAt?: string;
+    readonly includeSnapshotRoot?: boolean;
+    readonly payloadHash?: string;
+    readonly updateId?: string;
+  } = {},
 ): Promise<PendingSegmentFixture> {
-  const operationContext = syncOperationContext();
+  const operationContext = syncOperationContext({
+    payloadHash: options.payloadHash,
+    updateId: options.updateId,
+  });
   const keys = await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext);
   const snapshotRootRecord = await objectRecord(
     'workbook.snapshotRoot.v1',
@@ -441,7 +525,7 @@ async function pendingSegmentFixture(
       mutationSegmentDigest: mutationSegmentRecord.digest,
       ...(options.includeSnapshotRoot ? { snapshotRootDigest: snapshotRootRecord.digest } : {}),
       semanticChangeSetDigest: semanticChangeSetRecord.digest,
-      createdAt: '2026-06-21T00:00:00.000Z',
+      createdAt: options.createdAt ?? '2026-06-21T00:00:00.000Z',
     },
     objectRecords: [
       ...(options.includeSnapshotRoot ? [snapshotRootRecord] : []),

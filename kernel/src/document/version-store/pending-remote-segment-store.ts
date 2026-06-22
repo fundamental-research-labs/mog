@@ -207,6 +207,12 @@ export type ReservePersistedPendingRemoteSegmentOptions = {
   readonly input: ReservePendingRemoteSegmentInput;
 };
 
+export type PendingRemoteSegmentReservationRecordOptions = {
+  readonly namespaceKey: string;
+  readonly documentScopeKey: string;
+  readonly input: ReservePendingRemoteSegmentInput;
+};
+
 export type PendingRemoteSegmentMemoryBackendSnapshot = {
   readonly records: readonly PendingRemoteSegmentRecord[];
 };
@@ -249,6 +255,7 @@ export class PendingRemoteSegmentMemoryBackend {
           record.documentScopeKey === documentScopeKey &&
           record.state === state,
       )
+      .sort(comparePendingRemoteSegmentRecords)
       .map((record) => clonePendingRemoteSegmentRecord(record));
   }
 
@@ -298,7 +305,7 @@ export class InMemoryPendingRemoteSegmentStore implements PendingRemoteSegmentSt
   ): Promise<PendingRemoteSegmentReserveResult> {
     let record: PendingRemoteSegmentRecord;
     try {
-      record = this.recordFromInput(input);
+      record = await this.recordFromInput(input);
     } catch {
       return failedReserve('Pending remote segment reservation has invalid sync context.');
     }
@@ -398,16 +405,13 @@ export class InMemoryPendingRemoteSegmentStore implements PendingRemoteSegmentSt
     return { status: 'completed', record: completed, diagnostics: [] };
   }
 
-  private recordFromInput(input: ReservePendingRemoteSegmentInput): PendingRemoteSegmentRecord {
-    return clonePendingRemoteSegmentRecord({
-      ...input,
-      schemaVersion: 1,
-      recordKind: 'pendingRemoteSegment',
+  private recordFromInput(
+    input: ReservePendingRemoteSegmentInput,
+  ): Promise<PendingRemoteSegmentRecord> {
+    return pendingRemoteSegmentReservationRecord({
       namespaceKey: this.namespaceKey,
       documentScopeKey: this.documentScopeKey,
-      syncIdentity: pendingRemoteSegmentIdentityForOperationContext(input.operationContext),
-      state: 'pending',
-      updatedAt: input.createdAt,
+      input,
     });
   }
 }
@@ -433,6 +437,33 @@ export function pendingRemoteSegmentIdentityForOperationContext(
     ...(collaboration.sequence === undefined ? {} : { sequence: collaboration.sequence }),
     payloadHash: collaboration.payloadHash,
   };
+}
+
+export async function pendingRemoteSegmentReservationRecord(
+  options: PendingRemoteSegmentReservationRecordOptions,
+): Promise<PendingRemoteSegmentRecord> {
+  const keyMaterial = await pendingRemoteSegmentKeyMaterialForOperationContext(
+    options.input.operationContext,
+  );
+  if (
+    options.input.idempotencyKey !== keyMaterial.idempotencyKey ||
+    options.input.pendingRemoteSegmentId !== keyMaterial.pendingRemoteSegmentId
+  ) {
+    throw new Error('Pending remote segment key material does not match collaboration identity.');
+  }
+
+  return clonePendingRemoteSegmentRecord({
+    ...options.input,
+    schemaVersion: 1,
+    recordKind: 'pendingRemoteSegment',
+    pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
+    idempotencyKey: keyMaterial.idempotencyKey,
+    namespaceKey: options.namespaceKey,
+    documentScopeKey: options.documentScopeKey,
+    syncIdentity: keyMaterial.syncIdentity,
+    state: 'pending',
+    updatedAt: options.input.createdAt,
+  });
 }
 
 export async function pendingRemoteSegmentKeyMaterialForOperationContext(
@@ -630,6 +661,16 @@ function stableOperationContextIdentity(context: PendingRemoteSegmentOperationCo
   };
 }
 
+export function comparePendingRemoteSegmentRecords(
+  left: PendingRemoteSegmentRecord,
+  right: PendingRemoteSegmentRecord,
+): number {
+  return (
+    left.createdAt.localeCompare(right.createdAt) ||
+    left.pendingRemoteSegmentId.localeCompare(right.pendingRemoteSegmentId)
+  );
+}
+
 function memoryKey(
   namespace: VersionGraphNamespace,
   idempotencyKey: PendingRemoteSegmentIdempotencyKey,
@@ -762,7 +803,8 @@ function isPendingRemoteSyncIdentity(value: unknown): value is PendingRemoteSegm
     optionalString(value.epoch) &&
     optionalString(value.updateId) &&
     optionalString(value.sequence) &&
-    typeof value.payloadHash === 'string'
+    typeof value.payloadHash === 'string' &&
+    value.payloadHash.length > 0
   );
 }
 

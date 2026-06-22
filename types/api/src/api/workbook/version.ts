@@ -123,6 +123,8 @@ export type VersionSurfaceDiagnosticCode =
   | 'version.surfaceStatus.readUnavailable'
   | 'version.surfaceStatus.currentReadFailed'
   | 'version.surfaceStatus.dirtyTokenUnavailable'
+  | 'version.surfaceStatus.liveCollaborationActive'
+  | 'version.surfaceStatus.liveCollaborationUnknown'
   | 'version.surfaceStatus.diffUnavailable'
   | 'version.surfaceStatus.commitUnavailable'
   | 'version.surfaceStatus.branchUnavailable'
@@ -134,6 +136,24 @@ export type VersionSurfaceDiagnosticCode =
   | 'version.surfaceStatus.revertUnavailable'
   | 'version.surfaceStatus.provenanceUnavailable'
   | (string & {});
+
+export type VersionLiveCollaborationState =
+  | 'absent'
+  | 'disabled'
+  | 'idle'
+  | 'active'
+  | 'unknown';
+
+export interface VersionSurfaceLiveCollaborationStatus {
+  readonly state: VersionLiveCollaborationState;
+  readonly statusRevision: string;
+  readonly roomId?: string;
+  readonly sidecarStatus?: string;
+  readonly activeParticipantCount?: number;
+  readonly remoteProviderAttached?: boolean;
+  readonly inFlightRemoteUpdateCount?: number;
+  readonly syncApplyRemoteQueueDepth?: number;
+}
 
 export interface VersionSurfaceStatus {
   readonly schemaVersion: 1;
@@ -163,6 +183,7 @@ export interface VersionSurfaceStatus {
     readonly unsupportedDirtyDomains: readonly string[];
     readonly pendingProviderWrites: boolean;
     readonly pendingRecalc: boolean;
+    readonly liveCollaboration?: VersionSurfaceLiveCollaborationStatus;
     readonly checkoutSafe: boolean;
     readonly unsafeReasons: readonly VersionDiagnostic[];
     readonly source: 'VC-05';
@@ -226,18 +247,22 @@ export type VersionDiagnosticCode =
   | 'VERSION_CHECKOUT_DETACHED_TARGET_UNSUPPORTED'
   | 'VERSION_CHECKOUT_DIRTY_WORKING_STATE'
   | 'VERSION_CHECKOUT_INVALID_TARGET'
+  | 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE'
   | 'VERSION_CHECKOUT_MISSING_COMMIT'
   | 'VERSION_CHECKOUT_MISSING_DEPENDENCY'
   | 'VERSION_CHECKOUT_MISSING_HEAD_READER'
   | 'VERSION_CHECKOUT_MISSING_REF'
   | 'VERSION_CHECKOUT_MISSING_REF_READER'
   | 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE'
+  | 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES'
+  | 'VERSION_CHECKOUT_PENDING_RECALC'
   | 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED'
   | 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED'
   | 'VERSION_CHECKOUT_PROVIDER_ERROR'
   | 'VERSION_CHECKOUT_REF_READ_FAILED'
   | 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED'
   | 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE'
+  | 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD'
   | 'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT'
   | 'VERSION_CHECKOUT_UNSUPPORTED_TARGET'
   | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'

@@ -35,6 +35,29 @@ import {
   type VersionGraphRegistry,
 } from './registry';
 
+type MaybePromise<T> = T | Promise<T>;
+
+export type VersionLiveCollaborationState =
+  | 'absent'
+  | 'disabled'
+  | 'idle'
+  | 'active'
+  | 'unknown';
+
+export type VersionLiveCollaborationStatus = {
+  readonly state: VersionLiveCollaborationState;
+  readonly statusRevision: string;
+  readonly roomId?: string;
+  readonly sidecarStatus?: string;
+  readonly activeParticipantCount?: number;
+  readonly remoteProviderAttached?: boolean;
+  readonly inFlightRemoteUpdateCount?: number;
+  readonly syncApplyRemoteQueueDepth?: number;
+};
+
+export type VersionLiveCollaborationStatusReader =
+  () => MaybePromise<VersionLiveCollaborationStatus>;
+
 export type ResolvedWorkbookVersioningConfig = {
   readonly provider?: VersionStoreProvider;
   readonly writeService?: Pick<
@@ -51,6 +74,7 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
+  readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
 };
 
 export type VersionStoreLifecycleProviderSelection = {
@@ -176,6 +200,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
+      readLiveCollaborationStatus: config.readLiveCollaborationStatus,
     }),
     diagnostics,
   };

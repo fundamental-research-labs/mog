@@ -35,6 +35,7 @@ import type { SnapshotRootByteSyncPort } from '../../document/version-store/snap
 import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
+import type { VersionLiveCollaborationStatusReader } from './version-live-collaboration-status';
 import type {
   DomainSupportManifestValidationOptions,
 } from '../../document/version-store/domain-support-manifest-validator';
@@ -75,6 +76,7 @@ export interface WorkbookVersioningConfig {
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
+  readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
   readonly domainSupportManifest?: DomainSupportManifest | null;
   readonly readDomainSupportManifest?: () => MaybePromise<
     DomainSupportManifest | null | undefined

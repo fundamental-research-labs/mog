@@ -94,6 +94,7 @@ export function attachWorkbookVersioning(
     !semanticCapture &&
     !pendingRemotePromotionService &&
     !providerWriteActivityTracker &&
+    !config.readLiveCollaborationStatus &&
     Object.keys(domainSupportManifestFields).length === 0
   ) {
     return;
@@ -169,6 +170,11 @@ export function attachWorkbookVersioning(
       ? {
           providerWriteActivityTracker,
           versionProviderWriteActivityTracker: providerWriteActivityTracker,
+        }
+      : {}),
+    ...(config.readLiveCollaborationStatus
+      ? {
+          readLiveCollaborationStatus: config.readLiveCollaborationStatus,
         }
       : {}),
     ...domainSupportManifestFields,

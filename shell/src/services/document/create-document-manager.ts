@@ -41,6 +41,7 @@ import {
   extractImportedPivotMetadata,
 } from './imported-pivot-metadata';
 import { importInteractiveHostBackedDocument } from './import-interactive-host-backed-document';
+import { decorateCollaborationHandleWithVersioning } from './collaboration-versioning';
 
 /**
  * Create a DocumentManager instance.
@@ -757,6 +758,7 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
               `Collaboration roomUrl mismatch: shell=${roomUrl}, host=${result.room.roomUrl}`,
             );
           }
+          handle = decorateCollaborationHandleWithVersioning(handle, sidecar, result.room.roomId);
           const resources = { handle, hostAdapter: hostResult };
 
           if (disposedAll || isDisposeRequested(fileId, generation)) {

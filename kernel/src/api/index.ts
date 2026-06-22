@@ -46,6 +46,9 @@ export {
   type CreateWorkbookOptions,
   type Workbook,
   type WorkbookConfig,
+  type VersionLiveCollaborationState,
+  type VersionLiveCollaborationStatus,
+  type VersionLiveCollaborationStatusReader,
 } from './workbook';
 // WorksheetImpl intentionally NOT exported — use createWorkbook() to get Worksheet instances.
 // Tests that need the concrete class can import from '@mog-sdk/kernel/api/worksheet' directly.
@@ -59,6 +62,7 @@ export {
   type CollaborationSidecarStatus,
   type DocumentHandle,
   type DocumentHandleInternal,
+  type DocumentHandleWorkbookConfig,
 } from './document';
 
 // Introspection (getFunctionCatalog/Info: @stability stable, getWorkbookSnapshot: @stability experimental)

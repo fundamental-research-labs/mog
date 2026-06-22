@@ -1,6 +1,7 @@
 import type { VersionDiagnostic, VersionSurfaceStatus } from '@mog-sdk/contracts/api';
 
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
+import type { VersionLiveCollaborationDirtyStatus } from './version-live-collaboration-status';
 import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -38,6 +39,7 @@ export type AttachedVersionSurfaceStatusService = {
 export function createWorkbookVersionSurfaceStatusService(input: {
   readonly readDirtyState: () => WorkbookVersionSurfaceDirtyState;
   readonly readPendingProviderWrites?: () => MaybePromise<VersionPendingProviderWritesStatus>;
+  readonly readLiveCollaborationStatus?: () => MaybePromise<VersionLiveCollaborationDirtyStatus>;
 }): WorkbookVersionSurfaceStatusService {
   let activeCheckoutSession: VersionSurfaceCheckoutSession | null = null;
 
@@ -48,6 +50,9 @@ export function createWorkbookVersionSurfaceStatusService(input: {
         input.readPendingProviderWrites
           ? await input.readPendingProviderWrites()
           : cleanPendingProviderWrites(),
+        input.readLiveCollaborationStatus
+          ? await input.readLiveCollaborationStatus()
+          : cleanLiveCollaborationStatus(),
       ),
     readActiveCheckoutSession: () =>
       activeCheckoutSession === null ? null : Object.freeze({ ...activeCheckoutSession }),
@@ -255,6 +260,7 @@ function checkoutSessionFromMaterialization(
 function dirtyStatusFromState(
   state: WorkbookVersionSurfaceDirtyState,
   providerWrites: VersionPendingProviderWritesStatus,
+  liveCollaboration: VersionLiveCollaborationDirtyStatus,
 ): VersionSurfaceStatus['dirty'] {
   const pendingRecalc = state.calculationState !== 'done';
   const unsupportedDirtyDomains: readonly string[] = [];
@@ -287,6 +293,7 @@ function dirtyStatusFromState(
         ]
       : []),
     ...providerWrites.unsafeReasons,
+    ...liveCollaboration.unsafeReasons,
   ];
   const statusRevision = [
     'workbook',
@@ -296,6 +303,7 @@ function dirtyStatusFromState(
     `calc:${state.calculationState}`,
     `checkout:${state.checkoutInProgress ? 'busy' : 'idle'}`,
     `providerWrites:${providerWrites.statusRevision}`,
+    `liveCollaboration:${liveCollaboration.statusRevision}`,
   ].join('|');
 
   return {
@@ -306,10 +314,15 @@ function dirtyStatusFromState(
     unsupportedDirtyDomains,
     pendingProviderWrites: providerWrites.pendingProviderWrites,
     pendingRecalc,
+    liveCollaboration: liveCollaboration.liveCollaboration,
     checkoutSafe: unsafeReasons.length === 0,
     unsafeReasons,
     source: 'VC-05',
-    diagnostics: dedupeDiagnostics([...unsafeReasons, ...providerWrites.diagnostics]),
+    diagnostics: dedupeDiagnostics([
+      ...unsafeReasons,
+      ...providerWrites.diagnostics,
+      ...liveCollaboration.diagnostics,
+    ]),
   };
 }
 
@@ -317,6 +330,18 @@ function cleanPendingProviderWrites(): VersionPendingProviderWritesStatus {
   return {
     pendingProviderWrites: false,
     statusRevision: 'provider:none',
+    unsafeReasons: [],
+    diagnostics: [],
+  };
+}
+
+function cleanLiveCollaborationStatus(): VersionLiveCollaborationDirtyStatus {
+  return {
+    liveCollaboration: {
+      state: 'absent',
+      statusRevision: 'liveCollaboration:absent',
+    },
+    statusRevision: 'liveCollaboration:absent',
     unsafeReasons: [],
     diagnostics: [],
   };
@@ -386,6 +411,8 @@ function projectDirtyStatus(value: unknown): VersionSurfaceStatus['dirty'] | nul
   const unsafeReasons = diagnosticArray(value.unsafeReasons);
   const diagnostics = diagnosticArray(value.diagnostics);
   if (!unsupportedDirtyDomains || !unsafeReasons || !diagnostics) return null;
+  const liveCollaboration = projectLiveCollaboration(value.liveCollaboration);
+  if (value.liveCollaboration !== undefined && !liveCollaboration) return null;
 
   return {
     statusRevision: value.statusRevision,
@@ -395,10 +422,50 @@ function projectDirtyStatus(value: unknown): VersionSurfaceStatus['dirty'] | nul
     unsupportedDirtyDomains,
     pendingProviderWrites: value.pendingProviderWrites,
     pendingRecalc: value.pendingRecalc,
+    ...(liveCollaboration ? { liveCollaboration } : {}),
     checkoutSafe: value.checkoutSafe,
     unsafeReasons,
     source: 'VC-05',
     diagnostics,
+  };
+}
+
+function projectLiveCollaboration(
+  value: unknown,
+): VersionSurfaceStatus['dirty']['liveCollaboration'] | null {
+  if (value === undefined) return null;
+  if (!isRecord(value)) return null;
+  if (
+    value.state !== 'absent' &&
+    value.state !== 'disabled' &&
+    value.state !== 'idle' &&
+    value.state !== 'active' &&
+    value.state !== 'unknown'
+  ) {
+    return null;
+  }
+  if (typeof value.statusRevision !== 'string' || value.statusRevision.length === 0) return null;
+  return {
+    state: value.state,
+    statusRevision: value.statusRevision,
+    ...(typeof value.roomId === 'string' && value.roomId.length > 0
+      ? { roomId: value.roomId }
+      : {}),
+    ...(typeof value.sidecarStatus === 'string' && value.sidecarStatus.length > 0
+      ? { sidecarStatus: value.sidecarStatus }
+      : {}),
+    ...(typeof value.activeParticipantCount === 'number'
+      ? { activeParticipantCount: value.activeParticipantCount }
+      : {}),
+    ...(typeof value.remoteProviderAttached === 'boolean'
+      ? { remoteProviderAttached: value.remoteProviderAttached }
+      : {}),
+    ...(typeof value.inFlightRemoteUpdateCount === 'number'
+      ? { inFlightRemoteUpdateCount: value.inFlightRemoteUpdateCount }
+      : {}),
+    ...(typeof value.syncApplyRemoteQueueDepth === 'number'
+      ? { syncApplyRemoteQueueDepth: value.syncApplyRemoteQueueDepth }
+      : {}),
   };
 }
 

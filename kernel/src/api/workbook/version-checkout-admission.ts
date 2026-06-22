@@ -16,6 +16,15 @@ type PendingProviderWriteNumberPayload = {
   pendingRemotePromotionActiveCount?: number;
   pendingRemotePromotionQueuedCount?: number;
 };
+type LiveCollaborationPayload = {
+  collaborationState?: string;
+  roomId?: string;
+  sidecarStatus?: string;
+  activeParticipantCount?: number;
+  remoteProviderAttached?: boolean;
+  inFlightRemoteUpdateCount?: number;
+  syncApplyRemoteQueueDepth?: number;
+};
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -37,6 +46,9 @@ export type VersionCheckoutAdmissionBlock =
   | {
       readonly reason: 'pendingRecalc';
     }
+  | ({
+      readonly reason: 'liveCollaborationActive';
+    } & LiveCollaborationPayload)
   | {
       readonly reason: 'checkoutAlreadyInProgress' | 'checkoutPreflightUnsafe';
     }
@@ -104,6 +116,15 @@ function checkoutAdmissionBlockForDirtyStatus(
   if (unsafeReasonCode(dirty, 'version.surfaceStatus.checkoutInProgress')) {
     return { reason: 'checkoutAlreadyInProgress' };
   }
+  if (
+    unsafeReasonCode(dirty, 'version.surfaceStatus.liveCollaborationActive') ||
+    unsafeReasonCode(dirty, 'version.surfaceStatus.liveCollaborationUnknown')
+  ) {
+    return {
+      reason: 'liveCollaborationActive',
+      ...liveCollaborationPayload(dirty.unsafeReasons),
+    };
+  }
   if (!dirty.checkoutSafe) return { reason: 'checkoutPreflightUnsafe' };
   return null;
 }
@@ -169,14 +190,58 @@ function pendingProviderWritePayload(
   return payload;
 }
 
+function liveCollaborationPayload(
+  unsafeReasons: readonly VersionDiagnostic[],
+): LiveCollaborationPayload {
+  const payload: LiveCollaborationPayload = {};
+  for (const reason of unsafeReasons) {
+    if (
+      reason.code !== 'version.surfaceStatus.liveCollaborationActive' &&
+      reason.code !== 'version.surfaceStatus.liveCollaborationUnknown'
+    ) {
+      continue;
+    }
+    assignStringPayload(payload, 'collaborationState', reason.data);
+    assignStringPayload(payload, 'roomId', reason.data);
+    assignStringPayload(payload, 'sidecarStatus', reason.data);
+    assignNumberPayload(payload, 'activeParticipantCount', reason.data);
+    assignBooleanPayload(payload, 'remoteProviderAttached', reason.data);
+    assignNumberPayload(payload, 'inFlightRemoteUpdateCount', reason.data);
+    assignNumberPayload(payload, 'syncApplyRemoteQueueDepth', reason.data);
+  }
+  return payload;
+}
+
 function assignNumberPayload(
-  payload: PendingProviderWriteNumberPayload,
-  key: keyof PendingProviderWriteNumberPayload,
+  payload: PendingProviderWriteNumberPayload | LiveCollaborationPayload,
+  key: keyof PendingProviderWriteNumberPayload | keyof LiveCollaborationPayload,
   data: VersionDiagnostic['data'],
 ): void {
   const value = data?.[key];
   if (typeof value === 'number') {
-    payload[key] = value;
+    (payload as Record<string, number>)[key] = value;
+  }
+}
+
+function assignStringPayload(
+  payload: LiveCollaborationPayload,
+  key: keyof LiveCollaborationPayload,
+  data: VersionDiagnostic['data'],
+): void {
+  const value = data?.[key];
+  if (typeof value === 'string') {
+    (payload as Record<string, string>)[key] = value;
+  }
+}
+
+function assignBooleanPayload(
+  payload: LiveCollaborationPayload,
+  key: keyof LiveCollaborationPayload,
+  data: VersionDiagnostic['data'],
+): void {
+  const value = data?.[key];
+  if (typeof value === 'boolean') {
+    (payload as Record<string, boolean>)[key] = value;
   }
 }
 

@@ -680,6 +680,26 @@ function checkoutAdmissionDiagnostic(
       });
     case 'pendingRecalc':
       return checkoutPendingRecalcDiagnostic({ ...payload, reason: block.reason });
+    case 'liveCollaborationActive':
+      return checkoutLiveCollaborationActiveDiagnostic({
+        ...payload,
+        reason: block.reason,
+        ...(block.collaborationState ? { collaborationState: block.collaborationState } : {}),
+        ...(block.roomId ? { roomId: block.roomId } : {}),
+        ...(block.sidecarStatus ? { sidecarStatus: block.sidecarStatus } : {}),
+        ...(block.activeParticipantCount === undefined
+          ? {}
+          : { activeParticipantCount: block.activeParticipantCount }),
+        ...(block.remoteProviderAttached === undefined
+          ? {}
+          : { remoteProviderAttached: block.remoteProviderAttached }),
+        ...(block.inFlightRemoteUpdateCount === undefined
+          ? {}
+          : { inFlightRemoteUpdateCount: block.inFlightRemoteUpdateCount }),
+        ...(block.syncApplyRemoteQueueDepth === undefined
+          ? {}
+          : { syncApplyRemoteQueueDepth: block.syncApplyRemoteQueueDepth }),
+      });
     case 'checkoutAlreadyInProgress':
     case 'checkoutPreflightUnsafe':
       return checkoutWriteFenceUnavailableDiagnostic({ ...payload, reason: block.reason });
@@ -731,6 +751,20 @@ function checkoutPendingRecalcDiagnostic(
   return publicDiagnostic(
     'VERSION_CHECKOUT_PENDING_RECALC',
     'Checkout is blocked while workbook recalculation is not settled.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
+function checkoutLiveCollaborationActiveDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE',
+    'Checkout is blocked while live collaboration is active or cannot be proven idle.',
     {
       severity: 'error',
       recoverability: 'retry',
@@ -869,6 +903,8 @@ function safeMessageForIssue(issueCode: string): string {
       return 'Checkout is blocked while remote sync changes are waiting to be promoted into version history.';
     case 'VERSION_CHECKOUT_PENDING_RECALC':
       return 'Checkout is blocked while workbook recalculation is not settled.';
+    case 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE':
+      return 'Checkout is blocked while live collaboration is active or cannot be proven idle.';
     case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
       return 'Checkout is blocked because the active checkout session is stale relative to its ref head.';
     case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
@@ -910,6 +946,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
     case 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES':
     case 'VERSION_CHECKOUT_PENDING_RECALC':
+    case 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE':
     case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
       return 'retry';
     default:

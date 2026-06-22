@@ -46,17 +46,24 @@ async function flushMicrotasks(): Promise<void> {
   }
 }
 
-function makeHandle(documentId: string, dispose?: () => Promise<void> | void): DocumentHandle {
+function makeHandle(
+  documentId: string,
+  dispose?: () => Promise<void> | void,
+  workbook: jest.Mock = jest.fn(async () => ({})),
+): DocumentHandle {
   return {
     documentId,
     dispose: jest.fn(dispose ?? (() => undefined)),
+    workbook,
   } as unknown as DocumentHandle;
 }
 
-function makeSidecar() {
+function makeSidecar(options: { readonly status?: () => string } = {}) {
   return {
     detach: jest.fn(),
-    status: 'online',
+    get status() {
+      return options.status?.() ?? 'online';
+    },
     participants: new Map(),
     onStatusChange: jest.fn(() => jest.fn()),
     onPresenceChange: jest.fn(() => jest.fn()),
@@ -437,6 +444,66 @@ describe('createDocumentManager import identity', () => {
       bootstrapRoomEpoch: 3,
       bootstrapFullStateHash: 'hash-1',
       bootstrapSnapshotToken: 'token-1',
+    });
+  });
+
+  it('passes live sidecar status reader into collaboration workbook config', async () => {
+    let currentStatus = 'online';
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('room-1', undefined, originalWorkbook);
+    const sidecar = makeSidecar({ status: () => currentStatus });
+    const hostResult = { dispose: jest.fn() };
+    const options = {
+      documentId: 'room-1',
+      baseUrl: 'ws://collab.test/socket/',
+      roomId: 'room-1',
+      participantId: 'participant-1',
+    };
+    const manager = createDocumentManager();
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedCollaborationDocument).mockResolvedValue({
+      handle,
+      sidecar,
+      room: {
+        roomId: 'room-1',
+        roomUrl: 'ws://collab.test/socket/room-1',
+        roomEpoch: 3,
+        fullStateHash: 'hash-1',
+        snapshotToken: 'token-1',
+      },
+    } as never);
+
+    const returnedHandle = await manager.createCollaborationDocument('file-1', options);
+    await returnedHandle.workbook({
+      versioning: {
+        requireDomainSupportManifest: true,
+      } as never,
+    });
+
+    expect(originalWorkbook).toHaveBeenCalledWith({
+      versioning: expect.objectContaining({
+        requireDomainSupportManifest: true,
+        readLiveCollaborationStatus: expect.any(Function),
+      }),
+    });
+    const calledConfig = originalWorkbook.mock.calls[0]?.[0] as {
+      versioning?: {
+        readLiveCollaborationStatus?: () => unknown;
+      };
+    };
+    const readLiveCollaborationStatus = calledConfig.versioning?.readLiveCollaborationStatus;
+    expect(readLiveCollaborationStatus).toBeDefined();
+    expect(await readLiveCollaborationStatus?.()).toMatchObject({
+      state: 'active',
+      roomId: 'room-1',
+      sidecarStatus: 'online',
+    });
+
+    currentStatus = 'reconnecting';
+    expect(await readLiveCollaborationStatus?.()).toMatchObject({
+      state: 'active',
+      roomId: 'room-1',
+      sidecarStatus: 'reconnecting',
     });
   });
 

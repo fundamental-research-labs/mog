@@ -114,6 +114,7 @@ import {
   attachWorkbookVersioning,
   attachWorkbookVersionSurfaceStatusService,
 } from './version-wiring';
+import { readVersionLiveCollaborationStatus } from './version-live-collaboration-status';
 import { readVersionPendingProviderWrites } from './version-pending-provider-writes';
 import {
   getKnownSheetNames,
@@ -269,6 +270,7 @@ export class WorkbookImpl implements WorkbookInternal {
       contextGeneration: this.contextBinding.generation,
     }),
     readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
+    readLiveCollaborationStatus: () => readVersionLiveCollaborationStatus(this.ctx),
   });
   private readonly checkoutTransactionGuard: VersionCheckoutTransactionGuard = {
     beginCheckoutTransaction: () => this.beginCheckoutTransaction(),

@@ -7,7 +7,13 @@
  *
  */
 
-import { getMovingEdge, rangeFromAnchorAndCell } from '../../../systems/shared/types';
+import {
+  createFullColumnRangeSpan,
+  createFullRowRangeSpan,
+  getMovingEdge,
+  normalizeRange,
+  rangeFromAnchorAndCell,
+} from '../../../systems/shared/types';
 
 import type {
   ActionDependencies,
@@ -17,7 +23,7 @@ import type {
   CellRange,
   Direction,
 } from './helpers';
-import { handled } from './helpers';
+import { MAX_COLS, MAX_ROWS, handled } from './helpers';
 
 /**
  * Move to data edge in a direction.
@@ -44,6 +50,24 @@ export const MOVE_TO_EDGE_RIGHT: AsyncActionHandler = (deps) => moveToDataEdge(d
 // Data-Edge Extension Handlers (Ctrl+Shift+Arrow)
 // =============================================================================
 
+function farthestAxisEdge(start: number, end: number, anchor: number): number {
+  return Math.abs(start - anchor) >= Math.abs(end - anchor) ? start : end;
+}
+
+function isSemanticFullColumnRange(range: CellRange): boolean {
+  const normalized = normalizeRange(range);
+  return (
+    range.isFullColumn === true && normalized.startRow === 0 && normalized.endRow === MAX_ROWS - 1
+  );
+}
+
+function isSemanticFullRowRange(range: CellRange): boolean {
+  const normalized = normalizeRange(range);
+  return (
+    range.isFullRow === true && normalized.startCol === 0 && normalized.endCol === MAX_COLS - 1
+  );
+}
+
 /**
  * Extend selection to data edge.
  * Uses Rust bridge findDataEdge, then creates range from anchor to target.
@@ -65,6 +89,49 @@ async function extendToDataEdge(
   const anchorCell: CellCoord = anchor ?? activeCell;
 
   const currentRange = ranges[ranges.length - 1] as CellRange | undefined;
+
+  if (currentRange && isSemanticFullColumnRange(currentRange)) {
+    if (direction === 'left' || direction === 'right') {
+      const normalized = normalizeRange(currentRange);
+      const extendFromCol = farthestAxisEdge(
+        normalized.startCol,
+        normalized.endCol,
+        anchorCell.col,
+      );
+      const targetCell = await ws.findDataEdge(anchorCell.row, extendFromCol, direction);
+      const newRange = createFullColumnRangeSpan(anchorCell.col, targetCell.col);
+      deps.commands.selection.setSelection(
+        [newRange],
+        anchorCell,
+        anchorCell,
+        anchorCell.col,
+        null,
+      );
+    }
+    return handled();
+  }
+
+  if (currentRange && isSemanticFullRowRange(currentRange)) {
+    if (direction === 'up' || direction === 'down') {
+      const normalized = normalizeRange(currentRange);
+      const extendFromRow = farthestAxisEdge(
+        normalized.startRow,
+        normalized.endRow,
+        anchorCell.row,
+      );
+      const targetCell = await ws.findDataEdge(extendFromRow, anchorCell.col, direction);
+      const newRange = createFullRowRangeSpan(anchorCell.row, targetCell.row);
+      deps.commands.selection.setSelection(
+        [newRange],
+        anchorCell,
+        anchorCell,
+        null,
+        anchorCell.row,
+      );
+    }
+    return handled();
+  }
+
   const extendFrom: CellCoord = currentRange ? getMovingEdge(currentRange, anchorCell) : activeCell;
 
   const targetCell = await ws.findDataEdge(extendFrom.row, extendFrom.col, direction);

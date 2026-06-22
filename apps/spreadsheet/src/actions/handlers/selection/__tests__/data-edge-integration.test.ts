@@ -14,7 +14,7 @@
 
 import { jest } from '@jest/globals';
 
-import { sheetId } from '@mog-sdk/contracts/core';
+import { MAX_COLS, MAX_ROWS, sheetId } from '@mog-sdk/contracts/core';
 import { findDataEdge, type CellValueGetter } from '../../../../infra/utils';
 import {
   EXTEND_TO_EDGE_DOWN,
@@ -139,6 +139,8 @@ function createMockDeps(
     ranges: CellRange[];
     activeCell: CellCoord;
     anchor: CellCoord | null | undefined;
+    anchorCol: number | null | undefined;
+    anchorRow: number | null | undefined;
   } | null;
 } {
   const captureBox: {
@@ -146,6 +148,8 @@ function createMockDeps(
       ranges: CellRange[];
       activeCell: CellCoord;
       anchor: CellCoord | null | undefined;
+      anchorCol: number | null | undefined;
+      anchorRow: number | null | undefined;
     } | null;
   } = {
     value: null,
@@ -167,11 +171,15 @@ function createMockDeps(
         newRanges: CellRange[],
         newActiveCell: CellCoord,
         newAnchor?: CellCoord | null,
+        newAnchorCol?: number | null,
+        newAnchorRow?: number | null,
       ) => {
         captureBox.value = {
           ranges: newRanges,
           activeCell: newActiveCell,
           anchor: newAnchor,
+          anchorCol: newAnchorCol,
+          anchorRow: newAnchorRow,
         };
       },
       goTo: jest.fn(),
@@ -378,6 +386,139 @@ describe('extendToDataEdge - Integration tests with ACTUAL handlers', () => {
       expect(finalRange.endCol).toBe(1);
       expect(captured2!.activeCell).toEqual(activeCell);
       expect(captured2!.anchor).toEqual(activeCell);
+    });
+  });
+
+  describe('full-row and full-column header selections', () => {
+    const vendorMonthData = new Map<string, unknown>([
+      ['0,0', 'Vendor'],
+      ['0,1', 'Jan'],
+      ['0,2', 'Feb'],
+      ['0,3', 'Mar'],
+      ['1,0', 'Northwind'],
+      ['2,0', 'Contoso'],
+      ['3,0', 'Fabrikam'],
+      ['4,0', 'Adventure'],
+      ['5,0', 'Tailspin'],
+      ['6,0', 'Wingtip'],
+      ['7,0', 'Litware'],
+    ]);
+
+    it('Cmd+Shift+Right from selected column A selects full columns A:D', async () => {
+      const activeCell: CellCoord = { row: 0, col: 0 };
+      const ranges: CellRange[] = [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: MAX_ROWS - 1,
+          endCol: 0,
+          isFullColumn: true,
+        },
+      ];
+
+      const { deps, getCapturedSelection } = createMockDeps(
+        vendorMonthData,
+        activeCell,
+        ranges,
+        null,
+      );
+
+      const result = await EXTEND_TO_EDGE_RIGHT(deps);
+
+      expect(result.handled).toBe(true);
+      expect(getCapturedSelection()).toEqual({
+        ranges: [
+          {
+            startRow: 0,
+            startCol: 0,
+            endRow: MAX_ROWS - 1,
+            endCol: 3,
+            isFullColumn: true,
+          },
+        ],
+        activeCell,
+        anchor: activeCell,
+        anchorCol: 0,
+        anchorRow: null,
+      });
+    });
+
+    it('Cmd+Shift+Left from selected column D selects full columns A:D', async () => {
+      const activeCell: CellCoord = { row: 0, col: 3 };
+      const ranges: CellRange[] = [
+        {
+          startRow: 0,
+          startCol: 3,
+          endRow: MAX_ROWS - 1,
+          endCol: 3,
+          isFullColumn: true,
+        },
+      ];
+
+      const { deps, getCapturedSelection } = createMockDeps(
+        vendorMonthData,
+        activeCell,
+        ranges,
+        null,
+      );
+
+      const result = await EXTEND_TO_EDGE_LEFT(deps);
+
+      expect(result.handled).toBe(true);
+      expect(getCapturedSelection()).toEqual({
+        ranges: [
+          {
+            startRow: 0,
+            startCol: 0,
+            endRow: MAX_ROWS - 1,
+            endCol: 3,
+            isFullColumn: true,
+          },
+        ],
+        activeCell,
+        anchor: activeCell,
+        anchorCol: 3,
+        anchorRow: null,
+      });
+    });
+
+    it('Cmd+Shift+Down from selected row 1 selects full rows 1:8', async () => {
+      const activeCell: CellCoord = { row: 0, col: 0 };
+      const ranges: CellRange[] = [
+        {
+          startRow: 0,
+          startCol: 0,
+          endRow: 0,
+          endCol: MAX_COLS - 1,
+          isFullRow: true,
+        },
+      ];
+
+      const { deps, getCapturedSelection } = createMockDeps(
+        vendorMonthData,
+        activeCell,
+        ranges,
+        null,
+      );
+
+      const result = await EXTEND_TO_EDGE_DOWN(deps);
+
+      expect(result.handled).toBe(true);
+      expect(getCapturedSelection()).toEqual({
+        ranges: [
+          {
+            startRow: 0,
+            startCol: 0,
+            endRow: 7,
+            endCol: MAX_COLS - 1,
+            isFullRow: true,
+          },
+        ],
+        activeCell,
+        anchor: activeCell,
+        anchorCol: null,
+        anchorRow: 0,
+      });
     });
   });
 });

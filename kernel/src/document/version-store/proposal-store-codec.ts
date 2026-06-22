@@ -6,7 +6,8 @@ import type {
   AgentProposalStoreRow,
   AgentProposalMutationLogEntry,
 } from './proposal-store';
-import type { RedactionSummary, VersionAuthor } from '@mog-sdk/contracts/api';
+import type { RedactionSummary } from '@mog-sdk/contracts/api';
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
 const AGENT_PROPOSAL_STATUS_VALUES = Object.freeze([
@@ -146,14 +147,16 @@ function isAgentProposalRecord(value: unknown): value is AgentProposalRecord {
   if (typeof value.targetHeadIdAtCreation !== 'string') return false;
   if (typeof value.proposalBranchName !== 'string') return false;
   if (!isAgentProposalStatus(value.status)) return false;
-  if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1) return false;
+  if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1)
+    return false;
   if (typeof value.agentRunId !== 'string') return false;
   if (!isVersionAuthor(value.agent) || !isVersionAuthor(value.createdBy)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (!isRedactionSummary(value.redaction)) return false;
   if (!Array.isArray(value.diagnostics)) return false;
   if (value.lastActor !== undefined && !isVersionAuthor(value.lastActor)) return false;
-  if (value.proposalCommitId !== undefined && typeof value.proposalCommitId !== 'string') return false;
+  if (value.proposalCommitId !== undefined && typeof value.proposalCommitId !== 'string')
+    return false;
   if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') return false;
   if (value.reviewId !== undefined && typeof value.reviewId !== 'string') return false;
   if (value.verification !== undefined && !isRecord(value.verification)) return false;
@@ -164,9 +167,11 @@ function isAgentProposalRecord(value: unknown): value is AgentProposalRecord {
   ) {
     return false;
   }
-  if (value.rejectionReason !== undefined && typeof value.rejectionReason !== 'string') return false;
+  if (value.rejectionReason !== undefined && typeof value.rejectionReason !== 'string')
+    return false;
   if (value.failureReason !== undefined && typeof value.failureReason !== 'string') return false;
-  if (value.supersedeReason !== undefined && typeof value.supersedeReason !== 'string') return false;
+  if (value.supersedeReason !== undefined && typeof value.supersedeReason !== 'string')
+    return false;
   return true;
 }
 

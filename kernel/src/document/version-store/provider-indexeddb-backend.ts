@@ -350,7 +350,9 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
     });
   }
 
-  async openMergeApplyIntentStore(namespace: VersionGraphNamespace): Promise<IndexedDbMergeApplyIntentStore> {
+  async openMergeApplyIntentStore(
+    namespace: VersionGraphNamespace,
+  ): Promise<IndexedDbMergeApplyIntentStore> {
     await this.openGraph(namespace);
     return new IndexedDbMergeApplyIntentStore({
       namespace,
@@ -359,7 +361,9 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
     });
   }
 
-  async openPendingRemoteSegmentStore(namespace: VersionGraphNamespace): Promise<IndexedDbPendingRemoteSegmentStore> {
+  async openPendingRemoteSegmentStore(
+    namespace: VersionGraphNamespace,
+  ): Promise<IndexedDbPendingRemoteSegmentStore> {
     await this.openGraph(namespace);
     return new IndexedDbPendingRemoteSegmentStore({
       namespace,
@@ -793,7 +797,7 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
             ? { refCasProof: { applyKind: 'fastForward' as const } }
             : operation === 'mergeCommit'
               ? { refCasProof: { applyKind: 'mergeCommit' as const } }
-            : {}),
+              : {}),
         },
       });
       return result;
@@ -801,22 +805,18 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
       if (error instanceof RefCasConflictError) {
         return failedGraphWrite(
           [
-            graphDiagnostic(
-              'VERSION_REF_CONFLICT',
-              'Graph ref no longer matches expected head.',
-              {
-                refName: result.ref.name,
-                commitId: error.actualHead,
-                operation,
-                namespace: this.namespace,
-                details: {
-                  expectedHead: error.expectedHead,
-                  actualHead: error.actualHead,
-                  expectedRefVersion: error.expectedRefVersion.value,
-                  actualRefVersion: error.actualRefVersion.value,
-                },
+            graphDiagnostic('VERSION_REF_CONFLICT', 'Graph ref no longer matches expected head.', {
+              refName: result.ref.name,
+              commitId: error.actualHead,
+              operation,
+              namespace: this.namespace,
+              details: {
+                expectedHead: error.expectedHead,
+                actualHead: error.actualHead,
+                expectedRefVersion: error.expectedRefVersion.value,
+                actualRefVersion: error.actualRefVersion.value,
               },
-            ),
+            }),
           ],
           'no-write-attempted',
         );
@@ -903,11 +903,21 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
     }
   }
 
-  async createBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['createBranch']>) { return this.branchLifecycle.createBranch(...args); }
-  async readBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['readBranch']>) { return this.branchLifecycle.readBranch(...args); }
-  async listBranches(...args: Parameters<IndexedDbGraphBranchLifecycle['listBranches']>) { return this.branchLifecycle.listBranches(...args); }
-  async fastForwardBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['fastForwardBranch']>) { return this.branchLifecycle.fastForwardBranch(...args); }
-  async getHead() { return this.branchLifecycle.getHead(); }
+  async createBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['createBranch']>) {
+    return this.branchLifecycle.createBranch(...args);
+  }
+  async readBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['readBranch']>) {
+    return this.branchLifecycle.readBranch(...args);
+  }
+  async listBranches(...args: Parameters<IndexedDbGraphBranchLifecycle['listBranches']>) {
+    return this.branchLifecycle.listBranches(...args);
+  }
+  async fastForwardBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['fastForwardBranch']>) {
+    return this.branchLifecycle.fastForwardBranch(...args);
+  }
+  async getHead() {
+    return this.branchLifecycle.getHead();
+  }
 
   async listCommits(
     options?: VersionGraphListCommitsOptions,
@@ -942,7 +952,9 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
 }
 
 function storageRefNameFromGraphRefName(name: string): string {
-  return name.startsWith(REF_NAME_STORAGE_PREFIX) ? name.slice(REF_NAME_STORAGE_PREFIX.length) : name;
+  return name.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? name.slice(REF_NAME_STORAGE_PREFIX.length)
+    : name;
 }
 
 function failedObjectBatch(

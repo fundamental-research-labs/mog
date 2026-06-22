@@ -3,12 +3,12 @@ import type {
   Paged,
   RedactionPolicy,
   RedactionSummary,
-  VersionAuthor,
   VersionDiagnostic,
   VersionResult,
   VerificationSummary,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { objectDigestFor } from './merge-apply-intent-store';
 import {
@@ -132,16 +132,12 @@ export type ListAgentProposalsStoreInput = {
 
 export interface AgentProposalMetadataStore {
   readonly documentScope: VersionDocumentScope;
-  createProposal(
-    input: CreateAgentProposalStoreInput,
-  ): Promise<VersionResult<AgentProposalRecord>>;
+  createProposal(input: CreateAgentProposalStoreInput): Promise<VersionResult<AgentProposalRecord>>;
   getProposal(proposalId: AgentProposalId | string): Promise<VersionResult<AgentProposalRecord>>;
   listProposals(
     input: ListAgentProposalsStoreInput,
   ): Promise<VersionResult<Paged<AgentProposalSummary>>>;
-  updateProposal(
-    input: UpdateAgentProposalStoreInput,
-  ): Promise<VersionResult<AgentProposalRecord>>;
+  updateProposal(input: UpdateAgentProposalStoreInput): Promise<VersionResult<AgentProposalRecord>>;
 }
 
 export type AgentProposalMetadataStoreProvider = {
@@ -214,7 +210,9 @@ export class AgentProposalMetadataMemoryBackend {
     documentScopeKey: string,
     proposalId: AgentProposalId | string,
   ): AgentProposalStoreRow | undefined {
-    return cloneAgentProposalRow(this.rowsByKey.get(agentProposalStorageKey(documentScopeKey, proposalId)));
+    return cloneAgentProposalRow(
+      this.rowsByKey.get(agentProposalStorageKey(documentScopeKey, proposalId)),
+    );
   }
 
   put(row: AgentProposalStoreRow): void {
@@ -293,7 +291,9 @@ export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStor
         documentId: record.documentId,
         targetRef: record.targetRef,
         baseCommitId: record.baseCommitId,
-        ...(record.proposalCommitId === undefined ? {} : { proposalCommitId: record.proposalCommitId }),
+        ...(record.proposalCommitId === undefined
+          ? {}
+          : { proposalCommitId: record.proposalCommitId }),
         proposalBranchName: record.proposalBranchName,
         agentRunId: record.agentRunId,
         status: record.status,
@@ -602,14 +602,22 @@ function validateCreateProposalInput(
   | { readonly ok: true }
   | { readonly ok: false; readonly result: VersionResult<AgentProposalRecord> } {
   if (!input.clientRequestId) {
-    return invalidCreate('missing_client_request_id', ['clientRequestId'], 'clientRequestId is required.');
+    return invalidCreate(
+      'missing_client_request_id',
+      ['clientRequestId'],
+      'clientRequestId is required.',
+    );
   }
   if (!input.title) return invalidCreate('missing_title', ['title'], 'Proposal title is required.');
   if (!input.targetRef) {
     return invalidCreate('missing_target_ref', ['targetRef'], 'Proposal target ref is required.');
   }
   if (!input.baseCommitId) {
-    return invalidCreate('missing_base_commit', ['baseCommitId'], 'Proposal base commit is required.');
+    return invalidCreate(
+      'missing_base_commit',
+      ['baseCommitId'],
+      'Proposal base commit is required.',
+    );
   }
   if (!input.targetHeadIdAtCreation) {
     return invalidCreate(
@@ -639,7 +647,10 @@ function validateCreateProposalInput(
       'Trusted proposal identity must include an agent run id.',
     );
   }
-  if (!isVersionAuthor(input.trustedIdentity.actor) || !isVersionAuthor(input.trustedIdentity.agent)) {
+  if (
+    !isVersionAuthor(input.trustedIdentity.actor) ||
+    !isVersionAuthor(input.trustedIdentity.agent)
+  ) {
     return invalidCreate(
       'invalid_trusted_identity',
       ['trustedIdentity'],
@@ -656,10 +667,18 @@ function validateStatusUpdate(
   | { readonly ok: true }
   | { readonly ok: false; readonly result: VersionResult<AgentProposalRecord> } {
   if (!isAgentProposalStatus(input.status)) {
-    return invalidUpdate('invalid_proposal_status', [...AGENT_PROPOSAL_STATUSES], 'Proposal status is not supported.');
+    return invalidUpdate(
+      'invalid_proposal_status',
+      [...AGENT_PROPOSAL_STATUSES],
+      'Proposal status is not supported.',
+    );
   }
   if (input.status === 'open') {
-    return invalidUpdate('proposal_already_created', ['workspace', 'rejected', 'failed', 'superseded'], 'Open proposals are created, not updated back to open.');
+    return invalidUpdate(
+      'proposal_already_created',
+      ['workspace', 'rejected', 'failed', 'superseded'],
+      'Open proposals are created, not updated back to open.',
+    );
   }
   const allowed = allowedProposalTransitions(record.status);
   if (!allowed.includes(input.status)) {
@@ -670,19 +689,35 @@ function validateStatusUpdate(
     );
   }
   if (input.status === 'workspace' && !input.workspaceId) {
-    return invalidUpdate('proposal_workspace_required', ['workspaceId'], 'Workspace proposals require a workspace id.');
+    return invalidUpdate(
+      'proposal_workspace_required',
+      ['workspaceId'],
+      'Workspace proposals require a workspace id.',
+    );
   }
   if (input.status === 'committed' && !input.proposalCommitId) {
-    return invalidUpdate('proposal_commit_required', ['proposalCommitId'], 'Committed proposals require a proposal commit id.');
+    return invalidUpdate(
+      'proposal_commit_required',
+      ['proposalCommitId'],
+      'Committed proposals require a proposal commit id.',
+    );
   }
   if (
     input.status === 'verified' &&
     (!input.verification || input.verification.status !== 'passed')
   ) {
-    return invalidUpdate('proposal_verification_required', ['passed_verification'], 'Verified proposals require passed verification.');
+    return invalidUpdate(
+      'proposal_verification_required',
+      ['passed_verification'],
+      'Verified proposals require passed verification.',
+    );
   }
   if (input.status === 'accepted' && !input.accepted) {
-    return invalidUpdate('proposal_acceptance_required', ['accepted'], 'Accepted proposals require acceptance metadata.');
+    return invalidUpdate(
+      'proposal_acceptance_required',
+      ['accepted'],
+      'Accepted proposals require acceptance metadata.',
+    );
   }
   if (
     input.status === 'failed' &&
@@ -691,7 +726,11 @@ function validateStatusUpdate(
     input.verification?.status !== 'failed' &&
     input.verification?.status !== 'blocked'
   ) {
-    return invalidUpdate('proposal_failure_required', ['diagnostics', 'reason', 'failed_verification'], 'Failed proposals require failure evidence.');
+    return invalidUpdate(
+      'proposal_failure_required',
+      ['diagnostics', 'reason', 'failed_verification'],
+      'Failed proposals require failure evidence.',
+    );
   }
   return { ok: true };
 }
@@ -722,7 +761,8 @@ function proposalMatchesListInput(
   if (input.targetRef && record.targetRef !== input.targetRef) return false;
   if (input.baseCommitId && record.baseCommitId !== input.baseCommitId) return false;
   if (input.proposalCommitId && record.proposalCommitId !== input.proposalCommitId) return false;
-  if (input.proposalBranchName && record.proposalBranchName !== input.proposalBranchName) return false;
+  if (input.proposalBranchName && record.proposalBranchName !== input.proposalBranchName)
+    return false;
   if (input.status && record.status !== input.status) return false;
   if (input.agentRunId && record.agentRunId !== input.agentRunId) return false;
   return true;

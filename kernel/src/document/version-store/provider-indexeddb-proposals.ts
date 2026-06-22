@@ -38,7 +38,10 @@ export class IndexedDbAgentProposalMetadataStore extends AgentProposalMetadataSt
           const db = await options.getDb();
           const tx = db.transaction(PROPOSALS_STORE, 'readonly');
           const done = idbTransactionDone(tx);
-          const rows = await rowsForDocumentScope(tx.objectStore(PROPOSALS_STORE), documentScopeKey);
+          const rows = await rowsForDocumentScope(
+            tx.objectStore(PROPOSALS_STORE),
+            documentScopeKey,
+          );
           await done;
           return rows;
         },

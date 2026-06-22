@@ -199,6 +199,74 @@ describe('WorkbookVersion provider-backed proposal service', () => {
         reviewId: review.value.id,
       },
     });
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-1',
+      proposalId: created.value.id,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+    if (!accepted.ok) {
+      throw new Error(`expected proposal accept success: ${JSON.stringify(accepted.error)}`);
+    }
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: {
+        status: 'fast_forwarded',
+        proposalId: created.value.id,
+        appliedCommitId: committed.value.proposalCommitId,
+        targetRef: 'refs/heads/main',
+        newHeadId: committed.value.proposalCommitId,
+        refUpdateReceiptId: expect.stringContaining('proposal-accept:'),
+      },
+    });
+
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: committed.value.proposalCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'applied', revision: 6 },
+    });
+  });
+
+  it('marks a proposal stale when the target ref moves before acceptance', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = graphCommittingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+    const ready = await createReadyReviewedProposal(version, graph, 'stale');
+    const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-stale',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+    expect(accepted).toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        proposalId: ready.proposalId,
+        expectedTargetHeadId: graph.rootCommitId,
+        actualTargetHeadId: movedMainCommitId,
+      },
+    });
+
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'stale', revision: 6 },
+    });
   });
 });
 
@@ -220,6 +288,68 @@ function createProposalInput(clientRequestId: string) {
     agent: AGENT,
     redactionPolicy: REDACTION_POLICY,
   };
+}
+
+async function createReadyReviewedProposal(
+  version: WorkbookVersionImpl,
+  graph: Awaited<ReturnType<typeof graphWithRoot>>,
+  suffix: string,
+) {
+  const created = await version.createProposal(createProposalInput(`proposal-create-${suffix}`));
+  if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+  const opened = await version.startProposalWorkspace({
+    clientRequestId: `workspace-open-${suffix}`,
+    proposalId: created.value.id,
+    expectedRevision: 1,
+    actor: ACTOR,
+  });
+  if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
+  const committed = await version.commitProposalWorkspace({
+    clientRequestId: `workspace-commit-${suffix}`,
+    proposalId: created.value.id,
+    workspaceId: opened.value.workspaceId,
+    expectedRevision: 2,
+    actor: ACTOR,
+    message: 'Agent proposal commit',
+  });
+  if (!committed.ok) throw new Error(`expected proposal commit success: ${committed.error.code}`);
+  const verified = await version.markProposalVerified({
+    clientRequestId: `proposal-verify-${suffix}`,
+    proposalId: created.value.id,
+    expectedRevision: 3,
+    actor: ACTOR,
+    verification: PASSED_VERIFICATION,
+  });
+  if (!verified.ok) throw new Error(`expected proposal verify success: ${verified.error.code}`);
+  const review = await version.openProposalReview({
+    clientRequestId: `proposal-review-${suffix}`,
+    proposalId: created.value.id,
+    expectedRevision: 4,
+    actor: ACTOR,
+  });
+  if (!review.ok) throw new Error(`expected proposal review success: ${review.error.code}`);
+
+  expect(committed.value.baseCommitId).toBe(graph.rootCommitId);
+  return { proposalId: created.value.id, proposalCommitId: committed.value.proposalCommitId };
+}
+
+async function commitMain(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  expectedHeadCommitId: WorkbookCommitId,
+): Promise<WorkbookCommitId> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
+  const graph = await provider.openGraph(namespace);
+  const main = await graph.readRef('refs/heads/main');
+  if (main.status !== 'success' || main.ref.name === 'HEAD') {
+    throw new Error('expected main ref before stale proposal test');
+  }
+  const committed = await graph.commit(
+    await commitInput(namespace, expectedHeadCommitId, main.ref.revision, 'refs/heads/main'),
+  );
+  if (committed.status !== 'success') {
+    throw new Error(`expected main move success: ${committed.diagnostics[0]?.code}`);
+  }
+  return committed.commit.id;
 }
 
 function graphCommittingWorkspaceService(

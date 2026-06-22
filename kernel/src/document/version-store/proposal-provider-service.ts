@@ -42,9 +42,11 @@ import {
   publicProposal,
   publicProposalSummary,
 } from './proposal-provider-service-utils';
+import { acceptProviderBackedAgentProposal } from './proposal-provider-accept-service';
 import type { ProposalWorkspaceLifecycleService } from './proposal-workspace-lifecycle-service';
 import { namespaceForRegistry } from './registry';
 import type { WorkbookVersionReviewService } from './review-service';
+import type { RefVersion } from './ref-store';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -82,10 +84,11 @@ type ProposalGraphProvider = Pick<
   'accessContext' | 'openGraph' | 'readGraphRegistry'
 >;
 
-type ResolvedBranchHead = {
+export type ResolvedBranchHead = {
   readonly branchName: string;
   readonly refName: VersionMainRefName | VersionRefName;
   readonly commitId: WorkbookCommitId;
+  readonly refVersion: RefVersion;
 };
 
 const PROPOSAL_BRANCH_AUTHOR: GraphVersionAuthor = Object.freeze({
@@ -433,13 +436,15 @@ export class ProviderBackedAgentProposalService {
   }
 
   async acceptProposal(
-    _input: AcceptAgentProposalInput,
+    input: AcceptAgentProposalInput,
   ): Promise<VersionResult<AgentProposalAcceptResult>> {
-    return unsupported(
-      'acceptProposal',
-      'VERSION_PROPOSAL_ACCEPT_UNAVAILABLE',
-      'Provider-backed proposal accept is reserved for a later merge/apply slice.',
-    );
+    return acceptProviderBackedAgentProposal({
+      input,
+      openStore: this.openStore,
+      ...(this.graphProvider ? { graphProvider: this.graphProvider } : {}),
+      ensureCommitExists: (commitId) => this.ensureCommitExists(commitId, 'acceptProposal'),
+      resolveTargetHead: (targetRef) => this.resolveTargetHead(targetRef, 'acceptProposal'),
+    });
   }
 
   async rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
@@ -563,6 +568,7 @@ export class ProviderBackedAgentProposalService {
         branchName: branchName.branchName,
         refName: branchName.refName,
         commitId,
+        refVersion: read.branch.ref.refVersion,
       },
     };
   }

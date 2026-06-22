@@ -10,6 +10,10 @@ import {
   type DomainSupportManifestDiagnostic,
   type DomainSupportManifestValidationOptions,
 } from '../../document/version-store/domain-support-manifest-validator';
+import {
+  isMaterializableMergeDomainReference,
+  unsupportedDetectedMergeDomainDiagnostic,
+} from './version-merge-materializer-support';
 
 type MaybePromise<T> = T | Promise<T>;
 type VersionDomainSupportManifestGateOperation =
@@ -73,11 +77,28 @@ export async function validateVersionDomainSupportManifestGate(
     operation,
   };
   const validation = validateDomainSupportManifest(manifest, options);
-  if (validation.ok) return [];
+  if (validation.ok) return mergeDetectedDomainDiagnostics(operation, options);
 
   return validation.diagnostics.map((diagnostic) =>
     domainSupportManifestInvalidDiagnostic(operation, diagnostic),
   );
+}
+
+function mergeDetectedDomainDiagnostics(
+  operation: VersionDomainSupportManifestGateOperation,
+  options: DomainSupportManifestValidationOptions | undefined,
+): readonly VersionStoreDiagnostic[] {
+  if (operation !== 'merge' && operation !== 'applyMerge') return [];
+  if (!Array.isArray(options?.detectorRows)) return [];
+
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  options.detectorRows.forEach((row, itemIndex) => {
+    if (!row.present) return;
+    if (!isMaterializableMergeDomainReference(row)) {
+      diagnostics.push(unsupportedDetectedMergeDomainDiagnostic(operation, itemIndex, row));
+    }
+  });
+  return diagnostics;
 }
 
 function getAttachedDomainSupportManifestGate(

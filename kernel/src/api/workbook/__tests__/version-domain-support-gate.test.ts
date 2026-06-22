@@ -634,6 +634,82 @@ describe('WorkbookVersion domain support manifest gate', () => {
     expect(merge).not.toHaveBeenCalled();
   });
 
+  it('blocks merge preview when detector rows expose an unsupported merge domain', async () => {
+    const merge = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        domainSupportManifest: freshManifest({
+          domains: [
+            ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+            domainRow('filters'),
+          ],
+        }),
+        domainSupportManifestOptions: {
+          now: NOW,
+          detectorRows: [
+            {
+              matrixRowId: 'filters',
+              domainId: 'filters',
+              present: true,
+              detectorId: 'detector.filters',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.merge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            data: expect.objectContaining({
+              operation: 'merge',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                domain: 'filters',
+                matrixRowId: 'filters',
+                reason: 'unsupportedDetectedDomain',
+              }),
+            }),
+          }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('allows merge preview to reach services when detector rows stay inside the materializer domain surface', async () => {
+    const mergeResult = cleanMergeResult();
+    const merge = jest.fn(async () => mergeResult);
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        domainSupportManifest: freshManifest(),
+        domainSupportManifestOptions: {
+          now: NOW,
+          detectorRows: [
+            {
+              matrixRowId: 'cells.values',
+              domainId: 'cells.values',
+              present: true,
+              detectorId: 'detector.cells-values',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: true,
+      value: mergeResult,
+    });
+    expect(merge).toHaveBeenCalledWith({ base: BASE, ours: OURS, theirs: THEIRS }, {});
+  });
+
   it('blocks applyMerge before previewing or invoking write services when the manifest is invalid', async () => {
     const merge = jest.fn();
     const fastForwardMerge = jest.fn();
@@ -716,6 +792,59 @@ describe('WorkbookVersion domain support manifest gate', () => {
                 domainId: 'cells.values',
                 policyField: 'writeAdmissionMode',
                 policyValue: 'block',
+              }),
+            }),
+          }),
+        ]),
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('blocks applyMerge before previewing or invoking write services when detector rows expose an unsupported merge domain', async () => {
+    const merge = jest.fn();
+    const fastForwardMerge = jest.fn();
+    const mergeCommit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        writeService: { fastForwardMerge, mergeCommit },
+        domainSupportManifest: freshManifest(),
+        domainSupportManifestOptions: {
+          now: NOW,
+          detectorRows: [
+            {
+              matrixRowId: 'rows-columns',
+              domainId: 'rows-columns',
+              present: true,
+              detectorId: 'detector.rows-columns',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.applyMerge',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            data: expect.objectContaining({
+              operation: 'applyMerge',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                domain: 'rows-columns',
+                matrixRowId: 'rows-columns',
+                reason: 'unsupportedDetectedDomain',
               }),
             }),
           }),

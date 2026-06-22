@@ -10,7 +10,20 @@ import type {
 
 import { parseCellAddress } from '../internal/utils';
 
-export type MergeMaterializationOperation = 'applyMerge' | 'commitGraphWrite';
+export type MergeMaterializationOperation = 'merge' | 'applyMerge' | 'commitGraphWrite';
+
+export type MergeDomainReference = {
+  readonly matrixRowId?: string;
+  readonly domainId: string;
+};
+
+const MATERIALIZABLE_MERGE_MATRIX_ROW_IDS = new Set([
+  'cell',
+  'cells.values',
+  'cells.formulas',
+  'cells.formats.direct',
+]);
+const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set(['cell', 'cells.values']);
 
 export type MergeMaterializationSupport =
   | { readonly ok: true }
@@ -70,6 +83,33 @@ export function materializableMergePlanDiagnostics(
     }
   });
   return diagnostics;
+}
+
+export function isMaterializableMergeDomainReference(reference: MergeDomainReference): boolean {
+  if (reference.matrixRowId) {
+    return MATERIALIZABLE_MERGE_MATRIX_ROW_IDS.has(reference.matrixRowId);
+  }
+  return MATERIALIZABLE_MERGE_DOMAIN_IDS.has(reference.domainId);
+}
+
+export function unsupportedDetectedMergeDomainDiagnostic(
+  operation: Extract<MergeMaterializationOperation, 'merge' | 'applyMerge'>,
+  itemIndex: number,
+  reference: MergeDomainReference,
+): VersionStoreDiagnostic {
+  return unsupportedDiagnostic(
+    operation,
+    itemIndex,
+    {
+      ok: false,
+      reason: 'unsupportedDetectedDomain',
+      structuralKind: 'metadata',
+      domain: reference.domainId,
+    },
+    {
+      ...(reference.matrixRowId ? { matrixRowId: reference.matrixRowId } : {}),
+    },
+  );
 }
 
 function parseMaterializableStructural(

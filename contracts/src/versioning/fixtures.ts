@@ -155,6 +155,7 @@ const historyWriteModes: readonly VersionHistoryWriteMode[] = Object.freeze([
 ]);
 
 const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
+  domainPolicyId: 'authored-grid',
   matrixRowId: 'authored-grid',
   domainId: 'authored-grid',
   domainClass: 'authored',

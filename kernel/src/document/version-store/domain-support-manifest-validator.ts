@@ -25,7 +25,13 @@ import {
   type VersionDomainCapabilityKey,
   type VersionDomainCapabilityState,
   type VersionDomainClass,
+  type VersionDomainPolicyRegistry,
 } from '@mog-sdk/contracts/versioning';
+import {
+  policyRegistryRows,
+  validateDomainPolicyId,
+  validateRegistryMatch,
+} from './domain-support-policy-registry';
 
 /**
  * Schema versions this validator understands. A manifest tagged with anything
@@ -75,6 +81,11 @@ export type DomainSupportManifestDiagnosticCode =
   | 'domains-missing'
   | 'required-matrix-row-missing'
   | 'required-domain-missing'
+  | 'domain-policy-id-missing'
+  | 'domain-policy-id-malformed'
+  | 'duplicate-domain-policy'
+  | 'unknown-domain-policy'
+  | 'domain-policy-registry-mismatch'
   | 'matrix-row-id-missing'
   | 'duplicate-matrix-row'
   | 'domain-malformed'
@@ -187,6 +198,12 @@ export interface DomainSupportManifestValidationOptions {
    * manifest, otherwise the detector-row-missing fail-closed condition fires.
    */
   readonly detectorRows?: readonly DomainSupportDetectorRow[];
+  /**
+   * Public policy registry used as runtime authority. When supplied, every
+   * manifest row must reference a known domainPolicyId and must match the
+   * public policy row exactly for runtime-safe policy fields.
+   */
+  readonly domainPolicyRegistry?: VersionDomainPolicyRegistry;
   /**
    * Durable operation whose required capability states should be enforced.
    * Omit for shape-only validation.
@@ -510,6 +527,7 @@ export function validateDomainSupportManifest(
   const requiredCapabilityKeys = requiredCapabilityKeysForOptions(options);
   const enforceDurableOperationPolicy =
     options.operation !== undefined || requiredCapabilityKeys.length > 0;
+  const registryRows = policyRegistryRows(options.domainPolicyRegistry, diagnostics);
 
   // --- structural shape ---------------------------------------------------
   if (manifest === null || typeof manifest !== 'object') {
@@ -593,6 +611,7 @@ export function validateDomainSupportManifest(
     });
   } else {
     const seenMatrixRows = new Set<string>();
+    const seenDomainPolicies = new Set<string>();
     const seenDomains = new Set<string>();
     for (let index = 0; index < domains.length; index += 1) {
       const row = domains[index] as Partial<DomainCapabilityPolicyManifest> | unknown;
@@ -604,6 +623,31 @@ export function validateDomainSupportManifest(
         continue;
       }
       const typed = row as Partial<DomainCapabilityPolicyManifest>;
+      const domainPolicyId = validateDomainPolicyId(
+        typed.matrixRowId,
+        typed.domainId,
+        typed.domainPolicyId,
+        diagnostics,
+      );
+      if (domainPolicyId) {
+        if (seenDomainPolicies.has(domainPolicyId)) {
+          diagnostics.push({
+            code: 'duplicate-domain-policy',
+            message: `Domain policy id "${domainPolicyId}" appears more than once.`,
+            ...(typeof typed.matrixRowId === 'string' && typed.matrixRowId !== ''
+              ? { matrixRowId: typed.matrixRowId }
+              : {}),
+            ...(typeof typed.domainId === 'string' && typed.domainId !== ''
+              ? { domainId: typed.domainId }
+              : {}),
+            policyField: 'domainPolicyId',
+            policyValue: domainPolicyId,
+          });
+        } else {
+          seenDomainPolicies.add(domainPolicyId);
+        }
+        validateRegistryMatch(domainPolicyId, typed, registryRows, diagnostics);
+      }
       const matrixRowId = typed.matrixRowId;
       const domainId = typed.domainId;
       if (typeof matrixRowId !== 'string' || matrixRowId === '') {

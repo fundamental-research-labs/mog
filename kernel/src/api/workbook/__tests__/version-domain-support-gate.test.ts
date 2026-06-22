@@ -45,6 +45,7 @@ function domainRow(
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
 ): DomainCapabilityPolicyManifest {
   return {
+    domainPolicyId: overrides.domainPolicyId ?? overrides.matrixRowId ?? domainId,
     matrixRowId: overrides.matrixRowId ?? domainId,
     domainId,
     domainClass: 'authored',

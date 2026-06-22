@@ -378,6 +378,7 @@ export interface EntityLifecycleAndTombstonePolicy {
 }
 
 export interface DomainCapabilityPolicyManifest {
+  readonly domainPolicyId: string;
   readonly matrixRowId: string;
   readonly domainId: string;
   readonly domainClass: VersionDomainClass;
@@ -508,3 +509,10 @@ export interface VersionReviewRecord {
 }
 
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
+export {
+  PUBLIC_VERSION_DOMAIN_POLICY_IDS,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
+  VERSION_DOMAIN_POLICY_ID_PATTERN,
+  VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION,
+} from './domain-policy-registry';

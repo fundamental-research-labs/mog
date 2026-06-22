@@ -1,3 +1,4 @@
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 import type {
   DomainCapabilityPolicyManifest,
   DomainSupportManifest,
@@ -34,6 +35,7 @@ function domainRow(
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
 ): DomainCapabilityPolicyManifest {
   return {
+    domainPolicyId: overrides.domainPolicyId ?? overrides.matrixRowId ?? domainId,
     matrixRowId: overrides.matrixRowId ?? domainId,
     domainId,
     domainClass: 'authored',
@@ -59,6 +61,17 @@ function freshManifest(overrides: Partial<DomainSupportManifest> = {}): DomainSu
     domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
     ...overrides,
   };
+}
+
+function registryManifest(
+  matrixRowIds: readonly string[] = REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+): DomainSupportManifest {
+  const wanted = new Set(matrixRowIds);
+  return freshManifest({
+    domains: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.filter((row) =>
+      wanted.has(row.matrixRowId),
+    ),
+  });
 }
 
 const NOW = new Date('2026-06-21T00:05:00.000Z');
@@ -217,6 +230,50 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
       expect(result.diagnostics.find((d) => d.code === 'matrix-row-id-missing')).toMatchObject({
         domainId: 'filters',
       });
+    }
+  });
+
+  it('fails closed when a policy row omits domainPolicyId', () => {
+    const row = domainRow('filters') as any;
+    delete row.domainPolicyId;
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), row],
+      }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.find((d) => d.code === 'domain-policy-id-missing')).toMatchObject({
+        domainId: 'filters',
+        matrixRowId: 'filters',
+        policyField: 'domainPolicyId',
+      });
+    }
+  });
+
+  it('fails closed when a policy row uses a non-public-safe domainPolicyId', () => {
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [
+          ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+          domainRow('filters', { domainPolicyId: 'internal/Plan VC-06' }),
+        ],
+      }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.find((d) => d.code === 'domain-policy-id-malformed')).toMatchObject(
+        {
+          domainId: 'filters',
+          matrixRowId: 'filters',
+          policyField: 'domainPolicyId',
+          policyValue: 'internal/Plan VC-06',
+        },
+      );
     }
   });
 
@@ -643,6 +700,87 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.diagnostics.map((d) => d.code)).toContain('duplicate-matrix-row');
+    }
+  });
+
+  it('accepts first-slice rows that match the public domain policy registry', () => {
+    const result = validateDomainSupportManifest(registryManifest(), {
+      now: NOW,
+      operation: 'checkout',
+      domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('fails closed when a manifest references an unknown public domain policy id', () => {
+    const manifest = registryManifest();
+    const cells = manifest.domains.find((row) => row.domainPolicyId === 'cells.values');
+    if (!cells) throw new Error('missing cells.values registry row');
+    const drifted = {
+      ...cells,
+      domainPolicyId: 'cells.values.unregistered',
+    } as DomainCapabilityPolicyManifest;
+
+    const result = validateDomainSupportManifest(
+      {
+        ...manifest,
+        domains: manifest.domains.map((row) =>
+          row.domainPolicyId === 'cells.values' ? drifted : row,
+        ),
+      },
+      {
+        now: NOW,
+        domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.find((d) => d.code === 'unknown-domain-policy')).toMatchObject({
+        matrixRowId: 'cells.values',
+        domainId: 'cells.values',
+        policyField: 'domainPolicyId',
+        policyValue: 'cells.values.unregistered',
+      });
+    }
+  });
+
+  it('fails closed when a manifest row drifts from the public registry policy', () => {
+    const manifest = registryManifest();
+    const cells = manifest.domains.find((row) => row.domainPolicyId === 'cells.values');
+    if (!cells) throw new Error('missing cells.values registry row');
+    const drifted = {
+      ...cells,
+      capabilityStates: {
+        ...cells.capabilityStates,
+        capture: 'contracted',
+      },
+    } as DomainCapabilityPolicyManifest;
+
+    const result = validateDomainSupportManifest(
+      {
+        ...manifest,
+        domains: manifest.domains.map((row) =>
+          row.domainPolicyId === 'cells.values' ? drifted : row,
+        ),
+      },
+      {
+        now: NOW,
+        domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.diagnostics.find((d) => d.code === 'domain-policy-registry-mismatch'),
+      ).toMatchObject({
+        matrixRowId: 'cells.values',
+        domainId: 'cells.values',
+        policyField: 'capabilityStates.capture',
+        policyValue: 'contracted',
+      });
     }
   });
 });

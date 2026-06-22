@@ -14,13 +14,11 @@ import type {
   NamedRangeChange,
   RangeChange,
   SheetChange,
+  SemanticWorkbookStateEnvelope,
   SortingChange,
   TableChange,
 } from '../../bridges/compute/compute-types.gen';
-import type {
-  DirectEditPosition,
-  DirectEditRange,
-} from '../../bridges/compute/mutation-admission';
+import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
 import { decodeRangeMetaJson, type RangeMeta } from '../../bridges/wire/range-metadata-cache';
 import type {
   VersionNormalCommitCapture,
@@ -37,6 +35,8 @@ import {
   mapDirectCellFormatChanges,
 } from './semantic-mutation-direct-format-capture';
 import { mapSyncAuthoredCellChanges } from './semantic-mutation-sync-cell-capture';
+import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
+import { buildRustBackedSemanticChangeSetPayload } from './semantic-mutation-rust-diff-capture';
 
 export interface VersionMutationCaptureRecordInput {
   readonly operation: string;
@@ -46,7 +46,13 @@ export interface VersionMutationCaptureRecordInput {
   readonly operationContext?: VersionOperationContext;
 }
 
+export interface VersionMutationCapturePreMutationInput {
+  readonly operation: string;
+  readonly operationContext?: VersionOperationContext;
+}
+
 export interface VersionMutationCaptureSink {
+  recordPreMutation?(input: VersionMutationCapturePreMutationInput): void | Promise<void>;
   recordMutationResult(input: VersionMutationCaptureRecordInput): void;
 }
 
@@ -59,6 +65,7 @@ export interface SemanticMutationCaptureServices {
 export interface SemanticMutationCaptureOptions {
   readonly author?: VersionAuthor;
   readonly now?: () => Date;
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
 }
 
 type VersionSemanticChangeRecord = {
@@ -103,9 +110,29 @@ const DEFAULT_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
 });
 
 const rangeMetaDecoder = new TextDecoder();
-const FLOATING_OBJECT_ANCHOR_FIELDS = ['anchorRow', 'anchorCol', 'anchorRowOffsetEmu', 'anchorColOffsetEmu', 'anchorMode', 'absoluteXEmu', 'absoluteYEmu', 'endRow', 'endCol', 'endRowOffsetEmu', 'endColOffsetEmu', 'extentCxEmu', 'extentCyEmu'] as const;
+const FLOATING_OBJECT_ANCHOR_FIELDS = [
+  'anchorRow',
+  'anchorCol',
+  'anchorRowOffsetEmu',
+  'anchorColOffsetEmu',
+  'anchorMode',
+  'absoluteXEmu',
+  'absoluteYEmu',
+  'endRow',
+  'endCol',
+  'endRowOffsetEmu',
+  'endColOffsetEmu',
+  'extentCxEmu',
+  'extentCyEmu',
+] as const;
 const FLOATING_OBJECT_BOUNDS_FIELDS = ['x', 'y', 'width', 'height', 'rotation'] as const;
-const FLOATING_OBJECT_ANCHOR_CHANGE_FIELDS = new Set<string>(['anchor', 'width', 'height', 'bounds', ...FLOATING_OBJECT_ANCHOR_FIELDS]);
+const FLOATING_OBJECT_ANCHOR_CHANGE_FIELDS = new Set<string>([
+  'anchor',
+  'width',
+  'height',
+  'bounds',
+  ...FLOATING_OBJECT_ANCHOR_FIELDS,
+]);
 const RANGE_KIND_DOMAINS: Partial<Record<RangeMeta['kind'], string>> = {
   NamedRange: 'named-ranges',
   Table: 'tables',
@@ -129,14 +156,37 @@ export function createSemanticMutationCapture(
 class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private readonly author: VersionAuthor;
   private readonly now: () => Date;
+  private readonly semanticStateReader?: VersionSemanticStateReaderPort;
   private nextNormalSequence = 1;
   private nextPendingRemoteSequence = 1;
   private pendingNormal: PendingSemanticMutation[] = [];
   private pendingRemote: PendingSemanticMutation[] = [];
+  private beforeNormalSemanticState?: SemanticWorkbookStateEnvelope;
+  private semanticStateCaptureFailure?: string;
 
   constructor(options: SemanticMutationCaptureOptions) {
     this.author = options.author ?? DEFAULT_CAPTURE_AUTHOR;
     this.now = options.now ?? (() => new Date());
+    this.semanticStateReader = options.semanticStateReader;
+  }
+
+  async recordPreMutation(input: VersionMutationCapturePreMutationInput): Promise<void> {
+    if (
+      !this.semanticStateReader ||
+      classifySemanticMutationCaptureLane(input.operationContext) !== 'normalLocal' ||
+      this.beforeNormalSemanticState ||
+      this.pendingNormal.length > 0
+    ) {
+      return;
+    }
+
+    try {
+      this.beforeNormalSemanticState = await this.semanticStateReader.readCurrentSemanticState();
+      this.semanticStateCaptureFailure = undefined;
+    } catch (error) {
+      this.semanticStateCaptureFailure =
+        error instanceof Error ? error.message : 'semantic state read failed';
+    }
   }
 
   recordMutationResult(input: VersionMutationCaptureRecordInput): void {
@@ -173,13 +223,26 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   async captureNormalCommit(input: Parameters<VersionNormalCommitCapture>[0]) {
     const records = [...this.pendingNormal];
     const changes = records.flatMap((record) => [...record.changes]);
-    const semanticChangeSetRecord = await objectRecord(input.namespace, 'workbook.semanticChangeSet.v1', {
-      schemaVersion: 1,
-      changes,
+    const semanticChangeSetPayload = await buildRustBackedSemanticChangeSetPayload({
+      commit: input,
+      semanticStateReader: this.semanticStateReader,
+      beforeSemanticState: this.beforeNormalSemanticState,
+      semanticStateCaptureFailure: this.semanticStateCaptureFailure,
+      reviewChanges: changes,
     });
+    if (semanticChangeSetPayload.status !== 'success') return semanticChangeSetPayload;
+    const semanticChangeSetRecord = await objectRecord(
+      input.namespace,
+      'workbook.semanticChangeSet.v1',
+      semanticChangeSetPayload.payload,
+    );
     const mutationSegmentRecords = await Promise.all(
       records.map((record) =>
-        objectRecord(input.namespace, 'workbook.mutationSegment.v1', mutationSegmentPayload(record)),
+        objectRecord(
+          input.namespace,
+          'workbook.mutationSegment.v1',
+          mutationSegmentPayload(record),
+        ),
       ),
     );
     const lastSequence = records.at(-1)?.sequence ?? 0;
@@ -219,6 +282,10 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private drainNormalThrough(sequence: number): void {
     if (sequence <= 0) return;
     this.pendingNormal = this.pendingNormal.filter((record) => record.sequence > sequence);
+    if (this.pendingNormal.length === 0) {
+      this.beforeNormalSemanticState = undefined;
+      this.semanticStateCaptureFailure = undefined;
+    }
   }
 
   private drainPendingRemoteSequences(sequences: readonly number[]): void {
@@ -233,7 +300,8 @@ function mapMutationResultToSemanticChanges(
   sequence: number,
 ): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
-  if (input.operation === 'compute_apply_sync_update') changes.push(...mapSyncAuthoredCellChanges(input.result.authoredCellChanges ?? [], sequence));
+  if (input.operation === 'compute_apply_sync_update')
+    changes.push(...mapSyncAuthoredCellChanges(input.result.authoredCellChanges ?? [], sequence));
   if (isDirectCellValueOperation(input.operation)) {
     changes.push(
       ...mapCellWriteChanges(
@@ -306,7 +374,12 @@ function mapCellWriteChanges(
       row: cell.position.row,
       col: cell.position.col,
     });
-    if (directEditKeys.size > 0 ? !directEditKeys.has(key) : !isInDirectEditRange(cell, directEditRanges)) continue;
+    if (
+      directEditKeys.size > 0
+        ? !directEditKeys.has(key)
+        : !isInDirectEditRange(cell, directEditRanges)
+    )
+      continue;
 
     const address = toA1(cell.position.row, cell.position.col);
     changes.push({
@@ -601,7 +674,10 @@ function mapSortingChanges(
   return changes;
 }
 
-function mapNamedRangeChanges(namedRangeChanges: readonly NamedRangeChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapNamedRangeChanges(
+  namedRangeChanges: readonly NamedRangeChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of namedRangeChanges) {
     if (!isLikelyDefinedName(change.name)) continue;
@@ -609,12 +685,27 @@ function mapNamedRangeChanges(namedRangeChanges: readonly NamedRangeChange[], se
       { key: 'kind', value: change.kind },
       { key: 'name', value: change.name },
     ]);
-    changes.push(metadataChange({ sequence, prefix: 'named-range', index: changes.length, domain: 'named-ranges', entityId: `name:${change.name}`, propertyPath: ['definition'], value, removed: change.kind === 'Removed', display: { entityLabel: { kind: 'value', value: change.name } } }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'named-range',
+        index: changes.length,
+        domain: 'named-ranges',
+        entityId: `name:${change.name}`,
+        propertyPath: ['definition'],
+        value,
+        removed: change.kind === 'Removed',
+        display: { entityLabel: { kind: 'value', value: change.name } },
+      }),
+    );
   }
   return changes;
 }
 
-function mapTableChanges(tableChanges: readonly TableChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapTableChanges(
+  tableChanges: readonly TableChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of tableChanges) {
     if (!isStableSheetId(change.sheetId) || !isStableString(change.tableId)) continue;
@@ -627,12 +718,27 @@ function mapTableChanges(tableChanges: readonly TableChange[], sequence: number)
       ...(isStableString(change.name) ? [{ key: 'name', value: change.name }] : []),
       { key: 'sheetId', value: change.sheetId },
     ]);
-    changes.push(metadataChange({ sequence, prefix: 'table', index: changes.length, domain: 'tables', entityId, propertyPath: ['definition'], value, removed: change.kind === 'Removed', display: { entityLabel: { kind: 'value', value: label } } }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'table',
+        index: changes.length,
+        domain: 'tables',
+        entityId,
+        propertyPath: ['definition'],
+        value,
+        removed: change.kind === 'Removed',
+        display: { entityLabel: { kind: 'value', value: label } },
+      }),
+    );
   }
   return changes;
 }
 
-function mapCommentChanges(commentChanges: readonly CommentChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapCommentChanges(
+  commentChanges: readonly CommentChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of commentChanges) {
     if (!isStableSheetId(change.sheetId) || !isStableString(change.cellId)) continue;
@@ -643,12 +749,27 @@ function mapCommentChanges(commentChanges: readonly CommentChange[], sequence: n
       { key: 'cellId', value: change.cellId },
       ...(address ? [{ key: 'address', value: address }] : []),
     ]);
-    changes.push(metadataChange({ sequence, prefix: 'comment', index: changes.length, domain: 'comments-notes', entityId: `${change.sheetId}!comment:${change.cellId}`, propertyPath: ['cell'], value, removed: change.kind === 'Removed', ...(address ? { display: { address: { kind: 'value', value: address } } } : {}) }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'comment',
+        index: changes.length,
+        domain: 'comments-notes',
+        entityId: `${change.sheetId}!comment:${change.cellId}`,
+        propertyPath: ['cell'],
+        value,
+        removed: change.kind === 'Removed',
+        ...(address ? { display: { address: { kind: 'value', value: address } } } : {}),
+      }),
+    );
   }
   return changes;
 }
 
-function mapCfChanges(cfChanges: readonly CfChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapCfChanges(
+  cfChanges: readonly CfChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of cfChanges) {
     if (!isStableSheetId(change.sheetId) || !isStableString(change.ruleId)) continue;
@@ -656,30 +777,72 @@ function mapCfChanges(cfChanges: readonly CfChange[], sequence: number): readonl
       { key: 'kind', value: change.kind },
       { key: 'ruleId', value: change.ruleId },
     ]);
-    changes.push(metadataChange({ sequence, prefix: 'conditional-format', index: changes.length, domain: 'conditional-formatting', entityId: `${change.sheetId}!cf:${change.ruleId}`, propertyPath: ['rule'], value, removed: change.kind === 'Removed', display: { entityLabel: { kind: 'value', value: change.ruleId } } }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'conditional-format',
+        index: changes.length,
+        domain: 'conditional-formatting',
+        entityId: `${change.sheetId}!cf:${change.ruleId}`,
+        propertyPath: ['rule'],
+        value,
+        removed: change.kind === 'Removed',
+        display: { entityLabel: { kind: 'value', value: change.ruleId } },
+      }),
+    );
   }
   return changes;
 }
 
-function mapFloatingObjectChanges(floatingObjectChanges: readonly FloatingObjectChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapFloatingObjectChanges(
+  floatingObjectChanges: readonly FloatingObjectChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of floatingObjectChanges) {
     if (!isStableSheetId(change.sheetId) || !isStableString(change.objectId)) continue;
 
     const chartValue = semanticChartSourceValue(change);
     if (chartValue) {
-      changes.push(metadataChange({ sequence, prefix: 'chart', index: changes.length, domain: 'charts.source-range', entityId: `${change.sheetId}!chart:${change.objectId}`, propertyPath: ['sourceRange'], value: chartValue, removed: change.kind.type === 'removed', display: { entityLabel: { kind: 'value', value: change.objectId } } }));
+      changes.push(
+        metadataChange({
+          sequence,
+          prefix: 'chart',
+          index: changes.length,
+          domain: 'charts.source-range',
+          entityId: `${change.sheetId}!chart:${change.objectId}`,
+          propertyPath: ['sourceRange'],
+          value: chartValue,
+          removed: change.kind.type === 'removed',
+          display: { entityLabel: { kind: 'value', value: change.objectId } },
+        }),
+      );
       continue;
     }
 
     const objectValue = semanticFloatingObjectAnchorValue(change);
     if (!objectValue) continue;
-    changes.push(metadataChange({ sequence, prefix: 'floating-object', index: changes.length, domain: 'floating-objects.anchors', entityId: `${change.sheetId}!object:${change.objectId}`, propertyPath: ['anchor'], value: objectValue, removed: change.kind.type === 'removed', display: { entityLabel: { kind: 'value', value: change.objectId } } }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'floating-object',
+        index: changes.length,
+        domain: 'floating-objects.anchors',
+        entityId: `${change.sheetId}!object:${change.objectId}`,
+        propertyPath: ['anchor'],
+        value: objectValue,
+        removed: change.kind.type === 'removed',
+        display: { entityLabel: { kind: 'value', value: change.objectId } },
+      }),
+    );
   }
   return changes;
 }
 
-function mapRangeChanges(rangeChanges: readonly RangeChange[], sequence: number): readonly VersionSemanticChangeRecord[] {
+function mapRangeChanges(
+  rangeChanges: readonly RangeChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   for (const change of rangeChanges) {
     if (!isStableSheetId(change.sheetId) || !isStableString(change.rangeId)) continue;
@@ -691,7 +854,19 @@ function mapRangeChanges(rangeChanges: readonly RangeChange[], sequence: number)
     if (!domain) continue;
 
     const value = semanticRangeValue(change, meta);
-    changes.push(metadataChange({ sequence, prefix: 'range', index: changes.length, domain, entityId: `${change.sheetId}!range:${change.rangeId}`, propertyPath: ['range'], value, removed: change.kind === 'Removed', display: { entityLabel: { kind: 'value', value: `${meta.kind}:${change.rangeId}` } } }));
+    changes.push(
+      metadataChange({
+        sequence,
+        prefix: 'range',
+        index: changes.length,
+        domain,
+        entityId: `${change.sheetId}!range:${change.rangeId}`,
+        propertyPath: ['range'],
+        value,
+        removed: change.kind === 'Removed',
+        display: { entityLabel: { kind: 'value', value: `${meta.kind}:${change.rangeId}` } },
+      }),
+    );
   }
   return changes;
 }
@@ -723,7 +898,10 @@ function semanticFilterValue(change: FilterChange): VersionSemanticValue {
   pushOptionalSemanticField(fields, 'hiddenRowCount', change.hiddenRowCount);
   pushOptionalSemanticField(fields, 'visibleRowCount', change.visibleRowCount);
   if (change.unsupportedReasons?.length) {
-    fields.push({ key: 'unsupportedReasons', value: { kind: 'array', values: change.unsupportedReasons } });
+    fields.push({
+      key: 'unsupportedReasons',
+      value: { kind: 'array', values: change.unsupportedReasons },
+    });
   }
   return semanticObjectValue(fields);
 }
@@ -791,13 +969,15 @@ function semanticFloatingObjectAnchorValue(
 
 function semanticFloatingObjectAnchor(anchor: FloatingObjectAnchor): VersionSemanticValue {
   const fields: SemanticField[] = [];
-  for (const key of FLOATING_OBJECT_ANCHOR_FIELDS) pushOptionalSemanticField(fields, key, anchor[key]);
+  for (const key of FLOATING_OBJECT_ANCHOR_FIELDS)
+    pushOptionalSemanticField(fields, key, anchor[key]);
   return semanticObjectValue(fields);
 }
 
 function semanticFloatingObjectBounds(bounds: FloatingObjectBounds): VersionSemanticValue {
   const fields: SemanticField[] = [];
-  for (const key of FLOATING_OBJECT_BOUNDS_FIELDS) pushOptionalSemanticField(fields, key, bounds[key]);
+  for (const key of FLOATING_OBJECT_BOUNDS_FIELDS)
+    pushOptionalSemanticField(fields, key, bounds[key]);
   return semanticObjectValue(fields);
 }
 
@@ -872,9 +1052,7 @@ function pushStringArraySemanticField(
   fields.push({ key, value: { kind: 'array', values } });
 }
 
-function semanticObjectValue(
-  fields: readonly SemanticField[],
-): VersionSemanticValue {
+function semanticObjectValue(fields: readonly SemanticField[]): VersionSemanticValue {
   return { kind: 'object', fields };
 }
 
@@ -993,7 +1171,9 @@ function semanticCellEditValue(
   return formula ? { kind: 'formula', formula, result } : result;
 }
 
-function semanticCellValue(value: CellChange['value'] | CellChange['oldValue'] | undefined): VersionSemanticValue {
+function semanticCellValue(
+  value: CellChange['value'] | CellChange['oldValue'] | undefined,
+): VersionSemanticValue {
   if (value === undefined) return { kind: 'blank' };
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : { kind: 'blank' };
@@ -1007,7 +1187,9 @@ function semanticCellValue(value: CellChange['value'] | CellChange['oldValue'] |
   return { kind: 'blank' };
 }
 
-function isCellError(value: unknown): value is { readonly value: string; readonly message?: string } {
+function isCellError(
+  value: unknown,
+): value is { readonly value: string; readonly message?: string } {
   return (
     typeof value === 'object' &&
     value !== null &&

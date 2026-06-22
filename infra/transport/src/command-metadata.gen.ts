@@ -800,6 +800,7 @@ export const NAPI_SERDE_PARAM_INDICES: Record<string, number[]> = {
   'table_toggle_totals_row': [0],
   'table_validate_table_name': [1],
   'table_value_in_list': [0, 1],
+  'versioning_diff_semantic_workbook_states': [0, 1],
 };
 
 /** Commands that trigger formula evaluation and therefore need clock injection. */
@@ -1501,6 +1502,7 @@ export const BRIDGE_COMMAND_SECURITY_LEVELS: Record<string, string> = {
   'compute_schema_resolve_editor': 'Public',
   'compute_schema_validate': 'Public',
   'compute_security_active': 'Public',
+  'compute_semantic_workbook_state_envelope': 'Public',
   'compute_send_chart_backward': 'Public',
   'compute_send_chart_to_back': 'Public',
   'compute_send_floating_object_backward': 'Public',
@@ -1686,6 +1688,7 @@ export const BRIDGE_COMMAND_SECURITY_LEVELS: Record<string, string> = {
   'table_toggle_totals_row': 'Public',
   'table_validate_table_name': 'Public',
   'table_value_in_list': 'Public',
+  'versioning_diff_semantic_workbook_states': 'Public',
   'xlsx_parse_lazy': 'Sensitive',
   'xlsx_parse_lazy_with_mode': 'Sensitive',
   'xlsx_version': 'Sensitive',

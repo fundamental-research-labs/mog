@@ -10,6 +10,7 @@ import {
   createSemanticMutationCapture,
   type SemanticMutationCaptureServices,
 } from './semantic-mutation-capture';
+import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import {
   namespaceForDocumentScope,
@@ -24,10 +25,7 @@ import {
   selectVersionStoreProvider,
   type VersionStoreProviderKind,
 } from './provider-registry';
-import {
-  versionGraphNamespaceKey,
-  type VersionGraphNamespace,
-} from './object-store';
+import { versionGraphNamespaceKey, type VersionGraphNamespace } from './object-store';
 import {
   normalizeVersionDocumentScope,
   namespaceForRegistry,
@@ -37,12 +35,7 @@ import {
 
 type MaybePromise<T> = T | Promise<T>;
 
-export type VersionLiveCollaborationState =
-  | 'absent'
-  | 'disabled'
-  | 'idle'
-  | 'active'
-  | 'unknown';
+export type VersionLiveCollaborationState = 'absent' | 'disabled' | 'idle' | 'active' | 'unknown';
 
 export type VersionLiveCollaborationStatus = {
   readonly state: VersionLiveCollaborationState;
@@ -67,6 +60,7 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
   readonly pendingRemotePromotionService?: Pick<
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
@@ -195,6 +189,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       captureNormalCommit: config.captureNormalCommit,
       captureMergeCommit: config.captureMergeCommit,
       semanticMutationCapture: config.semanticMutationCapture,
+      semanticStateReader: config.semanticStateReader,
       pendingRemotePromotionService: config.pendingRemotePromotionService,
       providerWriteActivityTracker: config.providerWriteActivityTracker,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
@@ -212,7 +207,7 @@ function resolveSemanticMutationCapture(
   const semanticMutationCapture =
     config.semanticMutationCapture ??
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
-      ? createSemanticMutationCapture()
+      ? createSemanticMutationCapture({ semanticStateReader: config.semanticStateReader })
       : undefined);
   return semanticMutationCapture === config.semanticMutationCapture
     ? config

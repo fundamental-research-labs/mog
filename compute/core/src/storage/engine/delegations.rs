@@ -21,6 +21,7 @@ use domain_types::domain::sheet::{
     PrintRange, PrintTitles, SheetProtectionOptions, SheetSettings, SplitViewConfig,
 };
 use formula_types::{IdentityFormula, NamedRangeDef};
+use snapshot_types::versioning::SemanticWorkbookStateEnvelope;
 use value_types::ComputeError;
 
 #[bridge::api(
@@ -316,6 +317,23 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "workbook")]
     pub fn to_a1_display_qualified(&self, sheet_id: &SheetId, formula: &IdentityFormula) -> String {
         compute_sheets_named::to_a1_display_qualified(self, sheet_id, formula)
+    }
+
+    #[bridge::read(scope = "workbook")]
+    pub fn semantic_workbook_state_envelope(
+        &self,
+    ) -> Result<SemanticWorkbookStateEnvelope, ComputeError> {
+        let state =
+            crate::versioning::SemanticWorkbookStateReader::read_semantic_workbook_state(self)
+                .map_err(|error| ComputeError::Deserialize {
+                    message: format!("semantic workbook state read failed: {error}"),
+                })?;
+        let coverage = crate::versioning::coverage_for_states(&state, &state);
+        snapshot_types::versioning::semantic_state_envelope(state, coverage).map_err(|error| {
+            ComputeError::Deserialize {
+                message: format!("semantic workbook state digest failed: {error}"),
+            }
+        })
     }
 
     #[bridge::read(scope = "workbook")]

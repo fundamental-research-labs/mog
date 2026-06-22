@@ -14,6 +14,7 @@ import {
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionStoreProvider,
 } from '../../../document/version-store/provider';
 
 const DOCUMENT_ID = 'vc04-public-cell-edit-diff';
@@ -23,6 +24,25 @@ const AUTHOR: VersionAuthor = {
   authorId: 'user-1',
   actorKind: 'user',
   displayName: 'User One',
+};
+type StoredSemanticChangeSetPayload = {
+  readonly source: {
+    readonly beforeStateDigest: SemanticDigest;
+    readonly afterStateDigest: SemanticDigest;
+  };
+  readonly semanticDiff: {
+    readonly beforeDigest: SemanticDigest;
+    readonly afterDigest: SemanticDigest;
+    readonly changes: readonly unknown[];
+  };
+  readonly changes: readonly unknown[];
+  readonly reviewChanges: readonly unknown[];
+  readonly [key: string]: unknown;
+};
+type SemanticDigest = {
+  readonly algorithm: string;
+  readonly byteLength: number;
+  readonly value: string;
 };
 
 describe('WorkbookVersion public cell edit commit/diff vertical', () => {
@@ -67,7 +87,11 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         },
       });
       if (!commitResult.ok) {
-        throw new Error(`expected public cell edit commit success: ${commitResult.error.code}`);
+        throw new Error(
+          `expected public cell edit commit success: ${commitResult.error.code}: ${JSON.stringify(
+            commitResult.error,
+          )}`,
+        );
       }
       const committed = commitResult.value;
 
@@ -76,6 +100,49 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         actorKind: 'user',
         redacted: true,
       });
+      const storedSemanticChangeSet = await readSemanticChangeSetPayload(provider, committed.id);
+      expect(storedSemanticChangeSet).toMatchObject({
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: expectedSemanticDigest(),
+          afterStateDigest: expectedSemanticDigest(),
+        },
+        semanticDiff: {
+          beforeDigest: expectedSemanticDigest(),
+          afterDigest: expectedSemanticDigest(),
+          changes: expect.arrayContaining([
+            expect.objectContaining({
+              domainId: 'authored-grid',
+              kind: 'added',
+              objectId: 'cell:sheet#0:r0:c0',
+              objectKind: 'cell',
+            }),
+            expect.objectContaining({
+              domainId: 'cells.formulas',
+              kind: 'added',
+              objectId: 'formula:cell:sheet#0:r1:c0',
+              objectKind: 'cell-formula',
+            }),
+          ]),
+        },
+        reviewChanges: expect.arrayContaining([
+          expectedCellDiff('A1', 42),
+          expectedCellDiff('A2', { kind: 'formula', formula: '=A1+1', result: 43 }),
+        ]),
+      });
+      expect(storedSemanticChangeSet.source.beforeStateDigest).not.toEqual(
+        storedSemanticChangeSet.source.afterStateDigest,
+      );
+      expect(storedSemanticChangeSet.semanticDiff.beforeDigest).toEqual(
+        storedSemanticChangeSet.source.beforeStateDigest,
+      );
+      expect(storedSemanticChangeSet.semanticDiff.afterDigest).toEqual(
+        storedSemanticChangeSet.source.afterStateDigest,
+      );
+      expect(storedSemanticChangeSet.changes).toEqual(storedSemanticChangeSet.semanticDiff.changes);
+      expect(storedSemanticChangeSet.changes.length).toBeGreaterThan(0);
+      expect(storedSemanticChangeSet.reviewChanges).toHaveLength(8);
 
       const committedHeadResult = await wb.version.getHead();
       expect(committedHeadResult).toMatchObject({
@@ -168,7 +235,9 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         },
       });
       if (!clearReplaceDiff.ok) {
-        throw new Error(`expected public clear/replace diff success: ${clearReplaceDiff.error.code}`);
+        throw new Error(
+          `expected public clear/replace diff success: ${clearReplaceDiff.error.code}`,
+        );
       }
       expect(clearReplaceDiff.value.items).toHaveLength(6);
 
@@ -242,6 +311,14 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
   });
 });
 
+function expectedSemanticDigest() {
+  return expect.objectContaining({
+    algorithm: 'sha256',
+    byteLength: expect.any(Number),
+    value: expect.any(String),
+  });
+}
+
 function expectedCellDiff(address: string, value: unknown) {
   return expect.objectContaining({
     structural: expect.objectContaining({
@@ -261,6 +338,26 @@ function expectInitializeSuccess(
   if (result.status !== 'success') {
     throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
   }
+}
+
+async function readSemanticChangeSetPayload(
+  provider: VersionStoreProvider,
+  commitId: string,
+): Promise<StoredSemanticChangeSetPayload> {
+  const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+  const read = await graph.readCommit(commitId);
+  expect(read.status).toBe('success');
+  if (read.status !== 'success') {
+    throw new Error('expected committed record to be readable');
+  }
+  const semanticChangeSetRecord = await graph.getObjectRecord({
+    kind: 'object',
+    objectType: 'workbook.semanticChangeSet.v1',
+    digest: read.commit.payload.semanticChangeSetDigest,
+  });
+  expect(typeof semanticChangeSetRecord.preimage.payload).toBe('object');
+  expect(semanticChangeSetRecord.preimage.payload).not.toBeNull();
+  return semanticChangeSetRecord.preimage.payload as StoredSemanticChangeSetPayload;
 }
 
 async function initializeInput(

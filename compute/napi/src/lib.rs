@@ -12,6 +12,7 @@ pub use compute_api;
 // Import stateless bridge types so generated pure methods can call Type::method().
 use compute_core::bridge_pure::{
     CfBridge, ChartBridge, ClockBridge, FormatBridge, PivotBridge, SchemaBridge, TableBridge,
+    VersioningBridge,
 };
 
 use compute_api::ComputeService;
@@ -104,6 +105,7 @@ bridge_napi::generate!(
     compute_core::__bridge_descriptor_SchemaBridge_schema_utils,
     compute_core::__bridge_descriptor_CfBridge_cf_presets,
     compute_core::__bridge_descriptor_ClockBridge_clock,
+    compute_core::__bridge_descriptor_VersioningBridge_versioning,
     xlsx_api::__bridge_descriptor_XlsxParser_0,
 );
 

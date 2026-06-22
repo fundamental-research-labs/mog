@@ -10,7 +10,8 @@ use crate::storage::engine::stores::EngineStores;
 use compute_document::hex::id_to_hex;
 
 use super::{
-    NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at, write_cell_to_yrs,
+    NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at,
+    persist_cell_formula_identity, write_cell_to_yrs,
 };
 
 fn patch_direct_edit_before_snapshot(
@@ -214,6 +215,10 @@ pub(in crate::storage::engine) fn set_cell_value_parsed(
         let mut result = stores
             .compute
             .set_cell_with_target(mirror, sheet_id, cell_id, row, col, input, target)?;
+        {
+            let _guard = mutation.suppress_guard();
+            persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
+        }
 
         patch_direct_edit_before_snapshot(
             &mut result,
@@ -308,6 +313,10 @@ pub(in crate::storage::engine) fn set_cell_value_as_text(
         let mut result = stores
             .compute
             .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
+        {
+            let _guard = mutation.suppress_guard();
+            persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
+        }
 
         patch_direct_edit_before_snapshot(
             &mut result,
@@ -409,6 +418,10 @@ pub(in crate::storage::engine) fn set_cell(
     let mut result = stores
         .compute
         .set_cell(mirror, sheet_id, cell_id, row, col, input)?;
+    {
+        let _guard = mutation.suppress_guard();
+        persist_cell_formula_identity(stores, mirror, sheet_id, cell_id)?;
+    }
 
     patch_direct_edit_before_snapshot(
         &mut result,

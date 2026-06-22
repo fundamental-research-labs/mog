@@ -46,6 +46,7 @@ import { refreshViewportsAfterHistoryReplay } from './history-replay-refresh';
 import {
   admitPublicMutation as admitPublicMutationForCore,
   observeMutationAdmission,
+  prepareVersionMutationCapture,
   recordVersionMutationCapture,
   type DirectEditPosition,
   type MutationAdmissionOptions,
@@ -1008,13 +1009,7 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
     captureMutation = false,
   ): Promise<MutationResult> {
-    const result = await this.mutateCore(
-      promise,
-      directEdits,
-      operation,
-      options,
-      captureMutation,
-    );
+    const result = await this.mutateCore(promise, directEdits, operation, options, captureMutation);
     if (this.undoGroupDepth === 0) {
       await this.ctx.services?.undo.notifyForwardMutation();
     }
@@ -1032,6 +1027,10 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     await this.admitPublicMutation(operation, options);
+    await prepareVersionMutationCapture(this.ctx, {
+      operation,
+      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
+    });
     return this.mutate(call(), directEdits, operation, options, true);
   }
 
@@ -1055,6 +1054,10 @@ export class ComputeCore {
     });
     this.ensureInitialized();
     this._writeGate?.assertWritable(operation);
+    await prepareVersionMutationCapture(this.ctx, {
+      operation,
+      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
+    });
     return this.mutate(call(), directEdits, operation, options, true);
   }
 
@@ -1070,6 +1073,10 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
   ): Promise<{ raw: T; mutation: MutationResult }> {
     await this.admitPublicMutation(operation, options);
+    await prepareVersionMutationCapture(this.ctx, {
+      operation,
+      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
+    });
     const raw = await call();
     const mutation = await this.mutate(
       Promise.resolve(toMutationTuple(raw)),

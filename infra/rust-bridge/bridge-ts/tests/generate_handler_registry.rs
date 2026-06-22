@@ -7,8 +7,8 @@
 //! Output: runtime/src-tauri/src/handlers.gen.rs
 
 use bridge_ts::{
-    HandlerRegistryConfig, TsApi, collect_tauri_handler_names, emit_command_metadata,
-    emit_handler_registry, merge_blocks, parse_source,
+    collect_tauri_handler_names, emit_command_metadata, emit_handler_registry, merge_blocks,
+    parse_source, HandlerRegistryConfig, TsApi,
 };
 
 /// Service → Tauri command module path mappings.
@@ -30,6 +30,7 @@ fn service_module_map() -> Vec<(String, String)> {
         ("ChartBridge".into(), "commands::compute".into()),
         ("CfBridge".into(), "commands::compute".into()),
         ("ClockBridge".into(), "commands::compute".into()),
+        ("VersioningBridge".into(), "commands::compute".into()),
         // Stateless pivot bridge — in pivot.rs
         ("PivotBridge".into(), "commands::pivot".into()),
         // Stateless XLSX parser — in xlsx.rs

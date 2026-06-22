@@ -4,8 +4,8 @@
 //! Output: kernel/src/bridges/compute/compute-bridge.gen.ts
 
 use bridge_ts::{
-    BridgeConfig, collect_named_from_api, emit_bridge, emit_kind_manifest, merge_blocks,
-    parse_source,
+    collect_named_from_api, emit_bridge, emit_kind_manifest, merge_blocks, parse_source,
+    BridgeConfig,
 };
 use bridge_ts::{ImportConfig, ImportGroup, TypeImport};
 
@@ -353,6 +353,9 @@ fn build_import_config() -> ImportConfig {
                     ti("UndoState"),
                     ti("UpdateBindingFields"),
                     ti("RustWorkbookSettingsPatch"),
+                    ti("SemanticWorkbookDiff"),
+                    ti("SemanticWorkbookState"),
+                    ti("SemanticWorkbookStateEnvelope"),
                     ti("Viewport"),
                     ti("VerticalAlign"),
                     ti("WorkbookProtectionOptions"),

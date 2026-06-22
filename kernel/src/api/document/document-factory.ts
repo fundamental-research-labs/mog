@@ -62,6 +62,7 @@ import {
 } from './xlsx-document-import';
 import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 import { createDocumentByteSyncPort } from './document-sync-port';
+import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
 
 export { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from './xlsx-document-import';
 export type {
@@ -816,9 +817,8 @@ function createDocumentHandle(
       // Config-accepting path: fresh workbook each call (not cached).
       if (config) {
         const { createWorkbookFromConfig } = await loadWorkbookModule();
-        const { resolveDocumentWorkbookVersioningLifecycle } = await import(
-          '../../document/version-store/lifecycle'
-        );
+        const { resolveDocumentWorkbookVersioningLifecycle } =
+          await import('../../document/version-store/lifecycle');
         const resolvedVersioning = await resolveDocumentWorkbookVersioningLifecycle({
           documentId,
           versioning: config.versioning
@@ -826,6 +826,9 @@ function createDocumentHandle(
                 ...config.versioning,
                 snapshotRootByteSyncPort:
                   config.versioning.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort(),
+                semanticStateReader:
+                  config.versioning.semanticStateReader ??
+                  createComputeBridgeSemanticStateReader(lifecycle.computeBridge),
               }
             : undefined,
         });

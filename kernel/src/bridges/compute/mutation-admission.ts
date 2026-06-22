@@ -56,6 +56,11 @@ export interface VersionMutationCaptureRecordInput {
   readonly operationContext?: VersionOperationContext;
 }
 
+export interface VersionMutationCapturePreMutationInput {
+  readonly operation: string;
+  readonly operationContext?: VersionOperationContext;
+}
+
 interface PublicWriteMaterializationContext {
   awaitMaterialized?: (scope?: SheetId | 'allSheets') => Promise<void>;
 }
@@ -72,6 +77,7 @@ interface MutationAdmissionDiagnosticContext {
 }
 
 interface VersionMutationCaptureSink {
+  recordPreMutation?(input: VersionMutationCapturePreMutationInput): void | Promise<void>;
   recordMutationResult?(input: VersionMutationCaptureRecordInput): void;
 }
 
@@ -109,10 +115,25 @@ export function recordVersionMutationCapture(
   try {
     capture.recordMutationResult(normalizeVersionMutationCaptureInput(input));
   } catch {
-    (ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined)?.(
-      'versioning:mutation-capture-error',
-      { operation: input.operation },
-    );
+    (
+      ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
+    )?.('versioning:mutation-capture-error', { operation: input.operation });
+  }
+}
+
+export async function prepareVersionMutationCapture(
+  ctx: IKernelContext,
+  input: VersionMutationCapturePreMutationInput,
+): Promise<void> {
+  const capture = (ctx as IKernelContext & VersionMutationCaptureContext).versioning
+    ?.mutationCapture;
+  if (!capture?.recordPreMutation) return;
+  try {
+    await capture.recordPreMutation(input);
+  } catch {
+    (
+      ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
+    )?.('versioning:mutation-capture-error', { operation: input.operation, phase: 'pre-mutation' });
   }
 }
 

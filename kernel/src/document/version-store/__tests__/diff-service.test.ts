@@ -162,6 +162,50 @@ describe('WorkbookVersionDiffService', () => {
     expect(JSON.stringify(result)).not.toContain('secretFormula');
   });
 
+  it('projects Rust semantic changes when a payload has no review changes', async () => {
+    const rustChanges = [
+      {
+        structural: {
+          kind: 'metadata',
+          changeId: 'rust-cell-a1',
+          domain: 'cell',
+          entityId: 'sheet-1!A1',
+          propertyPath: ['value'],
+        },
+        before: { kind: 'value', value: null },
+        after: { kind: 'value', value: 42 },
+        display: { address: { kind: 'value', value: 'A1' } },
+      },
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: 'before-digest',
+          afterStateDigest: 'after-digest',
+        },
+        changes: rustChanges,
+        semanticDiff: {
+          beforeDigest: 'before-digest',
+          afterDigest: 'after-digest',
+          changes: rustChanges,
+          diagnostics: [],
+        },
+        reviewChanges: [],
+      },
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    await expect(
+      service.diff({ kind: 'commit', id: rootCommitId }, { kind: 'commit', id: childCommitId }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      items: rustChanges,
+      diagnostics: [],
+    });
+  });
+
   it('fails closed without leaking unsupported VC-06 raw payload fields', async () => {
     const rawSecret = 'Sheet1!$B$2:$B$20';
     const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({

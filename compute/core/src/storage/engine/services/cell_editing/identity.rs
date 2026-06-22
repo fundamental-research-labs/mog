@@ -1,4 +1,5 @@
 use cell_types::{CellId, SheetId, SheetPos};
+use value_types::ComputeError;
 use yrs::{Array, Map, Origin, Out, Transact};
 
 use crate::mirror::CellMirror;
@@ -300,4 +301,18 @@ pub(in crate::storage::engine) fn persist_identity_formula_cell_identities(
             ch.as_str(),
         );
     }
+}
+
+pub(in crate::storage::engine) fn persist_cell_formula_identity(
+    stores: &mut EngineStores,
+    mirror: &crate::mirror::CellMirror,
+    sheet_id: &SheetId,
+    cell_id: CellId,
+) -> Result<(), ComputeError> {
+    let Some(identity) = mirror.get_formula(&cell_id).cloned() else {
+        return Ok(());
+    };
+
+    persist_identity_formula_cell_identities(stores, mirror, &identity);
+    super::yrs_persistence::write_cell_identity_formula_to_yrs(stores, sheet_id, cell_id, &identity)
 }

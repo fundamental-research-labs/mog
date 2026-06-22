@@ -33,12 +33,11 @@ import type { VersionProviderWriteActivityTracker } from '../../document/version
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
+import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import type { VersionLiveCollaborationStatusReader } from './version-live-collaboration-status';
-import type {
-  DomainSupportManifestValidationOptions,
-} from '../../document/version-store/domain-support-manifest-validator';
+import type { DomainSupportManifestValidationOptions } from '../../document/version-store/domain-support-manifest-validator';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
@@ -74,13 +73,12 @@ export interface WorkbookVersioningConfig {
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
   readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
   readonly domainSupportManifest?: DomainSupportManifest | null;
-  readonly readDomainSupportManifest?: () => MaybePromise<
-    DomainSupportManifest | null | undefined
-  >;
+  readonly readDomainSupportManifest?: () => MaybePromise<DomainSupportManifest | null | undefined>;
   readonly domainSupportManifestOptions?: DomainSupportManifestValidationOptions;
   readonly requireDomainSupportManifest?: boolean;
 }

@@ -1,13 +1,17 @@
 use cell_types::{CellId, SheetId};
-use value_types::CellValue;
+use value_types::{CellValue, ComputeError};
 use yrs::{Map, MapRef, Origin, Out, Transact, TransactionMut};
 
 use crate::storage::cells::values::write_cell_position_to_yrs;
 use crate::storage::engine::stores::EngineStores;
-use compute_document::cell_serde::build_cell_prelim;
+use compute_document::cell_serde::{build_cell_prelim, write_identity_formula_to_yrs};
 use compute_document::hex::id_to_hex;
-use compute_document::schema::KEY_CELLS;
+use compute_document::schema::{
+    KEY_CELLS, KEY_FORMULA_AGGREGATE, KEY_FORMULA_DYNAMIC_ARRAY, KEY_FORMULA_REFS,
+    KEY_FORMULA_TEMPLATE, KEY_FORMULA_VOLATILE,
+};
 use compute_document::undo::ORIGIN_USER_EDIT;
+use formula_types::IdentityFormula;
 
 /// Write a cell value to the yrs Doc with ORIGIN_USER_EDIT.
 ///
@@ -93,4 +97,52 @@ pub(in crate::storage::engine) fn write_cell_to_yrs_in_txn(
     }
 
     write_cell_position_to_yrs(txn, sheets_map, sheet_hex, &cell_hex, row_hex, col_hex);
+}
+
+/// Overlay canonical formula identity metadata onto an already-written formula cell.
+///
+/// Value write paths intentionally commit legacy `KEY_FORMULA` text before the
+/// scheduler parses and registers the identity formula. Once the scheduler has
+/// updated the mirror, callers use this helper to make Yrs carry the same
+/// semantic formula state. Boolean identity flags are sparse-on-true in Yrs, so
+/// stale keys must be removed before writing the current identity.
+pub(in crate::storage::engine) fn write_cell_identity_formula_to_yrs(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    cell_id: CellId,
+    identity_formula: &IdentityFormula,
+) -> Result<(), ComputeError> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let cell_hex = id_to_hex(cell_id.as_u128());
+    let sheets_map = stores.storage.doc().get_or_insert_map("sheets");
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+
+    let Some(Out::YMap(sheet_map)) = sheets_map.get(&txn, &sheet_hex) else {
+        return Ok(());
+    };
+    let Some(Out::YMap(cells_map)) = sheet_map.get(&txn, KEY_CELLS) else {
+        return Ok(());
+    };
+    let Some(Out::YMap(cell_map)) = cells_map.get(&txn, &cell_hex) else {
+        return Ok(());
+    };
+
+    for key in [
+        KEY_FORMULA_TEMPLATE,
+        KEY_FORMULA_REFS,
+        KEY_FORMULA_DYNAMIC_ARRAY,
+        KEY_FORMULA_VOLATILE,
+        KEY_FORMULA_AGGREGATE,
+    ] {
+        cell_map.remove(&mut txn, key);
+    }
+
+    write_identity_formula_to_yrs(&cell_map, &mut txn, identity_formula).map_err(|err| {
+        ComputeError::InvalidInput {
+            message: format!("failed to persist formula identity metadata: {err}"),
+        }
+    })
 }

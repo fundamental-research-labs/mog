@@ -6,16 +6,16 @@ use formula_types::{
     StructureChange,
 };
 use snapshot_types::versioning::{
-    semantic_workbook_state_digest, CanonicalFormulaRef, SemanticChangeKind,
+    CanonicalFormulaRef, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticChangeKind,
     SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, SemanticObjectKind,
-    VersionDomainCapabilityState,
+    VersionDomainCapabilityState, semantic_workbook_state_digest,
 };
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 use crate::storage::engine::YrsComputeEngine;
 use crate::versioning::{
-    coverage_for_states, diff_semantic_workbook_states, SemanticWorkbookStateReader,
+    SemanticWorkbookStateReader, coverage_for_states, diff_semantic_workbook_states,
 };
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
@@ -117,6 +117,26 @@ fn engine_semantic_reader_reads_ordered_authored_cells() {
             .as_ref()
             .and_then(|value| value.canonical_value.as_ref()),
         Some(&serde_json::json!("beta"))
+    );
+}
+
+#[test]
+fn engine_semantic_reader_returns_digest_envelope() {
+    let (engine, _) =
+        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+            .expect("engine");
+
+    let envelope = engine
+        .semantic_workbook_state_envelope()
+        .expect("semantic state envelope");
+
+    assert_eq!(
+        envelope.state.schema_version,
+        SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION
+    );
+    assert_eq!(
+        envelope.state_digest,
+        semantic_workbook_state_digest(&envelope.state).expect("state digest")
     );
 }
 
@@ -358,10 +378,12 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(unsupported
-        .objects
-        .keys()
-        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
+    assert!(
+        unsupported
+            .objects
+            .keys()
+            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
+    );
     assert_eq!(
         coverage_for_states(&state, &state)
             .iter()
@@ -369,6 +391,68 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
             .expect("formula coverage")
             .status,
         SemanticDomainCoverageStatus::OpaqueBlocking
+    );
+}
+
+#[test]
+fn engine_semantic_reader_accepts_formula_identity_from_public_position_write() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let sheet_id = engine.storage().sheet_order()[0];
+
+    engine
+        .batch_set_cells_by_position(
+            vec![
+                (
+                    sheet_id,
+                    0,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "1".to_string(),
+                    },
+                ),
+                (
+                    sheet_id,
+                    1,
+                    0,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "2".to_string(),
+                    },
+                ),
+                (
+                    sheet_id,
+                    0,
+                    1,
+                    crate::storage::engine::mutation::CellInput::Parse {
+                        text: "=A1+A2".to_string(),
+                    },
+                ),
+            ],
+            false,
+        )
+        .expect("public formula write");
+
+    let formula_cell_id = engine
+        .storage()
+        .read_cell_id_at_pos(&sheet_id, 0, 1)
+        .expect("formula cell id");
+    let (_value, legacy_formula, persisted_identity) = engine
+        .storage()
+        .read_cell_from_yrs(&sheet_id, &formula_cell_id)
+        .expect("formula cell");
+    let state = engine.read_semantic_workbook_state().expect("state");
+    let formula_cell = &state.sheets["sheet#0"].cells["cell:sheet#0:r0:c1"];
+
+    assert_eq!(legacy_formula.as_deref(), Some("=A1+A2"));
+    assert!(
+        persisted_identity.is_some(),
+        "public formula writes must persist identity metadata"
+    );
+    assert!(formula_cell.formula.is_some());
+    assert!(
+        !state
+            .domains
+            .contains_key(super::UNSUPPORTED_CELL_FORMULAS_DOMAIN),
+        "public formula writes must not create unsupported formula coverage"
     );
 }
 
@@ -408,10 +492,12 @@ fn engine_semantic_reader_marks_unrepresented_persisted_formula_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(unsupported
-        .objects
-        .keys()
-        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
+    assert!(
+        unsupported
+            .objects
+            .keys()
+            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
+    );
 }
 
 #[test]
@@ -591,9 +677,11 @@ fn engine_semantic_reader_reads_direct_cell_format() {
     let before_state = before.read_semantic_workbook_state().expect("before state");
     let after_state = after.read_semantic_workbook_state().expect("after state");
     let cell_key = "cell:sheet#0:r0:c0";
-    assert!(before_state.sheets["sheet#0"].cells[cell_key]
-        .direct_format
-        .is_none());
+    assert!(
+        before_state.sheets["sheet#0"].cells[cell_key]
+            .direct_format
+            .is_none()
+    );
     let direct_format = after_state.sheets["sheet#0"].cells[cell_key]
         .direct_format
         .as_ref()

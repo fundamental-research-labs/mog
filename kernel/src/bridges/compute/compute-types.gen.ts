@@ -681,8 +681,93 @@ export interface CanonicalDirectFormat {
 export interface CanonicalFormula {
   normalizedFormula: string;
   dependencyObjectIds?: string[];
+  refs?: CanonicalFormulaRef[];
+  dynamicArray: boolean;
   volatile: boolean;
+  aggregate: boolean;
   digest?: ObjectDigest;
+}
+
+export type CanonicalFormulaRef =
+  | { kind: "cell" } & CanonicalFormulaRef_cell
+  | { kind: "range" } & CanonicalFormulaRef_range
+  | { kind: "rectRange" } & CanonicalFormulaRef_rectRange
+  | { kind: "fullRow" } & CanonicalFormulaRef_fullRow
+  | { kind: "rowRange" } & CanonicalFormulaRef_rowRange
+  | { kind: "fullColumn" } & CanonicalFormulaRef_fullColumn
+  | { kind: "columnRange" } & CanonicalFormulaRef_columnRange;
+
+export interface CanonicalFormulaRef_cell {
+  objectId: string;
+  sheetId: string;
+  row: number;
+  column: number;
+  rowAbsolute: boolean;
+  columnAbsolute: boolean;
+}
+
+export interface CanonicalFormulaRef_columnRange {
+  sheetId: string;
+  startObjectId: string;
+  endObjectId: string;
+  startColumn: number;
+  endColumn: number;
+  startAbsolute: boolean;
+  endAbsolute: boolean;
+}
+
+export interface CanonicalFormulaRef_fullColumn {
+  objectId: string;
+  sheetId: string;
+  column: number;
+  absolute: boolean;
+}
+
+export interface CanonicalFormulaRef_fullRow {
+  objectId: string;
+  sheetId: string;
+  row: number;
+  absolute: boolean;
+}
+
+export interface CanonicalFormulaRef_range {
+  sheetId: string;
+  startObjectId: string;
+  endObjectId: string;
+  startRow: number;
+  startColumn: number;
+  endRow: number;
+  endColumn: number;
+  startRowAbsolute: boolean;
+  startColumnAbsolute: boolean;
+  endRowAbsolute: boolean;
+  endColumnAbsolute: boolean;
+}
+
+export interface CanonicalFormulaRef_rectRange {
+  sheetId: string;
+  startRowObjectId: string;
+  startColumnObjectId: string;
+  endRowObjectId: string;
+  endColumnObjectId: string;
+  startRow: number;
+  startColumn: number;
+  endRow: number;
+  endColumn: number;
+  startRowAbsolute: boolean;
+  startColumnAbsolute: boolean;
+  endRowAbsolute: boolean;
+  endColumnAbsolute: boolean;
+}
+
+export interface CanonicalFormulaRef_rowRange {
+  sheetId: string;
+  startObjectId: string;
+  endObjectId: string;
+  startRow: number;
+  endRow: number;
+  startAbsolute: boolean;
+  endAbsolute: boolean;
 }
 
 export type CapturePolicyWire = "commitEligible" | "excluded" | "derivedOnly" | "rootCreation" | "historyGap" | "shadowOnly";
@@ -4528,6 +4613,16 @@ export interface SemanticChange {
 
 export type SemanticChangeKind = "added" | "removed" | "updated";
 
+export interface SemanticColumnState {
+  objectId: string;
+  sheetId: string;
+  index: number;
+  ordinal: number;
+  explicitWidthChars?: number;
+  hidden: boolean;
+  digest?: ObjectDigest;
+}
+
 export interface SemanticCompletenessDiagnostic {
   severity: SemanticDiagnosticSeverity;
   code: string;
@@ -4565,11 +4660,29 @@ export interface SemanticObjectDigest {
   digest: ObjectDigest;
 }
 
-export type SemanticObjectKind = "workbook" | "sheet" | "cell" | "cell-value" | "cell-formula" | "direct-format" | "domain-attachment";
+export type SemanticObjectKind = "workbook" | "sheet" | "row" | "column" | "cell" | "cell-value" | "cell-formula" | "direct-format" | "domain-attachment";
+
+export interface SemanticRowState {
+  objectId: string;
+  sheetId: string;
+  index: number;
+  ordinal: number;
+  explicitHeightPoints?: number;
+  effectiveHidden: boolean;
+  manualHidden: boolean;
+  structuralHidden: boolean;
+  filterHidden: boolean;
+  cacheHiddenWithoutOwner: boolean;
+  digest?: ObjectDigest;
+}
 
 export interface SemanticSheetState {
   sheetId: string;
   name: string;
+  rowCount: number;
+  columnCount: number;
+  rows: Record<string, SemanticRowState>;
+  columns: Record<string, SemanticColumnState>;
   cells: Record<string, SemanticCellState>;
   digest?: ObjectDigest;
 }

@@ -1,4 +1,4 @@
-use cell_types::{CellId, SheetId};
+use cell_types::SheetId;
 use value_types::{CellValue, ComputeError};
 use yrs::{Map, Origin, Out, Transact};
 
@@ -10,7 +10,9 @@ use compute_document::hex::id_to_hex;
 use compute_document::schema::KEY_CELLS;
 use compute_document::undo::ORIGIN_USER_EDIT;
 
-use super::{a1_range_string, ensure_cell_id_mirrored, write_cell_to_yrs};
+use super::{
+    a1_range_string, ensure_cell_id_mirrored, persist_cell_formula_identity, write_cell_to_yrs,
+};
 
 pub(in crate::storage::engine) fn set_array_formula(
     stores: &mut EngineStores,
@@ -83,6 +85,10 @@ pub(in crate::storage::engine) fn set_array_formula(
     let mut result = stores.compute.set_array_formula(
         mirror, sheet_id, anchor_id, top_row, left_col, bottom_row, right_col, formula,
     )?;
+    {
+        let _guard = mutation.suppress_guard();
+        persist_cell_formula_identity(stores, mirror, sheet_id, anchor_id)?;
+    }
 
     // Persist the CSE marker into Yrs so the array-formula brace
     // survives Yrs undo/redo. unified-reference left this runtime-only

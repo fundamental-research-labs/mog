@@ -8,7 +8,9 @@ use crate::snapshot::{CellChange, CellPosition, PolicyPreservedParseOutcome, Rec
 use crate::storage::cells::values::InputParseContext;
 use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
-use crate::storage::engine::services::cell_editing::NO_OLD_FORMULA_SENTINEL;
+use crate::storage::engine::services::cell_editing::{
+    NO_OLD_FORMULA_SENTINEL, persist_cell_formula_identity,
+};
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
@@ -284,6 +286,9 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         &parse_contexts,
         skip_cycle_check,
     )?;
+    for (sheet_id, cell_id, _, _, _) in &edits {
+        persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+    }
 
     // Patch before-side fields onto seed changes. Direct formula edits can
     // arrive from the scheduler with old_value=Null because the formula body

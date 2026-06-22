@@ -393,7 +393,24 @@ function mapSemanticChangeSet(
 ):
   | { readonly ok: true; readonly items: readonly VersionDiffEntry[] }
   | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] } {
-  if (!isRecord(payload) || payload.schemaVersion !== 1 || !Array.isArray(payload.changes)) {
+  if (!isRecord(payload) || payload.schemaVersion !== 1) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic(
+          'VERSION_UNSUPPORTED_SCHEMA',
+          'Semantic change-set payload is not supported by this diff slice.',
+        ),
+      ],
+    };
+  }
+
+  const changes = Array.isArray(payload.changes) ? payload.changes : null;
+  const reviewChanges =
+    Array.isArray(payload.reviewChanges) && payload.reviewChanges.length > 0
+      ? payload.reviewChanges
+      : changes;
+  if (!reviewChanges) {
     return {
       ok: false,
       diagnostics: [
@@ -406,8 +423,8 @@ function mapSemanticChangeSet(
   }
 
   const entries: VersionDiffEntry[] = [];
-  for (let index = 0; index < payload.changes.length; index++) {
-    const entry = mapSemanticChange(payload.changes[index]);
+  for (let index = 0; index < reviewChanges.length; index++) {
+    const entry = mapSemanticChange(reviewChanges[index]);
     if (!entry) {
       return {
         ok: false,

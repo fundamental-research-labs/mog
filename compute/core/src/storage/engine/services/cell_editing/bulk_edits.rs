@@ -9,7 +9,10 @@ use crate::storage::engine::mutation::CellInput;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
 use crate::storage::engine::stores::EngineStores;
 
-use super::{NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at};
+use super::{
+    NO_OLD_FORMULA_SENTINEL, cell_id_for_region_guard, find_cell_id_at,
+    persist_cell_formula_identity,
+};
 
 type PositionKey = (u32, u32);
 
@@ -221,6 +224,12 @@ pub(in crate::storage::engine) fn set_cell_values_parsed(
     let mut result = stores
         .compute
         .set_cells_with_targets(mirror, &edits, &format_hints, false)?;
+    {
+        let _guard = mutation.suppress_guard();
+        for (sheet_id, cell_id, _, _, _) in &edits {
+            persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+        }
+    }
 
     // Patch before-side fields onto seed changes (direct edits). Matching by
     // position preserves snapshots even when rich-value storage reallocates a
@@ -357,6 +366,12 @@ pub(in crate::storage::engine) fn import_values(
         false,
         crate::scheduler::WriteTrust::UserEdit,
     )?;
+    {
+        let _guard = mutation.suppress_guard();
+        for (sheet_id, cell_id, _, _, _, _) in &edits {
+            persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+        }
+    }
 
     // Patch before-side fields onto seed changes (direct edits). Matching by
     // position preserves snapshots even when rich-value storage reallocates a

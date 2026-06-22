@@ -49,7 +49,7 @@ export function attachWorkbookVersioning(
     config.semanticMutationCapture ??
     existingSemanticCapture ??
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
-      ? createSemanticMutationCapture()
+      ? createSemanticMutationCapture({ semanticStateReader: config.semanticStateReader })
       : undefined);
   const captureNormalCommit = config.captureNormalCommit ?? semanticCapture?.captureNormalCommit;
   const captureMergeCommit =
@@ -119,7 +119,9 @@ export function attachWorkbookVersioning(
     config.mergeService ??
     existing.mergeService ??
     existing.versionMergeService ??
-    (config.provider ? createWorkbookVersionMergeService({ provider: config.provider }) : undefined);
+    (config.provider
+      ? createWorkbookVersionMergeService({ provider: config.provider })
+      : undefined);
   const branchService =
     existing.branchService ??
     existing.branchRefService ??
@@ -163,7 +165,7 @@ export function attachWorkbookVersioning(
             : {
                 promotePendingRemoteSegments: () =>
                   pendingRemotePromotionService.promotePendingRemoteSegments(),
-            }),
+              }),
         }
       : {}),
     ...(providerWriteActivityTracker

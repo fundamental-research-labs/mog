@@ -958,3 +958,30 @@ impl ClockBridge {
         crate::eval::clock::set_current_time(timestamp_serial);
     }
 }
+
+// ===========================================================================
+// Versioning
+// ===========================================================================
+
+/// Stateless Rust-owned semantic versioning helpers.
+pub struct VersioningBridge;
+
+#[bridge::api(
+    group = "versioning",
+    fn_prefix = "versioning",
+    crate_path = "compute_core"
+)]
+impl VersioningBridge {
+    /// Diff two Rust-owned semantic workbook states.
+    #[bridge::pure]
+    pub fn diff_semantic_workbook_states(
+        before: snapshot_types::versioning::SemanticWorkbookState,
+        after: snapshot_types::versioning::SemanticWorkbookState,
+    ) -> Result<snapshot_types::versioning::SemanticWorkbookDiff, value_types::ComputeError> {
+        crate::versioning::diff_semantic_workbook_states(&before, &after).map_err(|error| {
+            value_types::ComputeError::Deserialize {
+                message: format!("semantic workbook diff serialization failed: {error}"),
+            }
+        })
+    }
+}

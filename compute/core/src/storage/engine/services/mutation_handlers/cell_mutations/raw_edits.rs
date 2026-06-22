@@ -6,7 +6,9 @@ use value_types::{CellValue, ComputeError};
 use crate::mirror::CellMirror;
 use crate::snapshot::RecalcResult;
 use crate::storage::engine::mutation_coordinator::MutationCoordinator;
-use crate::storage::engine::services::cell_editing::NO_OLD_FORMULA_SENTINEL;
+use crate::storage::engine::services::cell_editing::{
+    NO_OLD_FORMULA_SENTINEL, persist_cell_formula_identity,
+};
 use crate::storage::engine::stores::EngineStores;
 
 use super::edits::{canonicalize_resolved_raw_edits, validate_edit_bounds};
@@ -115,6 +117,9 @@ pub(in crate::storage::engine) fn mutation_set_cells_raw_with_trust(
         stores
             .compute
             .set_cells_raw_with_trust(mirror, &edits, skip_cycle_check, trust)?;
+    for (sheet_id, cell_id, _, _, _, _) in &edits {
+        persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
+    }
 
     // Patch before-side fields onto seed changes. Direct formula edits can
     // arrive from the scheduler with old_value=Null because the formula body

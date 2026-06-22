@@ -1,10 +1,10 @@
 import type {
   CheckoutVersionResult,
   Paged,
-  RedactedVersionAuthor, VersionBranchName, VersionBranchRefReadResult,
+  VersionBranchName, VersionBranchRefReadResult,
   VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
   VersionCheckoutOptions, VersionCheckoutTarget, VersionCommitish,
-  VersionCreateBranchOptions, VersionCommitOptions, VersionCommitPage, VersionDegradedHeadResult,
+  VersionCreateBranchOptions, VersionCommitOptions, VersionDegradedHeadResult,
   VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetHeadOptions, VersionGetMergeConflictDetailRequest,
   VersionListCommitsOptions, VersionListRefsOptions, VersionMainRefName, VersionMergeInput, VersionMergeOptions,
@@ -26,35 +26,28 @@ import { applyMergeWorkbookVersion } from './version-apply-merge';
 import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type VersionCheckoutTransactionGuard } from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
+import { listWorkbookVersionCommits } from './version-list-commits';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
 import { getMergeConflictDetailWorkbookVersion, putMergeResolutionPayloadWorkbookVersion, saveMergeResolutionsWorkbookVersion } from './version-merge-review-endpoints';
 import { promotePendingRemoteWorkbookVersion } from './version-pending-remote';
-import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromCommitPage, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
+import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import { createWorkbookVersionBranch, deleteWorkbookVersionBranch, deleteWorkbookVersionRef, fastForwardWorkbookVersionBranch, getWorkbookVersionRef, hasAttachedVersionRefLifecycleService, listWorkbookVersionRefs, readWorkbookVersionRef, updateWorkbookVersionBranch } from './version-refs';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
-const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
 const VERSION_LIST_REFS_DEFAULT_PAGE_SIZE = 50;
 
 type MaybePromise<T> = T | Promise<T>;
 
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
-type VersionPublicOperation = 'getHead' | 'listCommits' | 'readRef';
-type AttachedListCommitsOptions = {
-  readonly ref?: VersionRefSelector;
-  readonly from?: WorkbookCommitId;
-  readonly pageSize?: number;
-};
+type VersionPublicOperation = 'getHead' | 'readRef';
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
   getHead?: () => MaybePromise<unknown>;
   readRef?: (name: string) => MaybePromise<unknown>;
-  listCommits?: (options?: AttachedListCommitsOptions) => MaybePromise<unknown>;
 };
 
 type AttachedVersionServices = AttachedVersionReadService & {
@@ -132,17 +125,13 @@ function toReadService(value: unknown): AttachedVersionReadService | null {
   const readHead = bindMethod(value, 'readHead');
   const getHead = bindMethod(value, 'getHead');
   const readRef = bindMethod(value, 'readRef');
-  const listCommits = bindMethod(value, 'listCommits');
 
-  if (!readHead && !getHead && !readRef && !listCommits) return null;
+  if (!readHead && !getHead && !readRef) return null;
 
   const service: AttachedVersionReadService = {};
   if (readHead) service.readHead = () => readHead();
   if (getHead) service.getHead = () => getHead();
   if (readRef) service.readRef = (name) => readRef(name);
-  if (listCommits) {
-    service.listCommits = (options) => listCommits(options);
-  }
   return service;
 }
 
@@ -307,27 +296,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 
   async listCommits(options: VersionListCommitsOptions = {}): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
-    const limit = options.pageSize ?? VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE;
-    const optionDiagnostics = validateListCommitsOptions(options);
-    if (optionDiagnostics.length > 0) {
-      return versionResultFromCommitPage(degradedCommitPage(optionDiagnostics), limit);
-    }
-
-    const readService = getAttachedVersionReadService(this.ctx);
-    if (!readService?.listCommits) {
-      return versionResultFromCommitPage(degradedCommitPage([serviceUnavailableDiagnostic('listCommits')]), limit);
-    }
-
-    try {
-      const result = await readService.listCommits({
-        ...(options.ref === undefined ? {} : { ref: options.ref }),
-        ...(options.from === undefined ? {} : { from: options.from }),
-        ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
-      });
-      return versionResultFromCommitPage(mapCommitPageResult(result), limit);
-    } catch {
-      return versionResultFromCommitPage(degradedCommitPage([providerErrorDiagnostic('listCommits')]), limit);
-    }
+    return listWorkbookVersionCommits(this.ctx, options);
   }
   async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> { return commitWorkbookVersion(this.ctx, options); }
   async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionResult<CheckoutVersionResult>> {
@@ -397,100 +366,6 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   }
 }
 
-function validateListCommitsOptions(options: VersionListCommitsOptions): readonly VersionStoreDiagnostic[] {
-  const diagnostics: VersionStoreDiagnostic[] = [];
-  const pageSize = options.pageSize ?? VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE;
-
-  if (
-    !Number.isInteger(pageSize) ||
-    pageSize < 1 ||
-    pageSize > VERSION_LIST_COMMITS_MAX_PAGE_SIZE
-  ) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_OPTIONS',
-        'listCommits',
-        'listCommits pageSize must be an integer from 1 through 500.',
-        {
-          severity: 'error',
-          recoverability: 'none',
-          payload: {
-            option: 'pageSize',
-            min: 1,
-            max: VERSION_LIST_COMMITS_MAX_PAGE_SIZE,
-            receivedPageSize: formatPrimitiveForPayload(pageSize),
-          },
-        },
-      ),
-    );
-  }
-
-  if (options.pageToken !== undefined) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_STALE_PAGE_CURSOR',
-        'listCommits',
-        'listCommits page tokens are not supported by this version graph read slice.',
-        {
-          severity: 'error',
-          recoverability: 'unsupported',
-          payload: { option: 'pageToken', pageTokenUnsupported: true },
-        },
-      ),
-    );
-  }
-
-  if (options.ref !== undefined && options.from !== undefined) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_OPTIONS',
-        'listCommits',
-        'listCommits accepts either ref or from, not both.',
-        { severity: 'error', recoverability: 'none', payload: { option: 'ref' } },
-      ),
-    );
-  }
-
-  if (options.ref !== undefined && !toRefSelector(options.ref)) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_OPTIONS',
-        'listCommits',
-        'listCommits ref must be HEAD or refs/heads/<public branch>.',
-        { severity: 'error', recoverability: 'none', payload: { option: 'ref' } },
-      ),
-    );
-  }
-
-  if (options.from !== undefined && !toCommitId(options.from)) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_COMMIT_ID',
-        'listCommits',
-        'listCommits from must be commit:sha256:<64 lowercase hex>.',
-        { severity: 'error', recoverability: 'none', payload: { option: 'from' } },
-      ),
-    );
-  }
-
-  if (options.includeOrphans === true) {
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_PERMISSION_DENIED',
-        'listCommits',
-        'Orphan commit listing requires diagnostics support that is not exposed by this slice.',
-        {
-          severity: 'error',
-          recoverability: 'unsupported',
-          payload: { option: 'includeOrphans' },
-        },
-      ),
-    );
-  }
-
-  return diagnostics;
-}
-
 function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {
   if (!isRecord(value)) {
     return degradedHead([providerErrorDiagnostic('getHead')]);
@@ -546,57 +421,6 @@ function mapLegacyHead(value: unknown): WorkbookCommitRef | null {
     id,
     ...(refName ? { refName } : {}),
     ...(refName ? { resolvedFrom: VERSION_HEAD_REF } : {}),
-  };
-}
-
-function mapCommitPageResult(value: unknown): VersionCommitPage {
-  if (!isRecord(value)) {
-    return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
-  }
-
-  if (value.status === 'failed' || value.status === 'degraded') {
-    return degradedCommitPage(mapGraphDiagnostics(value.diagnostics, 'listCommits'));
-  }
-
-  if (value.status !== 'success') {
-    return degradedCommitPage([providerErrorDiagnostic('listCommits')]);
-  }
-
-  const readRevision = toRevision(value.readRevision);
-  const sourceItems = Array.isArray(value.commits)
-    ? value.commits
-    : Array.isArray(value.items)
-      ? value.items
-      : null;
-
-  if (!readRevision || !sourceItems) {
-    return degradedCommitPage([
-      publicDiagnostic(
-        'VERSION_INVALID_COMMIT_PAYLOAD',
-        'listCommits',
-        'The version graph commit page did not contain a valid public page shape.',
-        { severity: 'error', recoverability: 'repair' },
-      ),
-    ]);
-  }
-
-  const { items, diagnostics } = mapCommitSummaries(sourceItems);
-  if (diagnostics.length > 0) {
-    return {
-      status: 'degraded',
-      items,
-      readRevision,
-      order: 'topological-newest',
-      diagnostics,
-    };
-  }
-
-  return {
-    status: 'success',
-    items,
-    readRevision,
-    order: 'topological-newest',
-    diagnostics: [],
   };
 }
 
@@ -671,65 +495,6 @@ function mapRef(value: unknown): VersionRef | VersionSymbolicRef | null {
     commitId,
     revision,
     ...(typeof value.updatedAt === 'string' ? { updatedAt: value.updatedAt } : {}),
-  };
-}
-
-function mapCommitSummaries(values: readonly unknown[]): {
-  readonly items: readonly WorkbookCommitSummary[];
-  readonly diagnostics: readonly VersionStoreDiagnostic[];
-} {
-  const items: WorkbookCommitSummary[] = [];
-  const diagnostics: VersionStoreDiagnostic[] = [];
-
-  values.forEach((value, index) => {
-    const summary = mapCommitSummary(value);
-    if (summary) {
-      items.push(summary);
-      return;
-    }
-
-    diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_COMMIT_PAYLOAD',
-        'listCommits',
-        'A version graph commit summary could not be safely projected.',
-        {
-          severity: 'error',
-          recoverability: 'repair',
-          payload: { itemIndex: index },
-        },
-      ),
-    );
-  });
-
-  return { items, diagnostics };
-}
-
-function mapCommitSummary(value: unknown): WorkbookCommitSummary | null {
-  if (!isRecord(value)) return null;
-
-  const id = toCommitId(value.id);
-  if (!id || typeof value.createdAt !== 'string') return null;
-
-  const parents = Array.isArray(value.parents)
-    ? value.parents.map(toCommitId).filter((parent): parent is WorkbookCommitId => Boolean(parent))
-    : null;
-  if (!parents || parents.length !== (value.parents as readonly unknown[]).length) return null;
-
-  return {
-    id,
-    parents,
-    createdAt: value.createdAt,
-    author: redactAuthor(value.author),
-  };
-}
-
-function redactAuthor(value: unknown): RedactedVersionAuthor {
-  if (!isRecord(value)) return { redacted: true };
-  return {
-    ...(typeof value.actorKind === 'string' ? { actorKind: value.actorKind } : {}),
-    ...(typeof value.displayName === 'string' ? { displayName: value.displayName } : {}),
-    redacted: true,
   };
 }
 
@@ -925,15 +690,6 @@ function degradedHead(
   return {
     status: 'degraded',
     ...(ref ? { ref } : {}),
-    diagnostics,
-  };
-}
-
-function degradedCommitPage(diagnostics: readonly VersionStoreDiagnostic[]): VersionCommitPage {
-  return {
-    status: 'degraded',
-    items: [],
-    order: 'topological-newest',
     diagnostics,
   };
 }

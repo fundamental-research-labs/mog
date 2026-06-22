@@ -13,6 +13,7 @@ import type {
   VersionStoreDiagnostic as PublicVersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
+import { parseCellAddress } from '@mog/spreadsheet-utils/a1';
 
 import type { WorkbookCommit } from './commit-store';
 import {
@@ -40,21 +41,7 @@ const REDACTED_VALUE_REASONS = new Set([
   'historical-acl-unavailable',
 ]);
 
-const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set([
-  'cell',
-  'cells.values',
-  'cells.formats.direct',
-  'sheet',
-  'filters',
-  'sorts',
-  'named-ranges',
-  'tables',
-  'comments-notes',
-  'conditional-formatting',
-  'data-validation',
-  'charts.source-range',
-  'floating-objects.anchors',
-]);
+const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set(['cell', 'cells.values', 'cells.formats.direct']);
 
 type MergeDiagnostic = PublicVersionStoreDiagnostic;
 
@@ -614,6 +601,7 @@ function isSupportedSemanticValueChange(
   structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
 ): boolean {
   if (!SUPPORTED_SEMANTIC_MERGE_DOMAINS.has(structural.domain)) return false;
+  if (!hasMaterializableCellEntity(structural.entityId)) return false;
 
   if (structural.domain === 'cell') {
     return structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value';
@@ -626,7 +614,13 @@ function isSupportedSemanticValueChange(
     );
   }
 
-  return structural.propertyPath.length > 0;
+  return structural.propertyPath.length === 1 && structural.propertyPath[0] === 'format';
+}
+
+function hasMaterializableCellEntity(entityId: string): boolean {
+  const separator = entityId.lastIndexOf('!');
+  if (separator <= 0 || separator === entityId.length - 1) return false;
+  return Boolean(parseCellAddress(entityId.slice(separator + 1)));
 }
 
 function mapStructuralMetadata(

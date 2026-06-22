@@ -325,7 +325,7 @@ describe('WorkbookVersionMergeService', () => {
     });
   });
 
-  it('previews clean disjoint metadata-domain changes', async () => {
+  it('blocks disjoint metadata-domain changes the materializer cannot apply', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([
         valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
@@ -343,43 +343,32 @@ describe('WorkbookVersionMergeService', () => {
     });
     const service = createWorkbookVersionMergeService({ provider: graph.provider });
 
-    await expect(
-      service.merge({
-        base: graph.rootCommitId,
-        ours: graph.oursCommitId,
-        theirs: graph.theirsCommitId,
-      }),
-    ).resolves.toMatchObject({
-      status: 'clean',
-      changes: [
+    const result = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      changes: [],
+      conflicts: [],
+      diagnostics: [
         expect.objectContaining({
-          structural: expect.objectContaining({
+          issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+          payload: expect.objectContaining({
             domain: 'sheet',
-            entityId: 'sheet-1',
-            propertyPath: ['name'],
+            propertyPath: 'name',
           }),
-          base: { kind: 'value', value: 'Sheet1' },
-          ours: { kind: 'value', value: 'Forecast' },
-          merged: { kind: 'value', value: 'Forecast' },
-        }),
-        expect.objectContaining({
-          structural: expect.objectContaining({
-            domain: 'filters',
-            entityId: 'sheet-1:auto-filter',
-            propertyPath: ['state'],
-          }),
-          base: { kind: 'value', value: 'none' },
-          theirs: { kind: 'value', value: 'active' },
-          merged: { kind: 'value', value: 'active' },
         }),
       ],
-      conflicts: [],
-      diagnostics: [],
       mutationGuarantee: 'preview-only',
     });
+    expect(JSON.stringify(result)).not.toContain('Forecast');
+    expect(JSON.stringify(result)).not.toContain('active');
   });
 
-  it('classifies same-property metadata-domain changes as conflicts', async () => {
+  it('blocks same-property metadata-domain changes before conflict classification', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([
         valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
@@ -390,44 +379,35 @@ describe('WorkbookVersionMergeService', () => {
     });
     const service = createWorkbookVersionMergeService({ provider: graph.provider });
 
-    await expect(
-      service.merge({
-        base: graph.rootCommitId,
-        ours: graph.oursCommitId,
-        theirs: graph.theirsCommitId,
-      }),
-    ).resolves.toMatchObject({
-      status: 'conflicted',
+    const result = await service.merge({
+      base: graph.rootCommitId,
+      ours: graph.oursCommitId,
+      theirs: graph.theirsCommitId,
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
       changes: [],
-      conflicts: [
-        {
-          conflictKind: 'same-property',
-          structural: expect.objectContaining({
+      conflicts: [],
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+          payload: expect.objectContaining({
             domain: 'sheet',
-            entityId: 'sheet-1',
-            propertyPath: ['name'],
+            propertyPath: 'name',
           }),
-          base: { kind: 'value', value: 'Sheet1' },
-          ours: { kind: 'value', value: 'Forecast' },
-          theirs: { kind: 'value', value: 'Budget' },
-        },
+        }),
       ],
-      diagnostics: [],
       mutationGuarantee: 'preview-only',
     });
+    expect(JSON.stringify(result)).not.toContain('Forecast');
+    expect(JSON.stringify(result)).not.toContain('Budget');
   });
 
   it('blocks unsupported semantic domains without fabricating merge output', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([
-        valueChange(
-          'ours-pivot-source',
-          'pivot-tables',
-          'pivot-1',
-          ['source'],
-          'A1:B10',
-          'C1:D10',
-        ),
+        valueChange('ours-pivot-source', 'pivot-tables', 'pivot-1', ['source'], 'A1:B10', 'C1:D10'),
       ]),
       theirsSemanticPayload: validSemanticPayload([]),
     });
@@ -454,10 +434,7 @@ describe('WorkbookVersionMergeService', () => {
       'empty domain',
       valueChange('ours-empty-domain', '', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
     ],
-    [
-      'empty entity',
-      valueChange('ours-empty-entity', 'sheet', '', ['name'], 'Sheet1', 'Forecast'),
-    ],
+    ['empty entity', valueChange('ours-empty-entity', 'sheet', '', ['name'], 'Sheet1', 'Forecast')],
     [
       'empty property path',
       valueChange('ours-empty-property', 'sheet', 'sheet-1', [], 'Sheet1', 'Forecast'),
@@ -630,18 +607,19 @@ describe('WorkbookVersionMergeService', () => {
       throw new Error('expected a persisted fast-forward merge result id and digest');
     }
     const opened = await graph.provider.openGraph(graph.namespace);
-    await expect(opened.getObjectRecord(mergePreviewArtifactRef(result.previewArtifactDigest)))
-      .resolves.toMatchObject({
-        preimage: {
-          payload: {
-            recordKind: 'mergePreview',
-            status: 'fastForward',
-            base: graph.rootCommitId,
-            ours: graph.oursCommitId,
-            theirs: theirsDescendantCommitId,
-          },
+    await expect(
+      opened.getObjectRecord(mergePreviewArtifactRef(result.previewArtifactDigest)),
+    ).resolves.toMatchObject({
+      preimage: {
+        payload: {
+          recordKind: 'mergePreview',
+          status: 'fastForward',
+          base: graph.rootCommitId,
+          ours: graph.oursCommitId,
+          theirs: theirsDescendantCommitId,
         },
-      });
+      },
+    });
 
     const intentId = intentIdForMergeResultId(result.resultId);
     if (!intentId) throw new Error('expected persisted result id to map to an intent id');

@@ -3,6 +3,8 @@ import { jest } from '@jest/globals';
 import type {
   DomainCapabilityPolicyManifest,
   DomainSupportManifest,
+  VersionDomainCapabilityState,
+  VersionDomainCapabilityStateMap,
 } from '@mog-sdk/contracts/versioning';
 import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/api';
 import {
@@ -24,6 +26,22 @@ const EXPECTED_TARGET_HEAD = {
   revision: { kind: 'counter' as const, value: '1' },
 };
 
+function capabilityStates(
+  state: VersionDomainCapabilityState = 'supported',
+): VersionDomainCapabilityStateMap {
+  return {
+    capture: state,
+    replay: state,
+    diff: state,
+    reviewAccess: state,
+    checkout: state,
+    merge: state,
+    persistence: state,
+    import: state,
+    export: state,
+  };
+}
+
 function domainRow(
   domainId: string,
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
@@ -31,7 +49,7 @@ function domainRow(
   return {
     domainId,
     domainClass: 'authored',
-    capabilityState: 'supported',
+    capabilityStates: capabilityStates(),
     capturePolicy: 'commitEligible',
     writeAdmissionMode: 'capture',
     rolloutStage: 'headless-local',

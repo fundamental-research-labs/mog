@@ -11,6 +11,7 @@
 // contract can be specified and tested ahead of Batch B promotion.
 
 import {
+  VERSION_DOMAIN_CAPABILITY_KEYS,
   VERSION_DOMAIN_CAPABILITY_STATES,
   VERSION_DOMAIN_CLASSES,
   type DomainCapabilityPolicyManifest,
@@ -55,6 +56,9 @@ export type DomainSupportManifestDiagnosticCode =
   | 'duplicate-domain'
   | 'domain-malformed'
   | 'unknown-domain-class'
+  | 'capability-states-missing'
+  | 'capability-state-missing'
+  | 'unknown-capability-key'
   | 'unknown-capability-state'
   | 'detector-row-missing';
 
@@ -131,6 +135,7 @@ export interface DomainSupportManifestValidationOptions {
 }
 
 const CLASS_SET: ReadonlySet<string> = new Set(VERSION_DOMAIN_CLASSES);
+const CAPABILITY_KEY_SET: ReadonlySet<string> = new Set(VERSION_DOMAIN_CAPABILITY_KEYS);
 const STATE_SET: ReadonlySet<string> = new Set(VERSION_DOMAIN_CAPABILITY_STATES);
 
 function isVersionDomainClass(value: unknown): value is VersionDomainClass {
@@ -141,8 +146,56 @@ function isVersionDomainCapabilityState(value: unknown): value is VersionDomainC
   return typeof value === 'string' && STATE_SET.has(value);
 }
 
+function isPlainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function isSupportedSchemaVersion(value: string): boolean {
   return (SUPPORTED_DOMAIN_SUPPORT_MANIFEST_SCHEMA_VERSIONS as readonly string[]).includes(value);
+}
+
+function validateCapabilityStates(
+  domainId: string,
+  capabilityStates: unknown,
+  diagnostics: DomainSupportManifestDiagnostic[],
+): void {
+  if (!isPlainRecord(capabilityStates)) {
+    diagnostics.push({
+      code: 'capability-states-missing',
+      message: `Domain "${domainId}" must provide capabilityStates keyed by version capability.`,
+      domainId,
+    });
+    return;
+  }
+
+  for (const key of Object.keys(capabilityStates)) {
+    if (!CAPABILITY_KEY_SET.has(key)) {
+      diagnostics.push({
+        code: 'unknown-capability-key',
+        message: `Domain "${domainId}" references unknown capability key "${key}".`,
+        domainId,
+      });
+    }
+  }
+
+  for (const key of VERSION_DOMAIN_CAPABILITY_KEYS) {
+    const state = capabilityStates[key];
+    if (state === undefined) {
+      diagnostics.push({
+        code: 'capability-state-missing',
+        message: `Domain "${domainId}" is missing capability state for "${key}".`,
+        domainId,
+      });
+      continue;
+    }
+    if (!isVersionDomainCapabilityState(state)) {
+      diagnostics.push({
+        code: 'unknown-capability-state',
+        message: `Domain "${domainId}" capability "${key}" references unknown state "${String(state)}".`,
+        domainId,
+      });
+    }
+  }
 }
 
 /**
@@ -278,10 +331,14 @@ export function validateDomainSupportManifest(
           domainId,
         });
       }
-      if (!isVersionDomainCapabilityState(typed.capabilityState)) {
+      validateCapabilityStates(domainId, typed.capabilityStates, diagnostics);
+      if (
+        typed.capabilityState !== undefined &&
+        !isVersionDomainCapabilityState(typed.capabilityState)
+      ) {
         diagnostics.push({
           code: 'unknown-capability-state',
-          message: `Domain "${domainId}" references unknown capabilityState "${String(typed.capabilityState)}".`,
+          message: `Domain "${domainId}" references unknown legacy capabilityState "${String(typed.capabilityState)}".`,
           domainId,
         });
       }

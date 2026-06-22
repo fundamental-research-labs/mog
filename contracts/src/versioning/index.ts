@@ -59,6 +59,22 @@ export const VERSION_DOMAIN_CAPABILITY_STATES = Object.freeze([
 ] as const);
 export type VersionDomainCapabilityState = (typeof VERSION_DOMAIN_CAPABILITY_STATES)[number];
 
+export const VERSION_DOMAIN_CAPABILITY_KEYS = Object.freeze([
+  'capture',
+  'replay',
+  'diff',
+  'reviewAccess',
+  'checkout',
+  'merge',
+  'persistence',
+  'import',
+  'export',
+] as const);
+export type VersionDomainCapabilityKey = (typeof VERSION_DOMAIN_CAPABILITY_KEYS)[number];
+export type VersionDomainCapabilityStateMap = Readonly<
+  Record<VersionDomainCapabilityKey, VersionDomainCapabilityState>
+>;
+
 export const VERSION_ROLLOUT_STAGES = Object.freeze([
   'disabled',
   'shadow-only',
@@ -351,7 +367,9 @@ export interface EntityLifecycleAndTombstonePolicy {
 export interface DomainCapabilityPolicyManifest {
   readonly domainId: string;
   readonly domainClass: VersionDomainClass;
-  readonly capabilityState: VersionDomainCapabilityState;
+  readonly capabilityStates: VersionDomainCapabilityStateMap;
+  /** @deprecated Use capabilityStates keyed by VersionDomainCapabilityKey. */
+  readonly capabilityState?: VersionDomainCapabilityState;
   readonly capturePolicy: CapturePolicy;
   readonly writeAdmissionMode: VersionWriteAdmissionMode;
   readonly rolloutStage: VersionRolloutStage;
@@ -379,7 +397,9 @@ export interface DomainPresenceDetector {
   readonly domainId: string;
   readonly domainClass: VersionDomainClass;
   readonly detectsObjectKinds: readonly string[];
-  readonly capabilityStateWhenPresent: VersionDomainCapabilityState;
+  readonly capabilityStatesWhenPresent: VersionDomainCapabilityStateMap;
+  /** @deprecated Use capabilityStatesWhenPresent keyed by VersionDomainCapabilityKey. */
+  readonly capabilityStateWhenPresent?: VersionDomainCapabilityState;
 }
 
 export type VersionVerificationStatus = 'not-run' | 'passed' | 'failed' | 'inconclusive';

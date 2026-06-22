@@ -8,7 +8,9 @@ import type {
   ObjectDigest,
   VersionWriteAdmissionMode,
   VersionCapabilityGate,
+  VersionDomainCapabilityKey,
   VersionDomainCapabilityState,
+  VersionDomainCapabilityStateMap,
   VersionDomainClass,
 } from './index';
 
@@ -32,6 +34,16 @@ type ExpectedDomainCapabilityState =
   | 'excluded'
   | 'opaque-preserved'
   | 'opaque-blocking';
+type ExpectedDomainCapabilityKey =
+  | 'capture'
+  | 'replay'
+  | 'diff'
+  | 'reviewAccess'
+  | 'checkout'
+  | 'merge'
+  | 'persistence'
+  | 'import'
+  | 'export';
 type ExpectedCapturePolicy =
   | 'commitEligible'
   | 'excluded'
@@ -53,12 +65,21 @@ type _ExactDomainClassSet = Assert<IsEqual<VersionDomainClass, ExpectedDomainCla
 type _ExactDomainCapabilityStateSet = Assert<
   IsEqual<VersionDomainCapabilityState, ExpectedDomainCapabilityState>
 >;
+type _ExactDomainCapabilityKeySet = Assert<
+  IsEqual<VersionDomainCapabilityKey, ExpectedDomainCapabilityKey>
+>;
 type _ExactCapturePolicySet = Assert<IsEqual<CapturePolicy, ExpectedCapturePolicy>>;
 type _ExactWriteAdmissionModeSet = Assert<
   IsEqual<VersionWriteAdmissionMode, ExpectedWriteAdmissionMode>
 >;
-type _CapabilityStateFieldUsesCapabilityUnion = Assert<
-  IsEqual<DomainCapabilityPolicyManifest['capabilityState'], VersionDomainCapabilityState>
+type _CapabilityStatesFieldUsesCapabilityMap = Assert<
+  IsEqual<DomainCapabilityPolicyManifest['capabilityStates'], VersionDomainCapabilityStateMap>
+>;
+type _LegacyCapabilityStateFieldUsesCapabilityUnion = Assert<
+  IsEqual<
+    Exclude<DomainCapabilityPolicyManifest['capabilityState'], undefined>,
+    VersionDomainCapabilityState
+  >
 >;
 type _DomainClassFieldUsesDomainClassUnion = Assert<
   IsEqual<DomainCapabilityPolicyManifest['domainClass'], VersionDomainClass>
@@ -96,10 +117,22 @@ const versionCapabilityGate: VersionCapabilityGate = Object.freeze({
   }),
 });
 
+const contractedCapabilityStates: VersionDomainCapabilityStateMap = Object.freeze({
+  capture: 'contracted',
+  replay: 'contracted',
+  diff: 'contracted',
+  reviewAccess: 'contracted',
+  checkout: 'contracted',
+  merge: 'contracted',
+  persistence: 'contracted',
+  import: 'contracted',
+  export: 'contracted',
+});
+
 const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
   domainId: 'authored-grid',
   domainClass: 'authored',
-  capabilityState: 'contracted',
+  capabilityStates: contractedCapabilityStates,
   capturePolicy: 'shadowOnly',
   writeAdmissionMode: 'shadowOnly',
   rolloutStage: versionCapabilityGate.rolloutStage,

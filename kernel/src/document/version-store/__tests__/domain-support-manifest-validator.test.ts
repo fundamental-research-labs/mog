@@ -1,6 +1,8 @@
 import type {
   DomainCapabilityPolicyManifest,
   DomainSupportManifest,
+  VersionDomainCapabilityState,
+  VersionDomainCapabilityStateMap,
 } from '@mog-sdk/contracts/versioning';
 import {
   DomainSupportManifestError,
@@ -10,6 +12,22 @@ import {
   type DomainSupportDetectorRow,
 } from '../domain-support-manifest-validator';
 
+function capabilityStates(
+  state: VersionDomainCapabilityState = 'supported',
+): VersionDomainCapabilityStateMap {
+  return {
+    capture: state,
+    replay: state,
+    diff: state,
+    reviewAccess: state,
+    checkout: state,
+    merge: state,
+    persistence: state,
+    import: state,
+    export: state,
+  };
+}
+
 function domainRow(
   domainId: string,
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
@@ -17,7 +35,7 @@ function domainRow(
   return {
     domainId,
     domainClass: 'authored',
-    capabilityState: 'supported',
+    capabilityStates: capabilityStates(),
     capturePolicy: 'commitEligible',
     writeAdmissionMode: 'capture',
     rolloutStage: 'headless-local',
@@ -152,8 +170,11 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
       domains: [
         ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
         domainRow('filters', {
-          // @ts-expect-error intentionally invalid state
-          capabilityState: 'mostly-supported',
+          capabilityStates: {
+            ...capabilityStates(),
+            // @ts-expect-error intentionally invalid state
+            merge: 'mostly-supported',
+          },
         }),
       ],
     });
@@ -164,6 +185,68 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     if (!result.ok) {
       const diag = result.diagnostics.find((d) => d.code === 'unknown-capability-state');
       expect(diag?.domainId).toBe('filters');
+    }
+  });
+
+  it('fails closed when capabilityStates is missing', () => {
+    const row = domainRow('filters') as any;
+    delete row.capabilityStates;
+    const manifest = freshManifest({
+      domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), row],
+    });
+
+    const result = validateDomainSupportManifest(manifest, { now: NOW });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const diag = result.diagnostics.find((d) => d.code === 'capability-states-missing');
+      expect(diag?.domainId).toBe('filters');
+    }
+  });
+
+  it('fails closed when a capability state key is missing', () => {
+    const states = { ...capabilityStates() };
+    delete (states as Partial<VersionDomainCapabilityStateMap>).checkout;
+    const manifest = freshManifest({
+      domains: [
+        ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+        domainRow('filters', {
+          capabilityStates: states as VersionDomainCapabilityStateMap,
+        }),
+      ],
+    });
+
+    const result = validateDomainSupportManifest(manifest, { now: NOW });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const diag = result.diagnostics.find((d) => d.code === 'capability-state-missing');
+      expect(diag?.domainId).toBe('filters');
+      expect(diag?.message).toContain('checkout');
+    }
+  });
+
+  it('fails closed when a capability state map has an unknown key', () => {
+    const manifest = freshManifest({
+      domains: [
+        ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+        domainRow('filters', {
+          capabilityStates: {
+            ...capabilityStates(),
+            // @ts-expect-error intentionally invalid capability key
+            importExportMaybe: 'supported',
+          },
+        }),
+      ],
+    });
+
+    const result = validateDomainSupportManifest(manifest, { now: NOW });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const diag = result.diagnostics.find((d) => d.code === 'unknown-capability-key');
+      expect(diag?.domainId).toBe('filters');
+      expect(diag?.message).toContain('importExportMaybe');
     }
   });
 

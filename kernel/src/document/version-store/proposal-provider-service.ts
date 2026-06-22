@@ -444,6 +444,9 @@ export class ProviderBackedAgentProposalService {
       ...(this.graphProvider ? { graphProvider: this.graphProvider } : {}),
       ensureCommitExists: (commitId) => this.ensureCommitExists(commitId, 'acceptProposal'),
       resolveTargetHead: (targetRef) => this.resolveTargetHead(targetRef, 'acceptProposal'),
+      ...(this.reviewService
+        ? { getReview: (reviewId) => this.reviewService!.getReview({ reviewId }) }
+        : {}),
     });
   }
 

@@ -4,6 +4,7 @@ import type {
   VersionDiagnostic,
   VersionResult,
   WorkbookCommitId,
+  WorkbookVersionReviewRecord,
 } from '@mog-sdk/contracts/api';
 
 import type { ResolvedBranchHead } from './proposal-provider-service';
@@ -40,6 +41,7 @@ export async function acceptProviderBackedAgentProposal(options: {
   readonly graphProvider?: ProposalGraphProvider;
   readonly ensureCommitExists: (commitId: WorkbookCommitId) => Promise<CommitExistsResult>;
   readonly resolveTargetHead: (targetRef: string) => Promise<ResolutionResult>;
+  readonly getReview?: (reviewId: string) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
 }): Promise<VersionResult<AgentProposalAcceptResult>> {
   const store = await openProposalStore(options.openStore);
   if (!store.ok) return store.result;
@@ -68,6 +70,14 @@ export async function acceptProviderBackedAgentProposal(options: {
       'Proposal acceptance requires a proposal commit id.',
     );
   }
+  const reviewReady = await requireApprovedProposalReview({
+    proposalId: proposal.id,
+    baseCommitId: proposal.baseCommitId,
+    proposalCommitId: proposal.proposalCommitId,
+    reviewId: proposal.reviewId,
+    getReview: options.getReview,
+  });
+  if (!reviewReady.ok) return reviewReady.result;
 
   const commitExists = await options.ensureCommitExists(proposal.proposalCommitId);
   if (!commitExists.ok) return commitExists.result;
@@ -122,6 +132,63 @@ export async function acceptProviderBackedAgentProposal(options: {
   if (!updated.ok) return storeFailure(updated);
 
   return ok(fastForwardAcceptResult(updated.value.id, accepted));
+}
+
+async function requireApprovedProposalReview(input: {
+  readonly proposalId: string;
+  readonly baseCommitId: WorkbookCommitId;
+  readonly proposalCommitId: WorkbookCommitId;
+  readonly reviewId?: string;
+  readonly getReview?: (reviewId: string) => Promise<VersionResult<WorkbookVersionReviewRecord>>;
+}): Promise<{ readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }> {
+  if (!input.reviewId) {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_review_required',
+        ['approved_review'],
+        'Proposal acceptance requires a linked approved review.',
+      ),
+    };
+  }
+  if (!input.getReview) {
+    return {
+      ok: false,
+      result: targetUnavailable(
+        'VERSION_REVIEW_SERVICE_UNAVAILABLE',
+        'Proposal acceptance requires an attached review service.',
+      ),
+    };
+  }
+
+  const review = await input.getReview(input.reviewId);
+  if (!review.ok) return { ok: false, result: review };
+  if (review.value.status !== 'approved') {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_review_not_approved',
+        ['approved'],
+        'Proposal acceptance requires the linked review to be approved.',
+      ),
+    };
+  }
+  if (
+    review.value.subject.kind !== 'proposal' ||
+    review.value.subject.proposalId !== input.proposalId ||
+    review.value.subject.baseCommitId !== input.baseCommitId ||
+    review.value.subject.headCommitId !== input.proposalCommitId
+  ) {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_review_mismatch',
+        ['matching_proposal_review'],
+        'Proposal acceptance requires an approved review for the same proposal commit range.',
+      ),
+    };
+  }
+  return { ok: true };
 }
 
 async function fastForwardTargetRef(

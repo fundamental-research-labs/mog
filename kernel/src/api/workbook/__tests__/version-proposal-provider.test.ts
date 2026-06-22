@@ -1,4 +1,5 @@
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { VersionUpdateReviewStatusInput } from '@mog-sdk/contracts/api';
 import type {
   CommitVersionGraphInput,
   VersionGraphInitializeResult,
@@ -190,6 +191,14 @@ describe('WorkbookVersion provider-backed proposal service', () => {
       },
     });
     if (!review.ok) throw new Error(`expected proposal review success: ${review.error.code}`);
+    const approved = await approveReview(
+      version,
+      review.value.id,
+      review.value.revision,
+      'proposal-review-approve-1',
+    );
+    expect(approved).toMatchObject({ ok: true, value: { status: 'approved' } });
+    if (!approved.ok) throw new Error(`expected review approval success: ${approved.error.code}`);
 
     await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
@@ -233,6 +242,46 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied', revision: 6 },
+    });
+  });
+
+  it('rejects proposal acceptance until the linked review is approved', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = graphCommittingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+    const ready = await createReadyReviewedProposal(version, graph, 'unapproved', {
+      approveReview: false,
+    });
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-unapproved',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+    expect(accepted).toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_review_not_approved',
+        allowed: ['approved'],
+      },
+    });
+
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: graph.rootCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'ready_for_review', revision: 5 },
     });
   });
 
@@ -294,6 +343,7 @@ async function createReadyReviewedProposal(
   version: WorkbookVersionImpl,
   graph: Awaited<ReturnType<typeof graphWithRoot>>,
   suffix: string,
+  options: { readonly approveReview?: boolean } = {},
 ) {
   const created = await version.createProposal(createProposalInput(`proposal-create-${suffix}`));
   if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
@@ -328,9 +378,33 @@ async function createReadyReviewedProposal(
     actor: ACTOR,
   });
   if (!review.ok) throw new Error(`expected proposal review success: ${review.error.code}`);
+  if (options.approveReview !== false) {
+    const approved = await approveReview(
+      version,
+      review.value.id,
+      review.value.revision,
+      `proposal-review-approve-${suffix}`,
+    );
+    if (!approved.ok) throw new Error(`expected review approval success: ${approved.error.code}`);
+  }
 
   expect(committed.value.baseCommitId).toBe(graph.rootCommitId);
   return { proposalId: created.value.id, proposalCommitId: committed.value.proposalCommitId };
+}
+
+function approveReview(
+  version: WorkbookVersionImpl,
+  reviewId: VersionUpdateReviewStatusInput['reviewId'],
+  expectedRevision: number,
+  clientRequestId: string,
+) {
+  return version.updateReviewStatus({
+    reviewId,
+    expectedRevision,
+    clientRequestId,
+    status: 'approved',
+    actor: ACTOR,
+  });
 }
 
 async function commitMain(

@@ -22,11 +22,19 @@ import {
 } from '../../../document/version-store/object-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
+  pendingRemoteSegmentKeyMaterialForOperationContext,
+  reservePersistedPendingRemoteSegment,
+  type PendingRemoteSegmentOperationContext,
+  type PendingRemoteSegmentStore,
+  type ReservePendingRemoteSegmentInput,
+} from '../../../document/version-store/pending-remote-segment-store';
+import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionGraphStore,
 } from '../../../document/version-store/provider';
 
 const createCheckpointManagerMock = jest.fn();
@@ -274,6 +282,99 @@ function plannedCheckoutResult(commitId: string) {
   };
 }
 
+type PendingSegmentFixture = {
+  readonly input: ReservePendingRemoteSegmentInput;
+  readonly objectRecords: readonly VersionObjectRecord<unknown>[];
+};
+
+async function pendingSegmentFixture(
+  namespace: VersionGraphNamespace,
+): Promise<PendingSegmentFixture> {
+  const operationContext = syncOperationContext();
+  const keys = await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext);
+  const snapshotRootRecord = await scopedObjectRecord(
+    namespace,
+    'workbook.snapshotRoot.v1',
+    { snapshotId: 'remote-boundary-snapshot-1', sheets: [] },
+  );
+  const semanticChangeSetRecord = await scopedObjectRecord(
+    namespace,
+    'workbook.semanticChangeSet.v1',
+    { schemaVersion: 1, changes: [{ id: 'remote-change-1' }] },
+  );
+  const mutationSegmentRecord = await scopedObjectRecord(
+    namespace,
+    'workbook.mutationSegment.v1',
+    {
+      segmentId: 'remote-segment-1',
+      domainId: 'runtime-diagnostics',
+    },
+  );
+
+  return {
+    input: {
+      pendingRemoteSegmentId: keys.pendingRemoteSegmentId,
+      idempotencyKey: keys.idempotencyKey,
+      operationContext,
+      mutationSegmentDigest: mutationSegmentRecord.digest,
+      snapshotRootDigest: snapshotRootRecord.digest,
+      semanticChangeSetDigest: semanticChangeSetRecord.digest,
+      createdAt: operationContext.createdAt,
+    },
+    objectRecords: [snapshotRootRecord, semanticChangeSetRecord, mutationSegmentRecord],
+  };
+}
+
+function syncOperationContext(): PendingRemoteSegmentOperationContext {
+  return {
+    operationId: 'sync:providerLiveInbound:remote-update-1',
+    kind: 'sync-import',
+    author: {
+      authorId: 'subject-ref-1',
+      actorKind: 'user',
+      sessionId: 'remote-session-1',
+    },
+    createdAt: '2026-06-21T00:00:01.000Z',
+    workbookId: DOCUMENT_SCOPE.documentId,
+    domainIds: ['runtime-diagnostics'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+    collaboration: {
+      sourceKind: 'providerLiveInbound',
+      originKind: 'provider',
+      stableOriginId: 'provider-stable-1',
+      providerId: 'provider-1',
+      roomId: 'room-1',
+      epoch: 'epoch-1',
+      updateId: 'remote-update-1',
+      sequence: '7',
+      payloadHash: '3'.repeat(64),
+      trustStatus: 'verified',
+      authorState: 'singleRemote',
+      remoteSessionId: 'remote-session-1',
+      correlationId: 'correlation-1',
+      causationIds: ['cause-1'],
+      replay: false,
+      system: false,
+      commitGrouping: 'pendingRemote',
+      validationDiagnosticCount: 0,
+    },
+  };
+}
+
+async function persistAndReservePendingSegment(
+  graph: VersionGraphStore,
+  store: PendingRemoteSegmentStore,
+  fixture: PendingSegmentFixture,
+): Promise<void> {
+  await expect(graph.putObjects(fixture.objectRecords)).resolves.toMatchObject({
+    status: 'success',
+  });
+  await expect(
+    reservePersistedPendingRemoteSegment({ graph, store, input: fixture.input }),
+  ).resolves.toMatchObject({ status: 'created' });
+}
+
 describe('WorkbookVersion checkout facade', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -488,6 +589,53 @@ describe('WorkbookVersion checkout facade', () => {
       },
     });
     expect(checkout).not.toHaveBeenCalled();
+  });
+
+  it('blocks checkout while remote sync changes are waiting for promotion', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = namespaceForDocumentScope(
+      DOCUMENT_SCOPE,
+      'graph-pending-remote-checkout',
+    );
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-pending-remote-checkout', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await persistAndReservePendingSegment(graph, store, fixture);
+    const wb = createWorkbook({ versioning: { provider } });
+
+    await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+      dirty: {
+        pendingProviderWrites: true,
+        checkoutSafe: false,
+        unsafeReasons: [
+          expect.objectContaining({
+            code: 'version.surfaceStatus.pendingProviderWrites',
+            data: expect.objectContaining({ pendingRemoteSegmentCount: 1 }),
+          }),
+        ],
+      },
+    });
+
+    await expect(wb.version.checkout({ kind: 'head' })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                reason: 'pendingProviderWrites',
+                pendingRemoteSegmentCount: 1,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
   });
 
   it('rejects requireClean:false without invoking checkout services', async () => {

@@ -1,6 +1,7 @@
 import type { VersionDiagnostic, VersionSurfaceStatus } from '@mog-sdk/contracts/api';
 
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
+import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -24,7 +25,7 @@ export type VersionSurfaceCheckoutSession = {
 };
 
 export type WorkbookVersionSurfaceStatusService = {
-  readDirtyStatus(): VersionSurfaceStatus['dirty'];
+  readDirtyStatus(): MaybePromise<VersionSurfaceStatus['dirty']>;
   readActiveCheckoutSession(): VersionSurfaceCheckoutSession | null;
   recordCheckoutMaterialization(input: CheckoutSnapshotApplyInput): void;
 };
@@ -36,11 +37,18 @@ export type AttachedVersionSurfaceStatusService = {
 
 export function createWorkbookVersionSurfaceStatusService(input: {
   readonly readDirtyState: () => WorkbookVersionSurfaceDirtyState;
+  readonly readPendingProviderWrites?: () => MaybePromise<VersionPendingProviderWritesStatus>;
 }): WorkbookVersionSurfaceStatusService {
   let activeCheckoutSession: VersionSurfaceCheckoutSession | null = null;
 
   return {
-    readDirtyStatus: () => dirtyStatusFromState(input.readDirtyState()),
+    readDirtyStatus: async () =>
+      dirtyStatusFromState(
+        input.readDirtyState(),
+        input.readPendingProviderWrites
+          ? await input.readPendingProviderWrites()
+          : cleanPendingProviderWrites(),
+      ),
     readActiveCheckoutSession: () =>
       activeCheckoutSession === null ? null : Object.freeze({ ...activeCheckoutSession }),
     recordCheckoutMaterialization: (materialization) => {
@@ -246,6 +254,7 @@ function checkoutSessionFromMaterialization(
 
 function dirtyStatusFromState(
   state: WorkbookVersionSurfaceDirtyState,
+  providerWrites: VersionPendingProviderWritesStatus,
 ): VersionSurfaceStatus['dirty'] {
   const pendingRecalc = state.calculationState !== 'done';
   const unsupportedDirtyDomains: readonly string[] = [];
@@ -277,6 +286,7 @@ function dirtyStatusFromState(
           ),
         ]
       : []),
+    ...providerWrites.unsafeReasons,
   ];
   const statusRevision = [
     'workbook',
@@ -285,6 +295,7 @@ function dirtyStatusFromState(
     `dirty:${state.hasUncommittedLocalChanges ? 'yes' : 'no'}`,
     `calc:${state.calculationState}`,
     `checkout:${state.checkoutInProgress ? 'busy' : 'idle'}`,
+    `providerWrites:${providerWrites.statusRevision}`,
   ].join('|');
 
   return {
@@ -293,13 +304,36 @@ function dirtyStatusFromState(
     hasUncommittedLocalChanges: state.hasUncommittedLocalChanges,
     commitEligibleChanges: state.hasUncommittedLocalChanges,
     unsupportedDirtyDomains,
-    pendingProviderWrites: false,
+    pendingProviderWrites: providerWrites.pendingProviderWrites,
     pendingRecalc,
     checkoutSafe: unsafeReasons.length === 0,
     unsafeReasons,
     source: 'VC-05',
-    diagnostics: unsafeReasons,
+    diagnostics: dedupeDiagnostics([...unsafeReasons, ...providerWrites.diagnostics]),
   };
+}
+
+function cleanPendingProviderWrites(): VersionPendingProviderWritesStatus {
+  return {
+    pendingProviderWrites: false,
+    statusRevision: 'provider:none',
+    unsafeReasons: [],
+    diagnostics: [],
+  };
+}
+
+function dedupeDiagnostics(
+  diagnostics: readonly VersionDiagnostic[],
+): readonly VersionDiagnostic[] {
+  const seen = new Set<string>();
+  const deduped: VersionDiagnostic[] = [];
+  for (const diagnostic of diagnostics) {
+    const key = `${diagnostic.code}:${diagnostic.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(diagnostic);
+  }
+  return deduped;
 }
 
 function diagnostic(

@@ -114,6 +114,7 @@ import {
   attachWorkbookVersioning,
   attachWorkbookVersionSurfaceStatusService,
 } from './version-wiring';
+import { readVersionPendingProviderWrites } from './version-pending-provider-writes';
 import {
   getKnownSheetNames,
   resolveSheetNameToId as resolveWorkbookSheetNameToId,
@@ -267,6 +268,7 @@ export class WorkbookImpl implements WorkbookInternal {
       revision: this._dirtyStatusSequence,
       contextGeneration: this.contextBinding.generation,
     }),
+    readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
   });
   private readonly checkoutTransactionGuard: VersionCheckoutTransactionGuard = {
     beginCheckoutTransaction: () => this.beginCheckoutTransaction(),

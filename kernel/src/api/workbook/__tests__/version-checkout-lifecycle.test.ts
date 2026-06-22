@@ -372,6 +372,28 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           staleReason: 'refMoved',
         },
       });
+      await expect(
+        checkoutWb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/status' as any }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+              data: expect.objectContaining({
+                payload: expect.objectContaining({
+                  reason: 'refMoved',
+                  currentRefHeadId: moved.id,
+                  refHeadAtMaterialization: branchBase.id,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'branch-v1',
+      });
     } finally {
       if (checkoutWb) await checkoutWb.close('skipSave');
       if (sourceWb) await sourceWb.close('skipSave');

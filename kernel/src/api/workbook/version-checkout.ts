@@ -23,6 +23,10 @@ import {
   REF_NAME_STORAGE_PREFIX,
   validateRefName,
 } from '../../document/version-store/ref-name';
+import {
+  readVersionCheckoutAdmissionBlock,
+  type VersionCheckoutAdmissionBlock,
+} from './version-checkout-admission';
 import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 
 const VERSION_HEAD_REF = 'HEAD';
@@ -110,6 +114,11 @@ export async function checkoutWorkbookVersion(
     return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
   }
 
+  const admissionBlock = await readVersionCheckoutAdmissionBlock(ctx);
+  if (admissionBlock) {
+    return degradedCheckout([checkoutAdmissionDiagnostic(admissionBlock, parsed.payload)]);
+  }
+
   const transaction = transactionGuard?.beginCheckoutTransaction();
   if (transaction && !transaction.ok) {
     return degradedCheckout(transaction.diagnostics);
@@ -142,8 +151,7 @@ export function hasAttachedVersionCheckoutService(ctx: DocumentContext): boolean
 function getAttachedCheckoutMaterializationService(
   ctx: DocumentContext,
 ): AttachedCheckoutMaterializationService | null {
-  const runtime = ctx as MaybeVersionRuntimeContext;
-  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  const services = getAttachedVersionRuntimeServices(ctx);
   if (!isRecord(services)) return null;
 
   for (const candidate of [
@@ -159,6 +167,11 @@ function getAttachedCheckoutMaterializationService(
   }
 
   return null;
+}
+
+function getAttachedVersionRuntimeServices(ctx: DocumentContext): unknown {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  return runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
 }
 
 function toCheckoutMaterializationService(
@@ -641,6 +654,40 @@ function requireCleanUnsupportedDiagnostic(): VersionStoreDiagnostic {
   );
 }
 
+function checkoutAdmissionDiagnostic(
+  block: VersionCheckoutAdmissionBlock,
+  payload: VersionDiagnosticPublicPayload,
+): VersionStoreDiagnostic {
+  switch (block.reason) {
+    case 'dirtyWorkingState':
+      return checkoutDirtyWorkingStateDiagnostic({ ...payload, reason: block.reason });
+    case 'pendingProviderWrites':
+      return checkoutPendingProviderWritesDiagnostic({
+        ...payload,
+        reason: block.reason,
+        ...(block.pendingRemoteSegmentCount === undefined
+          ? {}
+          : { pendingRemoteSegmentCount: block.pendingRemoteSegmentCount }),
+      });
+    case 'pendingRecalc':
+      return checkoutPendingRecalcDiagnostic({ ...payload, reason: block.reason });
+    case 'checkoutAlreadyInProgress':
+    case 'checkoutPreflightUnsafe':
+      return checkoutWriteFenceUnavailableDiagnostic({ ...payload, reason: block.reason });
+    case 'staleWorkspaceHead':
+      return checkoutStaleWorkspaceHeadDiagnostic({
+        ...payload,
+        reason: block.staleReason,
+        ...(block.branchName ? { branchName: block.branchName } : {}),
+        ...(block.checkedOutCommitId ? { checkedOutCommitId: block.checkedOutCommitId } : {}),
+        ...(block.refHeadAtMaterialization
+          ? { refHeadAtMaterialization: block.refHeadAtMaterialization }
+          : {}),
+        ...(block.currentRefHeadId ? { currentRefHeadId: block.currentRefHeadId } : {}),
+      });
+  }
+}
+
 export function checkoutDirtyWorkingStateDiagnostic(
   payload: VersionDiagnosticPublicPayload = {},
 ): VersionStoreDiagnostic {
@@ -650,6 +697,48 @@ export function checkoutDirtyWorkingStateDiagnostic(
     {
       severity: 'error',
       recoverability: 'none',
+      payload,
+    },
+  );
+}
+
+function checkoutPendingProviderWritesDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+    'Checkout is blocked while remote sync changes are waiting to be promoted into version history.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
+function checkoutPendingRecalcDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_PENDING_RECALC',
+    'Checkout is blocked while workbook recalculation is not settled.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+    },
+  );
+}
+
+function checkoutStaleWorkspaceHeadDiagnostic(
+  payload: VersionDiagnosticPublicPayload = {},
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+    'Checkout is blocked because the active checkout session is stale relative to its ref head.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
       payload,
     },
   );
@@ -767,6 +856,12 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The checkout snapshot materializer could not apply the target snapshot.';
     case 'VERSION_CHECKOUT_DIRTY_WORKING_STATE':
       return 'Checkout requires a clean workbook and did not apply the target snapshot.';
+    case 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES':
+      return 'Checkout is blocked while remote sync changes are waiting to be promoted into version history.';
+    case 'VERSION_CHECKOUT_PENDING_RECALC':
+      return 'Checkout is blocked while workbook recalculation is not settled.';
+    case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
+      return 'Checkout is blocked because the active checkout session is stale relative to its ref head.';
     case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
       return 'Checkout cannot discard dirty working state; requireClean:false is not supported.';
     case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
@@ -804,6 +899,9 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
       return 'repair';
     case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
     case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
+    case 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES':
+    case 'VERSION_CHECKOUT_PENDING_RECALC':
+    case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
       return 'retry';
     default:
       return 'none';

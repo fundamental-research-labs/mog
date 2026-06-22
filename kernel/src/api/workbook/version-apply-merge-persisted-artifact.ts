@@ -20,7 +20,6 @@ import {
   intentIdForResolvedAttemptDigest,
   type MergeApplyIntentRecord,
   type MergeApplyIntentStore,
-  type MergeApplyIntentStoreDiagnostic,
 } from '../../document/version-store/merge-apply-intent-store';
 import {
   MERGE_PREVIEW_OBJECT_TYPE,
@@ -41,6 +40,17 @@ import {
   isApplyMergeWriteSuccessResult,
   mapApplyMergeWriteResult,
 } from './version-apply-merge-write-result';
+import {
+  applyMergeServiceUnavailableDiagnostic,
+  blockedApplyMergeResult,
+  intentStoreDiagnostics,
+  invalidPreviewArtifactDiagnostic,
+  mapProviderDiagnostics,
+  providerErrorDiagnostic,
+  publicDiagnostic,
+  resolutionMismatchDiagnostic,
+} from './version-apply-merge-persisted-artifact-diagnostics';
+import { materializableMergePlanDiagnostics } from './version-merge-materializer-support';
 import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
@@ -144,6 +154,19 @@ export async function applyPersistedMergePreviewArtifact(
       artifact.payload.ours,
       artifact.payload.theirs,
       resolutionPlan.diagnostics,
+    );
+  }
+
+  const supportDiagnostics = materializableMergePlanDiagnostics(
+    { changes: [...artifact.payload.changes, ...resolutionPlan.changes] },
+    'applyMerge',
+  );
+  if (supportDiagnostics.length > 0) {
+    return blockedApplyMergeResult(
+      artifact.payload.base,
+      artifact.payload.ours,
+      artifact.payload.theirs,
+      supportDiagnostics,
     );
   }
 
@@ -876,110 +899,6 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
-function mapProviderDiagnostics(
-  diagnostics: readonly unknown[],
-): readonly VersionStoreDiagnostic[] {
-  if (!Array.isArray(diagnostics) || diagnostics.length === 0) return [providerErrorDiagnostic()];
-  return diagnostics.map((diagnostic) => {
-    if (!isRecord(diagnostic)) return providerErrorDiagnostic();
-    return publicDiagnostic(
-      typeof diagnostic.issueCode === 'string'
-        ? diagnostic.issueCode
-        : typeof diagnostic.code === 'string'
-          ? diagnostic.code
-          : 'VERSION_PROVIDER_FAILED',
-      typeof diagnostic.safeMessage === 'string'
-        ? diagnostic.safeMessage
-        : typeof diagnostic.message === 'string'
-          ? diagnostic.message
-          : 'Version applyMerge provider failed.',
-      {
-        recoverability: isRecoverability(diagnostic.recoverability)
-          ? diagnostic.recoverability
-          : 'retry',
-      },
-    );
-  });
-}
-
-function intentStoreDiagnostics(
-  diagnostics: readonly MergeApplyIntentStoreDiagnostic[],
-): readonly VersionStoreDiagnostic[] {
-  return diagnostics.map((item) =>
-    publicDiagnostic(item.code, item.message, {
-      recoverability: item.recoverability,
-      ...(item.details ? { payload: item.details } : {}),
-    }),
-  );
-}
-
-function blockedApplyMergeResult(
-  base: WorkbookCommitId | null,
-  ours: WorkbookCommitId | null,
-  theirs: WorkbookCommitId | null,
-  diagnostics: readonly VersionStoreDiagnostic[],
-  mutationGuarantee: VersionApplyMergeResult['mutationGuarantee'] = 'no-write-attempted',
-): VersionApplyMergeResult {
-  return {
-    status: 'blocked',
-    base,
-    ours,
-    theirs,
-    changes: [],
-    conflicts: [],
-    diagnostics,
-    mutationGuarantee,
-  };
-}
-
-function invalidPreviewArtifactDiagnostic(): VersionStoreDiagnostic {
-  return publicDiagnostic(
-    'VERSION_INVALID_COMMIT_PAYLOAD',
-    'Persisted merge preview artifact payload is invalid.',
-    { recoverability: 'repair' },
-  );
-}
-
-function resolutionMismatchDiagnostic(safeMessage: string): VersionStoreDiagnostic {
-  return publicDiagnostic('VERSION_MERGE_RESOLUTION_MISMATCH', safeMessage, {
-    recoverability: 'none',
-  });
-}
-
-function applyMergeServiceUnavailableDiagnostic(): VersionStoreDiagnostic {
-  return publicDiagnostic(
-    'VERSION_STORE_UNAVAILABLE',
-    'No production merge-apply service is attached for version graph writes.',
-    { recoverability: 'unsupported' },
-  );
-}
-
-function providerErrorDiagnostic(): VersionStoreDiagnostic {
-  return publicDiagnostic('VERSION_PROVIDER_FAILED', 'Version applyMerge provider failed.', {
-    recoverability: 'retry',
-  });
-}
-
-function publicDiagnostic(
-  issueCode: string,
-  safeMessage: string,
-  options: {
-    readonly recoverability?: VersionStoreDiagnostic['recoverability'];
-    readonly payload?: VersionStoreDiagnostic['payload'];
-  } = {},
-): VersionStoreDiagnostic {
-  return {
-    issueCode,
-    severity: 'error',
-    recoverability: options.recoverability ?? 'none',
-    messageTemplateId: `version.applyMerge.${issueCode}`,
-    safeMessage,
-    ...(options.payload ? { payload: { operation: 'applyMerge', ...options.payload } } : {}),
-    redacted: true,
-    mutationGuarantee: 'no-write-attempted',
-  };
-}
-
 function digestsEqual(
   left: { readonly algorithm: string; readonly digest: string },
   right: { readonly algorithm: string; readonly digest: string },
@@ -997,10 +916,6 @@ function toInternalSha256Digest(value: ObjectDigest): InternalObjectDigest | nul
 
 function isWorkbookCommitId(value: unknown): value is WorkbookCommitId {
   return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value);
-}
-
-function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
-  return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

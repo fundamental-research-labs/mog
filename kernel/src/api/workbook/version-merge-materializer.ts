@@ -26,9 +26,9 @@ import { createDocumentLifecycleSnapshotRootHydrator } from '../document/snapsho
 import { parseCellAddress } from '../internal/utils';
 import * as CellOps from '../worksheet/operations/cell-operations';
 import * as FormatOps from '../worksheet/operations/format-operations';
+import { inspectMaterializableMergeChange } from './version-merge-materializer-support';
 
-export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND =
-  'semantic-cell-merge-commit-materializer.v1';
+export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND = 'semantic-cell-merge-commit-materializer.v1';
 
 const MERGE_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
   authorId: 'mog.version-merge',
@@ -181,8 +181,7 @@ export function createSemanticMergeCommitCapture(
             namespace: input.namespace,
             refName: input.currentRef.name,
             commitId: input.ours,
-            safeMessage:
-              'Version merge materialization failed while applying the merge plan.',
+            safeMessage: 'Version merge materialization failed while applying the merge plan.',
             recoverability: 'retry',
             mutationGuarantee: 'no-write-attempted',
             details: { cause: errorName(error) },
@@ -197,9 +196,7 @@ export function createSemanticMergeCommitCapture(
   };
 }
 
-function parseMergeChanges(
-  input: VersionMergeCommitCaptureInput,
-):
+function parseMergeChanges(input: VersionMergeCommitCaptureInput):
   | {
       readonly ok: true;
       readonly changes: readonly ParsedMergeChange[];
@@ -211,7 +208,12 @@ function parseMergeChanges(
   const parsed: ParsedMergeChange[] = [];
   for (let index = 0; index < input.changes.length; index++) {
     const change = input.changes[index];
-    const structural = parseCellStructural(change.structural) ?? parseDirectFormatStructural(change.structural);
+    const support = inspectMaterializableMergeChange(change);
+    if (!support.ok) {
+      return unsupportedMergeChange(input, index, change.structural, { reason: support.reason });
+    }
+    const structural =
+      parseCellStructural(change.structural) ?? parseDirectFormatStructural(change.structural);
     if (!structural) {
       return unsupportedMergeChange(input, index, change.structural);
     }
@@ -285,14 +287,12 @@ function parseDirectFormatStructural(
   return structural;
 }
 
-function parseCellEntity(entityId: string):
-  | {
-      readonly sheetId: string;
-      readonly address: string;
-      readonly row: number;
-      readonly col: number;
-    }
-  | null {
+function parseCellEntity(entityId: string): {
+  readonly sheetId: string;
+  readonly address: string;
+  readonly row: number;
+  readonly col: number;
+} | null {
   const separator = entityId.lastIndexOf('!');
   if (separator <= 0 || separator === entityId.length - 1) return null;
   const sheetId = entityId.slice(0, separator);
@@ -342,13 +342,9 @@ async function applyMergeChanges(
     const sheet = toSheetId(change.sheetId);
     if (change.kind === 'directCellFormat') {
       if (change.merged.kind === 'clear') {
-        const result = await FormatOps.clearFormat(
-          ctx,
-          sheet,
-          change.row,
-          change.col,
-          { operationContext },
-        );
+        const result = await FormatOps.clearFormat(ctx, sheet, change.row, change.col, {
+          operationContext,
+        });
         assertFormatOperationSuccess(result, 'clearFormat');
         continue;
       }
@@ -471,7 +467,7 @@ function unsupportedMergeChange(
           refName: input.currentRef.name,
           commitId: input.ours,
           safeMessage:
-            'Version merge materialization supports only cell value merge changes in this slice.',
+            'Version merge materialization supports only cell value and direct cell format merge changes in this slice.',
           recoverability: 'unsupported',
           mutationGuarantee: 'no-write-attempted',
           details: {

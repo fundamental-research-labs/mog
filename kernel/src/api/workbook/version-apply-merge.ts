@@ -32,6 +32,7 @@ import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
+import { materializableMergePlanDiagnostics } from './version-merge-materializer-support';
 import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
@@ -206,6 +207,18 @@ export async function applyMergeWorkbookVersion(
   }
 
   if (validated.resolutions.length === 0) {
+    const supportDiagnostics = materializableMergePlanDiagnostics(
+      { changes: preview.changes, conflicts: preview.conflicts },
+      'applyMerge',
+    );
+    if (supportDiagnostics.length > 0) {
+      return blockedApplyMergeResult(
+        preview.base,
+        preview.ours,
+        preview.theirs,
+        supportDiagnostics,
+      );
+    }
     if (validated.applyOptions.mode === 'apply') {
       return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
         resolutionMismatchDiagnostic(
@@ -260,6 +273,14 @@ async function finalizeApplyMergePlan(
     readonly resolutionCount: number;
   },
 ): Promise<VersionApplyMergeResult> {
+  const supportDiagnostics = materializableMergePlanDiagnostics(
+    { changes: plan.changes },
+    'applyMerge',
+  );
+  if (supportDiagnostics.length > 0) {
+    return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, supportDiagnostics);
+  }
+
   if (options.mode === 'preview') {
     return {
       status: 'planned',

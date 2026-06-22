@@ -147,6 +147,57 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     });
   });
 
+  it('blocks clean merge plans the merge materializer cannot apply', async () => {
+    const result: VersionMergeResult = {
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [
+        {
+          structural: metadata('merge-change-sheet-name', 'sheet-1', 'sheet', ['name']),
+          base: { kind: 'value', value: 'Sheet1' },
+          ours: { kind: 'value', value: 'Sheet1' },
+          theirs: { kind: 'value', value: 'Renamed' },
+          merged: { kind: 'value', value: 'Renamed' },
+        },
+      ],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    };
+    const merge = jest.fn(async () => result);
+    const mergeCommit = jest.fn();
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({ domain: 'sheet' }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(merge).toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
   it('fast-forwards apply mode without previewing or creating a merge commit', async () => {
     const merge = jest.fn();
     const mergeCommit = jest.fn();
@@ -722,13 +773,18 @@ function option(
   };
 }
 
-function metadata(changeId: string, entityId: string) {
+function metadata(
+  changeId: string,
+  entityId: string,
+  domain = 'cells.values',
+  propertyPath: readonly string[] = ['value'],
+) {
   return {
     kind: 'metadata' as const,
     changeId,
-    domain: 'cells.values',
+    domain,
     entityId,
-    propertyPath: ['value'],
+    propertyPath,
   };
 }
 

@@ -201,6 +201,8 @@ export class SheetCoordinator {
       floatingObjects: floatingObjects ?? undefined,
       hitTestService,
       workbook: this.workbook,
+      getActiveSheetId: config.getActiveSheetId,
+      uiStoreApi: config.sheetSwitchDependencies?.uiStoreApi,
       getCanvas: () => this.renderer.getContainer(),
       getGeometry: () => this.renderer.getGeometry(),
       getObjects: () => this.renderer.getObjects(),

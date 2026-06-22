@@ -323,3 +323,78 @@ fn chart_ex_one_cell_anchor_position_preserves_extent() {
     assert_eq!(pos.extent_cx, Some(4_699_001));
     assert_eq!(pos.extent_cy, Some(3_260_722));
 }
+
+#[test]
+fn convert_floating_objects_skips_chart_graphic_frames() {
+    for chart_uri in [
+        "http://schemas.openxmlformats.org/drawingml/2006/chart",
+        "http://schemas.microsoft.com/office/drawing/2014/chartex",
+    ] {
+        let drawing = Drawing {
+            anchors: vec![DrawingAnchor::OneCell(OneCellAnchor {
+                from: CellAnchor {
+                    col: 5,
+                    row: 2,
+                    col_off: 0,
+                    row_off: 0,
+                },
+                extent: Extent {
+                    cx: 7_620_000,
+                    cy: 3_048_000,
+                },
+                content: DrawingContent::GraphicFrame(
+                    ooxml_types::drawings::SpreadsheetGraphicFrame {
+                        graphic_xml: Some(format!(
+                            r#"<a:graphic><a:graphicData uri="{chart_uri}"><c:chart r:id="rId1"/></a:graphicData></a:graphic>"#
+                        )),
+                        ..Default::default()
+                    },
+                ),
+                client_data: ClientData::default(),
+                mc_alternate_content: None,
+            })],
+            ..Default::default()
+        };
+
+        let objects = convert_floating_objects(Some(&drawing), &HashMap::new());
+
+        assert!(
+            objects.is_empty(),
+            "chart URI {chart_uri} should be skipped"
+        );
+    }
+}
+
+#[test]
+fn convert_floating_objects_preserves_opaque_graphic_frames() {
+    let drawing = Drawing {
+        anchors: vec![DrawingAnchor::OneCell(OneCellAnchor {
+            from: CellAnchor {
+                col: 1,
+                row: 1,
+                col_off: 0,
+                row_off: 0,
+            },
+            extent: Extent { cx: 10, cy: 20 },
+            content: DrawingContent::GraphicFrame(ooxml_types::drawings::SpreadsheetGraphicFrame {
+                graphic_xml: Some(
+                    r#"<a:graphic><a:graphicData uri="urn:custom"><custom:item r:id="rId2"/></a:graphicData></a:graphic>"#
+                        .to_string(),
+                ),
+                ..Default::default()
+            }),
+            client_data: ClientData::default(),
+            mc_alternate_content: None,
+        })],
+        ..Default::default()
+    };
+
+    let objects = convert_floating_objects(Some(&drawing), &HashMap::new());
+
+    assert_eq!(objects.len(), 1);
+    assert_eq!(objects[0].common.id, "fobj-0");
+    assert!(matches!(
+        objects[0].data,
+        domain_types::domain::floating_object::FloatingObjectData::Drawing(_)
+    ));
+}

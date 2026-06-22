@@ -255,6 +255,11 @@ export class ObjectSystem implements IObjectSystem {
         selectionActor: null as never, // unused — kept for API stability
         objectInteractionActor: this.objectActor,
         workbook: this.config.workbook as Workbook,
+        getActiveSheetId: this.config.getActiveSheetId,
+        setHasSelectedChartObject: this.config.uiStoreApi
+          ? (hasSelectedChart) =>
+              this.config.uiStoreApi?.getState().setHasSelectedChartObject(hasSelectedChart)
+          : undefined,
       });
       this.chartCoordinationCleanup = chartCoord.cleanup;
     }

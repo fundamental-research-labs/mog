@@ -4,7 +4,7 @@
  * Verifies that setupChartCoordination's objectInteraction → chartActor
  * sync handles rapid emissions correctly:
  *
- * 1. Membership change → SYNC_SELECTION fires once (Excel parity).
+ * 1. Current chart selection always syncs into chartActor.
  * 2. Out-of-order async resolution must NOT overwrite a later emission's
  * SYNC_SELECTION send. lost selection after a real-UI gesture
  * because chart.list resolved out-of-order; sequences
@@ -49,19 +49,22 @@ interface MockEventBus {
 interface SetupResult {
   chartActor: MockChartActor;
   eventBus: MockEventBus;
+  setHasSelectedChartObject: jest.Mock;
   emitObjectState: (selectedIds: string[]) => Promise<void>;
-  /** Async list() controller — call resolveLast() to release the deferred result. */
+  /** Async get() controller — call resolve() to release the deferred result. */
   emitObjectStateDeferred: (selectedIds: string[]) => { resolve: () => void };
   cleanup: () => void;
 }
 
 async function buildSetup(opts: {
   chartIds: string[];
-  /** When true, ws.charts.list() returns a deferred promise the caller can resolve manually. */
-  deferList?: boolean;
+  activeSheetChartIds?: string[];
+  /** When true, ws.charts.get() returns a deferred promise the caller can resolve manually. */
+  deferGet?: boolean;
 }): Promise<SetupResult> {
   const chartActor: MockChartActor = { send: jest.fn() };
   const eventBus: MockEventBus = { emit: jest.fn() };
+  const setHasSelectedChartObject = jest.fn();
   const subscriber = createMockSubscriber();
 
   const objectInteractionActor = {
@@ -76,19 +79,28 @@ async function buildSetup(opts: {
   const ws = {
     sheetId: 'sheet-1',
     charts: {
-      list: jest.fn().mockImplementation(() => {
-        if (!opts.deferList) {
-          return Promise.resolve(opts.chartIds.map((id) => ({ id })));
+      get: jest.fn().mockImplementation((id: string) => {
+        if (!opts.deferGet) {
+          return Promise.resolve(opts.chartIds.includes(id) ? { id } : null);
         }
-        return new Promise<Array<{ id: string }>>((resolve) => {
-          pendingResolvers.push(() => resolve(opts.chartIds.map((id) => ({ id }))));
+        return new Promise<{ id: string } | null>((resolve) => {
+          pendingResolvers.push(() => resolve(opts.chartIds.includes(id) ? { id } : null));
         });
+      }),
+    },
+  };
+  const activeSheetChartIds = opts.activeSheetChartIds ?? opts.chartIds;
+  const activeSheet = {
+    sheetId: 'stale-active-sheet',
+    charts: {
+      get: jest.fn().mockImplementation((id: string) => {
+        return Promise.resolve(activeSheetChartIds.includes(id) ? { id } : null);
       }),
     },
   };
   const workbook = {
     getSheetById: jest.fn().mockReturnValue(ws),
-    activeSheet: ws,
+    activeSheet,
   };
 
   const config: ChartCoordinationConfig = {
@@ -99,6 +111,7 @@ async function buildSetup(opts: {
     getActiveSheetId: () => 'sheet-1',
     workbook: workbook as unknown as ChartCoordinationConfig['workbook'],
     eventBus: eventBus as unknown as ChartCoordinationConfig['eventBus'],
+    setHasSelectedChartObject,
   };
 
   jest.doMock('../../machines/object-interaction-machine', () => ({
@@ -124,6 +137,8 @@ async function buildSetup(opts: {
     });
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   };
 
   const emitObjectStateDeferred = (selectedIds: string[]): { resolve: () => void } => {
@@ -146,7 +161,14 @@ async function buildSetup(opts: {
     };
   };
 
-  return { chartActor, eventBus, emitObjectState, emitObjectStateDeferred, cleanup };
+  return {
+    chartActor,
+    eventBus,
+    setHasSelectedChartObject,
+    emitObjectState,
+    emitObjectStateDeferred,
+    cleanup,
+  };
 }
 
 // =============================================================================
@@ -159,7 +181,7 @@ describe('setupChartCoordination — sequencing & membership', () => {
   });
 
   it('emits SYNC_SELECTION once on initial chart selection', async () => {
-    const { chartActor, emitObjectState, cleanup } = await buildSetup({
+    const { chartActor, setHasSelectedChartObject, emitObjectState, cleanup } = await buildSetup({
       chartIds: ['chart-1'],
     });
 
@@ -168,24 +190,55 @@ describe('setupChartCoordination — sequencing & membership', () => {
     const syncCalls = chartActor.send.mock.calls.filter((c) => c[0]?.type === 'SYNC_SELECTION');
     expect(syncCalls.length).toBe(1);
     expect(syncCalls[0][0].chartIds).toEqual(['chart-1']);
+    expect(setHasSelectedChartObject).toHaveBeenLastCalledWith(true);
 
     cleanup();
   });
 
-  it('does NOT re-emit SYNC_SELECTION when membership is unchanged', async () => {
+  it('resolves selected chart IDs against the getter active sheet', async () => {
+    const { chartActor, setHasSelectedChartObject, emitObjectState, cleanup } = await buildSetup({
+      chartIds: ['chart-1'],
+      activeSheetChartIds: [],
+    });
+
+    await emitObjectState(['chart-1']);
+
+    expect(chartActor.send).toHaveBeenLastCalledWith({
+      type: 'SYNC_SELECTION',
+      chartIds: ['chart-1'],
+    });
+    expect(setHasSelectedChartObject).toHaveBeenLastCalledWith(true);
+
+    cleanup();
+  });
+
+  it('clears derived chart contextual-tab state when no chart is selected', async () => {
+    const { setHasSelectedChartObject, emitObjectState, cleanup } = await buildSetup({
+      chartIds: ['chart-1'],
+    });
+
+    await emitObjectState(['chart-1']);
+    await emitObjectState([]);
+
+    expect(setHasSelectedChartObject.mock.calls.map((call) => call[0])).toEqual([true, false]);
+
+    cleanup();
+  });
+
+  it('re-syncs chartActor when membership is unchanged', async () => {
     const { chartActor, emitObjectState, cleanup } = await buildSetup({
       chartIds: ['chart-1'],
     });
 
-    // Three identical emissions — only the first should send SYNC_SELECTION.
-    // The chart machine stays in 'selected' state from the first send;
-    // re-emitting would just re-arm element-level features unnecessarily.
+    // Three identical emissions still sync. This is intentionally idempotent:
+    // document reload can reset chartActor while imported chart IDs remain stable.
     await emitObjectState(['chart-1']);
     await emitObjectState(['chart-1']);
     await emitObjectState(['chart-1']);
 
     const syncCalls = chartActor.send.mock.calls.filter((c) => c[0]?.type === 'SYNC_SELECTION');
-    expect(syncCalls.length).toBe(1);
+    expect(syncCalls.length).toBe(3);
+    expect(syncCalls.map((c) => c[0].chartIds)).toEqual([['chart-1'], ['chart-1'], ['chart-1']]);
 
     cleanup();
   });
@@ -229,10 +282,10 @@ describe('setupChartCoordination — sequencing & membership', () => {
     // even though selection IS stable.
     const { chartActor, emitObjectStateDeferred, cleanup } = await buildSetup({
       chartIds: ['chart-1'],
-      deferList: true,
+      deferGet: true,
     });
 
-    // Fire two emissions back-to-back. Each calls ws.charts.list() which
+    // Fire two emissions back-to-back. Each selected chart emission calls ws.charts.get() which
     // returns a deferred promise. We resolve them out-of-order: the
     // SECOND emission's promise first, then the FIRST emission's promise.
     const e1 = emitObjectStateDeferred([]); // first: empty selection
@@ -242,10 +295,14 @@ describe('setupChartCoordination — sequencing & membership', () => {
     e2.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
     // Resolve the FIRST emission AFTER. With the seq guard, this resolution
     // must be dropped (it's stale); without the guard, it would overwrite.
     e1.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
 

@@ -8,6 +8,14 @@ use super::*;
 const EMUS_PER_PIXEL: i64 = 9525;
 const EMUS_PER_POINT: f64 = 12_700.0;
 const DEFAULT_OUTLINE_WIDTH_PT: f64 = 0.75;
+const STANDARD_CHART_GRAPHIC_URI: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+const CHART_EX_GRAPHIC_URI: &str = "http://schemas.microsoft.com/office/drawing/2014/chartex";
+
+fn is_chart_graphic_frame(gf: &ooxml_types::drawings::SpreadsheetGraphicFrame) -> bool {
+    gf.graphic_xml.as_deref().is_some_and(|xml| {
+        xml.contains(STANDARD_CHART_GRAPHIC_URI) || xml.contains(CHART_EX_GRAPHIC_URI)
+    })
+}
 
 fn normalize_hex_color(value: &str) -> Option<String> {
     let hex = value.trim().trim_start_matches('#');
@@ -623,6 +631,9 @@ pub(crate) fn convert_floating_objects(
                 (data, None, 0.0, false, false, false, true)
             }
             DrawingContent::GraphicFrame(gf) => {
+                if is_chart_graphic_frame(gf) {
+                    continue;
+                }
                 let relationship_ids = gf
                     .graphic_xml
                     .as_deref()

@@ -31,6 +31,8 @@ import type { StateCreator } from 'zustand';
 export interface ContextualTabsState {
   /** Whether the active cell contains a sparkline (shows Sparkline Tools tab) */
   hasSparklineInActiveCell: boolean;
+  /** Whether object selection currently contains a chart object */
+  hasSelectedChartObject: boolean;
 }
 
 /**
@@ -41,6 +43,8 @@ export interface ContextualTabsSlice {
 
   /** Set whether active cell has a sparkline (called by SparklineSelectionCoordination) */
   setHasSparklineInActiveCell: (hasSparkline: boolean) => void;
+  /** Set whether object selection contains a chart (called by ChartCoordination) */
+  setHasSelectedChartObject: (hasSelectedChart: boolean) => void;
 }
 
 // =============================================================================
@@ -49,6 +53,7 @@ export interface ContextualTabsSlice {
 
 const initialContextualTabsState: ContextualTabsState = {
   hasSparklineInActiveCell: false,
+  hasSelectedChartObject: false,
 };
 
 // =============================================================================
@@ -73,6 +78,20 @@ export const createContextualTabsSlice: StateCreator<
         contextualTabs: {
           ...state.contextualTabs,
           hasSparklineInActiveCell: hasSparkline,
+        },
+      };
+    });
+  },
+
+  setHasSelectedChartObject: (hasSelectedChart: boolean) => {
+    set((state) => {
+      if (state.contextualTabs.hasSelectedChartObject === hasSelectedChart) {
+        return state;
+      }
+      return {
+        contextualTabs: {
+          ...state.contextualTabs,
+          hasSelectedChartObject: hasSelectedChart,
         },
       };
     });

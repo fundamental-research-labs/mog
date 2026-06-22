@@ -34,7 +34,7 @@ export interface ObjectInteractionContext {
   /** Currently selected object IDs */
   selectedIds: string[];
   /** Type of the first selected object (for single-select contextual tabs) */
-  selectedObjectType: 'picture' | 'textbox' | 'shape' | null;
+  selectedObjectType: 'picture' | 'textbox' | 'shape' | 'chart' | null;
 }
 
 /**
@@ -129,6 +129,13 @@ export interface ContextualTabConfig {
   component: ComponentType<ContextualTabProps>;
 }
 
+function hasSelectedChart(context: ContextualTabContext): boolean {
+  return (
+    context.chartUI.selectedChartId !== null ||
+    context.objectInteraction.selectedObjectType === 'chart'
+  );
+}
+
 // =============================================================================
 // Registry
 // =============================================================================
@@ -168,7 +175,7 @@ export const CONTEXTUAL_TAB_REGISTRY: ContextualTabConfig[] = [
     label: 'Chart Design',
     groupLabel: 'Chart Tools',
     accentColor: 'var(--color-chart-accent, #1976d2)', // Blue accent for charts
-    showWhen: (context) => context.chartUI.selectedChartId !== null,
+    showWhen: hasSelectedChart,
     // Component will be imported dynamically to avoid circular dependencies
     component: (() => null) as ComponentType<ContextualTabProps>,
   },
@@ -179,7 +186,7 @@ export const CONTEXTUAL_TAB_REGISTRY: ContextualTabConfig[] = [
     label: 'Chart Format',
     groupLabel: 'Chart Tools',
     accentColor: 'var(--color-chart-accent, #1976d2)', // Blue accent for charts
-    showWhen: (context) => context.chartUI.selectedChartId !== null,
+    showWhen: hasSelectedChart,
     // Component will be imported dynamically to avoid circular dependencies
     component: (() => null) as ComponentType<ContextualTabProps>,
   },

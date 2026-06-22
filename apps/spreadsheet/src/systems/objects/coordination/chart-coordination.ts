@@ -51,6 +51,11 @@ export interface ChartCoordinationConfig {
    * Optional — when omitted, chart:selected / chart:deselected events are not emitted.
    */
   eventBus?: IEventBus;
+  /**
+   * Updates the derived contextual-tab flag for chart object selection.
+   * Optional for non-React/test consumers.
+   */
+  setHasSelectedChartObject?: (hasSelectedChart: boolean) => void;
 }
 
 /**
@@ -108,6 +113,7 @@ export function setupChartCoordination(config: ChartCoordinationConfig): ChartCo
     getActiveSheetId,
     workbook,
     eventBus,
+    setHasSelectedChartObject,
   } = config;
 
   // Track cleanups to be called on dispose
@@ -129,73 +135,93 @@ export function setupChartCoordination(config: ChartCoordinationConfig): ChartCo
     let emissionSeq = 0;
     let lastAppliedSeq = -1;
 
+    const applyChartSelection = (
+      seq: number,
+      currSelectedChartIds: string[],
+      activeSheetId: string,
+    ) => {
+      // Drop the result if a later emission has already been applied —
+      // out-of-order async resolves must not overwrite the latest state.
+      if (seq <= lastAppliedSeq) return;
+      lastAppliedSeq = seq;
+
+      // Detect membership change for chart:selected/chart:deselected events.
+      // Keep event emission gated, but always sync the chart actor below:
+      // document reloads can reset the actor while imported chart IDs remain
+      // deterministic, making an idempotent SYNC_SELECTION necessary.
+      const prevSet = new Set(prevSelectedChartIds);
+      const currSet = new Set(currSelectedChartIds);
+      const membershipChanged =
+        prevSet.size !== currSet.size ||
+        [...prevSet].some((id) => !currSet.has(id)) ||
+        [...currSet].some((id) => !prevSet.has(id));
+
+      if (membershipChanged) {
+        if (eventBus) {
+          const timestamp = Date.now();
+          // Emit deselected events for charts that were previously selected
+          for (const id of prevSelectedChartIds) {
+            if (!currSet.has(id)) {
+              eventBus.emit({
+                type: 'chart:deselected',
+                chartId: id,
+                sheetId: activeSheetId,
+                timestamp,
+              });
+            }
+          }
+          // Emit selected events for newly selected charts
+          for (const id of currSelectedChartIds) {
+            if (!prevSet.has(id)) {
+              eventBus.emit({
+                type: 'chart:selected',
+                chartId: id,
+                sheetId: activeSheetId,
+                timestamp,
+              });
+            }
+          }
+        }
+        prevSelectedChartIds = currSelectedChartIds;
+      }
+      // Sync chart selection to chartActor using SYNC_SELECTION. This is
+      // intentionally idempotent; contextual chart UI depends on actor state,
+      // and the actor can be reset independently of this coordination cache.
+      chartActor.send({ type: 'SYNC_SELECTION', chartIds: currSelectedChartIds });
+      setHasSelectedChartObject?.(currSelectedChartIds.length > 0);
+    };
+
     const objectSub = objectInteractionActor.subscribe((state) => {
       const snapshot = getObjectInteractionSnapshot(state);
       const currSelectedIds = snapshot.selectedIds;
       const seq = ++emissionSeq;
 
-      // Identify which selected objects are charts via the floating object type field.
-      // We query the chart list async; the floating object pipeline sets type='chart'
-      // on chart objects directly.
+      // Identify which selected objects are charts by checking the selected IDs
+      // directly against the worksheet chart API. Listing all charts here used
+      // to race imported-chart materialization in reused app sessions.
       //
       // Use getActiveSheetId() if provided; fall back to workbook.activeSheet (sync).
       const ws = getActiveSheetId
         ? workbook.getSheetById(toSheetId(getActiveSheetId()))
         : workbook.activeSheet;
       const activeSheetId = String(ws.sheetId);
-      void ws.charts.list({ materialization: 'available' }).then((allCharts) => {
-        // Drop the result if a later emission has already been applied —
-        // out-of-order async resolves must not overwrite the latest state.
-        if (seq <= lastAppliedSeq) return;
-        lastAppliedSeq = seq;
 
-        const chartIdSet = new Set(allCharts.map((c: { id: string }) => c.id));
+      if (currSelectedIds.length === 0) {
+        applyChartSelection(seq, [], activeSheetId);
+        return;
+      }
 
-        // Filter to only chart IDs from the current selection
-        const currSelectedChartIds = currSelectedIds.filter((id) => chartIdSet.has(id));
-
-        // Detect membership change for chart:selected/chart:deselected events
-        // and the chart-machine SYNC_SELECTION send. keeps the
-        // membership-change gate (the prior design); the harness
-        // `selectChart()` no longer needs the A1 detour because we now
-        // sequence emissions monotonically (the seq counter above).
-        const prevSet = new Set(prevSelectedChartIds);
-        const currSet = new Set(currSelectedChartIds);
-        const membershipChanged =
-          prevSet.size !== currSet.size ||
-          [...prevSet].some((id) => !currSet.has(id)) ||
-          [...currSet].some((id) => !prevSet.has(id));
-
-        if (membershipChanged) {
-          if (eventBus) {
-            const timestamp = Date.now();
-            // Emit deselected events for charts that were previously selected
-            for (const id of prevSelectedChartIds) {
-              if (!currSet.has(id)) {
-                eventBus.emit({
-                  type: 'chart:deselected',
-                  chartId: id,
-                  sheetId: activeSheetId,
-                  timestamp,
-                });
-              }
-            }
-            // Emit selected events for newly selected charts
-            for (const id of currSelectedChartIds) {
-              if (!prevSet.has(id)) {
-                eventBus.emit({
-                  type: 'chart:selected',
-                  chartId: id,
-                  sheetId: activeSheetId,
-                  timestamp,
-                });
-              }
-            }
-          }
-          // Sync chart selection to chartActor using SYNC_SELECTION
-          chartActor.send({ type: 'SYNC_SELECTION', chartIds: currSelectedChartIds });
-          prevSelectedChartIds = currSelectedChartIds;
-        }
+      void Promise.all(
+        currSelectedIds.map(async (id) => {
+          const chart = await ws.charts.get(id).catch(() => null);
+          return chart ? id : null;
+        }),
+      ).then((ids) => {
+        applyChartSelection(
+          seq,
+          ids.filter((id): id is string => id !== null),
+          activeSheetId,
+        );
       });
     });
 

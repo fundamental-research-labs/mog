@@ -1820,16 +1820,15 @@ export class MutationResultHandler {
             });
             break;
           case 'updated':
-            if (change.kind.changedFields?.includes('chartConfig')) {
-              this.eventBus.emit({
-                type: 'chart:updated',
-                timestamp,
-                sheetId: change.sheetId,
-                chartId: change.objectId,
-                changes: {},
-                source,
-              });
-            }
+            this.eventBus.emit({
+              type: 'chart:updated',
+              timestamp,
+              sheetId: change.sheetId,
+              chartId: change.objectId,
+              changes: {},
+              changedFields: change.kind.changedFields ?? [],
+              source,
+            });
             break;
           case 'removed':
             this.eventBus.emit({

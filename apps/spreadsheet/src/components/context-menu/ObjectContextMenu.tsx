@@ -143,6 +143,9 @@ export function ObjectContextMenu() {
 
   // Read from the Zustand store (sync, populated by event-driven re-fetching)
   const targetObject = useFloatingObject(targetObjectId ?? '');
+  const isSelectedChart =
+    targetObjectId !== null && deps.accessors.chart.getSelectedChartIds().has(targetObjectId);
+  const isChart = targetObject?.type === 'chart' || isSelectedChart;
   const isPicture = targetObject?.type === 'picture';
   const isEquation = targetObject?.type === 'equation';
 
@@ -204,39 +207,67 @@ export function ObjectContextMenu() {
     // Copy first
     await handleCopy();
 
-    // Then delete via dispatch (operates on currently selected object)
+    if (isChart) {
+      dispatch('DELETE_CHART', deps, { chartId: targetObjectId });
+      return;
+    }
+
     dispatch('DELETE_OBJECT', deps);
-  }, [targetObjectId, handleCopy, deps]);
+  }, [targetObjectId, handleCopy, isChart, deps]);
 
   const handleDuplicate = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('DUPLICATE_CHART', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('DUPLICATE_OBJECT', deps);
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   const handleDelete = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('DELETE_CHART', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('DELETE_OBJECT', deps);
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   const handleBringToFront = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('BRING_CHART_TO_FRONT', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('BRING_OBJECT_TO_FRONT', deps, { objectId: targetObjectId });
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   const handleSendToBack = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('SEND_CHART_TO_BACK', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('SEND_OBJECT_TO_BACK', deps, { objectId: targetObjectId });
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   const handleBringForward = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('BRING_CHART_FORWARD', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('BRING_OBJECT_FORWARD', deps, { objectId: targetObjectId });
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   const handleSendBackward = useCallback(() => {
     if (!targetObjectId) return;
+    if (isChart) {
+      dispatch('SEND_CHART_BACKWARD', deps, { chartId: targetObjectId });
+      return;
+    }
     dispatch('SEND_OBJECT_BACKWARD', deps, { objectId: targetObjectId });
-  }, [targetObjectId, deps]);
+  }, [targetObjectId, isChart, deps]);
 
   // Picture-specific handlers using dispatch()
   const handleFormatPicture = useCallback(() => {

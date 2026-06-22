@@ -453,7 +453,26 @@ export const NUDGE_OBJECT_RIGHT_FINE: AsyncActionHandler = async (deps): Promise
 /**
  * Ctrl+D (when object selected) - Duplicate the selected object.
  */
-export const DUPLICATE_OBJECT: ActionHandler = (deps): ActionResult => {
+export const DUPLICATE_OBJECT: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  const objectId = getSelectedObjectId(deps);
+  if (!objectId) {
+    return notHandled('wrong_context');
+  }
+
+  const sheetId = deps.getActiveSheetId();
+  if (await isChart(deps, sheetId, objectId)) {
+    try {
+      const ws = deps.workbook.getSheetById(sheetId);
+      const newChart = await ws.charts.duplicate(objectId);
+      if (newChart.chart.id) {
+        deps.commands.object.selectObject(newChart.chart.id, false, false);
+      }
+      return handled();
+    } catch (err) {
+      return { handled: false, error: (err as Error).message };
+    }
+  }
+
   deps.commands.object.keyDuplicate();
   return handled();
 };

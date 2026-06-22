@@ -317,7 +317,7 @@ export const CHANGE_CHART_TYPE: AsyncActionHandler = async (
  * Payload: { chartId: string }
  *
  * This is triggered from the context menu.
- * Uses Mutations layer for chart duplication.
+ * Uses the worksheet chart API so duplicate semantics stay centralized.
  */
 export const DUPLICATE_CHART: AsyncActionHandler = async (deps, payload): Promise<ActionResult> => {
   const chartId = payload?.chartId;
@@ -329,17 +329,7 @@ export const DUPLICATE_CHART: AsyncActionHandler = async (deps, payload): Promis
   const ws = deps.workbook.getSheetById(sheetId);
 
   try {
-    const existing = await ws.charts.get(chartId);
-    if (!existing) {
-      return { handled: false, error: `Chart ${chartId} not found` };
-    }
-
-    const { id: _id, createdAt: _c, updatedAt: _u, ...chartConfig } = existing;
-    const newChart = await ws.charts.add({
-      ...chartConfig,
-      anchorRow: (existing.anchorRow ?? 0) + 2,
-      anchorCol: (existing.anchorCol ?? 0) + 2,
-    });
+    const newChart = await ws.charts.duplicate(chartId);
 
     if (newChart.chart.id) {
       selectChartObject(deps, newChart.chart.id);

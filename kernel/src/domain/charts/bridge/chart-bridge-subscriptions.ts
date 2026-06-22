@@ -21,6 +21,7 @@ import {
 } from './chart-floating-object-events';
 import { handleCellChange, handleCellsBatchChange } from './chart-bridge-cell-events';
 import type { ChartBridgeSubscriptionContext } from './chart-bridge-subscription-context';
+import { isPositionOnlyUpdate } from './position-only-update';
 import {
   handleColumnsDeleted,
   handleColumnsInserted,
@@ -100,6 +101,7 @@ export function setupChartBridgeSubscriptions(deps: ChartBridgeSubscriptionConte
   cleanups.push(
     deps.ctx.eventBus.on<ChartUpdatedEvent>('chart:updated', (event) => {
       if (!liveDeps.isLive()) return;
+      if (isPositionOnlyUpdate(event.changedFields ?? [])) return;
       deps.invalidateChart(event.chartId, toSheetId(event.sheetId));
     }),
   );

@@ -67,6 +67,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       get: jest.fn().mockResolvedValue(null),
       list: jest.fn().mockResolvedValue([]),
       add: jest.fn().mockResolvedValue(createChartAddReceipt()),
+      duplicate: jest.fn().mockResolvedValue(createChartAddReceipt('duplicated-chart-id')),
       update: jest.fn().mockResolvedValue(undefined),
       setSourceData: jest.fn().mockResolvedValue(undefined),
       getAppModel: jest.fn().mockResolvedValue({
@@ -507,14 +508,19 @@ describe('Chart Handlers - Clipboard Actions', () => {
   });
 
   describe('DUPLICATE_CHART', () => {
-    it('should use Mutations layer (not onUIAction) to duplicate chart', async () => {
+    it('should use the worksheet chart duplicate API', async () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.DUPLICATE_CHART(deps, { chartId: 'chart-123' });
 
-      // Handler uses Mutations layer, not onUIAction (correct architecture)
-      // In unit tests without full Yjs setup, this will fail with chart not found
-      expect(result.handled).toBe(false);
-      expect(result.error).toContain('not found');
+      expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.charts.duplicate).toHaveBeenCalledWith('chart-123');
+      expect(deps.workbook.activeSheet.charts.get).not.toHaveBeenCalled();
+      expect(deps.workbook.activeSheet.charts.add).not.toHaveBeenCalled();
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith(
+        'duplicated-chart-id',
+        false,
+        false,
+      );
     });
 
     it('should return not handled when chartId is missing', async () => {

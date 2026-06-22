@@ -32,6 +32,8 @@ import type { Point } from '@mog-sdk/contracts/viewport';
 import type { DragTerminator } from '../shared/drag-terminator';
 import type { Metric } from '../shared/types';
 import type { ObjectCoordinationConfig } from './coordination/object-coordination';
+import type { UIState } from '../../ui-store';
+import type { StoreApi } from 'zustand';
 
 // Actor types (for useSelector hook subscriptions)
 import type { ChartActor } from './machines/chart-machine';
@@ -111,6 +113,16 @@ export interface ObjectSystemConfig {
   hitTestService: HitTestService;
   /** Workbook API for unified data access (optional - may not be available in all contexts) */
   workbook?: Workbook;
+  /**
+   * Active sheet ID getter.
+   *
+   * Chart selection sync must resolve selected IDs against the same active
+   * sheet the UI/renderer uses. Falling back to workbook.activeSheet can be
+   * stale during imported-document activation.
+   */
+  getActiveSheetId?: () => string;
+  /** Per-document UI store for derived contextual-tab state */
+  uiStoreApi?: StoreApi<UIState>;
   /** Function to get renderer container element (for hit testing and cursor updates) */
   getCanvas: () => HTMLElement | null;
   /** Function to get geometry capability (for coordinate conversions) */

@@ -78,6 +78,7 @@ export function useContextualTabs(): ContextualTabConfig[] {
     uiStore,
     (s) => s.contextualTabs.hasSparklineInActiveCell,
   );
+  const hasSelectedChartObject = useStore(uiStore, (s) => s.contextualTabs.hasSelectedChartObject);
 
   // Diagram selection state from UIStore
   // Read selectedDiagramId from the Diagram UI slice
@@ -95,17 +96,19 @@ export function useContextualTabs(): ContextualTabConfig[] {
     }
 
     let selectedObjectType: ObjectInteractionContext['selectedObjectType'] = null;
-    if (firstObject) {
+    if (hasSelectedChartObject) {
+      selectedObjectType = 'chart';
+    } else if (firstObject) {
       const type = firstObject.type;
-      // Only match contextual tab types (picture, textbox, shape)
+      // Only match contextual tab types (chart, picture, textbox, shape)
       // drawing is a valid FloatingObjectType but not currently used
-      if (type === 'picture' || type === 'textbox' || type === 'shape') {
+      if (type === 'chart' || type === 'picture' || type === 'textbox' || type === 'shape') {
         selectedObjectType = type;
       }
     }
 
     return { selectedIds, selectedObjectType };
-  }, [objectInteraction, firstObject]);
+  }, [objectInteraction, firstObject, hasSelectedChartObject]);
 
   // Slicer selection context
   const slicerSelectionContext: SlicerSelectionContext = useMemo(

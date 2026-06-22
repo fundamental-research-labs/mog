@@ -22,6 +22,8 @@ export interface ChartUpdatedEvent extends BaseEvent {
   sheetId: string;
   chartId: string;
   changes: Partial<ChartConfig>;
+  /** Names of chart/floating-object fields that changed, when supplied by compute. */
+  changedFields?: string[];
   source: StructureChangeSource;
 }
 

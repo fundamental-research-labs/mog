@@ -1,0 +1,75 @@
+import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
+import {
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  type DomainSupportManifest,
+} from '@mog-sdk/contracts/versioning';
+
+type MutableDocumentHandleWorkbook = {
+  workbook(config?: DocumentHandleWorkbookConfig): ReturnType<DocumentHandle['workbook']>;
+};
+
+type DefaultVersioningDocumentOptions = {
+  readonly skipLocalPersistence?: boolean;
+  readonly internal?: boolean;
+};
+
+const DEFAULT_VERSION_PROVIDER_SELECTION = {
+  kind: 'indexeddb',
+  requireDurablePersistence: true,
+} as const satisfies NonNullable<
+  NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
+>;
+
+const DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS = Object.freeze([
+  'workbook-metadata',
+  'sheets',
+  'rows-columns',
+  'cells.values',
+  'cells.formulas',
+  'recalc-caches',
+] as const);
+
+export function decorateNormalLocalHandleWithDefaultVersioning(
+  handle: DocumentHandle,
+  options?: DefaultVersioningDocumentOptions,
+): DocumentHandle {
+  if (options?.skipLocalPersistence === true || options?.internal === true) {
+    return handle;
+  }
+  return decorateHandleWithDefaultIndexedDbVersioning(handle);
+}
+
+export function decorateHandleWithDefaultIndexedDbVersioning(
+  handle: DocumentHandle,
+): DocumentHandle {
+  const originalWorkbook = handle.workbook.bind(handle);
+  (handle as DocumentHandle & MutableDocumentHandleWorkbook).workbook = ((
+    config?: DocumentHandleWorkbookConfig,
+  ) =>
+    originalWorkbook({
+      ...config,
+      versioning: {
+        providerSelection: DEFAULT_VERSION_PROVIDER_SELECTION,
+        domainSupportManifest: createDefaultDomainSupportManifest(handle.documentId),
+        ...config?.versioning,
+      },
+    })) as DocumentHandle['workbook'];
+  return handle;
+}
+
+function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {
+  return {
+    schemaVersion: 'domain-support-manifest.v2',
+    generatedAt: new Date().toISOString(),
+    workbookId: documentId,
+    domains: DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS.map((matrixRowId) => {
+      const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
+        (domain) => domain.matrixRowId === matrixRowId,
+      );
+      if (!row) {
+        throw new Error(`Missing public version domain policy row: ${matrixRowId}`);
+      }
+      return row;
+    }),
+  };
+}

@@ -32,6 +32,7 @@ pub fn wasm_start() {
 // Import stateless bridge types so generated pure methods can call Type::method().
 use compute_core::bridge_pure::{
     CfBridge, ChartBridge, ClockBridge, FormatBridge, PivotBridge, SchemaBridge, TableBridge,
+    VersioningBridge,
 };
 // Import ComputeService + Dispatch for the generated lifecycle and engine methods.
 use compute_api::ComputeService;
@@ -119,5 +120,6 @@ bridge_wasm::generate!(
     compute_core::__bridge_descriptor_SchemaBridge_schema_utils,
     compute_core::__bridge_descriptor_CfBridge_cf_presets,
     compute_core::__bridge_descriptor_ClockBridge_clock,
+    compute_core::__bridge_descriptor_VersioningBridge_versioning,
     xlsx_api::__bridge_descriptor_XlsxParser_0,
 );

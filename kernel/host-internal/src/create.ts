@@ -146,7 +146,15 @@ export async function createHostBackedDocument(
   await lifecycle.waitForReady();
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(lifecycleInput.documentId, lifecycle, context);
+  return _createDocumentHandleInternal(
+    lifecycleInput.documentId,
+    lifecycle,
+    context,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
 }
 
 export async function createHostBackedCollaborationDocument(
@@ -336,6 +344,11 @@ export async function importHostBackedDocument(
     context,
     undefined,
     importWarnings,
+    {
+      kind: 'xlsx',
+      source: { sourceType: 'bytes', byteLength: resolvedSource.bytes.byteLength },
+      diagnostics: importDiagnostics,
+    },
   );
   return { handle, importWarnings };
 }
@@ -381,7 +394,15 @@ export async function createHeadlessDocument(
   await lifecycle.waitForReady();
 
   const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(options.documentId, lifecycle, context);
+  return _createDocumentHandleInternal(
+    options.documentId,
+    lifecycle,
+    context,
+    undefined,
+    undefined,
+    undefined,
+    options.initialSnapshot === undefined && options.yrsState === undefined,
+  );
 }
 
 export async function importHeadlessDocumentFromXlsx(
@@ -414,6 +435,11 @@ export async function importHeadlessDocumentFromXlsx(
     context,
     undefined,
     importWarnings,
+    {
+      kind: 'xlsx',
+      source: { sourceType: 'bytes', byteLength: source.data.byteLength },
+      diagnostics: importDiagnostics,
+    },
   );
 }
 

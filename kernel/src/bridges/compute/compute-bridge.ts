@@ -1751,6 +1751,31 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return super.setCellValueAsText(sheetId, row, col, value);
   }
 
+  batchSetCellsByPosition(
+    edits: [SheetId, number, number, CellInput][],
+    skipCycleCheck: boolean,
+    admissionOptions?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    return this.core.mutatePublic(
+      'compute_batch_set_cells_by_position',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>(
+          'compute_batch_set_cells_by_position',
+          {
+            docId: this.core.docId,
+            edits,
+            skipCycleCheck,
+          },
+        ),
+      edits.map(([editSheetId, row, col]) => ({
+        sheetId: editSheetId,
+        row,
+        col,
+      })),
+      admissionOptions,
+    );
+  }
+
   /** Set cells by position. Converts to tuples for generated batchSetCellsByPosition.
    *
    * Passes `skip_cycle_check: true` — this is a trusted bulk path (ws.setCells,
@@ -1778,20 +1803,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     const tuples: [SheetId, number, number, CellInput][] = normalEdits.map(
       (e) => [sheetId, e.row, e.col, e.input] as [SheetId, number, number, CellInput],
     );
-    const result = await this.core.mutatePublic(
-      'compute_batch_set_cells_by_position',
-      () =>
-        this.core.transport.call<[Uint8Array, MutationResult]>(
-          'compute_batch_set_cells_by_position',
-          {
-            docId: this.core.docId,
-            edits: tuples,
-            skipCycleCheck: true,
-          },
-        ),
-      normalEdits.map((edit) => ({ sheetId, row: edit.row, col: edit.col })),
-      options,
-    );
+    const result = await this.batchSetCellsByPosition(tuples, true, options);
     return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
   }
 

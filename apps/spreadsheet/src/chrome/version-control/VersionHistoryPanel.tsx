@@ -20,6 +20,7 @@ import type {
 import { useWorkbook } from '../../internal-api';
 
 const COMMIT_PAGE_SIZE = 20;
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const CAPABILITY_ROWS: readonly VersionCapability[] = [
   'version:read',
@@ -254,7 +255,7 @@ export function VersionHistoryPanelContent({
 
     setBranchName('');
     setSelectedCommitId(result.value.commitId);
-    setActionState({ status: 'success', message: `Created ${result.value.name}` });
+    setActionState({ status: 'success', message: `Created ${displayBranchName(result.value.name)}` });
     await load();
   }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
 
@@ -278,7 +279,7 @@ export function VersionHistoryPanelContent({
       }
 
       setSelectedCommitId(result.value.plan.commitId);
-      setActionState({ status: 'success', message: `Checked out ${ref.name}` });
+      setActionState({ status: 'success', message: `Checked out ${displayBranchName(ref.name)}` });
       await load();
     },
     [canCheckout, load, workbook],
@@ -622,27 +623,32 @@ function RefList({
         <div className="text-body-sm text-ss-text-secondary py-2">No branches available</div>
       ) : (
         <ol className="flex flex-col gap-2 m-0 p-0 list-none">
-          {refs.map((ref) => (
-            <li key={ref.name} className="border border-ss-border rounded-sm p-2 bg-ss-surface">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="text-body-sm font-medium text-ss-text truncate">{ref.name}</div>
-                  <div className="font-mono text-[11px] text-ss-text-secondary truncate">
-                    {shortCommitId(ref.commitId)}
+          {refs.map((ref) => {
+            const branchLabel = displayBranchName(ref.name);
+            return (
+              <li key={ref.name} className="border border-ss-border rounded-sm p-2 bg-ss-surface">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-body-sm font-medium text-ss-text truncate">
+                      {branchLabel}
+                    </div>
+                    <div className="font-mono text-[11px] text-ss-text-secondary truncate">
+                      {shortCommitId(ref.commitId)}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => onCheckoutRef(ref)}
+                    disabled={!checkoutEnabled}
+                    aria-label={`Checkout ${branchLabel}`}
+                    className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+                  >
+                    Checkout
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onCheckoutRef(ref)}
-                  disabled={!checkoutEnabled}
-                  aria-label={`Checkout ${ref.name}`}
-                  className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-                >
-                  Checkout
-                </button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
@@ -899,6 +905,12 @@ function shortCommitId(id: string): string {
   return id.startsWith('commit:sha256:')
     ? id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12)
     : id;
+}
+
+function displayBranchName(name: string): string {
+  return name.startsWith(VERSION_BRANCH_REF_PREFIX)
+    ? name.slice(VERSION_BRANCH_REF_PREFIX.length)
+    : name;
 }
 
 function diffEntryLabel(entry: VersionSemanticDiffPage['items'][number]): string {

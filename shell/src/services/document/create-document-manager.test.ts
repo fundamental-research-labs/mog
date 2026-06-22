@@ -1,5 +1,9 @@
 import { jest } from '@jest/globals';
-import { DocumentFactory, type DocumentHandle } from '@mog-sdk/kernel';
+import {
+  DocumentFactory,
+  type DocumentHandle,
+  type DocumentHandleWorkbookConfig,
+} from '@mog-sdk/kernel';
 import {
   createStandaloneBrowserHostBackedCollaborationDocument,
   createStandaloneBrowserHostBackedDocument,
@@ -58,6 +62,32 @@ function makeHandle(
   } as unknown as DocumentHandle;
 }
 
+const DEFAULT_INDEXEDDB_PROVIDER_SELECTION = {
+  kind: 'indexeddb',
+  requireDurablePersistence: true,
+} as const;
+
+function capturedWorkbookConfig(workbook: jest.Mock): DocumentHandleWorkbookConfig | undefined {
+  return workbook.mock.calls[0]?.[0] as DocumentHandleWorkbookConfig | undefined;
+}
+
+function expectDefaultIndexedDbProviderSelection(workbook: jest.Mock): void {
+  expect(capturedWorkbookConfig(workbook)).toMatchObject({
+    versioning: {
+      providerSelection: DEFAULT_INDEXEDDB_PROVIDER_SELECTION,
+      domainSupportManifest: {
+        schemaVersion: 'domain-support-manifest.v2',
+        workbookId: expect.any(String),
+        domains: expect.arrayContaining([
+          expect.objectContaining({ matrixRowId: 'workbook-metadata' }),
+          expect.objectContaining({ matrixRowId: 'cells.values' }),
+          expect.objectContaining({ matrixRowId: 'cells.formulas' }),
+        ]),
+      },
+    },
+  });
+}
+
 function makeSidecar(options: { readonly status?: () => string } = {}) {
   return {
     detach: jest.fn(),
@@ -74,6 +104,122 @@ function makeSidecar(options: { readonly status?: () => string } = {}) {
 describe('createDocumentManager import identity', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('injects IndexedDB providerSelection into blank document workbooks by default', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('file-blank', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-blank');
+
+    await returnedHandle.workbook();
+
+    expectDefaultIndexedDbProviderSelection(originalWorkbook);
+  });
+
+  it('injects IndexedDB providerSelection into XLSX import workbooks by default', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('file-xlsx', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(importInteractiveHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const source = { type: 'bytes', data: new Uint8Array([1, 2, 3]) } as const;
+    const returnedHandle = await manager.loadDocument('file-xlsx', source);
+
+    await returnedHandle.workbook();
+
+    expectDefaultIndexedDbProviderSelection(originalWorkbook);
+  });
+
+  it('injects IndexedDB providerSelection into CSV import workbooks by default', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('file-csv', undefined, originalWorkbook);
+    jest.mocked(DocumentFactory.createFromCsv).mockResolvedValue({
+      success: true,
+      sheetIds: [],
+      handle,
+      warnings: [],
+    });
+
+    const manager = createDocumentManager();
+    const source = { type: 'bytes', data: new Uint8Array([97, 44, 98]) } as const;
+    const returnedHandle = await manager.loadDocument('file-csv', source, { kind: 'csv' });
+
+    await returnedHandle.workbook();
+
+    expectDefaultIndexedDbProviderSelection(originalWorkbook);
+  });
+
+  it('does not inject default versioning when local persistence is skipped', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('file-blank', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-blank', {
+      skipLocalPersistence: true,
+    });
+
+    await returnedHandle.workbook({
+      versioning: {
+        requireDomainSupportManifest: true,
+      } as never,
+    });
+
+    expect(capturedWorkbookConfig(originalWorkbook)).toEqual({
+      versioning: {
+        requireDomainSupportManifest: true,
+      },
+    });
+  });
+
+  it('preserves caller-supplied versioning fields and providerSelection', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    const handle = makeHandle('file-blank', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    const providerSelection = {
+      kind: 'caller-provider',
+      requireDurablePersistence: false,
+    };
+    const readLiveCollaborationStatus = jest.fn();
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-blank');
+
+    await returnedHandle.workbook({
+      versioning: {
+        providerSelection,
+        readLiveCollaborationStatus,
+        requireDomainSupportManifest: true,
+      } as never,
+    });
+
+    const calledConfig = capturedWorkbookConfig(originalWorkbook);
+    expect(calledConfig?.versioning).toMatchObject({
+      requireDomainSupportManifest: true,
+    });
+    expect(calledConfig?.versioning?.providerSelection).toBe(providerSelection);
+    expect(calledConfig?.versioning?.readLiveCollaborationStatus).toBe(
+      readLiveCollaborationStatus,
+    );
   });
 
   it('binds XLSX byte import documentId through the standalone browser host', async () => {

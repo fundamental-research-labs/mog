@@ -135,6 +135,7 @@ export type IndexedDbVersionStoreProviderOptions = {
 };
 
 export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
+  readonly kind = INDEXEDDB_VERSION_STORE_PROVIDER_KIND;
   readonly documentScope: VersionDocumentScope;
   readonly accessContext: VersionAccessContext;
   readonly capabilities: VersionStoreCapabilities;

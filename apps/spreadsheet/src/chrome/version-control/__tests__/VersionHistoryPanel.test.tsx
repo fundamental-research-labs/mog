@@ -39,7 +39,7 @@ describe('VersionHistoryPanelContent', () => {
 
     expect(await screen.findByText('Initial import')).toBeInTheDocument();
     expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
-    expect(screen.getByText('refs/heads/scenario/budget')).toBeInTheDocument();
+    expect(screen.getByText('scenario/budget')).toBeInTheDocument();
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getStatus).toHaveBeenCalledTimes(1);
@@ -118,9 +118,7 @@ describe('VersionHistoryPanelContent', () => {
 
     expect(screen.getByRole('button', { name: /^Commit$/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create branch' })).toBeDisabled();
-    expect(
-      screen.getByRole('button', { name: 'Checkout refs/heads/scenario/budget' }),
-    ).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Checkout scenario/budget' })).toBeDisabled();
     expect(
       screen.getByRole('button', {
         name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
@@ -163,7 +161,7 @@ describe('VersionHistoryPanelContent', () => {
     );
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
 
-    await user.click(screen.getByRole('button', { name: 'Checkout refs/heads/scenario/budget' }));
+    await user.click(screen.getByRole('button', { name: 'Checkout scenario/budget' }));
     await waitFor(() =>
       expect(workbook.version.checkout).toHaveBeenCalledWith(
         {

@@ -164,7 +164,7 @@ import type {
   WorkbookViewport,
 } from '@mog-sdk/contracts/api';
 import { WorkbookHistoryImpl } from './history';
-import { WorkbookVersionImpl } from './version';
+import { WorkbookVersionWithDirtyTracking } from './workbook-version-dirty-tracking';
 import {
   checkoutDirtyWorkingStateDiagnostic,
   checkoutWriteFenceUnavailableDiagnostic,
@@ -2117,10 +2117,11 @@ export class WorkbookImpl implements WorkbookInternal {
     }));
   }
 
-  private _version?: WorkbookVersionImpl;
+  private _version?: WorkbookVersion;
   get version(): WorkbookVersion {
-    return (this._version ??= new WorkbookVersionImpl(this.ctx, {
+    return (this._version ??= new WorkbookVersionWithDirtyTracking(this.ctx, {
       checkoutTransactionGuard: this.checkoutTransactionGuard,
+      markClean: () => this.markClean(),
     }));
   }
 

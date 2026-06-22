@@ -30,17 +30,25 @@ type AppliedSyncUpdateIdentityDuplicateDecision = {
     | 'failed'
     | 'failedAfterMutation'
     | 'missing'
-    | 'notDuplicate';
+    | 'notDuplicate'
+    | 'terminalRejected';
 };
 
 type AppliedSyncUpdateIdentityReserveDecision = {
-  readonly status: 'reserved' | 'duplicate' | 'conflict' | 'failed' | 'failedAfterMutation';
+  readonly status:
+    | 'reserved'
+    | 'duplicate'
+    | 'conflict'
+    | 'failed'
+    | 'failedAfterMutation'
+    | 'terminalRejected';
 };
 
 export type AppliedSyncUpdateIdentityPreApplyRejectionReason =
   | 'duplicate-update-id'
   | 'applied-sync-update-identity-conflict'
   | 'applied-sync-update-identity-failed-after-mutation'
+  | 'applied-sync-update-identity-terminal-rejected'
   | 'applied-sync-update-identity-read-failed'
   | 'applied-sync-update-identity-reservation-failed';
 
@@ -87,6 +95,11 @@ export async function prepareAppliedSyncUpdateIdentityBeforeApply(options: {
           status: 'rejected',
           reason: 'applied-sync-update-identity-failed-after-mutation',
         };
+      case 'terminalRejected':
+        return {
+          status: 'rejected',
+          reason: 'applied-sync-update-identity-terminal-rejected',
+        };
       case 'missing':
       case 'notDuplicate':
         return { status: 'rejected', reason: 'duplicate-update-id' };
@@ -109,6 +122,11 @@ export async function prepareAppliedSyncUpdateIdentityBeforeApply(options: {
       return {
         status: 'rejected',
         reason: 'applied-sync-update-identity-failed-after-mutation',
+      };
+    case 'terminalRejected':
+      return {
+        status: 'rejected',
+        reason: 'applied-sync-update-identity-terminal-rejected',
       };
   }
 }
@@ -147,6 +165,9 @@ async function readAppliedSyncUpdateIdentityDuplicate(
   if (read.record.payloadHash !== reservation.payloadHash) return { status: 'conflict' };
   if (read.record.state === 'applied') return { status: 'duplicate' };
   if (read.record.state === 'failedAfterMutation') return { status: 'failedAfterMutation' };
+  if (read.record.state === 'rejected' || read.record.state === 'gapWaiting') {
+    return { status: 'terminalRejected' };
+  }
   return { status: 'notDuplicate' };
 }
 
@@ -163,9 +184,19 @@ async function reserveAppliedSyncUpdateIdentity(
     case 'reserved':
       return { status: 'reserved' };
     case 'existing':
-      return reserved.record.state === 'failedAfterMutation'
-        ? { status: 'failedAfterMutation' }
-        : { status: 'reserved' };
+      switch (reserved.record.state) {
+        case 'failedAfterMutation':
+          return { status: 'failedAfterMutation' };
+        case 'rejected':
+        case 'gapWaiting':
+          return { status: 'terminalRejected' };
+        case 'reserved':
+        case 'retryable':
+          return { status: 'reserved' };
+        case 'applied':
+          return { status: 'duplicate' };
+      }
+      return { status: 'failed' };
     case 'duplicate':
       return { status: 'duplicate' };
     case 'conflict':

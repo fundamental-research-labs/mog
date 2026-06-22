@@ -218,7 +218,7 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
   ): Promise<AppliedSyncUpdateIdentityReserveResult> {
     let record: AppliedSyncUpdateIdentityRecord;
     try {
-      record = this.recordFromInput(input);
+      record = await this.recordFromInput(input);
     } catch {
       return failedReserve('Applied sync update reservation has invalid identity context.');
     }
@@ -229,6 +229,12 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
         return conflictReserve(
           existing,
           'Applied sync update identity is already bound to a different payload hash.',
+        );
+      }
+      if (!appliedSyncUpdateIdentityReservationsEquivalent(existing, record)) {
+        return conflictReserve(
+          existing,
+          'Applied sync update identity key is already bound to a different identity.',
         );
       }
       return {
@@ -275,12 +281,15 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
       );
     }
     if (existing.terminal) {
-      return appliedSyncUpdateIdentityTerminalsEqual(existing.terminal, input.terminal)
-        ? { status: 'completed', record: existing, diagnostics: [] }
-        : conflictComplete(
-            existing,
-            'Applied sync update identity is already finalized with different terminal metadata.',
-          );
+      if (appliedSyncUpdateIdentityTerminalsEqual(existing.terminal, input.terminal)) {
+        return { status: 'completed', record: existing, diagnostics: [] };
+      }
+      if (existing.state !== 'retryable') {
+        return conflictComplete(
+          existing,
+          'Applied sync update identity is already finalized with different terminal metadata.',
+        );
+      }
     }
 
     const completed: AppliedSyncUpdateIdentityRecord = {
@@ -293,18 +302,26 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
     return { status: 'completed', record: completed, diagnostics: [] };
   }
 
-  private recordFromInput(
+  private async recordFromInput(
     input: ReserveAppliedSyncUpdateIdentityInput,
-  ): AppliedSyncUpdateIdentityRecord {
+  ): Promise<AppliedSyncUpdateIdentityRecord> {
     const collaboration = appliedSyncOperationContext(input.operationContext);
+    const keyMaterial = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+      input.operationContext,
+    );
+    if (input.identityKey !== keyMaterial.identityKey) {
+      throw new Error('Applied sync update identity key does not match operation context.');
+    }
     return cloneAppliedSyncUpdateIdentityRecord({
-      ...input,
       schemaVersion: 1,
       recordKind: 'appliedSyncUpdateIdentity',
+      identityKey: input.identityKey,
       documentScopeKey: this.documentScopeKey,
-      identity: appliedSyncUpdateIdentityForOperationContext(input.operationContext),
+      identity: keyMaterial.identity,
       payloadHash: collaboration.payloadHash,
+      operationContext: input.operationContext,
       state: 'reserved',
+      createdAt: input.createdAt,
       updatedAt: input.createdAt,
     });
   }
@@ -360,6 +377,16 @@ export function cloneAppliedSyncUpdateIdentityRecord(
   return record === undefined ? undefined : cloneJson(record);
 }
 
+export function appliedSyncUpdateIdentityReservationsEquivalent(
+  left: AppliedSyncUpdateIdentityRecord,
+  right: AppliedSyncUpdateIdentityRecord,
+): boolean {
+  return (
+    canonicalJsonStringify(appliedSyncUpdateIdentityReservationIdentity(left)) ===
+    canonicalJsonStringify(appliedSyncUpdateIdentityReservationIdentity(right))
+  );
+}
+
 export function appliedSyncUpdateIdentityTerminalsEqual(
   left: AppliedSyncUpdateIdentityTerminal,
   right: AppliedSyncUpdateIdentityTerminal,
@@ -392,9 +419,24 @@ export function isAppliedSyncUpdateIdentityRecord(
     return false;
   }
   if (typeof value.documentScopeKey !== 'string') return false;
-  if (!isAppliedSyncUpdateIdentity(value.identity)) return false;
+  const identity = value.identity;
+  if (!isAppliedSyncUpdateIdentity(identity)) return false;
   if (typeof value.payloadHash !== 'string' || value.payloadHash.length === 0) return false;
-  if (!isAppliedSyncOperationContext(value.operationContext)) return false;
+  const operationContext = value.operationContext;
+  if (!isAppliedSyncOperationContext(operationContext)) return false;
+  if (operationContext.collaboration.payloadHash !== value.payloadHash) return false;
+  try {
+    if (
+      canonicalJsonStringify(
+        appliedSyncUpdateIdentityForOperationContext(operationContext),
+      ) !==
+      canonicalJsonStringify(identity)
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
   if (!isAppliedSyncUpdateIdentityState(value.state)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (value.state === 'reserved') return value.terminal === undefined;
@@ -425,7 +467,23 @@ function isAppliedSyncUpdateIdentity(value: unknown): value is AppliedSyncUpdate
 function isAppliedSyncOperationContext(
   value: unknown,
 ): value is AppliedSyncUpdateIdentityOperationContext {
-  return isRecord(value) && isRecord(value.collaboration);
+  if (!isRecord(value) || !isRecord(value.collaboration)) return false;
+  return (
+    typeof value.operationId === 'string' &&
+    typeof value.kind === 'string' &&
+    isRecord(value.author) &&
+    typeof value.createdAt === 'string' &&
+    Array.isArray(value.domainIds) &&
+    typeof value.capturePolicy === 'string' &&
+    typeof value.writeAdmissionMode === 'string' &&
+    typeof value.collaboration.sourceKind === 'string' &&
+    (value.collaboration.originKind === 'provider' ||
+      value.collaboration.originKind === 'room') &&
+    typeof value.collaboration.stableOriginId === 'string' &&
+    typeof value.collaboration.epoch === 'string' &&
+    typeof value.collaboration.updateId === 'string' &&
+    typeof value.collaboration.payloadHash === 'string'
+  );
 }
 
 function isAppliedSyncUpdateIdentityState(value: unknown): value is AppliedSyncUpdateIdentityState {
@@ -473,6 +531,16 @@ function memoryKey(
 
 function memoryKeyFromRecord(record: AppliedSyncUpdateIdentityRecord): string {
   return `${record.documentScopeKey}\u0000appliedSyncUpdate\u0000${record.identityKey}`;
+}
+
+function appliedSyncUpdateIdentityReservationIdentity(record: AppliedSyncUpdateIdentityRecord) {
+  return {
+    schemaVersion: record.schemaVersion,
+    recordKind: record.recordKind,
+    identityKey: record.identityKey,
+    documentScopeKey: record.documentScopeKey,
+    identity: record.identity,
+  };
 }
 
 function conflictReserve(

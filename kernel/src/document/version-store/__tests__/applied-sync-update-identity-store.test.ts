@@ -2,9 +2,10 @@ import 'fake-indexeddb/auto';
 
 import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
+import type { AdmittedSyncApplyContext } from '../../../bridges/compute/sync-apply-admission';
+import { prepareAppliedSyncUpdateIdentityBeforeApply } from '../../applied-sync-update-identity-wiring';
 import {
   appliedSyncUpdateIdentityKeyMaterialForOperationContext,
-  type AppliedSyncUpdateIdentityKey,
   type ReserveAppliedSyncUpdateIdentityInput,
 } from '../applied-sync-update-identity-store';
 import {
@@ -129,6 +130,20 @@ describe('applied sync update identity store', () => {
         payloadHash: '3'.repeat(64),
         completedAt: '2026-06-21T00:00:04.000Z',
         terminal: {
+          status: 'applied',
+          pendingRemoteSegmentId: 'pending-remote-segment:sha256:' + 'a'.repeat(64),
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { updatedAt: '2026-06-21T00:00:03.000Z' },
+    });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: {
           status: 'retryable',
           reason: 'transient-write-failure',
         },
@@ -155,6 +170,35 @@ describe('applied sync update identity store', () => {
     });
   });
 
+  it('rejects invalid reservation identity keys without creating rows', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAppliedSyncUpdateIdentityStore();
+    const input = await appliedIdentityInput();
+    const changedUpdate = await appliedIdentityInput(
+      syncOperationContext({ collaboration: { updateId: 'remote-update-2' } }),
+    );
+
+    await expect(
+      store.reserveIdentity({
+        ...input,
+        identityKey: changedUpdate.identityKey,
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      diagnostics: [{ code: 'VERSION_INVALID_OPTIONS' }],
+    });
+    await expect(store.readByIdentityKey(input.identityKey)).resolves.toMatchObject({
+      status: 'missing',
+    });
+    await expect(store.readByIdentityKey(changedUpdate.identityKey)).resolves.toMatchObject({
+      status: 'missing',
+    });
+  });
+
   it('persists IndexedDB identities before graph initialization and isolates document scopes', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const store = await provider.openAppliedSyncUpdateIdentityStore();
@@ -177,13 +221,37 @@ describe('applied sync update identity store', () => {
     });
 
     const reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const reloadedStore = await reloadedProvider.openAppliedSyncUpdateIdentityStore();
     await expect(
-      (await reloadedProvider.openAppliedSyncUpdateIdentityStore()).readByIdentityKey(
-        input.identityKey,
-      ),
+      reloadedStore.readByIdentityKey(input.identityKey),
     ).resolves.toMatchObject({
       status: 'found',
       record: { state: 'failedAfterMutation' },
+    });
+    await expect(reloadedStore.reserveIdentity(input)).resolves.toMatchObject({
+      status: 'existing',
+      record: { state: 'failedAfterMutation' },
+    });
+    await expect(
+      prepareAppliedSyncUpdateIdentityBeforeApply({
+        store: reloadedStore,
+        admittedContext: admittedContextFor(input.operationContext),
+        inboundUpdateAlreadySeen: false,
+      }),
+    ).resolves.toEqual({
+      status: 'rejected',
+      reason: 'applied-sync-update-identity-failed-after-mutation',
+    });
+    await expect(
+      reloadedStore.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: { status: 'applied' },
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      diagnostics: [{ code: 'VERSION_APPLIED_SYNC_UPDATE_CONFLICT' }],
     });
 
     const otherProvider = createIndexedDbVersionStoreProvider({
@@ -197,6 +265,85 @@ describe('applied sync update identity store', () => {
       status: 'missing',
     });
   });
+
+  it('rejects terminal rejected identities before applying sync bytes', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAppliedSyncUpdateIdentityStore();
+    const input = await appliedIdentityInput();
+
+    await expect(store.reserveIdentity(input)).resolves.toMatchObject({ status: 'reserved' });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:03.000Z',
+        terminal: { status: 'rejected', reason: 'provider-validation-rejected' },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { state: 'rejected' },
+    });
+
+    await expect(
+      prepareAppliedSyncUpdateIdentityBeforeApply({
+        store,
+        admittedContext: admittedContextFor(input.operationContext),
+        inboundUpdateAlreadySeen: false,
+      }),
+    ).resolves.toEqual({
+      status: 'rejected',
+      reason: 'applied-sync-update-identity-terminal-rejected',
+    });
+  });
+
+  it('allows retryable identities to complete after a retry', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAppliedSyncUpdateIdentityStore();
+    const input = await appliedIdentityInput();
+
+    await expect(store.reserveIdentity(input)).resolves.toMatchObject({ status: 'reserved' });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:03.000Z',
+        terminal: { status: 'retryable', reason: 'transient-before-mutation' },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { state: 'retryable' },
+    });
+
+    await expect(
+      prepareAppliedSyncUpdateIdentityBeforeApply({
+        store,
+        admittedContext: admittedContextFor(input.operationContext),
+        inboundUpdateAlreadySeen: false,
+      }),
+    ).resolves.toMatchObject({
+      status: 'apply',
+      reservation: { identityKey: input.identityKey },
+    });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: { status: 'applied' },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { state: 'applied', terminal: { status: 'applied' } },
+    });
+  });
 });
 
 async function appliedIdentityInput(
@@ -208,6 +355,22 @@ async function appliedIdentityInput(
     operationContext,
     createdAt: operationContext.createdAt,
   };
+}
+
+function admittedContextFor(operationContext: VersionOperationContext): AdmittedSyncApplyContext {
+  const collaboration = operationContext.collaboration!;
+  return {
+    source: 'provider-inbound',
+    docId: operationContext.workbookId ?? 'workbook-1',
+    envelopeVersion: 'v2',
+    providerRefId: collaboration.providerId,
+    providerEpoch: collaboration.epoch,
+    updateId: collaboration.updateId,
+    payloadHash: collaboration.payloadHash,
+    provenance: {} as never,
+    validationDiagnostics: [],
+    operationContext,
+  } as AdmittedSyncApplyContext;
 }
 
 function syncOperationContext(

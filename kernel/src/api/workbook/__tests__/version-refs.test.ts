@@ -70,6 +70,25 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         ],
       },
     });
+
+    await expect(
+      version.deleteRef({
+        name: 'scenario/missing' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REF_WRITE_UNAVAILABLE',
+            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+          }),
+        ],
+      },
+    });
   });
 
   it('creates, reads, gets, and lists public branch refs through the attached service', async () => {
@@ -212,6 +231,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
     const createBranch = jest.spyOn(branchService, 'createBranch');
     const fastForwardBranch = jest.spyOn(branchService, 'fastForwardBranch');
+    const deleteBranch = jest.spyOn(branchService, 'deleteBranch');
 
     const invalidName = await version.createBranch({
       name: 'Scenario/Budget' as any,
@@ -265,6 +285,21 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       },
     });
     expect(fastForwardBranch).not.toHaveBeenCalled();
+
+    await expect(
+      version.deleteRef({
+        name: 'refs/heads/main' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_PERMISSION_DENIED' })],
+      },
+    });
+    expect(deleteBranch).not.toHaveBeenCalled();
   });
 
   it('fast-forwards and updateBranch aliases fast-forward with stale guards', async () => {
@@ -334,7 +369,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     });
   });
 
-  it('reports unsupported delete paths without mutating branch service state', async () => {
+  it('deletes public branch refs through the attached service', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
     await version.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
 
@@ -345,37 +380,66 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
         expectedRefRevision: refVersion('0'),
       }),
     ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/delete-me',
+        commitId: COMMIT_A,
+        revision: refVersion('1'),
+        updatedAt: '2026-06-20T00:00:00.000Z',
+      },
+    });
+
+    expect(branchService.readBranch('scenario/delete-me')).toMatchObject({
+      ok: false,
+      error: {
+        code: 'refTombstoned',
+      },
+    });
+
+    await version.createBranch({ name: 'scenario/delete-ref' as any, targetCommitId: COMMIT_A });
+
+    await expect(
+      version.deleteRef({
+        name: 'refs/heads/scenario/delete-ref' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/delete-ref',
+        commitId: COMMIT_A,
+        revision: refVersion('1'),
+      },
+    });
+  });
+
+  it('rejects public delete without ref revision before service calls', async () => {
+    const { branchService, version } = createWorkbookVersionWithBranchService();
+    const deleteBranch = jest.spyOn(branchService, 'deleteBranch');
+    await version.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
+
+    await expect(
+      version.deleteRef({
+        name: 'refs/heads/scenario/delete-me' as any,
+        expectedHead: COMMIT_A,
+      }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            code: 'VERSION_REF_WRITE_UNAVAILABLE',
-            data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({ option: 'expectedRefRevision' }),
+            }),
           }),
         ],
       },
     });
-
-    await expect(
-      version.deleteRef({ name: 'refs/heads/scenario/delete-me' as any }),
-    ).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        diagnostics: [expect.objectContaining({ code: 'VERSION_REF_WRITE_UNAVAILABLE' })],
-      },
-    });
-
-    expect(branchService.readBranch('scenario/delete-me')).toMatchObject({
-      ok: true,
-      branch: {
-        ref: {
-          targetCommitId: COMMIT_A,
-          refVersion: refVersion('0'),
-        },
-      },
-    });
+    expect(deleteBranch).not.toHaveBeenCalled();
   });
 
   it('does not treat a raw ref store as a trusted public branch service', async () => {

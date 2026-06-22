@@ -165,6 +165,55 @@ describe('InMemoryRefStore branch CAS', () => {
   });
 });
 
+describe('InMemoryRefStore delete invariants', () => {
+  it('rejects deleting the last live ref from the current store state', () => {
+    const store = createStore();
+    const main = store.initializeMain({
+      targetCommitId: COMMIT_A,
+      createdBy: AUTHOR,
+      protected: false,
+    });
+    expectMutationOk(main);
+
+    const deleteMain = store.deleteRef({
+      name: 'main',
+      expectedHead: COMMIT_A,
+      expectedRefVersion: main.ref.refVersion,
+      deletedBy: AUTHOR,
+    });
+    expect(deleteMain.ok).toBe(false);
+    if (deleteMain.ok) throw new Error('expected last live ref delete to fail');
+    expect(deleteMain.error.code).toBe('lastLiveRef');
+
+    const branch = store.createBranch({
+      name: 'scenario/last-delete',
+      targetCommitId: COMMIT_A,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+    expectCreateOk(branch);
+
+    expectDeleteOk(
+      store.deleteRef({
+        name: 'main',
+        expectedHead: COMMIT_A,
+        expectedRefVersion: main.ref.refVersion,
+        deletedBy: AUTHOR,
+      }),
+    );
+
+    const deleteBranch = store.deleteRef({
+      name: 'scenario/last-delete',
+      expectedHead: COMMIT_A,
+      expectedRefVersion: branch.ref.refVersion,
+      deletedBy: AUTHOR,
+    });
+    expect(deleteBranch.ok).toBe(false);
+    if (deleteBranch.ok) throw new Error('expected last remaining branch delete to fail');
+    expect(deleteBranch.error.code).toBe('lastLiveRef');
+  });
+});
+
 describe('InMemoryRefStore tombstones', () => {
   it('returns tombstone conflicts from getRef and rejects ordinary create over tombstone', () => {
     const store = createStore([

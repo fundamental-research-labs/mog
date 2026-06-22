@@ -13,12 +13,14 @@ import {
   createInMemoryRefStore,
   parseRefVersion,
   type CreateBranchResult as RefStoreCreateBranchResult,
+  type DeleteRefResult as RefStoreDeleteRefResult,
   type GetRefResult as RefStoreGetRefResult,
   type ListRefsResult as RefStoreListRefsResult,
   type LiveRefRecord,
   type RefMutationConflict,
   type RefMutationResult as RefStoreMutationResult,
   type RefVersion,
+  type TombstoneRefRecord,
   type VersionDiagnostic,
 } from './ref-store';
 
@@ -62,6 +64,12 @@ export interface BranchRecord {
   readonly ref: LiveRefRecord;
 }
 
+export interface DeletedBranchRecord {
+  readonly name: RefName;
+  readonly refName: BranchRefName;
+  readonly ref: TombstoneRefRecord;
+}
+
 export interface CreateBranchInput {
   readonly name: RefName | BranchRefName | string;
   readonly targetCommitId: WorkbookCommitId | string;
@@ -85,6 +93,14 @@ export interface FastForwardBranchInput {
   readonly expectedOldCommitId?: WorkbookCommitId | string;
   readonly expectedRefVersion?: RefVersion;
   readonly updatedBy: VersionAuthor;
+}
+
+export interface DeleteBranchInput {
+  readonly name: RefName | BranchRefName | string;
+  readonly expectedHead?: WorkbookCommitId | string;
+  readonly expectedRefVersion?: RefVersion;
+  readonly deletedBy: VersionAuthor;
+  readonly deleteReason?: string;
 }
 
 export interface CreateDetachedHeadInput {
@@ -119,6 +135,14 @@ export type FastForwardBranchResult =
   | {
       readonly ok: true;
       readonly branch: BranchRecord;
+      readonly diagnostics: readonly [];
+    }
+  | BranchFailureResult;
+
+export type DeleteBranchResult =
+  | {
+      readonly ok: true;
+      readonly branch: DeletedBranchRecord;
       readonly diagnostics: readonly [];
     }
   | BranchFailureResult;
@@ -173,6 +197,13 @@ export interface BranchRefStore {
     readonly expectedRefVersion: RefVersion;
     readonly updatedBy: VersionAuthor;
   }): RefStoreMutationResult;
+  deleteRef(input: {
+    readonly name: RefName;
+    readonly expectedHead?: WorkbookCommitId;
+    readonly expectedRefVersion: RefVersion;
+    readonly deletedBy: VersionAuthor;
+    readonly deleteReason?: string;
+  }): RefStoreDeleteRefResult;
 }
 
 export interface InMemoryBranchServiceOptions {
@@ -362,6 +393,58 @@ export class InMemoryBranchService {
     }
 
     return { ok: true, branch: branchFromLiveRef(result.ref), diagnostics: [] };
+  }
+
+  deleteBranch(input: DeleteBranchInput): DeleteBranchResult {
+    const parsedName = parseBranchNameForResult(input.name);
+    if (!parsedName.ok) return parsedName.result;
+
+    if (input.expectedRefVersion === undefined) {
+      return failure(
+        'missingExpectedRefVersion',
+        'Branch delete requires expectedRefVersion.',
+        [
+          diagnostic(
+            'missingExpectedRefVersion',
+            'Branch delete requires expectedRefVersion.',
+            parsedName.name,
+            undefined,
+            undefined,
+            undefined,
+            { missingField: 'expectedRefVersion' },
+          ),
+        ],
+      );
+    }
+
+    const expectedHead =
+      input.expectedHead === undefined
+        ? undefined
+        : parseCommitForResult(input.expectedHead, 'expectedHead');
+    if (expectedHead !== undefined && !expectedHead.ok) return expectedHead.result;
+
+    const expectedRefVersion = parseRefVersionForResult(input.expectedRefVersion);
+    if (!expectedRefVersion.ok) return expectedRefVersion.result;
+
+    const result = this.refStore.deleteRef({
+      name: parsedName.name,
+      ...(expectedHead ? { expectedHead: expectedHead.commitId } : {}),
+      expectedRefVersion: expectedRefVersion.refVersion,
+      deletedBy: input.deletedBy,
+      ...(input.deleteReason ? { deleteReason: input.deleteReason } : {}),
+    });
+
+    if (!result.ok) {
+      if (
+        result.error.code === 'expectedHeadMismatch' ||
+        result.error.code === 'expectedRefVersionMismatch'
+      ) {
+        return casConflict(parsedName.name, result);
+      }
+      return fromRefStoreFailure(result);
+    }
+
+    return { ok: true, branch: branchFromTombstoneRef(result.ref), diagnostics: [] };
   }
 
   getHead(): GetBranchHeadResult {
@@ -555,6 +638,15 @@ function branchFromLiveRef(ref: LiveRefRecord): BranchRecord {
   });
 }
 
+function branchFromTombstoneRef(ref: TombstoneRefRecord): DeletedBranchRecord {
+  const cloned = cloneTombstoneRefRecord(ref);
+  return Object.freeze({
+    name: cloned.name,
+    refName: refNameStorageKey(cloned.name) as BranchRefName,
+    ref: cloned,
+  });
+}
+
 function parseCommitForResult(
   value: WorkbookCommitId | string,
   paramName: string,
@@ -609,15 +701,15 @@ function fromRefStoreFailure(result: {
 
 function casConflict(
   name: RefName,
-  result: Extract<RefStoreMutationResult, { readonly ok: false }>,
+  result: Extract<RefStoreMutationResult | RefStoreDeleteRefResult, { readonly ok: false }>,
 ): BranchFailureResult {
   return failure(
     'casConflict',
-    'Branch fast-forward compare-and-swap conflict.',
+    'Branch compare-and-swap conflict.',
     [
       diagnostic(
         'casConflict',
-        'Branch fast-forward compare-and-swap conflict.',
+        'Branch compare-and-swap conflict.',
         name,
         result.conflict?.actualHead,
         result.conflict?.actualRefVersion,
@@ -717,6 +809,16 @@ function cloneLiveRefRecord(ref: LiveRefRecord): LiveRefRecord {
     refVersion: cloneRefVersion(ref.refVersion),
     createdBy: Object.freeze({ ...ref.createdBy }),
     updatedBy: Object.freeze({ ...ref.updatedBy }),
+  });
+}
+
+function cloneTombstoneRefRecord(ref: TombstoneRefRecord): TombstoneRefRecord {
+  return Object.freeze({
+    ...ref,
+    previousProviderEpoch: Object.freeze({ ...ref.previousProviderEpoch }),
+    refVersion: cloneRefVersion(ref.refVersion),
+    deletedBy: Object.freeze({ ...ref.deletedBy }),
+    deleteDiagnostics: ref.deleteDiagnostics?.map((item) => Object.freeze({ ...item })),
   });
 }
 

@@ -511,7 +511,7 @@ export class InMemoryRefStore {
     if (record.protected) {
       return protectedRef(record.name, 'delete');
     }
-    if (this.liveRefCount() <= 1) {
+    if (!this.hasAnotherLiveRef(record.name)) {
       const diagnostics = [
         diagnostic('lastLiveRef', 'Deleting the last live ref is not supported.', record.name),
       ];
@@ -553,14 +553,13 @@ export class InMemoryRefStore {
     return `${prefix}:${this.versionDocumentId}:${this.nextGeneratedId}`;
   }
 
-  private liveRefCount(): number {
-    let count = 0;
+  private hasAnotherLiveRef(name: RefName): boolean {
     for (const record of this.records.values()) {
-      if (record.state === 'live') {
-        count += 1;
+      if (record.state === 'live' && record.name !== name) {
+        return true;
       }
     }
-    return count;
+    return false;
   }
 }
 

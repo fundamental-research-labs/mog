@@ -27,6 +27,7 @@ import {
   validateRefName,
   type RefNamespace,
 } from '../../document/version-store/ref-name';
+import { deleteWorkbookVersionBranchRef } from './version-refs-delete';
 import { branchDiagnosticMutationGuarantee } from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
@@ -234,21 +235,27 @@ export async function updateWorkbookVersionBranch(
 }
 
 export async function deleteWorkbookVersionBranch(
-  _ctx: DocumentContext,
+  ctx: DocumentContext,
   options: VersionDeleteRefOptions,
 ): Promise<VersionRefMutationResult> {
-  const parsed = parsePublicBranchName(options?.name, 'deleteBranch');
-  if (!parsed.ok) return degradedMutation(null, parsed.diagnostics);
-  return degradedMutation(null, [deleteUnsupportedDiagnostic('deleteBranch')]);
+  return deleteWorkbookVersionBranchRef({
+    ctx,
+    options,
+    operation: 'deleteBranch',
+    author: VERSION_REF_OPERATION_AUTHOR,
+  });
 }
 
 export async function deleteWorkbookVersionRef(
-  _ctx: DocumentContext,
+  ctx: DocumentContext,
   options: VersionDeleteRefOptions,
 ): Promise<VersionRefMutationResult> {
-  const parsed = parsePublicBranchName(options?.name, 'deleteRef');
-  if (!parsed.ok) return degradedMutation(null, parsed.diagnostics);
-  return degradedMutation(null, [deleteUnsupportedDiagnostic('deleteRef')]);
+  return deleteWorkbookVersionBranchRef({
+    ctx,
+    options,
+    operation: 'deleteRef',
+    author: VERSION_REF_OPERATION_AUTHOR,
+  });
 }
 
 function getAttachedVersionRefLifecycleService(
@@ -463,7 +470,11 @@ function parsePublicBranchName(value: unknown, operation: VersionRefOperation): 
           'VERSION_PERMISSION_DENIED',
           operation,
           'HEAD is symbolic and cannot be used as a branch ref mutation target.',
-          { severity: 'error', recoverability: 'unsupported' },
+          {
+            severity: 'error',
+            recoverability: 'unsupported',
+            ...noWriteAttemptedForMutation(operation),
+          },
         ),
       ],
     };
@@ -485,6 +496,7 @@ function parsePublicBranchName(value: unknown, operation: VersionRefOperation): 
             severity: 'error',
             recoverability: 'none',
             payload: { refName: 'redacted', issue: item.issue },
+            ...noWriteAttemptedForMutation(operation),
           },
         ),
       ),
@@ -736,19 +748,6 @@ function writeUnavailableDiagnostic(operation: VersionRefOperation): VersionStor
   );
 }
 
-function deleteUnsupportedDiagnostic(operation: VersionRefOperation): VersionStoreDiagnostic {
-  return publicDiagnostic(
-    'VERSION_REF_WRITE_UNAVAILABLE',
-    operation,
-    'Public ref deletion is unsupported until a document-scoped tombstone-safe branch service is attached.',
-    {
-      severity: 'warning',
-      recoverability: 'unsupported',
-      mutationGuarantee: 'no-write-attempted',
-    },
-  );
-}
-
 function protectedMainDiagnostic(operation: VersionRefOperation): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_PERMISSION_DENIED',
@@ -772,6 +771,7 @@ function invalidRefNameDiagnostic(operation: VersionRefOperation): VersionStoreD
       severity: 'error',
       recoverability: 'none',
       payload: { refName: 'redacted' },
+      ...noWriteAttemptedForMutation(operation),
     },
   );
 }
@@ -797,7 +797,12 @@ function invalidCommitDiagnostic(
     'VERSION_INVALID_COMMIT_ID',
     operation,
     'The supplied commit id is invalid.',
-    { severity: 'error', recoverability: 'none', payload: { option } },
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload: { option },
+      ...noWriteAttemptedForMutation(operation),
+    },
   );
 }
 
@@ -809,7 +814,12 @@ function invalidOptionsDiagnostic(
     'VERSION_INVALID_OPTIONS',
     operation,
     'The version ref lifecycle options are invalid for this method.',
-    { severity: 'error', recoverability: 'none', payload: { option } },
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload: { option },
+      ...noWriteAttemptedForMutation(operation),
+    },
   );
 }
 
@@ -897,6 +907,12 @@ function isRefMutationOperation(operation: VersionRefOperation): boolean {
     operation === 'deleteBranch' ||
     operation === 'deleteRef'
   );
+}
+
+function noWriteAttemptedForMutation(
+  operation: VersionRefOperation,
+): { readonly mutationGuarantee: 'no-write-attempted' } | Record<string, never> {
+  return isRefMutationOperation(operation) ? { mutationGuarantee: 'no-write-attempted' } : {};
 }
 
 function safeMessageForIssue(issueCode: string, operation: VersionRefOperation): string {

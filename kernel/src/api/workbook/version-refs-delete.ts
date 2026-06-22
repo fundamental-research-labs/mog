@@ -350,9 +350,7 @@ function invalidRefNameDiagnostic(
       severity: 'error',
       recoverability: 'none',
       payload: { refName: 'redacted' },
-      ...(isDeleteOperation(operation)
-        ? { mutationGuarantee: 'no-write-attempted' as const }
-        : {}),
+      ...(isDeleteOperation(operation) ? { mutationGuarantee: 'no-write-attempted' as const } : {}),
     },
   );
 }

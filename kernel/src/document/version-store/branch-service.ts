@@ -400,21 +400,17 @@ export class InMemoryBranchService {
     if (!parsedName.ok) return parsedName.result;
 
     if (input.expectedRefVersion === undefined) {
-      return failure(
-        'missingExpectedRefVersion',
-        'Branch delete requires expectedRefVersion.',
-        [
-          diagnostic(
-            'missingExpectedRefVersion',
-            'Branch delete requires expectedRefVersion.',
-            parsedName.name,
-            undefined,
-            undefined,
-            undefined,
-            { missingField: 'expectedRefVersion' },
-          ),
-        ],
-      );
+      return failure('missingExpectedRefVersion', 'Branch delete requires expectedRefVersion.', [
+        diagnostic(
+          'missingExpectedRefVersion',
+          'Branch delete requires expectedRefVersion.',
+          parsedName.name,
+          undefined,
+          undefined,
+          undefined,
+          { missingField: 'expectedRefVersion' },
+        ),
+      ]);
     }
 
     const expectedHead =

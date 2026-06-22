@@ -5,6 +5,7 @@ import type {
   VersionDiffOptions,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
+  ObjectDigest,
   VersionPageToken,
   VersionRecordRevision,
   VersionRedactedValue,
@@ -52,9 +53,23 @@ type DiffServiceDiagnostic = PublicVersionStoreDiagnostic & {
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
 };
 
-type DiffServiceResult = WorkbookDiffPage & {
+type DiffServiceSuccessResult = Extract<WorkbookDiffPage, { readonly status: 'success' }> & {
   readonly diagnostics: readonly (PublicVersionStoreDiagnostic | VersionStoreDiagnostic)[];
 };
+
+type DiffServiceDegradedResult = Extract<WorkbookDiffPage, { readonly status: 'degraded' }> & {
+  readonly diagnostics: readonly (PublicVersionStoreDiagnostic | VersionStoreDiagnostic)[];
+};
+
+type DiffServiceResult = DiffServiceSuccessResult | DiffServiceDegradedResult;
+
+export type WorkbookVersionDiffMetadataPage =
+  | (DiffServiceSuccessResult & {
+      readonly baseCommitId: WorkbookCommitId;
+      readonly targetCommitId: WorkbookCommitId;
+      readonly changeSetDigest: ObjectDigest;
+    })
+  | DiffServiceDegradedResult;
 
 type VersionObjectRecordReader = Pick<VersionObjectStore, 'getObjectRecord'>;
 
@@ -89,6 +104,23 @@ export class WorkbookVersionDiffService {
     target: NormalizedDiffCommitish,
     options: VersionDiffOptions = {},
   ): Promise<DiffServiceResult> {
+    const result = await this.diffWithMetadata(base, target, options);
+    if (result.status === 'degraded') return result;
+    return {
+      status: 'success',
+      items: result.items,
+      ...(result.nextPageToken ? { nextPageToken: result.nextPageToken } : {}),
+      readRevision: result.readRevision,
+      order: result.order,
+      diagnostics: result.diagnostics,
+    };
+  }
+
+  async diffWithMetadata(
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+    options: VersionDiffOptions = {},
+  ): Promise<WorkbookVersionDiffMetadataPage> {
     const parsedOptions = parseDiffOptions(options);
     if (parsedOptions.diagnostics.length > 0) {
       return degradedDiffPage(parsedOptions.diagnostics);
@@ -169,6 +201,9 @@ export class WorkbookVersionDiffService {
       readRevision: resolvedTarget.readRevision,
       order: 'semantic-change-order',
       diagnostics: [],
+      baseCommitId: resolvedBase.commitId,
+      targetCommitId: resolvedTarget.commitId,
+      changeSetDigest: targetCommit.payload.semanticChangeSetDigest,
     };
   }
 
@@ -679,7 +714,7 @@ function recoverabilityForIssue(issueCode: string): PublicVersionStoreDiagnostic
 
 function degradedDiffPage(
   diagnostics: readonly (PublicVersionStoreDiagnostic | VersionStoreDiagnostic)[],
-): DiffServiceResult {
+): DiffServiceDegradedResult {
   return {
     status: 'degraded',
     items: [],

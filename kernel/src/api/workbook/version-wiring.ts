@@ -8,6 +8,7 @@ import {
   createProviderBackedWorkbookVersionReviewService,
   hasWorkbookVersionReviewRecordStoreProvider,
 } from '../../document/version-store/review-service';
+import { createWorkbookVersionReviewDiffService } from '../../document/version-store/review-diff-service';
 import {
   createPendingRemotePromotionService,
   type PendingRemotePromotionService,
@@ -140,7 +141,10 @@ export function attachWorkbookVersioning(
     existing.versionReviewService ??
     existing.reviewMetadataStore ??
     (hasWorkbookVersionReviewRecordStoreProvider(config.provider)
-      ? createProviderBackedWorkbookVersionReviewService({ provider: config.provider })
+      ? createProviderBackedWorkbookVersionReviewService({
+          provider: config.provider,
+          diffService: createWorkbookVersionReviewDiffService({ provider: config.provider }),
+        })
       : undefined);
   runtime.versioning = {
     ...existing,

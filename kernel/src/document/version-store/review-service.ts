@@ -25,6 +25,7 @@ import {
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from './registry';
+import type { WorkbookVersionReviewDiffService } from './review-diff-service';
 
 const DEFAULT_REVIEW_LIST_LIMIT = 50;
 const REVIEW_LIST_CURSOR_PREFIX = 'review-list:';
@@ -371,9 +372,14 @@ export class InMemoryWorkbookVersionReviewRecordStore
 
 export class ProviderBackedWorkbookVersionReviewService implements WorkbookVersionReviewService {
   private readonly openStore: () => Promise<WorkbookVersionReviewRecordStore>;
+  private readonly diffService?: WorkbookVersionReviewDiffService;
 
-  constructor(options: { readonly openStore: () => Promise<WorkbookVersionReviewRecordStore> }) {
+  constructor(options: {
+    readonly openStore: () => Promise<WorkbookVersionReviewRecordStore>;
+    readonly diffService?: WorkbookVersionReviewDiffService;
+  }) {
     this.openStore = options.openStore;
+    this.diffService = options.diffService;
   }
 
   async listReviews(input: VersionListReviewsInput): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
@@ -397,21 +403,65 @@ export class ProviderBackedWorkbookVersionReviewService implements WorkbookVersi
   }
 
   async getReviewDiff(
-    _input: VersionGetReviewDiffInput,
+    input: VersionGetReviewDiffInput,
   ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
-    return targetUnavailable(
-      'getReviewDiff',
-      'VERSION_REVIEW_DIFF_UNAVAILABLE',
-      'Provider-backed review diff projection is not attached yet; review records remain persisted.',
-    );
+    if (!this.diffService) {
+      return targetUnavailable(
+        'getReviewDiff',
+        'VERSION_REVIEW_DIFF_UNAVAILABLE',
+        'Provider-backed review diff projection is not attached yet; review records remain persisted.',
+      );
+    }
+    if (!input.reviewId) return this.diffService.getReviewDiff(input);
+    const resolved = await this.reviewDiffInputForReview(input);
+    if (!resolved.ok) return resolved;
+    return this.diffService.getReviewDiff(resolved.value);
+  }
+
+  private async reviewDiffInputForReview(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<VersionGetReviewDiffInput>> {
+    if (!input.reviewId) return ok(input);
+    const review = await (await this.openStore()).getReview({ reviewId: input.reviewId });
+    if (!review.ok) return review as VersionResult<VersionGetReviewDiffInput>;
+    const baseCommitId = review.value.baseCommitId;
+    const headCommitId = review.value.headCommitId;
+    if (!baseCommitId || !headCommitId) {
+      return invalidState(
+        'review_diff_commit_range_unavailable',
+        ['commit_range_review'],
+        'Review record does not carry base/head commits for semantic diff projection.',
+      );
+    }
+    if (input.baseCommitId && input.baseCommitId !== baseCommitId) {
+      return invalidState(
+        'review_diff_base_mismatch',
+        ['matching_review_base_commit'],
+        'baseCommitId must match the review record base commit.',
+      );
+    }
+    if (input.headCommitId && input.headCommitId !== headCommitId) {
+      return invalidState(
+        'review_diff_head_mismatch',
+        ['matching_review_head_commit'],
+        'headCommitId must match the review record head commit.',
+      );
+    }
+    return ok({
+      ...input,
+      baseCommitId,
+      headCommitId,
+    });
   }
 }
 
 export function createProviderBackedWorkbookVersionReviewService(options: {
   readonly provider: WorkbookVersionReviewRecordStoreProvider;
+  readonly diffService?: WorkbookVersionReviewDiffService;
 }): WorkbookVersionReviewService {
   return new ProviderBackedWorkbookVersionReviewService({
     openStore: () => options.provider.openWorkbookVersionReviewRecordStore(),
+    ...(options.diffService ? { diffService: options.diffService } : {}),
   });
 }
 

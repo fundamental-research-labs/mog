@@ -12,29 +12,74 @@ import type {
   GetAgentProposalInput,
   GetProposalWorkspaceInput,
   Paged,
-  VersionBranchName, VersionBranchRefReadResult,
-  VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
-  VersionCheckoutOptions, VersionCheckoutTarget, VersionCommitish,
-  VersionCreateBranchOptions, VersionCommitOptions, VersionDegradedHeadResult,
-  VersionDeleteRefOptions, VersionDiffOptions, VersionDiagnosticPublicPayload,
-  VersionFastForwardBranchOptions, VersionGetHeadOptions, VersionGetMergeConflictDetailRequest,
-  VersionListCommitsOptions, VersionListRefsOptions, VersionMainRefName, VersionMergeInput, VersionMergeOptions,
-  VersionMergeConflictDetailResult, VersionMergeResult, VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPutMergeResolutionPayloadRequest,
-  VersionPutMergeResolutionPayloadResult, VersionRecordRevision, VersionRef, VersionRefListResult,
-  VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
-  VersionAppendReviewDecisionInput, VersionCreateReviewInput, VersionGetReviewDiffInput, VersionGetReviewInput,
+  VersionBranchName,
+  VersionBranchRefReadResult,
+  VersionApplyMergeInput,
+  VersionApplyMergeOptions,
+  VersionApplyMergeResult,
+  VersionCheckoutOptions,
+  VersionCheckoutTarget,
+  VersionCommitish,
+  VersionCreateBranchOptions,
+  VersionCommitOptions,
+  VersionDegradedHeadResult,
+  VersionDeleteRefOptions,
+  VersionDiffOptions,
+  VersionDiagnosticPublicPayload,
+  VersionFastForwardBranchOptions,
+  VersionGetHeadOptions,
+  VersionGetMergeConflictDetailRequest,
+  VersionListCommitsOptions,
+  VersionListRefsOptions,
+  VersionMainRefName,
+  VersionMergeInput,
+  VersionMergeOptions,
+  VersionMergeConflictDetailResult,
+  VersionMergeResult,
+  VersionPromotePendingRemoteOptions,
+  VersionPromotePendingRemoteResult,
+  VersionPutMergeResolutionPayloadRequest,
+  VersionPutMergeResolutionPayloadResult,
+  VersionRecordRevision,
+  VersionRef,
+  VersionRefListResult,
+  VersionRefMutationResult,
+  VersionRefName,
+  VersionRefReadResult,
+  VersionRefSelector,
+  VersionAppendReviewDecisionInput,
+  VersionCreateReviewInput,
+  VersionGetReviewDiffInput,
+  VersionGetReviewInput,
   ListAgentProposalsInput,
   MarkAgentProposalVerifiedInput,
   OpenProposalReviewInput,
   RejectAgentProposalInput,
   StartProposalWorkspaceInput,
   SupersedeAgentProposalInput,
-  VersionListReviewsInput, WorkbookVersionReviewDiffPage, WorkbookVersionReviewRecord, WorkbookVersionReviewRecordSummary,
-  VersionResult, VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
-  VersionSemanticDiffPage, VersionStoreDiagnostic, VersionSymbolicRef, VersionSymbolicRefReadResult,
-  VersionUpdateBranchOptions, VersionUpdateReviewStatusInput, VersionHead, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
-  WorkbookDiffPage, WorkbookVersion, WorkbookVersionCapabilityStatus, WorkbookVersionDiagnostic,
-  WorkbookVersionRolloutStage, WorkbookVersionStatus,
+  VersionListReviewsInput,
+  WorkbookVersionReviewDiffPage,
+  WorkbookVersionReviewRecord,
+  WorkbookVersionReviewRecordSummary,
+  VersionResult,
+  VersionSaveMergeResolutionsRequest,
+  VersionSaveMergeResolutionsResult,
+  VersionSemanticDiffPage,
+  VersionStoreDiagnostic,
+  VersionSymbolicRef,
+  VersionSymbolicRefReadResult,
+  VersionUpdateBranchOptions,
+  VersionUpdateReviewStatusInput,
+  VersionHead,
+  WorkbookCommitId,
+  WorkbookCommitRef,
+  WorkbookCommitSummary,
+  WorkbookDiffPage,
+  WorkbookVersion,
+  WorkbookVersionCapabilityStatus,
+  WorkbookVersionDiagnostic,
+  WorkbookVersionRolloutStage,
+  WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
 import { observeMutationAdmission } from '../../bridges/compute/mutation-admission';
@@ -42,17 +87,54 @@ import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
 import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
 import { applyMergeWorkbookVersion } from './version-apply-merge';
-import { checkoutWorkbookVersion, hasAttachedVersionCheckoutService, type VersionCheckoutTransactionGuard } from './version-checkout';
+import {
+  checkoutWorkbookVersion,
+  hasAttachedVersionCheckoutService,
+  type VersionCheckoutTransactionGuard,
+} from './version-checkout';
 import { commitWorkbookVersion, hasAttachedVersionWriteService } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
 import { listWorkbookVersionCommits } from './version-list-commits';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
-import { getMergeConflictDetailWorkbookVersion, putMergeResolutionPayloadWorkbookVersion, saveMergeResolutionsWorkbookVersion } from './version-merge-review-endpoints';
-import { hasAttachedPendingRemotePromotionService, promotePendingRemoteWorkbookVersion } from './version-pending-remote';
-import { appendWorkbookVersionReviewDecision, createWorkbookVersionReview, getWorkbookVersionReview, getWorkbookVersionReviewDiff, listWorkbookVersionReviews, updateWorkbookVersionReviewStatus } from './version-review';
-import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
+import {
+  getMergeConflictDetailWorkbookVersion,
+  putMergeResolutionPayloadWorkbookVersion,
+  saveMergeResolutionsWorkbookVersion,
+} from './version-merge-review-endpoints';
+import {
+  hasAttachedPendingRemotePromotionService,
+  promotePendingRemoteWorkbookVersion,
+} from './version-pending-remote';
+import {
+  appendWorkbookVersionReviewDecision,
+  createWorkbookVersionReview,
+  getWorkbookVersionReview,
+  getWorkbookVersionReviewDiff,
+  listWorkbookVersionReviews,
+  updateWorkbookVersionReviewStatus,
+} from './version-review';
+import {
+  versionResultFromApplyMerge,
+  versionResultFromCheckout,
+  versionResultFromDiffPage,
+  versionResultFromHead,
+  versionResultFromMerge,
+  versionResultFromRefList,
+  versionResultFromRefMutation,
+  versionResultFromRefRead,
+} from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
-import { createWorkbookVersionBranch, deleteWorkbookVersionBranch, deleteWorkbookVersionRef, fastForwardWorkbookVersionBranch, getWorkbookVersionRef, hasAttachedVersionRefLifecycleService, listWorkbookVersionRefs, readWorkbookVersionRef, updateWorkbookVersionBranch } from './version-refs';
+import {
+  createWorkbookVersionBranch,
+  deleteWorkbookVersionBranch,
+  deleteWorkbookVersionRef,
+  fastForwardWorkbookVersionBranch,
+  getWorkbookVersionRef,
+  hasAttachedVersionRefLifecycleService,
+  listWorkbookVersionRefs,
+  readWorkbookVersionRef,
+  updateWorkbookVersionBranch,
+} from './version-refs';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -181,7 +263,12 @@ function getRolloutStage(provenanceAdmissionPresent: boolean): WorkbookVersionRo
 }
 
 export class WorkbookVersionImpl implements WorkbookVersion {
-  constructor(private readonly ctx: DocumentContext, private readonly options: { readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard } = {}) {}
+  constructor(
+    private readonly ctx: DocumentContext,
+    private readonly options: {
+      readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
+    } = {},
+  ) {}
 
   async getStatus(): Promise<WorkbookVersionStatus> {
     const services = getAttachedVersionServices(this.ctx);
@@ -190,7 +277,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const checkoutServiceAttached = hasAttachedVersionCheckoutService(this.ctx);
     const mergeServiceAttached = hasAttachedVersionMergeService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
-    const pendingRemotePromotionServiceAttached = hasAttachedPendingRemotePromotionService(this.ctx);
+    const pendingRemotePromotionServiceAttached = hasAttachedPendingRemotePromotionService(
+      this.ctx,
+    );
     const provenanceAvailable = provenanceAdmissionPresent || pendingRemotePromotionServiceAttached;
     const rolloutStage = getRolloutStage(provenanceAvailable);
 
@@ -276,9 +365,10 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const objectStoreDiagnostics = services?.objectStore
       ? [objectStoreFoundation]
       : [objectStoreFoundation, objectStoreServiceUnavailable];
-    const refLifecycleDiagnostics = refLifecycleServiceAttached || services?.refStore
-      ? [refLifecycleFoundation]
-      : [refLifecycleFoundation, refLifecycleServiceUnavailable];
+    const refLifecycleDiagnostics =
+      refLifecycleServiceAttached || services?.refStore
+        ? [refLifecycleFoundation]
+        : [refLifecycleFoundation, refLifecycleServiceUnavailable];
     const commitApiDiagnostics = writeServiceAttached
       ? [commitApiServiceAttached]
       : [commitApiPending];
@@ -303,8 +393,18 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       rolloutStage,
       objectStoreFoundation: capability('present', true, 'VC-04', objectStoreDiagnostics),
       refLifecycleFoundation: capability('present', true, 'VC-05', refLifecycleDiagnostics),
-      commitApi: capability(writeServiceAttached ? 'present' : 'pending', writeServiceAttached, 'VC-04', commitApiDiagnostics),
-      checkout: capability(checkoutStage, checkoutServiceAttached, checkoutDependency, checkoutDiagnostics),
+      commitApi: capability(
+        writeServiceAttached ? 'present' : 'pending',
+        writeServiceAttached,
+        'VC-04',
+        commitApiDiagnostics,
+      ),
+      checkout: capability(
+        checkoutStage,
+        checkoutServiceAttached,
+        checkoutDependency,
+        checkoutDiagnostics,
+      ),
       merge: capability(
         mergeServiceAttached ? 'present' : 'pending',
         mergeServiceAttached,
@@ -320,7 +420,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       diagnostics,
     };
   }
-  async getSurfaceStatus() { return getWorkbookVersionSurfaceStatus(this.ctx, await this.getStatus()); }
+  async getSurfaceStatus() {
+    return getWorkbookVersionSurfaceStatus(this.ctx, await this.getStatus());
+  }
   async getHead(): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions): Promise<VersionResult<VersionHead>>;
   async getHead(_options: VersionGetHeadOptions = {}): Promise<VersionResult<VersionHead>> {
@@ -336,53 +438,172 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       if (readService.getHead) {
         return versionResultFromHead(mapLegacyHeadResult(await readService.getHead()));
       }
-    } catch { return failHead([providerErrorDiagnostic('getHead')]); }
+    } catch {
+      return failHead([providerErrorDiagnostic('getHead')]);
+    }
     return failHead([serviceUnavailableDiagnostic('getHead')]);
   }
 
-  async listCommits(options: VersionListCommitsOptions = {}): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
+  async listCommits(
+    options: VersionListCommitsOptions = {},
+  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
     return listWorkbookVersionCommits(this.ctx, options);
   }
-  async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> { return commitWorkbookVersion(this.ctx, options); }
-  async checkout(target: VersionCheckoutTarget, options: VersionCheckoutOptions = {}): Promise<VersionResult<CheckoutVersionResult>> {
-    return versionResultFromCheckout(await checkoutWorkbookVersion(this.ctx, target, options, this.options.checkoutTransactionGuard));
+  async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> {
+    return commitWorkbookVersion(this.ctx, options);
   }
-  async merge(input: VersionMergeInput, options: VersionMergeOptions = {}): Promise<VersionResult<VersionMergeResult>> {
+  async checkout(
+    target: VersionCheckoutTarget,
+    options: VersionCheckoutOptions = {},
+  ): Promise<VersionResult<CheckoutVersionResult>> {
+    return versionResultFromCheckout(
+      await checkoutWorkbookVersion(
+        this.ctx,
+        target,
+        options,
+        this.options.checkoutTransactionGuard,
+      ),
+    );
+  }
+  async merge(
+    input: VersionMergeInput,
+    options: VersionMergeOptions = {},
+  ): Promise<VersionResult<VersionMergeResult>> {
     return versionResultFromMerge(await mergeWorkbookVersion(this.ctx, input, options));
   }
-  async applyMerge(input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}): Promise<VersionResult<VersionApplyMergeResult>> {
+  async applyMerge(
+    input: VersionApplyMergeInput,
+    options: VersionApplyMergeOptions = {},
+  ): Promise<VersionResult<VersionApplyMergeResult>> {
     return versionResultFromApplyMerge(await applyMergeWorkbookVersion(this.ctx, input, options));
   }
-  async promotePendingRemote(options: VersionPromotePendingRemoteOptions = {}): Promise<VersionResult<VersionPromotePendingRemoteResult>> { return promotePendingRemoteWorkbookVersion(this.ctx, options); }
-  async saveMergeResolutions(input: VersionSaveMergeResolutionsRequest): Promise<VersionResult<VersionSaveMergeResolutionsResult>> { return saveMergeResolutionsWorkbookVersion(this.ctx, input); }
-  async getMergeConflictDetail(input: VersionGetMergeConflictDetailRequest): Promise<VersionResult<VersionMergeConflictDetailResult>> { return getMergeConflictDetailWorkbookVersion(this.ctx, input); }
-  async putMergeResolutionPayload(input: VersionPutMergeResolutionPayloadRequest): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> { return putMergeResolutionPayloadWorkbookVersion(this.ctx, input); }
-  async listReviews(input: VersionListReviewsInput = {}): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> { return listWorkbookVersionReviews(this.ctx, input); }
-  async getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return getWorkbookVersionReview(this.ctx, input); }
-  async createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return createWorkbookVersionReview(this.ctx, input); }
-  async appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return appendWorkbookVersionReviewDecision(this.ctx, input); }
-  async updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return updateWorkbookVersionReviewStatus(this.ctx, input); }
-  async getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>> { return getWorkbookVersionReviewDiff(this.ctx, input); }
-  async createProposal(_input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('createProposal'); }
-  async startProposalWorkspace(_input: StartProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>> { return proposalCapabilityUnavailable('startProposalWorkspace'); }
-  async getProposalWorkspace(_input: GetProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>> { return proposalCapabilityUnavailable('getProposalWorkspace'); }
-  async disposeProposalWorkspace(_input: DisposeProposalWorkspaceInput): Promise<VersionResult<{ readonly disposed: true }>> { return proposalCapabilityUnavailable('disposeProposalWorkspace'); }
-  async commitProposalWorkspace(_input: CommitProposalWorkspaceInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('commitProposalWorkspace'); }
-  async failProposal(_input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('failProposal'); }
-  async getProposal(_input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('getProposal'); }
-  async listProposals(_input: ListAgentProposalsInput): Promise<VersionResult<Paged<AgentProposalSummary>>> { return proposalCapabilityUnavailable('listProposals'); }
-  async markProposalVerified(_input: MarkAgentProposalVerifiedInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('markProposalVerified'); }
-  async openProposalReview(_input: OpenProposalReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return proposalCapabilityUnavailable('openProposalReview'); }
-  async acceptProposal(_input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>> { return proposalCapabilityUnavailable('acceptProposal'); }
-  async rejectProposal(_input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('rejectProposal'); }
-  async supersedeProposal(_input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('supersedeProposal'); }
-  async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<VersionResult<VersionSemanticDiffPage>> {
-    return versionResultFromDiffPage(await diffWorkbookVersion(this.ctx, base, target, options), options.pageSize ?? 50);
+  async promotePendingRemote(
+    options: VersionPromotePendingRemoteOptions = {},
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>> {
+    return promotePendingRemoteWorkbookVersion(this.ctx, options);
+  }
+  async saveMergeResolutions(
+    input: VersionSaveMergeResolutionsRequest,
+  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>> {
+    return saveMergeResolutionsWorkbookVersion(this.ctx, input);
+  }
+  async getMergeConflictDetail(
+    input: VersionGetMergeConflictDetailRequest,
+  ): Promise<VersionResult<VersionMergeConflictDetailResult>> {
+    return getMergeConflictDetailWorkbookVersion(this.ctx, input);
+  }
+  async putMergeResolutionPayload(
+    input: VersionPutMergeResolutionPayloadRequest,
+  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> {
+    return putMergeResolutionPayloadWorkbookVersion(this.ctx, input);
+  }
+  async listReviews(
+    input: VersionListReviewsInput = {},
+  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
+    return listWorkbookVersionReviews(this.ctx, input);
+  }
+  async getReview(
+    input: VersionGetReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return getWorkbookVersionReview(this.ctx, input);
+  }
+  async createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return createWorkbookVersionReview(this.ctx, input);
+  }
+  async appendReviewDecision(
+    input: VersionAppendReviewDecisionInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return appendWorkbookVersionReviewDecision(this.ctx, input);
+  }
+  async updateReviewStatus(
+    input: VersionUpdateReviewStatusInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return updateWorkbookVersionReviewStatus(this.ctx, input);
+  }
+  async getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
+    return getWorkbookVersionReviewDiff(this.ctx, input);
+  }
+  async createProposal(_input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('createProposal');
+  }
+  async startProposalWorkspace(
+    _input: StartProposalWorkspaceInput,
+  ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
+    return proposalCapabilityUnavailable('startProposalWorkspace');
+  }
+  async getProposalWorkspace(
+    _input: GetProposalWorkspaceInput,
+  ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
+    return proposalCapabilityUnavailable('getProposalWorkspace');
+  }
+  async disposeProposalWorkspace(
+    _input: DisposeProposalWorkspaceInput,
+  ): Promise<VersionResult<{ readonly disposed: true }>> {
+    return proposalCapabilityUnavailable('disposeProposalWorkspace');
+  }
+  async commitProposalWorkspace(
+    _input: CommitProposalWorkspaceInput,
+  ): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('commitProposalWorkspace');
+  }
+  async failProposal(_input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('failProposal');
+  }
+  async getProposal(_input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('getProposal');
+  }
+  async listProposals(
+    _input: ListAgentProposalsInput,
+  ): Promise<VersionResult<Paged<AgentProposalSummary>>> {
+    return proposalCapabilityUnavailable('listProposals');
+  }
+  async markProposalVerified(
+    _input: MarkAgentProposalVerifiedInput,
+  ): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('markProposalVerified');
+  }
+  async openProposalReview(
+    _input: OpenProposalReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return proposalCapabilityUnavailable('openProposalReview');
+  }
+  async acceptProposal(
+    _input: AcceptAgentProposalInput,
+  ): Promise<VersionResult<AgentProposalAcceptResult>> {
+    return proposalCapabilityUnavailable('acceptProposal');
+  }
+  async rejectProposal(_input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('rejectProposal');
+  }
+  async supersedeProposal(
+    _input: SupersedeAgentProposalInput,
+  ): Promise<VersionResult<AgentProposal>> {
+    return proposalCapabilityUnavailable('supersedeProposal');
+  }
+  async diff(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffOptions = {},
+  ): Promise<VersionResult<VersionSemanticDiffPage>> {
+    return versionResultFromDiffPage(
+      await diffWorkbookVersion(this.ctx, base, target, options),
+      options.pageSize ?? 50,
+    );
   }
   async readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  async readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
-  async readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>> {
+  async readRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  async readRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
+  async readRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>> {
     if (name !== VERSION_HEAD_REF && name !== VERSION_MAIN_REF) {
       return versionResultFromRefRead('readRef', await readWorkbookVersionRef(this.ctx, name));
     }
@@ -390,48 +611,86 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const publicReadName = name as VersionRefSelector;
     const readService = getAttachedVersionReadService(this.ctx);
     if (!readService?.readRef) {
-      return versionResultFromRefRead('readRef', degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: publicReadName })]));
+      return versionResultFromRefRead(
+        'readRef',
+        degradedRef(null, [serviceUnavailableDiagnostic('readRef', { refName: publicReadName })]),
+      );
     }
 
     try {
-      return versionResultFromRefRead('readRef', mapRefResult(await readService.readRef(publicReadName), publicReadName));
+      return versionResultFromRefRead(
+        'readRef',
+        mapRefResult(await readService.readRef(publicReadName), publicReadName),
+      );
     } catch {
-      return versionResultFromRefRead('readRef', degradedRef(null, [providerErrorDiagnostic('readRef', { refName: publicReadName })]));
+      return versionResultFromRefRead(
+        'readRef',
+        degradedRef(null, [providerErrorDiagnostic('readRef', { refName: publicReadName })]),
+      );
     }
   }
 
   async getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  async getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
-  async getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>> {
+  async getRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  async getRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
+  async getRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>> {
     return versionResultFromRefRead('getRef', await getWorkbookVersionRef(this.ctx, name));
   }
 
   async listRefs(options: VersionListRefsOptions = {}): Promise<VersionResult<Paged<VersionRef>>> {
-    return versionResultFromRefList(await listWorkbookVersionRefs(this.ctx, options), VERSION_LIST_REFS_DEFAULT_PAGE_SIZE);
+    return versionResultFromRefList(
+      await listWorkbookVersionRefs(this.ctx, options),
+      VERSION_LIST_REFS_DEFAULT_PAGE_SIZE,
+    );
   }
 
-  async createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>> { return versionResultFromRefMutation('createBranch', await createWorkbookVersionBranch(this.ctx, options)); }
+  async createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation(
+      'createBranch',
+      await createWorkbookVersionBranch(this.ctx, options),
+    );
+  }
 
-  async fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>> {
-    return versionResultFromRefMutation('fastForwardBranch', await fastForwardWorkbookVersionBranch(this.ctx, options));
+  async fastForwardBranch(
+    options: VersionFastForwardBranchOptions,
+  ): Promise<VersionResult<VersionRef>> {
+    return versionResultFromRefMutation(
+      'fastForwardBranch',
+      await fastForwardWorkbookVersionBranch(this.ctx, options),
+    );
   }
 
   async updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>> {
-    return versionResultFromRefMutation('updateBranch', await updateWorkbookVersionBranch(this.ctx, options));
+    return versionResultFromRefMutation(
+      'updateBranch',
+      await updateWorkbookVersionBranch(this.ctx, options),
+    );
   }
 
   async deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
-    return versionResultFromRefMutation('deleteBranch', await deleteWorkbookVersionBranch(this.ctx, options));
+    return versionResultFromRefMutation(
+      'deleteBranch',
+      await deleteWorkbookVersionBranch(this.ctx, options),
+    );
   }
 
   async deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
-    return versionResultFromRefMutation('deleteRef', await deleteWorkbookVersionRef(this.ctx, options));
+    return versionResultFromRefMutation(
+      'deleteRef',
+      await deleteWorkbookVersionRef(this.ctx, options),
+    );
   }
 }
 
 function proposalCapabilityUnavailable<T>(operation: VersionProposalOperation): VersionResult<T> {
-  const message = 'Agent proposal workflows require branch-scoped materialization support before they can run.';
+  const message =
+    'Agent proposal workflows require branch-scoped materialization support before they can run.';
   return {
     ok: false,
     error: {

@@ -11,14 +11,17 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
 const AGENT_PROPOSAL_STATUS_VALUES = Object.freeze([
-  'open',
-  'workspace',
+  'draft',
+  'workspace_open',
   'committed',
   'verified',
-  'accepted',
+  'ready_for_review',
   'rejected',
-  'failed',
+  'stale',
   'superseded',
+  'merge_conflicted',
+  'failed',
+  'applied',
 ] as const);
 
 export function agentProposalStorageKey(

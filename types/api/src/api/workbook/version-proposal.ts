@@ -68,8 +68,9 @@ export interface AgentProposalWorkspaceHandle {
   readonly workbookSessionId: string;
 }
 
-export interface AgentProposalWorkspaceSession<WorkbookLike = unknown>
-  extends AgentProposalWorkspaceHandle {
+export interface AgentProposalWorkspaceSession<
+  WorkbookLike = unknown,
+> extends AgentProposalWorkspaceHandle {
   getWorkbook(): WorkbookLike;
   dispose(): Promise<void>;
 }
@@ -238,7 +239,5 @@ export interface VersionProposalApi {
     input: AcceptAgentProposalInput,
   ): Promise<VersionResult<AgentProposalAcceptResult>>;
   rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;
-  supersedeProposal(
-    input: SupersedeAgentProposalInput,
-  ): Promise<VersionResult<AgentProposal>>;
+  supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;
 }

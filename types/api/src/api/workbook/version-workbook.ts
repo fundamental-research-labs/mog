@@ -78,7 +78,9 @@ export interface WorkbookVersion {
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
-  listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
+  listCommits(
+    options?: ListVersionCommitsInput,
+  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
   promotePendingRemote(
     options?: VersionPromotePendingRemoteOptions,
@@ -87,7 +89,10 @@ export interface WorkbookVersion {
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
   ): Promise<VersionResult<CheckoutVersionResult>>;
-  merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;
+  merge(
+    input: VersionMergeInput,
+    options?: VersionMergeOptions,
+  ): Promise<VersionResult<VersionMergeResult>>;
   applyMerge(
     input: VersionApplyMergeInput,
     options?: VersionApplyMergeOptions,
@@ -105,14 +110,18 @@ export interface WorkbookVersion {
     input?: VersionListReviewsInput,
   ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
   getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   appendReviewDecision(
     input: VersionAppendReviewDecisionInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   updateReviewStatus(
     input: VersionUpdateReviewStatusInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
+  getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
   createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>>;
   startProposalWorkspace(
     input: StartProposalWorkspaceInput,
@@ -137,7 +146,9 @@ export interface WorkbookVersion {
   openProposalReview(
     input: OpenProposalReviewInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>;
+  acceptProposal(
+    input: AcceptAgentProposalInput,
+  ): Promise<VersionResult<AgentProposalAcceptResult>>;
   rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;
   supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;
   diff(
@@ -146,11 +157,19 @@ export interface WorkbookVersion {
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  readRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  readRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
   getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  getRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
-  getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
+  getRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  getRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
   listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
   createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
   fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;

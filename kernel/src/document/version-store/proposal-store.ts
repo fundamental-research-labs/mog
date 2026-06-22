@@ -32,14 +32,17 @@ const PROPOSAL_LIST_CURSOR_PREFIX = 'proposal-list:';
 export type AgentProposalId = `proposal:sha256:${string}`;
 
 export const AGENT_PROPOSAL_STATUSES = Object.freeze([
-  'open',
-  'workspace',
+  'draft',
+  'workspace_open',
   'committed',
   'verified',
-  'accepted',
+  'ready_for_review',
   'rejected',
-  'failed',
+  'stale',
   'superseded',
+  'merge_conflicted',
+  'failed',
+  'applied',
 ] as const);
 
 export type AgentProposalStatus = (typeof AGENT_PROPOSAL_STATUSES)[number];
@@ -453,7 +456,7 @@ function createProposalRecord(input: {
     baseCommitId: input.input.baseCommitId,
     targetHeadIdAtCreation: input.input.targetHeadIdAtCreation,
     proposalBranchName: input.input.proposalBranchName,
-    status: 'open',
+    status: 'draft',
     revision: 1,
     agentRunId: input.input.trustedIdentity.agentRunId,
     agent: cloneJson(input.input.trustedIdentity.agent),
@@ -491,7 +494,7 @@ function applyStatusUpdate(
     ...(input.verification === undefined ? {} : { verification: cloneJson(input.verification) }),
   };
 
-  if (input.status === 'accepted') {
+  if (input.status === 'applied') {
     return cloneAgentProposalRecord({
       ...base,
       accepted: cloneJson(input.accepted),
@@ -673,11 +676,11 @@ function validateStatusUpdate(
       'Proposal status is not supported.',
     );
   }
-  if (input.status === 'open') {
+  if (input.status === 'draft') {
     return invalidUpdate(
       'proposal_already_created',
-      ['workspace', 'rejected', 'failed', 'superseded'],
-      'Open proposals are created, not updated back to open.',
+      ['workspace_open', 'rejected', 'failed', 'superseded'],
+      'Draft proposals are created, not updated back to draft.',
     );
   }
   const allowed = allowedProposalTransitions(record.status);
@@ -688,11 +691,11 @@ function validateStatusUpdate(
       `Cannot update proposal status from ${record.status} to ${input.status}.`,
     );
   }
-  if (input.status === 'workspace' && !input.workspaceId) {
+  if (input.status === 'workspace_open' && !input.workspaceId) {
     return invalidUpdate(
       'proposal_workspace_required',
       ['workspaceId'],
-      'Workspace proposals require a workspace id.',
+      'Workspace-open proposals require a workspace id.',
     );
   }
   if (input.status === 'committed' && !input.proposalCommitId) {
@@ -712,11 +715,18 @@ function validateStatusUpdate(
       'Verified proposals require passed verification.',
     );
   }
-  if (input.status === 'accepted' && !input.accepted) {
+  if (input.status === 'ready_for_review' && !input.reviewId) {
+    return invalidUpdate(
+      'proposal_review_required',
+      ['reviewId'],
+      'Ready-for-review proposals require a review id.',
+    );
+  }
+  if (input.status === 'applied' && !input.accepted) {
     return invalidUpdate(
       'proposal_acceptance_required',
       ['accepted'],
-      'Accepted proposals require acceptance metadata.',
+      'Applied proposals require acceptance metadata.',
     );
   }
   if (
@@ -737,18 +747,22 @@ function validateStatusUpdate(
 
 function allowedProposalTransitions(status: AgentProposalStatus): readonly AgentProposalStatus[] {
   switch (status) {
-    case 'open':
-      return ['workspace', 'rejected', 'failed', 'superseded'];
-    case 'workspace':
+    case 'draft':
+      return ['workspace_open', 'rejected', 'failed', 'superseded'];
+    case 'workspace_open':
       return ['committed', 'rejected', 'failed', 'superseded'];
     case 'committed':
       return ['verified', 'rejected', 'failed', 'superseded'];
     case 'verified':
-      return ['accepted', 'rejected', 'failed', 'superseded'];
+      return ['ready_for_review', 'rejected', 'failed', 'superseded'];
+    case 'ready_for_review':
+      return ['applied', 'merge_conflicted', 'stale', 'rejected', 'failed', 'superseded'];
+    case 'merge_conflicted':
+    case 'stale':
     case 'rejected':
     case 'failed':
       return ['superseded'];
-    case 'accepted':
+    case 'applied':
     case 'superseded':
       return [];
   }

@@ -64,7 +64,7 @@ describe('AgentProposalMetadataStore', () => {
       value: {
         id: expect.stringMatching(/^proposal:sha256:[0-9a-f]{64}$/),
         documentId: DOCUMENT_SCOPE.documentId,
-        status: 'open',
+        status: 'draft',
         revision: 1,
         targetRef: 'refs/heads/main',
         baseCommitId: BASE_COMMIT_ID,
@@ -87,21 +87,21 @@ describe('AgentProposalMetadataStore', () => {
       clientRequestId: 'workspace-1',
       proposalId,
       expectedRevision: 1,
-      status: 'workspace',
+      status: 'workspace_open',
       trustedActor: ACTOR,
       workspaceId: 'workspace-session-1',
       updatedAt: '2026-06-22T00:01:00.000Z',
     });
     expect(workspace).toMatchObject({
       ok: true,
-      value: { status: 'workspace', revision: 2, workspaceId: 'workspace-session-1' },
+      value: { status: 'workspace_open', revision: 2, workspaceId: 'workspace-session-1' },
     });
     await expect(
       store.updateProposal({
         clientRequestId: 'workspace-1',
         proposalId,
         expectedRevision: 1,
-        status: 'workspace',
+        status: 'workspace_open',
         trustedActor: ACTOR,
         workspaceId: 'workspace-session-1',
         updatedAt: '2026-06-22T00:01:00.000Z',
@@ -112,7 +112,7 @@ describe('AgentProposalMetadataStore', () => {
         clientRequestId: 'workspace-1',
         proposalId,
         expectedRevision: 2,
-        status: 'workspace',
+        status: 'workspace_open',
         trustedActor: ACTOR,
         workspaceId: 'different-workspace',
       }),
@@ -187,11 +187,38 @@ describe('AgentProposalMetadataStore', () => {
       value: { status: 'verified', revision: 4, verification: PASSED_VERIFICATION },
     });
 
-    const accepted = await store.updateProposal({
-      clientRequestId: 'accept-1',
+    await expect(
+      store.updateProposal({
+        clientRequestId: 'ready-missing-review',
+        proposalId,
+        expectedRevision: 4,
+        status: 'ready_for_review',
+        trustedActor: ACTOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_state', state: 'proposal_review_required' },
+    });
+
+    const ready = await store.updateProposal({
+      clientRequestId: 'ready-1',
       proposalId,
       expectedRevision: 4,
-      status: 'accepted',
+      status: 'ready_for_review',
+      trustedActor: ACTOR,
+      reviewId: 'review-1',
+      updatedAt: '2026-06-22T00:04:00.000Z',
+    });
+    expect(ready).toMatchObject({
+      ok: true,
+      value: { status: 'ready_for_review', revision: 5, reviewId: 'review-1' },
+    });
+
+    const applied = await store.updateProposal({
+      clientRequestId: 'accept-1',
+      proposalId,
+      expectedRevision: 5,
+      status: 'applied',
       trustedActor: ACTOR,
       accepted: {
         targetRef: 'refs/heads/main',
@@ -199,13 +226,13 @@ describe('AgentProposalMetadataStore', () => {
         appliedCommitId: ACCEPTED_COMMIT_ID,
         refUpdateReceiptId: 'receipt-1',
       },
-      updatedAt: '2026-06-22T00:04:00.000Z',
+      updatedAt: '2026-06-22T00:05:00.000Z',
     });
-    expect(accepted).toMatchObject({
+    expect(applied).toMatchObject({
       ok: true,
       value: {
-        status: 'accepted',
-        revision: 5,
+        status: 'applied',
+        revision: 6,
         proposalCommitId: PROPOSAL_COMMIT_ID,
         accepted: { appliedCommitId: ACCEPTED_COMMIT_ID },
       },
@@ -214,7 +241,7 @@ describe('AgentProposalMetadataStore', () => {
       store.updateProposal({
         clientRequestId: 'reject-after-accepted',
         proposalId,
-        expectedRevision: 5,
+        expectedRevision: 6,
         status: 'rejected',
         trustedActor: ACTOR,
         reason: 'too late',
@@ -317,6 +344,70 @@ describe('AgentProposalMetadataStore', () => {
       value: { id: second.id, title: 'B', proposalBranchName: 'agent/agent-run-1/b' },
     });
   });
+
+  it('projects stale and merge-conflicted proposal terminal states', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAgentProposalMetadataStore();
+
+    const staleReady = await createReadyProposal(store, 'stale');
+    const stale = await store.updateProposal({
+      clientRequestId: 'stale-status',
+      proposalId: staleReady.id,
+      expectedRevision: staleReady.revision,
+      status: 'stale',
+      trustedActor: ACTOR,
+      diagnostics: [
+        {
+          code: 'stale_head',
+          severity: 'warning',
+          message: 'Target ref moved before proposal acceptance.',
+        },
+      ],
+    });
+    expect(stale).toMatchObject({
+      ok: true,
+      value: { status: 'stale', revision: staleReady.revision + 1 },
+    });
+    if (!stale.ok) throw new Error(`expected stale success: ${stale.error.code}`);
+    await expect(
+      store.updateProposal({
+        clientRequestId: 'supersede-stale',
+        proposalId: stale.value.id,
+        expectedRevision: stale.value.revision,
+        status: 'superseded',
+        trustedActor: ACTOR,
+        reason: 'replacement proposal created',
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'superseded', supersedeReason: 'replacement proposal created' },
+    });
+
+    const conflictedReady = await createReadyProposal(store, 'conflict');
+    await expect(
+      store.updateProposal({
+        clientRequestId: 'conflicted-status',
+        proposalId: conflictedReady.id,
+        expectedRevision: conflictedReady.revision,
+        status: 'merge_conflicted',
+        trustedActor: ACTOR,
+        diagnostics: [
+          {
+            code: 'merge_conflicted',
+            severity: 'warning',
+            message: 'Proposal acceptance requires conflict resolution.',
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'merge_conflicted', revision: conflictedReady.revision + 1 },
+    });
+  });
 });
 
 function createProposalInput(
@@ -346,5 +437,66 @@ async function expectCreate(
 ): Promise<AgentProposalRecord> {
   const result = await resultPromise;
   if (!result.ok) throw new Error(`expected proposal create success: ${result.error.code}`);
+  return result.value;
+}
+
+async function createReadyProposal(
+  store: AgentProposalMetadataStore,
+  suffix: string,
+): Promise<AgentProposalRecord> {
+  const created = await expectCreate(
+    store.createProposal(
+      createProposalInput(`create-${suffix}`, {
+        proposalBranchName: `agent/agent-run-1/${suffix}`,
+      }),
+    ),
+  );
+  const workspace = await expectRecord(
+    store.updateProposal({
+      clientRequestId: `workspace-${suffix}`,
+      proposalId: created.id,
+      expectedRevision: created.revision,
+      status: 'workspace_open',
+      trustedActor: ACTOR,
+      workspaceId: `workspace-${suffix}`,
+    }),
+  );
+  const committed = await expectRecord(
+    store.updateProposal({
+      clientRequestId: `commit-${suffix}`,
+      proposalId: workspace.id,
+      expectedRevision: workspace.revision,
+      status: 'committed',
+      trustedActor: ACTOR,
+      proposalCommitId: PROPOSAL_COMMIT_ID,
+    }),
+  );
+  const verified = await expectRecord(
+    store.updateProposal({
+      clientRequestId: `verify-${suffix}`,
+      proposalId: committed.id,
+      expectedRevision: committed.revision,
+      status: 'verified',
+      trustedActor: ACTOR,
+      verification: PASSED_VERIFICATION,
+    }),
+  );
+  return expectRecord(
+    store.updateProposal({
+      clientRequestId: `ready-${suffix}`,
+      proposalId: verified.id,
+      expectedRevision: verified.revision,
+      status: 'ready_for_review',
+      trustedActor: ACTOR,
+      reviewId: `review-${suffix}`,
+    }),
+  );
+}
+
+async function expectRecord(
+  resultPromise: ReturnType<AgentProposalMetadataStore['updateProposal']>,
+): Promise<AgentProposalRecord> {
+  const result = await resultPromise;
+  if (!result.ok) throw new Error(`expected proposal update success: ${result.error.code}`);
   return result.value;
 }

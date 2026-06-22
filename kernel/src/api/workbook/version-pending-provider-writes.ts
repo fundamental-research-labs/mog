@@ -106,11 +106,15 @@ function readAttachedProviderWriteActivity(
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
   if (!isRecord(services)) return null;
+  const pendingRemotePromotionService = isRecord(services.pendingRemotePromotionService)
+    ? services.pendingRemotePromotionService
+    : null;
   for (const candidate of [
     services.providerWriteActivityTracker,
     services.versionProviderWriteActivityTracker,
     services.providerWriteActivity,
     services.versionProviderWriteActivity,
+    pendingRemotePromotionService?.providerWriteActivityTracker,
     services,
   ]) {
     if (!isVersionProviderWriteActivityTracker(candidate)) continue;

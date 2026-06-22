@@ -3,6 +3,7 @@ import type {
   VersionPromotePendingRemoteDiagnostic,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
+  VersionPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteStatus,
   VersionResult,
@@ -16,6 +17,21 @@ import { versionFailureFromStoreDiagnostics } from './version-result';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const PENDING_REMOTE_SEGMENT_ID_RE = /^pending-remote-segment:sha256:[0-9a-f]{64}$/;
 const OPTION_KEYS = new Set(['includeDiagnostics']);
+const SKIP_REASONS = new Set<VersionPromotePendingRemoteSkipReason>([
+  'batch-status-read-failed',
+  'batch-status-terminal',
+  'completion-failed',
+  'graph-ref-unavailable',
+  'graph-write-failed',
+  'inconsistent-group',
+  'ineligible-operation-context',
+  'ineligible-state',
+  'invalid-required-object',
+  'missing-required-object',
+  'missing-semantic-change-set',
+  'missing-snapshot-root',
+  'provider-read-failed',
+]);
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -184,7 +200,7 @@ function toSkippedSegments(value: unknown): readonly VersionPromotePendingRemote
   for (const item of value) {
     if (!isRecord(item)) return null;
     const segmentId = toSegmentId(item.segmentId);
-    const reason = typeof item.reason === 'string' ? item.reason : null;
+    const reason = toSkipReason(item.reason);
     const message = typeof item.message === 'string' ? item.message : null;
     const commitId = item.commitId === undefined ? undefined : toCommitId(item.commitId);
     if (!segmentId || !reason || !message || (item.commitId !== undefined && !commitId)) {
@@ -192,7 +208,7 @@ function toSkippedSegments(value: unknown): readonly VersionPromotePendingRemote
     }
     skipped.push({
       segmentId,
-      reason: reason as VersionPromotePendingRemoteSkippedSegment['reason'],
+      reason,
       message,
       ...(commitId ? { commitId } : {}),
     });
@@ -228,6 +244,7 @@ function mapDiagnostic(value: unknown): VersionPromotePendingRemoteDiagnostic {
   const code = typeof value.code === 'string' ? value.code : 'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE';
   const severity = value.severity;
   const commitId = toCommitId(value.commitId);
+  const reason = toSkipReason(value.reason);
   return {
     code: code as VersionPromotePendingRemoteDiagnostic['code'],
     severity: severity === 'info' || severity === 'warning' || severity === 'error' ? severity : 'error',
@@ -235,15 +252,19 @@ function mapDiagnostic(value: unknown): VersionPromotePendingRemoteDiagnostic {
       typeof value.message === 'string'
         ? value.message
         : 'Pending remote promotion produced a diagnostic.',
-    ...(typeof value.reason === 'string'
-      ? { reason: value.reason as VersionPromotePendingRemoteDiagnostic['reason'] }
-      : {}),
+    ...(reason ? { reason } : {}),
     ...(typeof value.segmentId === 'string' && PENDING_REMOTE_SEGMENT_ID_RE.test(value.segmentId)
       ? { segmentId: value.segmentId as VersionPromotePendingRemoteDiagnostic['segmentId'] }
       : {}),
     ...(commitId ? { commitId } : {}),
     ...(isRecord(value.details) ? { data: sanitizeDetails(value.details) } : {}),
   };
+}
+
+function toSkipReason(value: unknown): VersionPromotePendingRemoteSkipReason | null {
+  return typeof value === 'string' && SKIP_REASONS.has(value as VersionPromotePendingRemoteSkipReason)
+    ? (value as VersionPromotePendingRemoteSkipReason)
+    : null;
 }
 
 function sanitizeDetails(

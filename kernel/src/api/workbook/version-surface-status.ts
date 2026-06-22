@@ -96,6 +96,7 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly proposalMetadataStore?: unknown;
   readonly proposalStore?: unknown;
   readonly pendingRemotePromotionService?: unknown;
+  readonly promotePendingRemoteSegments?: unknown;
   readonly publicService?: unknown;
   readonly surfaceStatusService?: unknown;
   readonly versionSurfaceStatusService?: unknown;
@@ -766,6 +767,8 @@ function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
     proposalServiceDiscovery.hasAttachedVersionProposalService(services) ||
     hasAttachedVersionApplyMergeService(services) ||
     bindMethod(services.pendingRemotePromotionService, 'promotePendingRemoteSegments') ||
+    bindMethod(services.publicService, 'promotePendingRemoteSegments') ||
+    bindMethod(services, 'promotePendingRemoteSegments') ||
     bindMethod(services.writeService, 'commit') ||
     bindMethod(services.commitService, 'commit') ||
     bindMethod(services.checkoutService, 'checkout') ||

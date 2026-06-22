@@ -829,9 +829,7 @@ function createDocumentHandle(
               }
             : undefined,
         });
-        await lifecycle.rustDocument?.installVersionSyncServicesFromProvider(
-          resolvedVersioning.versioning?.provider,
-        );
+        await lifecycle.rustDocument?.installVersionSyncServices(resolvedVersioning.versioning);
         return createWorkbookFromConfig({
           ctx: context,
           eventBus: context.eventBus,

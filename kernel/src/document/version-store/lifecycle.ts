@@ -4,7 +4,10 @@ import type {
   WorkbookVersionCommitService,
 } from './commit-service';
 import type { CheckoutSnapshotMaterializer } from './checkout-apply';
-import type { SemanticMutationCaptureServices } from './semantic-mutation-capture';
+import {
+  createSemanticMutationCapture,
+  type SemanticMutationCaptureServices,
+} from './semantic-mutation-capture';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import {
   namespaceForDocumentScope,
@@ -125,7 +128,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
         };
       }
     }
-    return { versioning: config, diagnostics: [] };
+    return { versioning: resolveSemanticMutationCapture(config), diagnostics: [] };
   }
 
   const providerSelection = config.providerSelection;
@@ -156,7 +159,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
   });
 
   return {
-    versioning: {
+    versioning: resolveSemanticMutationCapture({
       provider,
       captureNormalCommit: config.captureNormalCommit,
       captureMergeCommit: config.captureMergeCommit,
@@ -164,9 +167,22 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
-    },
+    }),
     diagnostics,
   };
+}
+
+function resolveSemanticMutationCapture(
+  config: ResolvedWorkbookVersioningConfig,
+): ResolvedWorkbookVersioningConfig {
+  const semanticMutationCapture =
+    config.semanticMutationCapture ??
+    (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
+      ? createSemanticMutationCapture()
+      : undefined);
+  return semanticMutationCapture === config.semanticMutationCapture
+    ? config
+    : { ...config, semanticMutationCapture };
 }
 
 export function createLifecycleFailureReadService(

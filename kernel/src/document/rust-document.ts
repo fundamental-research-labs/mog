@@ -67,6 +67,7 @@ import {
   completeAppliedSyncUpdateIdentityFailedAfterMutation,
   openAppliedSyncUpdateIdentityStoreFromProvider,
   prepareAppliedSyncUpdateIdentityBeforeApply,
+  type AppliedSyncUpdateIdentityAppliedTerminalMetadata,
   type AppliedSyncUpdateIdentityStore,
   type AppliedSyncUpdateIdentityPreApplyRejectionReason,
 } from './applied-sync-update-identity-wiring';
@@ -78,6 +79,14 @@ import {
   type SyncBatchStatusPreApplyRejectionReason,
   type SyncBatchStatusStore,
 } from './sync-batch-status-wiring';
+import {
+  capturePendingRemoteSegmentForAdmittedContext,
+  type PendingRemoteSyncCaptureServices,
+} from './pending-remote-sync-capture';
+import type { ResolvedWorkbookVersioningConfig } from './version-store/lifecycle';
+import type { VersionPendingRemoteCapture } from './version-store/pending-remote-capture-service';
+import type { VersionStoreProvider } from './version-store/provider';
+import type { SnapshotRootByteSyncPort } from './version-store/snapshot-root-capture';
 import type { WriteGate } from './write-gate';
 import { touchDoc } from './providers/indexeddb-meta';
 import { slog } from '../lib/slog';
@@ -230,6 +239,9 @@ export class RustDocument {
   private readonly initialSnapshot?: Record<string, unknown>;
   private readonly yrsState?: Uint8Array;
   private versionSyncServicesProvider?: unknown;
+  private versionStoreProvider?: VersionStoreProvider;
+  private versioningSnapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
+  private capturePendingRemoteSegment?: VersionPendingRemoteCapture;
   private appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
   private syncBatchStatusStore?: SyncBatchStatusStore;
   /**
@@ -639,8 +651,29 @@ export class RustDocument {
 
   async installVersionSyncServicesFromProvider(provider: unknown): Promise<void> {
     if (provider === null || provider === undefined) return;
+    await this.installVersionSyncServices({ provider: provider as VersionStoreProvider });
+  }
+
+  async installVersionSyncServices(
+    versioning: Pick<
+      ResolvedWorkbookVersioningConfig,
+      'provider' | 'semanticMutationCapture' | 'snapshotRootByteSyncPort'
+    > | null | undefined,
+  ): Promise<void> {
+    if (versioning === null || versioning === undefined) return;
+    const provider = versioning?.provider;
+    if (provider === null || provider === undefined) {
+      this.clearVersionSyncServices();
+      return;
+    }
+
+    const capturePendingRemoteSegment =
+      versioning?.semanticMutationCapture?.capturePendingRemoteSegment;
+    const snapshotRootByteSyncPort = versioning?.snapshotRootByteSyncPort;
     if (
       this.versionSyncServicesProvider === provider &&
+      this.capturePendingRemoteSegment === capturePendingRemoteSegment &&
+      this.versioningSnapshotRootByteSyncPort === snapshotRootByteSyncPort &&
       (this.appliedSyncUpdateIdentityStore || this.syncBatchStatusStore)
     ) {
       return;
@@ -651,6 +684,17 @@ export class RustDocument {
       openAppliedSyncUpdateIdentityStoreFromProvider(provider),
       openSyncBatchStatusStoreFromProvider(provider),
     ]);
+    this.versionStoreProvider = provider;
+    if (capturePendingRemoteSegment) {
+      this.capturePendingRemoteSegment = capturePendingRemoteSegment;
+    } else {
+      delete this.capturePendingRemoteSegment;
+    }
+    if (snapshotRootByteSyncPort) {
+      this.versioningSnapshotRootByteSyncPort = snapshotRootByteSyncPort;
+    } else {
+      delete this.versioningSnapshotRootByteSyncPort;
+    }
     if (appliedSyncUpdateIdentityStore) {
       this.appliedSyncUpdateIdentityStore = appliedSyncUpdateIdentityStore;
     } else {
@@ -661,6 +705,15 @@ export class RustDocument {
     } else {
       delete this.syncBatchStatusStore;
     }
+  }
+
+  private clearVersionSyncServices(): void {
+    delete this.versionSyncServicesProvider;
+    delete this.versionStoreProvider;
+    delete this.versioningSnapshotRootByteSyncPort;
+    delete this.capturePendingRemoteSegment;
+    delete this.appliedSyncUpdateIdentityStore;
+    delete this.syncBatchStatusStore;
   }
 
   /**
@@ -794,10 +847,16 @@ export class RustDocument {
 
     this._currentUpdateOrigin = `provider:${envelope.providerRefId}`;
     let applyResult: ProviderDocApplyUpdateResult | void;
+    let appliedTerminalMetadata: AppliedSyncUpdateIdentityAppliedTerminalMetadata | undefined;
     try {
       const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
       const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
       applyResult = await doc.applyUpdate(envelope.payload, metadata);
+      appliedTerminalMetadata = await capturePendingRemoteSegmentForAdmittedContext({
+        docId: this.docId,
+        admittedContext,
+        services: this.pendingRemoteSyncCaptureServices(),
+      });
     } catch (error) {
       if (batchReservation) {
         try {
@@ -834,7 +893,7 @@ export class RustDocument {
     }
     if (identityReservation) {
       try {
-        await completeAppliedSyncUpdateIdentity(identityReservation);
+        await completeAppliedSyncUpdateIdentity(identityReservation, appliedTerminalMetadata);
       } catch (error) {
         terminalError ??= error;
       }
@@ -857,6 +916,18 @@ export class RustDocument {
       updateId: envelope.updateId,
       provenance,
       ...(applyResult === undefined ? {} : { applyResult }),
+    };
+  }
+
+  private pendingRemoteSyncCaptureServices(): PendingRemoteSyncCaptureServices {
+    return {
+      ...(this.versionStoreProvider ? { provider: this.versionStoreProvider } : {}),
+      ...(this.capturePendingRemoteSegment
+        ? { capturePendingRemoteSegment: this.capturePendingRemoteSegment }
+        : {}),
+      ...(this.versioningSnapshotRootByteSyncPort
+        ? { snapshotRootByteSyncPort: this.versioningSnapshotRootByteSyncPort }
+        : {}),
     };
   }
 

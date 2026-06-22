@@ -11,6 +11,11 @@ import {
 
 export type { AppliedSyncUpdateIdentityStore };
 
+export type AppliedSyncUpdateIdentityAppliedTerminalMetadata = Omit<
+  Extract<AppliedSyncUpdateIdentityTerminal, { readonly status: 'applied' }>,
+  'status'
+>;
+
 export type AppliedSyncUpdateIdentityReservation = {
   readonly store: AppliedSyncUpdateIdentityStore;
   readonly identityKey: AppliedSyncUpdateIdentityKey;
@@ -172,8 +177,17 @@ async function reserveAppliedSyncUpdateIdentity(
 
 export async function completeAppliedSyncUpdateIdentity(
   reservation: AppliedSyncUpdateIdentityReservation,
+  terminalMetadata: AppliedSyncUpdateIdentityAppliedTerminalMetadata = {},
 ): Promise<void> {
-  await completeAppliedSyncUpdateIdentityTerminal(reservation, { status: 'applied' });
+  await completeAppliedSyncUpdateIdentityTerminal(reservation, {
+    status: 'applied',
+    ...(terminalMetadata.pendingRemoteSegmentId
+      ? { pendingRemoteSegmentId: terminalMetadata.pendingRemoteSegmentId }
+      : {}),
+    ...(terminalMetadata.mutationSegmentDigest
+      ? { mutationSegmentDigest: terminalMetadata.mutationSegmentDigest }
+      : {}),
+  });
 }
 
 export async function completeAppliedSyncUpdateIdentityFailedAfterMutation(

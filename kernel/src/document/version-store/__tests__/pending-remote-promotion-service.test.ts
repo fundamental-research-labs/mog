@@ -196,14 +196,14 @@ describe('PendingRemotePromotionService', () => {
     expect(result.skipped).toHaveLength(2);
     expect(result.skipped).toEqual(
       expect.arrayContaining([
-        {
+        expect.objectContaining({
           segmentId: missingSnapshotDigest.input.pendingRemoteSegmentId,
           reason: 'missing-snapshot-root',
-        },
-        {
+        }),
+        expect.objectContaining({
           segmentId: missingSnapshotObject.input.pendingRemoteSegmentId,
           reason: 'missing-required-object',
-        },
+        }),
       ]),
     );
     await expectGraphHead(graph, headBefore);

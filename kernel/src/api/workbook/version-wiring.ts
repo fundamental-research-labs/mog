@@ -94,6 +94,7 @@ export function attachWorkbookVersioning(
     !semanticCapture &&
     !pendingRemotePromotionService &&
     !providerWriteActivityTracker &&
+    !config.reviewService &&
     !config.readLiveCollaborationStatus &&
     Object.keys(domainSupportManifestFields).length === 0
   ) {
@@ -129,6 +130,11 @@ export function attachWorkbookVersioning(
     (config.provider
       ? createProviderBackedBranchLifecycleService({ provider: config.provider })
       : undefined);
+  const reviewService =
+    config.reviewService ??
+    existing.reviewService ??
+    existing.versionReviewService ??
+    existing.reviewMetadataStore;
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
@@ -162,6 +168,7 @@ export function attachWorkbookVersioning(
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
     ...(branchService ? { branchService } : {}),
+    ...(reviewService ? { reviewService, versionReviewService: reviewService } : {}),
     ...(pendingRemotePromotionService
       ? {
           pendingRemotePromotionService,

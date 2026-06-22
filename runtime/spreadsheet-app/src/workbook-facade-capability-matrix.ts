@@ -3657,6 +3657,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
   },
   WorkbookVersion: {
+    appendReviewDecision: {
+      decision: 'allow',
+      capabilities: ['version:reviewWrite'],
+    },
     applyMerge: {
       decision: 'allow',
       capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
@@ -3672,6 +3676,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     createBranch: {
       decision: 'allow',
       capabilities: ['version:branch'],
+    },
+    createReview: {
+      decision: 'allow',
+      capabilities: ['version:reviewWrite'],
     },
     deleteBranch: {
       decision: 'allow',
@@ -3701,6 +3709,14 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:read'],
     },
+    getReview: {
+      decision: 'allow',
+      capabilities: ['version:reviewRead'],
+    },
+    getReviewDiff: {
+      decision: 'allow',
+      capabilities: ['version:reviewRead', 'version:diff'],
+    },
     getStatus: {
       decision: 'allow',
       capabilities: ['version:read'],
@@ -3716,6 +3732,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     listRefs: {
       decision: 'allow',
       capabilities: ['version:read'],
+    },
+    listReviews: {
+      decision: 'allow',
+      capabilities: ['version:reviewRead'],
     },
     merge: {
       decision: 'allow',
@@ -3740,6 +3760,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     updateBranch: {
       decision: 'allow',
       capabilities: ['version:branch'],
+    },
+    updateReviewStatus: {
+      decision: 'allow',
+      capabilities: ['version:reviewWrite'],
     },
   },
   WorkbookViewport: {

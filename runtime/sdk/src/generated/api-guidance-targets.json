@@ -4828,6 +4828,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.appendReviewDecision",
+      "stableId": "WorkbookVersion.appendReviewDecision",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "appendReviewDecision",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "appendReviewDecision(\n    input: VersionAppendReviewDecisionInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.applyMerge",
       "stableId": "WorkbookVersion.applyMerge",
       "root": "subApi",
@@ -4896,6 +4915,25 @@
       "asyncModel": "promise",
       "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.createReview",
+      "stableId": "WorkbookVersion.createReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5037,6 +5075,44 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.getReview",
+      "stableId": "WorkbookVersion.getReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.getReviewDiff",
+      "stableId": "WorkbookVersion.getReviewDiff",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getReviewDiff",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.getStatus",
       "stableId": "WorkbookVersion.getStatus",
       "root": "subApi",
@@ -5105,6 +5181,25 @@
       "asyncModel": "promise",
       "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
       "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.listReviews",
+      "stableId": "WorkbookVersion.listReviews",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listReviews",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listReviews(\n    input?: VersionListReviewsInput,\n  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5219,6 +5314,25 @@
       "asyncModel": "promise",
       "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.updateReviewStatus",
+      "stableId": "WorkbookVersion.updateReviewStatus",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "updateReviewStatus",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateReviewStatus(\n    input: VersionUpdateReviewStatusInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -23757,6 +23871,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.appendReviewDecision": {
+      "schemaVersion": "1",
+      "path": "wb.version.appendReviewDecision",
+      "stableId": "WorkbookVersion.appendReviewDecision",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "appendReviewDecision",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "appendReviewDecision(\n    input: VersionAppendReviewDecisionInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.applyMerge": {
       "schemaVersion": "1",
       "path": "wb.version.applyMerge",
@@ -23827,6 +23960,25 @@
       "asyncModel": "promise",
       "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.createReview": {
+      "schemaVersion": "1",
+      "path": "wb.version.createReview",
+      "stableId": "WorkbookVersion.createReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -23966,6 +24118,44 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.getReview": {
+      "schemaVersion": "1",
+      "path": "wb.version.getReview",
+      "stableId": "WorkbookVersion.getReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.getReviewDiff": {
+      "schemaVersion": "1",
+      "path": "wb.version.getReviewDiff",
+      "stableId": "WorkbookVersion.getReviewDiff",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getReviewDiff",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.getStatus": {
       "schemaVersion": "1",
       "path": "wb.version.getStatus",
@@ -24036,6 +24226,25 @@
       "asyncModel": "promise",
       "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
       "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.listReviews": {
+      "schemaVersion": "1",
+      "path": "wb.version.listReviews",
+      "stableId": "WorkbookVersion.listReviews",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listReviews",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listReviews(\n    input?: VersionListReviewsInput,\n  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24150,6 +24359,25 @@
       "asyncModel": "promise",
       "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.updateReviewStatus": {
+      "schemaVersion": "1",
+      "path": "wb.version.updateReviewStatus",
+      "stableId": "WorkbookVersion.updateReviewStatus",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "updateReviewStatus",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateReviewStatus(\n    input: VersionUpdateReviewStatusInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"

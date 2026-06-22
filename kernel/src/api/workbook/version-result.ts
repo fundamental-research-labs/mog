@@ -27,11 +27,16 @@ type VersionResultOperation =
   | 'getHead'
   | 'listCommits'
   | 'commit'
+  | 'appendReviewDecision'
   | 'createBranch'
+  | 'createReview'
   | 'deleteBranch'
   | 'deleteRef'
   | 'fastForwardBranch'
+  | 'getReview'
+  | 'getReviewDiff'
   | 'getRef'
+  | 'listReviews'
   | 'listRefs'
   | 'checkout'
   | 'diff'
@@ -42,6 +47,7 @@ type VersionResultOperation =
   | 'saveMergeResolutions'
   | 'applyMerge'
   | 'readRef'
+  | 'updateReviewStatus'
   | 'updateBranch';
 
 type VersionPageLike<T> = {

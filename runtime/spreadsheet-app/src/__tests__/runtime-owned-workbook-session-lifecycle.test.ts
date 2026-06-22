@@ -343,6 +343,42 @@ test('version surface status remains available without version read grant', asyn
         ]);
       }
     }
+    const getReviewDenied = await facade.version.getReview({ reviewId: 'review-1' });
+    assert.deepEqual(getReviewDenied, {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:reviewRead',
+        dependency: 'hostCapability',
+        reason: 'Capability "version:reviewRead" is denied for WorkbookVersion.getReview',
+        retryable: false,
+      },
+    });
+    const createReviewDenied = await facade.version.createReview(
+      {} as Parameters<typeof facade.version.createReview>[0],
+    );
+    assert.deepEqual(createReviewDenied, {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:reviewWrite',
+        dependency: 'hostCapability',
+        reason: 'Capability "version:reviewWrite" is denied for WorkbookVersion.createReview',
+        retryable: false,
+      },
+    });
+    const reviewDiffDenied = await facade.version.getReviewDiff({ reviewId: 'review-1' });
+    assert.equal(reviewDiffDenied.ok, false);
+    if (!reviewDiffDenied.ok) {
+      assert.equal(reviewDiffDenied.error.code, 'version_capability_unavailable');
+      if (reviewDiffDenied.error.code === 'version_capability_unavailable') {
+        assert.equal(reviewDiffDenied.error.capability, 'version:reviewRead');
+        assert.deepEqual(reviewDiffDenied.error.diagnostics?.[0]?.data?.deniedCapabilities, [
+          'version:reviewRead',
+          'version:diff',
+        ]);
+      }
+    }
   } finally {
     await disposeRuntime(runtime);
   }

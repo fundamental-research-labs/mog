@@ -11,9 +11,11 @@ import type {
   VersionMergeConflictDetailResult, VersionMergeResult, VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult, VersionRecordRevision, VersionRef, VersionRefListResult,
   VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
+  VersionAppendReviewDecisionInput, VersionCreateReviewInput, VersionGetReviewDiffInput, VersionGetReviewInput,
+  VersionListReviewsInput, WorkbookVersionReviewDiffPage, WorkbookVersionReviewRecord, WorkbookVersionReviewRecordSummary,
   VersionResult, VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
   VersionSemanticDiffPage, VersionStoreDiagnostic, VersionSymbolicRef, VersionSymbolicRefReadResult,
-  VersionUpdateBranchOptions, VersionHead, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
+  VersionUpdateBranchOptions, VersionUpdateReviewStatusInput, VersionHead, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
   WorkbookDiffPage, WorkbookVersion, WorkbookVersionCapabilityStatus, WorkbookVersionDiagnostic,
   WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
@@ -30,6 +32,7 @@ import { listWorkbookVersionCommits } from './version-list-commits';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
 import { getMergeConflictDetailWorkbookVersion, putMergeResolutionPayloadWorkbookVersion, saveMergeResolutionsWorkbookVersion } from './version-merge-review-endpoints';
 import { promotePendingRemoteWorkbookVersion } from './version-pending-remote';
+import { appendWorkbookVersionReviewDecision, createWorkbookVersionReview, getWorkbookVersionReview, getWorkbookVersionReviewDiff, listWorkbookVersionReviews, updateWorkbookVersionReviewStatus } from './version-review';
 import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
 import { createWorkbookVersionBranch, deleteWorkbookVersionBranch, deleteWorkbookVersionRef, fastForwardWorkbookVersionBranch, getWorkbookVersionRef, hasAttachedVersionRefLifecycleService, listWorkbookVersionRefs, readWorkbookVersionRef, updateWorkbookVersionBranch } from './version-refs';
@@ -312,6 +315,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async saveMergeResolutions(input: VersionSaveMergeResolutionsRequest): Promise<VersionResult<VersionSaveMergeResolutionsResult>> { return saveMergeResolutionsWorkbookVersion(this.ctx, input); }
   async getMergeConflictDetail(input: VersionGetMergeConflictDetailRequest): Promise<VersionResult<VersionMergeConflictDetailResult>> { return getMergeConflictDetailWorkbookVersion(this.ctx, input); }
   async putMergeResolutionPayload(input: VersionPutMergeResolutionPayloadRequest): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> { return putMergeResolutionPayloadWorkbookVersion(this.ctx, input); }
+  async listReviews(input: VersionListReviewsInput = {}): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> { return listWorkbookVersionReviews(this.ctx, input); }
+  async getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return getWorkbookVersionReview(this.ctx, input); }
+  async createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return createWorkbookVersionReview(this.ctx, input); }
+  async appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return appendWorkbookVersionReviewDecision(this.ctx, input); }
+  async updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return updateWorkbookVersionReviewStatus(this.ctx, input); }
+  async getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>> { return getWorkbookVersionReviewDiff(this.ctx, input); }
   async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<VersionResult<VersionSemanticDiffPage>> {
     return versionResultFromDiffPage(await diffWorkbookVersion(this.ctx, base, target, options), options.pageSize ?? 50);
   }

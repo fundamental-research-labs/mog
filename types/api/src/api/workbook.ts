@@ -135,9 +135,9 @@ export type {
   WorkbookVersionDiagnostic,
   WorkbookVersionDiagnosticCode,
   WorkbookVersionDiagnosticSeverity,
-  WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage,
-  WorkbookVersionStatus,
+  WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
+export type * from './workbook/version-review';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {

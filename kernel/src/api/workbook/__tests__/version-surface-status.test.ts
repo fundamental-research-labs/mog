@@ -238,6 +238,27 @@ describe('WorkbookVersion surface status', () => {
     expect(surface.capabilities['version:mergeApply']).toEqual({ enabled: true });
   });
 
+  it('enables review read and write when matching review service methods are attached', async () => {
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        reviewService: {
+          listReviews: jest.fn(),
+          getReview: jest.fn(),
+          getReviewDiff: jest.fn(),
+          createReview: jest.fn(),
+          appendReviewDecision: jest.fn(),
+          updateReviewStatus: jest.fn(),
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.capabilities['version:reviewRead']).toEqual({ enabled: true });
+    expect(surface.capabilities['version:reviewWrite']).toEqual({ enabled: true });
+  });
+
   it('disables only merge capabilities when the versionControl.merge feature gate is disabled', async () => {
     const surfaceReady = createSurfaceReadyVersionWithContext(
       {

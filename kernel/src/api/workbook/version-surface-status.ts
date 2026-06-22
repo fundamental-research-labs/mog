@@ -32,6 +32,10 @@ import {
   readVersionSurfaceDirtyStatus,
 } from './version-surface-status-service';
 import type { VersionSurfaceCheckoutSession } from './version-surface-status-service';
+import {
+  hasAttachedVersionReviewReadService,
+  hasAttachedVersionReviewWriteService,
+} from './version-review-service-discovery';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -80,6 +84,10 @@ type AttachedVersionServices = AttachedVersionReadService & {
   readonly refService?: unknown;
   readonly mergeService?: unknown;
   readonly versionMergeService?: unknown;
+  readonly reviewService?: unknown;
+  readonly versionReviewService?: unknown;
+  readonly reviewRecordService?: unknown;
+  readonly reviewMetadataStore?: unknown;
   readonly publicService?: unknown;
   readonly surfaceStatusService?: unknown;
   readonly versionSurfaceStatusService?: unknown;
@@ -102,6 +110,8 @@ type CapabilityAvailability = {
   readonly commit: boolean;
   readonly branch: boolean;
   readonly checkout: boolean;
+  readonly reviewRead: boolean;
+  readonly reviewWrite: boolean;
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
 };
@@ -184,6 +194,8 @@ export async function getWorkbookVersionSurfaceStatus(
     commit: Boolean(workbookStatus?.commitApi.available || hasAttachedVersionWriteService(ctx)),
     branch: hasAttachedVersionRefLifecycleService(ctx),
     checkout: Boolean(workbookStatus?.checkout.available || hasAttachedVersionCheckoutService(ctx)),
+    reviewRead: hasAttachedVersionReviewReadService(services),
+    reviewWrite: hasAttachedVersionReviewWriteService(services),
     mergePreview: Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)),
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
@@ -564,18 +576,18 @@ function buildCapabilityStates(
     ),
     'version:reviewRead': availableCapability(
       'version:reviewRead',
-      false,
+      availability.reviewRead,
       'storage',
-      'Review metadata storage is not attached in this surface slice.',
-      false,
+      'Review metadata read services are not attached.',
+      true,
       'version.surfaceStatus.reviewUnavailable',
     ),
     'version:reviewWrite': mutableCapability(
       'version:reviewWrite',
-      false,
+      availability.reviewWrite,
       'storage',
-      'Review metadata write storage is not attached in this surface slice.',
-      false,
+      'Review metadata write services are not attached.',
+      true,
       'version.surfaceStatus.reviewUnavailable',
     ),
     'version:proposal': mutableCapability(
@@ -732,6 +744,8 @@ function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
       services.refStore ||
       getAttachedVersionReadService(services) ||
       hasAttachedVersionDiffService(services) ||
+      hasAttachedVersionReviewReadService(services) ||
+      hasAttachedVersionReviewWriteService(services) ||
       hasAttachedVersionApplyMergeService(services) ||
       bindMethod(services.writeService, 'commit') ||
       bindMethod(services.commitService, 'commit') ||

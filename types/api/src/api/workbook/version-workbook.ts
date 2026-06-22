@@ -31,6 +31,15 @@ import type {
   VersionSemanticDiffPage,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  VersionAppendReviewDecisionInput,
+  VersionCreateReviewInput,
+  VersionGetReviewDiffInput,
+  VersionGetReviewInput,
+  VersionListReviewsInput,
+  WorkbookVersionReviewDiffPage,
+  WorkbookVersionReviewRecord,
+  WorkbookVersionReviewRecordSummary,
+  VersionUpdateReviewStatusInput,
   WorkbookCommitSummary,
   WorkbookVersionStatus,
   VersionSurfaceStatus,
@@ -73,6 +82,18 @@ export interface WorkbookVersion {
   putMergeResolutionPayload(
     input: VersionPutMergeResolutionPayloadRequest,
   ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
+  listReviews(
+    input?: VersionListReviewsInput,
+  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
+  getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  appendReviewDecision(
+    input: VersionAppendReviewDecisionInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  updateReviewStatus(
+    input: VersionUpdateReviewStatusInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,

@@ -34,6 +34,7 @@ export type {
 export type { WorkbookVersion } from './version-workbook';
 export type * from './version-merge-review';
 export type * from './version-pending-remote-promotion';
+export type * from './version-proposal';
 export type * from './version-review';
 
 export type WorkbookVersionRolloutStage =

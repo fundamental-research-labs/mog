@@ -1,4 +1,8 @@
 import type {
+  AgentProposal as ApiRootAgentProposal,
+  AgentProposalAcceptResult as ApiRootAgentProposalAcceptResult,
+  AgentProposalWorkspaceHandle as ApiRootAgentProposalWorkspaceHandle,
+  CreateAgentProposalInput as ApiRootCreateAgentProposalInput,
   Paged as ApiRootPaged,
   RedactionPolicy as ApiRootRedactionPolicy,
   VersionCapabilityError as ApiRootCapabilityError,
@@ -35,6 +39,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as ApiRootPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as ApiRootPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as ApiRootPromotePendingRemoteStatus,
+  VersionProposalApi as ApiRootVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as ApiRootPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
   VersionResult as ApiRootVersionResult,
@@ -49,6 +54,10 @@ import type {
   WorkbookVersionStatus as ApiRootWorkbookVersionStatus,
 } from '../index';
 import type {
+  AgentProposal as PackageApiAgentProposal,
+  AgentProposalAcceptResult as PackageApiAgentProposalAcceptResult,
+  AgentProposalWorkspaceHandle as PackageApiAgentProposalWorkspaceHandle,
+  CreateAgentProposalInput as PackageApiCreateAgentProposalInput,
   Paged as PackageApiPaged,
   RedactionPolicy as PackageApiRedactionPolicy,
   VersionCapabilityError as PackageApiCapabilityError,
@@ -85,6 +94,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as PackageApiPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as PackageApiPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as PackageApiPromotePendingRemoteStatus,
+  VersionProposalApi as PackageApiVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as PackageApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
   VersionResult as PackageApiVersionResult,
@@ -99,6 +109,10 @@ import type {
   WorkbookVersionStatus as PackageApiWorkbookVersionStatus,
 } from '@mog/types-api/api';
 import type {
+  AgentProposal as PackageWorkbookAgentProposal,
+  AgentProposalAcceptResult as PackageWorkbookAgentProposalAcceptResult,
+  AgentProposalWorkspaceHandle as PackageWorkbookAgentProposalWorkspaceHandle,
+  CreateAgentProposalInput as PackageWorkbookCreateAgentProposalInput,
   Paged as PackageWorkbookPaged,
   RedactionPolicy as PackageWorkbookRedactionPolicy,
   VersionCapabilityError as PackageWorkbookCapabilityError,
@@ -135,6 +149,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as PackageWorkbookPromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as PackageWorkbookPromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as PackageWorkbookPromotePendingRemoteStatus,
+  VersionProposalApi as PackageWorkbookVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as PackageWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
   VersionResult as PackageWorkbookVersionResult,
@@ -149,6 +164,10 @@ import type {
   WorkbookVersionStatus as PackageWorkbookVersionStatus,
 } from '@mog/types-api/api/workbook';
 import type {
+  AgentProposal as WorkbookNamespaceAgentProposal,
+  AgentProposalAcceptResult as WorkbookNamespaceAgentProposalAcceptResult,
+  AgentProposalWorkspaceHandle as WorkbookNamespaceAgentProposalWorkspaceHandle,
+  CreateAgentProposalInput as WorkbookNamespaceCreateAgentProposalInput,
   Paged as WorkbookNamespacePaged,
   RedactionPolicy as WorkbookNamespaceRedactionPolicy,
   VersionCapabilityError as WorkbookNamespaceCapabilityError,
@@ -185,6 +204,7 @@ import type {
   VersionPromotePendingRemoteSkippedSegment as WorkbookNamespacePromotePendingRemoteSkippedSegment,
   VersionPromotePendingRemoteSkipReason as WorkbookNamespacePromotePendingRemoteSkipReason,
   VersionPromotePendingRemoteStatus as WorkbookNamespacePromotePendingRemoteStatus,
+  VersionProposalApi as WorkbookNamespaceVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as WorkbookNamespacePutMergeResolutionPayloadResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
   VersionResult as WorkbookNamespaceVersionResult,
@@ -208,6 +228,21 @@ type _WorkbookNamespaceExportsVersionApi = Assert<
 >;
 type _WorkbookNamespaceExportsStatus = Assert<
   IsEqual<WorkbookNamespaceVersionStatus, PackageWorkbookVersionStatus>
+>;
+type _WorkbookNamespaceExportsAgentProposal = Assert<
+  IsEqual<WorkbookNamespaceAgentProposal, PackageWorkbookAgentProposal>
+>;
+type _WorkbookNamespaceExportsAgentProposalAcceptResult = Assert<
+  IsEqual<WorkbookNamespaceAgentProposalAcceptResult, PackageWorkbookAgentProposalAcceptResult>
+>;
+type _WorkbookNamespaceExportsAgentProposalWorkspaceHandle = Assert<
+  IsEqual<WorkbookNamespaceAgentProposalWorkspaceHandle, PackageWorkbookAgentProposalWorkspaceHandle>
+>;
+type _WorkbookNamespaceExportsCreateAgentProposalInput = Assert<
+  IsEqual<WorkbookNamespaceCreateAgentProposalInput, PackageWorkbookCreateAgentProposalInput>
+>;
+type _WorkbookNamespaceExportsVersionProposalApi = Assert<
+  IsEqual<WorkbookNamespaceVersionProposalApi, PackageWorkbookVersionProposalApi>
 >;
 type _WorkbookNamespaceExportsApplyMergeResult = Assert<
   IsEqual<WorkbookNamespaceApplyMergeResult, PackageWorkbookApplyMergeResult>
@@ -351,6 +386,21 @@ type _WorkbookNamespaceExportsPaged = Assert<
 type _ApiRootExportsVersionApi = Assert<IsEqual<ApiRootWorkbookVersion, PackageApiWorkbookVersion>>;
 type _ApiRootExportsStatus = Assert<
   IsEqual<ApiRootWorkbookVersionStatus, PackageApiWorkbookVersionStatus>
+>;
+type _ApiRootExportsAgentProposal = Assert<
+  IsEqual<ApiRootAgentProposal, PackageApiAgentProposal>
+>;
+type _ApiRootExportsAgentProposalAcceptResult = Assert<
+  IsEqual<ApiRootAgentProposalAcceptResult, PackageApiAgentProposalAcceptResult>
+>;
+type _ApiRootExportsAgentProposalWorkspaceHandle = Assert<
+  IsEqual<ApiRootAgentProposalWorkspaceHandle, PackageApiAgentProposalWorkspaceHandle>
+>;
+type _ApiRootExportsCreateAgentProposalInput = Assert<
+  IsEqual<ApiRootCreateAgentProposalInput, PackageApiCreateAgentProposalInput>
+>;
+type _ApiRootExportsVersionProposalApi = Assert<
+  IsEqual<ApiRootVersionProposalApi, PackageApiVersionProposalApi>
 >;
 type _ApiRootExportsApplyMergeResult = Assert<
   IsEqual<ApiRootApplyMergeResult, PackageApiApplyMergeResult>

@@ -4828,6 +4828,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.acceptProposal",
+      "stableId": "WorkbookVersion.acceptProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "acceptProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>;",
+      "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.appendReviewDecision",
       "stableId": "WorkbookVersion.appendReviewDecision",
       "root": "subApi",
@@ -4904,6 +4923,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.commitProposalWorkspace",
+      "stableId": "WorkbookVersion.commitProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "commitProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "commitProposalWorkspace(\n    input: CommitProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.createBranch",
       "stableId": "WorkbookVersion.createBranch",
       "root": "subApi",
@@ -4915,6 +4953,25 @@
       "asyncModel": "promise",
       "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.createProposal",
+      "stableId": "WorkbookVersion.createProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -4999,6 +5056,44 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.disposeProposalWorkspace",
+      "stableId": "WorkbookVersion.disposeProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "disposeProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "disposeProposalWorkspace(\n    input: DisposeProposalWorkspaceInput,\n  ): Promise<VersionResult<{ readonly disposed: true }>>;",
+      "typeText": "Promise<VersionResult<{ readonly disposed: true }>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.failProposal",
+      "stableId": "WorkbookVersion.failProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "failProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.fastForwardBranch",
       "stableId": "WorkbookVersion.fastForwardBranch",
       "root": "subApi",
@@ -5048,6 +5143,44 @@
       "asyncModel": "promise",
       "signature": "getMergeConflictDetail(\n    input: VersionGetMergeConflictDetailRequest,\n  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeConflictDetailResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.getProposal",
+      "stableId": "WorkbookVersion.getProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.getProposalWorkspace",
+      "stableId": "WorkbookVersion.getProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getProposalWorkspace(\n    input: GetProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;",
+      "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5170,6 +5303,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.listProposals",
+      "stableId": "WorkbookVersion.listProposals",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listProposals",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listProposals(\n    input: ListAgentProposalsInput,\n  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.listRefs",
       "stableId": "WorkbookVersion.listRefs",
       "root": "subApi",
@@ -5208,6 +5360,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.markProposalVerified",
+      "stableId": "WorkbookVersion.markProposalVerified",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "markProposalVerified",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "markProposalVerified(\n    input: MarkAgentProposalVerifiedInput,\n  ): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.merge",
       "stableId": "WorkbookVersion.merge",
       "root": "subApi",
@@ -5219,6 +5390,25 @@
       "asyncModel": "promise",
       "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.openProposalReview",
+      "stableId": "WorkbookVersion.openProposalReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "openProposalReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "openProposalReview(\n    input: OpenProposalReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5284,6 +5474,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.rejectProposal",
+      "stableId": "WorkbookVersion.rejectProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "rejectProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.saveMergeResolutions",
       "stableId": "WorkbookVersion.saveMergeResolutions",
       "root": "subApi",
@@ -5295,6 +5504,44 @@
       "asyncModel": "promise",
       "signature": "saveMergeResolutions(\n    input: VersionSaveMergeResolutionsRequest,\n  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;",
       "typeText": "Promise<VersionResult<VersionSaveMergeResolutionsResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.startProposalWorkspace",
+      "stableId": "WorkbookVersion.startProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "startProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "startProposalWorkspace(\n    input: StartProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;",
+      "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.supersedeProposal",
+      "stableId": "WorkbookVersion.supersedeProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "supersedeProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -23871,6 +24118,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.acceptProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.acceptProposal",
+      "stableId": "WorkbookVersion.acceptProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "acceptProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>;",
+      "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.appendReviewDecision": {
       "schemaVersion": "1",
       "path": "wb.version.appendReviewDecision",
@@ -23947,6 +24213,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.commitProposalWorkspace": {
+      "schemaVersion": "1",
+      "path": "wb.version.commitProposalWorkspace",
+      "stableId": "WorkbookVersion.commitProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "commitProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "commitProposalWorkspace(\n    input: CommitProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.createBranch": {
       "schemaVersion": "1",
       "path": "wb.version.createBranch",
@@ -23960,6 +24245,25 @@
       "asyncModel": "promise",
       "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.createProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.createProposal",
+      "stableId": "WorkbookVersion.createProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24042,6 +24346,44 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.disposeProposalWorkspace": {
+      "schemaVersion": "1",
+      "path": "wb.version.disposeProposalWorkspace",
+      "stableId": "WorkbookVersion.disposeProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "disposeProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "disposeProposalWorkspace(\n    input: DisposeProposalWorkspaceInput,\n  ): Promise<VersionResult<{ readonly disposed: true }>>;",
+      "typeText": "Promise<VersionResult<{ readonly disposed: true }>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.failProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.failProposal",
+      "stableId": "WorkbookVersion.failProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "failProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.fastForwardBranch": {
       "schemaVersion": "1",
       "path": "wb.version.fastForwardBranch",
@@ -24093,6 +24435,44 @@
       "asyncModel": "promise",
       "signature": "getMergeConflictDetail(\n    input: VersionGetMergeConflictDetailRequest,\n  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeConflictDetailResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.getProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.getProposal",
+      "stableId": "WorkbookVersion.getProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.getProposalWorkspace": {
+      "schemaVersion": "1",
+      "path": "wb.version.getProposalWorkspace",
+      "stableId": "WorkbookVersion.getProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getProposalWorkspace(\n    input: GetProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;",
+      "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24213,6 +24593,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.listProposals": {
+      "schemaVersion": "1",
+      "path": "wb.version.listProposals",
+      "stableId": "WorkbookVersion.listProposals",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listProposals",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listProposals(\n    input: ListAgentProposalsInput,\n  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.listRefs": {
       "schemaVersion": "1",
       "path": "wb.version.listRefs",
@@ -24251,6 +24650,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.markProposalVerified": {
+      "schemaVersion": "1",
+      "path": "wb.version.markProposalVerified",
+      "stableId": "WorkbookVersion.markProposalVerified",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "markProposalVerified",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "markProposalVerified(\n    input: MarkAgentProposalVerifiedInput,\n  ): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.merge": {
       "schemaVersion": "1",
       "path": "wb.version.merge",
@@ -24264,6 +24682,25 @@
       "asyncModel": "promise",
       "signature": "merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;",
       "typeText": "Promise<VersionResult<VersionMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.openProposalReview": {
+      "schemaVersion": "1",
+      "path": "wb.version.openProposalReview",
+      "stableId": "WorkbookVersion.openProposalReview",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "openProposalReview",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "openProposalReview(\n    input: OpenProposalReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24327,6 +24764,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.rejectProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.rejectProposal",
+      "stableId": "WorkbookVersion.rejectProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "rejectProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.saveMergeResolutions": {
       "schemaVersion": "1",
       "path": "wb.version.saveMergeResolutions",
@@ -24340,6 +24796,44 @@
       "asyncModel": "promise",
       "signature": "saveMergeResolutions(\n    input: VersionSaveMergeResolutionsRequest,\n  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;",
       "typeText": "Promise<VersionResult<VersionSaveMergeResolutionsResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.startProposalWorkspace": {
+      "schemaVersion": "1",
+      "path": "wb.version.startProposalWorkspace",
+      "stableId": "WorkbookVersion.startProposalWorkspace",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "startProposalWorkspace",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "startProposalWorkspace(\n    input: StartProposalWorkspaceInput,\n  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;",
+      "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.supersedeProposal": {
+      "schemaVersion": "1",
+      "path": "wb.version.supersedeProposal",
+      "stableId": "WorkbookVersion.supersedeProposal",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "supersedeProposal",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;",
+      "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"

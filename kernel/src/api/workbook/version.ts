@@ -1,5 +1,16 @@
 import type {
+  AcceptAgentProposalInput,
+  AgentProposal,
+  AgentProposalAcceptResult,
+  AgentProposalSummary,
+  AgentProposalWorkspaceHandle,
   CheckoutVersionResult,
+  CommitProposalWorkspaceInput,
+  CreateAgentProposalInput,
+  DisposeProposalWorkspaceInput,
+  FailAgentProposalInput,
+  GetAgentProposalInput,
+  GetProposalWorkspaceInput,
   Paged,
   VersionBranchName, VersionBranchRefReadResult,
   VersionApplyMergeInput, VersionApplyMergeOptions, VersionApplyMergeResult,
@@ -12,6 +23,12 @@ import type {
   VersionPutMergeResolutionPayloadResult, VersionRecordRevision, VersionRef, VersionRefListResult,
   VersionRefMutationResult, VersionRefName, VersionRefReadResult, VersionRefSelector,
   VersionAppendReviewDecisionInput, VersionCreateReviewInput, VersionGetReviewDiffInput, VersionGetReviewInput,
+  ListAgentProposalsInput,
+  MarkAgentProposalVerifiedInput,
+  OpenProposalReviewInput,
+  RejectAgentProposalInput,
+  StartProposalWorkspaceInput,
+  SupersedeAgentProposalInput,
   VersionListReviewsInput, WorkbookVersionReviewDiffPage, WorkbookVersionReviewRecord, WorkbookVersionReviewRecordSummary,
   VersionResult, VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
   VersionSemanticDiffPage, VersionStoreDiagnostic, VersionSymbolicRef, VersionSymbolicRefReadResult,
@@ -46,6 +63,20 @@ type MaybePromise<T> = T | Promise<T>;
 
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 type VersionPublicOperation = 'getHead' | 'readRef';
+type VersionProposalOperation =
+  | 'acceptProposal'
+  | 'commitProposalWorkspace'
+  | 'createProposal'
+  | 'disposeProposalWorkspace'
+  | 'failProposal'
+  | 'getProposal'
+  | 'getProposalWorkspace'
+  | 'listProposals'
+  | 'markProposalVerified'
+  | 'openProposalReview'
+  | 'rejectProposal'
+  | 'startProposalWorkspace'
+  | 'supersedeProposal';
 
 type AttachedVersionReadService = {
   readHead?: () => MaybePromise<unknown>;
@@ -332,6 +363,19 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return appendWorkbookVersionReviewDecision(this.ctx, input); }
   async updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return updateWorkbookVersionReviewStatus(this.ctx, input); }
   async getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>> { return getWorkbookVersionReviewDiff(this.ctx, input); }
+  async createProposal(_input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('createProposal'); }
+  async startProposalWorkspace(_input: StartProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>> { return proposalCapabilityUnavailable('startProposalWorkspace'); }
+  async getProposalWorkspace(_input: GetProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>> { return proposalCapabilityUnavailable('getProposalWorkspace'); }
+  async disposeProposalWorkspace(_input: DisposeProposalWorkspaceInput): Promise<VersionResult<{ readonly disposed: true }>> { return proposalCapabilityUnavailable('disposeProposalWorkspace'); }
+  async commitProposalWorkspace(_input: CommitProposalWorkspaceInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('commitProposalWorkspace'); }
+  async failProposal(_input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('failProposal'); }
+  async getProposal(_input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('getProposal'); }
+  async listProposals(_input: ListAgentProposalsInput): Promise<VersionResult<Paged<AgentProposalSummary>>> { return proposalCapabilityUnavailable('listProposals'); }
+  async markProposalVerified(_input: MarkAgentProposalVerifiedInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('markProposalVerified'); }
+  async openProposalReview(_input: OpenProposalReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> { return proposalCapabilityUnavailable('openProposalReview'); }
+  async acceptProposal(_input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>> { return proposalCapabilityUnavailable('acceptProposal'); }
+  async rejectProposal(_input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('rejectProposal'); }
+  async supersedeProposal(_input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>> { return proposalCapabilityUnavailable('supersedeProposal'); }
   async diff(base: VersionCommitish, target: VersionCommitish, options: VersionDiffOptions = {}): Promise<VersionResult<VersionSemanticDiffPage>> {
     return versionResultFromDiffPage(await diffWorkbookVersion(this.ctx, base, target, options), options.pageSize ?? 50);
   }
@@ -384,6 +428,29 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
     return versionResultFromRefMutation('deleteRef', await deleteWorkbookVersionRef(this.ctx, options));
   }
+}
+
+function proposalCapabilityUnavailable<T>(operation: VersionProposalOperation): VersionResult<T> {
+  const message = 'Agent proposal workflows require branch-scoped materialization support before they can run.';
+  return {
+    ok: false,
+    error: {
+      code: 'version_capability_unavailable',
+      capability: 'version:proposal',
+      dependency: 'VC-05',
+      reason: message,
+      retryable: false,
+      diagnostics: [
+        {
+          code: 'version.surfaceStatus.proposalUnavailable',
+          severity: 'warning',
+          message,
+          dependency: 'VC-05',
+          data: { operation },
+        },
+      ],
+    },
+  };
 }
 
 function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {

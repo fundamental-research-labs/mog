@@ -155,6 +155,7 @@ export type {
   WorkbookCommitSummary,
   WorkbookDiffPage,
 } from './workbook';
+export type * from './workbook/version-proposal';
 export type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,

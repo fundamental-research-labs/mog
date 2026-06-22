@@ -3765,6 +3765,58 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:reviewWrite'],
     },
+    acceptProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal', 'version:branch'],
+    },
+    commitProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    createProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    disposeProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    failProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    getProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    getProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    listProposals: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    markProposalVerified: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    openProposalReview: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    rejectProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    startProposalWorkspace: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
+    supersedeProposal: {
+      decision: 'allow',
+      capabilities: ['version:proposal'],
+    },
   },
   WorkbookViewport: {
     createRegion: {

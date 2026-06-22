@@ -1256,11 +1256,15 @@ export class RustDocument {
       return;
     }
 
+    const writeGate = this.computeBridge.writeGate as WriteGate | undefined;
+    let anyOfferedToProvider = false;
     for (const entry of batch) {
+      let offeredToProvider = false;
       for (const p of sinks) {
         if (entry.origin !== 'local' && entry.origin === `provider:${p.name}`) {
           continue;
         }
+        offeredToProvider = true;
         try {
           p.appendUpdate(entry.update);
         } catch (err) {
@@ -1270,6 +1274,10 @@ export class RustDocument {
           slog('rustDocument.providerAppendUpdateThrew', { error: err });
         }
       }
+      if (offeredToProvider) {
+        anyOfferedToProvider = true;
+        writeGate?.recordMutation();
+      }
     }
 
     // Once we've actually fanned an update out to at least one Provider, the
@@ -1277,7 +1285,7 @@ export class RustDocument {
     // The flag latches `true` for the lifetime of the orchestrator —
     // `__dt.persistenceEnabled` reads `hasAppendActive` to know the
     // orchestrator has crossed this threshold for at least one doc.
-    if (sinks.length > 0) {
+    if (anyOfferedToProvider) {
       this._appendActive = true;
     }
   }

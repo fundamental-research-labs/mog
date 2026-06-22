@@ -133,7 +133,12 @@ export type VersionSyncSourceKind =
 
 export type VersionSyncOriginKind = 'provider' | 'room' | 'import' | 'system' | 'legacyRaw';
 export type VersionSyncTrustStatus = 'verified' | 'trustedLocalSystem' | 'unverified' | 'legacyRaw';
-export type VersionSyncAuthorState = 'singleRemote' | 'mixedRemote' | 'unknown' | 'agent' | 'system';
+export type VersionSyncAuthorState =
+  | 'singleRemote'
+  | 'mixedRemote'
+  | 'unknown'
+  | 'agent'
+  | 'system';
 export type VersionSyncCommitGrouping =
   | 'none'
   | 'pendingRemote'
@@ -315,8 +320,16 @@ export interface VersionHistoryRootPolicy {
   readonly gapPolicy: VersionHistoryRootGapPolicy;
 }
 
-export type VersionHistoryReadMode = 'none' | 'metadata-only' | 'full';
-export type VersionHistoryWriteMode = 'none' | 'shadow-only' | 'gated' | 'full';
+export const VERSION_HISTORY_READ_MODES = Object.freeze(['none', 'metadata-only', 'full'] as const);
+export type VersionHistoryReadMode = (typeof VERSION_HISTORY_READ_MODES)[number];
+
+export const VERSION_HISTORY_WRITE_MODES = Object.freeze([
+  'none',
+  'shadow-only',
+  'gated',
+  'full',
+] as const);
+export type VersionHistoryWriteMode = (typeof VERSION_HISTORY_WRITE_MODES)[number];
 
 export interface VersionHistoryAccessPolicy {
   readonly readMode: VersionHistoryReadMode;

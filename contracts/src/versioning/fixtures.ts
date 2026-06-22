@@ -13,6 +13,8 @@ import type {
   VersionDomainCapabilityState,
   VersionDomainCapabilityStateMap,
   VersionDomainClass,
+  VersionHistoryReadMode,
+  VersionHistoryWriteMode,
 } from './index';
 
 type Assert<T extends true> = T;
@@ -58,6 +60,8 @@ type ExpectedWriteAdmissionMode =
   | 'captureDisabledNoHistory'
   | 'captureSuspendedWithGap'
   | 'block';
+type ExpectedHistoryReadMode = 'none' | 'metadata-only' | 'full';
+type ExpectedHistoryWriteMode = 'none' | 'shadow-only' | 'gated' | 'full';
 
 type _NoExpectedFailingDomainCapabilityState = Assert<
   IsNever<Extract<VersionDomainCapabilityState, 'expected-failing'>>
@@ -73,6 +77,8 @@ type _ExactCapturePolicySet = Assert<IsEqual<CapturePolicy, ExpectedCapturePolic
 type _ExactWriteAdmissionModeSet = Assert<
   IsEqual<VersionWriteAdmissionMode, ExpectedWriteAdmissionMode>
 >;
+type _ExactHistoryReadModeSet = Assert<IsEqual<VersionHistoryReadMode, ExpectedHistoryReadMode>>;
+type _ExactHistoryWriteModeSet = Assert<IsEqual<VersionHistoryWriteMode, ExpectedHistoryWriteMode>>;
 type _CapabilityStatesFieldUsesCapabilityMap = Assert<
   IsEqual<DomainCapabilityPolicyManifest['capabilityStates'], VersionDomainCapabilityStateMap>
 >;
@@ -136,6 +142,18 @@ const contractedCapabilityStates: VersionDomainCapabilityStateMap = Object.freez
   export: 'contracted',
 });
 
+const historyReadModes: readonly VersionHistoryReadMode[] = Object.freeze([
+  'none',
+  'metadata-only',
+  'full',
+]);
+const historyWriteModes: readonly VersionHistoryWriteMode[] = Object.freeze([
+  'none',
+  'shadow-only',
+  'gated',
+  'full',
+]);
+
 const domainPolicy: DomainCapabilityPolicyManifest = Object.freeze({
   matrixRowId: 'authored-grid',
   domainId: 'authored-grid',
@@ -170,23 +188,29 @@ const controlPlanePreflight: ControlPlaneDryRunRequest = Object.freeze({
   scopeDelta: Object.freeze({
     summary: 'VC-02 Batch A public contract preflight fixture',
   }),
-  preflightDigest: versionCapabilityGate.preflightDigest ?? Object.freeze({
-    algorithm: 'opaque',
-    value: 'missing',
-  }),
+  preflightDigest:
+    versionCapabilityGate.preflightDigest ??
+    Object.freeze({
+      algorithm: 'opaque',
+      value: 'missing',
+    }),
   clientRequestId: 'vc02-preflight-fixture',
 });
 
 const controlPlaneCompareAndSwap: ControlPlaneCompareAndSwapRequest = Object.freeze({
   ...controlPlanePreflight,
-  expectedPriorCasToken: versionCapabilityGate.casToken ?? Object.freeze({
-    token: 'missing',
-    version: '0',
-  }),
+  expectedPriorCasToken:
+    versionCapabilityGate.casToken ??
+    Object.freeze({
+      token: 'missing',
+      version: '0',
+    }),
 });
 
 export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   digest,
+  historyReadModes,
+  historyWriteModes,
   versionCapabilityGate,
   domainPolicy,
   domainPresenceDetector,

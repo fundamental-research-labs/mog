@@ -51,9 +51,7 @@ function domainRow(
   };
 }
 
-function freshManifest(
-  overrides: Partial<DomainSupportManifest> = {},
-): DomainSupportManifest {
+function freshManifest(overrides: Partial<DomainSupportManifest> = {}): DomainSupportManifest {
   return {
     schemaVersion: 'domain-support-manifest.v2',
     generatedAt: '2026-06-21T00:00:00.000Z',
@@ -94,10 +92,9 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
   });
 
   it('fails closed when schemaVersion is unsupported', () => {
-    const result = validateDomainSupportManifest(
-      freshManifest({ schemaVersion: '999' }),
-      { now: NOW },
-    );
+    const result = validateDomainSupportManifest(freshManifest({ schemaVersion: '999' }), {
+      now: NOW,
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -145,8 +142,8 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
 
   it('fails closed when a required first-slice matrix row is absent', () => {
     const manifest = freshManifest({
-      domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.filter((id) => id !== 'cells.formulas').map(
-        (id) => domainRow(id),
+      domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.filter((id) => id !== 'cells.formulas').map((id) =>
+        domainRow(id),
       ),
     });
 
@@ -240,6 +237,112 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
     if (!result.ok) {
       const diag = result.diagnostics.find((d) => d.code === 'unknown-domain-class');
       expect(diag?.domainId).toBe('tables');
+    }
+  });
+
+  it('fails closed when required policy fields are missing', () => {
+    const row = domainRow('filters') as any;
+    delete row.capturePolicy;
+    delete row.writeAdmissionMode;
+    delete row.rolloutStage;
+    delete row.historyAccess;
+    delete row.redactionPolicy;
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), row],
+      }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toEqual(
+        expect.arrayContaining([
+          'capture-policy-missing',
+          'write-admission-mode-missing',
+          'rollout-stage-missing',
+          'history-access-missing',
+          'redaction-policy-missing',
+        ]),
+      );
+      expect(result.diagnostics.find((d) => d.code === 'history-access-missing')).toMatchObject({
+        domainId: 'filters',
+        matrixRowId: 'filters',
+        policyField: 'historyAccess',
+      });
+    }
+  });
+
+  it('fails closed when policy fields reference unknown values', () => {
+    const row = domainRow('filters') as any;
+    row.capturePolicy = 'captureEventually';
+    row.writeAdmissionMode = 'bestEffort';
+    row.rolloutStage = 'surprise';
+    row.historyAccess = {
+      readMode: 'everything',
+      writeMode: 'sometimes',
+      redactionPolicy: 'trust-me',
+    };
+    row.redactionPolicy = 'unknown';
+    const result = validateDomainSupportManifest(
+      freshManifest({
+        domains: [...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)), row],
+      }),
+      { now: NOW },
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toEqual(
+        expect.arrayContaining([
+          'unknown-capture-policy',
+          'unknown-write-admission-mode',
+          'unknown-rollout-stage',
+          'unknown-history-read-mode',
+          'unknown-history-write-mode',
+          'unknown-history-redaction-policy',
+          'unknown-redaction-policy',
+        ]),
+      );
+      expect(
+        result.diagnostics.find((d) => d.code === 'unknown-write-admission-mode'),
+      ).toMatchObject({
+        domainId: 'filters',
+        matrixRowId: 'filters',
+        policyField: 'writeAdmissionMode',
+        policyValue: 'bestEffort',
+      });
+    }
+  });
+
+  it('blocks durable operations when policy write admission is block', () => {
+    const manifest = freshManifest({
+      domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+        id === 'cells.values'
+          ? domainRow(id, {
+              writeAdmissionMode: 'block',
+            })
+          : domainRow(id),
+      ),
+    });
+
+    expect(validateDomainSupportManifest(manifest, { now: NOW }).ok).toBe(true);
+
+    const result = validateDomainSupportManifest(manifest, {
+      now: NOW,
+      operation: 'commit',
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.diagnostics.find((d) => d.code === 'write-admission-mode-blocked'),
+      ).toMatchObject({
+        domainId: 'cells.values',
+        matrixRowId: 'cells.values',
+        policyField: 'writeAdmissionMode',
+        policyValue: 'block',
+      });
     }
   });
 

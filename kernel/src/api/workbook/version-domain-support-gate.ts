@@ -139,6 +139,8 @@ function domainSupportManifestInvalidDiagnostic(
       ...(diagnostic.domainId ? { domainId: diagnostic.domainId } : {}),
       ...(diagnostic.capabilityKey ? { capabilityKey: diagnostic.capabilityKey } : {}),
       ...(diagnostic.capabilityState ? { capabilityState: diagnostic.capabilityState } : {}),
+      ...(diagnostic.policyField ? { policyField: diagnostic.policyField } : {}),
+      ...(diagnostic.policyValue ? { policyValue: diagnostic.policyValue } : {}),
     },
   );
 }

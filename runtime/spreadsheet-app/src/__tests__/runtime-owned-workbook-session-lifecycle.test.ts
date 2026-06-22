@@ -372,11 +372,50 @@ test('version surface status remains available without version read grant', asyn
     if (!reviewDiffDenied.ok) {
       assert.equal(reviewDiffDenied.error.code, 'version_capability_unavailable');
       if (reviewDiffDenied.error.code === 'version_capability_unavailable') {
-        assert.equal(reviewDiffDenied.error.capability, 'version:reviewRead');
+        assert.equal(reviewDiffDenied.error.capability, 'version:diff');
         assert.deepEqual(reviewDiffDenied.error.diagnostics?.[0]?.data?.deniedCapabilities, [
-          'version:reviewRead',
           'version:diff',
+          'version:reviewRead',
         ]);
+      }
+    }
+  } finally {
+    await disposeRuntime(runtime);
+  }
+});
+
+test('version review diff conditionally requires review read only for review-id targets', async () => {
+  let runtime: SpreadsheetRuntime | undefined;
+  try {
+    runtime = await createSpreadsheetRuntime(
+      runtimeOptionsWithDeniedCapabilities(
+        'runtime-version-review-diff-conditional-capability',
+        new Set<SpreadsheetCapability>(['version:reviewRead']),
+      ),
+    );
+    await runtime.ready;
+
+    const workbook = await runtime.openWorkbook({
+      workbookId: 'runtime-version-review-diff-conditional-capability-workbook',
+      source: { kind: 'blank' },
+    });
+    await workbook.ready;
+    const actor = await workbook.resolveActor({ actorId: 'reader', kind: 'user' });
+    const facade = actor.getWorkbook();
+
+    const baseCommitId = `commit:sha256:${'a'.repeat(64)}` as const;
+    const headCommitId = `commit:sha256:${'b'.repeat(64)}` as const;
+    const commitRangeDiff = await facade.version.getReviewDiff({ baseCommitId, headCommitId });
+    if (!commitRangeDiff.ok) {
+      assert.notEqual(commitRangeDiff.error.code, 'version_capability_unavailable');
+    }
+
+    const reviewDiff = await facade.version.getReviewDiff({ reviewId: 'review-1' });
+    assert.equal(reviewDiff.ok, false);
+    if (!reviewDiff.ok) {
+      assert.equal(reviewDiff.error.code, 'version_capability_unavailable');
+      if (reviewDiff.error.code === 'version_capability_unavailable') {
+        assert.equal(reviewDiff.error.capability, 'version:reviewRead');
       }
     }
   } finally {

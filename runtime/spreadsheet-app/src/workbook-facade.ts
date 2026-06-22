@@ -116,6 +116,44 @@ function entryCapabilities(entry: SpreadsheetFacadeMatrixEntry): readonly Spread
   return entry.capabilities ?? (entry.capability ? [entry.capability] : []);
 }
 
+function conditionalCapabilityMatches(
+  conditional: NonNullable<SpreadsheetFacadeMatrixEntry['conditionalCapabilities']>[number],
+  args: readonly unknown[],
+): boolean {
+  let value = args[conditional.when.argumentIndex];
+  let parent: unknown = undefined;
+  let property: string | undefined;
+  for (const segment of conditional.when.path) {
+    if (!value || typeof value !== 'object') return false;
+    parent = value;
+    property = segment;
+    value = (value as Record<string, unknown>)[segment];
+  }
+  if (conditional.when.presence === 'present') {
+    return Boolean(
+      parent &&
+      typeof parent === 'object' &&
+      property &&
+      Object.hasOwn(parent, property) &&
+      value !== undefined,
+    );
+  }
+  return false;
+}
+
+function entryCapabilitiesForArgs(
+  entry: SpreadsheetFacadeMatrixEntry,
+  args: readonly unknown[] = [],
+): readonly SpreadsheetCapability[] {
+  const capabilities = [...entryCapabilities(entry)];
+  for (const conditional of entry.conditionalCapabilities ?? []) {
+    if (conditionalCapabilityMatches(conditional, args)) {
+      capabilities.push(...conditional.capabilities);
+    }
+  }
+  return capabilities;
+}
+
 function isVersionCapability(capability: SpreadsheetCapability): capability is VersionCapability {
   return capability.startsWith('version:');
 }
@@ -127,7 +165,10 @@ function isVersionResultFacadeMethod(
 ): boolean {
   if (interfaceName !== 'WorkbookVersion') return false;
   if (methodName === 'getSurfaceStatus' || methodName === 'getStatus') return false;
-  const capabilities = entryCapabilities(entry);
+  const capabilities = [
+    ...entryCapabilities(entry),
+    ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
+  ];
   return capabilities.length > 0 && capabilities.every(isVersionCapability);
 }
 
@@ -136,6 +177,7 @@ function facadeCapabilityDenial(
   binding: FacadeBinding,
   entry: SpreadsheetFacadeMatrixEntry,
   operation: string,
+  args: readonly unknown[] = [],
 ): FacadeCapabilityDenial | null {
   assertRecordUsable(record, operation);
   if (entry.decision === 'deny') {
@@ -150,7 +192,7 @@ function facadeCapabilityDenial(
 
   let firstDenied: FacadeCapabilityDenial | null = null;
   const deniedCapabilities: SpreadsheetCapability[] = [];
-  for (const capability of entryCapabilities(entry)) {
+  for (const capability of entryCapabilitiesForArgs(entry, args)) {
     const decision = policyDecision(binding.policy, capability);
     if (decision === 'allowed') continue;
     deniedCapabilities.push(capability);
@@ -403,7 +445,7 @@ function createCapabilityFacade(
           }
           return (...args: unknown[]) => {
             const operation = `${interfaceName}.${methodName}`;
-            const denial = facadeCapabilityDenial(record, binding, entry, operation);
+            const denial = facadeCapabilityDenial(record, binding, entry, operation, args);
             if (denial) {
               if (isVersionResultFacadeMethod(interfaceName, methodName, entry)) {
                 return versionCapabilityDeniedResult(operation, denial);

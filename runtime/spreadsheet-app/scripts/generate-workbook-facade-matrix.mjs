@@ -34,7 +34,12 @@ const POLICY_ADMIN_INTERFACES = new Set(['WorkbookSecurity']);
 const EXPORT_NAMES = new Set(['toCSV', 'toJSON']);
 const READ_NAMES = new Set(['autoFillPreview']);
 const WRITE_NAMES = new Set(['getOrCreateSheet']);
-const VERSION_METHOD_CAPABILITIES = {
+const REVIEW_ID_SUPPLIED_CONDITION = {
+  argumentIndex: 0,
+  path: ['reviewId'],
+  presence: 'present',
+};
+const VERSION_METHOD_REQUIREMENTS = {
   getStatus: ['version:read'],
   getSurfaceStatus: [],
   getHead: ['version:read'],
@@ -56,7 +61,15 @@ const VERSION_METHOD_CAPABILITIES = {
   createReview: ['version:reviewWrite'],
   appendReviewDecision: ['version:reviewWrite'],
   updateReviewStatus: ['version:reviewWrite'],
-  getReviewDiff: ['version:reviewRead', 'version:diff'],
+  getReviewDiff: {
+    capabilities: ['version:diff'],
+    conditionalCapabilities: [
+      {
+        when: REVIEW_ID_SUPPLIED_CONDITION,
+        capabilities: ['version:reviewRead'],
+      },
+    ],
+  },
   createProposal: ['version:proposal'],
   startProposalWorkspace: ['version:proposal'],
   getProposalWorkspace: ['version:proposal'],
@@ -117,6 +130,14 @@ const WRITE_PREFIXES = [
   'write',
 ];
 
+function versionMethodEntry(methodName) {
+  const requirements = VERSION_METHOD_REQUIREMENTS[methodName];
+  if (Array.isArray(requirements)) {
+    return { capabilities: requirements };
+  }
+  return requirements;
+}
+
 function classify(interfaceName, methodName) {
   if (DENY.has(methodName)) {
     return {
@@ -128,10 +149,10 @@ function classify(interfaceName, methodName) {
     return { decision: 'allow', capability: 'workbook:policy-admin' };
   }
   if (interfaceName === 'WorkbookVersion') {
-    if (!Object.hasOwn(VERSION_METHOD_CAPABILITIES, methodName)) {
+    if (!Object.hasOwn(VERSION_METHOD_REQUIREMENTS, methodName)) {
       throw new Error(`WorkbookVersion.${methodName} is missing an explicit version capability`);
     }
-    return { decision: 'allow', capabilities: VERSION_METHOD_CAPABILITIES[methodName] };
+    return { decision: 'allow', ...versionMethodEntry(methodName) };
   }
   if (ROUTE_EXPORT.has(methodName) || EXPORT_NAMES.has(methodName)) {
     return { decision: 'allow', capability: 'workbook:export' };
@@ -226,7 +247,7 @@ for (const [interfaceName, interfaceSpec] of Object.entries(spec.interfaces)) {
 for (const methodName of PROPOSAL_METHOD_NAMES) {
   matrix.WorkbookVersion[methodName] ??= {
     decision: 'allow',
-    capabilities: VERSION_METHOD_CAPABILITIES[methodName],
+    ...versionMethodEntry(methodName),
   };
 }
 matrix.WorkbookVersion = Object.fromEntries(
@@ -245,7 +266,8 @@ function assertVersionCapabilityMatrix() {
     throw new Error('workbook facade capability matrix is missing WorkbookVersion');
   }
 
-  for (const [methodName, capabilities] of Object.entries(VERSION_METHOD_CAPABILITIES)) {
+  for (const [methodName] of Object.entries(VERSION_METHOD_REQUIREMENTS)) {
+    const expected = versionMethodEntry(methodName);
     const entry = versionMatrix[methodName];
     if (!entry) {
       throw new Error(`workbook facade capability matrix is missing WorkbookVersion.${methodName}`);
@@ -258,15 +280,22 @@ function assertVersionCapabilityMatrix() {
     if (!Array.isArray(entry.capabilities)) {
       throw new Error(`WorkbookVersion.${methodName} must declare ordered capabilities`);
     }
-    if (entry.capabilities.join('\0') !== capabilities.join('\0')) {
+    if (entry.capabilities.join('\0') !== expected.capabilities.join('\0')) {
       throw new Error(
-        `WorkbookVersion.${methodName} must map to [${capabilities.join(', ')}], got [${entry.capabilities.join(', ')}]`,
+        `WorkbookVersion.${methodName} must map to [${expected.capabilities.join(', ')}], got [${entry.capabilities.join(', ')}]`,
       );
     }
     if (
-      entry.capabilities.some(
-        (capability) => capability === 'workbook:read' || capability === 'workbook:write',
-      )
+      JSON.stringify(entry.conditionalCapabilities ?? []) !==
+      JSON.stringify(expected.conditionalCapabilities ?? [])
+    ) {
+      throw new Error(`WorkbookVersion.${methodName} has stale conditional capabilities`);
+    }
+    if (
+      [
+        ...entry.capabilities,
+        ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
+      ].some((capability) => capability === 'workbook:read' || capability === 'workbook:write')
     ) {
       throw new Error(
         `WorkbookVersion.${methodName} must not map to generic workbook capabilities`,
@@ -288,6 +317,14 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly decision: SpreadsheetFacadeDecision;
   readonly capability?: SpreadsheetCapability;
   readonly capabilities?: readonly SpreadsheetCapability[];
+  readonly conditionalCapabilities?: readonly {
+    readonly when: {
+      readonly argumentIndex: number;
+      readonly path: readonly string[];
+      readonly presence: 'present';
+    };
+    readonly capabilities: readonly SpreadsheetCapability[];
+  }[];
   readonly reason?: string;
   readonly returns?: readonly string[];
 }

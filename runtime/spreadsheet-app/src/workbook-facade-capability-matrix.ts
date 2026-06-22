@@ -9,6 +9,14 @@ export interface SpreadsheetFacadeMatrixEntry {
   readonly decision: SpreadsheetFacadeDecision;
   readonly capability?: SpreadsheetCapability;
   readonly capabilities?: readonly SpreadsheetCapability[];
+  readonly conditionalCapabilities?: readonly {
+    readonly when: {
+      readonly argumentIndex: number;
+      readonly path: readonly string[];
+      readonly presence: 'present';
+    };
+    readonly capabilities: readonly SpreadsheetCapability[];
+  }[];
   readonly reason?: string;
   readonly returns?: readonly string[];
 }
@@ -3745,7 +3753,17 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
     getReviewDiff: {
       decision: 'allow',
-      capabilities: ['version:reviewRead', 'version:diff'],
+      capabilities: ['version:diff'],
+      conditionalCapabilities: [
+        {
+          when: {
+            argumentIndex: 0,
+            path: ['reviewId'],
+            presence: 'present',
+          },
+          capabilities: ['version:reviewRead'],
+        },
+      ],
     },
     getStatus: {
       decision: 'allow',

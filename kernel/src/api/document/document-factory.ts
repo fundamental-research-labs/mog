@@ -63,6 +63,16 @@ import {
 import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 import { createDocumentByteSyncPort } from './document-sync-port';
 import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
+import {
+  namespaceForDocumentScope,
+  normalizeVersionDocumentScope,
+} from '../../document/version-store/provider';
+import {
+  buildXlsxVersionImportRootWrite,
+  XLSX_IMPORT_ROOT_GRAPH_ID,
+  type XlsxVersionImportRootProvenance,
+} from '../../document/version-store/xlsx-import-root';
+import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 
 export { INTERNAL_INTERACTIVE_DEFERRED_IMPORT } from './xlsx-document-import';
 export type {
@@ -568,12 +578,61 @@ async function loadWorkbookModule() {
   };
 }
 
+async function withXlsxImportRootInitializer(input: {
+  readonly documentId: string;
+  readonly versioning: DocumentWorkbookVersioningLifecycleConfig & {
+    readonly snapshotRootByteSyncPort: NonNullable<
+      DocumentWorkbookVersioningLifecycleConfig['snapshotRootByteSyncPort']
+    >;
+    readonly semanticStateReader: NonNullable<
+      DocumentWorkbookVersioningLifecycleConfig['semanticStateReader']
+    >;
+  };
+  readonly xlsxImportRoot?: XlsxVersionImportRootProvenance;
+  readonly createdAt: string;
+}): Promise<DocumentWorkbookVersioningLifecycleConfig> {
+  const providerSelection = input.versioning.providerSelection;
+  if (!providerSelection || providerSelection.initialize || providerSelection.readOnly) {
+    return input.versioning;
+  }
+  if (!input.xlsxImportRoot) return input.versioning;
+
+  const documentScope = normalizeVersionDocumentScope({
+    ...(providerSelection.workspaceId === undefined
+      ? {}
+      : { workspaceId: providerSelection.workspaceId }),
+    documentId: input.documentId,
+    ...(providerSelection.principalScope === undefined
+      ? {}
+      : { principalScope: providerSelection.principalScope }),
+  });
+  const namespace = namespaceForDocumentScope(documentScope, XLSX_IMPORT_ROOT_GRAPH_ID);
+
+  return {
+    ...input.versioning,
+    providerSelection: {
+      ...providerSelection,
+      initialize: {
+        graphId: XLSX_IMPORT_ROOT_GRAPH_ID,
+        rootWrite: await buildXlsxVersionImportRootWrite({
+          namespace,
+          snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
+          semanticStateReader: input.versioning.semanticStateReader,
+          provenance: input.xlsxImportRoot,
+          createdAt: input.createdAt,
+        }),
+      },
+    },
+  };
+}
+
 function createDocumentHandle(
   documentId: string,
   lifecycle: DocumentLifecycleSystem,
   context: ISpreadsheetKernelContext,
   collaborationBootstrap?: CollaborationRoomSnapshot,
   importWarnings: readonly DocumentImportWarning[] = [],
+  xlsxImportRoot?: XlsxVersionImportRootProvenance,
 ): DocumentHandleInternal {
   let disposed = false;
   let cachedWorkbook: Workbook | undefined;
@@ -819,18 +878,27 @@ function createDocumentHandle(
         const { createWorkbookFromConfig } = await loadWorkbookModule();
         const { resolveDocumentWorkbookVersioningLifecycle } =
           await import('../../document/version-store/lifecycle');
+        const versioningWithDefaultPorts = config.versioning
+          ? {
+              ...config.versioning,
+              snapshotRootByteSyncPort:
+                config.versioning.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort(),
+              semanticStateReader:
+                config.versioning.semanticStateReader ??
+                createComputeBridgeSemanticStateReader(lifecycle.computeBridge),
+            }
+          : undefined;
+        const versioningWithImportRoot = versioningWithDefaultPorts
+          ? await withXlsxImportRootInitializer({
+              documentId,
+              versioning: versioningWithDefaultPorts,
+              xlsxImportRoot,
+              createdAt: new Date(DOCUMENT_FACTORY_CLOCK.now()).toISOString(),
+            })
+          : undefined;
         const resolvedVersioning = await resolveDocumentWorkbookVersioningLifecycle({
           documentId,
-          versioning: config.versioning
-            ? {
-                ...config.versioning,
-                snapshotRootByteSyncPort:
-                  config.versioning.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort(),
-                semanticStateReader:
-                  config.versioning.semanticStateReader ??
-                  createComputeBridgeSemanticStateReader(lifecycle.computeBridge),
-              }
-            : undefined,
+          versioning: versioningWithImportRoot,
         });
         const versioning =
           resolvedVersioning.versioning && lifecycle.rustDocument

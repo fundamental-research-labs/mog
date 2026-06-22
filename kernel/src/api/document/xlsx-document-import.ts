@@ -8,6 +8,7 @@ import type {
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentLifecycleSystem } from '../../document';
+import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';
 import type { KernelClock } from '../../context';
 import { LegacyOptionRejectedError } from '../../errors/document';
 import { slog } from '../../lib/slog';
@@ -37,6 +38,7 @@ export type XlsxDocumentHandleFactory<THandle extends DocumentHandleInternal> = 
   context: ISpreadsheetKernelContext,
   collaborationBootstrap?: undefined,
   importWarnings?: readonly DocumentImportWarning[],
+  xlsxImportRoot?: XlsxVersionImportRootProvenance,
 ) => THandle;
 
 export interface XlsxDocumentImportDependencies<THandle extends DocumentHandleInternal> {
@@ -190,7 +192,18 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       projectImportDiagnostic,
     );
     const warnings = documentImportWarningsFromDiagnostics(importDiagnostics);
-    const handle = deps.createDocumentHandle(documentId, lifecycle, context, undefined, warnings);
+    const handle = deps.createDocumentHandle(
+      documentId,
+      lifecycle,
+      context,
+      undefined,
+      warnings,
+      {
+        kind: 'xlsx',
+        source: xlsxImportRootSource(source),
+        diagnostics: importDiagnostics,
+      },
+    );
 
     return {
       success: true,
@@ -215,6 +228,13 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       ],
     };
   }
+}
+
+function xlsxImportRootSource(source: DocumentSource): XlsxVersionImportRootProvenance['source'] {
+  if (source.type === 'bytes') {
+    return { sourceType: 'bytes', byteLength: source.data.byteLength };
+  }
+  return { sourceType: 'path', pathRedacted: true };
 }
 
 export function assertInteractiveDeferredImportToken(token: InteractiveDeferredImportToken): void {

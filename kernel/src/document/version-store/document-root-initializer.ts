@@ -1,12 +1,6 @@
 import type { DocumentWorkbookVersioningLifecycleConfig } from './lifecycle';
-import {
-  namespaceForDocumentScope,
-  normalizeVersionDocumentScope,
-} from './provider';
-import {
-  BLANK_WORKBOOK_ROOT_GRAPH_ID,
-  buildBlankWorkbookRootWrite,
-} from './blank-workbook-root';
+import { namespaceForDocumentScope, normalizeVersionDocumentScope } from './provider';
+import { BLANK_WORKBOOK_ROOT_GRAPH_ID, buildBlankWorkbookRootWrite } from './blank-workbook-root';
 import {
   buildXlsxVersionImportRootWrite,
   XLSX_IMPORT_ROOT_GRAPH_ID,
@@ -49,6 +43,21 @@ export async function withDocumentRootInitializer(input: {
   });
   const graphId = input.xlsxImportRoot ? XLSX_IMPORT_ROOT_GRAPH_ID : BLANK_WORKBOOK_ROOT_GRAPH_ID;
   const namespace = namespaceForDocumentScope(documentScope, graphId);
+  const buildRootWrite = () =>
+    input.xlsxImportRoot
+      ? buildXlsxVersionImportRootWrite({
+          namespace,
+          snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
+          semanticStateReader: input.versioning.semanticStateReader,
+          provenance: input.xlsxImportRoot,
+          createdAt: input.createdAt,
+        })
+      : buildBlankWorkbookRootWrite({
+          namespace,
+          snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
+          semanticStateReader: input.versioning.semanticStateReader,
+          createdAt: input.createdAt,
+        });
 
   return {
     ...input.versioning,
@@ -67,20 +76,7 @@ export async function withDocumentRootInitializer(input: {
       ...providerSelection,
       initialize: {
         graphId,
-        rootWrite: input.xlsxImportRoot
-          ? await buildXlsxVersionImportRootWrite({
-              namespace,
-              snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
-              semanticStateReader: input.versioning.semanticStateReader,
-              provenance: input.xlsxImportRoot,
-              createdAt: input.createdAt,
-            })
-          : await buildBlankWorkbookRootWrite({
-              namespace,
-              snapshotRootByteSyncPort: input.versioning.snapshotRootByteSyncPort,
-              semanticStateReader: input.versioning.semanticStateReader,
-              createdAt: input.createdAt,
-            }),
+        buildRootWrite,
       },
     },
   };

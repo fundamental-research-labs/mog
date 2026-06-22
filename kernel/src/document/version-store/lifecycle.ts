@@ -95,12 +95,22 @@ export type VersionStoreLifecycleProviderSelection = {
    * has no visible version graph yet. Hosts must provide this explicitly so
    * IndexedDB never becomes an implicit default.
    */
-  readonly initialize?: {
-    readonly graphId: string;
-    readonly rootWrite: VersionGraphInitializeInput['rootWrite'];
-    readonly requireDurablePersistence?: boolean;
-  };
+  readonly initialize?: VersionStoreLifecycleRootInitializer;
 };
+
+export type VersionStoreLifecycleRootInitializer = {
+  readonly graphId: string;
+  readonly requireDurablePersistence?: boolean;
+} & (
+  | {
+      readonly rootWrite: VersionGraphInitializeInput['rootWrite'];
+      readonly buildRootWrite?: never;
+    }
+  | {
+      readonly rootWrite?: never;
+      readonly buildRootWrite: () => MaybePromise<VersionGraphInitializeInput['rootWrite']>;
+    }
+);
 
 export type DocumentWorkbookVersioningLifecycleConfig = ResolvedWorkbookVersioningConfig & {
   /**
@@ -308,7 +318,7 @@ function diagnosticsForProviderScopeMismatch(
 async function initializeSelectedProviderWhenAbsent(input: {
   readonly documentScope: VersionDocumentScope;
   readonly provider: VersionStoreProvider;
-  readonly initialize?: VersionStoreLifecycleProviderSelection['initialize'];
+  readonly initialize?: VersionStoreLifecycleRootInitializer;
   readonly xlsxImportRootExistingGraph?: Omit<XlsxVersionExistingGraphImportInput, 'graph'>;
   readonly requireDurablePersistence?: boolean;
 }): Promise<readonly VersionStoreDiagnostic[]> {
@@ -320,7 +330,10 @@ async function initializeSelectedProviderWhenAbsent(input: {
   }
 
   if (registryRead.status === 'ok') {
-    const namespace = assertRegistryMatchesDocumentScope(input.documentScope, registryRead.registry);
+    const namespace = assertRegistryMatchesDocumentScope(
+      input.documentScope,
+      registryRead.registry,
+    );
     if (!input.xlsxImportRootExistingGraph) return [];
     if (
       versionGraphNamespaceKey(input.xlsxImportRootExistingGraph.namespace) !==
@@ -350,17 +363,93 @@ async function initializeSelectedProviderWhenAbsent(input: {
   if (registryRead.status !== 'absent') return registryRead.diagnostics;
   if (!input.initialize) return [];
 
+  const rootWrite = await materializeLifecycleRootWrite({
+    documentScope: input.documentScope,
+    initialize: input.initialize,
+  });
+  if (rootWrite.status === 'failed') return rootWrite.diagnostics;
+
   const initialized = await input.provider.initializeGraph({
     expectedRegistryRevision: null,
     graphId: input.initialize.graphId,
-    rootWrite: input.initialize.rootWrite,
+    rootWrite: rootWrite.rootWrite,
     requireDurablePersistence:
       input.initialize.requireDurablePersistence ?? input.requireDurablePersistence,
   });
-  if (initialized.status !== 'success') return initialized.diagnostics;
+  if (initialized.status !== 'success') {
+    if (hasVersionGraphConflictDiagnostic(initialized.diagnostics)) {
+      const accepted = await acceptAlreadyInitializedGraph({
+        documentScope: input.documentScope,
+        provider: input.provider,
+        graphId: input.initialize.graphId,
+      });
+      if (accepted) return [];
+    }
+    return initialized.diagnostics;
+  }
 
   assertRegistryMatchesDocumentScope(input.documentScope, initialized.registry);
   return [];
+}
+
+async function materializeLifecycleRootWrite(input: {
+  readonly documentScope: VersionDocumentScope;
+  readonly initialize: VersionStoreLifecycleRootInitializer;
+}): Promise<
+  | {
+      readonly status: 'success';
+      readonly rootWrite: VersionGraphInitializeInput['rootWrite'];
+    }
+  | {
+      readonly status: 'failed';
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    }
+> {
+  let namespace: VersionGraphNamespace | undefined;
+  try {
+    namespace = namespaceForDocumentScope(input.documentScope, input.initialize.graphId);
+    const rootWrite =
+      input.initialize.rootWrite !== undefined
+        ? input.initialize.rootWrite
+        : await input.initialize.buildRootWrite();
+    return { status: 'success', rootWrite };
+  } catch {
+    return {
+      status: 'failed',
+      diagnostics: [
+        versionStoreDiagnostic('VERSION_PROVIDER_FAILED', {
+          operation: 'initializeGraph',
+          documentScope: input.documentScope,
+          ...(namespace ? { namespace } : {}),
+          recoverability: 'retry',
+          mutationGuarantee: 'no-write-attempted',
+          safeMessage: 'Version graph root initializer failed before provider mutation.',
+        }),
+      ],
+    };
+  }
+}
+
+async function acceptAlreadyInitializedGraph(input: {
+  readonly documentScope: VersionDocumentScope;
+  readonly provider: VersionStoreProvider;
+  readonly graphId: string;
+}): Promise<boolean> {
+  try {
+    const registryRead = await input.provider.readGraphRegistry();
+    if (registryRead.status !== 'ok') return false;
+    if (registryRead.registry.currentGraphId !== input.graphId) return false;
+    assertRegistryMatchesDocumentScope(input.documentScope, registryRead.registry);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasVersionGraphConflictDiagnostic(
+  diagnostics: readonly VersionStoreDiagnostic[],
+): boolean {
+  return diagnostics.some((diagnostic) => diagnostic.code === 'VERSION_GRAPH_CONFLICT');
 }
 
 function assertRegistryMatchesDocumentScope(

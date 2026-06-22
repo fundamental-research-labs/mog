@@ -11,7 +11,12 @@ import {
 } from '../../document/version-store/domain-support-manifest-validator';
 
 type MaybePromise<T> = T | Promise<T>;
-type VersionDomainSupportManifestGateOperation = 'commit' | 'checkout' | 'merge' | 'applyMerge';
+type VersionDomainSupportManifestGateOperation =
+  | 'commit'
+  | 'checkout'
+  | 'merge'
+  | 'applyMerge'
+  | 'export';
 
 type MaybeDomainSupportManifestContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -93,7 +98,47 @@ function isVersionDomainSupportManifestRequired(
       return hasMergeService(services);
     case 'applyMerge':
       return hasApplyMergeService(services) || hasMergeService(services);
+    case 'export':
+      return hasVersionOperationService(services);
   }
+}
+
+function hasVersionOperationService(services: Readonly<Record<string, unknown>>): boolean {
+  if (
+    hasCommitService(services) ||
+    hasCheckoutService(services) ||
+    hasMergeService(services) ||
+    hasApplyMergeService(services)
+  ) {
+    return true;
+  }
+
+  for (const candidate of [
+    services.provider,
+    services.readService,
+    services.refService,
+    services.refsService,
+    services.branchService,
+    services.publicService,
+    services.graphService,
+    services.graphStore,
+    services.graph,
+    services,
+  ]) {
+    if (isRawGraphStore(candidate)) return true;
+    if (
+      hasMethod(candidate, 'getHead') ||
+      hasMethod(candidate, 'listCommits') ||
+      hasMethod(candidate, 'listRefs') ||
+      hasMethod(candidate, 'readCommit') ||
+      hasMethod(candidate, 'readCommitClosure') ||
+      hasMethod(candidate, 'getCommit')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function hasCommitService(services: Readonly<Record<string, unknown>>): boolean {

@@ -4,6 +4,7 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { MogSdkError } from '../../../errors';
 import type { WorkbookConfig } from '../types';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 const worksheetImplMock = jest.fn().mockImplementation((id: SheetId) => ({
   _sheetId: id,
@@ -74,7 +75,7 @@ function createMockEventBus() {
   };
 }
 
-function createMockCtx() {
+function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
     computeBridge: {
       exportToXlsxBytes: jest.fn().mockResolvedValue(fakeBuffer),
@@ -95,6 +96,8 @@ function createMockCtx() {
     },
     mirror: {
       getWorkbookSettings: jest.fn().mockReturnValue({}),
+      getSheetIds: jest.fn().mockReturnValue([sheetId('sheet1')]),
+      getSheetMeta: jest.fn().mockReturnValue({ name: 'Sheet1', hidden: false }),
     },
     services: {
       undo: {
@@ -116,10 +119,14 @@ function createMockCtx() {
     floatingObjectManager: {
       dispose: jest.fn(),
     },
+    ...overrides,
   } as any;
 }
 
-async function createWorkbook(overrides?: Partial<WorkbookConfig>) {
+async function createWorkbook(
+  overrides?: Partial<WorkbookConfig>,
+  ctxOverrides: Record<string, unknown> = {},
+) {
   getOrderMock.mockResolvedValue([sheetId('sheet1')]);
   getNameMock.mockResolvedValue('Sheet1');
   createCheckpointManagerMock.mockReturnValue({
@@ -132,7 +139,7 @@ async function createWorkbook(overrides?: Partial<WorkbookConfig>) {
     clear: jest.fn(),
   });
 
-  const ctx = createMockCtx();
+  const ctx = createMockCtx(ctxOverrides);
   const wb = new WorkbookImpl({
     ctx,
     eventBus: createMockEventBus(),
@@ -156,6 +163,135 @@ describe('WorkbookImpl.save', () => {
     expect(result).toBe(fakeBuffer);
     expect(writeFile).toHaveBeenCalledWith('output.xlsx', fakeBuffer);
     expect(ctx.computeBridge.exportToXlsxBytes).toHaveBeenCalledTimes(1);
+    wb.dispose();
+  });
+
+  it('rejects version-capable toXlsx before host authorization when no domain support manifest is attached', async () => {
+    const { wb, ctx } = await createWorkbook(undefined, {
+      versioning: { writeService: { commit: jest.fn() } },
+    });
+
+    await expect(wb.toXlsx()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'EXPORT_ERROR',
+      operation: 'workbook.toXlsx',
+      diagnostics: {
+        domain: 'VERSION',
+        issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+        severity: 'error',
+      },
+      details: {
+        issue: 'export-domain-support-manifest-blocked',
+        operation: 'workbook.toXlsx',
+        mutationGuarantee: 'no-write-attempted',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({ operation: 'export' }),
+          }),
+        ],
+      },
+    });
+    expect(ctx.operationGate.authorizeExport).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.exportToXlsxBytes).not.toHaveBeenCalled();
+    wb.dispose();
+  });
+
+  it('rejects save before exporting or writing when version-capable export lacks a domain support manifest', async () => {
+    const writeFile = jest.fn().mockResolvedValue(undefined);
+    const onSave = jest.fn().mockResolvedValue(undefined);
+    const { wb, ctx } = await createWorkbook(
+      { writeFile, onSave },
+      { versioning: { writeService: { commit: jest.fn() } } },
+    );
+
+    await expect(wb.save('output.xlsx')).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'EXPORT_ERROR',
+      operation: 'workbook.toXlsx',
+      diagnostics: {
+        issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+      },
+      details: {
+        issue: 'export-domain-support-manifest-blocked',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            payload: expect.objectContaining({ operation: 'export' }),
+          }),
+        ],
+      },
+    });
+    expect(ctx.operationGate.authorizeExport).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.exportToXlsxBytes).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
+    wb.dispose();
+  });
+
+  it('allows version-capable toXlsx when the manifest proves export support', async () => {
+    const { wb, ctx } = await createWorkbook(undefined, {
+      versioning: {
+        writeService: { commit: jest.fn() },
+        ...versionDomainSupportManifestRuntime(),
+      },
+    });
+
+    const result = await wb.toXlsx();
+
+    expect(result).toBe(fakeBuffer);
+    expect(ctx.operationGate.authorizeExport).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.exportToXlsxBytes).toHaveBeenCalledTimes(1);
+    wb.dispose();
+  });
+
+  it('rejects version-capable toXlsx when the manifest does not prove export capability', async () => {
+    const manifestRuntime = versionDomainSupportManifestRuntime();
+    const { wb, ctx } = await createWorkbook(undefined, {
+      versioning: {
+        writeService: { commit: jest.fn() },
+        ...manifestRuntime,
+        domainSupportManifest: {
+          ...manifestRuntime.domainSupportManifest,
+          domains: manifestRuntime.domainSupportManifest.domains.map((row) =>
+            row.matrixRowId === 'cells.values'
+              ? {
+                  ...row,
+                  capabilityStates: {
+                    ...row.capabilityStates,
+                    export: 'contracted',
+                  },
+                }
+              : row,
+          ),
+        },
+      },
+    });
+
+    await expect(wb.toXlsx()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'EXPORT_ERROR',
+      operation: 'workbook.toXlsx',
+      diagnostics: {
+        issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+      },
+      details: {
+        issue: 'export-domain-support-manifest-blocked',
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            payload: expect.objectContaining({
+              operation: 'export',
+              diagnosticCode: 'capability-state-blocked',
+              capabilityKey: 'export',
+            }),
+          }),
+        ],
+      },
+    });
+    expect(ctx.operationGate.authorizeExport).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.exportToXlsxBytes).not.toHaveBeenCalled();
     wb.dispose();
   });
 

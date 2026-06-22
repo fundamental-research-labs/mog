@@ -1,6 +1,6 @@
 // VC-06A: Fail-closed validator for the DomainSupportManifest.
 //
-// Durable version-control operations (commit/checkout/merge/import) must NOT
+// Durable version-control operations (commit/checkout/merge/export/import) must NOT
 // proceed on a manifest that is missing, stale, or structurally incomplete. The
 // validator encodes that as a pure function whose defaults are fail-closed: any
 // missing/unknown/stale input produces `{ ok: false, diagnostics }` rather than
@@ -226,13 +226,15 @@ export type DomainSupportManifestValidationOperation =
   | 'commit'
   | 'checkout'
   | 'merge'
-  | 'applyMerge';
+  | 'applyMerge'
+  | 'export';
 
 export const REQUIRED_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
   commit: ['capture', 'persistence'],
   checkout: ['checkout'],
   merge: ['merge'],
   applyMerge: ['merge', 'persistence'],
+  export: ['export'],
 } satisfies Readonly<
   Record<DomainSupportManifestValidationOperation, readonly VersionDomainCapabilityKey[]>
 >);

@@ -128,6 +128,7 @@ import {
   createSaveWriterUnavailableError,
   normalizeWorkbookSavePath,
 } from './save-errors';
+import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -1492,6 +1493,7 @@ export class WorkbookImpl implements WorkbookInternal {
   async toXlsx(options?: { contextStripped?: boolean }): Promise<Uint8Array> {
     this._ensureNotDisposed();
     await this.ctx.awaitMaterialized?.('allSheets');
+    await assertWorkbookXlsxExportDomainSupportManifest(this.ctx);
 
     // Host-backed path: export requires authorization through the operation gate.
     const gate = this.ctx.operationGate;

@@ -3,6 +3,7 @@ import type {
   DomainSupportManifest,
   VersionDomainCapabilityState,
   VersionDomainCapabilityStateMap,
+  VersionDomainPolicyRegistry,
 } from '@mog-sdk/contracts/versioning';
 import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
@@ -112,6 +113,34 @@ export function selfPromotedVersionDomainSupportManifest(
   };
 }
 
+export function exportSupportedVersionDomainSupportManifest(
+  overrides: Partial<DomainSupportManifest> = {},
+): DomainSupportManifest {
+  return freshVersionDomainSupportManifest({
+    domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => {
+      const row = versionDomainSupportManifestRow(id);
+      return {
+        ...row,
+        capabilityStates: {
+          ...row.capabilityStates,
+          export: 'supported',
+        },
+      };
+    }),
+    ...overrides,
+  });
+}
+
+export function exportSupportedVersionDomainPolicyRegistry(
+  manifest: DomainSupportManifest,
+): VersionDomainPolicyRegistry {
+  return {
+    schemaVersion: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.schemaVersion,
+    domains: manifest.domains,
+    defaultHistoryRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+  };
+}
+
 export function versionDomainSupportManifestOptions(
   overrides: DomainSupportManifestValidationOptions = {},
 ): DomainSupportManifestValidationOptions {
@@ -134,6 +163,22 @@ export function versionDomainSupportManifestRuntime(
   };
 }
 
+export function versionDomainExportSupportedManifestRuntime(
+  input: {
+    readonly manifest?: Partial<DomainSupportManifest>;
+    readonly options?: DomainSupportManifestValidationOptions;
+  } = {},
+) {
+  const domainSupportManifest = exportSupportedVersionDomainSupportManifest(input.manifest);
+  return {
+    domainSupportManifest,
+    domainSupportManifestOptions: versionDomainSupportManifestOptions({
+      domainPolicyRegistry: exportSupportedVersionDomainPolicyRegistry(domainSupportManifest),
+      ...input.options,
+    }),
+  };
+}
+
 export function versioningWithDomainSupportManifest<T extends Record<string, unknown>>(
   versioning: T,
 ): T & ReturnType<typeof versionDomainSupportManifestRuntime> {
@@ -143,4 +188,15 @@ export function versioningWithDomainSupportManifest<T extends Record<string, unk
   };
 }
 
+export function versioningWithExportSupportedDomainSupportManifest<
+  T extends Record<string, unknown>,
+>(versioning: T): T & ReturnType<typeof versionDomainExportSupportedManifestRuntime> {
+  return {
+    ...versionDomainExportSupportedManifestRuntime(),
+    ...versioning,
+  };
+}
+
 export const withVersionManifest = versioningWithDomainSupportManifest;
+export const withExportSupportedVersionManifest =
+  versioningWithExportSupportedDomainSupportManifest;

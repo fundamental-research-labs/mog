@@ -7,7 +7,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { DocumentContext } from '../../context';
 
-const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
+export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 
 export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1';
@@ -29,6 +29,7 @@ export interface MogWorkbookVersionXlsxMetadata {
 interface CentralDirectoryEntry {
   readonly name: string;
   readonly bytes: Uint8Array;
+  readonly localHeaderOffset: number;
 }
 
 export function createMogWorkbookVersionXlsxMetadata(
@@ -59,39 +60,78 @@ export function addMogVersionMetadataToXlsx(
   xlsxBytes: Uint8Array,
   metadata: MogWorkbookVersionXlsxMetadata,
 ): Uint8Array {
+  return rewriteMogVersionMetadataInXlsx(xlsxBytes, metadata);
+}
+
+export function removeMogVersionMetadataFromXlsx(xlsxBytes: Uint8Array): Uint8Array {
+  return rewriteMogVersionMetadataInXlsx(xlsxBytes, null);
+}
+
+function rewriteMogVersionMetadataInXlsx(
+  xlsxBytes: Uint8Array,
+  metadata: MogWorkbookVersionXlsxMetadata | null,
+): Uint8Array {
   const view = new DataView(xlsxBytes.buffer, xlsxBytes.byteOffset, xlsxBytes.byteLength);
   const eocd = readEndOfCentralDirectory(view);
-  const existingCentralDirectory = readCentralDirectoryEntries(xlsxBytes, view, eocd).filter(
-    (entry) => normalizePackagePath(entry.name) !== MOG_VERSION_METADATA_PART,
+  const existingCentralDirectory = readCentralDirectoryEntries(xlsxBytes, view, eocd);
+  const keptCentralDirectory = existingCentralDirectory.filter(
+    (entry) => !isMogVersionMetadataPart(entry.name),
   );
+  if (keptCentralDirectory.length === existingCentralDirectory.length && metadata === null) {
+    return xlsxBytes;
+  }
 
-  const prefix = xlsxBytes.subarray(0, eocd.centralDirectoryOffset);
-  const metadataBytes = encodeUtf8(versionMetadataXml(metadata));
-  const metadataNameBytes = encodeUtf8(MOG_VERSION_METADATA_PART);
-  const metadataCrc = crc32(metadataBytes);
-  const metadataLocalHeaderOffset = prefix.byteLength;
-  const metadataLocalFile = concatUint8Arrays([
-    localFileHeader(metadataNameBytes, metadataBytes, metadataCrc),
-    metadataBytes,
-  ]);
-  const metadataCentralEntry = centralDirectoryHeader(
-    metadataNameBytes,
-    metadataBytes,
-    metadataCrc,
-    metadataLocalHeaderOffset,
-  );
-  const centralDirectory = [
-    ...existingCentralDirectory.map((entry) => entry.bytes),
-    metadataCentralEntry,
-  ];
-  const centralDirectoryOffset = prefix.byteLength + metadataLocalFile.byteLength;
+  const localFileParts: Uint8Array[] = [];
+  const localHeaderOffsets = new Map<CentralDirectoryEntry, number>();
+  let localOffset = 0;
+  const archivePreamble = archivePreambleBytes(xlsxBytes, existingCentralDirectory);
+  if (archivePreamble.byteLength > 0) {
+    localFileParts.push(archivePreamble);
+    localOffset += archivePreamble.byteLength;
+  }
+  for (const segment of localFileSegments(xlsxBytes, view, eocd, existingCentralDirectory)) {
+    if (isMogVersionMetadataPart(segment.entry.name)) continue;
+    localHeaderOffsets.set(segment.entry, localOffset);
+    localFileParts.push(segment.bytes);
+    localOffset += segment.bytes.byteLength;
+  }
+
+  const centralDirectory = keptCentralDirectory.map((entry) => {
+    const newOffset = localHeaderOffsets.get(entry);
+    if (newOffset === undefined) {
+      throw new Error(`missing rewritten ZIP local file offset for ${entry.name}`);
+    }
+    return centralDirectoryHeaderWithLocalHeaderOffset(entry.bytes, newOffset);
+  });
+
+  if (metadata !== null) {
+    const metadataBytes = encodeUtf8(versionMetadataXml(metadata));
+    const metadataNameBytes = encodeUtf8(MOG_VERSION_METADATA_PART);
+    const metadataCrc = crc32(metadataBytes);
+    const metadataLocalHeaderOffset = localOffset;
+    const metadataLocalFile = concatUint8Arrays([
+      localFileHeader(metadataNameBytes, metadataBytes, metadataCrc),
+      metadataBytes,
+    ]);
+    localFileParts.push(metadataLocalFile);
+    localOffset += metadataLocalFile.byteLength;
+    centralDirectory.push(
+      centralDirectoryHeader(
+        metadataNameBytes,
+        metadataBytes,
+        metadataCrc,
+        metadataLocalHeaderOffset,
+      ),
+    );
+  }
+
+  const centralDirectoryOffset = localOffset;
   const centralDirectorySize = byteLength(centralDirectory);
   return concatUint8Arrays([
-    prefix,
-    metadataLocalFile,
+    ...localFileParts,
     ...centralDirectory,
     endOfCentralDirectory(
-      existingCentralDirectory.length + 1,
+      centralDirectory.length,
       centralDirectorySize,
       centralDirectoryOffset,
       eocd.comment,
@@ -105,7 +145,7 @@ export async function maybeAddMogVersionMetadataToXlsx(
   xlsxBytes: Uint8Array,
   options: WorkbookXlsxExportOptions | undefined,
 ): Promise<Uint8Array> {
-  if (options?.versionMetadata !== 'include') return xlsxBytes;
+  if (options?.versionMetadata !== 'include') return removeMogVersionMetadataFromXlsx(xlsxBytes);
   return addMogVersionMetadataToXlsx(
     xlsxBytes,
     createMogWorkbookVersionXlsxMetadata(ctx, await version.getHead()),
@@ -174,13 +214,56 @@ function readCentralDirectoryEntries(
     const nameStart = offset + 46;
     const nextOffset = nameStart + nameLength + extraLength + commentLength;
     const name = decodeUtf8(bytes.subarray(nameStart, nameStart + nameLength));
-    entries.push({ name, bytes: bytes.subarray(offset, nextOffset) });
+    entries.push({
+      name,
+      bytes: bytes.subarray(offset, nextOffset),
+      localHeaderOffset: view.getUint32(offset + 42, true),
+    });
     offset = nextOffset;
   }
   if (entries.length !== eocd.entryCount) {
     throw new Error(`ZIP central directory entry count mismatch: ${entries.length}`);
   }
   return entries;
+}
+
+function archivePreambleBytes(
+  bytes: Uint8Array,
+  entries: readonly CentralDirectoryEntry[],
+): Uint8Array {
+  if (entries.length === 0) return bytes.subarray(0, 0);
+  const firstLocalHeaderOffset = Math.min(...entries.map((entry) => entry.localHeaderOffset));
+  return bytes.subarray(0, firstLocalHeaderOffset);
+}
+
+function localFileSegments(
+  bytes: Uint8Array,
+  view: DataView,
+  eocd: ReturnType<typeof readEndOfCentralDirectory>,
+  entries: readonly CentralDirectoryEntry[],
+): Array<{ readonly entry: CentralDirectoryEntry; readonly bytes: Uint8Array }> {
+  const sortedEntries = [...entries].sort((left, right) => {
+    if (left.localHeaderOffset !== right.localHeaderOffset) {
+      return left.localHeaderOffset - right.localHeaderOffset;
+    }
+    return left.name.localeCompare(right.name);
+  });
+  const segments: Array<{ readonly entry: CentralDirectoryEntry; readonly bytes: Uint8Array }> = [];
+  for (let index = 0; index < sortedEntries.length; index += 1) {
+    const entry = sortedEntries[index];
+    if (!entry) continue;
+    const start = entry.localHeaderOffset;
+    const nextEntry = sortedEntries[index + 1];
+    const end = nextEntry ? nextEntry.localHeaderOffset : eocd.centralDirectoryOffset;
+    if (start >= eocd.centralDirectoryOffset || start < 0 || end <= start) {
+      throw new Error(`invalid ZIP local file offset for ${entry.name}`);
+    }
+    if (view.getUint32(start, true) !== 0x04034b50) {
+      throw new Error(`invalid ZIP local file header for ${entry.name}`);
+    }
+    segments.push({ entry, bytes: bytes.subarray(start, end) });
+  }
+  return segments;
 }
 
 function readEndOfCentralDirectory(view: DataView): {
@@ -229,6 +312,15 @@ function centralDirectoryHeader(
   view.setUint16(28, nameBytes.byteLength, true);
   view.setUint32(42, localHeaderOffset, true);
   header.set(nameBytes, 46);
+  return header;
+}
+
+function centralDirectoryHeaderWithLocalHeaderOffset(
+  entryBytes: Uint8Array,
+  localHeaderOffset: number,
+): Uint8Array {
+  const header = new Uint8Array(entryBytes);
+  new DataView(header.buffer).setUint32(42, localHeaderOffset, true);
   return header;
 }
 
@@ -291,6 +383,10 @@ function concatUint8Arrays(parts: readonly Uint8Array[]): Uint8Array {
 
 function normalizePackagePath(value: string): string {
   return value.replace(/^\/+/, '');
+}
+
+function isMogVersionMetadataPart(value: string): boolean {
+  return normalizePackagePath(value) === MOG_VERSION_METADATA_PART;
 }
 
 function escapeXml(value: string): string {

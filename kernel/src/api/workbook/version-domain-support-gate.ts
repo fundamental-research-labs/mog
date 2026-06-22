@@ -59,13 +59,16 @@ export async function validateVersionDomainSupportManifestGate(
   }
 
   const {
-    domainPolicyRegistry: _ignoredCallerRegistry,
+    domainPolicyRegistry: callerDomainPolicyRegistry,
     requiredCapabilityKeys: _ignoredCallerCapabilityKeys,
     ...callerOptions
   } = gate.options ?? {};
   const options: DomainSupportManifestValidationOptions = {
     ...callerOptions,
-    domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+    domainPolicyRegistry:
+      operation === 'export' && callerDomainPolicyRegistry
+        ? callerDomainPolicyRegistry
+        : PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
   };

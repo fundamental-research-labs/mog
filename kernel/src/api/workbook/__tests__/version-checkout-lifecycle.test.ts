@@ -2,6 +2,7 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import {
@@ -46,7 +47,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let checkoutWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
 
       await authorVc06State(sourceWb);
       const commitResult = await sourceWb.version.commit({
@@ -60,7 +61,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       const committed = commitResult.value;
       sourceWb.markClean();
 
-      checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
       checkoutWb.markClean();
 
       const result = await checkoutWb.version.checkout({ kind: 'commit', id: committed.id });
@@ -237,7 +238,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let wb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({ versioning: { provider } });
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
 
       await wb.activeSheet.setCell('A1', 7);
       await wb.activeSheet.setCell('A2', '=A1*6');
@@ -292,7 +293,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let checkoutWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'branch-v1');
       const branchBaseResult = await sourceWb.version.commit({
         expectedHead: {
@@ -320,7 +321,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
       if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
 
-      checkoutWb = await checkoutHandle.workbook({ versioning: { provider } });
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
       checkoutWb.markClean();
       await expect(
         checkoutWb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/status' as any }),
@@ -357,7 +358,8 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           revision: created.value.revision,
         },
       });
-      if (!movedResult.ok) throw new Error(`expected moved commit success: ${movedResult.error.code}`);
+      if (!movedResult.ok)
+        throw new Error(`expected moved commit success: ${movedResult.error.code}`);
       const moved = movedResult.value;
       sourceWb.markClean();
 
@@ -425,7 +427,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let verifyWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommitResult = await sourceWb.version.commit({
         expectedHead: {
@@ -447,7 +449,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
       if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       branchWb.markClean();
       const branchCheckout = await branchWb.version.checkout({
         kind: 'ref',
@@ -487,7 +489,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
         baseRead.commit.payload.snapshotRootDigest,
       );
 
-      verifyWb = await verifyHandle.workbook({ versioning: { provider } });
+      verifyWb = await verifyHandle.workbook({ versioning: withVersionManifest({ provider }) });
       verifyWb.markClean();
       const verifyCheckout = await verifyWb.version.checkout({
         kind: 'commit',
@@ -547,7 +549,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     });
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommitResult = await sourceWb.version.commit({
         expectedHead: {
@@ -570,10 +572,10 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
 
       branchWb = await branchHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           provider,
           captureNormalCommit: branchCapture,
-        },
+        }),
       });
       branchWb.markClean();
       const branchCheckout = await branchWb.version.checkout({
@@ -600,7 +602,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
 
       expect(branchCaptureCount).toBe(1);
 
-      verifyWb = await verifyHandle.workbook({ versioning: { provider } });
+      verifyWb = await verifyHandle.workbook({ versioning: withVersionManifest({ provider }) });
       verifyWb.markClean();
       await expect(
         verifyWb.version.checkout({ kind: 'commit', id: branchCommit.id }),
@@ -755,16 +757,12 @@ function createCellEditNormalCommitCapture(input: {
     return {
       status: 'success',
       input: {
-        semanticChangeSetRecord: await objectRecord(
-          namespace,
-          'workbook.semanticChangeSet.v1',
-          {
-            schemaVersion: 1,
-            label: input.label,
-            changes: [semanticChange],
-            reviewChanges: [semanticChange],
-          },
-        ),
+        semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+          schemaVersion: 1,
+          label: input.label,
+          changes: [semanticChange],
+          reviewChanges: [semanticChange],
+        }),
         mutationSegmentRecords: [
           await objectRecord(namespace, 'workbook.mutationSegment.v1', {
             segmentId: `${input.address.toLowerCase()}-${input.value}`,

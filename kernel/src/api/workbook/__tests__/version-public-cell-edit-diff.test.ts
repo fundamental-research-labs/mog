@@ -2,6 +2,7 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -59,7 +60,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
     let wb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({ versioning: { provider } });
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
       await wb.activeSheet.setCell('A1', 'base');
 
       const commitResult = await wb.version.commit({
@@ -120,7 +121,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
     let reopenedWb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({ versioning: { provider } });
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
 
       await expect(wb.version.getHead()).resolves.toMatchObject({
         ok: true,
@@ -309,7 +310,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
         environment: 'headless',
         userTimezone: 'UTC',
       });
-      reopenedWb = await reopenedHandle.workbook({ versioning: { provider } });
+      reopenedWb = await reopenedHandle.workbook({ versioning: withVersionManifest({ provider }) });
 
       await expect(reopenedWb.version.getHead()).resolves.toMatchObject({
         ok: true,
@@ -382,7 +383,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
     let wb: Workbook | undefined;
 
     try {
-      wb = await handle.workbook({ versioning: { provider } });
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
       const activeSheet = wb.activeSheet;
       await activeSheet.setCell('A2', '=A1*2');
       await activeSheet.structure.insertRows(1, 1);

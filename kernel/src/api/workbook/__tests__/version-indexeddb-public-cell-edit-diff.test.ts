@@ -4,6 +4,7 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -49,7 +50,7 @@ describe('WorkbookVersion IndexedDB public cell edit commit/diff vertical', () =
 
     try {
       firstWb = await firstHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
@@ -58,7 +59,7 @@ describe('WorkbookVersion IndexedDB public cell edit commit/diff vertical', () =
               rootWrite: await rootWrite('root'),
             },
           },
-        },
+        }),
       });
       const rootHeadResult = await firstWb.version.getHead();
       expect(rootHeadResult).toMatchObject({
@@ -103,12 +104,12 @@ describe('WorkbookVersion IndexedDB public cell edit commit/diff vertical', () =
         userTimezone: 'UTC',
       });
       reopenedWb = await reopenedHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
 
       await expect(reopenedWb.version.getHead()).resolves.toMatchObject({

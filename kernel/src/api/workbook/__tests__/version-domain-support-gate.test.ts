@@ -1,19 +1,18 @@
 import { jest } from '@jest/globals';
 
-import type {
-  DomainCapabilityPolicyManifest,
-  DomainSupportManifest,
-  VersionDomainCapabilityState,
-  VersionDomainCapabilityStateMap,
-} from '@mog-sdk/contracts/versioning';
 import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/api';
 import { REQUIRED_FIRST_SLICE_DOMAIN_IDS } from '../../../document/version-store/domain-support-manifest-validator';
 import { WorkbookVersionImpl } from '../version';
+import {
+  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_CREATED_AT as CREATED_AT,
+  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW as NOW,
+  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS as ONE_MINUTE_MS,
+  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_TEN_MINUTES_MS as TEN_MINUTES_MS,
+  freshVersionDomainSupportManifest as freshManifest,
+  versionDomainCapabilityStates as capabilityStates,
+  versionDomainSupportManifestRow as domainRow,
+} from './version-domain-support-test-utils';
 
-const CREATED_AT = '2026-06-21T00:00:00.000Z';
-const NOW = new Date('2026-06-21T00:05:00.000Z');
-const ONE_MINUTE_MS = 60 * 1000;
-const TEN_MINUTES_MS = 10 * ONE_MINUTE_MS;
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
 const THEIRS = `commit:sha256:${'3'.repeat(64)}` as VersionMergeInput['theirs'];
@@ -23,55 +22,6 @@ const EXPECTED_TARGET_HEAD = {
   commitId: OURS,
   revision: { kind: 'counter' as const, value: '1' },
 };
-
-function capabilityStates(
-  state: VersionDomainCapabilityState = 'supported',
-): VersionDomainCapabilityStateMap {
-  return {
-    capture: state,
-    replay: state,
-    diff: state,
-    reviewAccess: state,
-    checkout: state,
-    merge: state,
-    persistence: state,
-    import: state,
-    export: state,
-  };
-}
-
-function domainRow(
-  domainId: string,
-  overrides: Partial<DomainCapabilityPolicyManifest> = {},
-): DomainCapabilityPolicyManifest {
-  return {
-    domainPolicyId: overrides.domainPolicyId ?? overrides.matrixRowId ?? domainId,
-    matrixRowId: overrides.matrixRowId ?? domainId,
-    domainId,
-    domainClass: 'authored',
-    capabilityStates: capabilityStates(),
-    capturePolicy: 'commitEligible',
-    writeAdmissionMode: 'capture',
-    rolloutStage: 'headless-local',
-    historyAccess: {
-      readMode: 'full',
-      writeMode: 'full',
-      redactionPolicy: 'none',
-    },
-    redactionPolicy: 'none',
-    ...overrides,
-  };
-}
-
-function freshManifest(overrides: Partial<DomainSupportManifest> = {}): DomainSupportManifest {
-  return {
-    schemaVersion: 'domain-support-manifest.v2',
-    generatedAt: CREATED_AT,
-    workbookId: 'wb-1',
-    domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
-    ...overrides,
-  };
-}
 
 function cleanMergeResult(): VersionMergeResult {
   return {
@@ -101,6 +51,130 @@ function cleanMergeResult(): VersionMergeResult {
 }
 
 describe('WorkbookVersion domain support manifest gate', () => {
+  it('fails closed before invoking version-capable services when no manifest source is attached', async () => {
+    const commit = jest.fn();
+    const checkout = jest.fn();
+    const merge = jest.fn();
+    const fastForwardMerge = jest.fn();
+    const mergeCommit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        writeService: { commit, fastForwardMerge, mergeCommit },
+        checkoutService: { checkout },
+        mergeService: { merge },
+      },
+    } as any);
+
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.commit',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    await expect(version.checkout({ kind: 'commit', id: BASE })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.checkout',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            data: expect.objectContaining({
+              operation: 'checkout',
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.merge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            data: expect.objectContaining({
+              operation: 'merge',
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            data: expect.objectContaining({
+              operation: 'applyMerge',
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+
+    expect(commit).not.toHaveBeenCalled();
+    expect(checkout).not.toHaveBeenCalled();
+    expect(merge).not.toHaveBeenCalled();
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for persisted applyMerge writer aliases when no manifest source is attached', async () => {
+    const fastForward = jest.fn();
+    const applyFastForwardMerge = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        versionWriteService: { fastForward },
+        applyFastForwardMerge,
+      },
+    } as any);
+
+    await expect(
+      version.applyMerge(
+        {
+          resultId: 'merge-result:review-main',
+          resultDigest: { algorithm: 'sha256', digest: 'a'.repeat(64) },
+        } as any,
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
+            data: expect.objectContaining({
+              operation: 'applyMerge',
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    expect(fastForward).not.toHaveBeenCalled();
+    expect(applyFastForwardMerge).not.toHaveBeenCalled();
+  });
+
   it('blocks commit before invoking the write service when the manifest is stale', async () => {
     const commit = jest.fn(async () => ({
       status: 'success',

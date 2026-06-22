@@ -31,7 +31,11 @@ export async function validateVersionDomainSupportManifestGate(
   operation: VersionDomainSupportManifestGateOperation,
 ): Promise<readonly VersionStoreDiagnostic[]> {
   const gate = getAttachedDomainSupportManifestGate(ctx);
-  if (!gate) return [];
+  if (!gate) {
+    return isVersionDomainSupportManifestRequired(ctx, operation)
+      ? [domainSupportManifestMissingDiagnostic(operation)]
+      : [];
+  }
 
   let manifest: unknown;
   if (gate.readManifest) {
@@ -72,6 +76,104 @@ function getAttachedDomainSupportManifestGate(
   return null;
 }
 
+function isVersionDomainSupportManifestRequired(
+  ctx: DocumentContext,
+  operation: VersionDomainSupportManifestGateOperation,
+): boolean {
+  const runtime = ctx as MaybeDomainSupportManifestContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return false;
+
+  switch (operation) {
+    case 'commit':
+      return hasCommitService(services);
+    case 'checkout':
+      return hasCheckoutService(services);
+    case 'merge':
+      return hasMergeService(services);
+    case 'applyMerge':
+      return hasApplyMergeService(services) || hasMergeService(services);
+  }
+}
+
+function hasCommitService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.writeService,
+    services.commitService,
+    services.versionWriteService,
+    services.publicService,
+    services.graphService,
+    services,
+  ]) {
+    if (isRawGraphStore(candidate)) continue;
+    if (hasMethod(candidate, 'commit') || hasMethod(candidate, 'commitVersion')) return true;
+  }
+  return false;
+}
+
+function hasCheckoutService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.checkoutService,
+    services.checkoutMaterializationService,
+    services.materializationService,
+    services.versionCheckoutService,
+    services.publicCheckoutService,
+    services,
+  ]) {
+    if (hasMethod(candidate, 'planCheckout') || hasMethod(candidate, 'checkout')) return true;
+  }
+  return false;
+}
+
+function hasMergeService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.mergeService,
+    services.versionMergeService,
+    services.publicService,
+    services.readService,
+    services.graphService,
+    services.graphStore,
+    services.graph,
+    services,
+  ]) {
+    if (
+      hasMethod(candidate, 'merge') ||
+      hasMethod(candidate, 'mergeVersions') ||
+      hasMethod(candidate, 'mergeCommits')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasApplyMergeService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.applyMergeService,
+    services.versionApplyMergeService,
+    services.writeService,
+    services.versionWriteService,
+    services.commitService,
+    services.publicService,
+    services,
+  ]) {
+    if (
+      hasMethod(candidate, 'mergeCommit') ||
+      hasMethod(candidate, 'applyMerge') ||
+      hasMethod(candidate, 'applyMergeVersion') ||
+      hasMethod(candidate, 'applyMergeCommit') ||
+      hasMethod(candidate, 'fastForwardMerge') ||
+      hasMethod(candidate, 'fastForward') ||
+      hasMethod(candidate, 'fastForwardApplyMerge') ||
+      hasMethod(candidate, 'applyMergeFastForward') ||
+      hasMethod(candidate, 'applyFastForwardMerge')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function gateFromRecord(value: unknown): AttachedDomainSupportManifestGate | null {
   if (!isRecord(value)) return null;
 
@@ -100,6 +202,19 @@ function bindManifestReader(
   const method = value[name];
   if (typeof method !== 'function') return null;
   return () => Reflect.apply(method, value, []) as MaybePromise<unknown>;
+}
+
+function hasMethod(value: unknown, name: string): boolean {
+  return isRecord(value) && typeof value[name] === 'function';
+}
+
+function isRawGraphStore(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.commit === 'function' &&
+    typeof value.initializeGraph === 'function' &&
+    typeof value.readCommitClosure === 'function'
+  );
 }
 
 function domainSupportManifestMissingDiagnostic(

@@ -12,6 +12,7 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -426,7 +427,7 @@ async function withPersistedConflictPreview(
   let branchWb: Workbook | undefined;
 
   try {
-    sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+    sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
     await sourceWb.activeSheet.setCell('A1', 'base');
     const baseCommit = await expectCommit(
       sourceWb.version.commit({
@@ -457,7 +458,7 @@ async function withPersistedConflictPreview(
     );
     const oursHead = await expectHead(sourceWb);
 
-    branchWb = await branchHandle.workbook({ versioning: { provider } });
+    branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
     const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
     if (!checkoutBase.ok) {
       throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);

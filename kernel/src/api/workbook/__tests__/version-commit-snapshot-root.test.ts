@@ -22,6 +22,7 @@ import {
 } from '../../../document/version-store/snapshot-root-capture';
 import { WorkbookVersionImpl } from '../version';
 import { attachWorkbookVersioning } from '../version-wiring';
+import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 const DOCUMENT_SCOPE: VersionDocumentScope = {
@@ -131,10 +132,13 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
     expectInitializeSuccess(initialized);
     const encodeDiff = jest.fn(async () => new Uint8Array([0x05, 0x06]));
     const ctx = {} as any;
-    attachWorkbookVersioning(ctx, {
-      provider,
-      snapshotRootByteSyncPort: { encodeDiff },
-    });
+    attachWorkbookVersioning(
+      ctx,
+      versioningWithDomainSupportManifest({
+        provider,
+        snapshotRootByteSyncPort: { encodeDiff },
+      }),
+    );
     ctx.versioning.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
@@ -216,7 +220,7 @@ function createWorkbookVersion(
   versioning: Parameters<typeof attachWorkbookVersioning>[1],
 ): WorkbookVersionImpl {
   const ctx = {} as any;
-  attachWorkbookVersioning(ctx, versioning);
+  attachWorkbookVersioning(ctx, versioningWithDomainSupportManifest(versioning as any));
   return new WorkbookVersionImpl(ctx);
 }
 

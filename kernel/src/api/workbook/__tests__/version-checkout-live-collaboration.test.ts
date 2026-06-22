@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 
 import type { WorkbookConfig } from '../types';
+import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -52,6 +53,7 @@ function createMockEventBus() {
 }
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
+  const versioning = overrides.versioning as Record<string, unknown> | undefined;
   return {
     computeBridge: {},
     writeGate: {
@@ -64,6 +66,7 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
       dispose: jest.fn(),
     },
     ...overrides,
+    ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   } as any;
 }
 
@@ -94,9 +97,7 @@ function plannedCheckoutResult(commitId: string) {
       commitId,
       parentCommitIds: [],
       resolvedTarget: { kind: 'commit', commitId },
-      requiredDependencies: [
-        { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
-      ],
+      requiredDependencies: [{ role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' }],
     },
     diagnostics: [],
     mutationGuarantee: 'no-workbook-mutation',

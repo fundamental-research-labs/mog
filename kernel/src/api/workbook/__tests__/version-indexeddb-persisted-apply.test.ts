@@ -7,15 +7,16 @@ import type {
   Workbook,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import {
-  createVersionObjectRecord,
-  type VersionGraphNamespace,
-  type VersionObjectRecord,
-} from '../../../document/version-store/object-store';
+  INDEXEDDB_PERSISTED_APPLY_AUTHOR as AUTHOR,
+  INDEXEDDB_PERSISTED_APPLY_DOCUMENT_ID as DOCUMENT_ID,
+  INDEXEDDB_PERSISTED_APPLY_DOCUMENT_SCOPE as DOCUMENT_SCOPE,
+  INDEXEDDB_PERSISTED_APPLY_GRAPH_ID as GRAPH_ID,
+  rootWrite,
+} from './version-indexeddb-persisted-apply-test-utils';
 import {
   intentIdForMergeResultId,
   intentIdForResolvedAttemptDigest,
@@ -29,20 +30,8 @@ import {
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
   namespaceForDocumentScope,
-  type VersionDocumentScope,
-  type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
-
-const DOCUMENT_ID = 'vc07-indexeddb-persisted-apply';
-const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
-const GRAPH_ID = 'graph-indexeddb-persisted-apply';
-const CREATED_AT = '2026-06-21T00:00:00.000Z';
-const AUTHOR: VersionAuthor = {
-  authorId: 'user-1',
-  actorKind: 'user',
-  displayName: 'User One',
-};
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -75,7 +64,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
 
     try {
       firstWb = await firstHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
@@ -84,7 +73,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
               rootWrite: await rootWrite('clean-artifact-root'),
             },
           },
-        },
+        }),
       });
       const rootHead = await expectHead(firstWb);
 
@@ -118,12 +107,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
       const oursHead = await expectHead(firstWb);
 
       branchWb = await branchHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
@@ -157,7 +146,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted clean preview success: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected persisted clean preview success: ${preview.error.code}`);
       expect(preview.value).toMatchObject({
         status: 'clean',
         resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
@@ -194,12 +184,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       reopenedWb = await reopenedHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
 
       const applied = await reopenedWb.version.applyMerge(
@@ -213,7 +203,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           expectedTargetHead,
         },
       );
-      if (!applied.ok) throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
+      if (!applied.ok)
+        throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
         status: 'applied',
         ours: oursCommit.id,
@@ -240,12 +231,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       secondReopenedWb = await secondReopenedHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
 
       const repeated = await secondReopenedWb.version.applyMerge(
@@ -287,18 +278,21 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       checkoutWb = await checkoutHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
       const checkout = await checkoutWb.version.checkout({ kind: 'commit', id: mergeCommitId });
-      if (!checkout.ok) throw new Error(`expected checkout after persisted merge apply: ${checkout.error.code}`);
+      if (!checkout.ok)
+        throw new Error(`expected checkout after persisted merge apply: ${checkout.error.code}`);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
       await expect(checkoutWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
-      await expect(checkoutWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'theirs' });
+      await expect(checkoutWb.activeSheet.getCell('C1')).resolves.toMatchObject({
+        value: 'theirs',
+      });
     } finally {
       if (checkoutWb) await checkoutWb.close('skipSave');
       if (checkoutHandle) await checkoutHandle.dispose();
@@ -340,7 +334,9 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
     let reopenedWb: Workbook | undefined;
 
     try {
-      firstWb = await firstHandle.workbook({ versioning: { provider: failingProvider } });
+      firstWb = await firstHandle.workbook({
+        versioning: withVersionManifest({ provider: failingProvider }),
+      });
       const rootHead = await expectHead(firstWb);
 
       await firstWb.activeSheet.setCell('A1', 'base');
@@ -372,7 +368,9 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
       );
       const oursHead = await expectHead(firstWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider: failingProvider } });
+      branchWb = await branchHandle.workbook({
+        versioning: withVersionManifest({ provider: failingProvider }),
+      });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -405,7 +403,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted conflicted preview success: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected persisted conflicted preview success: ${preview.error.code}`);
       if (
         preview.value.status !== 'conflicted' ||
         !preview.value.resultId ||
@@ -456,7 +455,9 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         },
       });
       if (interruptedCommit.status !== 'success') {
-        throw new Error(`expected interrupted merge commit read: ${interruptedCommit.diagnostics[0]?.code}`);
+        throw new Error(
+          `expected interrupted merge commit read: ${interruptedCommit.diagnostics[0]?.code}`,
+        );
       }
       const resolvedAttemptDigest = interruptedCommit.commit.payload.resolvedMergeAttemptDigest;
       if (!resolvedAttemptDigest) throw new Error('expected merge commit attempt digest');
@@ -474,12 +475,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       reopenedWb = await reopenedHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
 
       const recovered = await reopenedWb.version.applyMerge(
@@ -552,7 +553,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
 
     try {
       firstWb = await firstHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
@@ -561,7 +562,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
               rootWrite: await rootWrite('root'),
             },
           },
-        },
+        }),
       });
       const rootHead = await expectHead(firstWb);
 
@@ -622,7 +623,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
       expect(preview.value).toMatchObject({
         status: 'fastForward',
         resultId: expect.stringMatching(/^merge-result:[0-9a-f]{64}$/),
@@ -633,7 +635,11 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         attemptPersistence: 'persisted',
         attemptKind: 'applyable',
       });
-      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+      if (
+        preview.value.status !== 'fastForward' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest
+      ) {
         throw new Error('expected persisted fast-forward preview to expose result id and digest');
       }
 
@@ -647,12 +653,12 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       reopenedWb = await reopenedHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
 
       const applied = await reopenedWb.version.applyMerge(
@@ -665,7 +671,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           expectedTargetHead,
         },
       );
-      if (!applied.ok) throw new Error(`expected persisted apply success after reopen: ${applied.error.code}`);
+      if (!applied.ok)
+        throw new Error(`expected persisted apply success after reopen: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
         status: 'fastForwarded',
         ours: oursCommit.id,
@@ -689,18 +696,21 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         userTimezone: 'UTC',
       });
       checkoutWb = await checkoutHandle.workbook({
-        versioning: {
+        versioning: withVersionManifest({
           providerSelection: {
             kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
             requireDurablePersistence: true,
           },
-        },
+        }),
       });
       const checkout = await checkoutWb.version.checkout({ kind: 'commit', id: theirsCommit.id });
-      if (!checkout.ok) throw new Error(`expected checkout after persisted apply: ${checkout.error.code}`);
+      if (!checkout.ok)
+        throw new Error(`expected checkout after persisted apply: ${checkout.error.code}`);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
       await expect(checkoutWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
-      await expect(checkoutWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'theirs' });
+      await expect(checkoutWb.activeSheet.getCell('C1')).resolves.toMatchObject({
+        value: 'theirs',
+      });
     } finally {
       if (checkoutWb) await checkoutWb.close('skipSave');
       if (checkoutHandle) await checkoutHandle.dispose();
@@ -733,7 +743,7 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
     let reopenedWb: Workbook | undefined;
 
     try {
-      firstWb = await firstHandle.workbook({ versioning: { provider } });
+      firstWb = await firstHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const rootHead = await expectHead(firstWb);
 
       await firstWb.activeSheet.setCell('A1', 'base');
@@ -793,8 +803,13 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
-      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+      if (!preview.ok)
+        throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      if (
+        preview.value.status !== 'fastForward' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest
+      ) {
         throw new Error('expected persisted fast-forward preview to expose result id and digest');
       }
 
@@ -834,7 +849,9 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
         environment: 'headless',
         userTimezone: 'UTC',
       });
-      reopenedWb = await reopenedHandle.workbook({ versioning: { provider: reopenedProvider } });
+      reopenedWb = await reopenedHandle.workbook({
+        versioning: withVersionManifest({ provider: reopenedProvider }),
+      });
 
       const recovered = await reopenedWb.version.applyMerge(
         {
@@ -846,7 +863,8 @@ describe('WorkbookVersion IndexedDB persisted applyMerge', () => {
           expectedTargetHead,
         },
       );
-      if (!recovered.ok) throw new Error(`expected persisted apply recovery success: ${recovered.error.code}`);
+      if (!recovered.ok)
+        throw new Error(`expected persisted apply recovery success: ${recovered.error.code}`);
       expect(recovered.value).toMatchObject({
         status: 'alreadyApplied',
         ours: oursCommit.id,
@@ -962,35 +980,4 @@ function expectInitializeSuccess(
   if (result.status !== 'success') {
     throw new Error(`expected version graph initialize success: ${result.diagnostics[0]?.code}`);
   }
-}
-
-async function rootWrite(label: string): Promise<VersionGraphInitializeInput['rootWrite']> {
-  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, GRAPH_ID);
-  return {
-    snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
-      label,
-      sheets: [],
-    }),
-    semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
-      label,
-      changes: [],
-    }),
-    author: AUTHOR,
-    createdAt: CREATED_AT,
-    completenessDiagnostics: [],
-  };
-}
-
-async function objectRecord(
-  namespace: VersionGraphNamespace,
-  objectType: VersionObjectType,
-  payload: unknown,
-): Promise<VersionObjectRecord<unknown>> {
-  return createVersionObjectRecord(namespace, {
-    objectType,
-    schemaVersion: 1,
-    payloadEncoding: 'mog-canonical-json-v1',
-    dependencies: [],
-    payload,
-  });
 }

@@ -8,6 +8,7 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -57,7 +58,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -88,7 +89,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -163,7 +164,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         },
       });
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -186,7 +187,9 @@ describe('WorkbookVersion applyMerge production materializer', () => {
 
   it('creates a durable merge commit for a resolved same-cell conflict', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-conflict', 'root'));
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-conflict', 'root'),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
@@ -209,7 +212,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -240,7 +243,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -313,7 +316,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         },
       });
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -334,7 +337,9 @@ describe('WorkbookVersion applyMerge production materializer', () => {
 
   it('applies a persisted fast-forward merge result to an existing descendant commit', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-fast-forward', 'root'));
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-fast-forward', 'root'),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
@@ -351,7 +356,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -410,7 +415,8 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
       expect(preview.value).toMatchObject({
         status: 'fastForward',
         ours: oursCommit.id,
@@ -424,7 +430,11 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         attemptKind: 'applyable',
         targetRef: 'refs/heads/main',
       });
-      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+      if (
+        preview.value.status !== 'fastForward' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest
+      ) {
         throw new Error('expected fast-forward preview to expose a persisted result id and digest');
       }
 
@@ -477,7 +487,8 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           expectedTargetHead,
         },
       );
-      if (!repeated.ok) throw new Error(`expected repeated applyMerge success: ${repeated.error.code}`);
+      if (!repeated.ok)
+        throw new Error(`expected repeated applyMerge success: ${repeated.error.code}`);
       expect(repeated.value).toMatchObject({
         status: 'alreadyApplied',
         ours: oursCommit.id,
@@ -549,7 +560,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         ),
       ).toBe(false);
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: theirsCommit.id,
@@ -570,7 +581,9 @@ describe('WorkbookVersion applyMerge production materializer', () => {
 
   it('applies a persisted already-merged result without moving the target ref', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-already-merged', 'root'));
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-already-merged', 'root'),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
@@ -581,7 +594,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     let sourceWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -622,7 +635,8 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected already-merged preview success: ${preview.error.code}`);
+      if (!preview.ok)
+        throw new Error(`expected already-merged preview success: ${preview.error.code}`);
       expect(preview.value).toMatchObject({
         status: 'alreadyMerged',
         ours: oursCommit.id,
@@ -636,8 +650,14 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         attemptKind: 'applyable',
         targetRef: 'refs/heads/main',
       });
-      if (preview.value.status !== 'alreadyMerged' || !preview.value.resultId || !preview.value.resultDigest) {
-        throw new Error('expected already-merged preview to expose a persisted result id and digest');
+      if (
+        preview.value.status !== 'alreadyMerged' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest
+      ) {
+        throw new Error(
+          'expected already-merged preview to expose a persisted result id and digest',
+        );
       }
 
       const applied = await sourceWb.version.applyMerge(
@@ -650,7 +670,8 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           expectedTargetHead,
         },
       );
-      if (!applied.ok) throw new Error(`expected already-merged apply success: ${applied.error.code}`);
+      if (!applied.ok)
+        throw new Error(`expected already-merged apply success: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
         status: 'alreadyMerged',
         ours: oursCommit.id,
@@ -696,7 +717,9 @@ describe('WorkbookVersion applyMerge production materializer', () => {
         },
       );
       if (!staleTerminal.ok) {
-        throw new Error(`expected stale already-merged terminal result: ${staleTerminal.error.code}`);
+        throw new Error(
+          `expected stale already-merged terminal result: ${staleTerminal.error.code}`,
+        );
       }
       expect(staleTerminal.value).toMatchObject({
         status: 'staleTargetHead',
@@ -718,7 +741,9 @@ describe('WorkbookVersion applyMerge production materializer', () => {
 
   it('rejects a persisted fast-forward result when the target head moved after preview', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-stale-fast-forward', 'root'));
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-stale-fast-forward', 'root'),
+    );
     expectInitializeSuccess(initialized);
 
     const sourceHandle = await DocumentFactory.create({
@@ -729,7 +754,7 @@ describe('WorkbookVersion applyMerge production materializer', () => {
     let sourceWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -788,8 +813,13 @@ describe('WorkbookVersion applyMerge production materializer', () => {
           persistReviewRecord: true,
         },
       );
-      if (!preview.ok) throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
-      if (preview.value.status !== 'fastForward' || !preview.value.resultId || !preview.value.resultDigest) {
+      if (!preview.ok)
+        throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+      if (
+        preview.value.status !== 'fastForward' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest
+      ) {
         throw new Error('expected fast-forward preview to expose a persisted result id and digest');
       }
 

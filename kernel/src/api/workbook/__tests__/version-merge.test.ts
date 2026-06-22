@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { WorkbookVersionImpl } from '../version';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const OURS_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
@@ -31,7 +32,7 @@ describe('WorkbookVersion merge facade', () => {
       diagnostics: [],
       mutationGuarantee: 'preview-only',
     }));
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(
       version.merge(
@@ -80,7 +81,7 @@ describe('WorkbookVersion merge facade', () => {
 
   it('validates merge inputs before the merge service is called', async () => {
     const merge = jest.fn();
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(
       version.merge(
@@ -135,3 +136,12 @@ describe('WorkbookVersion merge facade', () => {
     });
   });
 });
+
+function workbookVersionWithMergeService(merge: unknown) {
+  return new WorkbookVersionImpl({
+    versioning: {
+      mergeService: { merge },
+      ...versionDomainSupportManifestRuntime(),
+    },
+  } as any);
+}

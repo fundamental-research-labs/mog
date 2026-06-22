@@ -3,6 +3,8 @@ import 'fake-indexeddb/auto';
 import { jest } from '@jest/globals';
 
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+
+import { withVersionManifest } from '../../../api/workbook/__tests__/version-domain-support-test-utils';
 import type { VersionNormalCommitCapture } from '../commit-service';
 import type { VersionObjectType } from '../object-digest';
 import {
@@ -339,10 +341,14 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     });
     await writable.handle.dispose();
 
-    await updateFirstByNamespace(OBJECTS_STORE, namespaceForDocumentScope(documentScope, graphId), (row) => ({
-      ...row,
-      schemaVersion: 99,
-    }));
+    await updateFirstByNamespace(
+      OBJECTS_STORE,
+      namespaceForDocumentScope(documentScope, graphId),
+      (row) => ({
+        ...row,
+        schemaVersion: 99,
+      }),
+    );
 
     const reopened = await openWorkbook(documentId, {
       providerSelection: { kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND },
@@ -422,7 +428,7 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
-    const wb = await handle.workbook({ versioning: { provider } });
+    const wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
       ok: false,
@@ -445,13 +451,16 @@ type LifecycleVersioningConfig = Parameters<
   Awaited<ReturnType<typeof DocumentFactory.create>>['workbook']
 >[0]['versioning'];
 
-async function openWorkbook(documentId: string, versioning: NonNullable<LifecycleVersioningConfig>) {
+async function openWorkbook(
+  documentId: string,
+  versioning: NonNullable<LifecycleVersioningConfig>,
+) {
   const handle = await DocumentFactory.create({
     documentId,
     environment: 'headless',
     userTimezone: 'UTC',
   });
-  const wb = await handle.workbook({ versioning });
+  const wb = await handle.workbook({ versioning: withVersionManifest(versioning) });
   return { handle, wb };
 }
 
@@ -503,7 +512,10 @@ async function objectRecord(
   });
 }
 
-async function putRegistryEnvelope(documentScope: VersionDocumentScope, value: unknown): Promise<void> {
+async function putRegistryEnvelope(
+  documentScope: VersionDocumentScope,
+  value: unknown,
+): Promise<void> {
   const db = await openVersionStoreIndexedDb();
   const tx = db.transaction(REGISTRIES_STORE, 'readwrite');
   tx.objectStore(REGISTRIES_STORE).put(value, versionDocumentScopeKey(documentScope));

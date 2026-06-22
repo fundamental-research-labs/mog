@@ -1,11 +1,8 @@
-import type {
-  VersionHead,
-  Workbook,
-  WorkbookCommitSummary,
-} from '@mog-sdk/contracts/api';
+import type { VersionHead, Workbook, WorkbookCommitSummary } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -56,7 +53,7 @@ describe('WorkbookVersion applyMerge direct formats', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('B1', 'base-seed');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -87,7 +84,7 @@ describe('WorkbookVersion applyMerge direct formats', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -167,7 +164,7 @@ describe('WorkbookVersion applyMerge direct formats', () => {
         },
       });
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,

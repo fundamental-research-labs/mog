@@ -8,6 +8,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { WorkbookVersionImpl } from '../version';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
@@ -43,9 +44,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     };
     const merge = jest.fn(async () => result);
     const write = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { commit: write } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { commit: write },
+    });
 
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
@@ -100,9 +102,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       },
       diagnostics: [],
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
 
     await expect(
       version.applyMerge(
@@ -158,12 +161,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       diagnostics: [],
       mutationGuarantee: 'ref-fast-forwarded',
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: {
-        mergeService: { merge },
-        writeService: { fastForwardMerge, mergeCommit },
-      },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { fastForwardMerge, mergeCommit },
+    });
 
     await expect(
       version.applyMerge(
@@ -224,12 +225,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       diagnostics: [],
       mutationGuarantee: 'ref-fast-forwarded',
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: {
-        mergeService: { merge },
-        writeService: { fastForwardMerge, mergeCommit },
-      },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { fastForwardMerge, mergeCommit },
+    });
 
     await expect(
       version.applyMerge(
@@ -272,9 +271,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('plans fast-forward previews as zero-change plans', async () => {
     const merge = jest.fn(async () => ancestryResult('fastForward'));
     const mergeCommit = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
 
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
@@ -298,9 +298,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('blocks fast-forward apply previews when no fast-forward writer is available', async () => {
     const merge = jest.fn(async () => ancestryResult('fastForward'));
     const mergeCommit = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
 
     await expect(
       version.applyMerge(
@@ -325,7 +326,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
 
   it('plans already-merged previews as zero-change plans', async () => {
     const merge = jest.fn(async () => ancestryResult('alreadyMerged'));
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
@@ -348,9 +349,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('returns alreadyMerged in apply mode without writing', async () => {
     const merge = jest.fn(async () => ancestryResult('alreadyMerged'));
     const mergeCommit = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
 
     await expect(
       version.applyMerge(
@@ -383,7 +385,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('returns conflicted previews when resolutions are not supplied', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }, { mode: 'preview' }),
@@ -406,7 +408,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('plans conflicted previews when each conflict has a matching resolution option', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge(
@@ -455,9 +457,10 @@ describe('WorkbookVersion applyMerge preview planner', () => {
       },
       diagnostics: [],
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge }, writeService: { mergeCommit } },
-    } as any);
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
     const resolution = resolutionFor(conflict, 'acceptTheirs');
     const resolvedChange = {
       structural: conflict.structural,
@@ -506,7 +509,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   it('blocks resolution sets with stale conflict digests', async () => {
     const conflict = sameCellConflict();
     const merge = jest.fn(async () => conflictedResult(conflict));
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
     const resolution = {
       ...resolutionFor(conflict, 'acceptOurs'),
       expectedConflictDigest: 'sha256:stale',
@@ -537,7 +540,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
 
   it('blocks apply mode before preview when target head fencing is incomplete', async () => {
     const merge = jest.fn();
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }),
@@ -556,7 +559,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
 
   it('validates applyMerge input before merge preview is requested', async () => {
     const merge = jest.fn();
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge({
@@ -581,7 +584,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
 
   it('validates persisted result inputs before merge preview is requested', async () => {
     const merge = jest.fn();
-    const version = new WorkbookVersionImpl({ versioning: { mergeService: { merge } } } as any);
+    const version = workbookVersionWithVersioning({ mergeService: { merge } });
 
     await expect(
       version.applyMerge(
@@ -727,4 +730,13 @@ function metadata(changeId: string, entityId: string) {
     entityId,
     propertyPath: ['value'],
   };
+}
+
+function workbookVersionWithVersioning(versioning: Record<string, unknown>) {
+  return new WorkbookVersionImpl({
+    versioning: {
+      ...versioning,
+      ...versionDomainSupportManifestRuntime(),
+    },
+  } as any);
 }

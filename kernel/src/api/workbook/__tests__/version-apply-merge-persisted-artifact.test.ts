@@ -8,6 +8,7 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -71,7 +72,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -102,7 +103,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -231,7 +232,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         },
       });
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -281,7 +282,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     let mergedWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -312,7 +313,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
@@ -482,7 +483,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
         },
       });
 
-      mergedWb = await mergedHandle.workbook({ versioning: { provider } });
+      mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -564,7 +565,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     let branchWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: { provider } });
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -595,7 +596,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       );
       const oursHead = await expectHead(sourceWb);
 
-      branchWb = await branchHandle.workbook({ versioning: { provider } });
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);

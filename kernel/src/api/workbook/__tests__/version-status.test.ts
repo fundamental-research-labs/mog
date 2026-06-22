@@ -1,6 +1,5 @@
 import { jest } from '@jest/globals';
 
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
@@ -17,6 +16,15 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
+import {
+  VERSION_STATUS_CHILD_COMMIT_ID as CHILD_COMMIT_ID,
+  VERSION_STATUS_CREATED_AT as CREATED_AT,
+  VERSION_STATUS_DIFF_PAGE_TOKEN as DIFF_PAGE_TOKEN,
+  VERSION_STATUS_REF_REVISION as REF_REVISION,
+  VERSION_STATUS_ROOT_COMMIT_ID as ROOT_COMMIT_ID,
+  createFakeVersionStatusGraphStore as createFakeGraphStore,
+} from './version-status-test-utils';
+import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -67,23 +75,19 @@ function createMockEventBus() {
   };
 }
 
-const ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
-const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
-const REF_REVISION = { kind: 'counter', value: '2' } as const;
-const CREATED_AT = '2026-06-20T00:00:00.000Z';
-const DIFF_PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
 const DOCUMENT_SCOPE: VersionDocumentScope = {
   workspaceId: 'workspace-1',
   documentId: 'document-1',
   principalScope: 'principal-1',
 };
-const VERSION_AUTHOR: VersionAuthor = {
+const VERSION_AUTHOR = {
   authorId: 'user-1',
   actorKind: 'user',
   displayName: 'User One',
-};
+} as const;
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
+  const versioning = overrides.versioning as Record<string, unknown> | undefined;
   return {
     computeBridge: {},
     writeGate: {
@@ -96,6 +100,7 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
       dispose: jest.fn(),
     },
     ...overrides,
+    ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   } as any;
 }
 
@@ -110,10 +115,12 @@ function createWorkbook(overrides?: Partial<WorkbookConfig>) {
     clear: jest.fn(),
   });
 
+  const versioning = overrides?.versioning as Record<string, unknown> | undefined;
   return new WorkbookImpl({
     ctx: createMockCtx(),
     eventBus: createMockEventBus(),
     ...overrides,
+    ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   });
 }
 
@@ -347,7 +354,6 @@ describe('WorkbookVersion status slice', () => {
         includeDiagnostics: true,
       },
     );
-
   });
 
   it('returns a stale unsupported diagnostic for page tokens without calling the graph service', async () => {
@@ -713,36 +719,33 @@ describe('WorkbookVersion status slice', () => {
     ['parents', 'VERSION_PERMISSION_DENIED'],
     ['segmentIds', 'VERSION_INVALID_OPTIONS'],
     ['unknownField', 'VERSION_INVALID_OPTIONS'],
-  ])(
-    'rejects unsafe commit option %s before the write service is called',
-    async (field, issue) => {
-      const commit = jest.fn();
-      const wb = createWorkbook({
-        ctx: createMockCtx({
-          versioning: {
-            writeService: { commit },
-          },
-        }),
-      });
-
-      await expect(wb.version.commit({ [field]: 'spoofed' } as any)).resolves.toMatchObject({
-        ok: false,
-        error: {
-          code: 'target_unavailable',
-          diagnostics: [
-            expect.objectContaining({
-              code: issue,
-              data: expect.objectContaining({
-                mutationGuarantee: 'no-write-attempted',
-                redacted: true,
-              }),
-            }),
-          ],
+  ])('rejects unsafe commit option %s before the write service is called', async (field, issue) => {
+    const commit = jest.fn();
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          writeService: { commit },
         },
-      });
-      expect(commit).not.toHaveBeenCalled();
-    },
-  );
+      }),
+    });
+
+    await expect(wb.version.commit({ [field]: 'spoofed' } as any)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: issue,
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              redacted: true,
+            }),
+          }),
+        ],
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
 
   it('rejects unsupported root/import commit modes before the write service is called', async () => {
     const commit = jest.fn();
@@ -894,107 +897,4 @@ function createEmptyNormalCommitCapture(label: string): VersionNormalCommitCaptu
       completenessDiagnostics: [],
     },
   });
-}
-
-function createFakeGraphStore(options: { readonly includeDiff?: boolean } = {}) {
-  const graphStore = {
-    readHead: jest.fn(async () => ({
-      status: 'success',
-      head: {
-        id: CHILD_COMMIT_ID,
-        refName: 'refs/heads/main',
-        resolvedFrom: 'HEAD',
-        refRevision: REF_REVISION,
-      },
-      main: {
-        name: 'refs/heads/main',
-        commitId: CHILD_COMMIT_ID,
-        revision: REF_REVISION,
-        updatedAt: CREATED_AT,
-      },
-      diagnostics: [],
-    })),
-    listCommits: jest.fn(async () => ({
-      status: 'success',
-      commits: [
-        {
-          id: CHILD_COMMIT_ID,
-          parents: [ROOT_COMMIT_ID],
-          createdAt: CREATED_AT,
-          author: {
-            authorId: 'user-1',
-            actorKind: 'user',
-            displayName: 'Public Reader',
-            clientId: 'hidden-client',
-          },
-        },
-        {
-          id: ROOT_COMMIT_ID,
-          parents: [],
-          createdAt: CREATED_AT,
-          author: {
-            authorId: 'system-1',
-            actorKind: 'system',
-          },
-        },
-      ],
-      readRevision: REF_REVISION,
-      order: 'topological-newest',
-      pageSize: 50,
-      diagnostics: [],
-    })),
-    readRef: jest.fn(async (name: string) => ({
-      status: 'success',
-      ref:
-        name === 'HEAD'
-          ? {
-              name: 'HEAD',
-              target: 'refs/heads/main',
-              revision: REF_REVISION,
-            }
-          : {
-              name: 'refs/heads/main',
-              commitId: CHILD_COMMIT_ID,
-              revision: REF_REVISION,
-              updatedAt: CREATED_AT,
-            },
-      diagnostics: [],
-    })),
-    diff: jest.fn(async () => ({
-      status: 'success',
-      items: [
-        {
-          structural: {
-            kind: 'metadata',
-            changeId: 'change-1',
-            domain: 'cell',
-            entityId: 'sheet-1!A1',
-            propertyPath: ['value'],
-          },
-          before: { kind: 'value', value: 1 },
-          after: {
-            kind: 'value',
-            value: { kind: 'formula', formula: '=A1+1', result: 2 },
-          },
-          display: {
-            sheetName: { kind: 'value', value: 'Sheet1' },
-            address: { kind: 'value', value: 'A1' },
-          },
-        },
-      ],
-      nextPageToken: DIFF_PAGE_TOKEN,
-      readRevision: REF_REVISION,
-      order: 'semantic-change-order',
-      diagnostics: [],
-    })),
-  };
-
-  if (options.includeDiff === false) {
-    return {
-      ...graphStore,
-      diff: undefined,
-    };
-  }
-
-  return graphStore;
 }

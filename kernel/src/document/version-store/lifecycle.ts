@@ -1,8 +1,11 @@
+import type { DomainSupportManifest } from '@mog-sdk/contracts/versioning';
+
 import type {
   VersionMergeCommitCapture,
   VersionNormalCommitCapture,
   WorkbookVersionCommitService,
 } from './commit-service';
+import type { DomainSupportManifestValidationOptions } from './domain-support-manifest-validator';
 import type { CheckoutSnapshotMaterializer } from './checkout-apply';
 import type { PendingRemotePromotionService } from './pending-remote-promotion-service';
 import type { VersionProviderWriteActivityTracker } from './provider-write-activity';
@@ -71,6 +74,10 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
   readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
+  readonly domainSupportManifest?: DomainSupportManifest | null;
+  readonly readDomainSupportManifest?: () => MaybePromise<DomainSupportManifest | null | undefined>;
+  readonly domainSupportManifestOptions?: DomainSupportManifestValidationOptions;
+  readonly requireDomainSupportManifest?: boolean;
 };
 
 export type VersionStoreLifecycleProviderSelection = {
@@ -150,6 +157,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
         return {
           versioning: {
             writeService: createLifecycleFailureReadService(mismatchDiagnostics),
+            ...domainSupportManifestLifecycleFields(config),
           },
           diagnostics: mismatchDiagnostics,
         };
@@ -199,8 +207,34 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       writeService: config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
       readLiveCollaborationStatus: config.readLiveCollaborationStatus,
+      ...domainSupportManifestLifecycleFields(config),
     }),
     diagnostics,
+  };
+}
+
+function domainSupportManifestLifecycleFields(
+  config: ResolvedWorkbookVersioningConfig,
+): Pick<
+  ResolvedWorkbookVersioningConfig,
+  | 'domainSupportManifest'
+  | 'readDomainSupportManifest'
+  | 'domainSupportManifestOptions'
+  | 'requireDomainSupportManifest'
+> {
+  return {
+    ...(config.domainSupportManifest !== undefined
+      ? { domainSupportManifest: config.domainSupportManifest }
+      : {}),
+    ...(config.readDomainSupportManifest
+      ? { readDomainSupportManifest: config.readDomainSupportManifest }
+      : {}),
+    ...(config.domainSupportManifestOptions
+      ? { domainSupportManifestOptions: config.domainSupportManifestOptions }
+      : {}),
+    ...(config.requireDomainSupportManifest !== undefined
+      ? { requireDomainSupportManifest: config.requireDomainSupportManifest }
+      : {}),
   };
 }
 

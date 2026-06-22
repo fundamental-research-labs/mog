@@ -1,7 +1,8 @@
 import { jest } from '@jest/globals';
 
-import { WorkbookVersionImpl } from '../version';
 import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/api';
+import { WorkbookVersionImpl } from '../version';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
@@ -28,9 +29,7 @@ describe('WorkbookVersion merge facade', () => {
       mutationGuarantee: 'preview-only',
     };
     const merge = jest.fn(async () => result);
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(
       version.merge(
@@ -79,9 +78,7 @@ describe('WorkbookVersion merge facade', () => {
       applyEligibilityDigest: DIGEST_C,
     } as const;
     const merge = jest.fn(async () => result);
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual({
       ok: true,
@@ -101,9 +98,7 @@ describe('WorkbookVersion merge facade', () => {
       mutationGuarantee: 'preview-only',
       resultDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
       ok: false,
@@ -132,9 +127,7 @@ describe('WorkbookVersion merge facade', () => {
       mutationGuarantee: 'preview-only',
       previewArtifactDigest: { algorithm: 'sha256', digest: 'not-a-digest' },
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
       ok: false,
@@ -184,9 +177,7 @@ describe('WorkbookVersion merge facade', () => {
       mutationGuarantee: 'preview-only',
     };
     const merge = jest.fn(async () => result);
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual({
       ok: true,
@@ -208,11 +199,11 @@ describe('WorkbookVersion merge facade', () => {
         mutationGuarantee: 'preview-only',
       };
       const merge = jest.fn(async () => result);
-      const version = new WorkbookVersionImpl({
-        versioning: { mergeService: { merge } },
-      } as any);
+      const version = workbookVersionWithMergeService(merge);
 
-      await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toStrictEqual({
+      await expect(
+        version.merge({ base: BASE, ours: OURS, theirs: THEIRS }),
+      ).resolves.toStrictEqual({
         ok: true,
         value: result,
       });
@@ -243,9 +234,7 @@ describe('WorkbookVersion merge facade', () => {
       diagnostics: [],
       mutationGuarantee: 'preview-only',
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
       ok: false,
@@ -297,9 +286,7 @@ describe('WorkbookVersion merge facade', () => {
         diagnostics: [],
         mutationGuarantee: 'preview-only',
       }));
-      const version = new WorkbookVersionImpl({
-        versioning: { mergeService: { merge } },
-      } as any);
+      const version = workbookVersionWithMergeService(merge);
 
       await expect(
         version.merge({ base: BASE, ours: OURS, theirs: THEIRS }),
@@ -350,9 +337,7 @@ describe('WorkbookVersion merge facade', () => {
       diagnostics: [],
       mutationGuarantee: 'preview-only',
     }));
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
       ok: false,
@@ -371,9 +356,7 @@ describe('WorkbookVersion merge facade', () => {
 
   it('returns a blocked preview result when merge input is malformed', async () => {
     const merge = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { mergeService: { merge } },
-    } as any);
+    const version = workbookVersionWithMergeService(merge);
 
     await expect(
       version.merge({ base: 'not-a-commit', ours: OURS, theirs: THEIRS } as any),
@@ -416,4 +399,13 @@ function resolutionOption(kind: 'acceptOurs' | 'acceptTheirs' | 'acceptBase', va
     value: { kind: 'value', value },
     recalcRequired: true,
   };
+}
+
+function workbookVersionWithMergeService(merge: unknown) {
+  return new WorkbookVersionImpl({
+    versioning: {
+      mergeService: { merge },
+      ...versionDomainSupportManifestRuntime(),
+    },
+  } as any);
 }

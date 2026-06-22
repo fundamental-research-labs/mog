@@ -6,9 +6,7 @@ import {
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphWriteResult,
 } from '../../../document/version-store/graph-store';
-import {
-  createCheckoutMaterializationService,
-} from '../../../document/version-store/checkout-service';
+import { createCheckoutMaterializationService } from '../../../document/version-store/checkout-service';
 import {
   createInMemoryWorkbookCommitStore,
   type CreateWorkbookCommitResult,
@@ -37,6 +35,7 @@ import {
   type VersionGraphStore,
 } from '../../../document/version-store/provider';
 import { createVersionProviderWriteActivityTracker } from '../../../document/version-store/provider-write-activity';
+import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -118,6 +117,7 @@ function createMockEventBus() {
 }
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
+  const versioning = overrides.versioning as Record<string, unknown> | undefined;
   return {
     computeBridge: {},
     writeGate: {
@@ -130,6 +130,7 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
       dispose: jest.fn(),
     },
     ...overrides,
+    ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   } as any;
 }
 
@@ -144,10 +145,12 @@ function createWorkbook(overrides?: Partial<WorkbookConfig>) {
     clear: jest.fn(),
   });
 
+  const versioning = overrides?.versioning as Record<string, unknown> | undefined;
   return new WorkbookImpl({
     ctx: createMockCtx(),
     eventBus: createMockEventBus(),
     ...overrides,
+    ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   });
 }
 
@@ -274,9 +277,7 @@ function plannedCheckoutResult(commitId: string) {
       commitId,
       parentCommitIds: [],
       resolvedTarget: { kind: 'commit', commitId },
-      requiredDependencies: [
-        { role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' },
-      ],
+      requiredDependencies: [{ role: 'snapshotRoot', objectType: 'workbook.snapshotRoot.v1' }],
     },
     diagnostics: [],
     mutationGuarantee: 'no-workbook-mutation',
@@ -293,24 +294,19 @@ async function pendingSegmentFixture(
 ): Promise<PendingSegmentFixture> {
   const operationContext = syncOperationContext();
   const keys = await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext);
-  const snapshotRootRecord = await scopedObjectRecord(
-    namespace,
-    'workbook.snapshotRoot.v1',
-    { snapshotId: 'remote-boundary-snapshot-1', sheets: [] },
-  );
+  const snapshotRootRecord = await scopedObjectRecord(namespace, 'workbook.snapshotRoot.v1', {
+    snapshotId: 'remote-boundary-snapshot-1',
+    sheets: [],
+  });
   const semanticChangeSetRecord = await scopedObjectRecord(
     namespace,
     'workbook.semanticChangeSet.v1',
     { schemaVersion: 1, changes: [{ id: 'remote-change-1' }] },
   );
-  const mutationSegmentRecord = await scopedObjectRecord(
-    namespace,
-    'workbook.mutationSegment.v1',
-    {
-      segmentId: 'remote-segment-1',
-      domainId: 'runtime-diagnostics',
-    },
-  );
+  const mutationSegmentRecord = await scopedObjectRecord(namespace, 'workbook.mutationSegment.v1', {
+    segmentId: 'remote-segment-1',
+    domainId: 'runtime-diagnostics',
+  });
 
   return {
     input: {
@@ -594,10 +590,7 @@ describe('WorkbookVersion checkout facade', () => {
 
   it('blocks checkout while remote sync changes are waiting for promotion', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const namespace = namespaceForDocumentScope(
-      DOCUMENT_SCOPE,
-      'graph-pending-remote-checkout',
-    );
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-pending-remote-checkout');
     const initialized = await provider.initializeGraph(
       await initializeInput('graph-pending-remote-checkout', 'root'),
     );
@@ -711,11 +704,12 @@ describe('WorkbookVersion checkout facade', () => {
     const promotionStarted = new Promise<void>((resolve) => {
       markPromotionStarted = resolve;
     });
-    const inFlightPromotion =
-      providerWriteActivityTracker.runExclusivePendingRemotePromotion(async () => {
+    const inFlightPromotion = providerWriteActivityTracker.runExclusivePendingRemotePromotion(
+      async () => {
         markPromotionStarted();
         await promotionHold;
-      });
+      },
+    );
     await promotionStarted;
     const wb = createWorkbook({
       versioning: {

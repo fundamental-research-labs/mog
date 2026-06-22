@@ -17,6 +17,7 @@ import {
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import { withVersionManifest } from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -106,10 +107,12 @@ function createWorkbook(overrides?: Partial<WorkbookConfig>) {
     clear: jest.fn(),
   });
 
+  const versioning = overrides?.versioning as Record<string, unknown> | undefined;
   return new WorkbookImpl({
     ctx: createMockCtx(),
     eventBus: createMockEventBus(),
     ...overrides,
+    ...(versioning ? { versioning: withVersionManifest(versioning) } : {}),
   });
 }
 

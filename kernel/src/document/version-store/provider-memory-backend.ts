@@ -32,6 +32,10 @@ import {
   SyncBatchStatusMemoryBackend,
   type SyncBatchStatusMemoryBackendSnapshot,
 } from './sync-batch-status-store';
+import {
+  WorkbookVersionReviewRecordMemoryBackend,
+  type WorkbookVersionReviewRecordMemoryBackendSnapshot,
+} from './review-service';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -47,6 +51,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly pendingRemoteSegments?: PendingRemoteSegmentMemoryBackendSnapshot;
   readonly appliedSyncUpdateIdentities?: AppliedSyncUpdateIdentityMemoryBackendSnapshot;
   readonly syncBatchStatuses?: SyncBatchStatusMemoryBackendSnapshot;
+  readonly reviewRecords?: WorkbookVersionReviewRecordMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
@@ -56,6 +61,7 @@ export class InMemoryVersionDocumentProviderBackend {
   readonly pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend;
   readonly appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend;
   readonly syncBatchStatusBackend: SyncBatchStatusMemoryBackend;
+  readonly reviewRecordBackend: WorkbookVersionReviewRecordMemoryBackend;
 
   constructor(
     options: {
@@ -63,6 +69,7 @@ export class InMemoryVersionDocumentProviderBackend {
       readonly pendingRemoteSegmentBackend?: PendingRemoteSegmentMemoryBackend;
       readonly appliedSyncUpdateIdentityBackend?: AppliedSyncUpdateIdentityMemoryBackend;
       readonly syncBatchStatusBackend?: SyncBatchStatusMemoryBackend;
+      readonly reviewRecordBackend?: WorkbookVersionReviewRecordMemoryBackend;
     } = {},
   ) {
     this.mergeApplyIntentBackend =
@@ -73,6 +80,8 @@ export class InMemoryVersionDocumentProviderBackend {
       options.appliedSyncUpdateIdentityBackend ?? new AppliedSyncUpdateIdentityMemoryBackend();
     this.syncBatchStatusBackend =
       options.syncBatchStatusBackend ?? new SyncBatchStatusMemoryBackend();
+    this.reviewRecordBackend =
+      options.reviewRecordBackend ?? new WorkbookVersionReviewRecordMemoryBackend();
   }
 
   readRegistryRecord(
@@ -137,6 +146,7 @@ export class InMemoryVersionDocumentProviderBackend {
       pendingRemoteSegments: this.pendingRemoteSegmentBackend.exportSnapshot(),
       appliedSyncUpdateIdentities: this.appliedSyncUpdateIdentityBackend.exportSnapshot(),
       syncBatchStatuses: this.syncBatchStatusBackend.exportSnapshot(),
+      reviewRecords: this.reviewRecordBackend.exportSnapshot(),
     });
   }
 
@@ -155,6 +165,9 @@ export class InMemoryVersionDocumentProviderBackend {
       ),
       syncBatchStatusBackend: SyncBatchStatusMemoryBackend.fromSnapshot(
         snapshot.syncBatchStatuses ?? { records: [] },
+      ),
+      reviewRecordBackend: WorkbookVersionReviewRecordMemoryBackend.fromSnapshot(
+        snapshot.reviewRecords ?? { rows: [] },
       ),
     });
     for (const [scope, record] of snapshot.registries) {

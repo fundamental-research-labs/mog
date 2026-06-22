@@ -11,31 +11,15 @@ import {
   type VersionGraphSymbolicRef,
 } from './graph-store';
 import type { WorkbookCommitId } from './object-digest';
-import {
-  normalizeVersionGraphNamespace,
-  versionGraphNamespaceKey,
-  type VersionGraphNamespace,
-} from './object-store';
+import { normalizeVersionGraphNamespace, versionGraphNamespaceKey, type VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore } from './provider-graph-store';
-import {
-  InMemoryVersionDocumentProviderBackend,
-  type InMemoryVersionProviderDurability,
-} from './provider-memory-backend';
+import { InMemoryVersionDocumentProviderBackend, type InMemoryVersionProviderDurability } from './provider-memory-backend';
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
 import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
 import { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
-import {
-  cloneVersionGraphRegistry,
-  createVersionGraphRegistry,
-  namespaceForDocumentScope,
-  namespaceForRegistry,
-  normalizeVersionDocumentScope,
-  normalizeVersionStoreString,
-  type VersionDocumentScope,
-  type VersionGraphRegistry,
-  type VersionRecordRevision,
-} from './registry';
+import { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
+import { cloneVersionGraphRegistry, createVersionGraphRegistry, namespaceForDocumentScope, namespaceForRegistry, normalizeVersionDocumentScope, normalizeVersionStoreString, type VersionDocumentScope, type VersionGraphRegistry, type VersionRecordRevision } from './registry';
 
 export {
   VERSION_GRAPH_REGISTRY_CHECKSUM_DOMAIN,
@@ -46,10 +30,7 @@ export {
   versionDocumentScopeKey,
 } from './registry';
 export type { VersionDocumentScope, VersionGraphRegistry, VersionRecordRevision } from './registry';
-export {
-  InMemoryVersionDocumentProviderBackend,
-  type InMemoryVersionDocumentProviderBackendSnapshot,
-} from './provider-memory-backend';
+export { InMemoryVersionDocumentProviderBackend, type InMemoryVersionDocumentProviderBackendSnapshot } from './provider-memory-backend';
 export type { VersionGraphStore } from './provider-graph-store';
 
 export type VersionAccessContext = {
@@ -576,11 +557,7 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
 
   async openMergeApplyIntentStore(namespace: VersionGraphNamespace): Promise<InMemoryMergeApplyIntentStore> {
     await this.openGraph(namespace);
-    return new InMemoryMergeApplyIntentStore({
-      namespace,
-      documentScope: this.documentScope,
-      backend: this.backend.mergeApplyIntentBackend,
-    });
+    return new InMemoryMergeApplyIntentStore({ namespace, documentScope: this.documentScope, backend: this.backend.mergeApplyIntentBackend });
   }
 
   async openPendingRemoteSegmentStore(namespace: VersionGraphNamespace): Promise<InMemoryPendingRemoteSegmentStore> {
@@ -589,17 +566,15 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
   }
 
   async openAppliedSyncUpdateIdentityStore(): Promise<InMemoryAppliedSyncUpdateIdentityStore> {
-    return new InMemoryAppliedSyncUpdateIdentityStore({
-      documentScope: this.documentScope,
-      backend: this.backend.appliedSyncUpdateIdentityBackend,
-    });
+    return new InMemoryAppliedSyncUpdateIdentityStore({ documentScope: this.documentScope, backend: this.backend.appliedSyncUpdateIdentityBackend });
   }
 
   async openSyncBatchStatusStore(): Promise<InMemorySyncBatchStatusStore> {
-    return new InMemorySyncBatchStatusStore({
-      documentScope: this.documentScope,
-      backend: this.backend.syncBatchStatusBackend,
-    });
+    return new InMemorySyncBatchStatusStore({ documentScope: this.documentScope, backend: this.backend.syncBatchStatusBackend });
+  }
+
+  async openWorkbookVersionReviewRecordStore(): Promise<InMemoryWorkbookVersionReviewRecordStore> {
+    return new InMemoryWorkbookVersionReviewRecordStore({ documentScope: this.documentScope, backend: this.backend.reviewRecordBackend });
   }
 
   async scanDocumentIntegrity(

@@ -92,6 +92,7 @@ import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-inten
 import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending-remote-segments';
 import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-applied-sync-updates';
 import { IndexedDbSyncBatchStatusStore } from './provider-indexeddb-sync-batch-statuses';
+import { IndexedDbWorkbookVersionReviewRecordStore } from './provider-indexeddb-review-records';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -375,6 +376,13 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
 
   async openSyncBatchStatusStore(): Promise<IndexedDbSyncBatchStatusStore> {
     return new IndexedDbSyncBatchStatusStore({
+      documentScope: this.documentScope,
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openWorkbookVersionReviewRecordStore(): Promise<IndexedDbWorkbookVersionReviewRecordStore> {
+    return new IndexedDbWorkbookVersionReviewRecordStore({
       documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });

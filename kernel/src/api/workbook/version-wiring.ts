@@ -5,6 +5,10 @@ import { createWorkbookVersionCommitService } from '../../document/version-store
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import {
+  createProviderBackedWorkbookVersionReviewService,
+  hasWorkbookVersionReviewRecordStoreProvider,
+} from '../../document/version-store/review-service';
+import {
   createPendingRemotePromotionService,
   type PendingRemotePromotionService,
 } from '../../document/version-store/pending-remote-promotion-service';
@@ -134,7 +138,10 @@ export function attachWorkbookVersioning(
     config.reviewService ??
     existing.reviewService ??
     existing.versionReviewService ??
-    existing.reviewMetadataStore;
+    existing.reviewMetadataStore ??
+    (hasWorkbookVersionReviewRecordStoreProvider(config.provider)
+      ? createProviderBackedWorkbookVersionReviewService({ provider: config.provider })
+      : undefined);
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),

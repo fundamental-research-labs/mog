@@ -60,6 +60,25 @@ export class IndexedDbWorkbookVersionReviewRecordStore extends WorkbookVersionRe
           await idbTransactionDone(tx);
           return result.result;
         },
+        async mutateRows<T>(mutator: (
+          rows: readonly WorkbookVersionReviewRecordStoreRow[],
+        ) => ReviewRecordRowMutation<T>) {
+          const db = await options.getDb();
+          const tx = db.transaction(INTENTS_STORE, 'readwrite');
+          const store = tx.objectStore(INTENTS_STORE);
+          const rows = await rowsForDocumentScope(store, documentScopeKey);
+          const result = mutator(rows);
+          if (result.action === 'put') {
+            await idbRequest(
+              store.put(
+                storedWorkbookVersionReviewRecordRow(result.row),
+                reviewRecordStorageKey(documentScopeKey, result.row.record.id),
+              ),
+            );
+          }
+          await idbTransactionDone(tx);
+          return result.result;
+        },
       },
     });
   }

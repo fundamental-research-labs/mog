@@ -26,6 +26,7 @@ const OTHER_DOCUMENT_SCOPE: VersionDocumentScope = {
 };
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}` as const;
 const HEAD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}` as const;
+const OTHER_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}` as const;
 const AUTHOR = { kind: 'user', trust: 'trusted', displayName: 'Reviewer' } as const;
 const REDACTION_POLICY = {
   mode: 'default',
@@ -74,6 +75,10 @@ describe('WorkbookVersionReviewRecordStore', () => {
     ).resolves.toMatchObject({
       ok: false,
       error: { code: 'invalid_state', state: 'review_client_request_reused' },
+    });
+    await expect(store.createReview(createReviewInput('create-duplicate'))).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_state', state: 'active_review_exists' },
     });
 
     const decisionInput = appendDecisionInput(reviewId, 1, 'decision-1');
@@ -130,7 +135,10 @@ describe('WorkbookVersionReviewRecordStore', () => {
       value: { items: [{ id: reviewId }], limit: 50, totalEstimate: 1 },
     });
 
-    const second = await store.createReview(createReviewInput('create-2'));
+    const second = await store.createReview(createReviewInput('create-2', {
+      kind: 'commit',
+      commitId: OTHER_COMMIT_ID,
+    }));
     expect(second.ok).toBe(true);
     const firstPage = await store.listReviews({ limit: 1 });
     expect(firstPage).toMatchObject({ ok: true, value: { items: [expect.any(Object)], limit: 1 } });
@@ -198,14 +206,17 @@ describe('WorkbookVersionReviewRecordStore', () => {
   });
 });
 
-function createReviewInput(clientRequestId: string): VersionCreateReviewInput {
+function createReviewInput(
+  clientRequestId: string,
+  subject: VersionCreateReviewInput['subject'] = {
+    kind: 'commitRange',
+    baseCommitId: BASE_COMMIT_ID,
+    headCommitId: HEAD_COMMIT_ID,
+  },
+): VersionCreateReviewInput {
   return {
     clientRequestId,
-    subject: {
-      kind: 'commitRange',
-      baseCommitId: BASE_COMMIT_ID,
-      headCommitId: HEAD_COMMIT_ID,
-    },
+    subject,
     title: `Review ${clientRequestId}`,
     createdBy: AUTHOR,
     redactionPolicy: REDACTION_POLICY,

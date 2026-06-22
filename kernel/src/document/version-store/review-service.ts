@@ -42,6 +42,11 @@ const TERMINAL_STATUSES = new Set<WorkbookVersionReviewStatus>([
   'superseded',
   'stale',
 ]);
+const ACTIVE_REVIEW_STATUSES = new Set<WorkbookVersionReviewStatus>([
+  'open',
+  'approved',
+  'changes_requested',
+]);
 
 export interface WorkbookVersionReviewService {
   listReviews(
@@ -111,6 +116,11 @@ export type WorkbookVersionReviewRecordStoreAdapter = {
     reviewId: string,
     mutator: (
       row: WorkbookVersionReviewRecordStoreRow | undefined,
+    ) => ReviewRecordRowMutation<T>,
+  ): Promise<VersionResult<T>>;
+  mutateRows<T>(
+    mutator: (
+      rows: readonly WorkbookVersionReviewRecordStoreRow[],
     ) => ReviewRecordRowMutation<T>,
   ): Promise<VersionResult<T>>;
 };
@@ -206,10 +216,23 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
     const reviewId = await reviewIdForCreate(this.documentScopeKey, input.clientRequestId);
     const fingerprint = mutationFingerprint('createReview', createReviewFingerprint(input));
     const createdAt = new Date().toISOString();
-    return this.adapter.mutateRow<WorkbookVersionReviewRecord>(reviewId, (existing) => {
+    return this.adapter.mutateRows<WorkbookVersionReviewRecord>((rows) => {
+      const existing = rows.find((row) => row.record.id === reviewId);
       if (existing) {
         const idempotent = idempotencyResult<WorkbookVersionReviewRecord>(existing, 'createReview', input.clientRequestId, fingerprint);
         return { action: 'none', result: idempotent ?? invalidClientRequestReuse() };
+      }
+
+      const duplicate = rows.find((row) => isActiveReview(row.record) && reviewSubjectsEqual(row.record.subject, input.subject));
+      if (duplicate) {
+        return {
+          action: 'none',
+          result: invalidState(
+            'active_review_exists',
+            ['existing_active_review', 'terminal_review_then_new_review'],
+            'An active review already exists for this review subject.',
+          ),
+        };
       }
 
       const record = createReviewRecord({
@@ -362,6 +385,11 @@ export class InMemoryWorkbookVersionReviewRecordStore
         },
         async mutateRow(reviewId, mutator) {
           const result = mutator(options.backend.get(documentScopeKey, reviewId));
+          if (result.action === 'put') options.backend.put(result.row);
+          return result.result;
+        },
+        async mutateRows(mutator) {
+          const result = mutator(options.backend.list(documentScopeKey));
           if (result.action === 'put') options.backend.put(result.row);
           return result.result;
         },
@@ -621,6 +649,14 @@ function reviewMatchesListInput(
   }
   if (input.conflictId && !reviewIncludesConflict(record.subject, input.conflictId)) return false;
   return true;
+}
+
+function isActiveReview(record: WorkbookVersionReviewRecord): boolean {
+  return ACTIVE_REVIEW_STATUSES.has(record.status);
+}
+
+function reviewSubjectsEqual(left: WorkbookVersionReviewSubject, right: WorkbookVersionReviewSubject): boolean {
+  return canonicalJsonStringify(left) === canonicalJsonStringify(right);
 }
 
 function reviewIncludesCommit(record: WorkbookVersionReviewRecord, commitId: WorkbookCommitId): boolean {

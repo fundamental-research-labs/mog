@@ -23,6 +23,7 @@ import {
 } from './provider-memory-backend';
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
+import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
 import {
   cloneVersionGraphRegistry,
   createVersionGraphRegistry,
@@ -584,6 +585,13 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
   async openPendingRemoteSegmentStore(namespace: VersionGraphNamespace): Promise<InMemoryPendingRemoteSegmentStore> {
     await this.openGraph(namespace);
     return new InMemoryPendingRemoteSegmentStore({ namespace, documentScope: this.documentScope, backend: this.backend.pendingRemoteSegmentBackend });
+  }
+
+  async openAppliedSyncUpdateIdentityStore(): Promise<InMemoryAppliedSyncUpdateIdentityStore> {
+    return new InMemoryAppliedSyncUpdateIdentityStore({
+      documentScope: this.documentScope,
+      backend: this.backend.appliedSyncUpdateIdentityBackend,
+    });
   }
 
   async scanDocumentIntegrity(

@@ -90,6 +90,7 @@ import {
 import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
 import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
 import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending-remote-segments';
+import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-applied-sync-updates';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
@@ -359,6 +360,13 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
     await this.openGraph(namespace);
     return new IndexedDbPendingRemoteSegmentStore({
       namespace,
+      documentScope: this.documentScope,
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openAppliedSyncUpdateIdentityStore(): Promise<IndexedDbAppliedSyncUpdateIdentityStore> {
+    return new IndexedDbAppliedSyncUpdateIdentityStore({
       documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });

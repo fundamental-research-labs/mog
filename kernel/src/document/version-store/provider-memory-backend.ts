@@ -24,6 +24,10 @@ import {
   PendingRemoteSegmentMemoryBackend,
   type PendingRemoteSegmentMemoryBackendSnapshot,
 } from './pending-remote-segment-store';
+import {
+  AppliedSyncUpdateIdentityMemoryBackend,
+  type AppliedSyncUpdateIdentityMemoryBackendSnapshot,
+} from './applied-sync-update-identity-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -37,6 +41,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly graphs: readonly InMemoryVersionGraphStoreSnapshot[];
   readonly mergeApplyIntents: MergeApplyIntentMemoryBackendSnapshot;
   readonly pendingRemoteSegments?: PendingRemoteSegmentMemoryBackendSnapshot;
+  readonly appliedSyncUpdateIdentities?: AppliedSyncUpdateIdentityMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
@@ -44,15 +49,21 @@ export class InMemoryVersionDocumentProviderBackend {
   private readonly graphStores = new Map<string, InMemoryVersionGraphStore>();
   readonly mergeApplyIntentBackend: MergeApplyIntentMemoryBackend;
   readonly pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend;
+  readonly appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend;
 
-  constructor(options: {
-    readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend;
-    readonly pendingRemoteSegmentBackend?: PendingRemoteSegmentMemoryBackend;
-  } = {}) {
+  constructor(
+    options: {
+      readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend;
+      readonly pendingRemoteSegmentBackend?: PendingRemoteSegmentMemoryBackend;
+      readonly appliedSyncUpdateIdentityBackend?: AppliedSyncUpdateIdentityMemoryBackend;
+    } = {},
+  ) {
     this.mergeApplyIntentBackend =
       options.mergeApplyIntentBackend ?? new MergeApplyIntentMemoryBackend();
     this.pendingRemoteSegmentBackend =
       options.pendingRemoteSegmentBackend ?? new PendingRemoteSegmentMemoryBackend();
+    this.appliedSyncUpdateIdentityBackend =
+      options.appliedSyncUpdateIdentityBackend ?? new AppliedSyncUpdateIdentityMemoryBackend();
   }
 
   readRegistryRecord(
@@ -115,6 +126,7 @@ export class InMemoryVersionDocumentProviderBackend {
       ),
       mergeApplyIntents: this.mergeApplyIntentBackend.exportSnapshot(),
       pendingRemoteSegments: this.pendingRemoteSegmentBackend.exportSnapshot(),
+      appliedSyncUpdateIdentities: this.appliedSyncUpdateIdentityBackend.exportSnapshot(),
     });
   }
 
@@ -122,9 +134,14 @@ export class InMemoryVersionDocumentProviderBackend {
     snapshot: InMemoryVersionDocumentProviderBackendSnapshot,
   ): Promise<InMemoryVersionDocumentProviderBackend> {
     const backend = new InMemoryVersionDocumentProviderBackend({
-      mergeApplyIntentBackend: MergeApplyIntentMemoryBackend.fromSnapshot(snapshot.mergeApplyIntents),
+      mergeApplyIntentBackend: MergeApplyIntentMemoryBackend.fromSnapshot(
+        snapshot.mergeApplyIntents,
+      ),
       pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend.fromSnapshot(
         snapshot.pendingRemoteSegments ?? { records: [] },
+      ),
+      appliedSyncUpdateIdentityBackend: AppliedSyncUpdateIdentityMemoryBackend.fromSnapshot(
+        snapshot.appliedSyncUpdateIdentities ?? { records: [] },
       ),
     });
     for (const [scope, record] of snapshot.registries) {

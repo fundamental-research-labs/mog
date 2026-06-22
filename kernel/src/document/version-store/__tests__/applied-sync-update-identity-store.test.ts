@@ -1,0 +1,254 @@
+import 'fake-indexeddb/auto';
+
+import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
+
+import {
+  appliedSyncUpdateIdentityKeyMaterialForOperationContext,
+  type AppliedSyncUpdateIdentityKey,
+  type ReserveAppliedSyncUpdateIdentityInput,
+} from '../applied-sync-update-identity-store';
+import {
+  InMemoryVersionDocumentProviderBackend,
+  createInMemoryVersionStoreProvider,
+  type VersionDocumentScope,
+} from '../provider';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { deleteVersionStoreIndexedDbForTesting } from '../provider-indexeddb-schema';
+
+const DOCUMENT_SCOPE: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  principalScope: 'principal-1',
+};
+
+const OTHER_DOCUMENT_SCOPE: VersionDocumentScope = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-2',
+  principalScope: 'principal-1',
+};
+
+const AUTHOR: VersionAuthor = {
+  authorId: 'remote-user-1',
+  actorKind: 'user',
+  displayName: 'Remote User One',
+};
+
+beforeEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+afterEach(async () => {
+  await deleteVersionStoreIndexedDbForTesting();
+});
+
+describe('applied sync update identity store', () => {
+  it('computes stable document-scoped identity keys independent of lifecycle source', async () => {
+    const first =
+      await appliedSyncUpdateIdentityKeyMaterialForOperationContext(syncOperationContext());
+    const replay = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+      syncOperationContext({
+        createdAt: '2026-06-21T00:00:02.000Z',
+        collaboration: { sourceKind: 'providerReplay', replay: true, system: true },
+      }),
+    );
+    const changedUpdate = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+      syncOperationContext({ collaboration: { updateId: 'remote-update-2' } }),
+    );
+    const changedPayload = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+      syncOperationContext({ collaboration: { payloadHash: '4'.repeat(64) } }),
+    );
+
+    expect(first.identityKey).toMatch(/^applied-sync-update:sha256:[0-9a-f]{64}$/);
+    expect(first).toEqual(replay);
+    expect(first.identityKey).not.toBe(changedUpdate.identityKey);
+    expect(first.identityKey).toBe(changedPayload.identityKey);
+    expect(first.identity).toEqual({
+      schemaVersion: 1,
+      originKind: 'provider',
+      stableOriginId: 'provider-stable-1',
+      epoch: 'epoch-1',
+      updateId: 'remote-update-1',
+    });
+  });
+
+  it('reserves, completes, deduplicates, and snapshots in-memory identities', async () => {
+    const backend = new InMemoryVersionDocumentProviderBackend();
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend,
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAppliedSyncUpdateIdentityStore();
+    const input = await appliedIdentityInput();
+
+    await expect(store.reserveIdentity(input)).resolves.toMatchObject({
+      status: 'reserved',
+      record: { identityKey: input.identityKey, state: 'reserved' },
+    });
+    await expect(
+      store.reserveIdentity({
+        ...input,
+        createdAt: '2026-06-21T00:00:02.000Z',
+        operationContext: syncOperationContext({ createdAt: '2026-06-21T00:00:02.000Z' }),
+      }),
+    ).resolves.toMatchObject({
+      status: 'existing',
+      record: { identityKey: input.identityKey, state: 'reserved' },
+    });
+    await expect(
+      store.reserveIdentity({
+        ...input,
+        operationContext: syncOperationContext({ collaboration: { payloadHash: '4'.repeat(64) } }),
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      diagnostics: [{ code: 'VERSION_APPLIED_SYNC_UPDATE_CONFLICT' }],
+    });
+
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:03.000Z',
+        terminal: {
+          status: 'applied',
+          pendingRemoteSegmentId: 'pending-remote-segment:sha256:' + 'a'.repeat(64),
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { state: 'applied' },
+    });
+    await expect(store.reserveIdentity(input)).resolves.toMatchObject({
+      status: 'duplicate',
+      record: { state: 'applied' },
+    });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: {
+          status: 'retryable',
+          reason: 'transient-write-failure',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'conflict',
+      diagnostics: [{ code: 'VERSION_APPLIED_SYNC_UPDATE_CONFLICT' }],
+    });
+
+    const snapshot = await backend.exportSnapshot();
+    const reloadedBackend = await InMemoryVersionDocumentProviderBackend.fromSnapshot(snapshot);
+    const reloadedProvider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: reloadedBackend,
+      durability: 'snapshot-test-double',
+    });
+    await expect(
+      (await reloadedProvider.openAppliedSyncUpdateIdentityStore()).readByIdentityKey(
+        input.identityKey,
+      ),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: { identityKey: input.identityKey, state: 'applied' },
+    });
+  });
+
+  it('persists IndexedDB identities before graph initialization and isolates document scopes', async () => {
+    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const store = await provider.openAppliedSyncUpdateIdentityStore();
+    const input = await appliedIdentityInput();
+
+    await expect(store.reserveIdentity(input)).resolves.toMatchObject({
+      status: 'reserved',
+      record: { documentScopeKey: expect.stringContaining(DOCUMENT_SCOPE.documentId) },
+    });
+    await expect(
+      store.completeIdentity({
+        identityKey: input.identityKey,
+        payloadHash: '3'.repeat(64),
+        completedAt: '2026-06-21T00:00:03.000Z',
+        terminal: { status: 'failedAfterMutation', reason: 'rebuild-failed' },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      record: { state: 'failedAfterMutation' },
+    });
+
+    const reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    await expect(
+      (await reloadedProvider.openAppliedSyncUpdateIdentityStore()).readByIdentityKey(
+        input.identityKey,
+      ),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: { state: 'failedAfterMutation' },
+    });
+
+    const otherProvider = createIndexedDbVersionStoreProvider({
+      documentScope: OTHER_DOCUMENT_SCOPE,
+    });
+    await expect(
+      (await otherProvider.openAppliedSyncUpdateIdentityStore()).readByIdentityKey(
+        input.identityKey,
+      ),
+    ).resolves.toMatchObject({
+      status: 'missing',
+    });
+  });
+});
+
+async function appliedIdentityInput(
+  operationContext: VersionOperationContext = syncOperationContext(),
+): Promise<ReserveAppliedSyncUpdateIdentityInput> {
+  const keys = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(operationContext);
+  return {
+    identityKey: keys.identityKey,
+    operationContext,
+    createdAt: operationContext.createdAt,
+  };
+}
+
+function syncOperationContext(
+  overrides: Partial<VersionOperationContext> & {
+    readonly collaboration?: Partial<NonNullable<VersionOperationContext['collaboration']>>;
+  } = {},
+): VersionOperationContext {
+  const collaboration = {
+    sourceKind: 'providerLiveInbound',
+    originKind: 'provider',
+    stableOriginId: 'provider-stable-1',
+    providerId: 'provider-1',
+    providerKind: 'indexeddb',
+    authorityRef: 'authority-1',
+    epoch: 'epoch-1',
+    updateId: 'remote-update-1',
+    sequence: '7',
+    payloadHash: '3'.repeat(64),
+    provenancePayloadHash: '5'.repeat(64),
+    trustStatus: 'verified',
+    authorState: 'singleRemote',
+    remoteSessionId: 'remote-session-1',
+    correlationId: 'correlation-1',
+    causationIds: ['cause-1'],
+    replay: false,
+    system: false,
+    commitGrouping: 'pendingRemote',
+    validationDiagnosticCount: 0,
+    ...overrides.collaboration,
+  } satisfies NonNullable<VersionOperationContext['collaboration']>;
+
+  return {
+    operationId: 'operation-1',
+    kind: 'sync-import',
+    author: AUTHOR,
+    createdAt: '2026-06-21T00:00:01.000Z',
+    workbookId: 'workbook-1',
+    domainIds: ['cells.values'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+    ...overrides,
+    collaboration,
+  };
+}

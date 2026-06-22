@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { attachWsSidecar, ComputeBridgeLike, fetchRoomSnapshot, WsSidecar } from '../ws-sidecar';
 import { createEventLog, type EventLog } from '../event-log';
 import { createCollabTestLog, type CollabTestLog } from './test-log-collector';
+import type { ClassifiedRawSyncUpdateProvenance } from '../../providers/provider';
 
 // ---------------------------------------------------------------------------
 // NAPI addon loading
@@ -320,6 +321,12 @@ describeWithAddon('WsSidecar integration (real server)', () => {
     url: string;
     participantId: string;
     computeBridge: ComputeBridgeLike;
+    syncPort?: {
+      applyClassifiedRawUpdate(
+        update: Uint8Array,
+        provenance: ClassifiedRawSyncUpdateProvenance,
+      ): Promise<void>;
+    };
   }): Promise<WsSidecar> {
     const roomId = roomIdFromUrl(opts.url);
     if (!preseededRooms.has(roomId)) {
@@ -334,6 +341,7 @@ describeWithAddon('WsSidecar integration (real server)', () => {
       preflightRoomEpoch: snapshot.roomEpoch,
       preflightFullStateHash: snapshot.fullStateHash,
       preflightSnapshotToken: snapshot.snapshotToken,
+      syncPort: opts.syncPort,
       eventLog,
     });
     testLog.addSidecar(opts.participantId, eventLog, () => sidecar.status);
@@ -514,16 +522,36 @@ describeWithAddon('WsSidecar integration (real server)', () => {
     bridges.push(bridgeB);
 
     const bAppliedBefore = bridgeB._appliedUpdates.length;
+    const classified: ClassifiedRawSyncUpdateProvenance[] = [];
 
     const sidecarB = await attachWithLog({
       url: `ws://localhost:${wsPort}/${roomId}`,
       participantId: 'user-second',
       computeBridge: bridgeB,
+      syncPort: {
+        async applyClassifiedRawUpdate(update, provenance) {
+          classified.push(provenance);
+          await bridgeB.syncApply(update);
+        },
+      },
     });
 
     // B should have received the full state during JOIN handshake
     // (syncApply is called with the JOIN_RESPONSE's full state)
     expect(bridgeB._appliedUpdates.length).toBeGreaterThan(bAppliedBefore);
+    expect(classified).toContainEqual(
+      expect.objectContaining({
+        sourceKind: 'collaborationHydration',
+        capturePolicy: 'excluded',
+        replay: true,
+        system: true,
+        author: { kind: 'system', systemRef: 'collaboration-hydration' },
+        updateIdentity: expect.objectContaining({
+          originKind: 'room',
+          roomId,
+        }),
+      }),
+    );
   }, 10_000);
 
   test('bidirectional: both clients send and both receive', async () => {

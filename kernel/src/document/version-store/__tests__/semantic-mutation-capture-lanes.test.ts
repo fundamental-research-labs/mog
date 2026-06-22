@@ -117,6 +117,7 @@ describe('semantic mutation capture lanes', () => {
       changes: [],
     });
     expect(afterFinalize.input.mutationSegmentRecords).toEqual([]);
+    expect(afterFinalize.input.author).toEqual(AUTHOR);
   });
 
   it('skips blocked mixed unknown excluded and shadow collaboration contexts', async () => {
@@ -147,6 +148,15 @@ describe('semantic mutation capture lanes', () => {
         collaboration: syncCollaboration({
           authorState: 'unknown',
           commitGrouping: 'blockedUnknownRemote',
+        }),
+      }),
+      operationContext({
+        operationId: 'blocked-redaction-key',
+        kind: 'sync-import',
+        author: REMOTE_AUTHOR,
+        collaboration: syncCollaboration({
+          commitGrouping: 'blockedMissingRedactionKey',
+          validationDiagnosticCount: 1,
         }),
       }),
       operationContext({

@@ -66,9 +66,20 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
     }
 
     try {
-      const existing = await this.findByBatchStatusId(record.batchStatusId);
+      const db = await this.getDb();
+      const tx = db.transaction(INTENTS_STORE, 'readwrite');
+      const done = idbTransactionDone(tx);
+      const store = tx.objectStore(INTENTS_STORE);
+      const storageKey = syncBatchStatusStorageKey(this.documentScope, record.batchStatusId);
+      const existing = decodeStoredSyncBatchStatus(
+        await idbRequest<unknown | undefined>(store.get(storageKey)),
+        this.documentScopeKey,
+      );
       if (existing) {
-        return syncBatchStatusReservationsEquivalent(existing, record)
+        const result: SyncBatchStatusReserveResult = syncBatchStatusReservationsEquivalent(
+          existing,
+          record,
+        )
           ? {
               status: existing.state === 'complete' ? 'duplicate' : 'existing',
               record: existing,
@@ -78,9 +89,12 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
               existing,
               'Sync batch status id is already bound to a different batch identity.',
             );
+        await done;
+        return result;
       }
 
-      await this.putRecord(record);
+      await idbRequest(store.put(storedSyncBatchStatus(record), storageKey));
+      await done;
       return { status: 'reserved', record, diagnostics: [] };
     } catch {
       return {
@@ -114,9 +128,17 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
     input: CompleteSyncBatchStatusInput,
   ): Promise<SyncBatchStatusCompleteResult> {
     try {
-      const existing = await this.findByBatchStatusId(input.batchStatusId);
+      const db = await this.getDb();
+      const tx = db.transaction(INTENTS_STORE, 'readwrite');
+      const done = idbTransactionDone(tx);
+      const store = tx.objectStore(INTENTS_STORE);
+      const storageKey = syncBatchStatusStorageKey(this.documentScope, input.batchStatusId);
+      const existing = decodeStoredSyncBatchStatus(
+        await idbRequest<unknown | undefined>(store.get(storageKey)),
+        this.documentScopeKey,
+      );
       if (!existing) {
-        return {
+        const result: SyncBatchStatusCompleteResult = {
           status: 'missing',
           record: null,
           diagnostics: [
@@ -127,20 +149,29 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
             },
           ],
         };
+        await done;
+        return result;
       }
       if (syncBatchCompletionIdentityConflicts(existing, input)) {
-        return conflictComplete(
+        const result = conflictComplete(
           existing,
           'Sync batch status completion did not match the stored batch identity.',
         );
+        await done;
+        return result;
       }
       if (existing.terminal) {
-        return syncBatchStatusTerminalsEqual(existing.terminal, input.terminal)
+        const result: SyncBatchStatusCompleteResult = syncBatchStatusTerminalsEqual(
+          existing.terminal,
+          input.terminal,
+        )
           ? { status: 'completed', record: existing, diagnostics: [] }
           : conflictComplete(
               existing,
               'Sync batch status is already finalized with different terminal metadata.',
             );
+        await done;
+        return result;
       }
 
       const completed: SyncBatchStatusRecord = {
@@ -149,7 +180,8 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
         updatedAt: input.completedAt,
         terminal: cloneJson(input.terminal),
       };
-      await this.putRecord(completed);
+      await idbRequest(store.put(storedSyncBatchStatus(completed), storageKey));
+      await done;
       return { status: 'completed', record: completed, diagnostics: [] };
     } catch {
       return {
@@ -177,21 +209,6 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
         .get(syncBatchStatusStorageKey(this.documentScope, batchStatusId)),
     );
     return decodeStoredSyncBatchStatus(row, this.documentScopeKey);
-  }
-
-  private async putRecord(record: SyncBatchStatusRecord): Promise<void> {
-    const db = await this.getDb();
-    const tx = db.transaction(INTENTS_STORE, 'readwrite');
-    const done = idbTransactionDone(tx);
-    await idbRequest(
-      tx
-        .objectStore(INTENTS_STORE)
-        .put(
-          storedSyncBatchStatus(record),
-          syncBatchStatusStorageKey(this.documentScope, record.batchStatusId),
-        ),
-    );
-    await done;
   }
 
   private recordFromInput(input: ReserveSyncBatchStatusInput): SyncBatchStatusRecord {

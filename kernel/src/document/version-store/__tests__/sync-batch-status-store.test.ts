@@ -235,6 +235,70 @@ describe('sync batch status store', () => {
       status: 'missing',
     });
   });
+
+  it('serializes concurrent IndexedDB reservations for the same batch key', async () => {
+    const firstProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const secondProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const firstStore = await firstProvider.openSyncBatchStatusStore();
+    const secondStore = await secondProvider.openSyncBatchStatusStore();
+    const input = await syncBatchStatusInput();
+
+    const results = await Promise.all([
+      firstStore.reserveBatchStatus(input),
+      secondStore.reserveBatchStatus(input),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual(['existing', 'reserved']);
+    await expect(firstStore.readByBatchStatusId(input.batchStatusId)).resolves.toMatchObject({
+      status: 'found',
+      record: { state: 'pending' },
+    });
+  });
+
+  it('serializes competing IndexedDB terminal completions as immutable conflicts', async () => {
+    const firstProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const secondProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const firstStore = await firstProvider.openSyncBatchStatusStore();
+    const secondStore = await secondProvider.openSyncBatchStatusStore();
+    const input = await syncBatchStatusInput();
+
+    await expect(firstStore.reserveBatchStatus(input)).resolves.toMatchObject({
+      status: 'reserved',
+    });
+
+    const results = await Promise.all([
+      firstStore.completeBatchStatus({
+        batchStatusId: input.batchStatusId,
+        payloadHash: DEFAULT_PAYLOAD_HASH,
+        orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
+        subUpdateCount: 2,
+        completedAt: '2026-06-21T00:00:03.000Z',
+        terminal: { status: 'complete' },
+      }),
+      secondStore.completeBatchStatus({
+        batchStatusId: input.batchStatusId,
+        payloadHash: DEFAULT_PAYLOAD_HASH,
+        orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
+        subUpdateCount: 2,
+        completedAt: '2026-06-21T00:00:04.000Z',
+        terminal: { status: 'failedAfterMutation', reason: 'sub-update-apply-failed' },
+      }),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual(['completed', 'conflict']);
+    const completed = results.find((result) => result.status === 'completed');
+    if (!completed || completed.status !== 'completed') {
+      throw new Error('expected one completed sync batch status result');
+    }
+    await expect(firstStore.readByBatchStatusId(input.batchStatusId)).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        state: completed.record.state,
+        terminal: completed.record.terminal,
+        updatedAt: completed.record.updatedAt,
+      },
+    });
+  });
 });
 
 async function syncBatchStatusInput(

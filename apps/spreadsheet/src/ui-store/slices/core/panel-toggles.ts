@@ -6,7 +6,7 @@
  * - status-bar (bottom strip; mode indicator + selection stats + zoom)
  * - find (Find & Replace dialog; Ctrl+F)
  * - comments (right-side comments pane; lists workbook comments)
- * - side (generic right-side panel host; chart editor / pivot / etc.)
+ * - side (generic right-side panel host; chart editor / pivot / version / etc.)
  *
  * The ribbon's hidden-state lives in the RibbonSlice as `ribbonCollapsed`
  * (Ctrl+Shift+F1 / panel-ribbon-close); Excel only has one ribbon-hidden
@@ -42,7 +42,7 @@ export interface PanelTogglesSlice {
   /** Whether the side panel host (charts/pivot/accessibility) is visible. */
   sidePanelVisible: boolean;
   /** Which side-panel surface should be shown by the generic host. */
-  sidePanelContent: 'index' | 'formula-references';
+  sidePanelContent: SidePanelContent;
 
   setFormulaBarVisible: (visible: boolean) => void;
   toggleFormulaBarVisible: () => void;
@@ -55,8 +55,10 @@ export interface PanelTogglesSlice {
 
   setSidePanelVisible: (visible: boolean) => void;
   toggleSidePanelVisible: () => void;
-  setSidePanelContent: (content: 'index' | 'formula-references') => void;
+  setSidePanelContent: (content: SidePanelContent) => void;
 }
+
+export type SidePanelContent = 'index' | 'formula-references' | 'version-history';
 
 export const createPanelTogglesSlice: StateCreator<PanelTogglesSlice, [], [], PanelTogglesSlice> = (
   set,

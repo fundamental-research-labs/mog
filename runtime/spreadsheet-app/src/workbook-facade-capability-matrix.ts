@@ -8,6 +8,7 @@ export type SpreadsheetFacadeDecision = 'allow' | 'deny';
 export interface SpreadsheetFacadeMatrixEntry {
   readonly decision: SpreadsheetFacadeDecision;
   readonly capability?: SpreadsheetCapability;
+  readonly capabilities?: readonly SpreadsheetCapability[];
   readonly reason?: string;
   readonly returns?: readonly string[];
 }
@@ -3658,86 +3659,87 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
   WorkbookVersion: {
     applyMerge: {
       decision: 'allow',
-      capability: 'version:mergeApply',
+      capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
     },
     checkout: {
       decision: 'allow',
-      capability: 'version:checkout',
+      capabilities: ['version:checkout'],
     },
     commit: {
       decision: 'allow',
-      capability: 'version:commit',
+      capabilities: ['version:commit'],
     },
     createBranch: {
       decision: 'allow',
-      capability: 'version:branch',
+      capabilities: ['version:branch'],
     },
     deleteBranch: {
       decision: 'allow',
-      capability: 'version:branch',
+      capabilities: ['version:branch'],
     },
     deleteRef: {
       decision: 'allow',
-      capability: 'version:branch',
+      capabilities: ['version:branch'],
     },
     diff: {
       decision: 'allow',
-      capability: 'version:diff',
+      capabilities: ['version:diff'],
     },
     fastForwardBranch: {
       decision: 'allow',
-      capability: 'version:branch',
+      capabilities: ['version:branch'],
     },
     getHead: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     getMergeConflictDetail: {
       decision: 'allow',
-      capability: 'version:mergePreview',
+      capabilities: ['version:mergePreview'],
     },
     getRef: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     getStatus: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     getSurfaceStatus: {
       decision: 'allow',
+      capabilities: [],
     },
     listCommits: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     listRefs: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     merge: {
       decision: 'allow',
-      capability: 'version:mergePreview',
+      capabilities: ['version:mergePreview'],
     },
     promotePendingRemote: {
       decision: 'allow',
-      capability: 'version:provenance',
+      capabilities: ['version:provenance'],
     },
     putMergeResolutionPayload: {
       decision: 'allow',
-      capability: 'version:mergeApply',
+      capabilities: ['version:mergePreview', 'version:mergeApply'],
     },
     readRef: {
       decision: 'allow',
-      capability: 'version:read',
+      capabilities: ['version:read'],
     },
     saveMergeResolutions: {
       decision: 'allow',
-      capability: 'version:mergeApply',
+      capabilities: ['version:mergePreview', 'version:mergeApply'],
     },
     updateBranch: {
       decision: 'allow',
-      capability: 'version:branch',
+      capabilities: ['version:branch'],
     },
   },
   WorkbookViewport: {

@@ -318,10 +318,31 @@ test('version surface status remains available without version read grant', asyn
       () => void facade.version.getStatus(),
       /Capability "version:read" is denied for WorkbookVersion\.getStatus/,
     );
-    assert.throws(
-      () => void facade.version.getHead(),
-      /Capability "version:read" is denied for WorkbookVersion\.getHead/,
+    assert.deepEqual(await facade.version.getHead(), {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:read',
+        dependency: 'hostCapability',
+        reason: 'Capability "version:read" is denied for WorkbookVersion.getHead',
+        retryable: false,
+      },
+    });
+    const applyMergeDenied = await facade.version.applyMerge(
+      {} as Parameters<typeof facade.version.applyMerge>[0],
     );
+    assert.equal(applyMergeDenied.ok, false);
+    if (!applyMergeDenied.ok) {
+      assert.equal(applyMergeDenied.error.code, 'version_capability_unavailable');
+      if (applyMergeDenied.error.code === 'version_capability_unavailable') {
+        assert.equal(applyMergeDenied.error.capability, 'version:mergePreview');
+        assert.deepEqual(applyMergeDenied.error.diagnostics?.[0]?.data?.deniedCapabilities, [
+          'version:mergePreview',
+          'version:mergeApply',
+          'version:branch',
+        ]);
+      }
+    }
   } finally {
     await disposeRuntime(runtime);
   }

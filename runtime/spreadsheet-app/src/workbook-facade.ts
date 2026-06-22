@@ -104,6 +104,128 @@ export function policyDecision(
   );
 }
 
+type VersionCapability = Extract<SpreadsheetCapability, `version:${string}`>;
+
+type FacadeCapabilityDenial = {
+  readonly capability: SpreadsheetCapability;
+  readonly decision: Exclude<SpreadsheetPolicyDecision, 'allowed'>;
+  readonly deniedCapabilities: readonly SpreadsheetCapability[];
+};
+
+function entryCapabilities(entry: SpreadsheetFacadeMatrixEntry): readonly SpreadsheetCapability[] {
+  return entry.capabilities ?? (entry.capability ? [entry.capability] : []);
+}
+
+function isVersionCapability(capability: SpreadsheetCapability): capability is VersionCapability {
+  return capability.startsWith('version:');
+}
+
+function isVersionResultFacadeMethod(
+  interfaceName: string,
+  methodName: string,
+  entry: SpreadsheetFacadeMatrixEntry,
+): boolean {
+  if (interfaceName !== 'WorkbookVersion') return false;
+  if (methodName === 'getSurfaceStatus' || methodName === 'getStatus') return false;
+  const capabilities = entryCapabilities(entry);
+  return capabilities.length > 0 && capabilities.every(isVersionCapability);
+}
+
+function facadeCapabilityDenial(
+  record: WorkbookRecord,
+  binding: FacadeBinding,
+  entry: SpreadsheetFacadeMatrixEntry,
+  operation: string,
+): FacadeCapabilityDenial | null {
+  assertRecordUsable(record, operation);
+  if (entry.decision === 'deny') {
+    throw toPublicError(
+      new Error(entry.reason ?? `${operation} is not exposed by the trusted embed workbook facade`),
+      'AuthorizationDenied',
+      false,
+      { workbookId: record.workbookId, epoch: record.epoch, operation },
+    );
+  }
+  if (!binding) return null;
+
+  let firstDenied: FacadeCapabilityDenial | null = null;
+  const deniedCapabilities: SpreadsheetCapability[] = [];
+  for (const capability of entryCapabilities(entry)) {
+    const decision = policyDecision(binding.policy, capability);
+    if (decision === 'allowed') continue;
+    deniedCapabilities.push(capability);
+    firstDenied ??= { capability, decision, deniedCapabilities };
+  }
+  return firstDenied
+    ? {
+        capability: firstDenied.capability,
+        decision: firstDenied.decision,
+        deniedCapabilities,
+      }
+    : null;
+}
+
+function facadeCapabilityDeniedError(
+  record: WorkbookRecord,
+  binding: FacadeBinding,
+  operation: string,
+  denial: FacadeCapabilityDenial,
+): Error {
+  return toPublicError(
+    new Error(`Capability "${denial.capability}" is ${denial.decision} for ${operation}`),
+    denial.decision === 'approval-required' ? 'ApprovalRequired' : 'AuthorizationDenied',
+    denial.decision === 'approval-required',
+    { workbookId: record.workbookId, epoch: record.epoch, operation, actor: binding?.actor },
+  );
+}
+
+function versionCapabilityDeniedResult(
+  operation: string,
+  denial: FacadeCapabilityDenial,
+): Promise<{
+  readonly ok: false;
+  readonly error: {
+    readonly code: 'version_capability_unavailable';
+    readonly capability: VersionCapability;
+    readonly dependency: 'hostCapability';
+    readonly reason: string;
+    readonly retryable: boolean;
+    readonly diagnostics?: readonly {
+      readonly code: string;
+      readonly severity: 'error';
+      readonly message: string;
+      readonly dependency: 'hostCapability';
+      readonly data: { readonly deniedCapabilities: readonly VersionCapability[] };
+    }[];
+  };
+}> {
+  const deniedVersionCapabilities = denial.deniedCapabilities.filter(isVersionCapability);
+  const reason = `Capability "${denial.capability}" is ${denial.decision} for ${operation}`;
+  return Promise.resolve({
+    ok: false,
+    error: {
+      code: 'version_capability_unavailable',
+      capability: denial.capability as VersionCapability,
+      dependency: 'hostCapability',
+      reason,
+      retryable: denial.decision === 'approval-required',
+      ...(deniedVersionCapabilities.length > 1
+        ? {
+            diagnostics: [
+              {
+                code: 'version_capability_denied',
+                severity: 'error',
+                message: reason,
+                dependency: 'hostCapability',
+                data: { deniedCapabilities: deniedVersionCapabilities },
+              },
+            ],
+          }
+        : {}),
+    },
+  });
+}
+
 export function assertRecordUsable(record: WorkbookRecord, operation: string): void {
   if (record.status === 'disposed') {
     throw toPublicError(new Error('Workbook is disposed'), 'Disposed', false, {
@@ -134,25 +256,8 @@ function assertFacadeAllowed(
   entry: SpreadsheetFacadeMatrixEntry,
   operation: string,
 ): void {
-  assertRecordUsable(record, operation);
-  if (entry.decision === 'deny') {
-    throw toPublicError(
-      new Error(entry.reason ?? `${operation} is not exposed by the trusted embed workbook facade`),
-      'AuthorizationDenied',
-      false,
-      { workbookId: record.workbookId, epoch: record.epoch, operation },
-    );
-  }
-  if (!binding || !entry.capability) return;
-  const decision = policyDecision(binding.policy, entry.capability);
-  if (decision !== 'allowed') {
-    throw toPublicError(
-      new Error(`Capability "${entry.capability}" is ${decision} for ${operation}`),
-      decision === 'approval-required' ? 'ApprovalRequired' : 'AuthorizationDenied',
-      decision === 'approval-required',
-      { workbookId: record.workbookId, epoch: record.epoch, operation, actor: binding.actor },
-    );
-  }
+  const denial = facadeCapabilityDenial(record, binding, entry, operation);
+  if (denial) throw facadeCapabilityDeniedError(record, binding, operation, denial);
 }
 
 function subApiInterfaceFor(interfaceName: string, prop: string): string | undefined {
@@ -297,7 +402,14 @@ function createCapabilityFacade(
             return wrapFacadeReturn(value, record, binding, entry.returns ?? []);
           }
           return (...args: unknown[]) => {
-            assertFacadeAllowed(record, binding, entry, `${interfaceName}.${methodName}`);
+            const operation = `${interfaceName}.${methodName}`;
+            const denial = facadeCapabilityDenial(record, binding, entry, operation);
+            if (denial) {
+              if (isVersionResultFacadeMethod(interfaceName, methodName, entry)) {
+                return versionCapabilityDeniedResult(operation, denial);
+              }
+              throw facadeCapabilityDeniedError(record, binding, operation, denial);
+            }
             const result = value.apply(currentTarget, args);
             return wrapFacadeReturn(result, record, binding, entry.returns ?? []);
           };

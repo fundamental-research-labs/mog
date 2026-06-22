@@ -86,6 +86,7 @@ export type VersionCapabilityError = {
   readonly dependency?: VersionCapabilityDependency;
   readonly reason: string;
   readonly retryable: boolean;
+  readonly diagnostics?: readonly VersionDiagnostic[];
 };
 
 export type VersionError =

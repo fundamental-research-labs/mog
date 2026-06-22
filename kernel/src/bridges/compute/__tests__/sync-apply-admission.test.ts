@@ -3,21 +3,21 @@ import {
   classifyLegacyRawUpdate,
   DEFAULT_PROVENANCE_REDACTION_POLICY,
   type SyncUpdateProvenance,
+  type SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
 import type { BridgeTransport } from '@rust-bridge/client';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 
 import { ComputeCore } from '../compute-core';
-import type {
-  MutationResult,
-  SyncApplyMutationMetadataWire,
-  SyncProvenanceApplyReport,
-} from '../compute-types.gen';
+import type { MutationResult, SyncApplyMutationMetadataWire } from '../compute-types.gen';
 import type { MutationAdmissionDiagnostic } from '../mutation-admission';
 import {
+  createNotEvaluatedSyncProvenanceApplyReport,
   createAdmittedSyncApplyContext,
   toSyncApplyOperationContextWire,
+  type AdmittedSyncApplyContext,
 } from '../sync-apply-admission';
+import { syncApplyWithMetadataResult } from '../sync-apply-result';
 
 (globalThis as any).window = {};
 
@@ -35,12 +35,12 @@ function mutationResult(): MutationResult {
 
 function syncMutationMetadata(
   result = mutationResult(),
-  provenanceReport?: SyncProvenanceApplyReport,
+  context: AdmittedSyncApplyContext = makeLegacyRawContext('0'.repeat(64)),
 ): SyncApplyMutationMetadataWire {
   return {
     mutationResult: result,
-    ...(provenanceReport === undefined ? {} : { provenanceReport }),
-  } as SyncApplyMutationMetadataWire;
+    provenanceReport: createNotEvaluatedSyncProvenanceApplyReport(context),
+  };
 }
 
 function makeMockContext(
@@ -87,7 +87,10 @@ function makeLegacyRawContext(payloadHash: string) {
   });
 }
 
-function makeVerifiedProviderContext(payloadHash: string) {
+function makeVerifiedProviderContext(
+  payloadHash: string,
+  validationDiagnostics: readonly SyncUpdateValidationDiagnostic[] = [],
+) {
   const provenance: SyncUpdateProvenance = {
     schemaVersion: 'sync-update-provenance-v1',
     sourceKind: 'providerLiveInbound',
@@ -157,6 +160,7 @@ function makeVerifiedProviderContext(payloadHash: string) {
     updateId: 'remote-update-1',
     payloadHash,
     provenance,
+    validationDiagnostics,
   });
 }
 
@@ -213,13 +217,15 @@ describe('sync apply admission', () => {
 
   it('admits raw sync mutations with a branded sync provenance context', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const payloadHash = '1'.repeat(64);
+    const syncApplyContext = makeLegacyRawContext(payloadHash);
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
+      call: jest.fn(async () => [
+        new Uint8Array(),
+        syncMutationMetadata(mutationResult(), syncApplyContext),
+      ]),
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
-    const payloadHash = '1'.repeat(64);
-
-    const syncApplyContext = makeLegacyRawContext(payloadHash);
 
     await core.syncApply(new Uint8Array([1]), syncApplyContext);
 
@@ -255,13 +261,7 @@ describe('sync apply admission', () => {
     const mutation = mutationResult();
     const payloadHash = '4'.repeat(64);
     const syncApplyContext = makeVerifiedProviderContext(payloadHash);
-    const provenanceReport = {
-      appliedContext: toSyncApplyOperationContextWire(syncApplyContext),
-      pendingSegmentStatus: 'notEvaluated',
-      pendingSegmentIds: ['pending-segment-1'],
-      batchDurabilityStatus: 'notEvaluated',
-    } satisfies SyncProvenanceApplyReport;
-    const metadata = syncMutationMetadata(mutation, provenanceReport);
+    const metadata = syncMutationMetadata(mutation, syncApplyContext);
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async () => [new Uint8Array(), metadata]),
     };
@@ -270,8 +270,10 @@ describe('sync apply admission', () => {
     const richResult = await core.syncApplyWithMetadata(new Uint8Array([4]), syncApplyContext);
     const compatResult = await core.syncApply(new Uint8Array([5]), syncApplyContext);
 
-    expect(richResult).toEqual({ mutationResult: mutation, metadata });
-    expect(richResult.metadata.provenanceReport).toEqual(provenanceReport);
+    expect(richResult).toEqual(syncApplyWithMetadataResult(metadata));
+    expect(richResult.metadata.provenanceReport).toEqual(
+      createNotEvaluatedSyncProvenanceApplyReport(syncApplyContext),
+    );
     expect(compatResult).toBe(mutation);
     expect((compatResult as MutationResult & { metadata?: unknown }).metadata).toBeUndefined();
     expect(transport.call).toHaveBeenCalledTimes(2);
@@ -279,12 +281,15 @@ describe('sync apply admission', () => {
 
   it('maps verified live provider provenance into a pending remote operation context', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
-    const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata()]),
-    };
-    const core = createStartedCore(makeMockContext(diagnostics), transport);
     const payloadHash = '3'.repeat(64);
     const syncApplyContext = makeVerifiedProviderContext(payloadHash);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [
+        new Uint8Array(),
+        syncMutationMetadata(mutationResult(), syncApplyContext),
+      ]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
 
     await core.syncApply(new Uint8Array([3]), syncApplyContext);
     const wireContext = toSyncApplyOperationContextWire(syncApplyContext);
@@ -344,6 +349,38 @@ describe('sync apply admission', () => {
     );
   });
 
+  it('propagates sync validation diagnostics into apply metadata context', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const mutation = mutationResult();
+    const payloadHash = '6'.repeat(64);
+    const syncApplyContext = makeVerifiedProviderContext(payloadHash, [
+      {
+        reason: 'missingRedactionKey',
+        subreason: 'missingRedactionKey',
+        field: 'author',
+        message: 'Provider proof omitted the durable remote author key.',
+      },
+    ]);
+    const metadata = syncMutationMetadata(mutation, syncApplyContext);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), metadata]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
+
+    const richResult = await core.syncApplyWithMetadata(new Uint8Array([6]), syncApplyContext);
+
+    expect(syncApplyContext.operationContext.collaboration).toMatchObject({
+      commitGrouping: 'blockedMissingRedactionKey',
+      validationDiagnosticCount: 1,
+    });
+    expect(richResult.metadata.provenanceReport.appliedContext.operationContext.collaboration)
+      .toMatchObject({
+        commitGrouping: 'blockedMissingRedactionKey',
+        validationDiagnosticCount: 1,
+      });
+    expect(richResult).toEqual(syncApplyWithMetadataResult(metadata));
+  });
+
   it('records verified live sync mutation results for pending remote capture', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const recordMutationResult = jest.fn();
@@ -360,12 +397,15 @@ describe('sync apply admission', () => {
         },
       ],
     } as MutationResult;
-    const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => [new Uint8Array(), syncMutationMetadata(mutation)]),
-    };
-    const core = createStartedCore(makeMockContext(diagnostics, recordMutationResult), transport);
     const payloadHash = '5'.repeat(64);
     const syncApplyContext = makeVerifiedProviderContext(payloadHash);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [
+        new Uint8Array(),
+        syncMutationMetadata(mutation, syncApplyContext),
+      ]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics, recordMutationResult), transport);
 
     await core.syncApplyWithMetadata(new Uint8Array([5]), syncApplyContext);
 

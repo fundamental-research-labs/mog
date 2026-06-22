@@ -22,7 +22,12 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { classifyLegacyRawUpdate } from '@mog-sdk/types-document/storage';
-import { createAdmittedSyncApplyContext } from '../sync-apply-admission';
+import type { SyncApplyMutationMetadataWire } from '../compute-types.gen';
+import {
+  createAdmittedSyncApplyContext,
+  toSyncApplyOperationContextWire,
+  type AdmittedSyncApplyContext,
+} from '../sync-apply-admission';
 
 // ---------------------------------------------------------------------------
 // NAPI addon + SDK loading (same pattern as collab-e2e.test.ts)
@@ -108,6 +113,12 @@ interface EngineFixture {
   bridge: any;
 }
 
+interface SyncAtoBApplyResult {
+  mutationResult: any;
+  syncApplyContext: AdmittedSyncApplyContext;
+  metadata?: SyncApplyMutationMetadataWire;
+}
+
 async function makeEngine(): Promise<EngineFixture> {
   const engine = await createHeadlessEngine({ computeAddon: addon });
   const bridge = _getComputeBridge(engine);
@@ -137,6 +148,17 @@ async function makeForkedEngines(
  * Sync A's changes to B and return the MutationResult from B's syncApply.
  */
 async function syncAtoB(a: EngineFixture, b: EngineFixture): Promise<any> {
+  const result = await syncAtoBWithResult(a, b);
+  return result.mutationResult;
+}
+
+/**
+ * Sync A's changes to B and return the full sync-apply bridge result.
+ */
+async function syncAtoBWithResult(
+  a: EngineFixture,
+  b: EngineFixture,
+): Promise<SyncAtoBApplyResult> {
   const coreA = a.bridge.core;
   const coreB = b.bridge.core;
 
@@ -145,17 +167,26 @@ async function syncAtoB(a: EngineFixture, b: EngineFixture): Promise<any> {
   expect(diff.byteLength).toBeGreaterThan(0);
   const payloadHash = createHash('sha256').update(diff).digest('hex');
   const provenance = classifyLegacyRawUpdate({ payloadHash, updateId: `test-sync:${payloadHash}` });
-  return coreB.syncApply(
-    diff,
-    createAdmittedSyncApplyContext({
-      source: 'test-sync-mutation-result',
-      docId: b.docId,
-      envelopeVersion: 'classified-raw',
-      updateId: provenance.updateIdentity.updateId,
-      payloadHash,
-      provenance,
-    }),
-  );
+  const syncApplyContext = createAdmittedSyncApplyContext({
+    source: 'test-sync-mutation-result',
+    docId: b.docId,
+    envelopeVersion: 'classified-raw',
+    updateId: provenance.updateIdentity.updateId,
+    payloadHash,
+    provenance,
+  });
+  if (typeof coreB.syncApplyWithMetadata === 'function') {
+    const result = await coreB.syncApplyWithMetadata(diff, syncApplyContext);
+    return {
+      mutationResult: result.mutationResult,
+      syncApplyContext,
+      metadata: result.metadata,
+    };
+  }
+  return {
+    mutationResult: await coreB.syncApply(diff, syncApplyContext),
+    syncApplyContext,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -264,5 +295,22 @@ describeWithEngine('syncApply MutationResult field population', () => {
     const sheetId = b.engine.activeSheetId;
     const cellData = await b.bridge.getCellData(sheetId as any, 0, 0);
     expect((cellData as any)?.raw?.value ?? (cellData as any)?.raw).toBe(42);
+  }, 30_000);
+
+  it('syncApplyWithMetadata returns the Rust provenance report for a remote update', async () => {
+    const [seed, a, b] = await makeForkedEngines();
+    fixtures.push(seed, a, b);
+
+    await a.engine.workbook.activeSheet.setCell('A1', 99);
+    const result = await syncAtoBWithResult(a, b);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata!.mutationResult).toEqual(result.mutationResult);
+    expect(result.metadata!.provenanceReport).toEqual({
+      appliedContext: toSyncApplyOperationContextWire(result.syncApplyContext),
+      pendingSegmentStatus: 'notEvaluated',
+      pendingSegmentIds: [],
+      batchDurabilityStatus: 'notEvaluated',
+    });
   }, 30_000);
 });

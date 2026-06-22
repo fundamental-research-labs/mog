@@ -10,6 +10,7 @@ import type {
 } from '@mog-sdk/types-document/storage';
 import type {
   SyncApplyOperationContextWire,
+  SyncProvenanceApplyReport,
   VersionOperationContextWire,
   VersionSyncOperationContextWire,
 } from './compute-types.gen';
@@ -83,6 +84,17 @@ export function toSyncApplyOperationContextWire(
 ): SyncApplyOperationContextWire {
   return {
     operationContext: toVersionOperationContextWire(context.operationContext),
+  };
+}
+
+export function createNotEvaluatedSyncProvenanceApplyReport(
+  context: AdmittedSyncApplyContext,
+): SyncProvenanceApplyReport {
+  return {
+    appliedContext: toSyncApplyOperationContextWire(context),
+    pendingSegmentStatus: 'notEvaluated',
+    pendingSegmentIds: [],
+    batchDurabilityStatus: 'notEvaluated',
   };
 }
 

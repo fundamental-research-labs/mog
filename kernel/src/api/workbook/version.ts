@@ -31,7 +31,7 @@ import { diffWorkbookVersion } from './version-diff';
 import { listWorkbookVersionCommits } from './version-list-commits';
 import { hasAttachedVersionMergeService, mergeWorkbookVersion } from './version-merge';
 import { getMergeConflictDetailWorkbookVersion, putMergeResolutionPayloadWorkbookVersion, saveMergeResolutionsWorkbookVersion } from './version-merge-review-endpoints';
-import { promotePendingRemoteWorkbookVersion } from './version-pending-remote';
+import { hasAttachedPendingRemotePromotionService, promotePendingRemoteWorkbookVersion } from './version-pending-remote';
 import { appendWorkbookVersionReviewDecision, createWorkbookVersionReview, getWorkbookVersionReview, getWorkbookVersionReviewDiff, listWorkbookVersionReviews, updateWorkbookVersionReviewStatus } from './version-review';
 import { versionResultFromApplyMerge, versionResultFromCheckout, versionResultFromDiffPage, versionResultFromHead, versionResultFromMerge, versionResultFromRefList, versionResultFromRefMutation, versionResultFromRefRead } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
@@ -159,7 +159,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const checkoutServiceAttached = hasAttachedVersionCheckoutService(this.ctx);
     const mergeServiceAttached = hasAttachedVersionMergeService(this.ctx);
     const provenanceAdmissionPresent = typeof observeMutationAdmission === 'function';
-    const rolloutStage = getRolloutStage(provenanceAdmissionPresent);
+    const pendingRemotePromotionServiceAttached = hasAttachedPendingRemotePromotionService(this.ctx);
+    const provenanceAvailable = provenanceAdmissionPresent || pendingRemotePromotionServiceAttached;
+    const rolloutStage = getRolloutStage(provenanceAvailable);
 
     const objectStoreFoundation = diagnostic(
       'version.objectStore.foundationPresent',
@@ -233,6 +235,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
         : 'Mutation provenance admission foundation is unavailable.',
       'VC-02',
     );
+    const provenancePromotionServiceAttached = diagnostic(
+      'version.provenancePromotion.serviceAttached',
+      'info',
+      'Document-scoped pending remote provenance promotion service is attached.',
+      'version-service',
+    );
 
     const objectStoreDiagnostics = services?.objectStore
       ? [objectStoreFoundation]
@@ -246,6 +254,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     const checkoutDiagnostics = checkoutServiceAttached
       ? [checkoutServiceAttachedDiagnostic]
       : [checkoutPending];
+    const provenanceDiagnostics = pendingRemotePromotionServiceAttached
+      ? [provenanceAdmission, provenancePromotionServiceAttached]
+      : [provenanceAdmission];
     const checkoutStage = checkoutServiceAttached ? 'present' : 'pending';
     const checkoutDependency = checkoutServiceAttached ? 'version-service' : 'VC-05';
     const diagnostics = [
@@ -254,7 +265,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       ...commitApiDiagnostics,
       ...checkoutDiagnostics,
       mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending,
-      provenanceAdmission,
+      ...provenanceDiagnostics,
     ];
     return {
       schemaVersion: 1,
@@ -270,10 +281,10 @@ export class WorkbookVersionImpl implements WorkbookVersion {
         [mergeServiceAttached ? mergeServiceAttachedDiagnostic : mergePending],
       ),
       provenanceAdmission: capability(
-        provenanceAdmissionPresent ? 'present' : 'unavailable',
-        provenanceAdmissionPresent,
-        'VC-02',
-        [provenanceAdmission],
+        provenanceAvailable ? 'present' : 'unavailable',
+        provenanceAvailable,
+        provenanceAdmissionPresent ? 'VC-02' : 'version-service',
+        provenanceDiagnostics,
       ),
       diagnostics,
     };

@@ -15,6 +15,10 @@ import type { WorkbookStateProvider } from '@mog-sdk/contracts/api';
 import type { CodeExecutionOptions, CodeExecutionResult, SheetId } from '@mog-sdk/contracts/core';
 import type { DomainSupportManifest } from '@mog-sdk/contracts/versioning';
 import type {
+  VersionShadowObservationOptions,
+  VersionShadowObservationSink,
+} from '@mog-sdk/contracts/versioning';
+import type {
   DocumentImportOptions,
   DocumentImportWarning,
   DocumentSource,
@@ -86,6 +90,8 @@ export interface WorkbookVersioningConfig {
   readonly readDomainSupportManifest?: () => MaybePromise<DomainSupportManifest | null | undefined>;
   readonly domainSupportManifestOptions?: DomainSupportManifestValidationOptions;
   readonly requireDomainSupportManifest?: boolean;
+  readonly shadowObservationSink?: VersionShadowObservationSink;
+  readonly shadowObservationOptions?: VersionShadowObservationOptions;
 }
 
 // =============================================================================

@@ -78,6 +78,8 @@ import type {
   VersionObjectHeader,
   VersionObjectKind,
   VersionOperationContext,
+  VersionShadowObservationRecord,
+  VersionShadowObservationSink,
   VersionSyncOperationContext,
   VersionSyncProvenanceEnvelope,
   VersionWriteAdmissionMode,
@@ -155,7 +157,10 @@ type _ContractsApiWorkbookEntryExportsGetMergeConflictDetailRequest = Assert<
   IsEqual<ContractsApiGetMergeConflictDetailRequest, ContractsWorkbookGetMergeConflictDetailRequest>
 >;
 type _ContractsApiWorkbookEntryExportsPutMergeResolutionPayloadResult = Assert<
-  IsEqual<ContractsApiPutMergeResolutionPayloadResult, ContractsWorkbookPutMergeResolutionPayloadResult>
+  IsEqual<
+    ContractsApiPutMergeResolutionPayloadResult,
+    ContractsWorkbookPutMergeResolutionPayloadResult
+  >
 >;
 type _ContractsApiWorkbookEntryExportsSealedResolutionPayloadRef = Assert<
   IsEqual<ContractsApiSealedResolutionPayloadRef, ContractsWorkbookSealedResolutionPayloadRef>
@@ -170,19 +175,31 @@ type _ContractsApiWorkbookEntryExportsPromotePendingRemoteResult = Assert<
   IsEqual<ContractsApiPromotePendingRemoteResult, ContractsWorkbookPromotePendingRemoteResult>
 >;
 type _ContractsApiWorkbookEntryExportsPromotePendingRemoteSkippedSegment = Assert<
-  IsEqual<ContractsApiPromotePendingRemoteSkippedSegment, ContractsWorkbookPromotePendingRemoteSkippedSegment>
+  IsEqual<
+    ContractsApiPromotePendingRemoteSkippedSegment,
+    ContractsWorkbookPromotePendingRemoteSkippedSegment
+  >
 >;
 type _ContractsApiWorkbookEntryExportsPromotePendingRemoteStatus = Assert<
   IsEqual<ContractsApiPromotePendingRemoteStatus, ContractsWorkbookPromotePendingRemoteStatus>
 >;
 type _ContractsApiWorkbookEntryExportsPromotePendingRemoteSkipReason = Assert<
-  IsEqual<ContractsApiPromotePendingRemoteSkipReason, ContractsWorkbookPromotePendingRemoteSkipReason>
+  IsEqual<
+    ContractsApiPromotePendingRemoteSkipReason,
+    ContractsWorkbookPromotePendingRemoteSkipReason
+  >
 >;
 type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnostic = Assert<
-  IsEqual<ContractsApiPromotePendingRemoteDiagnostic, ContractsWorkbookPromotePendingRemoteDiagnostic>
+  IsEqual<
+    ContractsApiPromotePendingRemoteDiagnostic,
+    ContractsWorkbookPromotePendingRemoteDiagnostic
+  >
 >;
 type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnosticCode = Assert<
-  IsEqual<ContractsApiPromotePendingRemoteDiagnosticCode, ContractsWorkbookPromotePendingRemoteDiagnosticCode>
+  IsEqual<
+    ContractsApiPromotePendingRemoteDiagnosticCode,
+    ContractsWorkbookPromotePendingRemoteDiagnosticCode
+  >
 >;
 
 type PublicVersionApiSurface = {
@@ -323,6 +340,61 @@ const persistedCommit: WorkbookCommitPersistedShape = Object.freeze({
   exportMetadata,
   syncProvenance,
 });
+const shadowObservation: VersionShadowObservationRecord = Object.freeze({
+  schemaVersion: 1,
+  recordKind: 'version-shadow-observation',
+  observationId: 'shadow-observation:vc11-public-export-surface',
+  observedAt: operationContext.createdAt,
+  environmentId: 'headless-local',
+  documentId: 'vc03-05-export-surface-workbook',
+  rolloutStage: 'shadow-only',
+  captureMode: 'shadow',
+  sampleStatus: 'observed',
+  operation: Object.freeze({
+    command: 'compute_batch_set_cells_by_position',
+    operationId: operationContext.operationId,
+    kind: operationContext.kind,
+    entrypointIds: Object.freeze(['compute_batch_set_cells_by_position']),
+    domainIds: vc03ExportSurfaceDomainIds,
+    sheetIds: Object.freeze(['sheet-1']),
+    capturePolicy,
+    writeAdmissionMode,
+    domainClass: 'authored',
+    invocation: 'public-mutation',
+  }),
+  actor: Object.freeze({
+    actorKind: author.actorKind,
+    redactedAuthorClass: author.actorKind,
+  }),
+  result: Object.freeze({
+    changedCellCount: 1,
+    directEditCount: 1,
+    directEditRangeCount: 0,
+    affectedSheetIds: Object.freeze(['sheet-1']),
+    sheetChangeCount: 0,
+    tableChangeCount: 0,
+    pivotChangeCount: 0,
+    chartChangeCount: 0,
+    validationAnnotationCount: 0,
+    diagnosticCodes: Object.freeze([]),
+  }),
+  redaction: Object.freeze({
+    policy: 'metadata-only',
+    policyDigest: digest.value,
+    omitted: Object.freeze(['cellValues', 'authorId', 'providerPayload']),
+  }),
+  sourceArtifactRefs: Object.freeze([
+    Object.freeze({
+      artifactId: 'operation-context',
+      kind: 'operation-context',
+      digest,
+      redactionPolicy: 'metadata-only',
+    }),
+  ]),
+});
+const shadowObservationSink: VersionShadowObservationSink = Object.freeze({
+  recordObservation: (_record: VersionShadowObservationRecord) => undefined,
+});
 
 export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   vc03ExportSurfaceDomainIds,
@@ -331,6 +403,8 @@ export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   exportMetadata,
   syncProvenance,
   persistedCommit,
+  shadowObservation,
+  shadowObservationSink,
 });
 
 export type { PublicVersionApiSurface };

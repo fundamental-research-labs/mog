@@ -200,6 +200,97 @@ export interface VersionOperationContext {
   readonly collaboration?: VersionSyncOperationContext;
 }
 
+export const VERSION_SHADOW_OBSERVATION_CAPTURE_MODES = Object.freeze([
+  'shadow',
+  'headless-replay',
+  'corpus-replay',
+  'app-eval',
+  'provider-shadow',
+] as const);
+export type VersionShadowObservationCaptureMode =
+  (typeof VERSION_SHADOW_OBSERVATION_CAPTURE_MODES)[number];
+
+export const VERSION_SHADOW_SAMPLE_STATUSES = Object.freeze([
+  'observed',
+  'skipped',
+  'blocked',
+  'divergent',
+  'pass',
+] as const);
+export type VersionShadowSampleStatus = (typeof VERSION_SHADOW_SAMPLE_STATUSES)[number];
+
+export interface VersionShadowObservationOptions {
+  readonly rolloutStage?: VersionRolloutStage;
+  readonly captureMode?: VersionShadowObservationCaptureMode;
+  readonly environmentId?: string;
+  readonly redactionPolicy?: VersionRedactionPolicy;
+  readonly redactionPolicyDigest?: string;
+}
+
+export interface VersionShadowObservationArtifactRef {
+  readonly artifactId: string;
+  readonly kind:
+    | 'operation-context'
+    | 'admission-classification'
+    | 'mutation-result'
+    | 'diagnostics';
+  readonly digest: ObjectDigest;
+  readonly redactionPolicy: VersionRedactionPolicy;
+}
+
+export interface VersionShadowMutationObservationRecord {
+  readonly schemaVersion: 1;
+  readonly recordKind: 'version-shadow-observation';
+  readonly observationId: string;
+  readonly observedAt: string;
+  readonly environmentId: string;
+  readonly documentId?: string;
+  readonly rolloutStage: VersionRolloutStage;
+  readonly captureMode: VersionShadowObservationCaptureMode;
+  readonly sampleStatus: VersionShadowSampleStatus;
+  readonly operation: {
+    readonly command: string;
+    readonly operationId?: string;
+    readonly operationGroupId?: string;
+    readonly kind: VersionOperationKind;
+    readonly entrypointIds: readonly string[];
+    readonly domainIds: readonly string[];
+    readonly sheetIds: readonly string[];
+    readonly capturePolicy: CapturePolicy;
+    readonly writeAdmissionMode: VersionWriteAdmissionMode;
+    readonly domainClass?: VersionDomainClass;
+    readonly invocation?: string;
+  };
+  readonly actor: {
+    readonly actorKind?: VersionActorKind | 'unknown';
+    readonly redactedAuthorClass: string;
+  };
+  readonly result: {
+    readonly changedCellCount: number;
+    readonly directEditCount: number;
+    readonly directEditRangeCount: number;
+    readonly affectedSheetIds: readonly string[];
+    readonly sheetChangeCount: number;
+    readonly tableChangeCount: number;
+    readonly pivotChangeCount: number;
+    readonly chartChangeCount: number;
+    readonly validationAnnotationCount: number;
+    readonly diagnosticCodes: readonly string[];
+  };
+  readonly redaction: {
+    readonly policy: VersionRedactionPolicy;
+    readonly policyDigest?: string;
+    readonly omitted: readonly string[];
+  };
+  readonly sourceArtifactRefs: readonly VersionShadowObservationArtifactRef[];
+}
+
+export type VersionShadowObservationRecord = VersionShadowMutationObservationRecord;
+
+export interface VersionShadowObservationSink {
+  recordObservation(record: VersionShadowObservationRecord): void | Promise<void>;
+}
+
 export interface SemanticOperationIntent {
   readonly intentId: string;
   readonly operationKind: VersionOperationKind;

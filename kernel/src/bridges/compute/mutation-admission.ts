@@ -13,6 +13,7 @@ import {
   SyncApplyAdmissionError,
   type AdmittedSyncApplyContext,
 } from './sync-apply-admission';
+import { recordVersionMutationShadowObservation } from './version-shadow-observation';
 
 export type MutationTuple = [Uint8Array, MutationResult];
 
@@ -29,6 +30,7 @@ export type MutationAdmissionDiagnosticCode =
   | 'versioning.admission.missing-context'
   | 'versioning.admission.blocked-write'
   | 'versioning.admission.unclassified-write'
+  | 'versioning.shadow-observation.sink-error'
   | 'provenance.missingContext'
   | 'provenance.invalidContext';
 
@@ -109,11 +111,21 @@ export function recordVersionMutationCapture(
   ctx: IKernelContext,
   input: VersionMutationCaptureRecordInput,
 ): void {
+  const normalizedInput = normalizeVersionMutationCaptureInput(input);
+  try {
+    const observation = recordVersionMutationShadowObservation(ctx, normalizedInput);
+    if (isPromiseLike(observation)) {
+      observation.catch(() => recordShadowObservationSinkDiagnostic(ctx, input.operation));
+    }
+  } catch {
+    recordShadowObservationSinkDiagnostic(ctx, input.operation);
+  }
+
   const capture = (ctx as IKernelContext & VersionMutationCaptureContext).versioning
     ?.mutationCapture;
   if (!capture?.recordMutationResult) return;
   try {
-    capture.recordMutationResult(normalizeVersionMutationCaptureInput(input));
+    capture.recordMutationResult(normalizedInput);
   } catch {
     (
       ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
@@ -253,6 +265,23 @@ export function withDirectEditRange(
     ...options,
     directEditRanges: [...(options?.directEditRanges ?? []), range],
   };
+}
+
+function recordShadowObservationSinkDiagnostic(ctx: IKernelContext, operation: string): void {
+  recordMutationAdmissionDiagnostic(ctx, {
+    code: 'versioning.shadow-observation.sink-error',
+    severity: 'warning',
+    command: operation,
+    message: `Version shadow observation sink failed for '${operation}'.`,
+  });
+}
+
+function isPromiseLike(value: unknown): value is Promise<void> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { readonly catch?: unknown }).catch === 'function'
+  );
 }
 
 function normalizeVersionMutationCaptureInput(

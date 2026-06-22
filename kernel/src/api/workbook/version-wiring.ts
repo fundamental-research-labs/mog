@@ -107,6 +107,8 @@ export function attachWorkbookVersioning(
     !config.proposalService &&
     !config.proposalWorkspaceService &&
     !config.readLiveCollaborationStatus &&
+    !config.shadowObservationSink &&
+    !config.shadowObservationOptions &&
     Object.keys(domainSupportManifestFields).length === 0
   ) {
     return;
@@ -235,6 +237,12 @@ export function attachWorkbookVersioning(
       ? {
           readLiveCollaborationStatus: config.readLiveCollaborationStatus,
         }
+      : {}),
+    ...(config.shadowObservationSink
+      ? { shadowObservationSink: config.shadowObservationSink }
+      : {}),
+    ...(config.shadowObservationOptions
+      ? { shadowObservationOptions: config.shadowObservationOptions }
       : {}),
     ...domainSupportManifestFields,
   };

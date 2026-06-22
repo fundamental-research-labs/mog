@@ -1,9 +1,12 @@
 import 'fake-indexeddb/auto';
 
+import { inflateRawSync } from 'node:zlib';
+
 import type { Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
+import { withVersionManifest } from './version-domain-support-test-utils';
 import {
   createDefaultVersionStoreProviderRegistry,
   selectVersionStoreProvider,
@@ -16,6 +19,7 @@ import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 
 const DOCUMENT_ID = 'vc10-xlsx-import-root';
+const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-clean-export';
 const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
 
 beforeEach(async () => {
@@ -135,6 +139,42 @@ describe('WorkbookVersion XLSX import root', () => {
       await imported.handle.dispose().catch(() => {});
     }
   });
+
+  it('exports clean XLSX bytes without Mog version metadata package parts', async () => {
+    const xlsxBytes = await createSourceXlsx();
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: xlsxBytes },
+      {
+        documentId: CLEAN_EXPORT_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected XLSX import success: ${imported.error?.message}`);
+    }
+
+    let wb: Workbook | undefined;
+    try {
+      wb = await imported.handle.workbook({
+        versioning: withVersionManifest({
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        }),
+      });
+
+      await expect(wb.version.getHead()).resolves.toMatchObject({ ok: true });
+
+      const exported = await wb.toXlsx({ contextStripped: true });
+      expect(findMogVersionMetadataEvidence(exported)).toEqual([]);
+    } finally {
+      await wb?.close('skipSave').catch(() => {});
+      await imported.handle.dispose().catch(() => {});
+    }
+  });
 });
 
 async function createSourceXlsx(): Promise<Uint8Array> {
@@ -180,4 +220,124 @@ async function readRootSemanticChangeSetPayload(
     digest: root.commit.payload.semanticChangeSetDigest,
   });
   return semanticRecord.preimage.payload as Record<string, unknown>;
+}
+
+interface ZipEntry {
+  readonly name: string;
+  readonly compressionMethod: number;
+  readonly compressedSize: number;
+  readonly localHeaderOffset: number;
+}
+
+function findMogVersionMetadataEvidence(xlsxBytes: Uint8Array): string[] {
+  const archive = readZipArchive(xlsxBytes);
+  const evidence: string[] = [];
+  for (const entry of archive.entries) {
+    if (isMogVersionMetadataPackagePart(entry.name)) {
+      evidence.push(entry.name);
+    }
+  }
+  for (const packageMetadataPart of ['[Content_Types].xml', '_rels/.rels']) {
+    const text = archive.readText(packageMetadataPart);
+    if (text && containsMogVersionMetadataMarker(text)) {
+      evidence.push(packageMetadataPart);
+    }
+  }
+  return evidence;
+}
+
+function isMogVersionMetadataPackagePart(entryName: string): boolean {
+  const normalized = normalizePackageText(entryName);
+  return (
+    normalized === 'docprops/custom.xml' ||
+    normalized.startsWith('customxml/') ||
+    containsMogVersionMetadataMarker(normalized)
+  );
+}
+
+function containsMogVersionMetadataMarker(value: string): boolean {
+  const normalized = normalizePackageText(value);
+  return (
+    normalized.includes('mog-version') ||
+    normalized.includes('mog_version') ||
+    normalized.includes('mog/version') ||
+    normalized.includes('version-control') ||
+    normalized.includes('versioncontrol') ||
+    normalized.includes('application/vnd.mog')
+  );
+}
+
+function normalizePackageText(value: string): string {
+  return value.replace(/^\/+/, '').toLowerCase();
+}
+
+function readZipArchive(bytes: Uint8Array): {
+  readonly entries: readonly ZipEntry[];
+  readonly readText: (name: string) => string | null;
+} {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const entries = readZipEntries(bytes, view);
+  const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
+  return {
+    entries,
+    readText(name: string): string | null {
+      const entry = entriesByName.get(name);
+      if (!entry) return null;
+      return new TextDecoder().decode(readZipEntry(bytes, view, entry));
+    },
+  };
+}
+
+function readZipEntries(bytes: Uint8Array, view: DataView): ZipEntry[] {
+  const eocdOffset = findEndOfCentralDirectory(view);
+  const centralDirectorySize = view.getUint32(eocdOffset + 12, true);
+  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
+  const entries: ZipEntry[] = [];
+  let offset = centralDirectoryOffset;
+  const end = centralDirectoryOffset + centralDirectorySize;
+  while (offset < end) {
+    if (view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error(`invalid ZIP central directory header at ${offset}`);
+    }
+    const compressionMethod = view.getUint16(offset + 10, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localHeaderOffset = view.getUint32(offset + 42, true);
+    const nameStart = offset + 46;
+    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLength));
+    entries.push({ name, compressionMethod, compressedSize, localHeaderOffset });
+    offset = nameStart + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function readZipEntry(bytes: Uint8Array, view: DataView, entry: ZipEntry): Uint8Array {
+  const offset = entry.localHeaderOffset;
+  if (view.getUint32(offset, true) !== 0x04034b50) {
+    throw new Error(`invalid ZIP local file header for ${entry.name}`);
+  }
+  const nameLength = view.getUint16(offset + 26, true);
+  const extraLength = view.getUint16(offset + 28, true);
+  const dataStart = offset + 30 + nameLength + extraLength;
+  const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
+  if (entry.compressionMethod === 0) {
+    return compressed;
+  }
+  if (entry.compressionMethod === 8) {
+    return inflateRawSync(compressed);
+  }
+  throw new Error(
+    `unsupported ZIP compression method ${entry.compressionMethod} for ${entry.name}`,
+  );
+}
+
+function findEndOfCentralDirectory(view: DataView): number {
+  for (let offset = view.byteLength - 22; offset >= 0; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      return offset;
+    }
+  }
+  throw new Error('missing ZIP end of central directory');
 }

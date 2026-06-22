@@ -132,6 +132,11 @@ export function attachWorkbookVersioning(
   runtime.versioning = {
     ...existing,
     ...(config.provider ? { provider: config.provider } : {}),
+    ...(config.captureNormalCommit ? { captureNormalCommit: config.captureNormalCommit } : {}),
+    ...(config.snapshotRootByteSyncPort
+      ? { snapshotRootByteSyncPort: config.snapshotRootByteSyncPort }
+      : {}),
+    ...(config.semanticStateReader ? { semanticStateReader: config.semanticStateReader } : {}),
     ...(writeService
       ? {
           writeService,

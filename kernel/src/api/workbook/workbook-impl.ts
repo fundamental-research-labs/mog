@@ -91,7 +91,6 @@ import { createCheckpointManager } from '../../services/checkpoint';
 import type { ICheckpointManager } from '../../services/checkpoint';
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
 import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
-import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
 import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import {
   getFunctionCatalog as getCatalog,
@@ -115,6 +114,7 @@ import {
   attachWorkbookVersioning,
   attachWorkbookVersionSurfaceStatusService,
 } from './version-wiring';
+import { rebindVersioningAfterCheckout } from './version-checkout-rebind';
 import { readVersionLiveCollaborationStatus } from './version-live-collaboration-status';
 import { readVersionPendingProviderWrites } from './version-pending-provider-writes';
 import {
@@ -517,13 +517,17 @@ export class WorkbookImpl implements WorkbookInternal {
   ): Promise<void> {
     const nextContext = materialization.context;
     const currentVersioning = (this.ctx as DocumentContext & { versioning?: unknown }).versioning;
+    const nextVersioning = rebindVersioningAfterCheckout({
+      versioning: currentVersioning,
+      nextContext,
+    });
     const mutableNextContext = nextContext as unknown as {
       eventBus: IEventBus;
       versioning?: unknown;
     };
-    resetSemanticMutationCaptureAfterCheckout(currentVersioning, nextContext);
-    mutableNextContext.versioning = currentVersioning;
     mutableNextContext.eventBus = this.eventBus;
+    attachWorkbookVersioning(nextContext, nextVersioning);
+    attachWorkbookVersionSurfaceStatusService(nextContext, this.versionSurfaceStatusService);
 
     this.contextBinding.publish(nextContext);
     this.versionSurfaceStatusService.recordCheckoutMaterialization(input);
@@ -2228,24 +2232,6 @@ export class WorkbookImpl implements WorkbookInternal {
   private workbookLinkScope(): WorkbookLinkStatusScope {
     return this.ctx.workbookLinkScope();
   }
-}
-
-function resetSemanticMutationCaptureAfterCheckout(
-  versioning: unknown,
-  nextContext: DocumentContext,
-): void {
-  if (!isVersioningRecord(versioning)) return;
-  const semanticCapture = versioning.semanticMutationCapture;
-  if (!isVersioningRecord(semanticCapture)) return;
-  const reset = semanticCapture.resetNormalCaptureForCheckout;
-  if (typeof reset !== 'function') return;
-  reset.call(semanticCapture, {
-    semanticStateReader: createComputeBridgeSemanticStateReader(nextContext.computeBridge),
-  });
-}
-
-function isVersioningRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 // =============================================================================

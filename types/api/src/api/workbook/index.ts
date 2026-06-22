@@ -108,6 +108,8 @@ export type {
   VersionRecordRevision,
   VersionRedactedValue,
   WorkbookVersionReviewApi,
+  WorkbookVersionReviewApprovalEvidence,
+  WorkbookVersionReviewApprovalTarget,
   WorkbookVersionReviewDecision,
   WorkbookVersionReviewDecisionDraft,
   WorkbookVersionReviewDecisionKind,

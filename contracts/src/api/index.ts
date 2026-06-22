@@ -109,6 +109,8 @@ export type {
   VersionPromotePendingRemoteStatus,
   VersionRecordRevision,
   VersionRedactedValue,
+  WorkbookVersionReviewApprovalEvidence,
+  WorkbookVersionReviewApprovalTarget,
   VersionRedactionClass,
   VersionRef,
   VersionRefListResult,

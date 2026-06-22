@@ -111,6 +111,51 @@ describe('WorkbookVersionReviewRecordStore', () => {
       ok: false,
       error: { code: 'stale_revision', expectedRevision: 1, actualRevision: 2 },
     });
+    await expect(
+      store.appendReviewDecision({
+        reviewId,
+        expectedRevision: 2,
+        clientRequestId: 'decision-derived-resolved',
+        decision: {
+          target: {
+            kind: 'semanticChange',
+            changeSetDigest: { algorithm: 'sha256', digest: '4'.repeat(64) },
+            changeId: 'derived-impact-1',
+            entityKind: 'formula',
+            entityId: 'sheet-1!B1',
+            propertyPath: ['value'],
+            derived: true,
+          },
+          decision: 'mark_resolved',
+          reviewer: AUTHOR,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_state', state: 'derived_target_not_resolvable' },
+    });
+    await expect(
+      store.appendReviewDecision({
+        reviewId,
+        expectedRevision: 2,
+        clientRequestId: 'decision-conflict-resolved',
+        decision: {
+          target: {
+            kind: 'conflict',
+            mergePreviewId: 'merge-preview-1',
+            conflictId: 'conflict-1',
+            entityKind: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+          decision: 'mark_resolved',
+          reviewer: AUTHOR,
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_state', state: 'conflict_target_resolution_unavailable' },
+    });
 
     const statusInput = updateStatusInput(reviewId, 2, 'status-1');
     const statusUpdated = await store.updateReviewStatus(statusInput);
@@ -125,6 +170,17 @@ describe('WorkbookVersionReviewRecordStore', () => {
       ok: false,
       error: { code: 'invalid_state', state: 'approval_requires_review_diff' },
     });
+    for (const status of ['applied', 'superseded', 'stale'] as const) {
+      await expect(
+        store.updateReviewStatus({
+          ...updateStatusInput(reviewId, 3, `status-flow-owned-${status}`),
+          status,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'invalid_state', state: 'flow_owned_review_status' },
+      });
+    }
 
     await expect(store.getReview({ reviewId })).resolves.toMatchObject({
       ok: true,

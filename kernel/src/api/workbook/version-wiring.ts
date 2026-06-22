@@ -7,7 +7,7 @@ import { createWorkbookVersionMergeService } from '../../document/version-store/
 import {
   createProviderBackedWorkbookVersionReviewService,
   hasWorkbookVersionReviewRecordStoreProvider,
-} from '../../document/version-store/review-service';
+} from '../../document/version-store/review-provider-service';
 import { createWorkbookVersionReviewDiffService } from '../../document/version-store/review-diff-service';
 import {
   createPendingRemotePromotionService,

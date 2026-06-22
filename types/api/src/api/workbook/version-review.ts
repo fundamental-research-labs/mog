@@ -87,6 +87,22 @@ export interface WorkbookVersionReviewDecision {
 
 export type WorkbookVersionReviewDecisionDraft = Omit<WorkbookVersionReviewDecision, 'id' | 'createdAt'>;
 
+export interface WorkbookVersionReviewApprovalTarget {
+  readonly targetKey: string;
+  readonly target: WorkbookVersionReviewDecisionTarget;
+}
+
+export interface WorkbookVersionReviewApprovalEvidence {
+  readonly schemaVersion: 1;
+  readonly changeSetDigest: ObjectDigest;
+  readonly baseCommitId: WorkbookCommitId;
+  readonly headCommitId: WorkbookCommitId;
+  readonly requiredTargets: readonly WorkbookVersionReviewApprovalTarget[];
+  readonly approvedBy: VersionAuthor;
+  readonly approvedAt: string;
+  readonly reviewRevision: number;
+}
+
 export interface WorkbookVersionReviewRecordSummary {
   readonly id: string;
   readonly documentId: string;
@@ -105,6 +121,7 @@ export interface WorkbookVersionReviewRecord extends WorkbookVersionReviewRecord
   readonly schemaVersion: 1;
   readonly createdAt: string;
   readonly decisions: readonly WorkbookVersionReviewDecision[];
+  readonly approval?: WorkbookVersionReviewApprovalEvidence;
   readonly verification?: VerificationSummary;
   readonly redaction: RedactionSummary;
   readonly diagnostics: readonly VersionDiagnostic[];

@@ -10,6 +10,7 @@ import type {
   VersionResult,
   WorkbookVersionReviewDecision,
   WorkbookVersionReviewDecisionDraft,
+  WorkbookVersionReviewApprovalEvidence,
   WorkbookVersionReviewDiffPage,
   WorkbookVersionReviewRecord,
   WorkbookVersionReviewRecordSummary,
@@ -25,7 +26,10 @@ import {
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from './registry';
-import type { WorkbookVersionReviewDiffService } from './review-diff-service';
+import {
+  reviewRecordWithoutApproval,
+  validateApprovalEvidenceForStatusMutation,
+} from './review-approval';
 
 const DEFAULT_REVIEW_LIST_LIMIT = 50;
 const REVIEW_LIST_CURSOR_PREFIX = 'review-list:';
@@ -33,6 +37,7 @@ const REVIEW_ID_RE = /^review:sha256:[0-9a-f]{64}$/;
 const REVIEW_DECISION_ID_RE = /^review-decision:sha256:[0-9a-f]{64}$/;
 const USER_OWNED_STATUSES = new Set<WorkbookVersionReviewStatus>([
   'open',
+  'approved',
   'changes_requested',
   'rejected',
 ]);
@@ -75,8 +80,14 @@ export interface WorkbookVersionReviewRecordStore {
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   updateReviewStatus(
     input: VersionUpdateReviewStatusInput,
+    options?: WorkbookVersionReviewStatusUpdateOptions,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
 }
+
+export type WorkbookVersionReviewStatusUpdateOptions = {
+  readonly approvalEvidence?: WorkbookVersionReviewApprovalEvidence;
+  readonly updatedAt?: string;
+};
 
 export type WorkbookVersionReviewRecordStoreProvider = {
   openWorkbookVersionReviewRecordStore(): Promise<WorkbookVersionReviewRecordStore>;
@@ -311,6 +322,7 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
 
   async updateReviewStatus(
     input: VersionUpdateReviewStatusInput,
+    options: WorkbookVersionReviewStatusUpdateOptions = {},
   ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
     const fingerprint = mutationFingerprint('updateReviewStatus', {
       clientRequestId: input.clientRequestId,
@@ -336,15 +348,25 @@ export class WorkbookVersionReviewRecordStoreImpl implements WorkbookVersionRevi
           result: staleRevision(input.expectedRevision, row.record.revision),
         };
       }
-      const transition = validateStatusTransition(row.record.status, input.status);
+      const transition = validateStatusTransition(
+        row.record.status,
+        input.status,
+        Boolean(options.approvalEvidence),
+      );
       if (!transition.ok) return { action: 'none', result: transition.result };
+      const approval = validateApprovalEvidenceForStatusMutation(row.record, input, options.approvalEvidence);
+      if (!approval.ok) return { action: 'none', result: approval.result };
 
-      const updatedAt = new Date().toISOString();
+      const updatedAt = options.updatedAt ?? new Date().toISOString();
+      const recordBase = reviewRecordWithoutApproval(row.record);
       const record: WorkbookVersionReviewRecord = {
-        ...row.record,
+        ...recordBase,
         status: input.status,
         revision: row.record.revision + 1,
         updatedAt,
+        ...(input.status === 'approved' && options.approvalEvidence
+          ? { approval: cloneJson(options.approvalEvidence) }
+          : {}),
         diagnostics: input.reason
           ? [
               ...row.record.diagnostics,
@@ -396,107 +418,6 @@ export class InMemoryWorkbookVersionReviewRecordStore
       },
     });
   }
-}
-
-export class ProviderBackedWorkbookVersionReviewService implements WorkbookVersionReviewService {
-  private readonly openStore: () => Promise<WorkbookVersionReviewRecordStore>;
-  private readonly diffService?: WorkbookVersionReviewDiffService;
-
-  constructor(options: {
-    readonly openStore: () => Promise<WorkbookVersionReviewRecordStore>;
-    readonly diffService?: WorkbookVersionReviewDiffService;
-  }) {
-    this.openStore = options.openStore;
-    this.diffService = options.diffService;
-  }
-
-  async listReviews(input: VersionListReviewsInput): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
-    return (await this.openStore()).listReviews(input);
-  }
-
-  async getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return (await this.openStore()).getReview(input);
-  }
-
-  async createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return (await this.openStore()).createReview(input);
-  }
-
-  async appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return (await this.openStore()).appendReviewDecision(input);
-  }
-
-  async updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return (await this.openStore()).updateReviewStatus(input);
-  }
-
-  async getReviewDiff(
-    input: VersionGetReviewDiffInput,
-  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
-    if (!this.diffService) {
-      return targetUnavailable(
-        'getReviewDiff',
-        'VERSION_REVIEW_DIFF_UNAVAILABLE',
-        'Provider-backed review diff projection is not attached yet; review records remain persisted.',
-      );
-    }
-    if (!input.reviewId) return this.diffService.getReviewDiff(input);
-    const resolved = await this.reviewDiffInputForReview(input);
-    if (!resolved.ok) return resolved;
-    return this.diffService.getReviewDiff(resolved.value);
-  }
-
-  private async reviewDiffInputForReview(
-    input: VersionGetReviewDiffInput,
-  ): Promise<VersionResult<VersionGetReviewDiffInput>> {
-    if (!input.reviewId) return ok(input);
-    const review = await (await this.openStore()).getReview({ reviewId: input.reviewId });
-    if (!review.ok) return review as VersionResult<VersionGetReviewDiffInput>;
-    const baseCommitId = review.value.baseCommitId;
-    const headCommitId = review.value.headCommitId;
-    if (!baseCommitId || !headCommitId) {
-      return invalidState(
-        'review_diff_commit_range_unavailable',
-        ['commit_range_review'],
-        'Review record does not carry base/head commits for semantic diff projection.',
-      );
-    }
-    if (input.baseCommitId && input.baseCommitId !== baseCommitId) {
-      return invalidState(
-        'review_diff_base_mismatch',
-        ['matching_review_base_commit'],
-        'baseCommitId must match the review record base commit.',
-      );
-    }
-    if (input.headCommitId && input.headCommitId !== headCommitId) {
-      return invalidState(
-        'review_diff_head_mismatch',
-        ['matching_review_head_commit'],
-        'headCommitId must match the review record head commit.',
-      );
-    }
-    return ok({
-      ...input,
-      baseCommitId,
-      headCommitId,
-    });
-  }
-}
-
-export function createProviderBackedWorkbookVersionReviewService(options: {
-  readonly provider: WorkbookVersionReviewRecordStoreProvider;
-  readonly diffService?: WorkbookVersionReviewDiffService;
-}): WorkbookVersionReviewService {
-  return new ProviderBackedWorkbookVersionReviewService({
-    openStore: () => options.provider.openWorkbookVersionReviewRecordStore(),
-    ...(options.diffService ? { diffService: options.diffService } : {}),
-  });
-}
-
-export function hasWorkbookVersionReviewRecordStoreProvider(
-  value: unknown,
-): value is WorkbookVersionReviewRecordStoreProvider {
-  return isRecord(value) && typeof value.openWorkbookVersionReviewRecordStore === 'function';
 }
 
 export function reviewRecordStorageKey(documentScopeKey: string, reviewId: string): string {
@@ -719,20 +640,51 @@ function validateDecisionDraft(
       ),
     };
   }
+  if (decision.decision === 'mark_resolved' && decision.target.kind === 'conflict') {
+    return {
+      ok: false,
+      result: invalidState(
+        'conflict_target_resolution_unavailable',
+        ['semantic_review_target'],
+        'Conflict review targets cannot be marked resolved until merge conflict application is enabled.',
+      ),
+    };
+  }
   return { ok: true };
 }
 
 function validateStatusTransition(
   current: WorkbookVersionReviewStatus,
   next: WorkbookVersionReviewStatus,
+  hasApprovalEvidence: boolean,
 ): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
-  if (next === 'approved') {
+  if (TERMINAL_STATUSES.has(current)) {
+    return {
+      ok: false,
+      result: invalidState(
+        'terminal_review_status',
+        ['new_review'],
+        'Terminal review statuses cannot be manually reopened in this slice.',
+      ),
+    };
+  }
+  if (next === 'approved' && !hasApprovalEvidence) {
     return {
       ok: false,
       result: invalidState(
         'approval_requires_review_diff',
-        ['open', 'changes_requested', 'rejected'],
-        'Manual approval requires review diff coverage and is enabled by the review-diff projection slice.',
+        ['open', 'changes_requested'],
+        'Manual approval requires review diff coverage and approval evidence.',
+      ),
+    };
+  }
+  if (next === 'approved' && current !== 'open' && current !== 'changes_requested') {
+    return {
+      ok: false,
+      result: invalidState(
+        'review_status_not_approvable',
+        ['open', 'changes_requested'],
+        'Only open or changes_requested reviews can be manually approved.',
       ),
     };
   }
@@ -741,18 +693,8 @@ function validateStatusTransition(
       ok: false,
       result: invalidState(
         'flow_owned_review_status',
-        ['open', 'changes_requested', 'rejected'],
+        ['open', 'approved', 'changes_requested', 'rejected'],
         `${next} is owned by proposal, merge, staleness, or supersede flows.`,
-      ),
-    };
-  }
-  if (TERMINAL_STATUSES.has(current)) {
-    return {
-      ok: false,
-      result: invalidState(
-        'terminal_review_status',
-        ['new_review'],
-        'Terminal review statuses cannot be manually reopened in this slice.',
       ),
     };
   }
@@ -829,21 +771,6 @@ function invalidState<T>(
   reason: string,
 ): VersionResult<T> {
   return { ok: false, error: { code: 'invalid_state', state, allowed, reason } };
-}
-
-function targetUnavailable<T>(
-  operation: string,
-  code: string,
-  message: string,
-): VersionResult<T> {
-  return {
-    ok: false,
-    error: {
-      code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
-      diagnostics: [diagnostic(code, 'warning', message)],
-    },
-  };
 }
 
 function diagnostic(

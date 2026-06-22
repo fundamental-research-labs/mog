@@ -22,6 +22,10 @@ import type {
   CreateWorkbookOptions as NativeCreateWorkbookOptions,
   MogSdkLogger,
 } from './boot';
+import {
+  createSdkVersionStoreLifecycleConfig,
+  type MogSdkVersionStoreConfig,
+} from './version-store';
 import * as chartRasterWasmGlue from '@mog-sdk/chart-raster-wasm';
 
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
@@ -38,6 +42,30 @@ export type {
   ChartRenderingOptions,
   MogSdkLogger,
 } from './boot';
+export {
+  MOG_SDK_SUPPORTED_VERSION_STORE_KINDS,
+  MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS,
+  MogSdkVersionStoreConfigError,
+  createSdkVersionStoreLifecycleConfig,
+  isMogSdkVersionStoreConfigError,
+} from './version-store';
+export type {
+  MogSdkBrowserVersionStoreConfig,
+  MogSdkIndexedDbVersionStoreConfig,
+  MogSdkMemoryDurableSnapshotVersionStoreConfig,
+  MogSdkMemoryVersionStoreConfig,
+  MogSdkNodeFileVersionStoreConfig,
+  MogSdkSupportedVersionStoreKind,
+  MogSdkUnsupportedVersionStoreKind,
+  MogSdkVersionStoreConfig,
+  MogSdkVersionStoreConfigObject,
+  MogSdkVersionStoreDiagnostic,
+  MogSdkVersionStoreDiagnosticCode,
+  MogSdkVersionStoreLifecycleConfig,
+  MogSdkVersionStoreLifecycleProviderSelection,
+  MogSdkVersionStoreRuntime,
+  MogSdkVersionStoreScopeOptions,
+} from './version-store';
 export type {
   Workbook,
   Worksheet,
@@ -82,6 +110,7 @@ export interface CreateWorkbookOptions {
   logger?: MogSdkLogger | false;
   debug?: boolean;
   chartRendering?: ChartRenderingConfig;
+  versionStore?: MogSdkVersionStoreConfig;
 }
 
 export async function createWorkbook(): Promise<Workbook>;
@@ -135,6 +164,7 @@ export async function createWorkbook(
     };
   }
 
+  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, { runtime: 'wasm' });
   const documentId = opts.documentId ?? createPortableRandomUUID();
   const hostResult = createNodeHeadlessHost({
     documentId,
@@ -174,7 +204,7 @@ export async function createWorkbook(
   }
 
   installWasmChartImageExporter(readyHandle, opts.chartRendering);
-  const wb = await readyHandle.workbook();
+  const wb = versioning ? await readyHandle.workbook({ versioning }) : await readyHandle.workbook();
 
   const originalDispose = wb.dispose.bind(wb);
   wb.dispose = () => {

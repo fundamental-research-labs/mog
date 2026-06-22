@@ -64,7 +64,7 @@ function applyWorkspaceAliases(
 
 export default defineConfig([
   {
-    entry: { index: 'src/index.ts' },
+    entry: { index: 'src/index.ts', 'version-store': 'src/version-store.ts' },
     format: ['esm', 'cjs'],
     platform: 'node',
     target: 'node18',

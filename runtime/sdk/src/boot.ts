@@ -52,6 +52,10 @@ import {
   createNodeWasmChartImageExporterFactory,
 } from './chart-export/node-chart-image-exporter';
 import type { NativeChartRasterAddon } from './chart-export/node-chart-image-exporter';
+import {
+  createSdkVersionStoreLifecycleConfig,
+  type MogSdkVersionStoreConfig,
+} from './version-store';
 import type {
   DocumentByteSyncPortApplyUpdateReturn,
   DocumentByteSyncPortClassifiedRawProvenance,
@@ -284,6 +288,7 @@ export interface CreateWorkbookOptions {
    * @mog-sdk/chart-raster-wasm lazily for PNG/JPEG export.
    */
   chartRendering?: ChartRenderingConfig;
+  versionStore?: MogSdkVersionStoreConfig;
 }
 
 export interface MogSdkLogger {
@@ -381,6 +386,7 @@ export async function createWorkbook(
     };
   }
 
+  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, { runtime: 'node' });
   // Default timezone for headless — headless hosts cannot infer user TZ.
   const timezone = opts.userTimezone ?? 'UTC';
 
@@ -439,9 +445,8 @@ export async function createWorkbook(
 
   installNodeChartImageExporter(readyHandle, loadNodeSdkNapiAddon, opts.chartRendering);
 
-  // Create a Workbook from the handle — uses the cached workbook() path
-  // which wires context, event bus, and sheet metadata internally.
-  const wb = await readyHandle.workbook({ writeFile: writeNodeFileBytes });
+  // Create a Workbook from the handle.
+  const wb = await readyHandle.workbook({ writeFile: writeNodeFileBytes, versioning });
 
   // Chain disposal: workbook.dispose → handle.dispose → host.dispose
   const originalDispose = wb.dispose.bind(wb);

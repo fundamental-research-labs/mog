@@ -45,6 +45,13 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./version-store": {
+      "development": "./src/version-store.ts",
+      "types": "./dist/version-store.d.ts",
+      "import": "./dist/version-store.js",
+      "require": "./dist/version-store.cjs",
+      "default": "./dist/version-store.js"
+    },
     "./wasm": {
       "development": "./src/wasm.ts",
       "types": "./dist/wasm.d.ts",
@@ -129,6 +136,12 @@
           "types": "./dist/index.d.cts",
           "default": "./dist/index.cjs"
         }
+      },
+      "./version-store": {
+        "types": "./dist/version-store.d.ts",
+        "import": "./dist/version-store.js",
+        "require": "./dist/version-store.cjs",
+        "default": "./dist/version-store.js"
       },
       "./wasm": {
         "types": "./dist/wasm.d.ts",

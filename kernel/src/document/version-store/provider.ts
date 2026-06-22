@@ -22,6 +22,7 @@ import {
   type InMemoryVersionProviderDurability,
 } from './provider-memory-backend';
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
+import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
 import {
   cloneVersionGraphRegistry,
   createVersionGraphRegistry,
@@ -578,6 +579,11 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
       documentScope: this.documentScope,
       backend: this.backend.mergeApplyIntentBackend,
     });
+  }
+
+  async openPendingRemoteSegmentStore(namespace: VersionGraphNamespace): Promise<InMemoryPendingRemoteSegmentStore> {
+    await this.openGraph(namespace);
+    return new InMemoryPendingRemoteSegmentStore({ namespace, documentScope: this.documentScope, backend: this.backend.pendingRemoteSegmentBackend });
   }
 
   async scanDocumentIntegrity(

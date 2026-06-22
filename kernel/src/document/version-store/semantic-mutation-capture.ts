@@ -27,6 +27,7 @@ import type {
   VersionNormalCommitCaptureFinalizeResult,
 } from './commit-service';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
+import { classifySemanticMutationCaptureLane } from './semantic-mutation-capture-lanes';
 
 export interface VersionMutationCaptureRecordInput {
   readonly operation: string;
@@ -117,8 +118,10 @@ export function createSemanticMutationCapture(
 class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private readonly author: VersionAuthor;
   private readonly now: () => Date;
-  private nextSequence = 1;
-  private pending: PendingSemanticMutation[] = [];
+  private nextNormalSequence = 1;
+  private nextPendingRemoteSequence = 1;
+  private pendingNormal: PendingSemanticMutation[] = [];
+  private pendingRemote: PendingSemanticMutation[] = [];
 
   constructor(options: SemanticMutationCaptureOptions) {
     this.author = options.author ?? DEFAULT_CAPTURE_AUTHOR;
@@ -126,17 +129,18 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   }
 
   recordMutationResult(input: VersionMutationCaptureRecordInput): void {
-    if (!shouldCaptureOperation(input.operationContext)) return;
+    const lane = classifySemanticMutationCaptureLane(input.operationContext);
+    if (lane === 'skip') return;
 
-    const sequence = this.nextSequence;
+    const sequence =
+      lane === 'normalLocal' ? this.nextNormalSequence : this.nextPendingRemoteSequence;
     const capturedAt = input.operationContext?.createdAt ?? this.now().toISOString();
     const directEdits = input.directEdits ? [...input.directEdits] : [];
     const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
     const changes = mapMutationResultToSemanticChanges(input, sequence);
     if (changes.length === 0) return;
-    this.nextSequence++;
 
-    this.pending.push({
+    const record = {
       sequence,
       operation: input.operation,
       capturedAt,
@@ -144,11 +148,19 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       directEdits,
       directEditRanges,
       changes,
-    });
+    };
+
+    if (lane === 'normalLocal') {
+      this.nextNormalSequence++;
+      this.pendingNormal.push(record);
+    } else {
+      this.nextPendingRemoteSequence++;
+      this.pendingRemote.push(record);
+    }
   }
 
   async captureNormalCommit(input: Parameters<VersionNormalCommitCapture>[0]) {
-    const records = [...this.pending];
+    const records = [...this.pendingNormal];
     const changes = records.flatMap((record) => [...record.changes]);
     const semanticChangeSetRecord = await objectRecord(input.namespace, 'workbook.semanticChangeSet.v1', {
       schemaVersion: 1,
@@ -171,21 +183,20 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       },
       finalize: (result: VersionNormalCommitCaptureFinalizeResult) => {
         if (result.status === 'success') {
-          this.drainThrough(lastSequence);
+          this.drainNormalThrough(lastSequence);
         }
       },
     };
   }
 
-  private drainThrough(sequence: number): void {
-    if (sequence <= 0) return;
-    this.pending = this.pending.filter((record) => record.sequence > sequence);
+  snapshotPendingRemoteMutations(): readonly PendingSemanticMutation[] {
+    return [...this.pendingRemote];
   }
-}
 
-function shouldCaptureOperation(context: VersionOperationContext | undefined): boolean {
-  if (!context) return true;
-  return context.capturePolicy === 'commitEligible' && context.writeAdmissionMode === 'capture';
+  private drainNormalThrough(sequence: number): void {
+    if (sequence <= 0) return;
+    this.pendingNormal = this.pendingNormal.filter((record) => record.sequence > sequence);
+  }
 }
 
 function mapMutationResultToSemanticChanges(

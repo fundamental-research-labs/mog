@@ -2,6 +2,7 @@ use bridge_core as bridge;
 use compute_collab as sync;
 
 use super::YrsComputeEngine;
+use super::sync_authored_cells;
 use crate::snapshot::MutationResult;
 use cell_types::SheetId;
 use value_types::ComputeError;
@@ -26,6 +27,8 @@ impl YrsComputeEngine {
         // Capture pre-state from Yrs (still old) and in-memory indexes for
         // diffing after rebuild. This lets us detect deletions/removals.
         let pre_sheet_order: Vec<SheetId> = self.stores.storage.sheet_order();
+        let pre_authored_cells =
+            sync_authored_cells::snapshot_authored_cells(&self.mirror, &self.stores.compute);
 
         sync::apply_update(self.stores.storage.doc(), update).map_err(|e| ComputeError::Eval {
             message: format!("sync update failed: {}", e),
@@ -40,7 +43,7 @@ impl YrsComputeEngine {
         // Always rebuild from Yrs after a sync update. This is the only
         // reliable way to ensure the in-memory cell index, grid indexes,
         // compute core, and mirror all reflect the converged CRDT state.
-        self.rebuild_from_yrs_after_sync(pre_sheet_order)
+        self.rebuild_from_yrs_after_sync(pre_sheet_order, pre_authored_cells)
     }
 
     /// Rebuild all in-memory state from Yrs after a sync update.

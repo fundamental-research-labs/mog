@@ -476,6 +476,7 @@ const mutationResultDispatcherCoverage: Record<keyof MutationResult, string> = {
     'recordRuntimeDiagnostics — retains runtime diagnostic side-channel for workbook diagnostics queries',
   undoDescription: 'handleUndoDescription — forwards to onUndoDescription callback for undo UI',
   // Side-channels — declared in mutationResultDispatcherExclusions below.
+  authoredCellChanges: '__excluded__',
   data: '__excluded__',
   oldValues: '__excluded__',
 };
@@ -484,6 +485,8 @@ const mutationResultDispatcherCoverage: Record<keyof MutationResult, string> = {
  * MutationResult keys that intentionally bypass the dispatcher.
  */
 const mutationResultDispatcherExclusions: Partial<Record<keyof MutationResult, string>> = {
+  authoredCellChanges:
+    'side-channel — exposed for semantic capture; not dispatched as a UI or state-mirror change family',
   data: 'arbitrary side-channel payload (per-IPC, not a change family) — consumed by the originating call site, not the generic dispatcher',
   oldValues:
     'side-channel — folded into ChangeAccumulator-bound CellChange.oldValue inside applyAndNotify before being passed to ingest, never dispatched as its own variant',

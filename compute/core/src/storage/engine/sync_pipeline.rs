@@ -8,6 +8,9 @@ use crate::scheduler::ComputeCore;
 use crate::snapshot::{ChangeKind, MutationResult, RecalcResult};
 
 use super::grid_indexing::apply_grid_index_changes;
+use super::sync_authored_cells::{
+    AuthoredCellSnapshot, diff_authored_cell_changes, snapshot_authored_cells,
+};
 use super::{YrsComputeEngine, construction, services, viewport};
 
 mod axis_capacity;
@@ -17,6 +20,7 @@ impl YrsComputeEngine {
     pub(super) fn rebuild_from_yrs_after_sync(
         &mut self,
         pre_sheet_order: Vec<SheetId>,
+        pre_authored_cells: AuthoredCellSnapshot,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         use crate::snapshot::{
             Axis, DimensionChange, MergeChange, SheetChange, SheetChangeField,
@@ -104,6 +108,9 @@ impl YrsComputeEngine {
             &self.mirror,
             recalc,
         );
+        let post_authored_cells = snapshot_authored_cells(&self.mirror, &self.stores.compute);
+        result.authored_cell_changes =
+            diff_authored_cell_changes(&pre_authored_cells, &post_authored_cells);
 
         let post_sheet_order: Vec<SheetId> = self.stores.storage.sheet_order();
         let doc = self.stores.storage.doc();

@@ -3055,6 +3055,7 @@ export interface MoveTarget_delta {
 
 export interface MutationResult {
   recalc: RecalcResult;
+  authoredCellChanges?: CellChange[];
   propertyChanges?: PropertyChange[];
   dimensionChanges?: DimensionChange[];
   mergeChanges?: MergeChange[];

@@ -17,7 +17,7 @@ use super::sheet_workbook::{
     SheetChange, SheetSettingsChange, SplitConfigChange, ViewSelectionChange,
     WorkbookSettingsChange,
 };
-use crate::recalc::RecalcResult;
+use crate::recalc::{CellChange, RecalcResult};
 use value_types::CellValue;
 
 /// Result of a mutation command — contains recalc changes plus domain-specific changes.
@@ -27,6 +27,9 @@ use value_types::CellValue;
 pub struct MutationResult {
     /// Cell value changes from recalculation.
     pub recalc: RecalcResult,
+    /// Direct authored cell content changes captured during remote sync apply.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub authored_cell_changes: Vec<CellChange>,
     /// Property/format changes.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub property_changes: Vec<PropertyChange>,
@@ -145,6 +148,7 @@ impl MutationResult {
     pub fn empty() -> Self {
         Self {
             recalc: RecalcResult::empty(),
+            authored_cell_changes: Vec::new(),
             property_changes: Vec::new(),
             dimension_changes: Vec::new(),
             merge_changes: Vec::new(),
@@ -240,6 +244,7 @@ mod tests {
     fn mutation_result_empty() {
         let mr = MutationResult::empty();
         assert!(mr.recalc.changed_cells.is_empty());
+        assert!(mr.authored_cell_changes.is_empty());
         assert!(mr.property_changes.is_empty());
         assert!(mr.sheet_lifecycle_runtime_hint.is_none());
         assert!(mr.dimension_changes.is_empty());
@@ -332,6 +337,7 @@ mod tests {
                 policy_preserved_parse_outcomes: Vec::new(),
                 policy_preserved_parse_summary: None,
             },
+            authored_cell_changes: vec![],
             property_changes: vec![PropertyChange {
                 sheet_id: "s1".into(),
                 cell_id: "c1".into(),

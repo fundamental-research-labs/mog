@@ -22,6 +22,9 @@ pub(in crate::storage::engine) fn merge_mutation_result(
         .old_values
         .extend(source.recalc.old_values.drain());
 
+    target
+        .authored_cell_changes
+        .append(&mut source.authored_cell_changes);
     target.property_changes.append(&mut source.property_changes);
     target
         .dimension_changes

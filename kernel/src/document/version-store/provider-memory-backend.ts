@@ -20,6 +20,10 @@ import {
   MergeApplyIntentMemoryBackend,
   type MergeApplyIntentMemoryBackendSnapshot,
 } from './merge-apply-intent-store';
+import {
+  PendingRemoteSegmentMemoryBackend,
+  type PendingRemoteSegmentMemoryBackendSnapshot,
+} from './pending-remote-segment-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -32,16 +36,23 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly registries: readonly (readonly [VersionDocumentScope, InMemoryVersionRegistryRecord])[];
   readonly graphs: readonly InMemoryVersionGraphStoreSnapshot[];
   readonly mergeApplyIntents: MergeApplyIntentMemoryBackendSnapshot;
+  readonly pendingRemoteSegments?: PendingRemoteSegmentMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {
   private readonly registries = new Map<string, InMemoryVersionRegistryRecord>();
   private readonly graphStores = new Map<string, InMemoryVersionGraphStore>();
   readonly mergeApplyIntentBackend: MergeApplyIntentMemoryBackend;
+  readonly pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend;
 
-  constructor(options: { readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend } = {}) {
+  constructor(options: {
+    readonly mergeApplyIntentBackend?: MergeApplyIntentMemoryBackend;
+    readonly pendingRemoteSegmentBackend?: PendingRemoteSegmentMemoryBackend;
+  } = {}) {
     this.mergeApplyIntentBackend =
       options.mergeApplyIntentBackend ?? new MergeApplyIntentMemoryBackend();
+    this.pendingRemoteSegmentBackend =
+      options.pendingRemoteSegmentBackend ?? new PendingRemoteSegmentMemoryBackend();
   }
 
   readRegistryRecord(
@@ -103,6 +114,7 @@ export class InMemoryVersionDocumentProviderBackend {
         await Promise.all([...this.graphStores.values()].map((graph) => graph.exportSnapshot())),
       ),
       mergeApplyIntents: this.mergeApplyIntentBackend.exportSnapshot(),
+      pendingRemoteSegments: this.pendingRemoteSegmentBackend.exportSnapshot(),
     });
   }
 
@@ -111,6 +123,9 @@ export class InMemoryVersionDocumentProviderBackend {
   ): Promise<InMemoryVersionDocumentProviderBackend> {
     const backend = new InMemoryVersionDocumentProviderBackend({
       mergeApplyIntentBackend: MergeApplyIntentMemoryBackend.fromSnapshot(snapshot.mergeApplyIntents),
+      pendingRemoteSegmentBackend: PendingRemoteSegmentMemoryBackend.fromSnapshot(
+        snapshot.pendingRemoteSegments ?? { records: [] },
+      ),
     });
     for (const [scope, record] of snapshot.registries) {
       backend.registries.set(versionDocumentScopeKey(scope), cloneRegistryRecord(record));

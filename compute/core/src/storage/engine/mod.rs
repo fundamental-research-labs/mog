@@ -16,6 +16,7 @@ mod pivot_materialization;
 mod recalc;
 mod settings;
 mod stores;
+mod sync_authored_cells;
 mod sync_pipeline;
 mod viewport;
 // Wire format types and serialization — now in compute-wire crate

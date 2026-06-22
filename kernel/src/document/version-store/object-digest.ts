@@ -99,12 +99,13 @@ export function parseObjectDigest(value: unknown, paramName = 'digest'): ObjectD
 }
 
 export function isObjectDigest(value: unknown): value is ObjectDigest {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Readonly<Record<string, unknown>>;
   return (
-    isPlainRecord(value) &&
-    Object.keys(value).length === 2 &&
-    value.algorithm === 'sha256' &&
-    typeof value.digest === 'string' &&
-    OBJECT_DIGEST_HEX_RE.test(value.digest)
+    Object.keys(record).length === 2 &&
+    record.algorithm === 'sha256' &&
+    typeof record.digest === 'string' &&
+    OBJECT_DIGEST_HEX_RE.test(record.digest)
   );
 }
 

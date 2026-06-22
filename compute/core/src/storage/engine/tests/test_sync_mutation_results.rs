@@ -3,8 +3,10 @@
 use super::super::*;
 use super::helpers::*;
 use super::sync_helpers::*;
+use cell_types::CellId;
 use domain_types::domain::comment::CommentType;
-use snapshot_types::{Axis, ChangeKind, SheetChangeField, StructureChangeType};
+use snapshot_types::{Axis, ChangeKind, MutationResult, SheetChangeField, StructureChangeType};
+use value_types::CellValue;
 
 // ===================================================================
 // Sync MutationResult propagation tests
@@ -19,6 +21,197 @@ use snapshot_types::{Axis, ChangeKind, SheetChangeField, StructureChangeType};
 //   4. Engine B applies the sync update
 //   5. Assert the returned MutationResult contains the expected change shape
 // ===================================================================
+
+fn authored_test_cell_id(offset: u128) -> CellId {
+    CellId::from_raw(0x9000_0000_0000_4000_8000_0000_0000_0000 + offset)
+}
+
+fn find_authored_change<'a>(
+    result: &'a MutationResult,
+    cell_id: CellId,
+) -> Option<&'a snapshot_types::CellChange> {
+    let cell_id = cell_id.to_uuid_string();
+    result
+        .authored_cell_changes
+        .iter()
+        .find(|change| change.cell_id == cell_id)
+}
+
+// -------------------------------------------------------------------
+// Authored cell changes
+// -------------------------------------------------------------------
+
+#[test]
+fn sync_authored_cell_changes_report_remote_literal_write() {
+    let a1 = authored_test_cell_id(1);
+    let (_, sheet_id, result) = sync_a_to_b(|engine_a, sheet_id| {
+        let a1 = authored_test_cell_id(1);
+        engine_a
+            .set_cell(
+                sheet_id,
+                a1,
+                0,
+                0,
+                crate::bridge_types::CellInput::Parse { text: "42".into() },
+            )
+            .unwrap();
+    });
+
+    let change =
+        find_authored_change(&result, a1).expect("remote literal write should be authored");
+    assert_eq!(change.sheet_id, sheet_id.to_uuid_string());
+    assert!(matches!(
+        &change.position,
+        Some(position) if position.row == 0 && position.col == 0
+    ));
+    assert_eq!(change.old_value, Some(CellValue::Null));
+    assert_eq!(change.value, num(42.0));
+    assert_eq!(change.old_formula, None);
+    assert_eq!(change.new_formula, None);
+}
+
+#[test]
+fn sync_authored_cell_changes_report_formula_text_edit_with_unchanged_value() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+    let b1 = authored_test_cell_id(2);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "1".into() },
+        )
+        .unwrap();
+    baseline
+        .set_cell(
+            &sheet_id,
+            b1,
+            0,
+            1,
+            crate::bridge_types::CellInput::Parse {
+                text: "=A1+1".into(),
+            },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .set_cell(
+            &sheet_id,
+            b1,
+            0,
+            1,
+            crate::bridge_types::CellInput::Parse {
+                text: "=A1*2".into(),
+            },
+        )
+        .unwrap();
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+    let change = find_authored_change(&result, b1).expect("remote formula edit should be authored");
+
+    assert_eq!(change.old_value, Some(num(2.0)));
+    assert_eq!(change.value, num(2.0));
+    assert_eq!(change.old_formula.as_deref(), Some("=A1+1"));
+    assert_eq!(change.new_formula.as_deref(), Some("=A1*2"));
+}
+
+#[test]
+fn sync_authored_cell_changes_report_remote_clear() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "7".into() },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .set_cell(&sheet_id, a1, 0, 0, crate::bridge_types::CellInput::Clear)
+        .unwrap();
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+    let change = find_authored_change(&result, a1).expect("remote clear should be authored");
+
+    assert!(matches!(
+        &change.position,
+        Some(position) if position.row == 0 && position.col == 0
+    ));
+    assert_eq!(change.old_value, Some(num(7.0)));
+    assert_eq!(change.value, CellValue::Null);
+    assert_eq!(change.old_formula, None);
+    assert_eq!(change.new_formula, None);
+}
+
+#[test]
+fn sync_authored_cell_changes_exclude_dependent_formula_recalculation() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+    let b1 = authored_test_cell_id(2);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "1".into() },
+        )
+        .unwrap();
+    baseline
+        .set_cell(
+            &sheet_id,
+            b1,
+            0,
+            1,
+            crate::bridge_types::CellInput::Parse {
+                text: "=A1+1".into(),
+            },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "2".into() },
+        )
+        .unwrap();
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+
+    assert!(
+        find_authored_change(&result, a1).is_some(),
+        "direct remote literal edit should be authored; got {:?}",
+        result.authored_cell_changes,
+    );
+    assert!(
+        find_authored_change(&result, b1).is_none(),
+        "dependent formula recalculation must not be authored; got {:?}",
+        result.authored_cell_changes,
+    );
+}
 
 // -------------------------------------------------------------------
 // Sheet changes

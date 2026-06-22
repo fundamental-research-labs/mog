@@ -185,6 +185,12 @@ describe('WorkbookVersion provider-backed review service', () => {
         },
         nextCursor: expect.stringContaining(graph.childCommitId),
         limit: 1,
+        upstreamDiff: {
+          items: [{ structural: { changeId: 'change-cell-a1' } }],
+          nextCursor: expect.stringContaining(graph.childCommitId),
+          limit: 1,
+          order: 'semantic-change-order',
+        },
       },
     });
     if (!firstPage.ok || !firstPage.value.nextCursor) {
@@ -216,6 +222,20 @@ describe('WorkbookVersion provider-backed review service', () => {
             kind: 'reorder',
           },
         ],
+      },
+    });
+    await expect(
+      version.getReviewDiff({
+        baseCommitId: graph.childCommitId,
+        headCommitId: graph.rootCommitId,
+        limit: 1,
+        cursor: firstPage.value.nextCursor,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_STALE_PAGE_CURSOR' })],
       },
     });
   });

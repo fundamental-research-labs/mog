@@ -6,6 +6,7 @@ import type {
   VersionGetReviewDiffInput,
   PageCursor,
   VersionResult,
+  VersionSemanticDiffPage,
   VersionStoreDiagnostic,
   WorkbookCommitId,
   WorkbookVersionReviewDiffChange,
@@ -109,6 +110,20 @@ function projectReviewDiffPage(
     ...(upstream.nextPageToken ? { nextCursor: upstream.nextPageToken as unknown as PageCursor } : {}),
     limit: input.limit ?? DEFAULT_REVIEW_DIFF_LIMIT,
     diagnostics,
+    upstreamDiff: upstreamDiffPage(upstream, input.limit ?? DEFAULT_REVIEW_DIFF_LIMIT),
+  };
+}
+
+function upstreamDiffPage(
+  upstream: Extract<WorkbookVersionDiffMetadataPage, { readonly status: 'success' }>,
+  limit: number,
+): VersionSemanticDiffPage {
+  return {
+    items: upstream.items,
+    ...(upstream.nextPageToken ? { nextCursor: upstream.nextPageToken as unknown as PageCursor } : {}),
+    limit,
+    readRevision: upstream.readRevision,
+    order: upstream.order,
   };
 }
 

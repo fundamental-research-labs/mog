@@ -9,6 +9,12 @@ const THEIRS_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}`;
 
 describe('WorkbookVersion merge facade', () => {
   it('routes explicit commit-id preview requests to the attached merge service', async () => {
+    const manifestRuntime = versionDomainSupportManifestRuntime();
+    const cellsValues = manifestRuntime.domainSupportManifest.domains.find(
+      (row) => row.matrixRowId === 'cells.values',
+    );
+    expect(cellsValues?.capabilityStates.merge).toBe('contracted');
+
     const merge = jest.fn(async () => ({
       status: 'clean',
       base: BASE_COMMIT_ID,
@@ -32,7 +38,7 @@ describe('WorkbookVersion merge facade', () => {
       diagnostics: [],
       mutationGuarantee: 'preview-only',
     }));
-    const version = workbookVersionWithMergeService(merge);
+    const version = workbookVersionWithMergeService(merge, manifestRuntime);
 
     await expect(
       version.merge(
@@ -137,11 +143,14 @@ describe('WorkbookVersion merge facade', () => {
   });
 });
 
-function workbookVersionWithMergeService(merge: unknown) {
+function workbookVersionWithMergeService(
+  merge: unknown,
+  manifestRuntime = versionDomainSupportManifestRuntime(),
+) {
   return new WorkbookVersionImpl({
     versioning: {
       mergeService: { merge },
-      ...versionDomainSupportManifestRuntime(),
+      ...manifestRuntime,
     },
   } as any);
 }

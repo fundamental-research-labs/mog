@@ -2,6 +2,7 @@ import type {
   VersionDiagnosticPublicPayload,
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
 import {
@@ -57,8 +58,14 @@ export async function validateVersionDomainSupportManifestGate(
     return [domainSupportManifestMissingDiagnostic(operation)];
   }
 
+  const {
+    domainPolicyRegistry: _ignoredCallerRegistry,
+    requiredCapabilityKeys: _ignoredCallerCapabilityKeys,
+    ...callerOptions
+  } = gate.options ?? {};
   const options: DomainSupportManifestValidationOptions = {
-    ...gate.options,
+    ...callerOptions,
+    domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
   };

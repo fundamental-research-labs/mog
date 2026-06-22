@@ -232,8 +232,8 @@ export type DomainSupportManifestValidationOperation =
 export const REQUIRED_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
   commit: ['capture', 'persistence'],
   checkout: ['checkout'],
-  merge: ['merge'],
-  applyMerge: ['merge', 'persistence'],
+  merge: [],
+  applyMerge: ['persistence'],
   export: ['export'],
 } satisfies Readonly<
   Record<DomainSupportManifestValidationOperation, readonly VersionDomainCapabilityKey[]>

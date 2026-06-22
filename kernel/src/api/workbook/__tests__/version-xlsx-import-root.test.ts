@@ -1,7 +1,5 @@
 import 'fake-indexeddb/auto';
 
-import { inflateRawSync } from 'node:zlib';
-
 import type { Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
@@ -21,7 +19,6 @@ import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version
 const DOCUMENT_ID = 'vc10-xlsx-import-root';
 const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-clean-export';
 const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export';
-const METADATA_REIMPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-reimport';
 const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
 
 beforeEach(async () => {
@@ -142,7 +139,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('exports clean XLSX bytes without Mog version metadata package parts', async () => {
+  it('fails closed before clean XLSX export while public registry export is contracted', async () => {
     const xlsxBytes = await createSourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: xlsxBytes },
@@ -170,15 +167,14 @@ describe('WorkbookVersion XLSX import root', () => {
 
       await expect(wb.version.getHead()).resolves.toMatchObject({ ok: true });
 
-      const exported = await wb.toXlsx({ contextStripped: true });
-      expect(findMogVersionMetadataEvidence(exported)).toEqual([]);
+      await expectContractedXlsxExportBlocked(wb.toXlsx({ contextStripped: true }));
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
     }
   });
 
-  it('can opt in to redacted Mog version metadata sidecar export', async () => {
+  it('fails closed before redacted Mog version metadata sidecar export while export is contracted', async () => {
     const xlsxBytes = await createSourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: xlsxBytes },
@@ -208,33 +204,9 @@ describe('WorkbookVersion XLSX import root', () => {
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
 
-      const exported = await wb.toXlsx({ contextStripped: true, versionMetadata: 'include' });
-      expect(findMogVersionMetadataEvidence(exported)).toEqual([
-        'customXml/mog-version-metadata.xml',
-      ]);
-      expect(readMogVersionMetadata(exported)).toMatchObject({
-        schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
-        documentId: METADATA_EXPORT_DOCUMENT_ID,
-        head: {
-          commitId: head.value.id,
-          refName: 'refs/heads/main',
-        },
-        redaction: {
-          policy: 'commit-and-document-only',
-          omitted: expect.arrayContaining(['rawWorkbookBytes', 'agentTraces', 'credentials']),
-        },
-      });
-
-      const reimported = await DocumentFactory.createFromXlsx(
-        { type: 'bytes', data: exported },
-        {
-          documentId: METADATA_REIMPORT_DOCUMENT_ID,
-          environment: 'headless',
-          userTimezone: 'UTC',
-        },
+      await expectContractedXlsxExportBlocked(
+        wb.toXlsx({ contextStripped: true, versionMetadata: 'include' }),
       );
-      expect(reimported.success).toBe(true);
-      await reimported.handle?.dispose().catch(() => {});
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
@@ -287,138 +259,35 @@ async function readRootSemanticChangeSetPayload(
   return semanticRecord.preimage.payload as Record<string, unknown>;
 }
 
-interface ZipEntry {
-  readonly name: string;
-  readonly compressionMethod: number;
-  readonly compressedSize: number;
-  readonly localHeaderOffset: number;
-}
-
-function findMogVersionMetadataEvidence(xlsxBytes: Uint8Array): string[] {
-  const archive = readZipArchive(xlsxBytes);
-  const evidence: string[] = [];
-  for (const entry of archive.entries) {
-    if (isMogVersionMetadataPackagePart(entry.name)) {
-      evidence.push(entry.name);
-    }
-  }
-  for (const packageMetadataPart of ['[Content_Types].xml', '_rels/.rels']) {
-    const text = archive.readText(packageMetadataPart);
-    if (text && containsMogVersionMetadataMarker(text)) {
-      evidence.push(packageMetadataPart);
-    }
-  }
-  return evidence;
-}
-
-function readMogVersionMetadata(xlsxBytes: Uint8Array): Record<string, unknown> {
-  const xml = readZipArchive(xlsxBytes).readText('customXml/mog-version-metadata.xml');
-  expect(xml).toBeTruthy();
-  if (!xml) throw new Error('missing Mog version metadata sidecar');
-  const json = xml.match(/<json>(.*)<\/json>/)?.[1];
-  if (!json) throw new Error('missing Mog version metadata JSON payload');
-  return JSON.parse(unescapeXml(json)) as Record<string, unknown>;
-}
-
-function isMogVersionMetadataPackagePart(entryName: string): boolean {
-  const normalized = normalizePackageText(entryName);
-  return (
-    normalized === 'customxml/mog-version-metadata.xml' ||
-    containsMogVersionMetadataMarker(normalized)
-  );
-}
-
-function containsMogVersionMetadataMarker(value: string): boolean {
-  const normalized = normalizePackageText(value);
-  return (
-    normalized.includes('mog-version') ||
-    normalized.includes('mog_version') ||
-    normalized.includes('mog/version') ||
-    normalized.includes('version-control') ||
-    normalized.includes('versioncontrol') ||
-    normalized.includes('application/vnd.mog')
-  );
-}
-
-function normalizePackageText(value: string): string {
-  return value.replace(/^\/+/, '').toLowerCase();
-}
-
-function unescapeXml(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&');
-}
-
-function readZipArchive(bytes: Uint8Array): {
-  readonly entries: readonly ZipEntry[];
-  readonly readText: (name: string) => string | null;
-} {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const entries = readZipEntries(bytes, view);
-  const entriesByName = new Map(entries.map((entry) => [entry.name, entry]));
-  return {
-    entries,
-    readText(name: string): string | null {
-      const entry = entriesByName.get(name);
-      if (!entry) return null;
-      return new TextDecoder().decode(readZipEntry(bytes, view, entry));
+async function expectContractedXlsxExportBlocked(
+  exportAttempt: Promise<Uint8Array>,
+): Promise<void> {
+  await expect(exportAttempt).rejects.toMatchObject({
+    name: 'MogSdkError',
+    code: 'EXPORT_ERROR',
+    operation: 'workbook.toXlsx',
+    diagnostics: {
+      domain: 'VERSION',
+      issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+      severity: 'error',
     },
-  };
-}
-
-function readZipEntries(bytes: Uint8Array, view: DataView): ZipEntry[] {
-  const eocdOffset = findEndOfCentralDirectory(view);
-  const centralDirectorySize = view.getUint32(eocdOffset + 12, true);
-  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
-  const entries: ZipEntry[] = [];
-  let offset = centralDirectoryOffset;
-  const end = centralDirectoryOffset + centralDirectorySize;
-  while (offset < end) {
-    if (view.getUint32(offset, true) !== 0x02014b50) {
-      throw new Error(`invalid ZIP central directory header at ${offset}`);
-    }
-    const compressionMethod = view.getUint16(offset + 10, true);
-    const compressedSize = view.getUint32(offset + 20, true);
-    const nameLength = view.getUint16(offset + 28, true);
-    const extraLength = view.getUint16(offset + 30, true);
-    const commentLength = view.getUint16(offset + 32, true);
-    const localHeaderOffset = view.getUint32(offset + 42, true);
-    const nameStart = offset + 46;
-    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLength));
-    entries.push({ name, compressionMethod, compressedSize, localHeaderOffset });
-    offset = nameStart + nameLength + extraLength + commentLength;
-  }
-  return entries;
-}
-
-function readZipEntry(bytes: Uint8Array, view: DataView, entry: ZipEntry): Uint8Array {
-  const offset = entry.localHeaderOffset;
-  if (view.getUint32(offset, true) !== 0x04034b50) {
-    throw new Error(`invalid ZIP local file header for ${entry.name}`);
-  }
-  const nameLength = view.getUint16(offset + 26, true);
-  const extraLength = view.getUint16(offset + 28, true);
-  const dataStart = offset + 30 + nameLength + extraLength;
-  const compressed = bytes.subarray(dataStart, dataStart + entry.compressedSize);
-  if (entry.compressionMethod === 0) {
-    return compressed;
-  }
-  if (entry.compressionMethod === 8) {
-    return inflateRawSync(compressed);
-  }
-  throw new Error(
-    `unsupported ZIP compression method ${entry.compressionMethod} for ${entry.name}`,
-  );
-}
-
-function findEndOfCentralDirectory(view: DataView): number {
-  for (let offset = view.byteLength - 22; offset >= 0; offset -= 1) {
-    if (view.getUint32(offset, true) === 0x06054b50) {
-      return offset;
-    }
-  }
-  throw new Error('missing ZIP end of central directory');
+    details: {
+      issue: 'export-domain-support-manifest-blocked',
+      operation: 'workbook.toXlsx',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'export',
+            diagnosticCode: 'capability-state-blocked',
+            domainId: 'workbook-metadata',
+            capabilityKey: 'export',
+            capabilityState: 'contracted',
+          }),
+        }),
+      ]),
+    },
+  });
 }

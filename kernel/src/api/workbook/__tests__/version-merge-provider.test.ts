@@ -18,6 +18,12 @@ const EXPECTED_TARGET_HEAD = {
 
 describe('WorkbookVersion merge facade', () => {
   it('delegates merge preview through an attached document-scoped service', async () => {
+    const manifestRuntime = versionDomainSupportManifestRuntime();
+    const cellsValues = manifestRuntime.domainSupportManifest.domains.find(
+      (row) => row.matrixRowId === 'cells.values',
+    );
+    expect(cellsValues?.capabilityStates.merge).toBe('contracted');
+
     const result: VersionMergeResult = {
       status: 'clean',
       base: BASE,
@@ -29,7 +35,7 @@ describe('WorkbookVersion merge facade', () => {
       mutationGuarantee: 'preview-only',
     };
     const merge = jest.fn(async () => result);
-    const version = workbookVersionWithMergeService(merge);
+    const version = workbookVersionWithMergeService(merge, manifestRuntime);
 
     await expect(
       version.merge(
@@ -401,11 +407,14 @@ function resolutionOption(kind: 'acceptOurs' | 'acceptTheirs' | 'acceptBase', va
   };
 }
 
-function workbookVersionWithMergeService(merge: unknown) {
+function workbookVersionWithMergeService(
+  merge: unknown,
+  manifestRuntime = versionDomainSupportManifestRuntime(),
+) {
   return new WorkbookVersionImpl({
     versioning: {
       mergeService: { merge },
-      ...versionDomainSupportManifestRuntime(),
+      ...manifestRuntime,
     },
   } as any);
 }

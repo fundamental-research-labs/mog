@@ -230,7 +230,7 @@ describe('WorkbookImpl.save', () => {
     wb.dispose();
   });
 
-  it('allows version-capable toXlsx when the manifest proves export support', async () => {
+  it('rejects version-capable toXlsx while public registry keeps export contracted', async () => {
     const { wb, ctx } = await createWorkbook(undefined, {
       versioning: {
         writeService: { commit: jest.fn() },
@@ -238,11 +238,36 @@ describe('WorkbookImpl.save', () => {
       },
     });
 
-    const result = await wb.toXlsx();
-
-    expect(result).toBe(fakeBuffer);
-    expect(ctx.operationGate.authorizeExport).toHaveBeenCalledTimes(1);
-    expect(ctx.computeBridge.exportToXlsxBytes).toHaveBeenCalledTimes(1);
+    await expect(wb.toXlsx()).rejects.toMatchObject({
+      name: 'MogSdkError',
+      code: 'EXPORT_ERROR',
+      operation: 'workbook.toXlsx',
+      diagnostics: {
+        domain: 'VERSION',
+        issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+        severity: 'error',
+      },
+      details: {
+        issue: 'export-domain-support-manifest-blocked',
+        operation: 'workbook.toXlsx',
+        mutationGuarantee: 'no-write-attempted',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              operation: 'export',
+              diagnosticCode: 'capability-state-blocked',
+              domainId: 'workbook-metadata',
+              capabilityKey: 'export',
+              capabilityState: 'contracted',
+            }),
+          }),
+        ]),
+      },
+    });
+    expect(ctx.operationGate.authorizeExport).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.exportToXlsxBytes).not.toHaveBeenCalled();
     wb.dispose();
   });
 
@@ -278,7 +303,7 @@ describe('WorkbookImpl.save', () => {
       },
       details: {
         issue: 'export-domain-support-manifest-blocked',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             payload: expect.objectContaining({
@@ -287,7 +312,7 @@ describe('WorkbookImpl.save', () => {
               capabilityKey: 'export',
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(ctx.operationGate.authorizeExport).not.toHaveBeenCalled();

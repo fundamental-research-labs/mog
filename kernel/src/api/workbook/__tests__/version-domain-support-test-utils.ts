@@ -4,6 +4,7 @@ import type {
   VersionDomainCapabilityState,
   VersionDomainCapabilityStateMap,
 } from '@mog-sdk/contracts/versioning';
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
 import {
   REQUIRED_FIRST_SLICE_DOMAIN_IDS,
@@ -32,7 +33,37 @@ export function versionDomainCapabilityStates(
   };
 }
 
+function cloneDomainPolicyManifest(
+  row: DomainCapabilityPolicyManifest,
+): DomainCapabilityPolicyManifest {
+  return {
+    ...row,
+    capabilityStates: { ...row.capabilityStates },
+    historyAccess: { ...row.historyAccess },
+  };
+}
+
+const PUBLIC_POLICY_ROWS_BY_MATRIX_ROW_ID = new Map(
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.matrixRowId, row]),
+);
+
 export function versionDomainSupportManifestRow(
+  domainId: string,
+  overrides: Partial<DomainCapabilityPolicyManifest> = {},
+): DomainCapabilityPolicyManifest {
+  const matrixRowId = overrides.matrixRowId ?? domainId;
+  const registryRow = PUBLIC_POLICY_ROWS_BY_MATRIX_ROW_ID.get(matrixRowId);
+  if (registryRow) {
+    return {
+      ...cloneDomainPolicyManifest(registryRow),
+      ...overrides,
+    };
+  }
+
+  return selfPromotedVersionDomainSupportManifestRow(domainId, overrides);
+}
+
+export function selfPromotedVersionDomainSupportManifestRow(
   domainId: string,
   overrides: Partial<DomainCapabilityPolicyManifest> = {},
 ): DomainCapabilityPolicyManifest {
@@ -63,6 +94,20 @@ export function freshVersionDomainSupportManifest(
     generatedAt: VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_CREATED_AT,
     workbookId: 'wb-1',
     domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => versionDomainSupportManifestRow(id)),
+    ...overrides,
+  };
+}
+
+export function selfPromotedVersionDomainSupportManifest(
+  overrides: Partial<DomainSupportManifest> = {},
+): DomainSupportManifest {
+  return {
+    schemaVersion: 'domain-support-manifest.v2',
+    generatedAt: VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_CREATED_AT,
+    workbookId: 'wb-1',
+    domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>
+      selfPromotedVersionDomainSupportManifestRow(id),
+    ),
     ...overrides,
   };
 }

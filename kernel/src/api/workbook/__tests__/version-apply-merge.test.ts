@@ -148,6 +148,12 @@ describe('WorkbookVersion applyMerge preview planner', () => {
   });
 
   it('blocks clean merge plans the merge materializer cannot apply', async () => {
+    const manifestRuntime = versionDomainSupportManifestRuntime();
+    const sheets = manifestRuntime.domainSupportManifest.domains.find(
+      (row) => row.matrixRowId === 'sheets',
+    );
+    expect(sheets?.capabilityStates.merge).toBe('contracted');
+
     const result: VersionMergeResult = {
       status: 'clean',
       base: BASE,
@@ -168,10 +174,13 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     };
     const merge = jest.fn(async () => result);
     const mergeCommit = jest.fn();
-    const version = workbookVersionWithVersioning({
-      mergeService: { merge },
-      writeService: { mergeCommit },
-    });
+    const version = workbookVersionWithVersioning(
+      {
+        mergeService: { merge },
+        writeService: { mergeCommit },
+      },
+      manifestRuntime,
+    );
 
     await expect(
       version.applyMerge(
@@ -788,11 +797,14 @@ function metadata(
   };
 }
 
-function workbookVersionWithVersioning(versioning: Record<string, unknown>) {
+function workbookVersionWithVersioning(
+  versioning: Record<string, unknown>,
+  manifestRuntime = versionDomainSupportManifestRuntime(),
+) {
   return new WorkbookVersionImpl({
     versioning: {
       ...versioning,
-      ...versionDomainSupportManifestRuntime(),
+      ...manifestRuntime,
     },
   } as any);
 }

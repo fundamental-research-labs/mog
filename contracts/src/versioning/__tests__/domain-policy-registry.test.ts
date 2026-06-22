@@ -60,7 +60,8 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       replay: 'supported',
       diff: 'supported',
       checkout: 'supported',
-      persistence: 'contracted',
+      persistence: 'supported',
+      merge: 'contracted',
     });
     expect(rows.get('recalc-caches')?.capabilityStates).toMatchObject({
       capture: 'derived',

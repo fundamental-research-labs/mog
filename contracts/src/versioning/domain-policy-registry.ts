@@ -63,6 +63,7 @@ const AUTHORED_GRID = capabilityStates('contracted', {
   replay: 'supported',
   diff: 'supported',
   checkout: 'supported',
+  persistence: 'supported',
 });
 const OPAQUE_PRESERVED_PACKAGE = capabilityStates('opaque-preserved', {
   diff: 'opaque-blocking',

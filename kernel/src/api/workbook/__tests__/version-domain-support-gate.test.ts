@@ -3,12 +3,14 @@ import { jest } from '@jest/globals';
 import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/api';
 import { REQUIRED_FIRST_SLICE_DOMAIN_IDS } from '../../../document/version-store/domain-support-manifest-validator';
 import { WorkbookVersionImpl } from '../version';
+import { validateVersionDomainSupportManifestGate } from '../version-domain-support-gate';
 import {
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_CREATED_AT as CREATED_AT,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW as NOW,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS as ONE_MINUTE_MS,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_TEN_MINUTES_MS as TEN_MINUTES_MS,
   freshVersionDomainSupportManifest as freshManifest,
+  selfPromotedVersionDomainSupportManifest as selfPromotedManifest,
   versionDomainCapabilityStates as capabilityStates,
   versionDomainSupportManifestRow as domainRow,
 } from './version-domain-support-test-utils';
@@ -69,7 +71,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -77,14 +79,14 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
     await expect(version.checkout({ kind: 'commit', id: BASE })).resolves.toMatchObject({
       ok: false,
       error: {
         target: 'workbook.version.checkout',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -92,14 +94,14 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
     await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
       ok: false,
       error: {
         target: 'workbook.version.merge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -107,7 +109,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
     await expect(
@@ -119,7 +121,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.applyMerge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -127,7 +129,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
 
@@ -160,7 +162,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.applyMerge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -168,7 +170,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(fastForward).not.toHaveBeenCalled();
@@ -198,7 +200,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -209,10 +211,102 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('blocks commit when an attached manifest self-promotes beyond the public policy registry', async () => {
+    const commit = jest.fn();
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        writeService: { commit },
+        domainSupportManifest: selfPromotedManifest(),
+        domainSupportManifestOptions: {
+          now: NOW,
+          maxAgeMs: TEN_MINUTES_MS,
+          domainPolicyRegistry: {
+            schemaVersion: 'version-domain-policy-registry.v1',
+            generatedAt: CREATED_AT,
+            domains: selfPromotedManifest().domains,
+          },
+        },
+      },
+    } as any);
+
+    await expect(version.commit()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.commit',
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'domain-policy-registry-mismatch',
+                domainId: 'cells.values',
+                policyField: 'capabilityStates.merge',
+                policyValue: 'supported',
+              }),
+            }),
+          }),
+        ]),
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('does not let caller options downgrade export-required capability checks', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest(),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+            requiredCapabilityKeys: [],
+          },
+        },
+      } as any,
+      'export',
+    );
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'export',
+            diagnosticCode: 'capability-state-blocked',
+            domainId: 'workbook-metadata',
+            capabilityKey: 'export',
+            capabilityState: 'contracted',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('allows merge preview to reach the merge service for a registry-compliant manifest', async () => {
+    const mergeResult = cleanMergeResult();
+    const merge = jest.fn(async () => mergeResult);
+    const version = new WorkbookVersionImpl({
+      versioning: {
+        mergeService: { merge },
+        domainSupportManifest: freshManifest(),
+        domainSupportManifestOptions: { now: NOW, maxAgeMs: TEN_MINUTES_MS },
+      },
+    } as any);
+
+    await expect(version.merge({ base: BASE, ours: OURS, theirs: THEIRS })).resolves.toMatchObject({
+      ok: true,
+      value: mergeResult,
+    });
+    expect(merge).toHaveBeenCalledWith({ base: BASE, ours: OURS, theirs: THEIRS }, {});
   });
 
   it('blocks commit before invoking the write service when a required capability is not supported', async () => {
@@ -240,7 +334,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -254,7 +348,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(commit).not.toHaveBeenCalled();
@@ -282,7 +376,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -296,7 +390,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(commit).not.toHaveBeenCalled();
@@ -323,7 +417,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -335,7 +429,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(commit).not.toHaveBeenCalled();
@@ -360,7 +454,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.checkout',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -372,7 +466,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(checkout).not.toHaveBeenCalled();
@@ -401,7 +495,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -413,7 +507,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(commit).not.toHaveBeenCalled();
@@ -445,7 +539,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.checkout',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -459,7 +553,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(checkout).not.toHaveBeenCalled();
@@ -480,7 +574,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.merge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -490,13 +584,13 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(merge).not.toHaveBeenCalled();
   });
 
-  it('blocks merge preview based on merge capability state', async () => {
+  it('blocks merge preview when the manifest self-promotes merge state beyond the registry', async () => {
     const merge = jest.fn();
     const version = new WorkbookVersionImpl({
       versioning: {
@@ -507,7 +601,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               ? domainRow(id, {
                   capabilityStates: {
                     ...capabilityStates(),
-                    merge: 'opaque-blocking',
+                    merge: 'supported',
                   },
                 })
               : domainRow(id),
@@ -521,20 +615,20 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.merge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
               operation: 'merge',
               payload: expect.objectContaining({
-                diagnosticCode: 'capability-state-blocked',
+                diagnosticCode: 'domain-policy-registry-mismatch',
                 domainId: 'cells.formulas',
-                capabilityKey: 'merge',
-                capabilityState: 'opaque-blocking',
+                policyField: 'capabilityStates.merge',
+                policyValue: 'supported',
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(merge).not.toHaveBeenCalled();
@@ -562,7 +656,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.applyMerge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -573,7 +667,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(merge).not.toHaveBeenCalled();
@@ -611,7 +705,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.applyMerge',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
             data: expect.objectContaining({
@@ -625,7 +719,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               }),
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(merge).not.toHaveBeenCalled();
@@ -633,7 +727,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
     expect(mergeCommit).not.toHaveBeenCalled();
   });
 
-  it('allows applyMerge to use the existing service path when the manifest is valid', async () => {
+  it('allows applyMerge to use the existing service path when the manifest is registry-compliant', async () => {
     const mergeResult = cleanMergeResult();
     const merge = jest.fn(async () => mergeResult);
     const mergeCommit = jest.fn(async () => ({
@@ -698,7 +792,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
       ok: false,
       error: {
         target: 'workbook.version.commit',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
             data: expect.objectContaining({
@@ -706,7 +800,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
             }),
           }),
-        ],
+        ]),
       },
     });
     expect(readDomainSupportManifest).toHaveBeenCalledTimes(1);

@@ -23,6 +23,12 @@ export type XlsxVersionImportRootProvenance = {
   readonly kind: 'xlsx';
   readonly source: XlsxVersionImportRootSource;
   readonly diagnostics: readonly ImportDiagnosticDto[];
+  readonly versionMetadataTrust?: {
+    readonly status: 'absent' | 'trusted' | 'untrusted';
+    readonly sidecarPart: string;
+    readonly reason?: string;
+    readonly redacted?: true;
+  };
 };
 
 export const XLSX_IMPORT_ROOT_GRAPH_ID = 'xlsx-import-root';
@@ -54,6 +60,9 @@ export async function buildXlsxVersionImportRootWrite(input: {
       source: {
         kind: 'xlsxImportRoot',
         source: input.provenance.source,
+        ...(input.provenance.versionMetadataTrust
+          ? { versionMetadataTrust: input.provenance.versionMetadataTrust }
+          : {}),
         semanticStateDigest: semanticState.stateDigest,
       },
       importDiagnostics: input.provenance.diagnostics,

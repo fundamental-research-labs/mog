@@ -11,6 +11,7 @@ import {
 import {
   addMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
+  readAndValidateMogVersionMetadataFromXlsx,
   type MogWorkbookVersionXlsxMetadata,
 } from '../xlsx-version-metadata';
 import {
@@ -28,8 +29,10 @@ const DOCUMENT_ID = 'vc10-xlsx-import-root';
 const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-clean-export';
 const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export';
 const METADATA_REPLACE_DOCUMENT_ID = 'vc10-xlsx-metadata-replace';
-const DOCUMENT_SCOPE: VersionDocumentScope = { documentId: DOCUMENT_ID };
+const METADATA_TRUST_DOCUMENT_ID = 'vc10-xlsx-metadata-trust';
+const METADATA_TRUST_REIMPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-trust-reimport';
 const OLD_METADATA_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
+const OTHER_METADATA_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -385,12 +388,252 @@ describe('WorkbookVersion XLSX import root', () => {
       await imported.handle.dispose().catch(() => {});
     }
   });
+
+  it('validates Mog version metadata only against authoritative document and head identity', async () => {
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+      }),
+    );
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(xlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'head-unverified',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataUntrusted',
+          reason: 'head-unverified',
+          details: expect.objectContaining({ redacted: true }),
+        }),
+      ],
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(xlsxBytes, {
+        expectedDocumentId: 'copied-target-document',
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'wrong-document',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(xlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OTHER_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'head-mismatch',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(xlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+        },
+      }),
+    ).toMatchObject({
+      status: 'trusted',
+      metadata: {
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        head: { commitId: OLD_METADATA_COMMIT_ID },
+      },
+      diagnostics: [],
+    });
+  });
+
+  it('records copied Mog version metadata as untrusted and creates a fresh import root', async () => {
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx('Copied sidecar content'),
+      testVersionMetadata({
+        documentId: 'copied-source-document',
+        commitId: OLD_METADATA_COMMIT_ID,
+      }),
+    );
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: xlsxBytes },
+      {
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected XLSX import success: ${imported.error?.message}`);
+    }
+    expect(imported.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'import_error',
+          reason: 'wrong-document',
+          diagnostic: expect.objectContaining({
+            code: 'mogVersionMetadataUntrusted',
+            details: expect.objectContaining({ redacted: true }),
+          }),
+        }),
+      ]),
+    );
+
+    let wb: Workbook | undefined;
+    try {
+      wb = await imported.handle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+
+      const head = await wb.version.getHead();
+      expect(head).toMatchObject({ ok: true });
+      if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+      expect(head.value.id).not.toBe(OLD_METADATA_COMMIT_ID);
+
+      const semanticPayload = await readRootSemanticChangeSetPayload(
+        head.value.id,
+        METADATA_TRUST_DOCUMENT_ID,
+      );
+      expect(semanticPayload).toMatchObject({
+        source: {
+          kind: 'xlsxImportRoot',
+          versionMetadataTrust: {
+            status: 'untrusted',
+            reason: 'wrong-document',
+            redacted: true,
+          },
+        },
+        importDiagnostics: [
+          expect.objectContaining({
+            code: 'mogVersionMetadataUntrusted',
+            reason: 'wrong-document',
+            details: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      });
+      expect(JSON.stringify(semanticPayload)).not.toContain('copied-source-document');
+      expect(JSON.stringify(semanticPayload)).not.toContain(OLD_METADATA_COMMIT_ID);
+    } finally {
+      await wb?.close('skipSave').catch(() => {});
+      await imported.handle.dispose().catch(() => {});
+    }
+  });
+
+  it('documents the missing same-document reimport graph replacement contract', async () => {
+    const originalXlsxBytes = await createSourceXlsx('Original import root');
+    const originalImport = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: originalXlsxBytes },
+      {
+        documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(originalImport.success).toBe(true);
+    if (!originalImport.success || !originalImport.handle) {
+      throw new Error(`expected original XLSX import success: ${originalImport.error?.message}`);
+    }
+
+    let originalWb: Workbook | undefined;
+    let originalRootId: WorkbookCommitId | undefined;
+    try {
+      originalWb = await originalImport.handle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+      const head = await originalWb.version.getHead();
+      expect(head).toMatchObject({ ok: true });
+      if (!head.ok) throw new Error(`expected original import-root head: ${head.error.code}`);
+      originalRootId = head.value.id;
+    } finally {
+      await originalWb?.close('skipSave').catch(() => {});
+      await originalImport.handle.dispose().catch(() => {});
+    }
+    if (!originalRootId) throw new Error('expected original root id');
+
+    const reimportedXlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx('Externally edited import'),
+      testVersionMetadata({
+        documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+        commitId: originalRootId,
+      }),
+    );
+    const reimported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: reimportedXlsxBytes },
+      {
+        documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(reimported.success).toBe(true);
+    if (!reimported.success || !reimported.handle) {
+      throw new Error(`expected reimport XLSX import success: ${reimported.error?.message}`);
+    }
+    expect(reimported.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'head-unverified',
+          diagnostic: expect.objectContaining({ code: 'mogVersionMetadataUntrusted' }),
+        }),
+      ]),
+    );
+
+    let reimportedWb: Workbook | undefined;
+    try {
+      reimportedWb = await reimported.handle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+      await expect(reimportedWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'Externally edited import',
+      });
+
+      const reimportedHead = await reimportedWb.version.getHead();
+      expect(reimportedHead).toMatchObject({ ok: true });
+      if (!reimportedHead.ok) {
+        throw new Error(`expected reimport version head: ${reimportedHead.error.code}`);
+      }
+      expect(reimportedHead.value.id).toBe(originalRootId);
+    } finally {
+      await reimportedWb?.close('skipSave').catch(() => {});
+      await reimported.handle.dispose().catch(() => {});
+    }
+  });
 });
 
-async function createSourceXlsx(): Promise<Uint8Array> {
+async function createSourceXlsx(a1Value = 'Imported'): Promise<Uint8Array> {
   const wb = await createWorkbook({ documentId: 'vc10-xlsx-import-source', userTimezone: 'UTC' });
   try {
-    await wb.activeSheet.setCell('A1', 'Imported');
+    await wb.activeSheet.setCell('A1', a1Value);
     await wb.activeSheet.setCell('B1', 42);
     return wb.toXlsx();
   } finally {
@@ -402,11 +645,13 @@ async function createSourceXlsx(): Promise<Uint8Array> {
 
 async function readRootSemanticChangeSetPayload(
   rootCommitId: WorkbookCommitId,
+  documentId = DOCUMENT_ID,
 ): Promise<Record<string, unknown>> {
+  const documentScope: VersionDocumentScope = { documentId };
   const provider = selectVersionStoreProvider(
     {
       kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-      documentScope: DOCUMENT_SCOPE,
+      documentScope,
       requireDurablePersistence: true,
     },
     createDefaultVersionStoreProviderRegistry(),
@@ -417,7 +662,7 @@ async function readRootSemanticChangeSetPayload(
     throw new Error(`expected version registry: ${registry.diagnostics[0]?.code}`);
   }
   const graph = await provider.openGraph(
-    namespaceForDocumentScope(DOCUMENT_SCOPE, registry.registry.currentGraphId),
+    namespaceForDocumentScope(documentScope, registry.registry.currentGraphId),
   );
   const root = await graph.readCommit(rootCommitId);
   expect(root.status).toBe('success');
@@ -493,9 +738,10 @@ function zipEntriesNamed(
   return readZipEntries(bytes).filter((entry) => entry.name === name);
 }
 
-function singleZipEntry(
-  entries: readonly { readonly name: string; readonly data: Uint8Array }[],
-): { readonly name: string; readonly data: Uint8Array } {
+function singleZipEntry(entries: readonly { readonly name: string; readonly data: Uint8Array }[]): {
+  readonly name: string;
+  readonly data: Uint8Array;
+} {
   const entry = entries[0];
   if (!entry) throw new Error('expected one ZIP entry');
   return entry;

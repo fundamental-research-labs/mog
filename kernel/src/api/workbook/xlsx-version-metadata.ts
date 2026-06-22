@@ -5,9 +5,12 @@ import type {
   WorkbookVersion,
   WorkbookXlsxExportOptions,
 } from '@mog-sdk/contracts/api';
+import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
 import type { DocumentContext } from '../../context';
 
 export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
+const MOG_VERSION_METADATA_MAX_BYTES = 64 * 1024;
+const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
 export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1';
@@ -30,7 +33,71 @@ interface CentralDirectoryEntry {
   readonly name: string;
   readonly bytes: Uint8Array;
   readonly localHeaderOffset: number;
+  readonly generalPurposeBitFlag: number;
+  readonly compressionMethod: number;
+  readonly compressedSize: number;
+  readonly uncompressedSize: number;
 }
+
+export type MogWorkbookVersionXlsxMetadataTrustReason =
+  | 'duplicate-sidecar'
+  | 'sidecar-too-large'
+  | 'unsupported-compression'
+  | 'malformed-sidecar'
+  | 'invalid-schema'
+  | 'wrong-document'
+  | 'missing-head'
+  | 'head-unverified'
+  | 'head-mismatch';
+
+export type MogWorkbookVersionXlsxMetadataTrustSummary =
+  | {
+      readonly status: 'absent';
+      readonly sidecarPart: typeof MOG_VERSION_METADATA_PART;
+    }
+  | {
+      readonly status: 'trusted';
+      readonly sidecarPart: typeof MOG_VERSION_METADATA_PART;
+      readonly redacted: true;
+    }
+  | {
+      readonly status: 'untrusted';
+      readonly sidecarPart: typeof MOG_VERSION_METADATA_PART;
+      readonly reason: MogWorkbookVersionXlsxMetadataTrustReason;
+      readonly redacted: true;
+    };
+
+export interface MogWorkbookVersionXlsxMetadataExpectedHead {
+  readonly commitId: VersionHead['id'];
+  readonly refName?: VersionHead['refName'];
+  readonly resolvedFrom?: VersionHead['resolvedFrom'];
+  readonly refRevision?: VersionHead['refRevision'];
+}
+
+export interface MogWorkbookVersionXlsxMetadataTrustContext {
+  readonly expectedDocumentId: string;
+  readonly expectedHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
+}
+
+export type MogWorkbookVersionXlsxMetadataTrustResult =
+  | {
+      readonly status: 'absent';
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'absent' }>;
+      readonly diagnostics: readonly ImportDiagnosticDto[];
+    }
+  | {
+      readonly status: 'trusted';
+      readonly metadata: MogWorkbookVersionXlsxMetadata;
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'trusted' }>;
+      readonly diagnostics: readonly ImportDiagnosticDto[];
+    }
+  | {
+      readonly status: 'untrusted';
+      readonly reason: MogWorkbookVersionXlsxMetadataTrustReason;
+      readonly metadata?: MogWorkbookVersionXlsxMetadata;
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'untrusted' }>;
+      readonly diagnostics: readonly ImportDiagnosticDto[];
+    };
 
 export function createMogWorkbookVersionXlsxMetadata(
   ctx: DocumentContext,
@@ -65,6 +132,77 @@ export function addMogVersionMetadataToXlsx(
 
 export function removeMogVersionMetadataFromXlsx(xlsxBytes: Uint8Array): Uint8Array {
   return rewriteMogVersionMetadataInXlsx(xlsxBytes, null);
+}
+
+export function readAndValidateMogVersionMetadataFromXlsx(
+  xlsxBytes: Uint8Array,
+  context: MogWorkbookVersionXlsxMetadataTrustContext,
+): MogWorkbookVersionXlsxMetadataTrustResult {
+  try {
+    const metadataRead = readMogVersionMetadataXmlFromXlsx(xlsxBytes);
+    if (metadataRead.status === 'absent') {
+      return {
+        status: 'absent',
+        trust: {
+          status: 'absent',
+          sidecarPart: MOG_VERSION_METADATA_PART,
+        },
+        diagnostics: [],
+      };
+    }
+    if (metadataRead.status === 'untrusted') {
+      return untrustedMetadataResult(metadataRead.reason);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(unescapeXml(metadataJsonPayload(metadataRead.xml)));
+    } catch {
+      return untrustedMetadataResult('malformed-sidecar');
+    }
+
+    const metadata = parseMogWorkbookVersionXlsxMetadata(parsed);
+    if (!metadata) return untrustedMetadataResult('invalid-schema');
+
+    const validation = validateMogWorkbookVersionXlsxMetadata(metadata, context);
+    if (validation.status === 'trusted') {
+      return {
+        status: 'trusted',
+        metadata,
+        trust: {
+          status: 'trusted',
+          sidecarPart: MOG_VERSION_METADATA_PART,
+          redacted: true,
+        },
+        diagnostics: [],
+      };
+    }
+
+    return untrustedMetadataResult(validation.reason, metadata);
+  } catch {
+    return untrustedMetadataResult('malformed-sidecar');
+  }
+}
+
+export function validateMogWorkbookVersionXlsxMetadata(
+  metadata: MogWorkbookVersionXlsxMetadata,
+  context: MogWorkbookVersionXlsxMetadataTrustContext,
+):
+  | { readonly status: 'trusted' }
+  | { readonly status: 'untrusted'; readonly reason: MogWorkbookVersionXlsxMetadataTrustReason } {
+  if (metadata.documentId !== context.expectedDocumentId) {
+    return { status: 'untrusted', reason: 'wrong-document' };
+  }
+  if (!metadata.head) {
+    return { status: 'untrusted', reason: 'missing-head' };
+  }
+  if (!context.expectedHead) {
+    return { status: 'untrusted', reason: 'head-unverified' };
+  }
+  if (!metadataHeadMatchesExpected(metadata.head, context.expectedHead)) {
+    return { status: 'untrusted', reason: 'head-mismatch' };
+  }
+  return { status: 'trusted' };
 }
 
 function rewriteMogVersionMetadataInXlsx(
@@ -152,6 +290,205 @@ export async function maybeAddMogVersionMetadataToXlsx(
   );
 }
 
+function readMogVersionMetadataXmlFromXlsx(
+  xlsxBytes: Uint8Array,
+):
+  | { readonly status: 'absent' }
+  | { readonly status: 'present'; readonly xml: string }
+  | { readonly status: 'untrusted'; readonly reason: MogWorkbookVersionXlsxMetadataTrustReason } {
+  const view = new DataView(xlsxBytes.buffer, xlsxBytes.byteOffset, xlsxBytes.byteLength);
+  const eocd = readEndOfCentralDirectory(view);
+  const metadataEntries = readCentralDirectoryEntries(xlsxBytes, view, eocd).filter((entry) =>
+    isMogVersionMetadataPart(entry.name),
+  );
+
+  if (metadataEntries.length === 0) return { status: 'absent' };
+  if (metadataEntries.length !== 1) {
+    return { status: 'untrusted', reason: 'duplicate-sidecar' };
+  }
+
+  const entry = metadataEntries[0];
+  if (!entry) return { status: 'absent' };
+  if (entry.compressedSize > MOG_VERSION_METADATA_MAX_BYTES) {
+    return { status: 'untrusted', reason: 'sidecar-too-large' };
+  }
+  if (
+    entry.compressionMethod !== 0 ||
+    entry.compressedSize !== entry.uncompressedSize ||
+    (entry.generalPurposeBitFlag & 0x0008) !== 0
+  ) {
+    return { status: 'untrusted', reason: 'unsupported-compression' };
+  }
+
+  const localHeaderOffset = entry.localHeaderOffset;
+  if (
+    localHeaderOffset < 0 ||
+    localHeaderOffset + 30 > view.byteLength ||
+    view.getUint32(localHeaderOffset, true) !== 0x04034b50
+  ) {
+    return { status: 'untrusted', reason: 'malformed-sidecar' };
+  }
+
+  const localGeneralPurposeBitFlag = view.getUint16(localHeaderOffset + 6, true);
+  const localCompressionMethod = view.getUint16(localHeaderOffset + 8, true);
+  if (
+    localCompressionMethod !== entry.compressionMethod ||
+    localGeneralPurposeBitFlag !== entry.generalPurposeBitFlag
+  ) {
+    return { status: 'untrusted', reason: 'malformed-sidecar' };
+  }
+
+  const nameLength = view.getUint16(localHeaderOffset + 26, true);
+  const extraLength = view.getUint16(localHeaderOffset + 28, true);
+  const dataStart = localHeaderOffset + 30 + nameLength + extraLength;
+  const dataEnd = dataStart + entry.compressedSize;
+  if (
+    dataStart < localHeaderOffset ||
+    dataEnd > view.byteLength ||
+    dataEnd > eocd.centralDirectoryOffset
+  ) {
+    return { status: 'untrusted', reason: 'malformed-sidecar' };
+  }
+
+  return {
+    status: 'present',
+    xml: decodeUtf8(xlsxBytes.subarray(dataStart, dataEnd)),
+  };
+}
+
+function metadataJsonPayload(xml: string): string {
+  const match = /<json>([\s\S]*)<\/json>/.exec(xml);
+  const json = match?.[1];
+  if (!json) throw new Error('missing Mog version metadata JSON payload');
+  return json;
+}
+
+function parseMogWorkbookVersionXlsxMetadata(
+  value: unknown,
+): MogWorkbookVersionXlsxMetadata | null {
+  if (!isRecord(value)) return null;
+  if (value.schemaVersion !== 'mog.workbookVersion.xlsxMetadata.v1') return null;
+  if (typeof value.exportedAt !== 'string' || !value.exportedAt) return null;
+  if (typeof value.documentId !== 'string' || !value.documentId) return null;
+  if (!isVersionMetadataHead(value.head)) return null;
+  if (
+    !Array.isArray(value.diagnostics) ||
+    !value.diagnostics.every(isVersionDiagnosticPublicPayload)
+  ) {
+    return null;
+  }
+  if (!isVersionMetadataRedaction(value.redaction)) return null;
+  return {
+    schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
+    exportedAt: value.exportedAt,
+    documentId: value.documentId,
+    head: value.head,
+    diagnostics: value.diagnostics,
+    redaction: value.redaction,
+  };
+}
+
+function isVersionMetadataHead(value: unknown): value is MogWorkbookVersionXlsxMetadata['head'] {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  if (typeof value.commitId !== 'string' || !WORKBOOK_COMMIT_ID_RE.test(value.commitId)) {
+    return false;
+  }
+  if ('refName' in value && typeof value.refName !== 'string') return false;
+  if ('resolvedFrom' in value && typeof value.resolvedFrom !== 'string') return false;
+  if ('refRevision' in value && !isVersionRecordRevision(value.refRevision)) return false;
+  return true;
+}
+
+function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHead['refRevision']> {
+  return (
+    isRecord(value) &&
+    (value.kind === 'counter' || value.kind === 'opaque') &&
+    typeof value.value === 'string'
+  );
+}
+
+function isVersionDiagnosticPublicPayload(value: unknown): value is VersionDiagnosticPublicPayload {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every(isPublicPrimitive);
+}
+
+function isVersionMetadataRedaction(
+  value: unknown,
+): value is MogWorkbookVersionXlsxMetadata['redaction'] {
+  return (
+    isRecord(value) &&
+    value.policy === 'commit-and-document-only' &&
+    Array.isArray(value.omitted) &&
+    value.omitted.every((item) => typeof item === 'string')
+  );
+}
+
+function metadataHeadMatchesExpected(
+  actual: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
+  expected: MogWorkbookVersionXlsxMetadataExpectedHead,
+): boolean {
+  return (
+    actual.commitId === expected.commitId &&
+    optionalStringMatches(actual.refName, expected.refName) &&
+    optionalStringMatches(actual.resolvedFrom, expected.resolvedFrom) &&
+    versionRecordRevisionMatches(actual.refRevision, expected.refRevision)
+  );
+}
+
+function optionalStringMatches(left: string | undefined, right: string | undefined): boolean {
+  return left === right;
+}
+
+function versionRecordRevisionMatches(
+  left: VersionHead['refRevision'] | undefined,
+  right: VersionHead['refRevision'] | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return left.kind === right.kind && left.value === right.value;
+}
+
+function untrustedMetadataResult(
+  reason: MogWorkbookVersionXlsxMetadataTrustReason,
+  metadata?: MogWorkbookVersionXlsxMetadata,
+): Extract<MogWorkbookVersionXlsxMetadataTrustResult, { status: 'untrusted' }> {
+  return {
+    status: 'untrusted',
+    reason,
+    ...(metadata ? { metadata } : {}),
+    trust: {
+      status: 'untrusted',
+      sidecarPart: MOG_VERSION_METADATA_PART,
+      reason,
+      redacted: true,
+    },
+    diagnostics: [mogVersionMetadataUntrustedDiagnostic(reason)],
+  };
+}
+
+function mogVersionMetadataUntrustedDiagnostic(
+  reason: MogWorkbookVersionXlsxMetadataTrustReason,
+): ImportDiagnosticDto {
+  return {
+    id: `mog-version-metadata-${reason}`,
+    code: 'mogVersionMetadataUntrusted',
+    severity: 'warning',
+    feature: 'workbook-metadata',
+    recoverability: reason === 'malformed-sidecar' ? 'malformedDropped' : 'unsupportedDropped',
+    message: 'Mog version metadata sidecar was ignored because it could not be trusted.',
+    reason,
+    details: {
+      kind: 'mogVersionMetadataTrust',
+      reason,
+      sidecarPart: MOG_VERSION_METADATA_PART,
+      trusted: false,
+      redacted: true,
+    },
+    importPhases: ['parser'],
+    firstImportPhase: 'parser',
+  };
+}
+
 function resolveVersionDocumentId(ctx: DocumentContext): string {
   const runtime = ctx as {
     readonly versioning?: unknown;
@@ -218,6 +555,10 @@ function readCentralDirectoryEntries(
       name,
       bytes: bytes.subarray(offset, nextOffset),
       localHeaderOffset: view.getUint32(offset + 42, true),
+      generalPurposeBitFlag: view.getUint16(offset + 8, true),
+      compressionMethod: view.getUint16(offset + 10, true),
+      compressedSize: view.getUint32(offset + 20, true),
+      uncompressedSize: view.getUint32(offset + 24, true),
     });
     offset = nextOffset;
   }
@@ -395,6 +736,14 @@ function escapeXml(value: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function unescapeXml(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 function encodeUtf8(value: string): Uint8Array {

@@ -18,6 +18,10 @@ import {
   projectImportDiagnostic,
 } from './import-diagnostics';
 import { resolveUserTimezone } from './resolve-user-timezone';
+import {
+  MOG_VERSION_METADATA_PART,
+  readAndValidateMogVersionMetadataFromXlsx,
+} from '../workbook/xlsx-version-metadata';
 
 export const INTERNAL_INTERACTIVE_DEFERRED_IMPORT: unique symbol = Symbol(
   'mog.internalInteractiveDeferredImport',
@@ -149,12 +153,8 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       userTimezone,
       clock: deps.clock,
     });
-    lifecycle.createFromXlsx(
-      options?.documentId ?? deps.generateDocumentId(),
-      { skipDefaultSheet: true },
-      source,
-      options,
-    );
+    const requestedDocumentId = options?.documentId ?? deps.generateDocumentId();
+    lifecycle.createFromXlsx(requestedDocumentId, { skipDefaultSheet: true }, source, options);
     await lifecycle.waitForReady();
 
     if (mode === 'durable') {
@@ -188,22 +188,18 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
     const documentId = snap.context.docId;
     const sheetIds = snap.context.initialSheetIds ?? [];
     const context = lifecycle.documentContext as ISpreadsheetKernelContext;
-    const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
-      projectImportDiagnostic,
-    );
+    const versionMetadataTrust = xlsxVersionMetadataTrust(source, documentId);
+    const importDiagnostics = [
+      ...versionMetadataTrust.diagnostics,
+      ...(await lifecycle.computeBridge.getImportDiagnostics()).map(projectImportDiagnostic),
+    ];
     const warnings = documentImportWarningsFromDiagnostics(importDiagnostics);
-    const handle = deps.createDocumentHandle(
-      documentId,
-      lifecycle,
-      context,
-      undefined,
-      warnings,
-      {
-        kind: 'xlsx',
-        source: xlsxImportRootSource(source),
-        diagnostics: importDiagnostics,
-      },
-    );
+    const handle = deps.createDocumentHandle(documentId, lifecycle, context, undefined, warnings, {
+      kind: 'xlsx',
+      source: xlsxImportRootSource(source),
+      diagnostics: importDiagnostics,
+      versionMetadataTrust: versionMetadataTrust.trust,
+    });
 
     return {
       success: true,
@@ -235,6 +231,32 @@ function xlsxImportRootSource(source: DocumentSource): XlsxVersionImportRootProv
     return { sourceType: 'bytes', byteLength: source.data.byteLength };
   }
   return { sourceType: 'path', pathRedacted: true };
+}
+
+function xlsxVersionMetadataTrust(
+  source: DocumentSource,
+  documentId: string,
+): {
+  readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
+  readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
+} {
+  if (source.type !== 'bytes') {
+    return {
+      trust: {
+        status: 'absent',
+        sidecarPart: MOG_VERSION_METADATA_PART,
+      },
+      diagnostics: [],
+    };
+  }
+
+  const result = readAndValidateMogVersionMetadataFromXlsx(source.data, {
+    expectedDocumentId: documentId,
+  });
+  return {
+    trust: result.trust,
+    diagnostics: result.diagnostics,
+  };
 }
 
 export function assertInteractiveDeferredImportToken(token: InteractiveDeferredImportToken): void {

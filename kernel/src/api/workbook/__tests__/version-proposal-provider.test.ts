@@ -315,6 +315,42 @@ describe('WorkbookVersion provider-backed proposal service', () => {
     });
   });
 
+  it('rejects proposal workspace handles that do not match the proposal binding', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = misboundStartWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+
+    const created = await version.createProposal(
+      createProposalInput('proposal-create-misbound-start'),
+    );
+    if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+
+    await expect(
+      version.startProposalWorkspace({
+        clientRequestId: 'workspace-open-misbound',
+        proposalId: created.value.id,
+        expectedRevision: 1,
+        actor: ACTOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_workspace_proposal_mismatch',
+        allowed: ['matching_proposal_workspace'],
+      },
+    });
+    const stored = await version.getProposal({ proposalId: created.value.id });
+    expect(stored).toMatchObject({
+      ok: true,
+      value: { status: 'draft', revision: 1 },
+    });
+    if (!stored.ok) throw new Error(`expected proposal get success: ${stored.error.code}`);
+    expect('workspaceId' in stored.value).toBe(false);
+  });
+
   it('rejects proposal workspace commits with a stale workspace id', async () => {
     const graph = await graphWithRoot();
     const workspaceService = graphCommittingWorkspaceService(graph.provider);
@@ -361,6 +397,48 @@ describe('WorkbookVersion provider-backed proposal service', () => {
         status: 'success',
         ref: { commitId: graph.rootCommitId },
       },
+    });
+  });
+
+  it('rejects proposal workspace commits whose result echoes a different workspace id', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = mismatchedCommitWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: workspaceService,
+    });
+
+    const created = await version.createProposal(
+      createProposalInput('proposal-create-commit-workspace-mismatch'),
+    );
+    if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+    const opened = await version.startProposalWorkspace({
+      clientRequestId: 'workspace-open-commit-workspace-mismatch',
+      proposalId: created.value.id,
+      expectedRevision: 1,
+      actor: ACTOR,
+    });
+    if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
+
+    await expect(
+      version.commitProposalWorkspace({
+        clientRequestId: 'workspace-commit-result-mismatch',
+        proposalId: created.value.id,
+        workspaceId: opened.value.workspaceId,
+        expectedRevision: 2,
+        actor: ACTOR,
+        message: 'Mismatched workspace commit result',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_workspace_commit_mismatch',
+        allowed: ['matching_workspace_id'],
+      },
+    });
+    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'workspace_open', revision: 2 },
     });
   });
 
@@ -765,6 +843,45 @@ function graphCommittingWorkspaceService(
           },
         };
       }
+    },
+  };
+}
+
+function misboundStartWorkspaceService(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+): ProposalWorkspaceLifecycleService {
+  return {
+    ...graphCommittingWorkspaceService(provider),
+    async startProposalWorkspace(input) {
+      const started = await graphCommittingWorkspaceService(provider).startProposalWorkspace(input);
+      if (!started.ok) return started;
+      return {
+        ok: true,
+        value: {
+          ...started.value,
+          proposalId: `${started.value.proposalId}:other` as never,
+        },
+      };
+    },
+  };
+}
+
+function mismatchedCommitWorkspaceService(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+): ProposalWorkspaceLifecycleService {
+  return {
+    ...graphCommittingWorkspaceService(provider),
+    async commitProposalWorkspace(input) {
+      const committed =
+        await graphCommittingWorkspaceService(provider).commitProposalWorkspace(input);
+      if (!committed.ok) return committed;
+      return {
+        ok: true,
+        value: {
+          ...committed.value,
+          workspaceId: `${committed.value.workspaceId}:other`,
+        },
+      };
     },
   };
 }

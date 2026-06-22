@@ -45,6 +45,15 @@ import {
 } from './proposal-provider-service-utils';
 import { acceptProviderBackedAgentProposal } from './proposal-provider-accept-service';
 import {
+  isProposalBranchService,
+  isProposalGraphProvider,
+  isWorkbookVersionReviewService,
+} from './proposal-provider-service-guards';
+import {
+  validateProposalWorkspaceCommitResult,
+  validateProposalWorkspaceHandle,
+} from './proposal-provider-workspace-binding';
+import {
   isProposalWorkspaceLifecycleService,
   type ProposalWorkspaceLifecycleService,
 } from './proposal-workspace-lifecycle-service';
@@ -217,6 +226,11 @@ export class ProviderBackedAgentProposalService {
       }),
     );
     if (!started.ok) return started;
+    const workspaceBinding = validateProposalWorkspaceHandle({
+      proposal: proposal.value,
+      handle: started.value,
+    });
+    if (!workspaceBinding.ok) return workspaceBinding.result;
 
     const updated = await store.value.updateProposal({
       clientRequestId: input.clientRequestId,
@@ -282,6 +296,11 @@ export class ProviderBackedAgentProposalService {
       }),
     );
     if (!committed.ok) return committed;
+    const workspaceBinding = validateProposalWorkspaceCommitResult({
+      workspaceId: input.workspaceId,
+      result: committed.value,
+    });
+    if (!workspaceBinding.ok) return workspaceBinding.result;
     if (!isWorkbookCommitId(committed.value.proposalCommitId)) {
       return invalidState(
         'invalid_proposal_commit',
@@ -966,31 +985,6 @@ function diagnosticsFromProviderError(error: unknown): readonly VersionDiagnosti
     diagnostic(item.issueCode, publicSeverity(item.severity), item.safeMessage, {
       operation: item.operation,
     }),
-  );
-}
-
-function isProposalBranchService(value: unknown): value is ProposalBranchService {
-  return (
-    isRecord(value) &&
-    typeof value.readBranch === 'function' &&
-    typeof value.createBranch === 'function'
-  );
-}
-
-function isProposalGraphProvider(value: unknown): value is ProposalGraphProvider {
-  return (
-    isRecord(value) &&
-    typeof value.readGraphRegistry === 'function' &&
-    typeof value.openGraph === 'function' &&
-    isRecord(value.accessContext)
-  );
-}
-
-function isWorkbookVersionReviewService(value: unknown): value is WorkbookVersionReviewService {
-  return (
-    isRecord(value) &&
-    typeof value.createReview === 'function' &&
-    typeof value.getReview === 'function'
   );
 }
 

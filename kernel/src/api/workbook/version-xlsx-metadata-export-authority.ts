@@ -20,6 +20,8 @@ import {
 import type { WorkbookCommit } from '../../document/version-store/commit-store';
 import type { MogVersionMetadataExportBlockReason } from './version-xlsx-metadata-export-gate';
 
+const REF_REVISION_COUNTER_RE = /^(0|[1-9][0-9]*)$/;
+
 type VersionMetadataHeadIdentity = {
   readonly commitId?: VersionHead['id'];
   readonly refName?: VersionHead['refName'];
@@ -50,6 +52,9 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
   head: VersionResult<VersionHead>,
 ): Promise<MogVersionMetadataHeadAuthorityResult> {
   if (!head.ok) return { ok: false, reason: 'head-read-failed' };
+  if (!hasNoSidecarDiagnostics(head.value)) {
+    return { ok: false, reason: 'redaction-failed' };
+  }
   const expectedHead = graphHeadIdentity(head.value);
   if (!hasAuthoritativeHeadIdentity(expectedHead)) {
     return { ok: false, reason: 'head-unverified' };
@@ -65,6 +70,9 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
   try {
     const registry = await provider.readGraphRegistry();
     if (registry.status !== 'ok') return { ok: false, reason: 'head-unverified' };
+    if (!hasNoSidecarDiagnostics(registry)) {
+      return { ok: false, reason: 'redaction-failed' };
+    }
     const registryScope = normalizeRegistryDocumentScope(registry.registry);
     if (!registryScope || !documentScopesMatch(registryScope, providerScope)) {
       return { ok: false, reason: 'head-unverified' };
@@ -82,6 +90,9 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
 
     const currentHead = await graph.readHead();
     if (currentHead.status !== 'success') return { ok: false, reason: 'head-unverified' };
+    if (!hasNoSidecarDiagnostics(currentHead)) {
+      return { ok: false, reason: 'redaction-failed' };
+    }
     const currentHeadIdentity = graphHeadIdentity(currentHead.head);
     if (!hasAuthoritativeHeadIdentity(currentHeadIdentity)) {
       return { ok: false, reason: 'head-unverified' };
@@ -92,6 +103,9 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
 
     const closure = await graph.readCommitClosure(expectedHead.commitId);
     if (closure.status !== 'success') return { ok: false, reason: 'commit-missing' };
+    if (!hasNoSidecarDiagnostics(closure)) {
+      return { ok: false, reason: 'redaction-failed' };
+    }
     const sourceRoot = closure.commits.find((commit) => commit.id === sourceRootCommitId);
     if (
       !sourceRoot ||
@@ -175,7 +189,9 @@ function hasAuthoritativeHeadIdentity(
   );
 }
 
-function normalizeProviderDocumentScope(provider: VersionStoreProvider): VersionDocumentScope | null {
+function normalizeProviderDocumentScope(
+  provider: VersionStoreProvider,
+): VersionDocumentScope | null {
   try {
     return normalizeVersionDocumentScope(provider.documentScope);
   } catch {
@@ -208,7 +224,13 @@ function documentScopeMatchesWorkbookContext(
   ctx: DocumentContext,
   providerScope: VersionDocumentScope,
 ): boolean {
-  return providerScope.documentId === ctx.workbookLinkScope().requestingDocumentId;
+  const contextScope = workbookContextDocumentScope(ctx);
+  return (
+    contextScope !== null &&
+    providerScope.documentId === contextScope.documentId &&
+    (contextScope.workspaceId === undefined ||
+      providerScope.workspaceId === contextScope.workspaceId)
+  );
 }
 
 function documentScopesMatch(left: VersionDocumentScope, right: VersionDocumentScope): boolean {
@@ -275,6 +297,24 @@ function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProv
   return undefined;
 }
 
+function workbookContextDocumentScope(
+  ctx: DocumentContext,
+): Pick<VersionDocumentScope, 'documentId' | 'workspaceId'> | null {
+  const linkScope = ctx.workbookLinkScope();
+  if (!isRecord(linkScope) || !isNonEmptyString(linkScope.requestingDocumentId)) {
+    return null;
+  }
+  const workspaceId =
+    readNestedString(linkScope, ['workspaceId']) ??
+    readNestedString(linkScope, ['requestingWorkspaceId']) ??
+    readNestedString(ctx, ['kernelHostContext', 'storage', 'resourceContext', 'workspaceId']) ??
+    readNestedString(ctx, ['kernelHostContext', 'session', 'workspaceId']);
+  return {
+    documentId: linkScope.requestingDocumentId,
+    ...(workspaceId === undefined ? {} : { workspaceId }),
+  };
+}
+
 function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
   return (
     isRecord(value) &&
@@ -286,15 +326,28 @@ function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
 }
 
 function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHead['refRevision']> {
-  return (
-    isRecord(value) &&
-    (value.kind === 'counter' || value.kind === 'opaque') &&
-    typeof value.value === 'string'
-  );
+  if (!isRecord(value) || typeof value.value !== 'string') return false;
+  if (value.kind === 'counter') return REF_REVISION_COUNTER_RE.test(value.value);
+  if (value.kind === 'opaque') return value.value.length > 0;
+  return false;
 }
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
+}
+
+function hasNoSidecarDiagnostics(value: unknown): boolean {
+  if (!isRecord(value) || !Object.prototype.hasOwnProperty.call(value, 'diagnostics')) return true;
+  return Array.isArray(value.diagnostics) && value.diagnostics.length === 0;
+}
+
+function readNestedString(value: unknown, path: readonly string[]): string | undefined {
+  let current = value;
+  for (const key of path) {
+    if (!isRecord(current)) return undefined;
+    current = current[key];
+  }
+  return isNonEmptyString(current) ? current : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

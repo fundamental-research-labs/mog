@@ -21,6 +21,8 @@ const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-clean';
 const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate';
 const STALE_IMPORTED_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-stale-imported';
 const STALE_IMPORTED_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-stale-workspace';
+const METADATA_EXPORT_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-workspace';
+const OTHER_METADATA_EXPORT_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-other-workspace';
 const COPIED_METADATA_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-copied';
 const METADATA_EXPORT_GRAPH_ID = 'vc10-xlsx-metadata-export-gate-graph';
 const WRONG_METADATA_EXPORT_GRAPH_ID = 'vc10-xlsx-metadata-export-gate-wrong-graph';
@@ -35,6 +37,9 @@ const STALE_IMPORTED_REF_REVISION = {
   kind: 'opaque',
   value: 'vc10-xlsx-metadata-export-gate-stale-ref-revision',
 } as const;
+const UNSAFE_AUTHORITY_DIAGNOSTICS = [
+  { message: 'vc10-metadata-export-authority-leak', dependency: 'secret://authority' },
+] as const;
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -190,6 +195,25 @@ describe('VC-10 XLSX metadata export gating', () => {
     );
   });
 
+  it('blocks Mog version metadata sidecar export when the exported ref revision is stale', async () => {
+    const staleExportedHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: OTHER_REF_REVISION,
+    });
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+
+    await expectAuthorityExportBlocked(
+      {
+        exportedHead: staleExportedHead,
+        provider: { documentId: METADATA_EXPORT_DOCUMENT_ID, head: currentHead },
+      },
+      'stale-head',
+    );
+  });
+
   it('blocks Mog version metadata sidecar export when the registry source root is stale', async () => {
     const currentHead = versionHead({
       id: OLD_METADATA_COMMIT_ID,
@@ -244,6 +268,25 @@ describe('VC-10 XLSX metadata export gating', () => {
     );
   });
 
+  it('blocks Mog version metadata sidecar export when the provider is bound to another workspace', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+
+    await expectAuthorityExportBlocked(
+      {
+        contextWorkspaceId: METADATA_EXPORT_WORKSPACE_ID,
+        provider: {
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          workspaceId: OTHER_METADATA_EXPORT_WORKSPACE_ID,
+          head: currentHead,
+        },
+      },
+      'head-unverified',
+    );
+  });
+
   it('blocks Mog version metadata sidecar export when the visible registry names another document', async () => {
     const currentHead = versionHead({
       id: OLD_METADATA_COMMIT_ID,
@@ -270,6 +313,31 @@ describe('VC-10 XLSX metadata export gating', () => {
       'head-unverified',
     );
   });
+
+  it.each([
+    ['registry', { registryWorkspaceId: OTHER_METADATA_EXPORT_WORKSPACE_ID }],
+    ['opened graph', { graphNamespaceWorkspaceId: OTHER_METADATA_EXPORT_WORKSPACE_ID }],
+  ])(
+    'blocks Mog version metadata sidecar export when the %s workspace is stale',
+    async (_case, staleWorkspaceInput) => {
+      const currentHead = versionHead({
+        id: OLD_METADATA_COMMIT_ID,
+        refRevision: REF_REVISION,
+      });
+
+      await expectAuthorityExportBlocked(
+        {
+          provider: {
+            documentId: METADATA_EXPORT_DOCUMENT_ID,
+            workspaceId: METADATA_EXPORT_WORKSPACE_ID,
+            head: currentHead,
+            ...staleWorkspaceInput,
+          },
+        },
+        'head-unverified',
+      );
+    },
+  );
 
   it('blocks Mog version metadata sidecar export when the opened graph identity is not the registry graph', async () => {
     const currentHead = versionHead({
@@ -483,6 +551,18 @@ describe('VC-10 XLSX metadata export gating', () => {
     );
   });
 
+  it('blocks Mog version metadata sidecar export when ref revision proof is malformed', async () => {
+    const malformedRevisionHead = {
+      ...versionHead({ id: OLD_METADATA_COMMIT_ID }),
+      refRevision: { kind: 'counter', value: '01' },
+    } satisfies VersionHead;
+
+    await expectAuthorityExportBlocked(
+      { provider: { documentId: METADATA_EXPORT_DOCUMENT_ID, head: malformedRevisionHead } },
+      'head-unverified',
+    );
+  });
+
   it('blocks Mog version metadata sidecar export when commit identity is only lexical', async () => {
     const lexicalHead = {
       id: 'commit:sha256:not-a-real-commit-object' as WorkbookCommitId,
@@ -513,6 +593,31 @@ describe('VC-10 XLSX metadata export gating', () => {
       'head-unverified',
     );
   });
+
+  it.each([
+    ['registry', { registryDiagnostics: UNSAFE_AUTHORITY_DIAGNOSTICS }],
+    ['current head', { headDiagnostics: UNSAFE_AUTHORITY_DIAGNOSTICS }],
+    ['commit closure', { closureDiagnostics: UNSAFE_AUTHORITY_DIAGNOSTICS }],
+  ])(
+    'blocks Mog version metadata sidecar export when %s authority has diagnostics',
+    async (_case, diagnosticInput) => {
+      const currentHead = versionHead({
+        id: OLD_METADATA_COMMIT_ID,
+        refRevision: REF_REVISION,
+      });
+
+      await expectAuthorityExportBlocked(
+        {
+          provider: {
+            documentId: METADATA_EXPORT_DOCUMENT_ID,
+            head: currentHead,
+            ...diagnosticInput,
+          },
+        },
+        'redaction-failed',
+      );
+    },
+  );
 
   it('blocks Mog version metadata sidecar export instead of serializing failed-head diagnostics', async () => {
     const leakSentinel = 'vc10-metadata-export-redaction-leak';
@@ -633,25 +738,38 @@ async function createSourceXlsx(): Promise<Uint8Array> {
 
 function metadataExportContext(input: {
   readonly documentId: string;
+  readonly workspaceId?: string;
   readonly provider?: unknown;
 }): Parameters<typeof maybeAddMogVersionMetadataToXlsx>[0] {
   return {
     clock: { dateNow: () => Date.parse('2026-06-23T00:00:00.000Z') },
-    workbookLinkScope: () => ({ requestingDocumentId: input.documentId }),
+    workbookLinkScope: () => ({
+      requestingDocumentId: input.documentId,
+      ...(input.workspaceId ? { requestingWorkspaceId: input.workspaceId } : {}),
+    }),
     ...(input.provider ? { versioning: { provider: input.provider } } : {}),
   } as Parameters<typeof maybeAddMogVersionMetadataToXlsx>[0];
 }
 
 function metadataExportAuthorityProvider(input: {
   readonly documentId: string;
+  readonly workspaceId?: string;
   readonly head: VersionHead;
   readonly registryDocumentId?: string;
+  readonly registryWorkspaceId?: string;
   readonly registryRootCommitId?: WorkbookCommitId;
   readonly sourceRootInClosure?: boolean;
   readonly graphNamespaceGraphId?: string;
+  readonly graphNamespaceWorkspaceId?: string;
+  readonly registryDiagnostics?: readonly unknown[];
+  readonly headDiagnostics?: readonly unknown[];
+  readonly closureDiagnostics?: readonly unknown[];
 }) {
   const rootCommitId = input.registryRootCommitId ?? (input.head.id as WorkbookCommitId);
+  const registryWorkspaceId = input.registryWorkspaceId ?? input.workspaceId;
+  const graphWorkspaceId = input.graphNamespaceWorkspaceId ?? registryWorkspaceId;
   const graphNamespace = {
+    ...(graphWorkspaceId ? { workspaceId: graphWorkspaceId } : {}),
     documentId: input.documentId,
     graphId: input.graphNamespaceGraphId ?? METADATA_EXPORT_GRAPH_ID,
   };
@@ -673,11 +791,16 @@ function metadataExportAuthorityProvider(input: {
         : [headCommit, rootCommit];
 
   return {
-    documentScope: { documentId: input.documentId },
+    documentScope: {
+      ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
+      documentId: input.documentId,
+    },
     accessContext: {},
     readGraphRegistry: async () => ({
       status: 'ok',
+      ...(input.registryDiagnostics ? { diagnostics: input.registryDiagnostics } : {}),
       registry: {
+        ...(registryWorkspaceId ? { workspaceId: registryWorkspaceId } : {}),
         documentId: input.registryDocumentId ?? input.documentId,
         currentGraphId: METADATA_EXPORT_GRAPH_ID,
         rootCommitId,
@@ -685,18 +808,45 @@ function metadataExportAuthorityProvider(input: {
     }),
     openGraph: async () => ({
       namespace: graphNamespace,
-      readHead: async () => ({ status: 'success', head: input.head }),
-      readCommit: async (commitId: WorkbookCommitId) => ({
+      readHead: async () => ({
         status: 'success',
-        commit: commitClosure.find((commit) => commit.id === commitId) ?? headCommit,
+        head: input.head,
+        ...(input.headDiagnostics ? { diagnostics: input.headDiagnostics } : {}),
       }),
       readCommitClosure: async () => ({
         status: 'success',
         commits: commitClosure,
-        diagnostics: [],
+        diagnostics: input.closureDiagnostics ?? [],
       }),
     }),
   };
+}
+
+async function expectAuthorityExportBlocked(
+  input: {
+    readonly contextWorkspaceId?: string;
+    readonly exportedHead?: VersionHead;
+    readonly provider: Parameters<typeof metadataExportAuthorityProvider>[0];
+  },
+  metadataIssue: string,
+): Promise<void> {
+  const exportedHead = input.exportedHead ?? input.provider.head;
+  await expectMogMetadataExportBlocked(
+    maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        ...(input.contextWorkspaceId ? { workspaceId: input.contextWorkspaceId } : {}),
+        provider: metadataExportAuthorityProvider(input.provider),
+      }),
+      { getHead: async () => ({ ok: true, value: exportedHead }) } as Parameters<
+        typeof maybeAddMogVersionMetadataToXlsx
+      >[1],
+      await createSourceXlsx(),
+      { versionMetadata: 'include' },
+      blockedMetadataSink(),
+    ),
+    metadataIssue,
+  );
 }
 
 function testCommit(input: {

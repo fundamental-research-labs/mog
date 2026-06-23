@@ -34,7 +34,7 @@ export function registerPendingSyncBatchAdmissionScenarios(): void {
               recoverability: 'retry',
               payload: expect.objectContaining({
                 reason: 'syncBatchStatusBlocked',
-                refName: 'HEAD',
+                refName: 'redacted',
                 pendingRemoteSegmentCount: 1,
                 syncBatchStatusPendingCount: 1,
                 syncBatchStatusBlockedCount: 1,

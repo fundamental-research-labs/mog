@@ -41,14 +41,20 @@ export function registerVersionReviewDiffScenarios(): void {
           expect.objectContaining({
             code: 'VERSION_REVIEW_DIFF_INCOMPLETE',
             data: expect.objectContaining({
+              recoverability: 'unsupported',
+              redacted: true,
               payload: expect.objectContaining({
-                omittedChangeCount: 1,
-                domain: 'macros.vba',
+                operation: 'getReviewDiff',
               }),
             }),
           }),
         ],
       },
     });
+    const result = await version.getReviewDiff({ reviewId: REVIEW_ID });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('macros.vba');
+    expect(serialized).not.toContain('private macro source');
+    expect(serialized).not.toContain('omittedChangeCount');
   });
 }

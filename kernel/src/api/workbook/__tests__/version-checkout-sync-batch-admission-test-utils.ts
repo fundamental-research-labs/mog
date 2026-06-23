@@ -27,7 +27,10 @@ import {
   syncBatchStatusKeyMaterialForOperationContext,
   type SyncBatchStatusTerminal,
 } from '../../../document/version-store/sync-batch-status-store';
-import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnBridgeMock,
+  versioningWithDomainSupportManifest,
+} from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -106,8 +109,10 @@ export function createMockEventBus() {
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   const versioning = overrides.versioning as Record<string, unknown> | undefined;
+  const computeBridge = {};
+  installVersionDomainDetectorNoopsOnBridgeMock(computeBridge);
   return {
-    computeBridge: {},
+    computeBridge,
     writeGate: {
       assertWritable: jest.fn(),
     },

@@ -16,6 +16,7 @@ import {
   getDiffAvailability,
   getRemotePromoteAvailability,
   getRollbackAvailability,
+  type VersionActionDisabledReasonId,
   type VersionActionAvailability,
 } from '../version-action-availability';
 
@@ -54,7 +55,12 @@ type VersionActionCapability = Extract<
 
 type SplitVersionActionCapability = Extract<
   VersionCapability,
-  'version:reviewRead' | 'version:reviewWrite' | 'version:proposal' | 'version:mergeApply'
+  | 'version:reviewRead'
+  | 'version:reviewWrite'
+  | 'version:proposal'
+  | 'version:mergePreview'
+  | 'version:mergeApply'
+  | 'version:provenance'
 >;
 
 type ActionAvailabilityOptions = {
@@ -138,7 +144,9 @@ const SPLIT_CAPABILITY_CASES: readonly {
   { capability: 'version:reviewRead', fallbackReason: 'Review read is unavailable.' },
   { capability: 'version:reviewWrite', fallbackReason: 'Review write is unavailable.' },
   { capability: 'version:proposal', fallbackReason: 'Proposal is unavailable.' },
+  { capability: 'version:mergePreview', fallbackReason: 'Merge preview is unavailable.' },
   { capability: 'version:mergeApply', fallbackReason: 'Merge apply is unavailable.' },
+  { capability: 'version:provenance', fallbackReason: 'Provenance is unavailable.' },
 ];
 
 describe('version action availability', () => {
@@ -315,6 +323,76 @@ describe('version action availability', () => {
     }
   });
 
+  it('blocks sensitive actions when public diagnostics report incomplete history', () => {
+    const historyDiagnostic = diagnostic(
+      'The workbook version graph is not initialized for this document.',
+      'VERSION_GRAPH_UNINITIALIZED',
+    );
+    const surface = createSurfaceStatus({ diagnostics: [historyDiagnostic] });
+
+    expectDisabled(
+      getCommitAvailability({ surface }, false, false, 'Checkpoint'),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
+    expectDisabled(
+      getCheckoutAvailability({ surface }, false, false),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:reviewRead'),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:provenance'),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
+    expect(
+      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+    ).toEqual({ enabled: true });
+    expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+  });
+
+  it('blocks host-denied capability diagnostics even when capability state is enabled', () => {
+    const deniedMergeApply = diagnostic(
+      'Host policy denies merge apply.',
+      'version.surfaceStatus.hostCapabilityDenied',
+      'hostCapability',
+      { capability: 'version:mergeApply' },
+    );
+    const deniedRead = diagnostic(
+      'Host policy denies version reads.',
+      'version.surfaceStatus.hostCapabilityDenied',
+      'hostCapability',
+      { deniedCapabilities: ['version:read'] },
+    );
+    const mergeSurface = createSurfaceStatus({ diagnostics: [deniedMergeApply] });
+    const readSurface = createSurfaceStatus({ diagnostics: [deniedRead] });
+
+    expectDisabled(
+      getCapabilityAvailability({ surface: mergeSurface }, false, false, 'version:mergeApply'),
+      deniedMergeApply.message,
+      'version-capability-host-denied',
+    );
+    expect(
+      getCapabilityAvailability({ surface: mergeSurface }, false, false, 'version:reviewRead'),
+    ).toEqual({ enabled: true });
+    expectDisabled(
+      getCommitAvailability({ surface: readSurface }, false, false, 'Checkpoint'),
+      deniedRead.message,
+      'version-capability-host-denied',
+    );
+  });
+
   it('disables commit and checkout while provider writes are pending', () => {
     const surface = createSurfaceStatus({
       dirty: {
@@ -385,6 +463,21 @@ describe('version action availability', () => {
     expectDisabled(
       getCheckoutAvailability({ surface }, false, false),
       'Commit or discard changes in charts, pivotTables before checking out.',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:reviewWrite'),
+      'Changes in charts, pivotTables cannot be reviewed yet.',
+      'version-unsupported-domain',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:mergeApply'),
+      'Changes in charts, pivotTables cannot be merged yet.',
+      'version-unsupported-domain',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:provenance'),
+      'Changes in charts, pivotTables cannot be exported with version metadata yet.',
+      'version-unsupported-domain',
     );
   });
 
@@ -614,7 +707,7 @@ describe('version action availability', () => {
     );
   });
 
-  it('disables commit, checkout, and rollback when the current checkout session is stale', () => {
+  it('disables stale-head-sensitive actions when the current checkout session is stale', () => {
     const surface = createSurfaceStatus({
       current: {
         checkedOutCommitId: HEAD_COMMIT_ID,
@@ -648,6 +741,21 @@ describe('version action availability', () => {
       ),
       'main is stale because the branch head moved. Refresh before staging rollback.',
     );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:reviewRead'),
+      'main is stale because the branch head moved. Refresh before reviewing version changes.',
+      'version-head-stale',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
+      'main is stale because the branch head moved. Refresh before merging.',
+      'version-head-stale',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:provenance'),
+      'main is stale because the branch head moved. Refresh before exporting version metadata.',
+      'version-head-stale',
+    );
     expect(
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
@@ -670,12 +778,14 @@ function createSurfaceStatus({
   current = {},
   dirty = {},
   capabilityOverrides = {},
+  diagnostics = [],
 }: {
   readonly featureGateEnabled?: boolean;
   readonly storageReady?: boolean;
   readonly current?: Partial<VersionSurfaceStatus['current']>;
   readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
   readonly capabilityOverrides?: Partial<Record<VersionCapability, VersionCapabilityState>>;
+  readonly diagnostics?: readonly VersionDiagnostic[];
 } = {}): VersionSurfaceStatus {
   return {
     schemaVersion: 1,
@@ -736,7 +846,7 @@ function createSurfaceStatus({
         return [capability, { enabled: true } satisfies VersionCapabilityState];
       }),
     ) as VersionSurfaceStatus['capabilities'],
-    diagnostics: [],
+    diagnostics,
   };
 }
 
@@ -763,15 +873,28 @@ function diagnostic(
   message: string,
   code = 'test.diagnostic',
   dependency?: VersionCapabilityDependency,
+  data?: VersionDiagnostic['data'],
 ): VersionDiagnostic {
   return {
     code,
     severity: 'warning',
     message,
     ...(dependency ? { dependency } : {}),
+    ...(data ? { data } : {}),
   };
 }
 
-function expectDisabled(availability: VersionActionAvailability, disabledReason: string): void {
-  expect(availability).toEqual({ enabled: false, disabledReason });
+function expectDisabled(
+  availability: VersionActionAvailability,
+  disabledReason: string,
+  disabledReasonId?: VersionActionDisabledReasonId,
+): void {
+  expect(availability.enabled).toBe(false);
+  if (availability.enabled) return;
+  expect(availability.disabledReason).toBe(disabledReason);
+  if (disabledReasonId) {
+    expect(availability.disabledReasonId).toBe(disabledReasonId);
+  } else {
+    expect(typeof availability.disabledReasonId).toBe('string');
+  }
 }

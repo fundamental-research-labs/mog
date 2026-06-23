@@ -660,7 +660,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('fails closed on same-document XLSX metadata without import-time authority', async () => {
+  it('trusts same-document XLSX metadata when local authority is available', async () => {
     const originalXlsxBytes = await createSourceXlsx('Original import root');
     const originalImport = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: originalXlsxBytes },
@@ -725,15 +725,10 @@ describe('WorkbookVersion XLSX import root', () => {
     if (!reimported.success || !reimported.handle) {
       throw new Error(`expected reimport XLSX import success: ${reimported.error?.message}`);
     }
-    expect(reimported.warnings).toEqual(
+    expect(reimported.warnings).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          type: 'import_error',
-          reason: 'head-unverified',
-          diagnostic: expect.objectContaining({
-            code: 'mogVersionMetadataUntrusted',
-            details: expect.objectContaining({ redacted: true }),
-          }),
+          diagnostic: expect.objectContaining({ code: 'mogVersionMetadataUntrusted' }),
         }),
       ]),
     );

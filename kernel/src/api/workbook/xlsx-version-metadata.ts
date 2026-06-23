@@ -22,6 +22,7 @@ export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1';
   readonly exportedAt: string;
   readonly documentId: string;
+  readonly workspaceId?: string;
   readonly head: {
     readonly commitId: VersionHead['id'];
     readonly refName?: VersionHead['refName'];
@@ -54,6 +55,7 @@ export type MogWorkbookVersionXlsxMetadataTrustReason =
   | 'malformed-sidecar'
   | 'invalid-schema'
   | 'wrong-document'
+  | 'wrong-workspace'
   | 'missing-head'
   | 'head-unverified'
   | 'head-mismatch'
@@ -90,6 +92,7 @@ export interface MogWorkbookVersionXlsxMetadataExpectedHead {
 
 export interface MogWorkbookVersionXlsxMetadataTrustContext {
   readonly expectedDocumentId: string;
+  readonly expectedWorkspaceId?: string;
   readonly expectedHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
 }
 
@@ -125,6 +128,7 @@ export function createMogWorkbookVersionXlsxMetadata(
     schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
     exportedAt: new Date(ctx.clock.dateNow()).toISOString(),
     documentId: resolveVersionDocumentId(ctx),
+    ...optionalMetadataWorkspaceId(ctx),
     head: head.ok
       ? {
           commitId: head.value.id,
@@ -149,8 +153,8 @@ export function createMogWorkbookVersionXlsxMetadata(
         'credentials',
         'externalDataSecrets',
         'objectStoreNamespace',
-        'workspaceId',
         'principalScope',
+        ...(optionalMetadataWorkspaceId(ctx).workspaceId ? [] : ['workspaceId']),
       ],
     },
   };
@@ -225,6 +229,9 @@ export function validateMogWorkbookVersionXlsxMetadata(
   | { readonly status: 'untrusted'; readonly reason: MogWorkbookVersionXlsxMetadataTrustReason } {
   if (metadata.documentId !== context.expectedDocumentId) {
     return { status: 'untrusted', reason: 'wrong-document' };
+  }
+  if (!optionalStringMatches(metadata.workspaceId, context.expectedWorkspaceId)) {
+    return { status: 'untrusted', reason: 'wrong-workspace' };
   }
   if (!metadata.head) {
     return { status: 'untrusted', reason: 'missing-head' };
@@ -493,6 +500,9 @@ function parseMogWorkbookVersionXlsxMetadata(
   if (value.schemaVersion !== 'mog.workbookVersion.xlsxMetadata.v1') return null;
   if (typeof value.exportedAt !== 'string' || !value.exportedAt) return null;
   if (typeof value.documentId !== 'string' || !value.documentId) return null;
+  if ('workspaceId' in value && (typeof value.workspaceId !== 'string' || !value.workspaceId)) {
+    return null;
+  }
   if (!isVersionMetadataHead(value.head)) return null;
   if (
     !Array.isArray(value.diagnostics) ||
@@ -505,6 +515,7 @@ function parseMogWorkbookVersionXlsxMetadata(
     schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
     exportedAt: value.exportedAt,
     documentId: value.documentId,
+    ...(typeof value.workspaceId === 'string' ? { workspaceId: value.workspaceId } : {}),
     head: value.head,
     diagnostics: value.diagnostics,
     redaction: value.redaction,
@@ -685,6 +696,11 @@ function resolveVersionDocumentId(ctx: DocumentContext): string {
     }
   }
   return ctx.workbookLinkScope().requestingDocumentId;
+}
+
+function optionalMetadataWorkspaceId(ctx: DocumentContext): { readonly workspaceId?: string } {
+  const workspaceId = versionStoreProviderFromContext(ctx)?.documentScope.workspaceId;
+  return workspaceId ? { workspaceId } : {};
 }
 
 function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProvider | undefined {

@@ -1,3 +1,4 @@
+import type { ObjectDigest, VersionHead } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type {
   DocumentImportOptions,
@@ -8,6 +9,14 @@ import type {
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentLifecycleSystem } from '../../document';
+import {
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+  type VersionStoreProvider,
+} from '../../document/version-store/provider';
+import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
+import { selectVersionStoreProvider } from '../../document/version-store/provider-registry';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb-backend';
 import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';
 import type { KernelClock } from '../../context';
 import { LegacyOptionRejectedError } from '../../errors/document';
@@ -34,6 +43,7 @@ export type XlsxDocumentImportOptions = DocumentImportOptions & {
   napiAddon?: unknown;
   security?: DocumentSecurityConfig;
   userTimezone?: string;
+  versioning?: Pick<DocumentWorkbookVersioningLifecycleConfig, 'provider' | 'providerSelection'>;
 };
 
 export type XlsxDocumentHandleFactory<THandle extends DocumentHandleInternal> = (
@@ -188,7 +198,7 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
     const documentId = snap.context.docId;
     const sheetIds = snap.context.initialSheetIds ?? [];
     const context = lifecycle.documentContext as ISpreadsheetKernelContext;
-    const versionMetadataTrust = xlsxVersionMetadataTrust(source, documentId);
+    const versionMetadataTrust = await xlsxVersionMetadataTrust(source, documentId, options);
     const importDiagnostics = [
       ...versionMetadataTrust.diagnostics,
       ...(await lifecycle.computeBridge.getImportDiagnostics()).map(projectImportDiagnostic),
@@ -236,14 +246,15 @@ function xlsxImportRootSource(source: DocumentSource): XlsxVersionImportRootProv
   return { sourceType: 'path', pathRedacted: true };
 }
 
-function xlsxVersionMetadataTrust(
+async function xlsxVersionMetadataTrust(
   source: DocumentSource,
   documentId: string,
-): {
+  options: XlsxDocumentImportOptions | undefined,
+): Promise<{
   readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
   readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
   readonly versionMetadataHeadCandidate?: XlsxVersionImportRootProvenance['versionMetadataHeadCandidate'];
-} {
+}> {
   if (source.type !== 'bytes') {
     return {
       trust: {
@@ -254,8 +265,11 @@ function xlsxVersionMetadataTrust(
     };
   }
 
+  const authority = await readLocalVersionMetadataAuthority(documentId, options);
   const result = readAndValidateMogVersionMetadataFromXlsx(source.data, {
     expectedDocumentId: documentId,
+    ...(authority.expectedWorkspaceId ? { expectedWorkspaceId: authority.expectedWorkspaceId } : {}),
+    ...(authority.expectedHead ? { expectedHead: authority.expectedHead } : {}),
   });
   return {
     trust: result.trust,
@@ -269,6 +283,103 @@ function xlsxVersionMetadataTrust(
         }
       : {}),
   };
+}
+
+type LocalVersionMetadataAuthority = {
+  readonly expectedWorkspaceId?: string;
+  readonly expectedHead?: {
+    readonly commitId: VersionHead['id'];
+    readonly refName?: VersionHead['refName'];
+    readonly resolvedFrom?: VersionHead['resolvedFrom'];
+    readonly refRevision?: VersionHead['refRevision'];
+    readonly semanticChangeSetDigest: ObjectDigest;
+    readonly snapshotRootDigest: ObjectDigest;
+  };
+};
+
+async function readLocalVersionMetadataAuthority(
+  documentId: string,
+  options: XlsxDocumentImportOptions | undefined,
+): Promise<LocalVersionMetadataAuthority> {
+  const selected = selectLocalVersionMetadataAuthorityProvider(documentId, options);
+  const expectedWorkspaceId = selected.provider.documentScope.workspaceId;
+  const baseAuthority = expectedWorkspaceId ? { expectedWorkspaceId } : {};
+
+  try {
+    const registry = await selected.provider.readGraphRegistry();
+    if (registry.status !== 'ok') return baseAuthority;
+
+    const graph = await selected.provider.openGraph(
+      namespaceForDocumentScope(selected.provider.documentScope, registry.registry.currentGraphId),
+      selected.provider.accessContext,
+    );
+    const head = await graph.readHead();
+    if (head.status !== 'success') return baseAuthority;
+
+    const commit = await graph.readCommit(head.head.id);
+    if (commit.status !== 'success') return baseAuthority;
+
+    return {
+      ...baseAuthority,
+      expectedHead: {
+        commitId: head.head.id as VersionHead['id'],
+        refName: head.head.refName as VersionHead['refName'],
+        resolvedFrom: head.head.resolvedFrom as VersionHead['resolvedFrom'],
+        refRevision: head.head.refRevision,
+        semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest as ObjectDigest,
+        snapshotRootDigest: commit.commit.payload.snapshotRootDigest as ObjectDigest,
+      },
+    };
+  } catch {
+    return baseAuthority;
+  } finally {
+    if (selected.owned) {
+      await selected.provider.close('dispose').catch(() => {});
+    }
+  }
+}
+
+function selectLocalVersionMetadataAuthorityProvider(
+  documentId: string,
+  options: XlsxDocumentImportOptions | undefined,
+): { readonly provider: VersionStoreProvider; readonly owned: boolean } {
+  const configured = options?.versioning;
+  if (isVersionStoreProvider(configured?.provider)) {
+    return { provider: configured.provider, owned: false };
+  }
+
+  const providerSelection = configured?.providerSelection;
+  const documentScope: VersionDocumentScope = {
+    ...(providerSelection?.workspaceId ? { workspaceId: providerSelection.workspaceId } : {}),
+    documentId,
+    ...(providerSelection?.principalScope
+      ? { principalScope: providerSelection.principalScope }
+      : {}),
+  };
+
+  return {
+    provider: selectVersionStoreProvider({
+      kind: providerSelection?.kind ?? INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+      documentScope,
+      readOnly: true,
+      requireDurablePersistence: providerSelection?.requireDurablePersistence,
+    }),
+    owned: true,
+  };
+}
+
+function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
+  return (
+    isRecord(value) &&
+    isRecord(value.documentScope) &&
+    isRecord(value.accessContext) &&
+    typeof value.readGraphRegistry === 'function' &&
+    typeof value.openGraph === 'function'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 export function assertInteractiveDeferredImportToken(token: InteractiveDeferredImportToken): void {

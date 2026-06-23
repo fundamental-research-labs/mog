@@ -201,6 +201,7 @@ export async function applyPersistedMergePreviewArtifact(
 
   const prepared = await prepareResolvedAttempt(opened, artifact.payload, input, options);
   if (!prepared.ok) {
+    if ('result' in prepared) return prepared.result;
     return blockedApplyMergeResult(
       artifact.payload.base,
       artifact.payload.ours,
@@ -515,6 +516,20 @@ function validatePreviewArtifactForApply(
   ];
 }
 
+async function staleTargetHeadBeforeStaging(
+  graph: VersionGraphStore,
+  input: NormalizedPersistedApplyMergeInput,
+  payload: MergePreviewArtifactPayload,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
+): Promise<VersionApplyMergeResult | null> {
+  const current = await readCurrentTargetHead(graph, options.targetRef);
+  if (!current.ok) {
+    return blockedApplyMergeResult(payload.base, payload.ours, payload.theirs, current.diagnostics);
+  }
+  if (current.commitId === options.expectedTargetHead.commitId) return null;
+  return staleTargetHeadPreviewArtifactResult(input, payload, options, current.commitId);
+}
+
 async function prepareResolvedAttempt(
   opened: {
     readonly namespace: VersionGraphNamespace;
@@ -530,6 +545,7 @@ async function prepareResolvedAttempt(
       readonly store: MergeApplyIntentStore;
       readonly intent: MergeApplyIntentRecord;
     }
+  | { readonly ok: false; readonly result: VersionApplyMergeResult }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   if (!opened.intentStore) {
@@ -573,18 +589,36 @@ async function prepareResolvedAttempt(
     return { ok: false, diagnostics: digestDiagnostics };
   }
 
+  const intentId = intentIdForResolvedAttemptDigest(resolvedAttempt.digest);
+  const idempotencyKey = idempotencyKeyForResolvedAttempt({
+    resolvedAttemptDigest: resolvedAttempt.digest,
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+  });
+  const existing = await opened.intentStore.readByIdempotencyKey(idempotencyKey);
+  if (existing.status === 'found') {
+    return { ok: true, store: opened.intentStore, intent: existing.record };
+  }
+  if (existing.status === 'failed') {
+    return { ok: false, diagnostics: intentStoreDiagnostics(existing.diagnostics) };
+  }
+
+  const staleBeforeStaging = await staleTargetHeadBeforeStaging(
+    opened.graph,
+    input,
+    payload,
+    options,
+  );
+  if (staleBeforeStaging) return { ok: false, result: staleBeforeStaging };
+
   const persisted = await opened.graph.putObjects([resolutionSet, resolvedAttempt]);
   if (persisted.status !== 'success') {
     return { ok: false, diagnostics: mapProviderDiagnostics(persisted.diagnostics) };
   }
 
   const begin = await opened.intentStore.beginIntent({
-    intentId: intentIdForResolvedAttemptDigest(resolvedAttempt.digest),
-    idempotencyKey: idempotencyKeyForResolvedAttempt({
-      resolvedAttemptDigest: resolvedAttempt.digest,
-      targetRef: options.targetRef,
-      expectedTargetHead: options.expectedTargetHead,
-    }),
+    intentId,
+    idempotencyKey,
     applyKind: 'mergeCommit',
     base: payload.base,
     ours: payload.ours,
@@ -680,6 +714,28 @@ async function readCurrentTargetHead(
   } catch {
     return { ok: false, diagnostics: [providerErrorDiagnostic()] };
   }
+}
+
+function staleTargetHeadPreviewArtifactResult(
+  input: NormalizedPersistedApplyMergeInput,
+  payload: MergePreviewArtifactPayload,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
+  currentHead: WorkbookCommitId,
+): VersionApplyMergeResult {
+  return {
+    ...previewArtifactMetadata(input),
+    targetRef: options.targetRef,
+    headBefore: payload.ours,
+    headAfter: currentHead,
+    status: 'staleTargetHead',
+    base: payload.base,
+    ours: payload.ours,
+    theirs: payload.theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'ref-not-mutated',
+  };
 }
 
 function staleTargetHeadArtifactResult(

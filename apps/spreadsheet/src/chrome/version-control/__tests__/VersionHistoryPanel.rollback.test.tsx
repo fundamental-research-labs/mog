@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
@@ -138,6 +138,59 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     await expectActionResult(`Rollback staged for ${shortCommitId(PARENT_COMMIT_ID)}`, 'success');
   });
 
+  it('fails closed while refreshing stale surface status after rollback staging', async () => {
+    const refreshedSurface = createDeferred<VersionSurfaceStatus>();
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(createSurfaceStatus({ revertEnabled: true }))
+      .mockImplementationOnce(() => refreshedSurface.promise);
+    const workbook = createWorkbook({ getSurfaceStatus });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
+    await user.click(screen.getByRole('button', { name: 'Stage rollback' }));
+
+    await expectActionResult(`Rollback staged for ${shortCommitId(HEAD_COMMIT_ID)}`, 'success');
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Stage rollback' }),
+      'Enter a rollback reason.',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Refresh version history' }));
+    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Stage rollback' }),
+      'Version status is refreshing.',
+    );
+
+    await act(async () => {
+      refreshedSurface.resolve(
+        createSurfaceStatus({
+          revertEnabled: true,
+          current: {
+            checkedOutCommitId: HEAD_COMMIT_ID,
+            refHeadAtMaterialization: HEAD_COMMIT_ID,
+            currentRefHeadId: LATEST_COMMIT_ID,
+            stale: true,
+            staleReason: 'refMoved',
+          },
+        }),
+      );
+      await refreshedSurface.promise;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-current-stale-status')).toBeVisible(),
+    );
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Stage rollback' }),
+      'main is stale because the branch head moved. Refresh before staging rollback.',
+    );
+  });
+
   it('surfaces stale-head rollback errors with expected and actual heads', async () => {
     const workbook = createWorkbook({
       surface: createSurfaceStatus({ revertEnabled: true }),
@@ -225,13 +278,15 @@ describe('VersionHistoryPanelContent rollback staging', () => {
 
 function createWorkbook({
   surface = createSurfaceStatus(),
+  getSurfaceStatus,
   revert,
 }: {
   readonly surface?: VersionSurfaceStatus;
+  readonly getSurfaceStatus?: VersionHistoryWorkbook['version']['getSurfaceStatus'];
   readonly revert?: VersionHistoryWorkbook['version']['revert'];
 } = {}): VersionHistoryWorkbook {
   const version = {
-    getSurfaceStatus: jest.fn(async () => surface),
+    getSurfaceStatus: getSurfaceStatus ?? jest.fn(async () => surface),
     getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
     getHead: jest.fn(async () => ({
       ok: true,
@@ -379,6 +434,17 @@ function failedStaleHead<T = never>(
     ok: false,
     error: { code: 'stale_head', expectedHeadId, actualHeadId },
   };
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 async function expectActionResult(message: string, status: 'success' | 'error'): Promise<void> {

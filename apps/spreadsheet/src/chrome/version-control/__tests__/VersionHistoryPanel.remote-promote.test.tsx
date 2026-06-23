@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
@@ -107,6 +107,77 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
     expect(workbook.version.promotePendingRemote).not.toHaveBeenCalled();
   });
 
+  it('fails closed while refreshing capability status after remote promotion', async () => {
+    const pendingProviderWrites = diagnostic(
+      'Remote sync changes are waiting to be promoted into version history; checkout is unsafe.',
+      { pendingRemoteSegmentCount: 1 },
+    );
+    const refreshedReason = 'Remote promotion is disabled until the provider reconnects.';
+    const refreshedSurface = createDeferred<VersionSurfaceStatus>();
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(
+        createSurfaceStatus({
+          dirty: {
+            pendingProviderWrites: true,
+            checkoutSafe: false,
+            unsafeReasons: [pendingProviderWrites],
+            diagnostics: [pendingProviderWrites],
+          },
+        }),
+      )
+      .mockImplementationOnce(() => refreshedSurface.promise);
+    const workbook = createWorkbook({ getSurfaceStatus });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByRole('button', { name: 'Promote remote' }));
+
+    await waitFor(() =>
+      expect(workbook.version.promotePendingRemote).toHaveBeenCalledWith({
+        includeDiagnostics: true,
+      }),
+    );
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Promote remote' }),
+      'Version status is refreshing.',
+    );
+
+    await act(async () => {
+      refreshedSurface.resolve(
+        createSurfaceStatus({
+          capabilityOverrides: {
+            'version:remotePromote': disabledCapabilityState(
+              refreshedReason,
+              'hostCapability',
+              true,
+            ),
+          },
+        }),
+      );
+      await refreshedSurface.promise;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-remote-promote-status')).toHaveAttribute(
+        'data-state',
+        'unavailable',
+      ),
+    );
+    expect(screen.getByTestId('version-history-remote-promote-status')).toHaveTextContent(
+      refreshedReason,
+    );
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Promote remote' }),
+      refreshedReason,
+    );
+    expect(
+      screen.getByTestId('version-history-capability-version-remotePromote'),
+    ).toHaveAccessibleName(`Remote promote unavailable: ${refreshedReason}`);
+  });
+
   it('surfaces failed pending remote promotion diagnostics in the action result region', async () => {
     const workbook = createWorkbook({
       promotePendingRemote: jest.fn(async () => ({
@@ -145,13 +216,15 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
 
 function createWorkbook({
   surface = createSurfaceStatus(),
+  getSurfaceStatus,
   promotePendingRemote,
 }: {
   readonly surface?: VersionSurfaceStatus;
+  readonly getSurfaceStatus?: VersionHistoryWorkbook['version']['getSurfaceStatus'];
   readonly promotePendingRemote?: VersionHistoryWorkbook['version']['promotePendingRemote'];
 } = {}): VersionHistoryWorkbook {
   const version = {
-    getSurfaceStatus: jest.fn(async () => surface),
+    getSurfaceStatus: getSurfaceStatus ?? jest.fn(async () => surface),
     getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
     getHead: jest.fn(async () => ({
       ok: true,
@@ -275,6 +348,17 @@ function disabledCapabilityState(
   retryable: boolean,
 ): VersionCapabilityState {
   return { enabled: false, dependency, reason, retryable };
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 async function expectActionResult(message: string, status: 'success' | 'error'): Promise<void> {

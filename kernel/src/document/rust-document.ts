@@ -59,8 +59,8 @@ import type {
   ProviderAttachResult,
   ProviderCheckpointMode,
   ProviderCheckpointResult,
-  ProviderDocApplyUpdateMetadata,
   ProviderDocApplyUpdateResult,
+  ProviderInboundApplyUpdateMetadata,
 } from './providers/provider';
 import {
   completeAppliedSyncUpdateIdentity,
@@ -852,7 +852,7 @@ export class RustDocument {
       } as const satisfies ProviderInboundUpdateResult;
     }
 
-    const metadata: ProviderDocApplyUpdateMetadata = {
+    const metadata: ProviderInboundApplyUpdateMetadata = {
       source: 'provider-inbound',
       docId: this.docId,
       envelopeVersion,
@@ -907,7 +907,9 @@ export class RustDocument {
       try {
         const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
         const doc = createBridgeBackedProviderDoc(this.computeBridge, this.docId);
-        applyResult = await doc.applyUpdate(envelope.payload, metadata);
+        applyResult = isV2Envelope
+          ? await doc.applyProviderInboundUpdateEnvelopeV2(envelope, metadata)
+          : await doc.applyLegacyProviderInboundUpdate(envelope, metadata);
         appliedTerminalMetadata = await capturePendingRemoteSegmentForAdmittedContext({
           docId: this.docId,
           admittedContext,

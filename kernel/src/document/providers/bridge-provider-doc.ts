@@ -25,8 +25,12 @@
 import {
   classifyLegacyRawUpdate,
   DEFAULT_PROVENANCE_REDACTION_POLICY,
+  validateProviderInboundUpdateEnvelope,
   validateSyncUpdateProvenance,
+  type ProviderInboundUpdateEnvelope,
+  type ProviderInboundUpdateEnvelopeV2,
   type SyncUpdateProvenance,
+  type SyncUpdateValidationDiagnostic,
 } from '@mog-sdk/types-document/storage';
 import type { StorageScopeBinding } from '@mog-sdk/types-document/storage/provider-identity';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
@@ -38,6 +42,7 @@ import { slog } from '../../lib/slog';
 import type {
   Provider,
   ProviderDoc,
+  ProviderInboundApplyUpdateMetadata,
   ProviderDocApplyUpdateMetadata,
   ProviderDocApplyUpdateResult,
 } from './provider';
@@ -77,6 +82,27 @@ type ComputeBridgeSyncApplyWithMetadata = {
   ) => Promise<ProviderDocApplyUpdateResult>;
 };
 
+export interface BridgeBackedProviderDoc extends ProviderDoc {
+  /**
+   * Provenance-preserving provider inbound path. The V2 envelope is admitted
+   * as a V2 envelope, not collapsed back to payload-only replay/raw bytes.
+   */
+  applyProviderInboundUpdateEnvelopeV2(
+    envelope: ProviderInboundUpdateEnvelopeV2,
+    metadata?: ProviderInboundApplyUpdateMetadata,
+  ): Promise<ProviderDocApplyUpdateResult | void>;
+
+  /**
+   * Explicit compatibility path for old provider envelopes. Callers must pass
+   * already-classified legacy metadata so this branch remains visibly separate
+   * from provenance-bearing V2 admission.
+   */
+  applyLegacyProviderInboundUpdate(
+    envelope: ProviderInboundUpdateEnvelope,
+    metadata: ProviderInboundApplyUpdateMetadata,
+  ): Promise<ProviderDocApplyUpdateResult | void>;
+}
+
 /**
  * Build a `ProviderDoc` backed by `bridge`. The returned object is stable
  * (same reference returned on subsequent reads of any property) and stateless
@@ -100,7 +126,7 @@ export function createBridgeBackedProviderDoc(
   bridge: ComputeBridge,
   docId: string,
   options: BridgeBackedProviderDocOptions = {},
-): ProviderDoc {
+): BridgeBackedProviderDoc {
   return {
     docId,
     async applyUpdate(
@@ -110,21 +136,25 @@ export function createBridgeBackedProviderDoc(
       const admissionMetadata =
         metadata ??
         (options.providerReplayAdmission
-          ? await classifyProviderReplayApplyUpdate(
-              docId,
-              update,
-              options.providerReplayAdmission,
-            )
+          ? await classifyProviderReplayApplyUpdate(docId, update, options.providerReplayAdmission)
           : await classifyLegacyRawProviderDocApplyUpdate(docId, update));
-      emitApplyUpdateAdmission(bridge, options, admissionMetadata);
-      const admittedContext = createAdmittedSyncApplyContext(admissionMetadata);
-      const syncApplyWithMetadata = (bridge as ComputeBridgeSyncApplyWithMetadata)
-        .syncApplyWithMetadata;
-      if (typeof syncApplyWithMetadata === 'function') {
-        return syncApplyWithMetadata.call(bridge, update, admittedContext);
-      }
-      await bridge.syncApply(update, admittedContext);
-      return undefined;
+      return applyAdmittedBridgeUpdate(bridge, options, update, admissionMetadata);
+    },
+    async applyProviderInboundUpdateEnvelopeV2(
+      envelope: ProviderInboundUpdateEnvelopeV2,
+      metadata?: ProviderInboundApplyUpdateMetadata,
+    ): Promise<ProviderDocApplyUpdateResult | void> {
+      const admissionMetadata =
+        metadata ?? (await classifyProviderInboundUpdateEnvelopeV2(docId, envelope));
+      assertProviderInboundV2Metadata(envelope, admissionMetadata);
+      return applyAdmittedBridgeUpdate(bridge, options, envelope.payload, admissionMetadata);
+    },
+    async applyLegacyProviderInboundUpdate(
+      envelope: ProviderInboundUpdateEnvelope,
+      metadata: ProviderInboundApplyUpdateMetadata,
+    ): Promise<ProviderDocApplyUpdateResult | void> {
+      assertLegacyProviderInboundMetadata(envelope, metadata);
+      return applyAdmittedBridgeUpdate(bridge, options, envelope.payload, metadata);
     },
     encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array> {
       return bridge.encodeDiff(remoteSv);
@@ -133,6 +163,117 @@ export function createBridgeBackedProviderDoc(
       return bridge.currentStateVector();
     },
   };
+}
+
+async function applyAdmittedBridgeUpdate(
+  bridge: ComputeBridge,
+  options: BridgeBackedProviderDocOptions,
+  update: Uint8Array,
+  admissionMetadata: ProviderDocApplyUpdateMetadata,
+): Promise<ProviderDocApplyUpdateResult | void> {
+  emitApplyUpdateAdmission(bridge, options, admissionMetadata);
+  const admittedContext = createAdmittedSyncApplyContext(admissionMetadata);
+  const syncApplyWithMetadata = (bridge as ComputeBridgeSyncApplyWithMetadata)
+    .syncApplyWithMetadata;
+  if (typeof syncApplyWithMetadata === 'function') {
+    return syncApplyWithMetadata.call(bridge, update, admittedContext);
+  }
+  await bridge.syncApply(update, admittedContext);
+  return undefined;
+}
+
+async function classifyProviderInboundUpdateEnvelopeV2(
+  docId: string,
+  envelope: ProviderInboundUpdateEnvelopeV2,
+): Promise<ProviderInboundApplyUpdateMetadata> {
+  const payloadHash = await sha256Hex(envelope.payload);
+  const validation = validateProviderInboundUpdateEnvelope(envelope, {
+    expectedPayloadHash: payloadHash,
+  });
+  if (!validation.ok) {
+    throw new Error(
+      formatSyncAdmissionError(
+        'BridgeBackedProviderDoc.applyProviderInboundUpdateEnvelopeV2',
+        validation.diagnostics,
+      ),
+    );
+  }
+  return {
+    source: 'provider-inbound',
+    docId,
+    envelopeVersion: 'provider-inbound-update-v2',
+    providerRefId: envelope.providerRefId,
+    providerEpoch: envelope.providerEpoch,
+    updateId: envelope.updateId,
+    payloadHash,
+    provenance: envelope.provenance,
+    validationDiagnostics: validation.diagnostics,
+  };
+}
+
+function assertProviderInboundV2Metadata(
+  envelope: ProviderInboundUpdateEnvelopeV2,
+  metadata: ProviderInboundApplyUpdateMetadata,
+): void {
+  const mismatches = providerInboundMetadataMismatches(envelope, metadata);
+  if (metadata.envelopeVersion !== 'provider-inbound-update-v2') {
+    mismatches.push('envelopeVersion');
+  }
+  if (metadata.provenance !== envelope.provenance) {
+    mismatches.push('provenance');
+  }
+  if (mismatches.length > 0) {
+    throw new Error(
+      `BridgeBackedProviderDoc.applyProviderInboundUpdateEnvelopeV2: metadata does not match V2 envelope (${mismatches.join(', ')})`,
+    );
+  }
+}
+
+function assertLegacyProviderInboundMetadata(
+  envelope: ProviderInboundUpdateEnvelope,
+  metadata: ProviderInboundApplyUpdateMetadata,
+): void {
+  const mismatches = providerInboundMetadataMismatches(envelope, metadata, {
+    comparePayloadHash: false,
+  });
+  if (metadata.envelopeVersion !== 'provider-inbound-update-v1') {
+    mismatches.push('envelopeVersion');
+  }
+  if (mismatches.length > 0) {
+    throw new Error(
+      `BridgeBackedProviderDoc.applyLegacyProviderInboundUpdate: metadata does not match legacy envelope (${mismatches.join(', ')})`,
+    );
+  }
+}
+
+function providerInboundMetadataMismatches(
+  envelope: ProviderInboundUpdateEnvelope,
+  metadata: ProviderInboundApplyUpdateMetadata,
+  options: { readonly comparePayloadHash: boolean } = { comparePayloadHash: true },
+): string[] {
+  const mismatches: string[] = [];
+  if (metadata.source !== 'provider-inbound') mismatches.push('source');
+  if (metadata.providerRefId !== envelope.providerRefId) mismatches.push('providerRefId');
+  if (metadata.providerEpoch !== envelope.providerEpoch) mismatches.push('providerEpoch');
+  if (metadata.updateId !== envelope.updateId) mismatches.push('updateId');
+  if (options.comparePayloadHash && metadata.payloadHash !== envelope.payloadHash) {
+    mismatches.push('payloadHash');
+  }
+  return mismatches;
+}
+
+function formatSyncAdmissionError(
+  methodName: string,
+  diagnostics: readonly Pick<SyncUpdateValidationDiagnostic, 'reason' | 'subreason'>[],
+): string {
+  const reasonList = diagnostics
+    .map((diagnostic) =>
+      diagnostic.subreason === undefined
+        ? diagnostic.reason
+        : `${diagnostic.reason}/${diagnostic.subreason}`,
+    )
+    .join(', ');
+  return `${methodName}: provenance validation failed${reasonList.length === 0 ? '' : `: ${reasonList}`}`;
 }
 
 async function classifyProviderReplayApplyUpdate(

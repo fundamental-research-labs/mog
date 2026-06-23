@@ -79,6 +79,88 @@ describe('SDK version-store config', () => {
       ),
     ).toThrow('cannot satisfy requireDurablePersistence=true');
   });
+
+  it('rejects ambiguous provider identity fields', () => {
+    expect(() =>
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'indexeddb', providerId: 'provider-1' } as never,
+        { runtime: 'wasm' },
+      ),
+    ).toThrow(MogSdkVersionStoreConfigError);
+
+    try {
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'indexeddb', providerId: 'provider-1' } as never,
+        { runtime: 'wasm' },
+      );
+    } catch (error) {
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          runtime: 'wasm',
+          requestedKind: 'indexeddb',
+          details: {
+            field: 'providerId',
+            category: 'provider-identity',
+          },
+        },
+      });
+    }
+  });
+
+  it('rejects provider selectors outside browser config', () => {
+    expect(() =>
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'memory', provider: 'indexeddb' } as never,
+        { runtime: 'node' },
+      ),
+    ).toThrow("versionStore.provider is only valid with kind='browser'");
+  });
+
+  it('rejects raw storage key material fields', () => {
+    expect(() =>
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'indexeddb', storageKeyPrefix: 'tenant-a' } as never,
+        { runtime: 'wasm' },
+      ),
+    ).toThrow(MogSdkVersionStoreConfigError);
+
+    try {
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'indexeddb', storageKeyPrefix: 'tenant-a' } as never,
+        { runtime: 'wasm' },
+      );
+    } catch (error) {
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field: 'storageKeyPrefix',
+            category: 'storage-key',
+          },
+        },
+      });
+    }
+  });
+
+  it('rejects unsafe storage key material in scope strings', () => {
+    expect(() =>
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'memory', workspaceId: 'workspace\u0000one' },
+        { runtime: 'node' },
+      ),
+    ).toThrow('ASCII control characters are not allowed');
+  });
+
+  it('rejects document scope inside version-store config', () => {
+    expect(() =>
+      createSdkVersionStoreLifecycleConfig(
+        { kind: 'indexeddb', documentId: 'document-1' } as never,
+        { runtime: 'wasm' },
+      ),
+    ).toThrow('pass documentId to createWorkbook options instead');
+  });
 });
 
 describe('SDK createWorkbook version-store validation', () => {

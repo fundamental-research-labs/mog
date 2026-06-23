@@ -93,6 +93,111 @@ export interface MogSdkVersionStoreDiagnostic {
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
+type DisallowedVersionStoreConfigField = {
+  readonly category: 'provider-identity' | 'storage-key' | 'scope';
+  readonly message: string;
+};
+
+const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
+  Record<string, DisallowedVersionStoreConfigField>
+> = Object.freeze({
+  providerId: {
+    category: 'provider-identity',
+    message:
+      'versionStore.providerId is ambiguous; SDK version-store config selects a provider kind, not a persisted provider identity.',
+  },
+  providerID: {
+    category: 'provider-identity',
+    message:
+      'versionStore.providerID is ambiguous; SDK version-store config selects a provider kind, not a persisted provider identity.',
+  },
+  providerIdentity: {
+    category: 'provider-identity',
+    message:
+      'versionStore.providerIdentity is ambiguous; provider identities are owned by the selected kernel provider.',
+  },
+  providerRefId: {
+    category: 'provider-identity',
+    message:
+      'versionStore.providerRefId is ambiguous; provider ref identities are graph metadata, not SDK provider selection.',
+  },
+  providerKey: {
+    category: 'provider-identity',
+    message:
+      'versionStore.providerKey is ambiguous; SDK version-store config selects a provider kind, not a persisted provider key.',
+  },
+  storageKey: {
+    category: 'storage-key',
+    message:
+      'versionStore.storageKey is unsafe storage key material; storage keys are derived from the validated document scope.',
+  },
+  storageKeyPrefix: {
+    category: 'storage-key',
+    message:
+      'versionStore.storageKeyPrefix is unsafe storage key material; storage keys are derived from the validated document scope.',
+  },
+  keyPrefix: {
+    category: 'storage-key',
+    message:
+      'versionStore.keyPrefix is unsafe storage key material; storage keys are derived from the validated document scope.',
+  },
+  documentScopeKey: {
+    category: 'storage-key',
+    message:
+      'versionStore.documentScopeKey is unsafe storage key material; document scope keys are kernel-owned derived values.',
+  },
+  namespaceKey: {
+    category: 'storage-key',
+    message:
+      'versionStore.namespaceKey is unsafe storage key material; namespace keys are kernel-owned derived values.',
+  },
+  namespace: {
+    category: 'storage-key',
+    message:
+      'versionStore.namespace is unsafe storage key material; graph namespaces are kernel-owned derived values.',
+  },
+  graphId: {
+    category: 'storage-key',
+    message:
+      'versionStore.graphId is unsafe storage key material; root graph IDs are selected by the kernel lifecycle.',
+  },
+  databaseName: {
+    category: 'storage-key',
+    message:
+      'versionStore.databaseName is unsafe storage key material; IndexedDB database naming is SDK-owned.',
+  },
+  dbName: {
+    category: 'storage-key',
+    message:
+      'versionStore.dbName is unsafe storage key material; IndexedDB database naming is SDK-owned.',
+  },
+  objectStoreName: {
+    category: 'storage-key',
+    message:
+      'versionStore.objectStoreName is unsafe storage key material; IndexedDB object store naming is SDK-owned.',
+  },
+  documentId: {
+    category: 'scope',
+    message:
+      'versionStore.documentId is inconsistent with SDK document scope; pass documentId to createWorkbook options instead.',
+  },
+  documentScope: {
+    category: 'scope',
+    message:
+      'versionStore.documentScope is inconsistent with SDK document scope; pass workspaceId/principalScope on versionStore and documentId to createWorkbook options.',
+  },
+  workspaceScope: {
+    category: 'scope',
+    message:
+      'versionStore.workspaceScope is inconsistent with SDK workspace scope; pass workspaceId directly on versionStore.',
+  },
+  scope: {
+    category: 'scope',
+    message:
+      'versionStore.scope is inconsistent with SDK document scope; pass workspaceId/principalScope on versionStore and documentId to createWorkbook options.',
+  },
+});
+
 export class MogSdkVersionStoreConfigError extends Error {
   readonly diagnostic: MogSdkVersionStoreDiagnostic;
   readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[];
@@ -136,6 +241,13 @@ export function createSdkVersionStoreLifecycleConfig(
       unsupportedVersionStoreDiagnostic(parsed.kind, parsed.config, options),
     );
   }
+  if (!isSupportedVersionStoreKind(parsed.kind)) {
+    throw new MogSdkVersionStoreConfigError(
+      unsupportedVersionStoreDiagnostic(parsed.kind, parsed.config, options),
+    );
+  }
+
+  validateSupportedVersionStoreConfig(parsed.kind, parsed.config, options);
 
   switch (parsed.kind) {
     case 'memory':
@@ -216,6 +328,35 @@ function parseVersionStoreConfig(
   return { kind: versionStore.kind, config: versionStore };
 }
 
+function validateSupportedVersionStoreConfig(
+  kind: MogSdkSupportedVersionStoreKind,
+  config: Readonly<Record<string, unknown>> | null,
+  options: { readonly runtime: MogSdkVersionStoreRuntime },
+): void {
+  if (config === null) return;
+
+  if (kind !== 'browser' && hasOwnField(config, 'provider')) {
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(
+        options,
+        kind,
+        "versionStore.provider is only valid with kind='browser'; use versionStore.kind to select a provider.",
+        { field: 'provider', category: 'provider-identity' },
+      ),
+    );
+  }
+
+  for (const [field, fieldConfig] of Object.entries(DISALLOWED_VERSION_STORE_CONFIG_FIELDS)) {
+    if (!hasOwnField(config, field)) continue;
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(options, kind, fieldConfig.message, {
+        field,
+        category: fieldConfig.category,
+      }),
+    );
+  }
+}
+
 function lifecycleConfig(
   kind: MogSdkVersionStoreLifecycleProviderSelection['kind'],
   config: Readonly<Record<string, unknown>> | null,
@@ -260,7 +401,28 @@ function optionalStringField(
       ),
     );
   }
-  return value;
+  const normalized = value.normalize('NFC');
+  if (normalized.trim().length === 0 || utf8ByteLength(normalized) > 256) {
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(
+        options,
+        kindFromConfig(config),
+        `versionStore.${field} must contain non-whitespace text and be at most 256 UTF-8 bytes when provided.`,
+        { field },
+      ),
+    );
+  }
+  if (/[\u0000-\u001f\u007f]/u.test(normalized)) {
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(
+        options,
+        kindFromConfig(config),
+        `versionStore.${field} contains unsafe storage key material; ASCII control characters are not allowed.`,
+        { field, category: 'storage-key' },
+      ),
+    );
+  }
+  return normalized;
 }
 
 function optionalBooleanField(
@@ -311,6 +473,7 @@ function invalidVersionStoreDiagnostic(
   options: { readonly runtime: MogSdkVersionStoreRuntime },
   kind: string | undefined,
   message: string,
+  details?: Readonly<Record<string, string | number | boolean | null>>,
 ): MogSdkVersionStoreDiagnostic {
   return {
     code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
@@ -320,6 +483,7 @@ function invalidVersionStoreDiagnostic(
     supportedKinds: MOG_SDK_SUPPORTED_VERSION_STORE_KINDS,
     safeMessage: message,
     message,
+    ...(details !== undefined ? { details } : {}),
   };
 }
 
@@ -331,6 +495,31 @@ function isUnsupportedVersionStoreKind(kind: string): kind is MogSdkUnsupportedV
   return (MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS as readonly string[]).includes(kind);
 }
 
+function isSupportedVersionStoreKind(kind: string): kind is MogSdkSupportedVersionStoreKind {
+  return (MOG_SDK_SUPPORTED_VERSION_STORE_KINDS as readonly string[]).includes(kind);
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function hasOwnField(config: Readonly<Record<string, unknown>>, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(config, field);
+}
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    if (codePoint <= 0x7f) {
+      bytes += 1;
+    } else if (codePoint <= 0x7ff) {
+      bytes += 2;
+    } else if (codePoint <= 0xffff) {
+      bytes += 3;
+    } else {
+      bytes += 4;
+    }
+  }
+  return bytes;
 }

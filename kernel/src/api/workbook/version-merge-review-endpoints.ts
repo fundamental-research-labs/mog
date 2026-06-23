@@ -17,11 +17,13 @@ import {
 } from '../../document/version-store/merge-attempt-artifacts';
 import {
   findExpectedConflict,
-  findResolutionOption,
+  findResolutionOptionForConflictSet,
+  normalizeMergeReviewConflicts,
   projectResolutionOptions,
   projectReviewValue,
   selectConflictDetailValue,
   validateResolutionPayloadPurpose,
+  validateResolutionsForConflictSet,
 } from './version-merge-review-conflicts';
 import {
   createMergeReviewPayloadRecord,
@@ -40,7 +42,6 @@ import {
   normalizeSaveMergeResolutionsInput,
   validateOptionalTarget,
   validateRequiredTarget,
-  validateResolutionsForPreview,
 } from './version-merge-review-normalization';
 import {
   getVersionMergeCapabilityDecision,
@@ -105,14 +106,18 @@ export async function saveMergeResolutionsWorkbookVersion(
       ),
     ]);
   }
-  const resolutionPreview = {
-    status: artifact.payload.status,
-    conflicts: artifact.payload.conflicts,
-  };
-
-  const resolutionValidation = validateResolutionsForPreview(
+  const conflictSet = await normalizeMergeReviewConflicts(
     'saveMergeResolutions',
-    resolutionPreview,
+    artifact.payload.conflicts,
+  );
+  if (!conflictSet.ok) {
+    return mergeEndpointFailure('saveMergeResolutions', conflictSet.diagnostics);
+  }
+
+  const resolutionValidation = validateResolutionsForConflictSet(
+    'saveMergeResolutions',
+    { status: artifact.payload.status },
+    conflictSet.conflictSet,
     normalized.input.resolutions,
   );
   if (!resolutionValidation.ok) {
@@ -133,8 +138,8 @@ export async function saveMergeResolutionsWorkbookVersion(
     ...(target
       ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead }
       : {}),
-    conflicts: artifact.payload.conflicts,
-    resolutions: normalized.input.resolutions,
+    conflicts: conflictSet.conflictSet.conflicts,
+    resolutions: resolutionValidation.resolutions,
   });
   if (sealedPayloadDiagnostics.length > 0) {
     return mergeEndpointFailure('saveMergeResolutions', sealedPayloadDiagnostics);
@@ -143,7 +148,7 @@ export async function saveMergeResolutionsWorkbookVersion(
   try {
     const resolutionSet = await createMergeResolutionSetArtifactRecord(
       opened.namespace,
-      normalized.input.resolutions,
+      resolutionValidation.resolutions,
     );
     const resultDigest = toInternalSha256Digest(normalized.input.resultDigest);
     if (!resultDigest) {
@@ -233,9 +238,17 @@ export async function getMergeConflictDetailWorkbookVersion(
   );
   if (!artifact.ok) return mergeEndpointFailure('getMergeConflictDetail', artifact.diagnostics);
 
-  const conflict = findExpectedConflict(
+  const conflictSet = await normalizeMergeReviewConflicts(
     'getMergeConflictDetail',
     artifact.payload.conflicts,
+  );
+  if (!conflictSet.ok) {
+    return mergeEndpointFailure('getMergeConflictDetail', conflictSet.diagnostics);
+  }
+
+  const conflict = findExpectedConflict(
+    'getMergeConflictDetail',
+    conflictSet.conflictSet,
     normalized.input.conflictId,
     normalized.input.expectedConflictDigest,
   );
@@ -243,6 +256,7 @@ export async function getMergeConflictDetailWorkbookVersion(
 
   const selected = selectConflictDetailValue(
     'getMergeConflictDetail',
+    conflictSet.conflictSet,
     conflict.conflict,
     normalized.input,
   );
@@ -311,6 +325,14 @@ export async function putMergeResolutionPayloadWorkbookVersion(
   );
   if (!artifact.ok) return mergeEndpointFailure('putMergeResolutionPayload', artifact.diagnostics);
 
+  const conflictSet = await normalizeMergeReviewConflicts(
+    'putMergeResolutionPayload',
+    artifact.payload.conflicts,
+  );
+  if (!conflictSet.ok) {
+    return mergeEndpointFailure('putMergeResolutionPayload', conflictSet.diagnostics);
+  }
+
   const targetDiagnostics = validateRequiredTarget(
     'putMergeResolutionPayload',
     artifact.payload.ours,
@@ -323,13 +345,14 @@ export async function putMergeResolutionPayloadWorkbookVersion(
 
   const conflict = findExpectedConflict(
     'putMergeResolutionPayload',
-    artifact.payload.conflicts,
+    conflictSet.conflictSet,
     normalized.input.conflictId,
     normalized.input.expectedConflictDigest,
   );
   if (!conflict.ok) return mergeEndpointFailure('putMergeResolutionPayload', conflict.diagnostics);
 
-  const option = findResolutionOption(
+  const option = findResolutionOptionForConflictSet(
+    conflictSet.conflictSet,
     conflict.conflict,
     normalized.input.optionId,
     normalized.input.kind,
@@ -370,9 +393,9 @@ export async function putMergeResolutionPayloadWorkbookVersion(
       resultId: normalized.input.resultId,
       resultDigest,
       redactionPolicyDigest: normalized.input.redactionPolicyDigest,
-      conflictId: normalized.input.conflictId,
-      expectedConflictDigest: normalized.input.expectedConflictDigest,
-      optionId: normalized.input.optionId,
+      conflictId: conflict.conflict.conflictId,
+      expectedConflictDigest: conflict.conflict.conflictDigest,
+      optionId: option.optionId,
       kind: normalized.input.kind,
       targetRef: normalized.input.targetRef,
       expectedTargetHead: cloneJson(normalized.input.expectedTargetHead) as unknown as JsonValue,
@@ -399,8 +422,8 @@ export async function putMergeResolutionPayloadWorkbookVersion(
         storageMode: 'serverEncrypted',
         resultId: normalized.input.resultId,
         resultDigest: normalized.input.resultDigest,
-        conflictId: normalized.input.conflictId,
-        optionId: normalized.input.optionId,
+        conflictId: conflict.conflict.conflictId,
+        optionId: option.optionId,
         resolutionKind: normalized.input.kind,
       },
     };

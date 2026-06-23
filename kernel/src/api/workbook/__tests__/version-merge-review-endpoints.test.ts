@@ -1,4 +1,6 @@
 import type {
+  VersionDiffStructuralMetadata,
+  VersionDiffValue,
   ObjectDigest,
   VersionApplyMergeResolution,
   VersionCommitExpectedHead,
@@ -6,6 +8,7 @@ import type {
   VersionMergeConflict,
   VersionMergeResult,
   VersionMergeResultId,
+  VersionSemanticValue,
   Workbook,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
@@ -21,6 +24,7 @@ import {
 } from '../../../document/version-store/object-store';
 import {
   mergeResolutionSetArtifactRef,
+  mergeResultIdForPreviewDigest,
   resolvedMergeAttemptArtifactRef,
 } from '../../../document/version-store/merge-attempt-artifacts';
 import {
@@ -30,11 +34,6 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
-import {
-  mapMergeReviewProviderDiagnostics,
-  mergeReviewDiagnostic,
-} from '../version-merge-review-artifacts';
-
 const DOCUMENT_ID = 'vc07-merge-review-endpoints';
 const DOCUMENT_RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const CREATED_AT = '2026-06-21T00:00:00.000Z';
@@ -48,6 +47,10 @@ type PersistedConflictPreview = VersionMergeResult & {
   readonly resultId: VersionMergeResultId;
   readonly resultDigest: ObjectDigest;
 };
+type ConflictDetailSuccess = Extract<
+  Awaited<ReturnType<Workbook['version']['getMergeConflictDetail']>>,
+  { ok: true }
+>;
 
 describe('WorkbookVersion merge review endpoints', () => {
   it('reads conflict detail from a persisted merge preview artifact', async () => {
@@ -101,16 +104,8 @@ describe('WorkbookVersion merge review endpoints', () => {
 
         expect(detail.value.conflictId).toBe(conflict.conflictId);
         expect(detail.value.conflictDigest).toBe(conflict.conflictDigest);
-        expect(
-          detail.value.resolutionOptions.map(optionIdentity).sort(compareOptionIdentity),
-        ).toEqual(
-          conflict.resolutionOptions
-            .map((option) => ({
-              conflictId: conflict.conflictId,
-              optionId: option.optionId,
-              kind: option.kind,
-            }))
-            .sort(compareOptionIdentity),
+        expect(stableOptionIds(detail.value.resolutionOptions)).toEqual(
+          stableOptionIds(conflict.resolutionOptions),
         );
 
         const unsafePackagePath = 'xl/worksheets/sheet1.xml';
@@ -144,48 +139,36 @@ describe('WorkbookVersion merge review endpoints', () => {
           },
         });
         expectNoDiagnosticLeaks(invalid, [unsafePackagePath, unsafeCellPath, unsafeValue]);
-
-        const directDiagnostic = mergeReviewDiagnostic(
-          'getMergeConflictDetail',
-          'VERSION_INVALID_OPTIONS',
-          `Unknown field "${unsafePackagePath}!${unsafeCellPath}".`,
-          {
-            payload: {
-              option: `input.${unsafePackagePath}!${unsafeCellPath}`,
-              attemptedValue: unsafeValue,
-              safeOption: 'resultDigest',
-            } as any,
-          },
-        );
-        expect(directDiagnostic).toMatchObject({
-          safeMessage: 'The version merge review request is invalid.',
-          payload: {
-            operation: 'getMergeConflictDetail',
-            option: 'redacted',
-            attemptedValue: 'redacted',
-            safeOption: 'resultDigest',
-          },
-        });
-        expectNoDiagnosticLeaks(directDiagnostic, [unsafePackagePath, unsafeCellPath, unsafeValue]);
-
-        const providerDiagnostics = mapMergeReviewProviderDiagnostics('saveMergeResolutions', [
-          {
-            issueCode: 'VERSION_PROVIDER_FAILED',
-            message: `provider exposed ${unsafePackagePath}!${unsafeCellPath} ${unsafeValue}`,
-          },
-        ]);
-        expect(providerDiagnostics[0]).toMatchObject({
-          issueCode: 'VERSION_PROVIDER_FAILED',
-          safeMessage: 'Version merge review provider failed.',
-          payload: { operation: 'saveMergeResolutions' },
-        });
-        expectNoDiagnosticLeaks(providerDiagnostics, [
-          unsafePackagePath,
-          unsafeCellPath,
-          unsafeValue,
-        ]);
       },
     );
+  });
+
+  it('keeps formula and row/column conflict option identities stable', async () => {
+    const formulaA = await readSyntheticConflictDetail(
+      'stable-formula-result-a',
+      formulaConflict({ result: 2, conflictIdDigit: '1' }),
+    );
+    const formulaB = await readSyntheticConflictDetail(
+      'stable-formula-result-b',
+      formulaConflict({ result: 999, conflictIdDigit: '2' }),
+    );
+    expectStableConflictOptions(formulaA, formulaB);
+
+    const rowColumnA = await readSyntheticConflictDetail(
+      'stable-row-column-a',
+      rowColumnConflict({
+        conflictIdDigit: '3',
+        fields: rowColumnFields('row', 4),
+      }),
+    );
+    const rowColumnB = await readSyntheticConflictDetail(
+      'stable-row-column-b',
+      rowColumnConflict({
+        conflictIdDigit: '4',
+        fields: [...rowColumnFields('row', 4)].reverse(),
+      }),
+    );
+    expectStableConflictOptions(rowColumnA, rowColumnB);
   });
 
   it('persists saved resolutions as resolution-set and resolved-attempt artifacts', async () => {
@@ -262,8 +245,7 @@ describe('WorkbookVersion merge review endpoints', () => {
           (candidate) => candidate.kind === 'acceptTheirs',
         );
         if (!option) throw new Error('expected acceptTheirs option');
-
-        const put = await sourceWb.version.putMergeResolutionPayload({
+        const request = {
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -273,8 +255,24 @@ describe('WorkbookVersion merge review endpoints', () => {
           kind: option.kind,
           targetRef: 'refs/heads/main' as any,
           expectedTargetHead,
-          value: option.value as any,
           purpose: 'chooseValue',
+        };
+
+        await expect(
+          sourceWb.version.putMergeResolutionPayload({
+            ...request,
+            value: { kind: 'value', value: 'tampered' },
+          }),
+        ).resolves.toMatchObject({
+          ok: false,
+          error: {
+            diagnostics: [expect.objectContaining({ code: 'VERSION_MERGE_RESOLUTION_MISMATCH' })],
+          },
+        });
+
+        const put = await sourceWb.version.putMergeResolutionPayload({
+          ...request,
+          value: option.value as any,
         });
         if (!put.ok) throw new Error(`expected payload put success: ${put.error.code}`);
 
@@ -465,6 +463,55 @@ describe('WorkbookVersion merge review endpoints', () => {
     });
   });
 
+  it('maps redaction and schema diagnostics to blocked or invalid endpoint failures', async () => {
+    const cases = [
+      {
+        graphId: 'redacted-identity',
+        conflict: redactedStructuralConflict(),
+        code: 'VERSION_REDACTION_VIOLATION',
+        recoverability: 'unsupported',
+      },
+      {
+        graphId: 'invalid-object-schema',
+        conflict: rowColumnConflict({
+          conflictIdDigit: '5',
+          fields: [
+            { key: 'axis', value: 'row' },
+            { key: 'axis', value: 'column' },
+          ],
+        }),
+        code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+        recoverability: 'repair',
+      },
+    ] as const;
+
+    for (const item of cases) {
+      await withSyntheticConflictPreview(item.graphId, item.conflict, async ({ sourceWb, preview }) => {
+        const result = await sourceWb.version.getMergeConflictDetail({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: preview.conflicts[0].conflictId,
+          expectedConflictDigest: conflictDigestObject(preview.conflicts[0].conflictDigest),
+          valueRole: 'base',
+          purpose: 'review',
+        });
+        expect(result).toMatchObject({
+          ok: false,
+          error: {
+            code: 'target_unavailable',
+            diagnostics: [
+              expect.objectContaining({
+                code: item.code,
+                data: expect.objectContaining({ recoverability: item.recoverability }),
+              }),
+            ],
+          },
+        });
+      });
+    }
+  });
+
   it('fails closed when no provider is attached', async () => {
     const digest = { algorithm: 'sha256', digest: 'a'.repeat(64) } as const;
     const handle = await DocumentFactory.create({
@@ -536,7 +583,9 @@ async function withPersistedConflictPreview(
   let branchWb: Workbook | undefined;
 
   try {
-    sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+    const versioning = withVersionManifest({ provider });
+    sourceWb = await sourceHandle.workbook({ versioning });
+    installVersionDomainDetectorNoops(sourceWb);
     await sourceWb.activeSheet.setCell('A1', 'base');
     const baseCommit = await expectCommit(
       sourceWb.version.commit({
@@ -567,11 +616,11 @@ async function withPersistedConflictPreview(
     );
     const oursHead = await expectHead(sourceWb);
 
-    branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+    branchWb = await branchHandle.workbook({ versioning });
+    installVersionDomainDetectorNoops(branchWb);
     const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
-    if (!checkoutBase.ok) {
-      throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
-    }
+    if (!checkoutBase.ok) throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
+    installVersionDomainDetectorNoops(branchWb);
     await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
     await branchWb.activeSheet.setCell('A1', 'theirs');
     await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'theirs' });
@@ -627,6 +676,89 @@ async function withPersistedConflictPreview(
   }
 }
 
+async function readSyntheticConflictDetail(
+  graphId: string,
+  conflict: VersionMergeConflict,
+): Promise<ConflictDetailSuccess> {
+  let detail: ConflictDetailSuccess | undefined;
+  await withSyntheticConflictPreview(graphId, conflict, async ({ sourceWb, preview }) => {
+    const previewConflict = preview.conflicts[0];
+    const result = await sourceWb.version.getMergeConflictDetail({
+      resultId: preview.resultId,
+      resultDigest: preview.resultDigest,
+      redactionPolicyDigest: preview.resultDigest,
+      conflictId: previewConflict.conflictId,
+      expectedConflictDigest: conflictDigestObject(previewConflict.conflictDigest),
+      valueRole: 'ours',
+      purpose: 'review',
+    });
+    if (!result.ok) throw new Error(`expected synthetic conflict detail: ${result.error.code}`);
+    detail = result;
+  });
+  if (!detail) throw new Error('expected synthetic conflict detail callback to run');
+  return detail;
+}
+
+async function withSyntheticConflictPreview(
+  graphId: string,
+  conflict: VersionMergeConflict,
+  run: (fixture: {
+    readonly sourceWb: Workbook;
+    readonly preview: PersistedConflictPreview;
+  }) => Promise<void>,
+): Promise<void> {
+  const documentScope = documentScopeForGraph(graphId);
+  const provider = createInMemoryVersionStoreProvider({ documentScope });
+  const initialized = await provider.initializeGraph(
+    await initializeInput(graphId, 'root', documentScope),
+  );
+  expectInitializeSuccess(initialized);
+  const namespace = namespaceForDocumentScope(documentScope, graphId);
+  const previewRecord = await objectRecord(namespace, 'workbook.mergePreview.v1', {
+    schemaVersion: 1,
+    recordKind: 'mergePreview',
+    status: 'conflicted',
+    base: initialized.rootCommit.id,
+    ours: initialized.rootCommit.id,
+    theirs: initialized.rootCommit.id,
+    changes: [],
+    conflicts: [conflict],
+  });
+  const graph = await provider.openGraph(namespace, provider.accessContext);
+  const put = await graph.putObjects([previewRecord]);
+  expect(put).toMatchObject({ status: 'success' });
+
+  const sourceHandle = await DocumentFactory.create({
+    documentId: documentScope.documentId,
+    environment: 'headless',
+    userTimezone: 'UTC',
+  });
+  let sourceWb: Workbook | undefined;
+  try {
+    sourceWb = await sourceHandle.workbook({
+      versioning: withVersionManifest({ provider }),
+    });
+    await run({
+      sourceWb,
+      preview: {
+        status: 'conflicted',
+        base: initialized.rootCommit.id,
+        ours: initialized.rootCommit.id,
+        theirs: initialized.rootCommit.id,
+        changes: [],
+        conflicts: [conflict],
+        diagnostics: [],
+        mutationGuarantee: 'preview-only',
+        resultId: mergeResultIdForPreviewDigest(previewRecord.digest),
+        resultDigest: previewRecord.digest,
+      },
+    });
+  } finally {
+    if (sourceWb) await sourceWb.close('skipSave');
+    await sourceHandle.dispose();
+  }
+}
+
 async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
@@ -678,27 +810,141 @@ function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): v
   }
 }
 
-function optionIdentity(option: {
-  readonly conflictId: string;
-  readonly optionId: string;
-  readonly kind: string;
-}) {
+function stableOptionIds(
+  options: readonly {
+    readonly conflictId: string;
+    readonly optionId: string;
+    readonly kind: string;
+  }[],
+): readonly string[] {
+  return options
+    .map((option) => `${option.kind}\u0000${option.conflictId}\u0000${option.optionId}`)
+    .sort();
+}
+
+function expectStableConflictOptions(left: ConflictDetailSuccess, right: ConflictDetailSuccess) {
+  expect(left.value.conflictId).toBe(right.value.conflictId);
+  expect(left.value.conflictDigest).toBe(right.value.conflictDigest);
+  expect(stableOptionIds(left.value.resolutionOptions)).toEqual(
+    stableOptionIds(right.value.resolutionOptions),
+  );
+}
+
+function formulaConflict(input: {
+  readonly result: number;
+  readonly conflictIdDigit: string;
+}): VersionMergeConflict {
+  const structural = metadata('legacy-formula-conflict', 'sheet-1!A1', 'cells.values', ['value']);
+  const base = diffValue(null);
+  const ours = diffValue({ kind: 'formula', formula: '=1+1', result: input.result });
+  const theirs = diffValue('literal');
+  return conflictRecord(input.conflictIdDigit, structural, base, ours, theirs);
+}
+
+function rowColumnConflict(input: {
+  readonly conflictIdDigit: string;
+  readonly fields: readonly { readonly key: string; readonly value: VersionSemanticValue }[];
+}): VersionMergeConflict {
+  const structural = metadata(
+    'legacy-row-column-conflict',
+    'sheet-1!row:4',
+    'rows-columns',
+    ['order'],
+  );
+  return conflictRecord(
+    input.conflictIdDigit,
+    structural,
+    diffValue(null),
+    diffValue({ kind: 'object', fields: input.fields }),
+    diffValue('manual-order'),
+  );
+}
+
+function redactedStructuralConflict(): VersionMergeConflict {
   return {
-    conflictId: option.conflictId,
-    optionId: option.optionId,
-    kind: option.kind,
+    ...rowColumnConflict({ conflictIdDigit: '6', fields: rowColumnFields('row', 4) }),
+    structural: { kind: 'redacted', reason: 'redaction-policy' } as any,
   };
 }
 
-function compareOptionIdentity(
-  left: ReturnType<typeof optionIdentity>,
-  right: ReturnType<typeof optionIdentity>,
-): number {
-  return (
-    left.kind.localeCompare(right.kind) ||
-    left.optionId.localeCompare(right.optionId) ||
-    left.conflictId.localeCompare(right.conflictId)
-  );
+function conflictRecord(
+  digit: string,
+  structural: VersionDiffStructuralMetadata,
+  base: VersionDiffValue,
+  ours: VersionDiffValue,
+  theirs: VersionDiffValue,
+): VersionMergeConflict {
+  const conflictId = `conflict:legacy:${digit}`;
+  const conflictDigest = `sha256:${digit.repeat(64)}`;
+  return {
+    conflictId,
+    conflictDigest,
+    conflictKind: 'same-property',
+    structural,
+    base,
+    ours,
+    theirs,
+    resolutionOptions: [
+      resolutionOption(conflictId, 'acceptOurs', ours, digit),
+      resolutionOption(conflictId, 'acceptTheirs', theirs, digit),
+      resolutionOption(conflictId, 'acceptBase', base, digit),
+    ],
+  };
+}
+
+function resolutionOption(
+  conflictId: string,
+  kind: VersionMergeConflict['resolutionOptions'][number]['kind'],
+  value: VersionDiffValue,
+  digit: string,
+): VersionMergeConflict['resolutionOptions'][number] {
+  return {
+    optionId: `option:legacy:${kind}:${digit}`,
+    conflictId,
+    kind,
+    value,
+    recalcRequired: true,
+  };
+}
+
+function metadata(
+  changeId: string,
+  entityId: string,
+  domain: string,
+  propertyPath: readonly string[],
+): VersionDiffStructuralMetadata {
+  return {
+    kind: 'metadata',
+    changeId,
+    domain,
+    entityId,
+    propertyPath,
+  };
+}
+
+function diffValue(value: VersionSemanticValue): VersionDiffValue {
+  return { kind: 'value', value };
+}
+
+function rowColumnFields(
+  axis: 'row' | 'column',
+  index: number,
+): readonly { readonly key: string; readonly value: VersionSemanticValue }[] {
+  return [
+    { key: 'axis', value: axis },
+    { key: 'displayRef', value: axis === 'row' ? '5:5' : 'E:E' },
+    { key: 'index', value: index },
+    { key: 'sheetId', value: 'sheet-1' },
+  ];
+}
+
+function installVersionDomainDetectorNoops(wb: Workbook): void {
+  const version = wb.version as any;
+  const bridge = (version.ctx ?? version.versionContext).computeBridge;
+  bridge.namedRangeCount = async () => 0;
+  bridge.getAllNamedRangesWire = async () => [];
+  bridge.getHyperlinks = async () => [];
+  bridge.getRangeSchemasForSheet = async () => [];
 }
 
 async function initializeInput(

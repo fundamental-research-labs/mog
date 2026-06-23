@@ -1,8 +1,11 @@
+import { jest } from '@jest/globals';
 import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import type { DocumentHandleInternal } from '../../document/document-handle-types';
 import { withVersionManifest } from './version-domain-support-test-utils';
+import type { DocumentContext } from '../../../context';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -37,6 +40,36 @@ const VERSION_AUTHOR: VersionAuthor = {
   actorKind: 'user',
   displayName: 'User One',
 };
+
+let documentCreateSpy: { mockRestore(): void } | undefined;
+let injectStaleMaterializationVersioning = false;
+let internalMaterializationCreateCount = 0;
+
+beforeEach(() => {
+  injectStaleMaterializationVersioning = false;
+  internalMaterializationCreateCount = 0;
+  const createDocument = DocumentFactory.create.bind(DocumentFactory);
+  const spy = jest.spyOn(DocumentFactory, 'create');
+  spy.mockImplementation(async (options?: any) => {
+    const handle = await createDocument(options);
+    installVersionDomainDetectorNoops(handle);
+    if (options?.internal === true) {
+      internalMaterializationCreateCount += 1;
+      if (injectStaleMaterializationVersioning) {
+        attachStaleMaterializationVersioning(handle);
+      }
+    }
+    return handle;
+  });
+  documentCreateSpy = spy;
+});
+
+afterEach(() => {
+  documentCreateSpy?.mockRestore();
+  documentCreateSpy = undefined;
+  injectStaleMaterializationVersioning = false;
+  internalMaterializationCreateCount = 0;
+});
 
 describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
   it('surfaces pending provider writes and blocks provider-backed checkout admission', async () => {
@@ -275,6 +308,150 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
       await sourceHandle.dispose();
     }
   });
+
+  it('fails closed when provider identity changes after checkout services are attached', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setCell('A1', 'target-provider-identity');
+      const committedResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!committedResult.ok) {
+        throw new Error(`expected commit success: ${committedResult.error.code}`);
+      }
+      const committed = committedResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await checkoutWb.activeSheet.setCell('A1', 'active-before-provider-identity-fence');
+      checkoutWb.markClean();
+
+      const runtimeVersioning = versioningRuntimeForHandle(checkoutHandle);
+      runtimeVersioning.provider = createInMemoryVersionStoreProvider({
+        documentScope: {
+          ...DOCUMENT_SCOPE,
+          documentId: 'checkout-provider-lifecycle-other-doc',
+        },
+      });
+
+      await expect(
+        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  commitId: committed.id,
+                  cause: 'VersionCheckoutRebindProviderIdentityError',
+                  mutationGuarantee: 'unknown-after-partial-mutation',
+                  rollbackSafe: false,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-provider-identity-fence',
+      });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
+  it('fails closed when a fresh checkout reload already carries stale versioning identity', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setCell('A1', 'target-materialization-identity');
+      const committedResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!committedResult.ok) {
+        throw new Error(`expected commit success: ${committedResult.error.code}`);
+      }
+      const committed = committedResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await checkoutWb.activeSheet.setCell('A1', 'active-before-materialization-identity-fence');
+      checkoutWb.markClean();
+      injectStaleMaterializationVersioning = true;
+
+      await expect(
+        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  commitId: committed.id,
+                  cause: 'VersionCheckoutRebindMaterializationIdentityError',
+                  mutationGuarantee: 'unknown-after-partial-mutation',
+                  rollbackSafe: false,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(internalMaterializationCreateCount).toBeGreaterThan(0);
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-materialization-identity-fence',
+      });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
 });
 
 function expectInitializeSuccess(
@@ -309,14 +486,10 @@ async function initializeInput(
         label,
         sheets: [],
       }),
-      semanticChangeSetRecord: await objectRecord(
-        namespace,
-        'workbook.semanticChangeSet.v1',
-        {
-          label,
-          changes: [],
-        },
-      ),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [],
+      }),
       author: VERSION_AUTHOR,
       createdAt: CREATED_AT,
       completenessDiagnostics: [],
@@ -352,11 +525,10 @@ async function pendingSegmentFixture(
     snapshotId: 'checkout-provider-lifecycle-pending-snapshot',
     sheets: [],
   });
-  const semanticChangeSetRecord = await objectRecord(
-    namespace,
-    'workbook.semanticChangeSet.v1',
-    { schemaVersion: 1, changes: [{ id: 'checkout-provider-lifecycle-pending-change' }] },
-  );
+  const semanticChangeSetRecord = await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+    schemaVersion: 1,
+    changes: [{ id: 'checkout-provider-lifecycle-pending-change' }],
+  });
   const mutationSegmentRecord = await objectRecord(namespace, 'workbook.mutationSegment.v1', {
     segmentId: 'checkout-provider-lifecycle-pending-segment',
     domainId: 'runtime-diagnostics',
@@ -454,5 +626,50 @@ function providerWithFailingRegistryRead<T extends VersionStoreProvider>(
   return {
     provider: wrapped,
     openGraphCalls: () => openGraphCalls,
+  };
+}
+
+function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFactory.create>>) {
+  const context = (handle as DocumentHandleInternal).context as DocumentContext & {
+    versioning?: unknown;
+  };
+  if (!isMutableRecord(context.versioning)) {
+    throw new Error('expected attached versioning runtime');
+  }
+  return context.versioning;
+}
+
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function installVersionDomainDetectorNoops(
+  handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
+): void {
+  const bridge = ((handle as DocumentHandleInternal).context as DocumentContext)
+    .computeBridge as unknown;
+  if (!isMutableRecord(bridge)) return;
+  bridge.namedRangeCount = jest.fn(async () => 0);
+  bridge.getAllNamedRangesWire = jest.fn(async () => []);
+  bridge.getHyperlinks = jest.fn(async () => []);
+  bridge.getRangeSchemasForSheet = jest.fn(async () => []);
+}
+
+function attachStaleMaterializationVersioning(
+  handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
+): void {
+  const context = (handle as DocumentHandleInternal).context as DocumentContext & {
+    versioning?: unknown;
+  };
+  context.versioning = {
+    provider: createInMemoryVersionStoreProvider({
+      documentScope: {
+        ...DOCUMENT_SCOPE,
+        documentId: 'checkout-provider-lifecycle-stale-materialized-doc',
+      },
+    }),
+    checkoutService: {
+      checkout: jest.fn(),
+    },
   };
 }

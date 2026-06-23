@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use compute_document::hex::{id_to_hex, parse_cell_id};
-use compute_document::schema::{KEY_CONDITIONAL_FORMAT, KEY_VALIDATION_RULES};
+use compute_document::schema::{KEY_CONDITIONAL_FORMAT, KEY_PROPERTIES, KEY_VALIDATION_RULES};
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
@@ -37,6 +37,15 @@ use super::{
 const DATA_VALIDATION_DOMAIN: &str = "data-validation";
 const CONDITIONAL_FORMATTING_DOMAIN: &str = "conditional-formatting";
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
+const DATA_VALIDATION_METADATA_KEYS: &[&str] = &[
+    "dataValidations",
+    "dvDeclaredCount",
+    "dvDisablePrompts",
+    "dvXWindow",
+    "dvYWindow",
+    "x14DataValidations",
+    "x14DvDeclaredCount",
+];
 
 impl SemanticWorkbookStateReader for YrsComputeEngine {
     fn read_semantic_workbook_state(
@@ -316,7 +325,8 @@ fn record_data_validation_presence(
     sheet_key: &str,
     objects: &mut BTreeMap<String, SemanticObjectDigest>,
 ) -> Result<(), SemanticStateReadError> {
-    let raw_entry_count = raw_sheet_submap_entry_count(engine, sheet_id, KEY_VALIDATION_RULES);
+    let raw_entry_count = raw_sheet_submap_entry_count(engine, sheet_id, KEY_VALIDATION_RULES)
+        + data_validation_metadata_entry_count(engine, sheet_id);
     if raw_entry_count == 0 {
         return Ok(());
     }
@@ -326,7 +336,7 @@ fn record_data_validation_presence(
         objects,
         DATA_VALIDATION_DOMAIN,
         sheet_key,
-        "yrs-validation-rules-presence",
+        "yrs-data-validation-presence",
         raw_entry_count,
         range_schemas.len(),
         &range_schemas,
@@ -369,6 +379,23 @@ fn raw_sheet_submap_entry_count(
         .unwrap_or(0)
 }
 
+fn data_validation_metadata_entry_count(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+) -> usize {
+    let sheets = engine.storage().sheets_ref();
+    let txn = engine.storage().doc().transact();
+    let sheet_hex = sheet_id_to_hex(sheet_id);
+    let Some(meta_map) = get_sheet_submap(&txn, &sheets, &sheet_hex, KEY_PROPERTIES) else {
+        return 0;
+    };
+
+    DATA_VALIDATION_METADATA_KEYS
+        .iter()
+        .filter(|key| meta_map.get(&txn, key).is_some())
+        .count()
+}
+
 fn record_presence_detector_row<T: Serialize>(
     objects: &mut BTreeMap<String, SemanticObjectDigest>,
     domain_id: &str,
@@ -380,7 +407,10 @@ fn record_presence_detector_row<T: Serialize>(
 ) -> Result<(), SemanticStateReadError> {
     let object_id = format!("domain-presence:{domain_id}:{sheet_key}");
     let mut payload = serde_json::Map::new();
-    payload.insert("detectorId".to_string(), Value::String(detector_id.to_string()));
+    payload.insert(
+        "detectorId".to_string(),
+        Value::String(detector_id.to_string()),
+    );
     payload.insert("domainId".to_string(), Value::String(domain_id.to_string()));
     payload.insert("sheetId".to_string(), Value::String(sheet_key.to_string()));
     payload.insert("present".to_string(), Value::Bool(true));

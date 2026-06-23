@@ -4,14 +4,18 @@ import type {
   VersionApplyMergeResult,
   VersionCommitExpectedHead,
   VersionMainRefName,
+  VersionMergeResult,
   VersionMergeResultId,
+  VersionRefName,
   VersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
+import { applyMergeWorkbookVersion } from '../version-apply-merge';
 import { applyPersistedMergeResult } from '../version-apply-merge-persisted';
 import { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
 import { recoverStagedMergeCommitIfAlreadyApplied } from '../version-apply-merge-persisted-artifact-recovery';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
 import {
   computeMergeApplyRefCasProof,
@@ -41,6 +45,130 @@ const EXPECTED_TARGET_HEAD: VersionCommitExpectedHead = {
   commitId: OURS,
   revision: { kind: 'counter', value: '1' },
 };
+
+describe('applyMergeWorkbookVersion target-ref CAS proof validation', () => {
+  it('fails closed before fast-forward writes when the concrete target head is stale', async () => {
+    const fastForwardMerge = jest.fn();
+    const ctx = await publicApplyContext({
+      targetCommitId: THEIRS,
+      targetRevision: { kind: 'counter', value: '2' },
+      fastForwardMerge,
+    });
+
+    const result = await applyMergeWorkbookVersion(
+      ctx,
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { targetRef: TARGET_REF, expectedTargetHead: EXPECTED_TARGET_HEAD },
+    );
+
+    expect(result).toMatchObject({
+      status: 'staleTargetHead',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      mutationGuarantee: 'ref-not-mutated',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          recoverability: 'retry',
+          payload: expect.objectContaining({
+            operation: 'applyMerge',
+            reason: 'staleTargetHead',
+            targetRef: TARGET_REF,
+            expectedHead: OURS,
+            actualHead: THEIRS,
+          }),
+        }),
+      ],
+    });
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before writes when targetRef mismatches the current symbolic HEAD target', async () => {
+    const fastForwardMerge = jest.fn();
+    const expectedTargetHead: VersionCommitExpectedHead = {
+      ...EXPECTED_TARGET_HEAD,
+      symbolicHeadRevision: { kind: 'counter', value: 'head-1' },
+    };
+    const ctx = await publicApplyContext({
+      symbolicTarget: 'refs/heads/scenario/current' as VersionRefName,
+      symbolicRevision: expectedTargetHead.symbolicHeadRevision,
+      fastForwardMerge,
+    });
+
+    const result = await applyMergeWorkbookVersion(
+      ctx,
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { targetRef: TARGET_REF, expectedTargetHead },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          recoverability: 'retry',
+          payload: expect.objectContaining({
+            operation: 'applyMerge',
+            reason: 'symbolicTargetMismatch',
+            expectedTargetRef: TARGET_REF,
+            actualTargetRef: 'refs/heads/scenario/current',
+          }),
+        }),
+      ],
+    });
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before writes when symbolicHeadRevision is stale', async () => {
+    const mergeCommit = jest.fn();
+    const merge = jest.fn(async (): Promise<VersionMergeResult> => cleanMergePreview());
+    const ctx = await publicApplyContext({
+      symbolicRevision: { kind: 'counter', value: 'head-2' },
+      merge,
+      mergeCommit,
+    });
+
+    const result = await applyMergeWorkbookVersion(
+      ctx,
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      {
+        targetRef: TARGET_REF,
+        expectedTargetHead: {
+          ...EXPECTED_TARGET_HEAD,
+          symbolicHeadRevision: { kind: 'counter', value: 'head-1' },
+        },
+      },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          recoverability: 'retry',
+          payload: expect.objectContaining({
+            operation: 'applyMerge',
+            reason: 'staleSymbolicHead',
+            targetRef: TARGET_REF,
+            expectedRevision: 'head-1',
+            actualRevision: 'head-2',
+          }),
+        }),
+      ],
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+});
 
 describe('applyPersistedMergeResult ref CAS proof recovery', () => {
   it('does not finalize an already-moved fast-forward intent without a durable proof row', async () => {
@@ -263,11 +391,13 @@ describe('recoverPersistedMergeApplyPostCas', () => {
   it('finalizes an already-moved fast-forward intent under the merge kill switch without write services', async () => {
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'internal-fast-forward-recovery');
     const record = fastForwardIntentRecord(namespace);
-    const completeIntent = jest.fn(async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
-      status: 'completed' as const,
-      record: { ...record, state: 'finalized' as const, terminal: input.terminal },
-      diagnostics: [],
-    }));
+    const completeIntent = jest.fn(
+      async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
+        status: 'completed' as const,
+        record: { ...record, state: 'finalized' as const, terminal: input.terminal },
+        diagnostics: [],
+      }),
+    );
     const fastForwardMerge = jest.fn();
     const mergeCommit = jest.fn();
 
@@ -328,11 +458,13 @@ describe('recoverPersistedMergeApplyPostCas', () => {
   it('finalizes an already-moved mergeCommit intent under the merge kill switch without write services', async () => {
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'internal-merge-commit-recovery');
     const record = mergeCommitIntentRecord(namespace);
-    const completeIntent = jest.fn(async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
-      status: 'completed' as const,
-      record: { ...record, state: 'finalized' as const, terminal: input.terminal },
-      diagnostics: [],
-    }));
+    const completeIntent = jest.fn(
+      async (input: Parameters<MergeApplyIntentStore['completeIntent']>[0]) => ({
+        status: 'completed' as const,
+        record: { ...record, state: 'finalized' as const, terminal: input.terminal },
+        diagnostics: [],
+      }),
+    );
     const mergeCommit = jest.fn();
 
     const result = await recoverPersistedMergeApplyPostCas(
@@ -365,6 +497,112 @@ describe('recoverPersistedMergeApplyPostCas', () => {
     expect(mergeCommit).not.toHaveBeenCalled();
   });
 });
+
+async function publicApplyContext(input: {
+  readonly targetCommitId?: WorkbookCommitId;
+  readonly targetRevision?: VersionCommitExpectedHead['revision'];
+  readonly symbolicTarget?: VersionMainRefName | VersionRefName;
+  readonly symbolicRevision?: VersionCommitExpectedHead['revision'];
+  readonly fastForwardMerge?: jest.Mock;
+  readonly mergeCommit?: jest.Mock;
+  readonly merge?: jest.Mock;
+}): Promise<Parameters<typeof applyMergeWorkbookVersion>[0]> {
+  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'public-apply-target-ref-cas');
+  const registry = await createVersionGraphRegistry({
+    documentScope: DOCUMENT_SCOPE,
+    graphId: namespace.graphId,
+    rootCommitId: BASE,
+    createdAt: CREATED_AT,
+  });
+  const targetCommitId = input.targetCommitId ?? EXPECTED_TARGET_HEAD.commitId;
+  const targetRevision = input.targetRevision ?? EXPECTED_TARGET_HEAD.revision;
+  const symbolicTarget = input.symbolicTarget ?? TARGET_REF;
+  const symbolicRevision =
+    input.symbolicRevision ?? EXPECTED_TARGET_HEAD.symbolicHeadRevision ?? targetRevision;
+  const readRef = jest.fn(async (name: string) => {
+    if (name === 'HEAD') {
+      return {
+        status: 'success' as const,
+        ref: {
+          name: 'HEAD' as const,
+          target: symbolicTarget,
+          revision: symbolicRevision,
+        },
+        diagnostics: [],
+      };
+    }
+    if (name === TARGET_REF) {
+      return {
+        status: 'success' as const,
+        ref: {
+          name: TARGET_REF,
+          commitId: targetCommitId,
+          revision: targetRevision,
+          updatedAt: CREATED_AT,
+        },
+        diagnostics: [],
+      };
+    }
+    return {
+      status: 'degraded' as const,
+      ref: null,
+      diagnostics: [
+        {
+          code: 'VERSION_DANGLING_REF',
+          message: 'test ref not found',
+          recoverability: 'retry',
+        },
+      ],
+    };
+  });
+  const provider = {
+    accessContext: {},
+    readGraphRegistry: jest.fn(async () => ({
+      status: 'ok' as const,
+      registry,
+      diagnostics: [],
+    })),
+    openGraph: jest.fn(async () => ({ namespace, readRef })),
+  };
+  return {
+    versioning: {
+      ...versionDomainSupportManifestRuntime(),
+      provider,
+      ...(input.merge ? { mergeService: { merge: input.merge } } : {}),
+      writeService: {
+        ...(input.fastForwardMerge ? { fastForwardMerge: input.fastForwardMerge } : {}),
+        ...(input.mergeCommit ? { mergeCommit: input.mergeCommit } : {}),
+      },
+    },
+  } as Parameters<typeof applyMergeWorkbookVersion>[0];
+}
+
+function cleanMergePreview(): VersionMergeResult {
+  return {
+    status: 'clean',
+    base: BASE,
+    ours: OURS,
+    theirs: THEIRS,
+    changes: [
+      {
+        structural: {
+          kind: 'metadata',
+          changeId: 'change:target-ref-cas',
+          domain: 'cells.values',
+          entityId: 'sheet-1!A1',
+          propertyPath: ['value'],
+        },
+        base: { kind: 'value', value: null },
+        ours: { kind: 'value', value: 'ours' },
+        theirs: { kind: 'value', value: 'theirs' },
+        merged: { kind: 'value', value: 'theirs' },
+      },
+    ],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  };
+}
 
 function fastForwardIntentRecord(
   namespace: ReturnType<typeof namespaceForDocumentScope>,

@@ -30,6 +30,8 @@ import { applyPersistedMergeResult } from './version-apply-merge-persisted';
 import {
   VERSION_BRANCH_REF_PREFIX,
   VERSION_MAIN_REF,
+  validateApplyMergeTargetRefCasProof,
+  type ApplyMergeTargetRefCasValidationResult,
   isApplyTargetRefName,
 } from './version-apply-merge-target-ref';
 import { mergeWorkbookVersion } from './version-merge';
@@ -202,6 +204,10 @@ export async function applyMergeWorkbookVersion(
       return plannedAncestryApplyMergeResult(preview);
     }
     if (preview.status === 'alreadyMerged') {
+      const cas = await validateApplyModeTargetRefCasProof(ctx, validated.applyOptions);
+      if (!cas.ok) {
+        return resultFromTargetRefCasFailure(preview.base, preview.ours, preview.theirs, cas);
+      }
       return alreadyMergedApplyMergeResult({ ...preview, ...validated.applyOptions });
     }
     return blockedApplyMergeResult(preview.base, preview.ours, preview.theirs, [
@@ -304,6 +310,9 @@ async function finalizeApplyMergePlan(
     ]);
   }
 
+  const cas = await validateApplyModeTargetRefCasProof(ctx, options);
+  if (!cas.ok) return resultFromTargetRefCasFailure(plan.base, plan.ours, plan.theirs, cas);
+
   const service = getAttachedVersionApplyMergeService(ctx);
   if (!service?.mergeCommit) {
     return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
@@ -341,6 +350,14 @@ async function tryApplyFastForwardMerge(
     };
   }
 
+  const cas = await validateApplyModeTargetRefCasProof(ctx, options);
+  if (!cas.ok) {
+    return {
+      kind: 'blocked',
+      result: resultFromTargetRefCasFailure(input.base, input.ours, input.theirs, cas),
+    };
+  }
+
   const service = getAttachedVersionApplyMergeService(ctx);
   if (!service?.fastForwardMerge) return { kind: 'not-fast-forward' };
 
@@ -375,6 +392,27 @@ async function tryApplyFastForwardMerge(
       ]),
     };
   }
+}
+
+function validateApplyModeTargetRefCasProof(
+  ctx: DocumentContext,
+  options: Extract<NormalizedApplyMergeOptions, { readonly mode: 'apply' }>,
+): Promise<ApplyMergeTargetRefCasValidationResult> {
+  return validateApplyMergeTargetRefCasProof(ctx, {
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+  });
+}
+
+function resultFromTargetRefCasFailure(
+  base: WorkbookCommitId,
+  ours: WorkbookCommitId,
+  theirs: WorkbookCommitId,
+  failure: Extract<ApplyMergeTargetRefCasValidationResult, { readonly ok: false }>,
+): VersionApplyMergeResult {
+  return failure.kind === 'staleTargetHead'
+    ? staleTargetHeadApplyMergeResult(base, ours, theirs, failure.diagnostics)
+    : blockedApplyMergeResult(base, ours, theirs, failure.diagnostics);
 }
 
 function validateApplyMergeRequest(
@@ -562,9 +600,10 @@ function validateTargetRef(
     return undefined;
   }
 
-  const targetRef = parsed.name === 'main'
-    ? VERSION_MAIN_REF
-    : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
+  const targetRef =
+    parsed.name === 'main'
+      ? VERSION_MAIN_REF
+      : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
   if (!isApplyTargetRefName(targetRef)) {
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic(
@@ -780,6 +819,24 @@ function blockedApplyMergeResult(
     conflicts: [],
     diagnostics,
     mutationGuarantee,
+  };
+}
+
+function staleTargetHeadApplyMergeResult(
+  base: WorkbookCommitId,
+  ours: WorkbookCommitId,
+  theirs: WorkbookCommitId,
+  diagnostics: readonly VersionStoreDiagnostic[],
+): VersionApplyMergeResult {
+  return {
+    status: 'staleTargetHead',
+    base,
+    ours,
+    theirs,
+    changes: [],
+    conflicts: [],
+    diagnostics,
+    mutationGuarantee: 'ref-not-mutated',
   };
 }
 

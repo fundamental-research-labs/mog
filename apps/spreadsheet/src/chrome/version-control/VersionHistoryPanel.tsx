@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { GitBranch, GitCommit, GitCompare, History, RefreshCw, X } from 'lucide-react';
 import type {
+  AgentProposalSummary,
   Paged,
   VersionAnnotationText,
   VersionCapability,
@@ -14,6 +15,7 @@ import type {
   WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
+  WorkbookVersionReviewRecordSummary,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
@@ -24,10 +26,15 @@ import {
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
+  isCapabilityEnabled,
   safeDomId,
 } from './version-action-availability';
+import { ActionStatus } from './VersionActionStatus';
+import { ReviewProposalSurface } from './ReviewProposalSurface';
 
 const COMMIT_PAGE_SIZE = 20;
+const REVIEW_PAGE_SIZE = 5;
+const PROPOSAL_PAGE_SIZE = 5;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const CAPABILITY_ROWS: readonly VersionCapability[] = [
@@ -76,6 +83,8 @@ export type VersionHistoryWorkbook = {
     | 'createBranch'
     | 'checkout'
     | 'diff'
+    | 'listReviews'
+    | 'listProposals'
   >;
 };
 
@@ -90,6 +99,10 @@ type VersionHistoryData = {
   readonly head?: VersionHead;
   readonly commits: readonly WorkbookCommitSummary[];
   readonly refs: readonly VersionRef[];
+  readonly reviews: readonly WorkbookVersionReviewRecordSummary[];
+  readonly proposals: readonly AgentProposalSummary[];
+  readonly reviewDiagnostic?: VersionPanelDiagnostic;
+  readonly proposalDiagnostic?: VersionPanelDiagnostic;
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
 
@@ -139,8 +152,13 @@ export function VersionHistoryPanelContent({
     }));
 
     const diagnostics: VersionPanelDiagnostic[] = [];
-    const [surface, rollout, head, commits, refs] = await Promise.all([
-      readValue('VERSION_UI_SURFACE_STATUS_FAILED', () => workbook.version.getSurfaceStatus()),
+    const surface = await readValue('VERSION_UI_SURFACE_STATUS_FAILED', () =>
+      workbook.version.getSurfaceStatus(),
+    );
+    const readReviews = surface.ok && isCapabilityEnabled(surface.value, 'version:reviewRead');
+    const readProposals = surface.ok && isCapabilityEnabled(surface.value, 'version:proposal');
+
+    const [rollout, head, commits, refs, reviews, proposals] = await Promise.all([
       readValue('VERSION_UI_STATUS_FAILED', () => workbook.version.getStatus()),
       readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.getHead()),
       readVersionResult('VERSION_UI_COMMITS_FAILED', () =>
@@ -149,6 +167,16 @@ export function VersionHistoryPanelContent({
       readVersionResult('VERSION_UI_REFS_FAILED', () =>
         workbook.version.listRefs({ includeDiagnostics: true }),
       ),
+      readReviews
+        ? readVersionResult('VERSION_UI_REVIEWS_FAILED', () =>
+            workbook.version.listReviews({ limit: REVIEW_PAGE_SIZE }),
+          )
+        : Promise.resolve(emptyPagedRead<WorkbookVersionReviewRecordSummary>(REVIEW_PAGE_SIZE)),
+      readProposals
+        ? readVersionResult('VERSION_UI_PROPOSALS_FAILED', () =>
+            workbook.version.listProposals({ limit: PROPOSAL_PAGE_SIZE }),
+          )
+        : Promise.resolve(emptyPagedRead<AgentProposalSummary>(PROPOSAL_PAGE_SIZE)),
     ]);
 
     if (!surface.ok) diagnostics.push(surface.diagnostic);
@@ -156,6 +184,8 @@ export function VersionHistoryPanelContent({
     if (!head.ok) diagnostics.push(head.diagnostic);
     if (!commits.ok) diagnostics.push(commits.diagnostic);
     if (!refs.ok) diagnostics.push(refs.diagnostic);
+    if (!reviews.ok) diagnostics.push(reviews.diagnostic);
+    if (!proposals.ok) diagnostics.push(proposals.diagnostic);
 
     const data: VersionHistoryData = {
       ...(surface.ok ? { surface: surface.value } : {}),
@@ -163,10 +193,22 @@ export function VersionHistoryPanelContent({
       ...(head.ok ? { head: head.value } : {}),
       commits: commits.ok ? commits.value.items : [],
       refs: refs.ok ? refs.value.items : [],
+      reviews: reviews.ok ? reviews.value.items : [],
+      proposals: proposals.ok ? proposals.value.items : [],
+      ...(!reviews.ok ? { reviewDiagnostic: reviews.diagnostic } : {}),
+      ...(!proposals.ok ? { proposalDiagnostic: proposals.diagnostic } : {}),
       diagnostics,
     };
 
-    if (!surface.ok && !rollout.ok && !head.ok && !commits.ok && !refs.ok) {
+    if (
+      !surface.ok &&
+      !rollout.ok &&
+      !head.ok &&
+      !commits.ok &&
+      !refs.ok &&
+      !reviews.ok &&
+      !proposals.ok
+    ) {
       setLoadState({ status: 'error', diagnostics });
       return;
     }
@@ -390,7 +432,13 @@ export function VersionHistoryPanelContent({
               checkoutDisabledReason={checkoutAvailability.disabledReason}
               onCheckoutRef={handleCheckoutRef}
             />
-            <ProposalSurfaceStatus surface={data.surface} />
+            <ReviewProposalSurface
+              surface={data.surface}
+              reviews={data.reviews}
+              proposals={data.proposals}
+              reviewDiagnostic={data.reviewDiagnostic}
+              proposalDiagnostic={data.proposalDiagnostic}
+            />
             <CommitList
               commits={data.commits}
               selectedCommitId={selectedCommitId}
@@ -502,57 +550,6 @@ function VersionActions({
       </div>
 
       <ActionStatus actionState={actionState} />
-    </section>
-  );
-}
-
-function ActionStatus({
-  actionState,
-}: {
-  readonly actionState: VersionActionState;
-}): React.JSX.Element | null {
-  if (actionState.status === 'idle') return null;
-  if (actionState.status === 'error') {
-    return (
-      <div
-        role="alert"
-        className="rounded-sm border border-ss-danger/40 bg-ss-danger/10 px-3 py-2 text-body-sm text-ss-text"
-      >
-        {actionState.diagnostic.message}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      aria-live="polite"
-      className="rounded-sm border border-ss-border bg-ss-surface-secondary px-3 py-2 text-body-sm text-ss-text-secondary"
-    >
-      {actionState.status === 'running' ? actionState.label : actionState.message}
-    </div>
-  );
-}
-
-function ProposalSurfaceStatus({
-  surface,
-}: {
-  readonly surface?: VersionSurfaceStatus;
-}): React.JSX.Element | null {
-  const proposalState = surface?.capabilities['version:proposal'];
-  if (!proposalState || proposalState.enabled) return null;
-
-  return (
-    <section
-      className="border border-ss-border rounded-sm px-3 py-2 bg-ss-surface-secondary"
-      aria-label="Proposal status"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-body-sm font-medium text-ss-text">Proposal review</span>
-        <span className="text-[11px] leading-none uppercase text-ss-text-tertiary">
-          Unavailable
-        </span>
-      </div>
-      <div className="mt-1 text-body-sm text-ss-text-secondary">{proposalState.reason}</div>
     </section>
   );
 }
@@ -905,6 +902,13 @@ async function readVersionResult<T>(
       },
     };
   }
+}
+
+function emptyPagedRead<T>(limit: number): { readonly ok: true; readonly value: Paged<T> } {
+  return {
+    ok: true,
+    value: { items: [], limit },
+  };
 }
 
 function resolveSelectedOrHeadCommitId(

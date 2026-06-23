@@ -1,7 +1,7 @@
 import { createHash, webcrypto } from 'node:crypto';
-import type { DocumentByteSyncPort } from '../src/boot';
+import type { DocumentByteSyncPort, DocumentByteSyncPortRawProvenance } from '../src/boot';
 import { _applyCoordinatorRawUpdate } from '../src/collaborative-engine';
-import type { DocumentByteSyncPortClassifiedRawProvenance } from '../src/document-sync-port-types';
+import { createClassifiedDocumentByteSyncPort } from '../src/document-byte-sync-port';
 
 const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
 let installedCrypto = false;
@@ -27,9 +27,7 @@ afterAll(() => {
 describe('collaborative engine classified raw coordinator updates', () => {
   it('prefers classified raw provenance for coordinator diffs', async () => {
     const update = new Uint8Array([1, 2, 3]);
-    const classifiedCalls: Array<
-      readonly [Uint8Array, DocumentByteSyncPortClassifiedRawProvenance]
-    > = [];
+    const classifiedCalls: Array<readonly [Uint8Array, DocumentByteSyncPortRawProvenance]> = [];
     const rawUpdates: Uint8Array[] = [];
     const syncPort = createSyncPort({
       applyUpdate: async (rawUpdate) => {
@@ -40,7 +38,7 @@ describe('collaborative engine classified raw coordinator updates', () => {
       },
     });
 
-    await _applyCoordinatorRawUpdate(syncPort, update, 'hydration');
+    await _applyCoordinatorRawUpdate(syncPort, update, 'bootstrap');
 
     expect(rawUpdates).toEqual([]);
     expect(classifiedCalls).toHaveLength(1);
@@ -62,27 +60,34 @@ describe('collaborative engine classified raw coordinator updates', () => {
     });
     expect(classifiedCalls[0]?.[1].updateIdentity).toEqual({
       originKind: 'room',
-      updateId: `sdk-coordinator-hydration:${sha256Hex(update)}`,
+      updateId: `sdk-coordinator-bootstrap:${sha256Hex(update)}`,
       payloadHash: sha256Hex(update),
     });
 
-    classifiedCalls.length = 0;
-    await _applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote');
+    for (const classification of ['flush', 'pull', 'sync'] as const) {
+      classifiedCalls.length = 0;
+      await _applyCoordinatorRawUpdate(syncPort, update, classification);
 
-    expect(rawUpdates).toEqual([]);
-    expect(classifiedCalls).toHaveLength(1);
-    expect(classifiedCalls[0]?.[1]).toMatchObject({
-      sourceKind: 'collaborationMixedRemote',
-      trust: { status: 'unverified' },
-      author: { kind: 'mixedRemote', reason: 'aggregateWithoutBoundaries' },
-      replay: false,
-      system: false,
-      capturePolicy: 'excluded',
-      exclusionDiagnostic: {
-        reason: 'mixedAuthors',
-        message: 'Aggregate coordinator diff lacks per-update provenance boundaries.',
-      },
-    });
+      expect(rawUpdates).toEqual([]);
+      expect(classifiedCalls).toHaveLength(1);
+      expect(classifiedCalls[0]?.[1]).toMatchObject({
+        sourceKind: 'collaborationMixedRemote',
+        updateIdentity: {
+          originKind: 'room',
+          updateId: `sdk-coordinator-${classification}:${sha256Hex(update)}`,
+          payloadHash: sha256Hex(update),
+        },
+        trust: { status: 'unverified' },
+        author: { kind: 'mixedRemote', reason: 'aggregateWithoutBoundaries' },
+        replay: false,
+        system: false,
+        capturePolicy: 'excluded',
+        exclusionDiagnostic: {
+          reason: 'mixedAuthors',
+          message: `Coordinator ${classification} diff lacks per-update provenance boundaries.`,
+        },
+      });
+    }
   });
 
   it('fails closed when classified raw is unavailable', async () => {
@@ -94,7 +99,7 @@ describe('collaborative engine classified raw coordinator updates', () => {
       },
     });
 
-    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote')).rejects.toThrow(
+    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'pull')).rejects.toThrow(
       'requires DocumentByteSyncPort.applyClassifiedRawUpdate',
     );
 
@@ -114,11 +119,71 @@ describe('collaborative engine classified raw coordinator updates', () => {
       },
     });
 
-    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'mixedRemote')).rejects.toThrow(
+    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'sync')).rejects.toThrow(
       'requires DocumentByteSyncPort.applyClassifiedRawUpdate',
     );
 
     expect(rawUpdates).toEqual([]);
+  });
+});
+
+describe('SDK document byte sync port classification wrapper', () => {
+  it('classifies legacy applyUpdate bytes as legacyRawUnknown', async () => {
+    const update = new Uint8Array([10, 11, 12]);
+    const rawUpdates: Uint8Array[] = [];
+    const classifiedCalls: Array<readonly [Uint8Array, DocumentByteSyncPortRawProvenance]> = [];
+    const syncPort = createClassifiedDocumentByteSyncPort(
+      createSyncPort({
+        applyUpdate: async (rawUpdate) => {
+          rawUpdates.push(rawUpdate);
+        },
+        applyClassifiedRawUpdate: async (classifiedUpdate, provenance) => {
+          classifiedCalls.push([classifiedUpdate, provenance]);
+        },
+      }),
+    );
+
+    await syncPort.applyUpdate(update);
+
+    expect(rawUpdates).toEqual([]);
+    expect(classifiedCalls).toHaveLength(1);
+    expect(classifiedCalls[0]?.[0]).toBe(update);
+    expect(classifiedCalls[0]?.[1]).toMatchObject({
+      schemaVersion: 'sync-update-provenance-v1',
+      sourceKind: 'legacyRawUnknown',
+      updateIdentity: {
+        originKind: 'legacyRaw',
+        updateId: `legacy-raw:${sha256Hex(update)}`,
+        payloadHash: sha256Hex(update),
+      },
+      trust: { status: 'legacyRaw' },
+      author: { kind: 'unknown', reason: 'legacyRaw' },
+      replay: false,
+      system: false,
+      capturePolicy: 'excluded',
+      exclusionDiagnostic: {
+        reason: 'legacyRawUnknown',
+        subreason: 'rawUnclassified',
+        message: 'Raw sync bytes have no authenticated provenance and cannot claim authorship.',
+      },
+    });
+  });
+
+  it('preserves legacy raw fallback for ports without classified admission', async () => {
+    const update = new Uint8Array([13, 14, 15]);
+    const rawUpdates: Uint8Array[] = [];
+    const syncPort = createClassifiedDocumentByteSyncPort(
+      createSyncPort({
+        applyUpdate: async (rawUpdate) => {
+          rawUpdates.push(rawUpdate);
+        },
+      }),
+    );
+
+    await syncPort.applyUpdate(update);
+
+    expect(rawUpdates).toEqual([update]);
+    expect(syncPort.applyClassifiedRawUpdate).toBeUndefined();
   });
 });
 

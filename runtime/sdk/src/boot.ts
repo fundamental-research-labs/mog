@@ -56,10 +56,14 @@ import {
   createSdkVersionStoreLifecycleConfig,
   type MogSdkVersionStoreConfig,
 } from './version-store';
-import type {
-  DocumentByteSyncPortApplyUpdateReturn,
-  DocumentByteSyncPortClassifiedRawProvenance,
-} from './document-sync-port-types';
+import { createClassifiedDocumentByteSyncPort } from './document-byte-sync-port';
+import type { ComputeEngineInstance, DocumentByteSyncPort } from './document-byte-sync-port';
+export type {
+  ComputeEngineInstance,
+  DocumentByteSyncPort,
+  DocumentByteSyncPortLegacyRawProvenance,
+  DocumentByteSyncPortRawProvenance,
+} from './document-byte-sync-port';
 
 type KernelCreateWorkbook = (...args: readonly unknown[]) => Promise<Workbook>;
 type HostBackedDocumentHandle = Awaited<ReturnType<typeof createHostBackedDocument>>;
@@ -116,34 +120,6 @@ function registerExternalWorkbookSession(
 // ---------------------------------------------------------------------------
 // SDK-owned types
 // ---------------------------------------------------------------------------
-
-/**
- * A compute engine instance. The SDK invokes methods by name
- * through the rust-bridge command protocol.
- *
- * @internal Not part of the public SDK API surface.
- */
-export interface ComputeEngineInstance {
-  [method: string]: (...args: unknown[]) => unknown;
-}
-
-/**
- * Package-local byte-sync capability exposed by the deprecated collaboration
- * helpers. Structurally matches the kernel provider port without publishing a
- * dependency on the kernel storage subpath.
- *
- * @internal
- */
-export interface DocumentByteSyncPort {
-  readonly docId: string;
-  applyUpdate(update: Uint8Array): Promise<DocumentByteSyncPortApplyUpdateReturn>;
-  applyClassifiedRawUpdate?(
-    update: Uint8Array,
-    provenance: DocumentByteSyncPortClassifiedRawProvenance,
-  ): Promise<void>;
-  encodeDiff(remoteSv: Uint8Array): Promise<Uint8Array>;
-  currentStateVector(): Promise<Uint8Array>;
-}
 
 export interface ChartImageFrame {
   readonly exportWidth: number;
@@ -701,7 +677,7 @@ class HeadlessLifecycleSystem {
         '[HeadlessLifecycleSystem] sync port accessed before ready -- call create() or createFromXlsx() first',
       );
     }
-    return this.handle.createSyncPort();
+    return createClassifiedDocumentByteSyncPort(this.handle.createSyncPort());
   }
 
   get workbookLinkScope(): WorkbookLinkStatusScope | undefined {

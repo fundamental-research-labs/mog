@@ -85,7 +85,7 @@ export interface SyncResult {
   pulled: boolean;
 }
 
-type CoordinatorRawUpdateClassification = 'hydration' | 'mixedRemote';
+type CoordinatorRawUpdateClassification = 'bootstrap' | 'flush' | 'pull' | 'sync';
 
 const COORDINATOR_RAW_UPDATE_REDACTION_POLICY = Object.freeze({
   schemaVersion: 'provenance-redaction-policy-v1',
@@ -118,13 +118,15 @@ function buildCoordinatorRawUpdateProvenance(
   classification: CoordinatorRawUpdateClassification,
   payloadHash: string,
 ): DocumentByteSyncPortClassifiedRawProvenance {
+  const sourceKind =
+    classification === 'bootstrap' ? 'collaborationHydration' : 'collaborationMixedRemote';
   const updateIdentity = {
     originKind: 'room' as const,
     updateId: `sdk-coordinator-${classification}:${payloadHash}`,
     payloadHash,
   };
 
-  if (classification === 'hydration') {
+  if (sourceKind === 'collaborationHydration') {
     return {
       schemaVersion: 'sync-update-provenance-v1',
       sourceKind: 'collaborationHydration',
@@ -154,7 +156,7 @@ function buildCoordinatorRawUpdateProvenance(
     redaction: COORDINATOR_RAW_UPDATE_REDACTION_POLICY,
     exclusionDiagnostic: {
       reason: 'mixedAuthors',
-      message: 'Aggregate coordinator diff lacks per-update provenance boundaries.',
+      message: `Coordinator ${classification} diff lacks per-update provenance boundaries.`,
     },
   };
 }
@@ -405,7 +407,7 @@ export class CollaborativeEngine {
         await _applyCoordinatorRawUpdate(
           syncPort,
           new Uint8Array(pushRaw.serverDiff),
-          'hydration',
+          'bootstrap',
         );
       }
     }
@@ -470,7 +472,7 @@ export class CollaborativeEngine {
         await _applyCoordinatorRawUpdate(
           syncPort,
           new Uint8Array(pushRaw.serverDiff),
-          'hydration',
+          'bootstrap',
         );
       }
     }
@@ -522,6 +524,12 @@ export class CollaborativeEngine {
    * In manual mode, call this explicitly. In immediate mode, auto-called.
    */
   async flush(): Promise<FlushResult> {
+    return this.flushClassifiedRawUpdate('flush');
+  }
+
+  private async flushClassifiedRawUpdate(
+    classification: Extract<CoordinatorRawUpdateClassification, 'flush' | 'sync'>,
+  ): Promise<FlushResult> {
     if (this._disposed) throw new Error('Engine is disposed');
 
     // Get local state vector and diff
@@ -550,7 +558,7 @@ export class CollaborativeEngine {
       await _applyCoordinatorRawUpdate(
         syncPort,
         new Uint8Array(result.serverDiff),
-        'mixedRemote',
+        classification,
       );
     }
 
@@ -564,6 +572,12 @@ export class CollaborativeEngine {
    * Pull remote changes from the coordinator.
    */
   async pull(): Promise<void> {
+    return this.pullClassifiedRawUpdate('pull');
+  }
+
+  private async pullClassifiedRawUpdate(
+    classification: Extract<CoordinatorRawUpdateClassification, 'pull' | 'sync'>,
+  ): Promise<void> {
     if (this._disposed) throw new Error('Engine is disposed');
 
     const syncPort = _getDocumentSyncPort(this._inner);
@@ -571,7 +585,7 @@ export class CollaborativeEngine {
     const diff = this._coordinator.pull(this._participantId, Buffer.from(localSv));
 
     if (diff.length > 0) {
-      await _applyCoordinatorRawUpdate(syncPort, diff, 'mixedRemote');
+      await _applyCoordinatorRawUpdate(syncPort, diff, classification);
     }
   }
 
@@ -579,8 +593,8 @@ export class CollaborativeEngine {
    * Full sync cycle: push local changes, then pull remote changes.
    */
   async sync(): Promise<SyncResult> {
-    const flushResult = await this.flush();
-    await this.pull();
+    const flushResult = await this.flushClassifiedRawUpdate('sync');
+    await this.pullClassifiedRawUpdate('sync');
     return { pushed: flushResult.ok, pulled: true };
   }
 

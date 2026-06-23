@@ -17,6 +17,26 @@ use super::edits::{canonicalize_resolved_cell_inputs, validate_edit_bounds};
 use super::outcomes::{attach_policy_preserved_outcomes, truncate_submitted_text};
 use super::yrs_writes::write_prepared_cell_inputs_to_yrs;
 
+#[derive(Debug, Clone)]
+struct DirectEditRecord {
+    sheet_id: SheetId,
+    cell_id: CellId,
+    row: u32,
+    col: u32,
+    prepared_value: CellValue,
+    prepared_formula: Option<String>,
+    old_value: CellValue,
+    old_formula: Option<String>,
+}
+
+impl DirectEditRecord {
+    fn new_formula(&self) -> Option<String> {
+        self.prepared_formula
+            .as_deref()
+            .map(formula_body_to_display_formula)
+    }
+}
+
 fn formula_body_to_display_formula(body: &str) -> String {
     if body.starts_with('=') {
         body.to_string()
@@ -44,46 +64,82 @@ fn result_has_direct_change(
     })
 }
 
-fn append_missing_direct_changes(
+fn resolved_post_edit_value(mirror: &CellMirror, record: &DirectEditRecord) -> CellValue {
+    if record.prepared_formula.is_some() {
+        mirror
+            .get_cell_value(&record.cell_id)
+            .cloned()
+            .unwrap_or(CellValue::Null)
+    } else {
+        record.prepared_value.clone()
+    }
+}
+
+fn append_missing_direct_edit_changes(
     result: &mut RecalcResult,
-    edits: &[(SheetId, CellId, u32, u32, CellInput)],
-    prepared_values: &[(CellValue, Option<String>)],
-    direct_edit_old_values: &mut HashMap<CellId, CellValue>,
-    direct_edit_old_formulas: &mut HashMap<CellId, String>,
+    mirror: &CellMirror,
+    records: &[DirectEditRecord],
 ) {
-    for ((sheet_id, cell_id, row, col, _), (value, formula)) in
-        edits.iter().zip(prepared_values.iter())
-    {
-        if result_has_direct_change(result, *cell_id, sheet_id, *row, *col) {
+    for record in records {
+        if result_has_direct_change(
+            result,
+            record.cell_id,
+            &record.sheet_id,
+            record.row,
+            record.col,
+        ) {
             continue;
         }
 
-        let old_value = direct_edit_old_values
-            .remove(cell_id)
-            .unwrap_or(CellValue::Null);
-        let old_formula = direct_edit_old_formulas.remove(cell_id);
-        let new_formula = formula.as_deref().map(formula_body_to_display_formula);
-        if old_value == *value && old_formula == new_formula {
+        let value = resolved_post_edit_value(mirror, record);
+        let new_formula = record.new_formula();
+        if record.old_value == value && record.old_formula == new_formula {
             continue;
         }
 
         result.changed_cells.push(CellChange {
-            cell_id: cell_id.to_uuid_string(),
-            sheet_id: sheet_id.to_uuid_string(),
+            cell_id: record.cell_id.to_uuid_string(),
+            sheet_id: record.sheet_id.to_uuid_string(),
             position: Some(CellPosition {
-                row: *row,
-                col: *col,
+                row: record.row,
+                col: record.col,
             }),
-            value: value.clone(),
+            value,
             display_text: None,
             old_display_text: None,
-            old_formula: Some(old_formula.unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string())),
+            old_formula: Some(
+                record
+                    .old_formula
+                    .clone()
+                    .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
+            ),
             new_formula,
             number_format: None,
             format_idx: None,
             extra_flags: 0,
-            old_value: Some(old_value),
+            old_value: Some(record.old_value.clone()),
         });
+    }
+}
+
+fn patch_direct_edit_before_snapshots(
+    result: &mut RecalcResult,
+    records_by_cell: &HashMap<CellId, DirectEditRecord>,
+) {
+    for change in &mut result.changed_cells {
+        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id)
+            && let Some(record) = records_by_cell.get(&cid)
+        {
+            change.old_value = Some(record.old_value.clone());
+            if change.old_formula.is_none() {
+                change.old_formula = Some(
+                    record
+                        .old_formula
+                        .clone()
+                        .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
+                );
+            }
+        }
     }
 }
 
@@ -169,12 +225,7 @@ pub(in crate::storage::engine) fn mutation_set_cells(
 
     let _suppress = mutation.suppress_guard();
 
-    // Snapshot old values from CellMirror BEFORE writes (read-before-write pattern).
-    // These are used to populate CellChange.old_value on direct-edit seed cells.
-    let mut direct_edit_old_values: HashMap<CellId, CellValue> =
-        HashMap::with_capacity(edits.len());
-    let mut direct_edit_old_formulas: HashMap<CellId, String> = HashMap::with_capacity(edits.len());
-
+    let mut direct_edit_records = Vec::with_capacity(edits.len());
     let mut prepared_values = Vec::with_capacity(edits.len());
     for (idx, &(ref sheet_id, cell_id, row, col, ref input)) in edits.iter().enumerate() {
         let target = format_hints[idx];
@@ -224,8 +275,28 @@ pub(in crate::storage::engine) fn mutation_set_cells(
                 }
             }
         };
+        let old_value = mirror
+            .get_cell_value(&cell_id)
+            .cloned()
+            .unwrap_or(CellValue::Null);
+        let old_formula = stores.compute.get_formula(&cell_id).map(str::to_owned);
+        direct_edit_records.push(DirectEditRecord {
+            sheet_id: *sheet_id,
+            cell_id,
+            row,
+            col,
+            prepared_value: value.clone(),
+            prepared_formula: formula.clone(),
+            old_value,
+            old_formula,
+        });
         prepared_values.push((value, formula));
     }
+    let direct_edit_records_by_cell: HashMap<CellId, DirectEditRecord> = direct_edit_records
+        .iter()
+        .cloned()
+        .map(|record| (record.cell_id, record))
+        .collect();
 
     write_prepared_cell_inputs_to_yrs(stores, &edits, &prepared_values)?;
     let mut cache_metadata_cells: HashMap<SheetId, Vec<CellId>> = HashMap::new();
@@ -248,16 +319,6 @@ pub(in crate::storage::engine) fn mutation_set_cells(
     for ((sheet_id, cell_id, row, col, _), (value, formula)) in
         edits.iter().zip(prepared_values.iter())
     {
-        // Snapshot old value from mirror BEFORE anything overwrites it.
-        let old_val = mirror
-            .get_cell_value(cell_id)
-            .cloned()
-            .unwrap_or(CellValue::Null);
-        direct_edit_old_values.insert(*cell_id, old_val);
-        if let Some(old_formula) = stores.compute.get_formula(cell_id) {
-            direct_edit_old_formulas.insert(*cell_id, old_formula.to_string());
-        }
-
         // Update mirror — ONLY for plain-value edits. For formula edits,
         //    `process_input` needs to see the prior cell value to detect
         //    "same formula re-entered" and preserve the converged
@@ -290,32 +351,8 @@ pub(in crate::storage::engine) fn mutation_set_cells(
         persist_cell_formula_identity(stores, mirror, sheet_id, *cell_id)?;
     }
 
-    // Patch before-side fields onto seed changes. Direct formula edits can
-    // arrive from the scheduler with old_value=Null because the formula body
-    // changed; the user-facing change record still needs the pre-edit value.
-    for change in &mut result.changed_cells {
-        if let Ok(cid) = CellId::from_uuid_str(&change.cell_id) {
-            let mut matched_direct_edit = false;
-            if let Some(old) = direct_edit_old_values.remove(&cid) {
-                change.old_value = Some(old);
-                matched_direct_edit = true;
-            }
-            if matched_direct_edit && change.old_formula.is_none() {
-                change.old_formula = Some(
-                    direct_edit_old_formulas
-                        .remove(&cid)
-                        .unwrap_or_else(|| NO_OLD_FORMULA_SENTINEL.to_string()),
-                );
-            }
-        }
-    }
-    append_missing_direct_changes(
-        &mut result,
-        &edits,
-        &prepared_values,
-        &mut direct_edit_old_values,
-        &mut direct_edit_old_formulas,
-    );
+    patch_direct_edit_before_snapshots(&mut result, &direct_edit_records_by_cell);
+    append_missing_direct_edit_changes(&mut result, mirror, &direct_edit_records);
 
     attach_policy_preserved_outcomes(&mut result, preserved_outcomes);
     Ok(result)

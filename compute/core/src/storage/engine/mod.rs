@@ -66,6 +66,8 @@ pub(crate) mod update_buffer;
 mod validation;
 
 #[cfg(test)]
+mod integration_tests_direct_edit_results;
+#[cfg(test)]
 mod integration_tests_old_value;
 #[cfg(test)]
 mod integration_tests_replace_all;
@@ -94,8 +96,8 @@ use crate::mirror::CellMirror;
 
 pub(in crate::storage::engine) use grid_indexing::build_grid_from_yrs_for_sheet;
 use mutation_coordinator::MutationCoordinator;
-use snapshot_types::SyncApplyOperationContextWire;
 use settings::EngineSettings;
+use snapshot_types::SyncApplyOperationContextWire;
 pub(crate) use stores::CFCacheEntry;
 use stores::EngineStores;
 use viewport::service::ViewportService;

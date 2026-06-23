@@ -1,7 +1,10 @@
 import 'fake-indexeddb/auto';
 
 import { jest } from '@jest/globals';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import {
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  type VersionAuthor,
+} from '@mog-sdk/contracts/versioning';
 
 import {
   createWorkbookVersionCommitService,
@@ -92,6 +95,46 @@ describe('version-store lifecycle root initialization', () => {
 
     await first.versioning?.provider?.dispose('test-teardown');
     await second.versioning?.provider?.dispose('test-teardown');
+  });
+
+  it('fails closed before materializing existing-no-history roots rejected by policy', async () => {
+    const namespace = namespaceForDocumentScope({ documentId: DOCUMENT_ID }, GRAPH_ID);
+    const rootBuilder = jest.fn(() => rootWrite('policy-blocked-root', namespace));
+
+    const result = await resolveDocumentWorkbookVersioningLifecycle({
+      documentId: DOCUMENT_ID,
+      versioning: {
+        providerSelection: {
+          kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+          initialize: {
+            graphId: GRAPH_ID,
+            buildRootWrite: rootBuilder,
+            historyRootKind: 'existing-no-history',
+            historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+          },
+        },
+        captureNormalCommit: emptyAuthoredCapture,
+      },
+    });
+
+    expect(rootBuilder).not.toHaveBeenCalled();
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_HISTORY_ROOT_POLICY_BLOCKED',
+        safeMessage: 'Version history root policy rejects roots that would create a history gap.',
+        operation: 'initializeGraph',
+        mutationGuarantee: 'no-write-attempted',
+        redacted: true,
+        details: expect.objectContaining({
+          rootKind: 'existing-no-history',
+          reason: 'history-gap-rejected',
+          allowDetachedRoots: false,
+          gapPolicy: 'reject',
+          redacted: true,
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(result.diagnostics)).not.toContain(DOCUMENT_ID);
   });
 });
 

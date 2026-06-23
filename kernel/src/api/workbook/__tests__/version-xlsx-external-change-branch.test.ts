@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
 import type {
   SemanticWorkbookDiff,
@@ -136,6 +137,7 @@ describe('VC-10 XLSX external-change branch routing', () => {
       semanticStateReader: semanticStateReader(externalState, baseState),
       provenance: trustedProvenance(namespace.documentId, baseCommit, baseHead.head),
       createdAt: CREATED_AT,
+      historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
     });
 
     expect(result).toMatchObject({ status: 'committed' });
@@ -178,6 +180,74 @@ describe('VC-10 XLSX external-change branch routing', () => {
       throw new Error(`expected main commits readable: ${mainPage.diagnostics[0]?.code}`);
     }
     expect(mainPage.commits.map((commit) => commit.id)).toEqual([localCommit.id, baseCommit.id]);
+  });
+
+  it('fails closed with redacted diagnostics when policy rejects existing-no-history roots', async () => {
+    const namespace = testNamespace('vc10-xlsx-policy-existing-no-history-secret');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base-policy', 'p');
+    const localState = semanticState('local-policy', 'q');
+    const importedState = semanticState('import-policy', 'r');
+
+    const { baseCommit, baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    const localCommit = await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-policy',
+    });
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x35),
+      semanticStateReader: semanticStateReader(importedState, baseState),
+      provenance: {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 768 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'absent',
+          sidecarPart: SIDE_CAR_PART,
+        },
+      },
+      createdAt: CREATED_AT,
+      historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+    });
+
+    expect(result).toEqual({
+      status: 'failed',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_HISTORY_ROOT_POLICY_BLOCKED',
+          safeMessage: 'Version history root policy rejects roots that would create a history gap.',
+          operation: 'commitGraphWrite',
+          redacted: true,
+          mutationGuarantee: 'no-write-attempted',
+          details: expect.objectContaining({
+            rootKind: 'existing-no-history',
+            reason: 'history-gap-rejected',
+            existingVisibleHistory: 'true',
+            trustedBase: 'false',
+            allowDetachedRoots: false,
+            gapPolicy: 'reject',
+            redacted: true,
+          }),
+        }),
+      ],
+    });
+
+    const serialized = JSON.stringify(result.diagnostics);
+    expect(serialized).not.toContain(namespace.documentId);
+    expect(serialized).not.toContain(baseCommit.id);
+    expect(serialized).not.toContain(localCommit.id);
+    const branches = await graph.listBranches({ prefix: 'import' });
+    expect(branches).toMatchObject({ ok: true });
+    if (!branches.ok) throw new Error(`expected import branch list: ${branches.error.code}`);
+    expect(branches.branches.filter((branch) => /^import\/new-root\//.test(branch.name))).toEqual(
+      [],
+    );
   });
 
   it('routes a missing trusted base to a redacted import-root branch', async () => {

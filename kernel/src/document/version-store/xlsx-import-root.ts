@@ -1,5 +1,5 @@
 import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { VersionAuthor, VersionHistoryRootPolicy } from '@mog-sdk/contracts/versioning';
 
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 import type { WorkbookCommit } from './commit-store';
@@ -24,6 +24,7 @@ import {
   type SnapshotRootByteSyncPort,
 } from './snapshot-root-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
+import { evaluateVersionHistoryRootPolicy } from './version-history-root-policy';
 
 export type XlsxVersionImportRootSource =
   | {
@@ -100,6 +101,7 @@ export type XlsxVersionExistingGraphImportInput = {
   readonly semanticStateReader: VersionSemanticStateReaderPort;
   readonly provenance: XlsxVersionImportRootProvenance;
   readonly createdAt: string;
+  readonly historyRootPolicy?: VersionHistoryRootPolicy;
 };
 
 export type XlsxVersionExistingGraphImportResult =
@@ -186,6 +188,19 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   }
   if (trustedBase.status !== 'success') return trustedBase;
 
+  if (input.historyRootPolicy) {
+    const externalChangePolicy = evaluateVersionHistoryRootPolicy({
+      kind: 'external-change',
+      policy: input.historyRootPolicy,
+      operation: 'commitGraphWrite',
+      hasExistingVisibleHistory: true,
+      trustedBase: true,
+    });
+    if (!externalChangePolicy.ok) {
+      return { status: 'failed', diagnostics: externalChangePolicy.diagnostics };
+    }
+  }
+
   const parentCommit = trustedBase.commit;
   const previousSemanticState = await readCommitSemanticState(
     input.graph,
@@ -269,6 +284,19 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
 async function applyXlsxVersionImportNewRootToExistingGraph(
   input: XlsxVersionExistingGraphImportInput,
 ): Promise<XlsxVersionExistingGraphImportResult> {
+  if (input.historyRootPolicy) {
+    const rootPolicy = evaluateVersionHistoryRootPolicy({
+      kind: 'existing-no-history',
+      policy: input.historyRootPolicy,
+      operation: 'commitGraphWrite',
+      hasExistingVisibleHistory: true,
+      trustedBase: false,
+    });
+    if (!rootPolicy.ok) {
+      return { status: 'failed', diagnostics: rootPolicy.diagnostics };
+    }
+  }
+
   const rootWrite = await buildXlsxVersionImportRootWrite({
     namespace: input.namespace,
     snapshotRootByteSyncPort: input.snapshotRootByteSyncPort,

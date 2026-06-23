@@ -94,6 +94,8 @@ function messageTemplateIdForCode(code: VersionStoreDiagnosticCode): VersionDiag
     case 'VERSION_MISSING_CHANGE_SET':
     case 'VERSION_MISSING_DEPENDENCY':
       return 'version.integrity.missing-change-set';
+    case 'VERSION_HISTORY_ROOT_POLICY_BLOCKED':
+      return 'version.history-root-policy.blocked';
     case 'VERSION_REF_CONFLICT':
       return 'version.ref.conflict';
     case 'VERSION_DANGLING_REF':
@@ -134,6 +136,7 @@ function recoverabilityForCode(
     case 'VERSION_UNSUPPORTED_REGISTRY':
     case 'VERSION_UNSUPPORTED_PARENT_COMMIT':
     case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
+    case 'VERSION_HISTORY_ROOT_POLICY_BLOCKED':
       return 'unsupported';
     case 'VERSION_CORRUPT_REGISTRY':
       return 'repair';

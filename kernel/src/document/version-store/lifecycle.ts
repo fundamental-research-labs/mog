@@ -1,4 +1,7 @@
-import type { DomainSupportManifest } from '@mog-sdk/contracts/versioning';
+import type {
+  DomainSupportManifest,
+  VersionHistoryRootPolicy,
+} from '@mog-sdk/contracts/versioning';
 
 import type {
   VersionMergeCommitCapture,
@@ -40,6 +43,10 @@ import {
   type VersionDocumentScope,
   type VersionGraphRegistry,
 } from './registry';
+import {
+  evaluateVersionHistoryRootPolicy,
+  type VersionHistoryRootKind,
+} from './version-history-root-policy';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -101,6 +108,8 @@ export type VersionStoreLifecycleProviderSelection = {
 export type VersionStoreLifecycleRootInitializer = {
   readonly graphId: string;
   readonly requireDurablePersistence?: boolean;
+  readonly historyRootKind?: VersionHistoryRootKind;
+  readonly historyRootPolicy?: VersionHistoryRootPolicy;
 } & (
   | {
       readonly rootWrite: VersionGraphInitializeInput['rootWrite'];
@@ -366,6 +375,9 @@ async function initializeSelectedProviderWhenAbsent(input: {
   if (registryRead.status !== 'absent') return registryRead.diagnostics;
   if (!input.initialize) return [];
 
+  const rootPolicy = evaluateLifecycleRootPolicy(input.initialize);
+  if (!rootPolicy.ok) return rootPolicy.diagnostics;
+
   const rootWrite = await materializeLifecycleRootWrite({
     documentScope: input.documentScope,
     initialize: input.initialize,
@@ -393,6 +405,22 @@ async function initializeSelectedProviderWhenAbsent(input: {
 
   assertRegistryMatchesDocumentScope(input.documentScope, initialized.registry);
   return [];
+}
+
+function evaluateLifecycleRootPolicy(
+  initialize: VersionStoreLifecycleRootInitializer,
+):
+  | { readonly ok: true; readonly diagnostics: readonly [] }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] } {
+  if (!initialize.historyRootKind && !initialize.historyRootPolicy) {
+    return { ok: true, diagnostics: [] };
+  }
+  return evaluateVersionHistoryRootPolicy({
+    kind: initialize.historyRootKind,
+    policy: initialize.historyRootPolicy,
+    operation: 'initializeGraph',
+    hasExistingVisibleHistory: false,
+  });
 }
 
 async function materializeLifecycleRootWrite(input: {

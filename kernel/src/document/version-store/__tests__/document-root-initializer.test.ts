@@ -1,8 +1,11 @@
 import { jest } from '@jest/globals';
 
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
+
 import { BLANK_WORKBOOK_ROOT_GRAPH_ID } from '../blank-workbook-root';
 import { withDocumentRootInitializer } from '../document-root-initializer';
 import { namespaceForDocumentScope } from '../provider';
+import { XLSX_IMPORT_ROOT_GRAPH_ID } from '../xlsx-import-root';
 import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
 import type { SemanticWorkbookStateEnvelope } from '../../../bridges/compute/compute-types.gen';
 
@@ -49,7 +52,11 @@ describe('document root initializer', () => {
     expect(semanticStateReader.readCurrentSemanticState).not.toHaveBeenCalled();
 
     const initialize = versioning.providerSelection?.initialize;
-    expect(initialize).toMatchObject({ graphId: BLANK_WORKBOOK_ROOT_GRAPH_ID });
+    expect(initialize).toMatchObject({
+      graphId: BLANK_WORKBOOK_ROOT_GRAPH_ID,
+      historyRootKind: 'new',
+      historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+    });
     if (!initialize || !('buildRootWrite' in initialize)) {
       throw new Error('expected lazy root initializer');
     }
@@ -99,5 +106,42 @@ describe('document root initializer', () => {
     expect(versioning.providerSelection?.initialize?.graphId).toBe('host-root');
     if (!versioning.providerSelection?.initialize) throw new Error('expected initializer');
     expect('rootWrite' in versioning.providerSelection.initialize).toBe(true);
+  });
+
+  it('attaches public root policy metadata for XLSX import roots and reimports', async () => {
+    const encodeDiff = jest.fn().mockResolvedValue(new Uint8Array([0x06]) as never);
+    const semanticStateReader: VersionSemanticStateReaderPort = {
+      readCurrentSemanticState: jest.fn().mockResolvedValue(SEMANTIC_STATE as never),
+      diffSemanticStates: jest.fn(),
+    };
+
+    const versioning = await withDocumentRootInitializer({
+      documentId: DOCUMENT_ID,
+      versioning: {
+        providerSelection: { kind: 'memory' },
+        snapshotRootByteSyncPort: { encodeDiff },
+        semanticStateReader,
+      },
+      xlsxImportRoot: {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 10 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'absent',
+          sidecarPart: 'customXml/mog-version-metadata.xml',
+        },
+      },
+      blankWorkbookRootInitializerEnabled: false,
+      createdAt: CREATED_AT,
+    });
+
+    expect(versioning.providerSelection?.initialize).toMatchObject({
+      graphId: XLSX_IMPORT_ROOT_GRAPH_ID,
+      historyRootKind: 'import',
+      historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+    });
+    expect(versioning.xlsxImportRootExistingGraph).toMatchObject({
+      historyRootPolicy: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy,
+    });
   });
 });

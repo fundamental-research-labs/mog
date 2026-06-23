@@ -80,6 +80,7 @@ export type VersionStoreDiagnosticCode =
   | 'VERSION_UNSUPPORTED_REGISTRY'
   | 'VERSION_CORRUPT_REGISTRY'
   | 'VERSION_MISSING_CHANGE_SET'
+  | 'VERSION_HISTORY_ROOT_POLICY_BLOCKED'
   | 'VERSION_PROVIDER_FAILED';
 
 export type VersionDiagnosticMessageId =
@@ -94,6 +95,7 @@ export type VersionDiagnosticMessageId =
   | 'version.integrity.missing-object'
   | 'version.integrity.missing-parent'
   | 'version.integrity.missing-change-set'
+  | 'version.history-root-policy.blocked'
   | 'version.ref.conflict'
   | 'version.ref.dangling'
   | 'version.options.invalid'

@@ -1,5 +1,6 @@
 import type { VersionDiagnostic, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
+import { evaluateVersionHistoryRootPolicy } from '../../../document/version-store/version-history-root-policy';
 import { projectVersionHistoryDiagnosticsForAccess } from '../version-history-diagnostic-projection';
 import { versionFailureFromStoreDiagnostics } from '../version-result';
 
@@ -339,6 +340,52 @@ describe('version history diagnostic projection', () => {
     });
     expectNoForbiddenDetails(result);
   });
+
+  it('projects root-policy store diagnostics without root identifiers or raw policy material', () => {
+    const decision = evaluateVersionHistoryRootPolicy({
+      kind: 'existing-no-history',
+      policy: {
+        rootCommitId: 'commit-secret-root',
+        allowDetachedRoots: false,
+        gapPolicy: 'reject',
+      },
+      operation: 'initializeGraph',
+      hasExistingVisibleHistory: true,
+      trustedBase: false,
+      rootCommitMatchesPolicy: false,
+    });
+    if (decision.ok) throw new Error('expected root policy block');
+
+    const result = versionFailureFromStoreDiagnostics(
+      'getHead',
+      decision.diagnostics as readonly VersionStoreDiagnostic[],
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.getHead',
+        diagnostics: [
+          {
+            code: 'VERSION_HISTORY_ROOT_POLICY_BLOCKED',
+            severity: 'error',
+            message: 'Version history root policy does not match this root transition.',
+            owner: 'version-store',
+            data: {
+              operation: 'initializeGraph',
+              recoverability: 'unsupported',
+              messageTemplateId: 'version.history-root-policy.blocked',
+              redacted: true,
+              mutationGuarantee: 'no-write-attempted',
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('commit-secret-root');
+    expectNoForbiddenDetails(result);
+  });
 });
 
 function sensitiveDiagnostic(data: NonNullable<VersionDiagnostic['data']>): VersionDiagnostic {
@@ -393,10 +440,7 @@ function sensitiveDomainDiagnosticCases(): readonly (readonly VersionDiagnostic[
     }),
   ] as const;
 
-  return cases.map((diagnostic, index) => [
-    diagnostic,
-    ...cases.slice(0, index),
-  ]);
+  return cases.map((diagnostic, index) => [diagnostic, ...cases.slice(0, index)]);
 }
 
 function hostDeniedStoreDiagnostic(): VersionStoreDiagnostic {
@@ -450,7 +494,8 @@ function staleHeadStoreDiagnostic(): VersionStoreDiagnostic {
     refName: 'refs/heads/secret',
     commitId: 'commit:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     details: {
-      expectedHead: 'commit:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      expectedHead:
+        'commit:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       actualHead: 'commit:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
       providerRefId: 'ref-secret',
       clientId: 'client-secret-id',
@@ -488,7 +533,8 @@ function historyGapStoreDiagnostic(): VersionStoreDiagnostic {
       completenessCondition: 'history-gap',
       accessFiltered: true,
       missingCommitRole: 'parent',
-      childCommitId: 'commit:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      childCommitId:
+        'commit:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
       clientId: 'client-secret-id',
       sessionId: 'session-secret-id',
       namespaceKey: 'namespace-secret-key',

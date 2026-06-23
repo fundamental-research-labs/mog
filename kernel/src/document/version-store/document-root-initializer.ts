@@ -1,3 +1,5 @@
+import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
+
 import type { DocumentWorkbookVersioningLifecycleConfig } from './lifecycle';
 import { namespaceForDocumentScope, normalizeVersionDocumentScope } from './provider';
 import { BLANK_WORKBOOK_ROOT_GRAPH_ID, buildBlankWorkbookRootWrite } from './blank-workbook-root';
@@ -42,6 +44,7 @@ export async function withDocumentRootInitializer(input: {
       : { principalScope: providerSelection.principalScope }),
   });
   const graphId = input.xlsxImportRoot ? XLSX_IMPORT_ROOT_GRAPH_ID : BLANK_WORKBOOK_ROOT_GRAPH_ID;
+  const historyRootPolicy = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.defaultHistoryRootPolicy;
   const namespace = namespaceForDocumentScope(documentScope, graphId);
   const buildRootWrite = () =>
     input.xlsxImportRoot
@@ -69,6 +72,7 @@ export async function withDocumentRootInitializer(input: {
             semanticStateReader: input.versioning.semanticStateReader,
             provenance: input.xlsxImportRoot,
             createdAt: input.createdAt,
+            historyRootPolicy,
           } satisfies Omit<XlsxVersionExistingGraphImportInput, 'graph'>,
         }
       : {}),
@@ -76,6 +80,8 @@ export async function withDocumentRootInitializer(input: {
       ...providerSelection,
       initialize: {
         graphId,
+        historyRootKind: input.xlsxImportRoot ? 'import' : 'new',
+        historyRootPolicy,
         buildRootWrite,
       },
     },

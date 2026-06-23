@@ -1999,6 +1999,7 @@ export interface SpreadsheetDrawing {
 export interface SpreadsheetGraphicFrame {
   nv_graphic_frame_pr: GraphicFrameNonVisual;
   xfrm: Transform2D;
+  has_xfrm: boolean;
   graphic_xml: string | null;
   macro_name: string | null;
   f_published: boolean | null;

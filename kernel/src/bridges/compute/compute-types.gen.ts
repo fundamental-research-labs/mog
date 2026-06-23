@@ -6249,6 +6249,33 @@ export interface VersionAuthorWire {
   sessionId?: string;
 }
 
+export type VersionCaptureDiagnosticsSinkRecordKindWire = "version-capture-failure";
+
+export type VersionCaptureFailureCodeWire = "missing_redaction_key" | "write_admission_blocked" | "capture_serialization_failed" | "diagnostics_sink_unavailable";
+
+export interface VersionCaptureFailureSinkRecordWire {
+  schemaVersion: number;
+  recordKind: VersionCaptureDiagnosticsSinkRecordKindWire;
+  diagnosticId: string;
+  observedAt: string;
+  stage: VersionCaptureFailureStageWire;
+  code: VersionCaptureFailureCodeWire;
+  severity: VersionDiagnosticSeverityWire;
+  message: string;
+  operationId?: string;
+  domainIds?: string[];
+  capturePolicy: CapturePolicyWire;
+  writeAdmissionMode: VersionWriteAdmissionModeWire;
+  redactionPolicy: VersionRedactionPolicyWire;
+  redactionKeys?: VersionRedactionKeyWire[];
+  missingRedactionFields?: string[];
+  debug?: Record<string, unknown>;
+}
+
+export type VersionCaptureFailureStageWire = "admission" | "capture";
+
+export type VersionDiagnosticSeverityWire = "info" | "warning" | "error";
+
 export type VersionDomainCapabilityState = "not-started" | "contracted" | "supported" | "derived" | "excluded" | "opaque-preserved" | "opaque-blocking";
 
 export type VersionDomainClass = "authored" | "derived" | "transient" | "packageFidelity" | "secret" | "external";
@@ -6271,6 +6298,18 @@ export interface VersionOperationContextWire {
 }
 
 export type VersionOperationKindWire = "mutation" | "semantic-operation" | "derived-output-promotion" | "sync-import" | "sync-export" | "merge" | "revert" | "review";
+
+export type VersionRedactionKeySubjectWire = "author" | "session" | "provider" | "debug";
+
+export interface VersionRedactionKeyWire {
+  keyId: string;
+  subject: VersionRedactionKeySubjectWire;
+  sourceField: string;
+  digest: ObjectDigest;
+  policy: VersionRedactionPolicyWire;
+}
+
+export type VersionRedactionPolicyWire = "none" | "metadata-only" | "content-redacted" | "opaque-digest-only" | "drop";
 
 export type VersionSyncAuthorStateWire = "singleRemote" | "mixedRemote" | "unknown" | "agent" | "system";
 

@@ -17,13 +17,28 @@ export type MergeDomainReference = {
   readonly domainId: string;
 };
 
-const MATERIALIZABLE_MERGE_MATRIX_ROW_IDS = new Set([
+const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
   'cell',
   'cells.values',
   'cells.formulas',
   'cells.formats.direct',
 ]);
-const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set(['cell', 'cells.values']);
+const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
+  ['cell', new Set(['cell', 'cells.values', 'cells.formulas'])],
+  ['cells.values', new Set(['cell', 'cells.values'])],
+  ['cells.formulas', new Set(['cell', 'cells.values', 'cells.formulas'])],
+  ['cells.formats.direct', new Set(['cells.formats', 'cells.formats.direct'])],
+]);
+const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set(['rows-columns', 'sheets']);
+const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS = new Set([
+  'column',
+  'columns',
+  'row',
+  'rows',
+  'rows-columns',
+  'sheet',
+  'sheets',
+]);
 
 export type MergeMaterializationSupport =
   | { readonly ok: true }
@@ -39,7 +54,7 @@ export function inspectMaterializableMergeChange(
 ): MergeMaterializationSupport {
   const structural = parseMaterializableStructural(change.structural);
   if (!structural) {
-    return unsupported(change.structural, 'unsupportedStructuralMetadata');
+    return unsupported(change.structural, unsupportedStructuralReason(change.structural));
   }
   if (!parseCellEntity(structural.entityId)) {
     return unsupported(structural, 'unsupportedEntityId');
@@ -86,8 +101,14 @@ export function materializableMergePlanDiagnostics(
 }
 
 export function isMaterializableMergeDomainReference(reference: MergeDomainReference): boolean {
+  if (isUnsupportedStructuralMergeDomainId(reference.domainId)) return false;
+
   if (reference.matrixRowId) {
-    return MATERIALIZABLE_MERGE_MATRIX_ROW_IDS.has(reference.matrixRowId);
+    if (UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS.has(reference.matrixRowId)) return false;
+    const allowedDomainIds = MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID.get(
+      reference.matrixRowId,
+    );
+    return Boolean(allowedDomainIds?.has(reference.domainId));
   }
   return MATERIALIZABLE_MERGE_DOMAIN_IDS.has(reference.domainId);
 }
@@ -196,6 +217,20 @@ function unsupported(
     structuralKind: structural.kind,
     domain: structural.kind === 'metadata' ? structural.domain : 'redacted',
   };
+}
+
+function unsupportedStructuralReason(structural: VersionDiffStructuralMetadata): string {
+  if (
+    structural.kind === 'metadata' &&
+    isUnsupportedStructuralMergeDomainId(structural.domain)
+  ) {
+    return 'unsupportedStructuralDomain';
+  }
+  return 'unsupportedStructuralMetadata';
+}
+
+function isUnsupportedStructuralMergeDomainId(domainId: string): boolean {
+  return UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS.has(domainId);
 }
 
 function unsupportedDiagnostic(

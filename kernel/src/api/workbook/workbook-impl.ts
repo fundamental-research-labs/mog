@@ -53,7 +53,6 @@ import type {
   WorksheetWithInternals,
 } from '@mog-sdk/contracts/api';
 import type { CultureInfo } from '@mog-sdk/contracts/culture';
-import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import type { IChartBridge, IInkRecognitionBridge, IPivotBridge } from '@mog-sdk/contracts/bridges';
 import { type CellValuePrimitive, type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import { toRowId as toSpreadsheetRowId } from '@mog-sdk/contracts/cell-identity';
@@ -92,7 +91,6 @@ import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { createCheckpointManager } from '../../services/checkpoint';
 import type { ICheckpointManager } from '../../services/checkpoint';
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
-import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
 import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import {
   getFunctionCatalog as getCatalog,
@@ -110,7 +108,6 @@ import type {
   CodeExecutorType,
   CreateWorkbookOptions,
   WorkbookConfig,
-  WorkbookVersioningConfig,
 } from './types';
 import {
   attachWorkbookVersioning,
@@ -170,13 +167,6 @@ import {
   WorkbookVersionWithDirtyTracking,
   type WorkbookVersionDirtyTrackingState,
 } from './workbook-version-dirty-tracking';
-import {
-  checkoutDirtyWorkingStateDiagnostic,
-  checkoutWriteFenceUnavailableDiagnostic,
-  type VersionCheckoutTransactionBeginResult,
-  type VersionCheckoutTransactionGuard,
-  type VersionCheckoutTransactionToken,
-} from './version-checkout';
 import { WorkbookNamesImpl } from './names';
 import { WorkbookNotificationsImpl } from './notifications';
 import { WorkbookPropertiesImpl } from './properties';
@@ -197,10 +187,18 @@ import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
-import { bindWorkbookFeatureGates } from './workbook-feature-gates-context';
-import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
 import { reconcileCheckoutActiveSheet } from './version-checkout-materializer-active-sheet';
 import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
+import {
+  applyWorkbookReadOnlyMode,
+  createWorkbookFeatureGateBinder,
+  createWorkbookStateProvider,
+  type WorkbookFeatureGateBinder,
+} from './workbook-construction-config';
+import { createWorkbookCheckoutTransactionCoordinator } from './workbook-checkout-transactions';
+import { createWorkbookLiveness } from './workbook-liveness';
+import { resolveWorkbookImportWarnings } from './workbook-import-warnings';
+import { withDefaultWorkbookCheckoutMaterializer } from './workbook-versioning-assembly';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -209,44 +207,11 @@ import type {
   KernelDocumentHighWaterMarkProof,
 } from '@mog-sdk/types-host/kernel';
 import { createHostCanonicalFingerprint } from '@mog-sdk/types-host/fingerprints';
-import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
+import type { HandleLiveness } from '../lifecycle/handle-liveness';
 
 // =============================================================================
 // WorkbookImpl
 // =============================================================================
-
-function resolveWorkbookLivenessMetadata(ctx: DocumentContext): {
-  readonly label: string;
-  readonly documentId?: string;
-  readonly sessionId?: string;
-} {
-  const maybeScope = (ctx as { workbookLinkScope?: DocumentContext['workbookLinkScope'] })
-    .workbookLinkScope;
-  const scope = typeof maybeScope === 'function' ? maybeScope.call(ctx) : undefined;
-  return {
-    label: 'Workbook',
-    ...(scope?.requestingDocumentId ? { documentId: scope.requestingDocumentId } : {}),
-    ...(scope?.requestingSessionId ? { sessionId: scope.requestingSessionId } : {}),
-  };
-}
-
-type WorkbookCheckoutTransactionToken = VersionCheckoutTransactionToken & {
-  readonly id: number;
-  readonly mutationWatermark: number | null;
-};
-
-function checkoutPublishDiagnosticMessage(code: CheckoutMaterializationDiagnostic['code']): string {
-  switch (code) {
-    case 'VERSION_CHECKOUT_DIRTY_WORKING_STATE':
-      return 'Checkout requires a clean workbook before publishing materialized state.';
-    case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
-      return 'Workbook state changed while checkout materialization was in progress.';
-    case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
-      return 'Checkout could not acquire a local write fence before publishing materialized state.';
-    default:
-      return 'Checkout materialized state could not be published.';
-  }
-}
 
 export class WorkbookImpl implements WorkbookInternal {
   /**
@@ -257,8 +222,7 @@ export class WorkbookImpl implements WorkbookInternal {
   private readonly contextBinding: WorkbookContextBinding;
   private readonly stateProvider: WorkbookStateProvider;
   private readonly eventBus: IEventBus;
-  private readonly initialFeatureGates?: FeatureGates;
-  private readonly readFeatureGates?: () => FeatureGates;
+  private readonly bindFeatureGates: WorkbookFeatureGateBinder;
   private checkpointManager: ICheckpointManager;
   private readonly _disposables = new DisposableStore();
 
@@ -268,24 +232,23 @@ export class WorkbookImpl implements WorkbookInternal {
   private _links?: WorkbookLinks;
   private _diagnostics?: WorkbookDiagnosticsImpl;
   private readonly _checkoutMaterializations = new Set<SnapshotRootFreshLifecycleMaterialization>();
-  private _checkoutTransactionSequence = 0;
-  private _activeCheckoutTransaction: WorkbookCheckoutTransactionToken | null = null;
+  private _dirty = false;
   private _dirtyStatusSequence = 0;
+  private readonly checkoutTransactions = createWorkbookCheckoutTransactionCoordinator({
+    readContext: () => this.ctx,
+    isDirty: () => this._dirty,
+  });
   private readonly versionSurfaceStatusService = createWorkbookVersionSurfaceStatusService({
     readDirtyState: () => ({
       hasUncommittedLocalChanges: this._dirty,
       calculationState: this._calculationState,
-      checkoutInProgress: this._activeCheckoutTransaction !== null,
+      checkoutInProgress: this.checkoutTransactions.checkoutInProgress,
       revision: this._dirtyStatusSequence,
       contextGeneration: this.contextBinding.generation,
     }),
     readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
     readLiveCollaborationStatus: () => readVersionLiveCollaborationStatus(this.ctx),
   });
-  private readonly checkoutTransactionGuard: VersionCheckoutTransactionGuard = {
-    beginCheckoutTransaction: () => this.beginCheckoutTransaction(),
-    endCheckoutTransaction: (token) => this.endCheckoutTransaction(token),
-  };
 
   private get _floatingObjectManager(): SpreadsheetObjectManager {
     return this.ctx.floatingObjectManager as SpreadsheetObjectManager;
@@ -300,8 +263,6 @@ export class WorkbookImpl implements WorkbookInternal {
   private _cachedSheetNames: string[] = [];
   private _cachedSheetCount: number = 0;
 
-  // Platform state: dirty tracking
-  private _dirty = false;
   private _sheetRuntimeAdapterRegistration: CallableDisposable | null = null;
   private _sheetRuntimeAdapterHandler: unknown = null;
 
@@ -343,47 +304,29 @@ export class WorkbookImpl implements WorkbookInternal {
 
   constructor(config: WorkbookConfig) {
     // Cast to DocumentContext — WorkbookImpl is internal kernel code and knows the runtime type
-    this.initialFeatureGates = config.featureGates;
-    this.readFeatureGates = config.readFeatureGates;
+    this.bindFeatureGates = createWorkbookFeatureGateBinder(config);
     this.contextBinding = createWorkbookContextBinding(
       this.withWorkbookFeatureGates(config.ctx as DocumentContext),
     );
     this.ctx = this.contextBinding.context;
-    const versioning = this.versioningWithDefaultCheckoutMaterializer(config.versioning);
+    const versioning = withDefaultWorkbookCheckoutMaterializer(config.versioning, {
+      currentContext: () => this.ctx,
+      revalidateCheckoutPublish: (input) =>
+        this.checkoutTransactions.revalidateCheckoutPublish(input),
+      publishCheckoutMaterialization: (materialization, input) =>
+        this.publishCheckoutMaterialization(materialization, input),
+    });
     if (versioning) {
       attachWorkbookVersioning(this.ctx, versioning);
     }
     attachWorkbookVersionSurfaceStatusService(this.ctx, this.versionSurfaceStatusService);
-    this._liveness =
-      config.liveness ??
-      createHandleLiveness({
-        label: 'Workbook',
-        code: 'BRIDGE_DISPOSED',
-        metadata: resolveWorkbookLivenessMetadata(this.ctx),
-      });
+    this._liveness = createWorkbookLiveness(config, this.ctx);
 
     // stateProvider is the single source of truth for active sheet + UI state.
     // When not provided, a default headless provider tracks activeSheetId internally
     // and returns null/empty for all UI queries. _init() populates the active sheet
     // to the first sheet when it's empty.
-    if (config.stateProvider) {
-      this.stateProvider = config.stateProvider;
-      slog('workbook.activeSheet.mode', { mode: 'external-provider' });
-    } else {
-      let _activeSheetId = '';
-      this.stateProvider = {
-        getActiveSheetId: () => _activeSheetId,
-        setActiveSheetId: (id: string) => {
-          slog('workbook.activeSheet.set', { sheetId: id });
-          _activeSheetId = id;
-        },
-        getActiveCell: () => null,
-        getSelectedRanges: () => [],
-        getActiveObjectId: () => null,
-        getActiveObjectType: () => null,
-      };
-      slog('workbook.activeSheet.mode', { mode: 'internal-tracking' });
-    }
+    this.stateProvider = createWorkbookStateProvider(config.stateProvider);
 
     this.eventBus = config.eventBus;
     this.checkpointManager = createCheckpointManager(
@@ -401,12 +344,10 @@ export class WorkbookImpl implements WorkbookInternal {
     this.readOnly = config.readOnly ?? false;
     this._onSave = config.onSave;
     this._writeFile = config.writeFile;
-    this._importWarnings = config.importWarnings ?? [];
+    this._importWarnings = resolveWorkbookImportWarnings(config);
 
     // Write gate: if the workbook is opened read-only, lock the gate.
-    if (this.readOnly) {
-      (this.ctx.writeGate as import('../../document/write-gate').WriteGate)?.setMode('closed');
-    }
+    applyWorkbookReadOnlyMode(this.ctx, this.readOnly);
 
     this.registerSheetRuntimeAdapter();
 
@@ -420,119 +361,7 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   private withWorkbookFeatureGates(ctx: DocumentContext): DocumentContext {
-    if (!this.initialFeatureGates && !this.readFeatureGates) return ctx;
-    return bindWorkbookFeatureGates(
-      ctx,
-      () => this.readFeatureGates?.() ?? this.initialFeatureGates,
-    );
-  }
-
-  private versioningWithDefaultCheckoutMaterializer(
-    versioning: WorkbookVersioningConfig | undefined,
-  ): WorkbookVersioningConfig | undefined {
-    if (
-      !versioning ||
-      versioning.checkoutSnapshotMaterializer ||
-      !versioning.snapshotRootByteSyncPort
-    ) {
-      return versioning;
-    }
-
-    return {
-      ...versioning,
-      checkoutSnapshotMaterializer: createWorkbookCheckoutSnapshotMaterializer({
-        currentContext: () => this.ctx,
-        revalidateCheckoutPublish: (input) => this.revalidateCheckoutPublish(input),
-        publishCheckoutMaterialization: (materialization, input) =>
-          this.publishCheckoutMaterialization(materialization, input),
-      }),
-    };
-  }
-
-  private beginCheckoutTransaction(): VersionCheckoutTransactionBeginResult {
-    if (this._activeCheckoutTransaction) {
-      return {
-        ok: false,
-        diagnostics: [
-          checkoutWriteFenceUnavailableDiagnostic({ reason: 'checkoutAlreadyInProgress' }),
-        ],
-      };
-    }
-    if (this._dirty) {
-      return { ok: false, diagnostics: [checkoutDirtyWorkingStateDiagnostic()] };
-    }
-
-    const mutationWatermark = this.captureCheckoutMutationWatermark();
-    if (mutationWatermark === false) {
-      return {
-        ok: false,
-        diagnostics: [checkoutWriteFenceUnavailableDiagnostic({ reason: 'writeGateRejected' })],
-      };
-    }
-
-    const token = {
-      id: ++this._checkoutTransactionSequence,
-      mutationWatermark,
-    } satisfies WorkbookCheckoutTransactionToken;
-    this._activeCheckoutTransaction = token;
-    return { ok: true, token };
-  }
-
-  private endCheckoutTransaction(token: VersionCheckoutTransactionToken): void {
-    if (this._activeCheckoutTransaction === token) {
-      this._activeCheckoutTransaction = null;
-    }
-  }
-
-  private revalidateCheckoutPublish(
-    input: CheckoutSnapshotApplyInput,
-  ): readonly CheckoutMaterializationDiagnostic[] {
-    const token = this._activeCheckoutTransaction;
-    if (!token) {
-      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE')];
-    }
-    if (this._dirty) {
-      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_DIRTY_WORKING_STATE')];
-    }
-
-    const mutationWatermark = this.captureCheckoutMutationWatermark();
-    if (mutationWatermark === false) {
-      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE')];
-    }
-    if (
-      token.mutationWatermark !== null &&
-      mutationWatermark !== null &&
-      mutationWatermark !== token.mutationWatermark
-    ) {
-      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_STALE')];
-    }
-    return [];
-  }
-
-  private captureCheckoutMutationWatermark(): number | null | false {
-    try {
-      this.ctx.writeGate.assertWritable('workbook.version.checkout');
-    } catch {
-      return false;
-    }
-    const snapshot = this.ctx.writeGate.captureHighWaterMark?.();
-    return typeof snapshot?.mutationWatermark === 'number' ? snapshot.mutationWatermark : null;
-  }
-
-  private checkoutPublishDiagnostic(
-    input: CheckoutSnapshotApplyInput,
-    code:
-      | 'VERSION_CHECKOUT_DIRTY_WORKING_STATE'
-      | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'
-      | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
-  ): CheckoutMaterializationDiagnostic {
-    return {
-      code,
-      severity: 'error',
-      message: checkoutPublishDiagnosticMessage(code),
-      commitId: input.commitId,
-      details: { cause: code },
-    };
+    return this.bindFeatureGates(ctx);
   }
 
   private async publishCheckoutMaterialization(
@@ -2160,7 +1989,7 @@ export class WorkbookImpl implements WorkbookInternal {
   private _version?: WorkbookVersion;
   get version(): WorkbookVersion {
     return (this._version ??= new WorkbookVersionWithDirtyTracking(this.ctx, {
-      checkoutTransactionGuard: this.checkoutTransactionGuard,
+      checkoutTransactionGuard: this.checkoutTransactions.guard,
       readState: () => this.readVersionDirtyTrackingState(),
       markCleanIfRevisionUnchanged: (revision) => this.markCleanIfDirtyRevisionUnchanged(revision),
     }));

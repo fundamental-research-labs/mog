@@ -23,15 +23,10 @@ import {
   createInMemoryRefStore,
   refVersionsEqual,
   type InMemoryRefStore,
-  type LiveRefRecord,
   type ProviderEpoch,
   type RefVersion,
   type VersionDiagnostic,
 } from './ref-store';
-import {
-  assertRefStoreSnapshotManifestInvariants,
-  assertSnapshotRefTargetsReadable,
-} from './graph-store-snapshot';
 import type { InMemoryVersionGraphStoreSnapshot } from './graph-store-snapshot';
 import {
   createGraphBranchLifecycle,
@@ -55,17 +50,19 @@ import {
   parseListCommitsOptions,
 } from './graph-store-list-options';
 import { resolveListCommitsRoot } from './graph-store-list-commits-root';
+import {
+  createInMemoryVersionGraphStorePartsFromSnapshot,
+  exportInMemoryVersionGraphStoreSnapshot,
+} from './graph-store-object-helpers';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import { parseGraphCommitParentPlan, type GraphCommitParentPlan } from './graph-store-parent-plans';
 import {
-  collectReachableGraphCommits,
-  readCommitFromGraphRef,
-  readGraphBranchRef,
-  readGraphMainRef,
-} from './graph-store-read-helpers';
+  createGraphStoreRefHelpers,
+  type GraphStoreRefHelpers,
+} from './graph-store-ref-helpers';
 import { validateInputNamespaces } from './graph-store-record-validation';
+import { failedGraphWrite } from './graph-store-results';
 import { orderTopologicalNewestFirst } from './graph-store-traversal';
-import type { RefName } from './ref-name';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
@@ -275,6 +272,7 @@ export class InMemoryVersionGraphStore {
   readonly refStore: InMemoryRefStore;
 
   private readonly namespaceKey: string;
+  private readonly refs: GraphStoreRefHelpers;
 
   constructor(options: InMemoryVersionGraphStoreOptions) {
     this.namespace = normalizeVersionGraphNamespace(options.namespace);
@@ -283,12 +281,16 @@ export class InMemoryVersionGraphStore {
     this.commitStore = options.commitStore ?? createInMemoryWorkbookCommitStore(this.objectStore);
     this.refStore =
       options.refStore ?? createInMemoryRefStore({ versionDocumentId: this.namespace.documentId });
+    this.refs = createGraphStoreRefHelpers({
+      commitStore: this.commitStore,
+      refStore: this.refStore,
+    });
   }
 
   async initializeGraph(input: InitializeVersionGraphInput): Promise<VersionGraphWriteResult> {
     const namespaceDiagnostics = validateInputNamespaces(this.namespaceKey, input);
     if (namespaceDiagnostics.length > 0) {
-      return failedWrite(namespaceDiagnostics, 'no-write-attempted');
+      return failedGraphWrite(namespaceDiagnostics, 'no-write-attempted');
     }
 
     const created = await this.commitStore.createWorkbookCommit({
@@ -297,7 +299,7 @@ export class InMemoryVersionGraphStore {
       parentCommitIds: [],
     });
     if (created.status !== 'success') {
-      return failedWrite(mapCommitDiagnostics(created.diagnostics), 'no-write-attempted');
+      return failedGraphWrite(mapCommitDiagnostics(created.diagnostics), 'no-write-attempted');
     }
 
     const initialized = this.refStore.initializeMain({
@@ -314,7 +316,7 @@ export class InMemoryVersionGraphStore {
       return graphWriteSuccess(created.commit, existing.ref);
     }
 
-    return failedWrite(
+    return failedGraphWrite(
       [
         diagnostic('VERSION_GRAPH_CONFLICT', 'Graph main ref is already initialized.', {
           refName: VERSION_GRAPH_MAIN_REF,
@@ -356,17 +358,17 @@ export class InMemoryVersionGraphStore {
   ): Promise<VersionGraphWriteResult> {
     const namespaceDiagnostics = validateInputNamespaces(this.namespaceKey, input);
     if (namespaceDiagnostics.length > 0) {
-      return failedWrite(namespaceDiagnostics, 'no-write-attempted');
+      return failedGraphWrite(namespaceDiagnostics, 'no-write-attempted');
     }
 
     const target = parseGraphCommitTargetRef(input.targetRef, diagnostic);
     if (!target.ok) {
-      return failedWrite(target.diagnostics, 'no-write-attempted');
+      return failedGraphWrite(target.diagnostics, 'no-write-attempted');
     }
 
     const expectedRefVersion = input.expectedTargetRefVersion ?? input.expectedMainRefVersion;
     if (expectedRefVersion === undefined) {
-      return failedWrite(
+      return failedGraphWrite(
         [missingGraphCommitExpectedRefVersionDiagnostic(target.name, diagnostic)],
         'no-write-attempted',
       );
@@ -374,20 +376,20 @@ export class InMemoryVersionGraphStore {
 
     const current =
       target.refName === 'main'
-        ? this.readMainRef('commit')
-        : this.readBranchRef(target.refName, 'commit');
+        ? this.refs.readMainRef('commit')
+        : this.refs.readBranchRef(target.refName, 'commit');
     if (!current.ok) {
-      return failedWrite(current.diagnostics, 'no-write-attempted');
+      return failedGraphWrite(current.diagnostics, 'no-write-attempted');
     }
 
-    const main = target.refName === 'main' ? undefined : this.readMainRef('commit');
+    const main = target.refName === 'main' ? undefined : this.refs.readMainRef('commit');
     if (main !== undefined && !main.ok) {
-      return failedWrite(main.diagnostics, 'no-write-attempted');
+      return failedGraphWrite(main.diagnostics, 'no-write-attempted');
     }
 
     const expectedHead = parseGraphCommitExpectedHead(input.expectedHeadCommitId, diagnostic);
     if (!expectedHead.ok) {
-      return failedWrite(expectedHead.diagnostics, 'no-write-attempted');
+      return failedGraphWrite(expectedHead.diagnostics, 'no-write-attempted');
     }
     const parentResult = parseGraphCommitParentPlan(parentPlan, current.ref, {
       diagnostic,
@@ -395,13 +397,13 @@ export class InMemoryVersionGraphStore {
       refConflictDiagnostic,
     });
     if (!parentResult.ok) {
-      return failedWrite(parentResult.diagnostics, 'no-write-attempted');
+      return failedGraphWrite(parentResult.diagnostics, 'no-write-attempted');
     }
     if (
       current.ref.targetCommitId !== expectedHead.commitId ||
       !refVersionsEqual(current.ref.refVersion, expectedRefVersion)
     ) {
-      return failedWrite(
+      return failedGraphWrite(
         [refConflictDiagnostic(current.ref, expectedHead.commitId)],
         'no-write-attempted',
       );
@@ -413,7 +415,7 @@ export class InMemoryVersionGraphStore {
       parentCommitIds: parentResult.parentCommitIds,
     });
     if (created.status !== 'success') {
-      return failedWrite(mapCommitDiagnostics(created.diagnostics), 'ref-not-mutated');
+      return failedGraphWrite(mapCommitDiagnostics(created.diagnostics), 'ref-not-mutated');
     }
 
     const advanced = this.refStore.advanceRefForGraphWrite({
@@ -424,7 +426,7 @@ export class InMemoryVersionGraphStore {
       updatedBy: input.author,
     });
     if (!advanced.ok) {
-      return failedWrite(
+      return failedGraphWrite(
         [refConflictDiagnostic(current.ref, expectedHead.commitId, advanced.diagnostics)],
         'ref-not-mutated',
       );
@@ -448,13 +450,13 @@ export class InMemoryVersionGraphStore {
   }
 
   async readHead(): Promise<VersionGraphReadHeadResult> {
-    const current = this.readMainRef('readHead');
+    const current = this.refs.readMainRef('readHead');
     if (!current.ok) {
       return { status: 'degraded', head: null, diagnostics: current.diagnostics };
     }
 
     const main = graphRefFromLiveRef(current.ref);
-    const readable = await this.readCommitFromRef(current.ref, 'readHead');
+    const readable = await this.refs.readCommitFromRef(current.ref, 'readHead');
     if (!readable.ok) {
       return {
         status: 'degraded',
@@ -479,13 +481,13 @@ export class InMemoryVersionGraphStore {
     }
 
     if (selector.name === VERSION_GRAPH_HEAD_REF) {
-      const current = this.readMainRef('readRef');
+      const current = this.refs.readMainRef('readRef');
       if (!current.ok) {
         return { status: 'degraded', ref: null, diagnostics: current.diagnostics };
       }
 
       const ref = symbolicHeadFromLiveRef(current.ref);
-      const readable = await this.readCommitFromRef(current.ref, 'readRef');
+      const readable = await this.refs.readCommitFromRef(current.ref, 'readRef');
       if (!readable.ok) {
         return {
           status: 'degraded',
@@ -499,14 +501,14 @@ export class InMemoryVersionGraphStore {
 
     const current =
       selector.refName === 'main'
-        ? this.readMainRef('readRef')
-        : this.readBranchRef(selector.refName, 'readRef');
+        ? this.refs.readMainRef('readRef')
+        : this.refs.readBranchRef(selector.refName, 'readRef');
     if (!current.ok) {
       return { status: 'degraded', ref: null, diagnostics: current.diagnostics };
     }
 
     const ref = graphRefFromLiveRef(current.ref);
-    const readable = await this.readCommitFromRef(current.ref, 'readRef');
+    const readable = await this.refs.readCommitFromRef(current.ref, 'readRef');
     if (!readable.ok) {
       return {
         status: 'degraded',
@@ -546,14 +548,14 @@ export class InMemoryVersionGraphStore {
     }
 
     const root = resolveListCommitsRoot(parsedOptions.target, {
-      readMainRef: () => this.readMainRef('listCommits'),
-      readBranchRef: (refName) => this.readBranchRef(refName, 'listCommits'),
+      readMainRef: () => this.refs.readMainRef('listCommits'),
+      readBranchRef: (refName) => this.refs.readBranchRef(refName, 'listCommits'),
     });
     if (!root.ok) {
       return { status: 'failed', diagnostics: root.diagnostics };
     }
 
-    const collected = await this.collectReachableCommits(root.commitId, 'listCommits');
+    const collected = await this.refs.collectReachableCommits(root.commitId, 'listCommits');
     if (!collected.ok) {
       const diagnostics =
         root.ref && !collected.commits.has(root.commitId)
@@ -608,7 +610,7 @@ export class InMemoryVersionGraphStore {
       return { status: 'failed', diagnostics: start.diagnostics };
     }
 
-    const collected = await this.collectReachableCommits(start.commitId, 'readCommitClosure');
+    const collected = await this.refs.collectReachableCommits(start.commitId, 'readCommitClosure');
     if (!collected.ok) {
       return { status: 'failed', diagnostics: collected.diagnostics };
     }
@@ -624,42 +626,12 @@ export class InMemoryVersionGraphStore {
   }
 
   async exportSnapshot(): Promise<InMemoryVersionGraphStoreSnapshot> {
-    const refStore = this.refStore.exportSnapshot();
-    assertRefStoreSnapshotManifestInvariants(refStore, this.namespace.documentId);
-    await assertSnapshotRefTargetsReadable(refStore.records, (commitId) =>
-      this.readCommit(commitId),
-    );
-
-    return Object.freeze({
+    return exportInMemoryVersionGraphStoreSnapshot({
       namespace: this.namespace,
-      objectRecords: this.objectStore.listObjectRecords(),
-      refStore,
+      objectStore: this.objectStore,
+      refStore: this.refStore,
+      readCommit: (commitId) => this.readCommit(commitId),
     });
-  }
-
-  private async readCommitFromRef(
-    ref: LiveRefRecord,
-    operation: VersionGraphStoreOperation,
-  ): ReturnType<typeof readCommitFromGraphRef> {
-    return readCommitFromGraphRef(this.commitStore, ref, operation);
-  }
-
-  private async collectReachableCommits(
-    rootCommitId: WorkbookCommitId,
-    operation: VersionGraphStoreOperation,
-  ): ReturnType<typeof collectReachableGraphCommits> {
-    return collectReachableGraphCommits(this.commitStore, rootCommitId, operation);
-  }
-
-  private readMainRef(operation?: VersionGraphStoreOperation): ReturnType<typeof readGraphMainRef> {
-    return readGraphMainRef(this.refStore, operation);
-  }
-
-  private readBranchRef(
-    refName: RefName,
-    operation?: VersionGraphStoreOperation,
-  ): ReturnType<typeof readGraphBranchRef> {
-    return readGraphBranchRef(this.refStore, refName, operation);
   }
 
   private branchService(): GraphBranchLifecycle {
@@ -676,30 +648,6 @@ export function createInMemoryVersionGraphStore(
 export async function createInMemoryVersionGraphStoreFromSnapshot(
   snapshot: InMemoryVersionGraphStoreSnapshot,
 ): Promise<InMemoryVersionGraphStore> {
-  const namespace = normalizeVersionGraphNamespace(snapshot.namespace);
-  assertRefStoreSnapshotManifestInvariants(snapshot.refStore, namespace.documentId);
-  const objectStore = createInMemoryVersionObjectStore(namespace);
-  const putResult = await objectStore.putObjects(snapshot.objectRecords);
-  if (putResult.status !== 'success') {
-    throw new Error('Version graph object snapshot failed validation.');
-  }
-  const graph = createInMemoryVersionGraphStore({
-    namespace,
-    objectStore,
-    refStore: createInMemoryRefStore({
-      versionDocumentId: namespace.documentId,
-      snapshot: snapshot.refStore,
-    }),
-  });
-  await assertSnapshotRefTargetsReadable(snapshot.refStore.records, (commitId) =>
-    graph.readCommit(commitId),
-  );
-  return graph;
-}
-
-function failedWrite(
-  diagnostics: readonly VersionGraphStoreDiagnostic[],
-  mutationGuarantee: VersionGraphWriteFailure['mutationGuarantee'],
-): VersionGraphWriteFailure {
-  return { status: 'failed', diagnostics, mutationGuarantee };
+  const parts = await createInMemoryVersionGraphStorePartsFromSnapshot(snapshot);
+  return createInMemoryVersionGraphStore(parts);
 }

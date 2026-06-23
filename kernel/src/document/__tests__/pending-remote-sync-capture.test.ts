@@ -218,10 +218,27 @@ describe('RustDocument pending remote sync capture', () => {
       objectType: 'workbook.mutationSegment.v1',
       payload: {
         lane: 'pendingRemote',
-        operationContext: matchingContext,
+        operationContext: {
+          kind: 'sync-import',
+          collaboration: {
+            stableOriginId: 'provider-stable-1',
+            updateId: 'remote-update-a',
+            payloadHash: 'a'.repeat(64),
+          },
+        },
         mutations: [expect.objectContaining({ operation: 'compute_apply_sync_update' })],
       },
     });
+    const mutationSegmentPayload = captured.objectRecords?.mutationSegmentRecord.preimage
+      .payload as {
+      readonly operationContext?: {
+        readonly collaboration?: Readonly<Record<string, unknown>>;
+      };
+    };
+    expect(mutationSegmentPayload.operationContext?.collaboration).not.toHaveProperty('providerId');
+    expect(mutationSegmentPayload.operationContext?.collaboration).not.toHaveProperty(
+      'remoteSessionId',
+    );
     expect(captured.objectRecords?.semanticChangeSetRecord?.preimage).toMatchObject({
       objectType: 'workbook.semanticChangeSet.v1',
       payload: {
@@ -246,7 +263,14 @@ describe('RustDocument pending remote sync capture', () => {
         mutationSegmentDigest: captured.record.mutationSegmentDigest,
         semanticChangeSetDigest: captured.record.semanticChangeSetDigest,
         snapshotRootDigest: captured.record.snapshotRootDigest,
-        operationContext: matchingContext,
+        operationContext: {
+          kind: 'sync-import',
+          collaboration: {
+            stableOriginId: 'provider-stable-1',
+            updateId: 'remote-update-a',
+            payloadHash: 'a'.repeat(64),
+          },
+        },
       },
     });
 

@@ -9,6 +9,7 @@ import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
   type VersionDocumentScope,
+  type VersionGraphStore,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../provider';
@@ -170,6 +171,178 @@ describe('pending remote capture service', () => {
     expect(result.diagnostics[0]?.details).not.toHaveProperty('authorityRef');
     expect(result.diagnostics[0]?.details).not.toHaveProperty('remoteSessionId');
   });
+
+  it('persists a verified history-suspension marker when no matching semantic mutations exist', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const registryRead = await provider.readGraphRegistry();
+    if (registryRead.status !== 'ok') throw new Error('expected graph registry');
+    const pendingRemoteSegmentStore = await provider.openPendingRemoteSegmentStore(namespace);
+    const operationContext = pendingRemoteOperationContext({
+      operationId: 'operation-history-suspension',
+      collaboration: {
+        updateId: 'remote-update-history-suspension',
+        payloadHash: '6'.repeat(64),
+      },
+    });
+
+    const result = await capturePendingRemoteSemanticMutations({
+      capture: {
+        provider,
+        graph,
+        accessContext: provider.accessContext,
+        namespace,
+        registry: registryRead.registry,
+        pendingRemoteSegmentStore,
+        operationContext,
+        snapshotRootByteSyncPort: {
+          encodeDiff: async () => new Uint8Array([0x01, 0x02, 0x03]),
+        },
+      },
+      records: [],
+      mutationSegmentPayload: (record) => record,
+    });
+
+    expect(result).toMatchObject({
+      status: 'success',
+      reservationStatus: 'created',
+      capturedRecordSequences: [],
+      historySuspension: {
+        status: 'verified',
+        reason: 'no-matching-semantic-mutations',
+        capturePolicy: 'historyGap',
+        writeAdmissionMode: 'captureSuspendedWithGap',
+      },
+      record: {
+        operationContext: {
+          capturePolicy: 'historyGap',
+          writeAdmissionMode: 'captureSuspendedWithGap',
+        },
+      },
+    });
+    if (result.status !== 'success') throw new Error('expected history-suspension marker');
+    expectNoRawProviderIdentity(result.record.operationContext.collaboration);
+    expectHistorySuspensionMutationSegment(result.objectRecords?.mutationSegmentRecord);
+    await expect(
+      pendingRemoteSegmentStore.readBySegmentId(result.record.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        pendingRemoteSegmentId: result.record.pendingRemoteSegmentId,
+        state: 'pending',
+        operationContext: {
+          capturePolicy: 'historyGap',
+          writeAdmissionMode: 'captureSuspendedWithGap',
+        },
+      },
+    });
+  });
+
+  it('fails closed with redacted diagnostics when verified marker object writes fail', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const registryRead = await provider.readGraphRegistry();
+    if (registryRead.status !== 'ok') throw new Error('expected graph registry');
+    const pendingRemoteSegmentStore = await provider.openPendingRemoteSegmentStore(namespace);
+
+    const result = await capturePendingRemoteSemanticMutations({
+      capture: {
+        provider,
+        graph: graphWithObjectWriteFailure(graph),
+        accessContext: provider.accessContext,
+        namespace,
+        registry: registryRead.registry,
+        pendingRemoteSegmentStore,
+        operationContext: pendingRemoteOperationContext({
+          operationId: 'operation-object-write-failure',
+          collaboration: {
+            updateId: 'remote-update-object-write-failure',
+            payloadHash: '7'.repeat(64),
+          },
+        }),
+      },
+      records: [],
+      mutationSegmentPayload: (record) => record,
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-objects-written',
+      retryable: true,
+      diagnostics: [
+        {
+          code: 'VERSION_OBJECT_STORE_FAILURE',
+          source: 'objectStore',
+          details: {
+            sourceCode: 'VERSION_STORE_UNAVAILABLE',
+            objectType: 'workbook.mutationSegment.v1',
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('provider-raw');
+    expect(JSON.stringify(result)).not.toContain('authority-raw');
+    expect(JSON.stringify(result)).not.toContain('remote-session-raw');
+  });
+
+  it('fails closed with redacted diagnostics when verified marker reservation fails', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const registryRead = await provider.readGraphRegistry();
+    if (registryRead.status !== 'ok') throw new Error('expected graph registry');
+
+    const result = await capturePendingRemoteSemanticMutations({
+      capture: {
+        provider,
+        graph,
+        accessContext: provider.accessContext,
+        namespace,
+        registry: registryRead.registry,
+        pendingRemoteSegmentStore: failingReservePendingRemoteSegmentStore(namespace),
+        operationContext: pendingRemoteOperationContext({
+          operationId: 'operation-reservation-failure',
+          collaboration: {
+            updateId: 'remote-update-reservation-failure',
+            payloadHash: '8'.repeat(64),
+          },
+        }),
+      },
+      records: [],
+      mutationSegmentPayload: (record) => record,
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'objects-written-segment-not-reserved',
+      retryable: true,
+      diagnostics: [
+        {
+          code: 'VERSION_PROVIDER_FAILED',
+          source: 'pendingRemoteSegmentStore',
+          details: { stableDetail: 'kept' },
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toContain('provider-raw');
+    expect(JSON.stringify(result)).not.toContain('ProviderA');
+    expect(JSON.stringify(result)).not.toContain('authority-raw');
+    expect(JSON.stringify(result)).not.toContain('remote-session-raw');
+  });
 });
 
 async function initializeProvider(provider: {
@@ -329,6 +502,58 @@ function expectMutationSegmentHasNoRawProviderIdentity(
   );
 }
 
+function expectHistorySuspensionMutationSegment(
+  record: VersionObjectRecord<unknown> | undefined,
+): void {
+  expect(record).toBeDefined();
+  const payload = record?.preimage.payload;
+  if (!isRecord(payload)) throw new Error('expected mutation segment payload');
+  expect(payload).toMatchObject({
+    historySuspension: {
+      status: 'verified',
+      reason: 'no-matching-semantic-mutations',
+      capturePolicy: 'historyGap',
+      writeAdmissionMode: 'captureSuspendedWithGap',
+    },
+    mutations: [],
+    changeIds: [],
+  });
+  const operationContext = payload.operationContext;
+  if (!isRecord(operationContext) || !isRecord(operationContext.collaboration)) {
+    throw new Error('expected mutation segment operation context');
+  }
+  expect(operationContext).toMatchObject({
+    capturePolicy: 'historyGap',
+    writeAdmissionMode: 'captureSuspendedWithGap',
+  });
+  expectNoRawProviderIdentity(
+    operationContext.collaboration as NonNullable<VersionOperationContext['collaboration']>,
+  );
+}
+
+function graphWithObjectWriteFailure(graph: VersionGraphStore): VersionGraphStore {
+  return {
+    ...graph,
+    putObjects: async () => ({
+      status: 'failed',
+      mutationGuarantee: 'no-objects-written',
+      diagnostics: [
+        {
+          code: 'VERSION_STORE_UNAVAILABLE',
+          severity: 'error',
+          message: 'Injected object write failure for provider-raw authority-raw.',
+          objectType: 'workbook.mutationSegment.v1',
+          details: {
+            providerId: 'provider-raw',
+            authorityRef: 'authority-raw',
+            remoteSessionId: 'remote-session-raw',
+          },
+        },
+      ],
+    }),
+  };
+}
+
 function failingReadPendingRemoteSegmentStore(
   namespace: VersionGraphNamespace,
 ): PendingRemoteSegmentStore {
@@ -359,6 +584,48 @@ function failingReadPendingRemoteSegmentStore(
           },
         },
       ],
+    }),
+    listByState: async () => ({ status: 'success', records: [], diagnostics: [] }),
+    completeSegment: async () => ({
+      status: 'missing',
+      record: null,
+      diagnostics: [],
+    }),
+  };
+}
+
+function failingReservePendingRemoteSegmentStore(
+  namespace: VersionGraphNamespace,
+): PendingRemoteSegmentStore {
+  return {
+    namespace,
+    reserveSegment: async () => ({
+      status: 'failed',
+      record: null,
+      diagnostics: [
+        {
+          code: 'VERSION_PROVIDER_FAILED',
+          message: 'Injected reservation failure.',
+          recoverability: 'retry',
+          details: {
+            providerId: 'provider-raw',
+            providerRefId: 'ProviderA',
+            authorityRef: 'authority-raw',
+            remoteSessionId: 'remote-session-raw',
+            stableDetail: 'kept',
+          },
+        },
+      ],
+    }),
+    readBySegmentId: async () => ({
+      status: 'missing',
+      record: null,
+      diagnostics: [],
+    }),
+    readByIdempotencyKey: async () => ({
+      status: 'missing',
+      record: null,
+      diagnostics: [],
     }),
     listByState: async () => ({ status: 'success', records: [], diagnostics: [] }),
     completeSegment: async () => ({

@@ -53,6 +53,13 @@ export type VersionPendingRemoteCaptureObjectRecords = {
   readonly snapshotRootRecord?: VersionObjectRecord<unknown>;
 };
 
+export type VersionPendingRemoteHistorySuspension = {
+  readonly status: 'verified';
+  readonly reason: 'no-matching-semantic-mutations';
+  readonly capturePolicy: 'historyGap';
+  readonly writeAdmissionMode: 'captureSuspendedWithGap';
+};
+
 export type VersionPendingRemoteCaptureDiagnosticCode =
   | 'VERSION_INVALID_OPTIONS'
   | 'VERSION_OBJECT_STORE_FAILURE'
@@ -77,6 +84,7 @@ export type VersionPendingRemoteCaptureResult =
       readonly record: PendingRemoteSegmentRecord;
       readonly objectRecords?: VersionPendingRemoteCaptureObjectRecords;
       readonly capturedRecordSequences: readonly number[];
+      readonly historySuspension?: VersionPendingRemoteHistorySuspension;
       readonly diagnostics: readonly [];
     }
   | {
@@ -97,6 +105,14 @@ export type VersionPendingRemoteCaptureResult =
 export type VersionPendingRemoteCapture = (
   input: VersionPendingRemoteCaptureInput,
 ) => Promise<VersionPendingRemoteCaptureResult> | VersionPendingRemoteCaptureResult;
+
+type PendingRemoteHistorySuspensionVerificationResult =
+  | { readonly status: 'success' }
+  | {
+      readonly status: 'failed';
+      readonly message: string;
+      readonly details: Readonly<Record<string, string | number | boolean | null>>;
+    };
 
 export async function capturePendingRemoteSemanticMutations<
   TRecord extends PendingRemoteSemanticMutationCaptureRecord,
@@ -133,15 +149,28 @@ export async function capturePendingRemoteSemanticMutations<
     return existing;
   }
 
-  if (matchingRecords.length === 0) {
-    return existing;
-  }
+  const historySuspension =
+    matchingRecords.length === 0
+      ? pendingRemoteHistorySuspension(identityOperationContext)
+      : undefined;
+  if (historySuspension?.status === 'failed') return historySuspension.failure;
+
+  const persistedOperationContext =
+    historySuspension?.status === 'success'
+      ? pendingRemoteHistorySuspensionOperationContext(identityOperationContext)
+      : identityOperationContext;
+  const persistedCapture: VersionPendingRemoteCaptureInput & {
+    readonly operationContext: PendingRemoteSegmentOperationContext;
+  } = { ...capture, operationContext: persistedOperationContext };
 
   const objectRecords = await materializePendingRemoteObjects({
-    ...capture,
+    ...persistedCapture,
     records: matchingRecords,
     mutationSegmentPayload: input.mutationSegmentPayload,
     pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
+    ...(historySuspension?.status === 'success'
+      ? { historySuspension: historySuspension.historySuspension }
+      : {}),
   });
   if (objectRecords.status !== 'success') return objectRecords.failure;
 
@@ -154,7 +183,7 @@ export async function capturePendingRemoteSemanticMutations<
     input: {
       pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
       idempotencyKey: keyMaterial.idempotencyKey,
-      operationContext: identityOperationContext,
+      operationContext: persistedOperationContext,
       mutationSegmentDigest: objectRecords.records.mutationSegmentRecord.digest,
       ...(objectRecords.records.snapshotRootRecord
         ? { snapshotRootDigest: objectRecords.records.snapshotRootRecord.digest }
@@ -183,6 +212,9 @@ export async function capturePendingRemoteSemanticMutations<
     record: reserved.record,
     objectRecords: objectRecords.records,
     capturedRecordSequences,
+    ...(historySuspension?.status === 'success'
+      ? { historySuspension: historySuspension.historySuspension }
+      : {}),
     diagnostics: [],
   };
 }
@@ -263,11 +295,13 @@ async function existingPendingRemoteSegment(
 ): Promise<VersionPendingRemoteCaptureResult> {
   const read = await input.pendingRemoteSegmentStore.readByIdempotencyKey(idempotencyKey);
   if (read.status === 'found') {
+    const historySuspension = pendingRemoteHistorySuspensionFromRecord(read.record);
     return {
       status: 'success',
       reservationStatus: 'existing',
       record: read.record,
       capturedRecordSequences,
+      ...(historySuspension ? { historySuspension } : {}),
       diagnostics: [],
     };
   }
@@ -292,6 +326,7 @@ async function materializePendingRemoteObjects<
     readonly records: readonly TRecord[];
     readonly mutationSegmentPayload: (record: TRecord) => unknown;
     readonly pendingRemoteSegmentId: string;
+    readonly historySuspension?: VersionPendingRemoteHistorySuspension;
   },
 ): Promise<
   | { readonly status: 'success'; readonly records: VersionPendingRemoteCaptureObjectRecords }
@@ -404,6 +439,7 @@ function pendingRemoteMutationSegmentPayload<
   readonly records: readonly TRecord[];
   readonly mutationSegmentPayload: (record: TRecord) => unknown;
   readonly pendingRemoteSegmentId: string;
+  readonly historySuspension?: VersionPendingRemoteHistorySuspension;
 }): unknown {
   const changes = input.records.flatMap((record) => [...record.changes]);
   return {
@@ -416,6 +452,7 @@ function pendingRemoteMutationSegmentPayload<
     graphId: input.registry.currentGraphId,
     documentId: input.provider.documentScope.documentId,
     changeIds: changes.map((change) => semanticChangeId(change)),
+    ...(input.historySuspension ? { historySuspension: input.historySuspension } : {}),
     mutations: input.records.map((record) =>
       sanitizePendingRemoteMutationPayload(input.mutationSegmentPayload(record)),
     ),
@@ -459,7 +496,7 @@ function pendingRemoteCaptureDiagnosticFromSegmentStore(
 ): VersionPendingRemoteCaptureDiagnostic {
   return pendingRemoteCaptureDiagnostic(
     diagnostic.code,
-    diagnostic.message,
+    pendingRemoteSegmentStoreDiagnosticMessage(diagnostic.code),
     diagnostic.recoverability,
     'pendingRemoteSegmentStore',
     sanitizePendingRemoteDiagnosticDetails(diagnostic.details),
@@ -471,7 +508,7 @@ function pendingRemoteCaptureDiagnosticFromObjectStore(
 ): VersionPendingRemoteCaptureDiagnostic {
   return pendingRemoteCaptureDiagnostic(
     'VERSION_OBJECT_STORE_FAILURE',
-    diagnostic.message,
+    'Pending remote capture object store operation failed.',
     'retry',
     'objectStore',
     {
@@ -480,6 +517,25 @@ function pendingRemoteCaptureDiagnosticFromObjectStore(
       digest: diagnostic.digest?.digest ?? null,
     },
   );
+}
+
+function pendingRemoteSegmentStoreDiagnosticMessage(
+  code: PendingRemoteSegmentStoreDiagnostic['code'],
+): string {
+  switch (code) {
+    case 'VERSION_INVALID_OPTIONS':
+      return 'Pending remote segment storage rejected invalid options.';
+    case 'VERSION_PENDING_REMOTE_CONFLICT':
+      return 'Pending remote segment storage found a conflicting marker.';
+    case 'VERSION_PENDING_REMOTE_MISSING_OBJECT':
+      return 'Pending remote segment storage could not verify a referenced object.';
+    case 'VERSION_PENDING_REMOTE_OBJECT_CORRUPTION':
+      return 'Pending remote segment storage found an invalid referenced object.';
+    case 'VERSION_PENDING_REMOTE_NOT_FOUND':
+      return 'Pending remote segment storage did not find the marker.';
+    case 'VERSION_PROVIDER_FAILED':
+      return 'Pending remote segment store operation failed.';
+  }
 }
 
 function pendingRemoteCaptureDiagnostic(
@@ -502,6 +558,144 @@ function sanitizePendingRemoteCaptureOperationContext(
     ...operationContext,
     collaboration: sanitizePendingRemoteCaptureCollaboration(collaboration),
   });
+}
+
+function pendingRemoteHistorySuspensionOperationContext(
+  operationContext: PendingRemoteSegmentOperationContext,
+): PendingRemoteSegmentOperationContext {
+  return cloneJson({
+    ...operationContext,
+    capturePolicy: 'historyGap',
+    writeAdmissionMode: 'captureSuspendedWithGap',
+  });
+}
+
+function pendingRemoteHistorySuspension(operationContext: PendingRemoteSegmentOperationContext):
+  | {
+      readonly status: 'success';
+      readonly historySuspension: VersionPendingRemoteHistorySuspension;
+    }
+  | {
+      readonly status: 'failed';
+      readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }>;
+    } {
+  const verification = verifyPendingRemoteHistorySuspension(operationContext);
+  if (verification.status === 'failed') {
+    return {
+      status: 'failed',
+      failure: {
+        status: 'failed',
+        diagnostics: [
+          pendingRemoteCaptureDiagnostic(
+            'VERSION_INVALID_OPTIONS',
+            verification.message,
+            'none',
+            'pendingRemoteCapture',
+            verification.details,
+          ),
+        ],
+        mutationGuarantee: 'no-write-attempted',
+        retryable: false,
+      },
+    };
+  }
+  return {
+    status: 'success',
+    historySuspension: {
+      status: 'verified',
+      reason: 'no-matching-semantic-mutations',
+      capturePolicy: 'historyGap',
+      writeAdmissionMode: 'captureSuspendedWithGap',
+    },
+  };
+}
+
+function pendingRemoteHistorySuspensionFromRecord(
+  record: PendingRemoteSegmentRecord,
+): VersionPendingRemoteHistorySuspension | undefined {
+  return record.operationContext.capturePolicy === 'historyGap' &&
+    record.operationContext.writeAdmissionMode === 'captureSuspendedWithGap'
+    ? {
+        status: 'verified',
+        reason: 'no-matching-semantic-mutations',
+        capturePolicy: 'historyGap',
+        writeAdmissionMode: 'captureSuspendedWithGap',
+      }
+    : undefined;
+}
+
+function verifyPendingRemoteHistorySuspension(
+  operationContext: PendingRemoteSegmentOperationContext,
+): PendingRemoteHistorySuspensionVerificationResult {
+  const collaboration = operationContext.collaboration;
+  if (collaboration.trustStatus !== 'verified') {
+    return failedHistorySuspensionVerification('trustStatus', 'verified', {
+      actual: collaboration.trustStatus,
+    });
+  }
+  if (collaboration.authorState !== 'singleRemote') {
+    return failedHistorySuspensionVerification('authorState', 'singleRemote', {
+      actual: collaboration.authorState,
+      exclusionReasonPresent: isNonEmptyString(collaboration.exclusionReason),
+      exclusionSubreasonPresent: isNonEmptyString(collaboration.exclusionSubreason),
+    });
+  }
+  if (collaboration.replay) {
+    return failedHistorySuspensionVerification('replay', false, { actual: true });
+  }
+  if (collaboration.system) {
+    return failedHistorySuspensionVerification('system', false, { actual: true });
+  }
+  if (collaboration.validationDiagnosticCount !== 0) {
+    return failedHistorySuspensionVerification('validationDiagnosticCount', 0, {
+      actual:
+        typeof collaboration.validationDiagnosticCount === 'number'
+          ? collaboration.validationDiagnosticCount
+          : null,
+      exclusionReasonPresent: isNonEmptyString(collaboration.exclusionReason),
+      exclusionSubreasonPresent: isNonEmptyString(collaboration.exclusionSubreason),
+    });
+  }
+  if (collaboration.originKind !== 'provider' && collaboration.originKind !== 'room') {
+    return failedHistorySuspensionVerification('originKind', 'provider|room', {
+      actual: collaboration.originKind,
+    });
+  }
+  const expectedSourceKind =
+    collaboration.originKind === 'provider' ? 'providerLiveInbound' : 'collaborationLiveRemote';
+  if (collaboration.sourceKind !== expectedSourceKind) {
+    return failedHistorySuspensionVerification('sourceKind', expectedSourceKind, {
+      actual: collaboration.sourceKind,
+    });
+  }
+  const requiredStringFields = ['stableOriginId', 'epoch', 'updateId', 'payloadHash'] as const;
+  for (const field of requiredStringFields) {
+    if (!isNonEmptyString(collaboration[field])) {
+      return failedHistorySuspensionVerification(field, 'present', { present: false });
+    }
+  }
+  if (collaboration.originKind === 'room' && !isNonEmptyString(collaboration.roomId)) {
+    return failedHistorySuspensionVerification('roomId', 'present', { present: false });
+  }
+  return { status: 'success' };
+}
+
+function failedHistorySuspensionVerification(
+  field: string,
+  expected: string | number | boolean,
+  details: Readonly<Record<string, string | number | boolean | null>>,
+): Extract<PendingRemoteHistorySuspensionVerificationResult, { status: 'failed' }> {
+  return {
+    status: 'failed',
+    message:
+      'Pending remote history suspension requires verified provider authority before writing a gap marker.',
+    details: {
+      gate: 'verified-history-suspension',
+      field,
+      expected,
+      ...details,
+    },
+  };
 }
 
 function sanitizePendingRemoteCaptureCollaboration(
@@ -598,6 +792,10 @@ function isRawProviderDiagnosticKey(key: string): boolean {
     key === 'correlationId' ||
     key === 'causationIds'
   );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function cloneJson<T>(value: T): T {

@@ -1,4 +1,4 @@
-import { expect, jest } from '@jest/globals';
+import { afterEach, beforeEach, expect, jest } from '@jest/globals';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
@@ -29,6 +29,7 @@ import {
   type VersionGraphStore,
   type VersionStoreProvider,
 } from '../../../document/version-store/provider';
+import { installVersionDomainDetectorNoopsOnHandles } from './version-domain-support-test-utils';
 
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 export const DOCUMENT_SCOPE: VersionDocumentScope = {
@@ -41,6 +42,54 @@ const VERSION_AUTHOR: VersionAuthor = {
   actorKind: 'user',
   displayName: 'User One',
 };
+
+export type ProviderLifecycleDocumentFactoryState = {
+  readonly setStaleMaterializationVersioningScope: (
+    scope: VersionDocumentScope | null,
+  ) => void;
+  readonly internalMaterializationCreateCount: () => number;
+};
+
+export function installProviderLifecycleDocumentFactoryHooks(): ProviderLifecycleDocumentFactoryState {
+  let documentCreateSpy: { mockRestore(): void } | undefined;
+  let staleMaterializationVersioningScope: VersionDocumentScope | null = null;
+  let internalMaterializationCreateCount = 0;
+
+  beforeEach(() => {
+    staleMaterializationVersioningScope = null;
+    internalMaterializationCreateCount = 0;
+    const createDocument = DocumentFactory.create.bind(DocumentFactory);
+    const spy = jest.spyOn(DocumentFactory, 'create');
+    spy.mockImplementation(async (options?: any) => {
+      const handle = await createDocument(options);
+      const getAllSheetIds = bindProviderLifecycleGetAllSheetIds(handle);
+      installVersionDomainDetectorNoopsOnHandles(handle);
+      installProviderLifecycleMetadataNoops(handle, getAllSheetIds);
+      if (options?.internal === true) {
+        internalMaterializationCreateCount += 1;
+        if (staleMaterializationVersioningScope) {
+          attachStaleMaterializationVersioning(handle, staleMaterializationVersioningScope);
+        }
+      }
+      return handle;
+    });
+    documentCreateSpy = spy;
+  });
+
+  afterEach(() => {
+    documentCreateSpy?.mockRestore();
+    documentCreateSpy = undefined;
+    staleMaterializationVersioningScope = null;
+    internalMaterializationCreateCount = 0;
+  });
+
+  return {
+    setStaleMaterializationVersioningScope: (scope) => {
+      staleMaterializationVersioningScope = scope;
+    },
+    internalMaterializationCreateCount: () => internalMaterializationCreateCount,
+  };
+}
 
 function expectInitializeSuccess(
   result: VersionGraphInitializeResult,

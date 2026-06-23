@@ -20,6 +20,19 @@ export const VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW = new Date('2026-06-21T00:
 export const VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS = 60 * 1000;
 export const VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_TEN_MINUTES_MS =
   10 * VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS;
+export const VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_SHEET_ID = 'sheet-detector-noop';
+
+const VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_GETTER = Symbol(
+  'mog.versionDomainDetectorNoopSyntheticGetAllSheetIds',
+);
+
+type VersionDomainDetectorNoopGetAllSheetIds = (() => Promise<unknown>) & {
+  [VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_GETTER]?: true;
+};
+
+type VersionDomainDetectorNoopInstallOptions = {
+  readonly allowSyntheticSheetIdFallback?: boolean;
+};
 
 export function versionDomainCapabilityStates(
   state: VersionDomainCapabilityState = 'supported',
@@ -220,15 +233,30 @@ export function installVersionDomainDetectorNoopsOnWorkbook(wb: Pick<Workbook, '
   installVersionDomainDetectorNoopsOnBridge((version.ctx ?? version.versionContext)?.computeBridge);
 }
 
-function installVersionDomainDetectorNoopsOnBridge(bridge: unknown): void {
+export function installVersionDomainDetectorNoopsOnBridgeMock(bridge: unknown): void {
+  installVersionDomainDetectorNoopsOnBridge(bridge, { allowSyntheticSheetIdFallback: true });
+}
+
+function installVersionDomainDetectorNoopsOnBridge(
+  bridge: unknown,
+  options: VersionDomainDetectorNoopInstallOptions = {},
+): void {
   if (!isMutableRecord(bridge)) return;
-  const getAllSheetIds =
-    typeof bridge.getAllSheetIds === 'function' ? bridge.getAllSheetIds.bind(bridge) : undefined;
-  bridge.getAllSheetIds = async () => {
-    if (!getAllSheetIds) return ['sheet-detector-noop'];
-    const sheetIds = await getAllSheetIds();
-    return Array.isArray(sheetIds) ? sheetIds : [];
-  };
+  const getAllSheetIds = bindNativeGetAllSheetIds(bridge);
+  if (getAllSheetIds) {
+    bridge.getAllSheetIds = async () => {
+      const sheetIds = await getAllSheetIds();
+      return Array.isArray(sheetIds) ? sheetIds : [];
+    };
+  } else if (options.allowSyntheticSheetIdFallback) {
+    const syntheticGetAllSheetIds: VersionDomainDetectorNoopGetAllSheetIds = async () => [
+      VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_SHEET_ID,
+    ];
+    syntheticGetAllSheetIds[VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_GETTER] = true;
+    bridge.getAllSheetIds = syntheticGetAllSheetIds;
+  } else if (isSyntheticGetAllSheetIds(bridge.getAllSheetIds)) {
+    delete bridge.getAllSheetIds;
+  }
   bridge.getAllTablesInSheet = async () => [];
   bridge.getFiltersInSheet = async () => [];
   bridge.namedRangeCount = async () => 0;
@@ -239,4 +267,25 @@ function installVersionDomainDetectorNoopsOnBridge(bridge: unknown): void {
 
 function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function bindNativeGetAllSheetIds(
+  bridge: Record<string, unknown>,
+): (() => Promise<unknown>) | undefined {
+  const getAllSheetIds = bridge.getAllSheetIds;
+  if (typeof getAllSheetIds !== 'function' || isSyntheticGetAllSheetIds(getAllSheetIds)) {
+    return undefined;
+  }
+  return getAllSheetIds.bind(bridge) as () => Promise<unknown>;
+}
+
+function isSyntheticGetAllSheetIds(
+  value: unknown,
+): value is VersionDomainDetectorNoopGetAllSheetIds {
+  return (
+    typeof value === 'function' &&
+    (value as VersionDomainDetectorNoopGetAllSheetIds)[
+      VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_GETTER
+    ] === true
+  );
 }

@@ -391,23 +391,28 @@ export async function createHeadlessDocument(
     workbookLinkResolver: options.workbookLinkResolver as any,
     workbookLinkScope: options.workbookLinkScope as any,
   });
-  lifecycle.create(options.documentId, {
-    documentId: options.documentId,
-    initialSnapshot: options.initialSnapshot,
-    yrsState: options.yrsState,
-  });
-  await lifecycle.waitForReady();
+  try {
+    lifecycle.create(options.documentId, {
+      documentId: options.documentId,
+      initialSnapshot: options.initialSnapshot,
+      yrsState: options.yrsState,
+    });
+    await lifecycle.waitForReady();
 
-  const context = lifecycle.documentContext;
-  return _createDocumentHandleInternal(
-    options.documentId,
-    lifecycle,
-    context,
-    undefined,
-    undefined,
-    undefined,
-    options.initialSnapshot === undefined && options.yrsState === undefined,
-  );
+    const context = lifecycle.documentContext;
+    return _createDocumentHandleInternal(
+      options.documentId,
+      lifecycle,
+      context,
+      undefined,
+      undefined,
+      undefined,
+      options.initialSnapshot === undefined && options.yrsState === undefined,
+    );
+  } catch (error) {
+    await lifecycle.dispose().catch(() => {});
+    throw error;
+  }
 }
 
 export async function importHeadlessDocumentFromXlsx(
@@ -422,30 +427,35 @@ export async function importHeadlessDocumentFromXlsx(
     workbookLinkResolver: options.workbookLinkResolver as any,
     workbookLinkScope: options.workbookLinkScope as any,
   });
-  lifecycle.createFromXlsx(options.documentId, { skipDefaultSheet: true }, source, {
-    documentId: options.documentId,
-    ...options.importOptions,
-  });
-  await lifecycle.waitForReady();
-  await lifecycle.awaitImportDurability();
+  try {
+    lifecycle.createFromXlsx(options.documentId, { skipDefaultSheet: true }, source, {
+      documentId: options.documentId,
+      ...options.importOptions,
+    });
+    await lifecycle.waitForReady();
+    await lifecycle.awaitImportDurability();
 
-  const context = lifecycle.documentContext;
-  const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
-    projectImportDiagnostic,
-  );
-  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
-  return _createDocumentHandleInternal(
-    options.documentId,
-    lifecycle,
-    context,
-    undefined,
-    importWarnings,
-    {
-      kind: 'xlsx',
-      source: { sourceType: 'bytes', byteLength: source.data.byteLength },
-      diagnostics: importDiagnostics,
-    },
-  );
+    const context = lifecycle.documentContext;
+    const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
+      projectImportDiagnostic,
+    );
+    const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+    return _createDocumentHandleInternal(
+      options.documentId,
+      lifecycle,
+      context,
+      undefined,
+      importWarnings,
+      {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: source.data.byteLength },
+        diagnostics: importDiagnostics,
+      },
+    );
+  } catch (error) {
+    await lifecycle.dispose().catch(() => {});
+    throw error;
+  }
 }
 
 function assertEphemeralCollaborationStorage(storage: {

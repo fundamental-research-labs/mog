@@ -802,11 +802,29 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.core.syncDiff(remoteSv);
   }
 
+  syncApply(update: Uint8Array): Promise<MutationResult>;
   syncApply(
     update: Uint8Array,
     syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult>;
+  syncApply(
+    update: Uint8Array,
+    syncApplyContext?: AdmittedSyncApplyContext,
   ): Promise<MutationResult> {
-    return this.core.syncApply(update, syncApplyContext);
+    return syncApplyContext
+      ? this.core.syncApply(update, syncApplyContext)
+      : this.core.syncApply(update);
+  }
+
+  syncApplyLegacyRaw(update: Uint8Array): Promise<SyncApplyWithMetadataResult> {
+    return this.core.syncApplyLegacyRaw(update);
+  }
+
+  syncApplyAdmitted(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult> {
+    return this.core.syncApplyAdmitted(update, syncApplyContext);
   }
 
   syncApplyWithMetadata(
@@ -814,6 +832,13 @@ export class ComputeBridge extends GeneratedBridgeBase {
     syncApplyContext: AdmittedSyncApplyContext,
   ): Promise<SyncApplyWithMetadataResult> {
     return this.core.syncApplyWithMetadata(update, syncApplyContext);
+  }
+
+  syncApplyAdmittedWithMetadata(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<SyncApplyWithMetadataResult> {
+    return this.core.syncApplyAdmittedWithMetadata(update, syncApplyContext);
   }
 
   override async drainPendingUpdates(): Promise<Uint8Array[]> {

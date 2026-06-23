@@ -179,10 +179,7 @@ mod tests {
             .expect("apply sync update");
 
         assert!(target.active_sync_context.is_none());
-        assert!(metadata
-            .provenance_report
-            .pending_segment_ids
-            .is_empty());
+        assert!(metadata.provenance_report.pending_segment_ids.is_empty());
     }
 
     #[test]
@@ -194,5 +191,21 @@ mod tests {
 
         assert!(result.is_err());
         assert!(engine.active_sync_context.is_none());
+    }
+
+    #[test]
+    fn apply_sync_update_legacy_adapter_accepts_duplicate_raw_update() {
+        let source = empty_engine();
+        let full_state = compute_collab::encode_full_state(source.storage().doc());
+        let mut target = empty_engine();
+
+        target
+            .apply_sync_update_legacy(&full_state)
+            .expect("first legacy sync update");
+        target
+            .apply_sync_update_legacy(&full_state)
+            .expect("duplicate legacy sync update");
+
+        assert!(target.active_sync_context.is_none());
     }
 }

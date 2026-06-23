@@ -32,7 +32,9 @@ export type MutationAdmissionDiagnosticCode =
   | 'versioning.admission.unclassified-write'
   | 'versioning.shadow-observation.sink-error'
   | 'provenance.missingContext'
-  | 'provenance.invalidContext';
+  | 'provenance.invalidContext'
+  | 'provenance.legacyRawUnknown'
+  | 'provenance.duplicateUpdate';
 
 export interface MutationAdmissionDiagnostic {
   readonly code: MutationAdmissionDiagnosticCode;

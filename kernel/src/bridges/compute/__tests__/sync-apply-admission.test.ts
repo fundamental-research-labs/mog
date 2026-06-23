@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { createHash, webcrypto } from 'node:crypto';
 import {
   classifyLegacyRawUpdate,
   DEFAULT_PROVENANCE_REDACTION_POLICY,
@@ -20,6 +21,9 @@ import {
 import { syncApplyWithMetadataResult } from '../sync-apply-result';
 
 (globalThis as any).window = {};
+if (!globalThis.crypto) {
+  Object.defineProperty(globalThis, 'crypto', { value: webcrypto });
+}
 
 function mutationResult(): MutationResult {
   return {
@@ -56,16 +60,11 @@ function makeMockContext(
     versioningAdmissionDiagnostics: {
       record: (diagnostic: MutationAdmissionDiagnostic) => diagnostics.push(diagnostic),
     },
-    ...(recordMutationResult
-      ? { versioning: { mutationCapture: { recordMutationResult } } }
-      : {}),
+    ...(recordMutationResult ? { versioning: { mutationCapture: { recordMutationResult } } } : {}),
   } as unknown as IKernelContext;
 }
 
-function createStartedCore(
-  ctx: IKernelContext,
-  transport: BridgeTransport,
-): ComputeCore {
+function createStartedCore(ctx: IKernelContext, transport: BridgeTransport): ComputeCore {
   const core = new ComputeCore(ctx, 'test-doc', transport);
   (core as any)._phase = 'STARTED';
   (core as any).engineCreated = true;
@@ -172,9 +171,9 @@ describe('sync apply admission', () => {
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
 
-    await expect(core.syncApply(new Uint8Array([1, 2, 3]), undefined as never)).rejects.toThrow(
-      'compute_apply_sync_update: provenance.missingContext',
-    );
+    await expect(
+      core.syncApplyAdmitted(new Uint8Array([1, 2, 3]), undefined as never),
+    ).rejects.toThrow('compute_apply_sync_update: provenance.missingContext');
 
     expect(transport.call).not.toHaveBeenCalled();
     expect(diagnostics).toContainEqual(
@@ -201,7 +200,7 @@ describe('sync apply admission', () => {
       validationDiagnostics: [],
     };
 
-    await expect(core.syncApply(new Uint8Array([1]), forged as never)).rejects.toThrow(
+    await expect(core.syncApplyAdmitted(new Uint8Array([1]), forged as never)).rejects.toThrow(
       'compute_apply_sync_update: provenance.invalidContext',
     );
 
@@ -210,6 +209,56 @@ describe('sync apply admission', () => {
       expect.objectContaining({
         code: 'provenance.invalidContext',
         severity: 'error',
+        command: 'compute_apply_sync_update',
+      }),
+    );
+  });
+
+  it('keeps syncApply as an explicit legacy raw adapter with diagnostics', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const update = new Uint8Array([9, 8, 7]);
+    const payloadHash = createHash('sha256').update(update).digest('hex');
+    const mutation = mutationResult();
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async (_command: string, args: { syncContext: unknown }) => [
+        new Uint8Array(),
+        {
+          mutationResult: mutation,
+          provenanceReport: {
+            appliedContext: args.syncContext,
+            pendingSegmentStatus: 'notEvaluated',
+            pendingSegmentIds: [],
+            batchDurabilityStatus: 'notEvaluated',
+          },
+        } satisfies SyncApplyMutationMetadataWire,
+      ]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
+
+    const result = await core.syncApply(update);
+
+    expect(result).toBe(mutation);
+    expect(transport.call).toHaveBeenCalledWith('compute_apply_sync_update', {
+      docId: 'test-doc',
+      update,
+      syncContext: expect.objectContaining({
+        operationContext: expect.objectContaining({
+          kind: 'sync-import',
+          collaboration: expect.objectContaining({
+            sourceKind: 'legacyRawUnknown',
+            originKind: 'legacyRaw',
+            payloadHash,
+            trustStatus: 'legacyRaw',
+            authorState: 'unknown',
+            commitGrouping: 'excludedLifecycle',
+          }),
+        }),
+      }),
+    });
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'provenance.legacyRawUnknown',
+        severity: 'warning',
         command: 'compute_apply_sync_update',
       }),
     );
@@ -227,7 +276,7 @@ describe('sync apply admission', () => {
     };
     const core = createStartedCore(makeMockContext(diagnostics), transport);
 
-    await core.syncApply(new Uint8Array([1]), syncApplyContext);
+    await core.syncApplyAdmitted(new Uint8Array([1]), syncApplyContext);
 
     expect(transport.call).toHaveBeenCalledWith('compute_apply_sync_update', {
       docId: 'test-doc',
@@ -253,6 +302,31 @@ describe('sync apply admission', () => {
     );
     expect(diagnostics).not.toContainEqual(
       expect.objectContaining({ code: 'provenance.missingContext' }),
+    );
+  });
+
+  it('records duplicate admitted sync update diagnostics without short-circuiting apply', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const payloadHash = '7'.repeat(64);
+    const syncApplyContext = makeVerifiedProviderContext(payloadHash);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [
+        new Uint8Array(),
+        syncMutationMetadata(mutationResult(), syncApplyContext),
+      ]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
+
+    await core.syncApplyAdmitted(new Uint8Array([7]), syncApplyContext);
+    await core.syncApplyAdmitted(new Uint8Array([7]), syncApplyContext);
+
+    expect(transport.call).toHaveBeenCalledTimes(2);
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: 'provenance.duplicateUpdate',
+        severity: 'warning',
+        command: 'compute_apply_sync_update',
+      }),
     );
   });
 
@@ -373,11 +447,12 @@ describe('sync apply admission', () => {
       commitGrouping: 'blockedMissingRedactionKey',
       validationDiagnosticCount: 1,
     });
-    expect(richResult.metadata.provenanceReport.appliedContext.operationContext.collaboration)
-      .toMatchObject({
-        commitGrouping: 'blockedMissingRedactionKey',
-        validationDiagnosticCount: 1,
-      });
+    expect(
+      richResult.metadata.provenanceReport.appliedContext.operationContext.collaboration,
+    ).toMatchObject({
+      commitGrouping: 'blockedMissingRedactionKey',
+      validationDiagnosticCount: 1,
+    });
     expect(richResult).toEqual(syncApplyWithMetadataResult(metadata));
   });
 

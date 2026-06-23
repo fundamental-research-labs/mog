@@ -23,6 +23,10 @@ import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext, ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { ColumnSchema } from '@mog-sdk/contracts/schema';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
+import {
+  classifyLegacyRawUpdate,
+  validateSyncUpdateProvenance,
+} from '@mog-sdk/types-document/storage';
 import * as Schemas from '../../domain/schemas/schemas';
 
 import { BridgeError } from '../../errors/bridge';
@@ -47,6 +51,7 @@ import {
   admitPublicMutation as admitPublicMutationForCore,
   observeMutationAdmission,
   prepareVersionMutationCapture,
+  recordMutationAdmissionDiagnostic,
   recordVersionMutationCapture,
   type DirectEditPosition,
   type MutationAdmissionOptions,
@@ -54,6 +59,7 @@ import {
   runSystemMutation,
 } from './mutation-admission';
 import {
+  createAdmittedSyncApplyContext,
   toSyncApplyOperationContextWire,
   type AdmittedSyncApplyContext,
 } from './sync-apply-admission';
@@ -79,6 +85,15 @@ import type {
   SyncApplyMutationMetadataWire,
   UndoState,
 } from './compute-types.gen';
+
+const SYNC_APPLY_ADMISSION_LEDGER_LIMIT = 1024;
+
+interface SyncApplyAdmissionLedgerEntry {
+  readonly operationId: string;
+  readonly payloadHash: string;
+  readonly sourceKind: string;
+  seenCount: number;
+}
 
 // ---------------------------------------------------------------------------
 // MutationResult data extraction helper
@@ -260,6 +275,7 @@ export class ComputeCore {
    */
   private afterMutationHook: (() => Promise<void>) | null = null;
   private undoGroupDepth = 0;
+  private readonly syncApplyAdmissionLedger = new Map<string, SyncApplyAdmissionLedgerEntry>();
 
   /** Coordinator registry — single owner of per-viewport state. */
   private coordinatorRegistry: ViewportCoordinatorRegistry;
@@ -1766,15 +1782,62 @@ export class ComputeCore {
    * STARTED phase. It can be called in CREATED (after createEngine) or later
    * phases to hydrate the Rust engine with persisted state.
    */
+  /** Compatibility adapter for legacy raw sync bytes. Prefer syncApplyAdmitted for new callers. */
+  async syncApply(update: Uint8Array): Promise<MutationResult>;
   async syncApply(
     update: Uint8Array,
     syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult>;
+  async syncApply(
+    update: Uint8Array,
+    syncApplyContext?: AdmittedSyncApplyContext,
   ): Promise<MutationResult> {
-    const { mutationResult } = await this.syncApplyWithMetadata(update, syncApplyContext);
+    if (syncApplyContext) {
+      return this.syncApplyAdmitted(update, syncApplyContext);
+    }
+    const { mutationResult } = await this.syncApplyLegacyRaw(update);
+    return mutationResult;
+  }
+
+  async syncApplyLegacyRaw(update: Uint8Array): Promise<SyncApplyWithMetadataResult> {
+    const payloadHash = await sha256Hex(update, 'ComputeCore.syncApplyLegacyRaw');
+    const provenance = classifyLegacyRawUpdate({
+      payloadHash,
+      updateId: `legacy-raw:${payloadHash}`,
+    });
+    const validation = validateSyncUpdateProvenance(provenance, {
+      expectedPayloadHash: payloadHash,
+    });
+    return this.syncApplyAdmittedWithMetadata(
+      update,
+      createAdmittedSyncApplyContext({
+        source: 'document-sync-port',
+        docId: this.docId,
+        envelopeVersion: 'classified-raw',
+        updateId: provenance.updateIdentity.updateId,
+        payloadHash,
+        provenance,
+        validationDiagnostics: validation.diagnostics,
+      }),
+    );
+  }
+
+  async syncApplyAdmitted(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<MutationResult> {
+    const { mutationResult } = await this.syncApplyAdmittedWithMetadata(update, syncApplyContext);
     return mutationResult;
   }
 
   async syncApplyWithMetadata(
+    update: Uint8Array,
+    syncApplyContext: AdmittedSyncApplyContext,
+  ): Promise<SyncApplyWithMetadataResult> {
+    return this.syncApplyAdmittedWithMetadata(update, syncApplyContext);
+  }
+
+  async syncApplyAdmittedWithMetadata(
     update: Uint8Array,
     syncApplyContext: AdmittedSyncApplyContext,
   ): Promise<SyncApplyWithMetadataResult> {
@@ -1818,6 +1881,7 @@ export class ComputeCore {
       },
       true,
     );
+    this.recordSyncApplyAdmissionDiagnostics(syncApplyContext);
     // Store the hydration result (overrides the empty init result)
     this.initResult = mutationResult.recalc;
     // Transition to HYDRATED if we were in CREATED or CONTEXT_SET
@@ -1837,6 +1901,56 @@ export class ComputeCore {
     }
 
     return { mutationResult, metadata: syncApplyMetadata };
+  }
+
+  private recordSyncApplyAdmissionDiagnostics(syncApplyContext: AdmittedSyncApplyContext): void {
+    const provenance = syncApplyContext.provenance;
+    if (provenance.sourceKind === 'legacyRawUnknown') {
+      this.tryRecordSyncApplyDiagnostic({
+        code: 'provenance.legacyRawUnknown',
+        severity: 'warning',
+        command: 'compute_apply_sync_update',
+        message:
+          'Raw sync update admitted through the legacy adapter without authenticated provenance.',
+      });
+    }
+
+    const idempotencyKey = syncApplyIdempotencyKey(syncApplyContext);
+    const existing = this.syncApplyAdmissionLedger.get(idempotencyKey);
+    if (existing) {
+      existing.seenCount += 1;
+      this.tryRecordSyncApplyDiagnostic({
+        code: 'provenance.duplicateUpdate',
+        severity: 'warning',
+        command: 'compute_apply_sync_update',
+        message:
+          `Duplicate sync update admitted for ${idempotencyKey}; ` +
+          `firstOperationId=${existing.operationId}, seenCount=${existing.seenCount}.`,
+      });
+      return;
+    }
+
+    this.syncApplyAdmissionLedger.set(idempotencyKey, {
+      operationId: syncApplyContext.operationContext.operationId,
+      payloadHash: syncApplyContext.payloadHash,
+      sourceKind: provenance.sourceKind,
+      seenCount: 1,
+    });
+    if (this.syncApplyAdmissionLedger.size > SYNC_APPLY_ADMISSION_LEDGER_LIMIT) {
+      const oldestKey = this.syncApplyAdmissionLedger.keys().next().value;
+      if (oldestKey !== undefined) this.syncApplyAdmissionLedger.delete(oldestKey);
+    }
+  }
+
+  private tryRecordSyncApplyDiagnostic(
+    diagnostic: Parameters<typeof recordMutationAdmissionDiagnostic>[1],
+  ): void {
+    try {
+      recordMutationAdmissionDiagnostic(this.ctx, diagnostic);
+    } catch {
+      // Pre-context hydration may run with a DeferredContext. Admission still
+      // happens; diagnostics become observable once the document context exists.
+    }
   }
 
   async syncFullState(): Promise<Uint8Array> {
@@ -1944,4 +2058,32 @@ export class ComputeCore {
       console.error('[ComputeCore] Error syncing schema change to Rust:', err);
     }
   }
+}
+
+function syncApplyIdempotencyKey(context: AdmittedSyncApplyContext): string {
+  const identity = context.provenance.updateIdentity;
+  const origin =
+    identity.providerId ??
+    identity.stableOriginId ??
+    identity.providerRefId ??
+    identity.authorityRef ??
+    identity.roomId ??
+    identity.originKind;
+  const updateIdentity =
+    identity.updateId ?? identity.provenancePayloadHash ?? identity.payloadHash;
+  return [
+    context.provenance.sourceKind,
+    identity.originKind,
+    origin,
+    identity.epoch ?? 'no-epoch',
+    updateIdentity,
+  ].join(':');
+}
+
+async function sha256Hex(bytes: Uint8Array, caller: string): Promise<string> {
+  if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
+    throw new Error(`${caller}: SHA-256 digest is unavailable`);
+  }
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new Uint8Array(bytes));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

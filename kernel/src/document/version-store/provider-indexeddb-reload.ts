@@ -5,9 +5,11 @@ import {
 } from './graph-store';
 import { parseWorkbookCommitId } from './object-digest';
 import {
+  createInMemoryVersionObjectStore,
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
+  type VersionObjectStoreDiagnostic,
   type VersionObjectRecord,
 } from './object-store';
 import {
@@ -20,11 +22,7 @@ import {
   type StoredObjectRecord,
   type StoredRefRecord,
 } from './provider-indexeddb-internal';
-import {
-  INDEX_MANIFESTS_STORE,
-  OBJECTS_STORE,
-  REFS_STORE,
-} from './provider-indexeddb-schema';
+import { INDEX_MANIFESTS_STORE, OBJECTS_STORE, REFS_STORE } from './provider-indexeddb-schema';
 import { parseRefVersion, type RefRecord } from './ref-store';
 import { parseRefName } from './ref-name';
 import {
@@ -33,7 +31,7 @@ import {
   type VersionDocumentScope,
 } from './registry';
 
-type GraphSnapshotLoadIssue = 'corrupt' | 'unsupported' | 'wrong-namespace';
+type GraphSnapshotLoadIssue = 'corrupt' | 'unsupported' | 'wrong-namespace' | 'missing-dependency';
 type GraphSnapshotLoadDetails = Readonly<Record<string, string | number | boolean | null>>;
 
 class IndexedDbGraphSnapshotLoadError extends Error {
@@ -98,6 +96,10 @@ export async function loadGraphSnapshot(
       documentScopeKey,
     }),
   );
+  await validateReloadedObjectRecords(
+    normalized,
+    objects.map((entry) => cloneJson(entry.record)),
+  );
   const refs = refRows.map((row, index) =>
     validateStoredRefRecord(row, {
       store: REFS_STORE,
@@ -127,14 +129,12 @@ export function graphLoadDiagnostic(
   operation: VersionGraphStoreDiagnostic['operation'],
 ): VersionGraphStoreDiagnostic {
   const loadError = error instanceof IndexedDbGraphSnapshotLoadError ? error : null;
-  const details = {
+  const details = sanitizeLoadDetails({
     cause: errorMessage(error),
     ...(loadError ? { reloadIssue: loadError.issue, ...loadError.details } : {}),
-  };
+  });
   return graphDiagnostic(
-    loadError?.issue === 'wrong-namespace'
-      ? 'VERSION_WRONG_NAMESPACE'
-      : 'VERSION_OBJECT_STORE_FAILURE',
+    graphDiagnosticCodeForLoadIssue(loadError?.issue),
     loadError?.message ?? 'IndexedDB graph snapshot could not be loaded.',
     {
       namespace,
@@ -142,6 +142,52 @@ export function graphLoadDiagnostic(
       details,
     },
   );
+}
+
+async function validateReloadedObjectRecords(
+  namespace: VersionGraphNamespace,
+  records: readonly VersionObjectRecord<unknown>[],
+): Promise<void> {
+  const objectStore = createInMemoryVersionObjectStore(namespace);
+  const put = await objectStore.putObjects(records);
+  if (put.status === 'success') return;
+
+  const first = put.diagnostics[0];
+  throwLoadError(
+    loadIssueForObjectDiagnostic(first),
+    'IndexedDB graph object records failed recovery validation.',
+    {
+      store: OBJECTS_STORE,
+      sourceIssue: first.code,
+      sourceSeverity: first.severity,
+      diagnosticCount: put.diagnostics.length,
+      ...(first.objectType === undefined ? {} : { objectType: first.objectType }),
+      ...(first.details === undefined ? {} : sanitizeLoadDetails(first.details)),
+    },
+  );
+}
+
+function loadIssueForObjectDiagnostic(
+  diagnostic: VersionObjectStoreDiagnostic,
+): GraphSnapshotLoadIssue {
+  if (diagnostic.code === 'VERSION_MISSING_DEPENDENCY') return 'missing-dependency';
+  if (
+    diagnostic.code === 'VERSION_UNSUPPORTED_SCHEMA' ||
+    diagnostic.code === 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING' ||
+    diagnostic.code === 'VERSION_UNSUPPORTED_DIGEST_ALGORITHM' ||
+    diagnostic.code === 'VERSION_UNSUPPORTED_OBJECT_TYPE'
+  ) {
+    return 'unsupported';
+  }
+  return 'corrupt';
+}
+
+function graphDiagnosticCodeForLoadIssue(
+  issue: GraphSnapshotLoadIssue | undefined,
+): VersionGraphStoreDiagnostic['code'] {
+  if (issue === 'wrong-namespace') return 'VERSION_WRONG_NAMESPACE';
+  if (issue === 'missing-dependency') return 'VERSION_MISSING_DEPENDENCY';
+  return 'VERSION_OBJECT_STORE_FAILURE';
 }
 
 type RowValidationContext = {
@@ -193,7 +239,10 @@ function validateStoredObjectRecord(
   };
 }
 
-function validateStoredRefRecord(value: unknown, context: RefRowValidationContext): StoredRefRecord {
+function validateStoredRefRecord(
+  value: unknown,
+  context: RefRowValidationContext,
+): StoredRefRecord {
   const row = validateStoredRowEnvelope(value, context, [
     'schemaVersion',
     'namespaceKey',
@@ -490,11 +539,7 @@ function validateRefRecordEnvelope(
   validateRefVersion(record.refVersion, context, 'record.refVersion');
 }
 
-function validateProviderEpoch(
-  value: unknown,
-  context: RowValidationContext,
-  path: string,
-): void {
+function validateProviderEpoch(value: unknown, context: RowValidationContext, path: string): void {
   const epoch = requirePlainRecord(value, context, path);
   if (!hasOnlyKeys(epoch, ['kind', 'value'])) {
     throwLoadError('corrupt', 'IndexedDB ref provider epoch has unsupported fields.', {
@@ -596,6 +641,29 @@ function rowLocation(context: RowValidationContext): GraphSnapshotLoadDetails {
     store: context.store,
     ...(context.rowIndex === undefined ? {} : { rowIndex: context.rowIndex }),
   };
+}
+
+function sanitizeLoadDetails(details: GraphSnapshotLoadDetails): GraphSnapshotLoadDetails {
+  const sanitized: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(details)) {
+    sanitized[key] = shouldRedactLoadDetail(key) ? 'redacted' : value;
+  }
+  return Object.freeze(sanitized);
+}
+
+function shouldRedactLoadDetail(key: string): boolean {
+  return (
+    key === 'expectedKey' ||
+    key === 'actualKey' ||
+    key === 'expectedNamespaceKey' ||
+    key === 'actualNamespaceKey' ||
+    key === 'expectedDocumentScopeKey' ||
+    key === 'actualDocumentScopeKey' ||
+    key === 'namespaceKey' ||
+    key === 'documentScopeKey' ||
+    key === 'expectedDocumentId' ||
+    key === 'actualDocumentId'
+  );
 }
 
 function throwLoadError(

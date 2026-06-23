@@ -279,9 +279,7 @@ export async function persistGraphSnapshot(options: {
     const manifest = await idbRequest<StoredIndexManifest | undefined>(
       tx.objectStore(INDEX_MANIFESTS_STORE).get(namespaceKey),
     );
-    if (
-      manifest?.refStoreNextGeneratedId !== options.mode.expectedRefStoreNextGeneratedId
-    ) {
+    if (manifest?.refStoreNextGeneratedId !== options.mode.expectedRefStoreNextGeneratedId) {
       tx.abort();
       throw new RefStoreManifestConflictError({
         expectedRefStoreNextGeneratedId: options.mode.expectedRefStoreNextGeneratedId,
@@ -346,7 +344,9 @@ export async function persistObjectRecords(options: {
     }),
   );
   if (namespaceDocumentScopeKey !== documentScopeKey) {
-    throw new Error('IndexedDB object batch namespace does not match the requested document scope.');
+    throw new Error(
+      'IndexedDB object batch namespace does not match the requested document scope.',
+    );
   }
 
   const tx = options.db.transaction(
@@ -720,17 +720,17 @@ export function mapGraphDiagnostics(
   diagnostics: readonly VersionGraphStoreDiagnostic[],
   operation: VersionStoreOperation,
 ): readonly VersionStoreDiagnostic[] {
-  return diagnostics.map((item) =>
-    versionStoreDiagnostic(item.code, {
+  return diagnostics.map((item) => {
+    const { namespace: _namespace, ...source } = item;
+    return versionStoreDiagnostic(item.code, {
       operation,
-      namespace: item.namespace,
       refName: item.refName,
       commitId: item.commitId,
       safeMessage: item.message,
-      sourceDiagnostics: [item],
+      sourceDiagnostics: [source],
       details: item.details,
-    }),
-  );
+    });
+  });
 }
 
 export function registryRecordResult(

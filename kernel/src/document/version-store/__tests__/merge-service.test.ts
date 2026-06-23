@@ -227,7 +227,14 @@ describe('WorkbookVersionMergeService', () => {
         valueChange('ours-a1-value', 'cell', 'sheet-1!A1', ['value'], null, 'ours'),
       ]),
       theirsSemanticPayload: validSemanticPayload([
-        valueChange('theirs-a1-formula', 'cell', 'sheet-1!A1', ['value'], null, formulaValue),
+        valueChange(
+          'theirs-a1-formula',
+          'cells.formulas',
+          'sheet-1!A1',
+          ['formula'],
+          null,
+          formulaValue,
+        ),
       ]),
     });
     const service = createWorkbookVersionMergeService({ provider: graph.provider });

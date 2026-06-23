@@ -6,6 +6,7 @@ const ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const MISSING_COMMIT_ID = `commit:sha256:${'9'.repeat(64)}`;
 const PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
+const DIFF_PAGE_TOKEN = 'mog-vdiff-v1.semantic-change-order.cursor-handle';
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 
@@ -25,31 +26,36 @@ function createFakeGraphStore() {
   };
 }
 
+function childCommitSummary() {
+  return {
+    id: CHILD_COMMIT_ID,
+    parents: [ROOT_COMMIT_ID],
+    createdAt: CREATED_AT,
+    author: {
+      authorId: 'user-1',
+      actorKind: 'user',
+      displayName: 'Public Reader',
+      clientId: 'hidden-client',
+    },
+  };
+}
+
+function rootCommitSummary() {
+  return {
+    id: ROOT_COMMIT_ID,
+    parents: [],
+    createdAt: CREATED_AT,
+    author: {
+      authorId: 'system-1',
+      actorKind: 'system',
+    },
+  };
+}
+
 function successPage(overrides: Record<string, unknown> = {}) {
   return {
     status: 'success',
-    commits: [
-      {
-        id: CHILD_COMMIT_ID,
-        parents: [ROOT_COMMIT_ID],
-        createdAt: CREATED_AT,
-        author: {
-          authorId: 'user-1',
-          actorKind: 'user',
-          displayName: 'Public Reader',
-          clientId: 'hidden-client',
-        },
-      },
-      {
-        id: ROOT_COMMIT_ID,
-        parents: [],
-        createdAt: CREATED_AT,
-        author: {
-          authorId: 'system-1',
-          actorKind: 'system',
-        },
-      },
-    ],
+    commits: [childCommitSummary(), rootCommitSummary()],
     readRevision: REF_REVISION,
     order: 'topological-newest',
     pageSize: 50,
@@ -84,6 +90,11 @@ function expectUnavailable(code: string, option?: string) {
 describe('WorkbookVersion listCommits selectors', () => {
   it('forwards public ref and commit roots without leaking unsupported options to the graph service', async () => {
     const graphStore = createFakeGraphStore();
+    graphStore.listCommits
+      .mockResolvedValueOnce(successPage())
+      .mockResolvedValueOnce(successPage())
+      .mockResolvedValueOnce(successPage({ commits: [rootCommitSummary()] }))
+      .mockResolvedValueOnce(successPage());
     const version = createVersion(graphStore);
 
     await expect(version.listCommits({ ref: 'refs/heads/main', pageSize: 2 })).resolves.toEqual({
@@ -113,7 +124,10 @@ describe('WorkbookVersion listCommits selectors', () => {
         limit: 2,
       },
     });
-    expect(graphStore.listCommits).toHaveBeenLastCalledWith({ ref: 'refs/heads/main', pageSize: 2 });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({
+      ref: 'refs/heads/main',
+      pageSize: 2,
+    });
 
     await expect(version.listCommits({ ref: 'HEAD' })).resolves.toMatchObject({
       ok: true,
@@ -136,6 +150,45 @@ describe('WorkbookVersion listCommits selectors', () => {
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
   });
 
+  it('rejects provider pages that violate root traversal and topological order', async () => {
+    const graphStore = createFakeGraphStore();
+    const version = createVersion(graphStore);
+
+    graphStore.listCommits.mockResolvedValueOnce(successPage());
+    await expect(version.listCommits({ from: ROOT_COMMIT_ID })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ rootMismatch: true }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({ from: ROOT_COMMIT_ID });
+
+    graphStore.listCommits.mockResolvedValueOnce(
+      successPage({ commits: [rootCommitSummary(), childCommitSummary()] }),
+    );
+    await expect(version.listCommits()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ itemIndex: 1, rootTraversal: false }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({});
+  });
+
   it('validates listCommits options before calling the graph service', async () => {
     const cases: readonly [string, unknown, string, string | undefined][] = [
       ['non-object options', null, 'VERSION_INVALID_OPTIONS', 'options'],
@@ -147,13 +200,13 @@ describe('WorkbookVersion listCommits selectors', () => {
         'VERSION_INVALID_OPTIONS',
         'ref',
       ],
+      ['malformed commit id', { from: 'commit:sha256:bad' }, 'VERSION_INVALID_COMMIT_ID', 'from'],
       [
-        'malformed commit id',
-        { from: 'commit:sha256:bad' },
-        'VERSION_INVALID_COMMIT_ID',
-        'from',
+        'unknown ref namespace',
+        { ref: 'refs/heads/private-review' },
+        'VERSION_INVALID_OPTIONS',
+        'ref',
       ],
-      ['unknown ref namespace', { ref: 'refs/heads/private-review' }, 'VERSION_INVALID_OPTIONS', 'ref'],
       ['uppercase ref', { ref: 'refs/heads/scenario/Bad' }, 'VERSION_INVALID_OPTIONS', 'ref'],
       ['non-heads ref', { ref: 'refs/tags/not-public' }, 'VERSION_INVALID_OPTIONS', 'ref'],
       [
@@ -174,10 +227,11 @@ describe('WorkbookVersion listCommits selectors', () => {
         'VERSION_INVALID_OPTIONS',
         'includeDiagnostics',
       ],
+      ['malformed pageToken', { pageToken: 'bad-token' }, 'VERSION_INVALID_OPTIONS', 'pageToken'],
       [
-        'malformed pageToken',
-        { pageToken: 'bad-token' },
-        'VERSION_INVALID_OPTIONS',
+        'wrong-operation pageToken',
+        { pageToken: DIFF_PAGE_TOKEN },
+        'VERSION_STALE_PAGE_CURSOR',
         'pageToken',
       ],
     ];
@@ -196,9 +250,7 @@ describe('WorkbookVersion listCommits selectors', () => {
               code,
               data: expect.objectContaining({
                 redacted: true,
-                ...(option
-                  ? { payload: expect.objectContaining({ option }) }
-                  : {}),
+                ...(option ? { payload: expect.objectContaining({ option }) } : {}),
               }),
             }),
           ]),
@@ -239,6 +291,7 @@ describe('WorkbookVersion listCommits selectors', () => {
             operation: 'listCommits',
             commitId: MISSING_COMMIT_ID,
             objectKind: 'commit',
+            details: { rootKind: 'commit', rootMissing: true },
           },
         ],
       })
@@ -254,14 +307,17 @@ describe('WorkbookVersion listCommits selectors', () => {
           },
         ],
       })
+      .mockResolvedValueOnce(successPage({ nextPageToken: 'bad-token' }))
       .mockResolvedValueOnce(successPage({ nextPageToken: 'vpt_next_page' }));
     const version = createVersion(graphStore);
 
-    await expect(version.listCommits({ ref: 'refs/heads/scenario/missing' })).resolves
-      .toMatchObject(expectUnavailable('VERSION_INVALID_OPTIONS', 'ref'));
+    await expect(
+      version.listCommits({ ref: 'refs/heads/scenario/missing' }),
+    ).resolves.toMatchObject(expectUnavailable('VERSION_INVALID_OPTIONS', 'ref'));
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ ref: 'refs/heads/scenario/missing' });
 
-    await expect(version.listCommits({ from: MISSING_COMMIT_ID })).resolves.toMatchObject({
+    const missingRootResult = await version.listCommits({ from: MISSING_COMMIT_ID });
+    expect(missingRootResult).toMatchObject({
       ...expectUnavailable('VERSION_MISSING_OBJECT'),
       error: {
         code: 'target_unavailable',
@@ -271,17 +327,41 @@ describe('WorkbookVersion listCommits selectors', () => {
             code: 'VERSION_MISSING_OBJECT',
             data: expect.objectContaining({
               recoverability: 'repair',
-              payload: expect.objectContaining({ operation: 'listCommits' }),
+              payload: expect.objectContaining({
+                operation: 'listCommits',
+                rootKind: 'commit',
+                rootMissing: true,
+              }),
             }),
           }),
         ],
       },
     });
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ from: MISSING_COMMIT_ID });
+    expect(JSON.stringify(missingRootResult)).not.toContain(MISSING_COMMIT_ID);
 
-    await expect(version.listCommits({ pageToken: PAGE_TOKEN })).resolves
-      .toMatchObject(expectUnavailable('VERSION_STALE_PAGE_CURSOR', 'pageToken'));
+    await expect(version.listCommits({ pageToken: PAGE_TOKEN })).resolves.toMatchObject(
+      expectUnavailable('VERSION_STALE_PAGE_CURSOR', 'pageToken'),
+    );
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
+
+    await expect(version.listCommits()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                option: 'pageToken',
+                cursorMalformed: true,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({});
 
     await expect(version.listCommits()).resolves.toMatchObject({
       ok: true,

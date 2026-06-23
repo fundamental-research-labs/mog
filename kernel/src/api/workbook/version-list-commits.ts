@@ -21,7 +21,10 @@ import { versionResultFromCommitPage } from './version-result';
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
+const VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX = 'vpt_';
+const VERSION_LIST_COMMITS_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
+const VERSION_LIST_COMMITS_MAX_PAGE_TOKEN_BYTES = 2048;
+const VERSION_OPERATION_PAGE_TOKEN_RE = /^mog-v[a-z0-9-]+-v[0-9]+\.[A-Za-z0-9_.:-]+$/;
 const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
 const VERSION_LIST_COMMITS_OPTION_KEYS = new Set([
@@ -65,10 +68,7 @@ export async function listWorkbookVersionCommits(
 
   const readService = getAttachedListCommitsService(ctx);
   if (!readService?.listCommits) {
-    return versionResultFromCommitPage(
-      degradedCommitPage([serviceUnavailableDiagnostic()]),
-      limit,
-    );
+    return versionResultFromCommitPage(degradedCommitPage([serviceUnavailableDiagnostic()]), limit);
   }
 
   const pageToken = options.pageToken === undefined ? undefined : toPageToken(options.pageToken);
@@ -79,12 +79,15 @@ export async function listWorkbookVersionCommits(
       ...(options.pageSize === undefined ? {} : { pageSize: options.pageSize }),
       ...(pageToken === undefined ? {} : { pageToken }),
     });
-    return versionResultFromCommitPage(mapCommitPageResult(result), limit);
-  } catch {
     return versionResultFromCommitPage(
-      degradedCommitPage([providerErrorDiagnostic()]),
+      mapCommitPageResult(result, {
+        requestedRootCommitId: options.from,
+        isFollowUpPage: pageToken !== undefined,
+      }),
       limit,
     );
+  } catch {
+    return versionResultFromCommitPage(degradedCommitPage([providerErrorDiagnostic()]), limit);
   }
 }
 
@@ -122,7 +125,9 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
-function validateListCommitsOptions(options: VersionListCommitsOptions): readonly VersionStoreDiagnostic[] {
+function validateListCommitsOptions(
+  options: VersionListCommitsOptions,
+): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
   if (!isRecord(options) || Array.isArray(options)) {
     return [
@@ -137,11 +142,11 @@ function validateListCommitsOptions(options: VersionListCommitsOptions): readonl
   for (const key of Object.keys(options)) {
     if (!VERSION_LIST_COMMITS_OPTION_KEYS.has(key)) {
       diagnostics.push(
-        publicDiagnostic(
-          'VERSION_INVALID_OPTIONS',
-          'listCommits received an unsupported option.',
-          { severity: 'error', recoverability: 'none', payload: { option: key } },
-        ),
+        publicDiagnostic('VERSION_INVALID_OPTIONS', 'listCommits received an unsupported option.', {
+          severity: 'error',
+          recoverability: 'none',
+          payload: { option: key },
+        }),
       );
     }
   }
@@ -172,13 +177,17 @@ function validateListCommitsOptions(options: VersionListCommitsOptions): readonl
   }
 
   if (options.pageToken !== undefined) {
-    const pageToken = toPageToken(options.pageToken);
-    if (!pageToken) {
+    const pageToken = classifyPageToken(options.pageToken);
+    if (pageToken.kind !== 'valid') {
       diagnostics.push(
         publicDiagnostic(
-          'VERSION_INVALID_OPTIONS',
-          'listCommits pageToken is malformed or unsupported.',
-          { severity: 'error', recoverability: 'none', payload: { option: 'pageToken' } },
+          pageToken.kind === 'stale' ? 'VERSION_STALE_PAGE_CURSOR' : 'VERSION_INVALID_OPTIONS',
+          pageToken.safeMessage,
+          {
+            severity: 'error',
+            recoverability: pageToken.kind === 'stale' ? 'retry' : 'none',
+            payload: { option: 'pageToken', ...pageToken.payload },
+          },
         ),
       );
     }
@@ -228,10 +237,7 @@ function validateListCommitsOptions(options: VersionListCommitsOptions): readonl
     );
   }
 
-  if (
-    options.includeDiagnostics !== undefined &&
-    typeof options.includeDiagnostics !== 'boolean'
-  ) {
+  if (options.includeDiagnostics !== undefined && typeof options.includeDiagnostics !== 'boolean') {
     diagnostics.push(
       publicDiagnostic(
         'VERSION_INVALID_OPTIONS',
@@ -268,19 +274,21 @@ function validateListCommitsRef(ref: unknown): readonly VersionStoreDiagnostic[]
   const parsed = validateRefName(ref.slice('refs/heads/'.length));
   if (parsed.ok) return [];
   return parsed.diagnostics.map((item) =>
-    publicDiagnostic(
-      'VERSION_INVALID_OPTIONS',
-      'listCommits ref must be public-safe.',
-      {
-        severity: 'error',
-        recoverability: 'none',
-        payload: { option: 'ref', refName: 'redacted', issue: item.issue },
-      },
-    ),
+    publicDiagnostic('VERSION_INVALID_OPTIONS', 'listCommits ref must be public-safe.', {
+      severity: 'error',
+      recoverability: 'none',
+      payload: { option: 'ref', refName: 'redacted', issue: item.issue },
+    }),
   );
 }
 
-function mapCommitPageResult(value: unknown): VersionCommitPage {
+function mapCommitPageResult(
+  value: unknown,
+  context: {
+    readonly requestedRootCommitId?: WorkbookCommitId;
+    readonly isFollowUpPage: boolean;
+  },
+): VersionCommitPage {
   if (!isRecord(value)) {
     return degradedCommitPage([providerErrorDiagnostic()]);
   }
@@ -321,14 +329,131 @@ function mapCommitPageResult(value: unknown): VersionCommitPage {
     };
   }
 
+  const pageDiagnostics = validateCommitPageOrder(items, context);
+  if (pageDiagnostics.length > 0) {
+    return {
+      status: 'degraded',
+      items: [],
+      readRevision,
+      order: 'topological-newest',
+      diagnostics: pageDiagnostics,
+    };
+  }
+
+  const nextPageToken =
+    value.nextPageToken === undefined ? undefined : toPageToken(value.nextPageToken);
+  if (value.nextPageToken !== undefined && !nextPageToken) {
+    return {
+      status: 'degraded',
+      items: [],
+      readRevision,
+      order: 'topological-newest',
+      diagnostics: [
+        publicDiagnostic(
+          'VERSION_INVALID_COMMIT_PAYLOAD',
+          'The version graph returned a malformed listCommits page cursor.',
+          {
+            severity: 'error',
+            recoverability: 'repair',
+            payload: { option: 'pageToken', cursorMalformed: true },
+          },
+        ),
+      ],
+    };
+  }
+
   return {
     status: 'success',
     items,
-    ...(typeof value.nextPageToken === 'string' ? { nextPageToken: value.nextPageToken } : {}),
+    ...(nextPageToken ? { nextPageToken } : {}),
     readRevision,
     order: 'topological-newest',
     diagnostics: [],
   };
+}
+
+function validateCommitPageOrder(
+  items: readonly WorkbookCommitSummary[],
+  context: {
+    readonly requestedRootCommitId?: WorkbookCommitId;
+    readonly isFollowUpPage: boolean;
+  },
+): readonly VersionStoreDiagnostic[] {
+  if (items.length === 0) return [];
+
+  if (
+    context.requestedRootCommitId !== undefined &&
+    !context.isFollowUpPage &&
+    items[0]?.id !== context.requestedRootCommitId
+  ) {
+    return [
+      publicDiagnostic(
+        'VERSION_INVALID_COMMIT_PAYLOAD',
+        'The version graph did not start listCommits at the requested commit root.',
+        {
+          severity: 'error',
+          recoverability: 'repair',
+          payload: { rootMismatch: true },
+        },
+      ),
+    ];
+  }
+
+  const indexByCommitId = new Map<WorkbookCommitId, number>();
+  for (const [index, item] of items.entries()) {
+    const previousIndex = indexByCommitId.get(item.id);
+    if (previousIndex !== undefined) {
+      return [
+        publicDiagnostic(
+          'VERSION_INVALID_COMMIT_PAYLOAD',
+          'The version graph returned duplicate commits in one listCommits page.',
+          {
+            severity: 'error',
+            recoverability: 'repair',
+            payload: { itemIndex: index, duplicateOfItemIndex: previousIndex },
+          },
+        ),
+      ];
+    }
+    indexByCommitId.set(item.id, index);
+  }
+
+  const reachableFromEarlierItems = new Set<WorkbookCommitId>();
+  for (const [index, item] of items.entries()) {
+    if (!context.isFollowUpPage && index > 0 && !reachableFromEarlierItems.has(item.id)) {
+      return [
+        publicDiagnostic(
+          'VERSION_INVALID_COMMIT_PAYLOAD',
+          'The version graph returned a commit outside the first-page root traversal.',
+          {
+            severity: 'error',
+            recoverability: 'repair',
+            payload: { itemIndex: index, rootTraversal: false },
+          },
+        ),
+      ];
+    }
+
+    for (const parentId of item.parents) {
+      const parentIndex = indexByCommitId.get(parentId);
+      if (parentIndex !== undefined && parentIndex <= index) {
+        return [
+          publicDiagnostic(
+            'VERSION_INVALID_COMMIT_PAYLOAD',
+            'The version graph returned a parent before its reachable child.',
+            {
+              severity: 'error',
+              recoverability: 'repair',
+              payload: { itemIndex: index, parentItemIndex: parentIndex },
+            },
+          ),
+        ];
+      }
+      reachableFromEarlierItems.add(parentId);
+    }
+  }
+
+  return [];
 }
 
 function mapCommitSummaries(values: readonly unknown[]): {
@@ -435,11 +560,27 @@ function sanitizeDiagnosticPayload(
   const details = isRecord(value.details) ? value.details : null;
   if (details) {
     for (const key of [
+      'category',
+      'commitCount',
+      'cursorMalformed',
+      'cursorRootMismatch',
+      'cursorRevisionMismatch',
+      'duplicateOfItemIndex',
+      'itemIndex',
       'min',
       'max',
+      'orderedCommitCount',
+      'parentItemIndex',
       'pageSize',
       'receivedPageSize',
+      'refMissing',
+      'rootKind',
+      'rootMissing',
+      'rootMismatch',
+      'rootTraversal',
       'pageTokenUnsupported',
+      'reachableCommitCount',
+      'receivedCursorBytes',
     ] as const) {
       const detailValue = details[key];
       if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
@@ -565,12 +706,59 @@ function toCommitId(value: unknown): WorkbookCommitId | null {
 }
 
 function toPageToken(value: unknown): VersionPageToken | undefined {
-  return typeof value === 'string' &&
-    value.length >= 16 &&
-    value.length <= 2048 &&
-    VERSION_PAGE_TOKEN_RE.test(value)
-    ? (value as VersionPageToken)
-    : undefined;
+  return classifyPageToken(value).kind === 'valid' ? (value as VersionPageToken) : undefined;
+}
+
+function classifyPageToken(value: unknown):
+  | { readonly kind: 'valid' }
+  | {
+      readonly kind: 'invalid' | 'stale';
+      readonly safeMessage: string;
+      readonly payload: VersionDiagnosticPublicPayload;
+    } {
+  if (typeof value !== 'string') {
+    return {
+      kind: 'invalid',
+      safeMessage: 'listCommits pageToken is malformed or unsupported.',
+      payload: { category: 'malformedCursor' },
+    };
+  }
+
+  if (value.length > VERSION_LIST_COMMITS_MAX_PAGE_TOKEN_BYTES) {
+    return {
+      kind: 'invalid',
+      safeMessage: 'listCommits pageToken exceeds the public cursor size limit.',
+      payload: {
+        category: 'oversizedCursor',
+        max: VERSION_LIST_COMMITS_MAX_PAGE_TOKEN_BYTES,
+        receivedCursorBytes: value.length,
+      },
+    };
+  }
+
+  if (
+    value.length > VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX.length &&
+    value.startsWith(VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX) &&
+    VERSION_LIST_COMMITS_PAGE_TOKEN_RE.test(
+      value.slice(VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX.length),
+    )
+  ) {
+    return { kind: 'valid' };
+  }
+
+  if (VERSION_OPERATION_PAGE_TOKEN_RE.test(value)) {
+    return {
+      kind: 'stale',
+      safeMessage: 'listCommits pageToken belongs to a different version read operation.',
+      payload: { category: 'wrongOperationCursor' },
+    };
+  }
+
+  return {
+    kind: 'invalid',
+    safeMessage: 'listCommits pageToken is malformed or unsupported.',
+    payload: { category: 'malformedCursor' },
+  };
 }
 
 function toRevision(value: unknown): VersionRecordRevision | undefined {

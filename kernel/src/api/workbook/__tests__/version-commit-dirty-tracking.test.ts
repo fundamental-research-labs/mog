@@ -153,13 +153,45 @@ describe('WorkbookVersion dirty tracking around commit', () => {
       result: cellWriteResult(42),
     });
 
-    await expect(wb.version.commit()).resolves.toMatchObject({ ok: true });
+    const commitResult = await wb.version.commit();
+    expect(commitResult).toMatchObject({ ok: true });
 
     expect(wb.isDirty).toBe(false);
     expect(semanticMutationCapture.readNormalCommitCaptureState()).toMatchObject({
       pendingCapturedNormalMutationCount: 0,
       pendingUncapturedNormalMutationCount: 0,
     });
+  });
+
+  it('keeps workbook dirty when the commit save head token is stale at baseline update time', async () => {
+    const eventBus = createMockEventBus();
+    const commit = jest.fn(async () => ({
+      status: 'success',
+      commit: commitSummary('child'),
+      diagnostics: [],
+    }));
+    const readHead = jest.fn(async () => ({
+      status: 'success',
+      head: commitRef('moved', '3'),
+      diagnostics: [],
+    }));
+    const wb = createWorkbook({
+      eventBus,
+      versioning: {
+        writeService: { commit, readHead } as any,
+      },
+    });
+    eventBus.emit({ type: 'test:dirty-before-commit' });
+
+    await expect(wb.version.commit()).resolves.toMatchObject({
+      ok: true,
+      value: {
+        id: commitId('child'),
+      },
+    });
+
+    expect(readHead).toHaveBeenCalled();
+    expect(wb.isDirty).toBe(true);
   });
 
   it('keeps workbook dirty when a local mutation is not captured by the committed range', async () => {
@@ -262,11 +294,25 @@ function cellWriteResult(value: unknown) {
 
 function commitSummary(label: string) {
   return {
-    id: `commit:sha256:${(label === 'child' ? 'b' : 'a').repeat(64)}`,
-    parents: [`commit:sha256:${'a'.repeat(64)}`],
+    id: commitId(label),
+    parents: [commitId('root')],
     createdAt: CREATED_AT,
     author: VERSION_AUTHOR,
   };
+}
+
+function commitRef(label: string, revision: string) {
+  return {
+    id: commitId(label),
+    refName: 'refs/heads/main',
+    resolvedFrom: 'HEAD',
+    refRevision: { kind: 'counter', value: revision },
+  };
+}
+
+function commitId(label: string) {
+  const byte = label === 'child' ? 'b' : label === 'moved' ? 'c' : 'a';
+  return `commit:sha256:${byte.repeat(64)}`;
 }
 
 function expectInitializeSuccess(

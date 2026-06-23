@@ -385,7 +385,8 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
               code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
               data: expect.objectContaining({
                 payload: expect.objectContaining({
-                  reason: 'refMoved',
+                  reason: 'staleWorkspaceHead',
+                  staleReason: 'refMoved',
                   currentRefHeadId: moved.id,
                   refHeadAtMaterialization: branchBase.id,
                 }),

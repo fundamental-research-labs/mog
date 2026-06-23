@@ -1,5 +1,9 @@
 import type {
   VersionCommitOptions,
+  VersionMainRefName,
+  VersionRecordRevision,
+  VersionRefName,
+  VersionRefSelector,
   VersionResult,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
@@ -17,6 +21,16 @@ interface NormalCommitCaptureDirtyState {
   readonly pendingCapturedNormalMutationCount: number;
   readonly pendingUncapturedNormalMutationCount: number;
 }
+
+interface VersionSaveHeadToken {
+  readonly commitId: string;
+  readonly refName?: VersionMainRefName | VersionRefName;
+  readonly resolvedFrom?: VersionRefSelector;
+  readonly refRevision?: VersionRecordRevision;
+  readonly source: 'runtime-head' | 'checkout-session';
+}
+
+type RuntimeSaveHeadTokenState = VersionSaveHeadToken | 'stale' | null;
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -48,24 +62,74 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
   ): Promise<VersionResult<WorkbookCommitSummary>> {
     const beforeCommit = this.dirtyTracking.readState();
     const result = await super.commit(options);
-    if (result.ok && this.canMarkCleanAfterCommit(beforeCommit)) {
+    if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
       this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
     }
     return result;
   }
 
-  private canMarkCleanAfterCommit(beforeCommit: WorkbookVersionDirtyTrackingState): boolean {
+  private async canMarkCleanAfterCommit(
+    beforeCommit: WorkbookVersionDirtyTrackingState,
+    commitSummary: WorkbookCommitSummary,
+  ): Promise<boolean> {
     const afterCommit = this.dirtyTracking.readState();
     if (!afterCommit.isDirty) return false;
     if (afterCommit.revision !== beforeCommit.revision) return false;
 
     const captureState = readNormalCommitCaptureDirtyState(this.versionContext);
-    if (!captureState) return true;
-    return (
-      captureState.pendingCapturedNormalMutationCount === 0 &&
-      captureState.pendingUncapturedNormalMutationCount === 0
-    );
+    if (captureState && !isNormalCommitCaptureDrained(captureState)) {
+      return false;
+    }
+
+    return this.commitSaveHeadStillCurrent(commitSummary);
   }
+
+  private async commitSaveHeadStillCurrent(commitSummary: WorkbookCommitSummary): Promise<boolean> {
+    const currentToken = await this.readCurrentRuntimeSaveHeadToken();
+    if (currentToken === 'stale') return false;
+    if (currentToken === null) return true;
+    return currentToken.commitId === commitSummary.id;
+  }
+
+  private async readCurrentRuntimeSaveHeadToken(): Promise<RuntimeSaveHeadTokenState> {
+    try {
+      const surface = await this.getSurfaceStatus();
+      const current = surface.current;
+      if (current.stale) return 'stale';
+      if (!current.headCommitId) return null;
+
+      const surfaceToken: VersionSaveHeadToken = {
+        commitId: current.headCommitId,
+        ...(current.branchName ? { refName: refNameFromBranchName(current.branchName) } : {}),
+        source: current.checkedOutCommitId ? 'checkout-session' : 'runtime-head',
+      };
+      if (current.checkedOutCommitId) return surfaceToken;
+
+      const head = await this.getHead();
+      if (!head.ok) return surfaceToken;
+
+      return {
+        commitId: head.value.id,
+        ...(head.value.refName ? { refName: head.value.refName } : {}),
+        ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
+        ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
+        source: 'runtime-head',
+      };
+    } catch {
+      return null;
+    }
+  }
+}
+
+function refNameFromBranchName(branchName: string): VersionMainRefName | VersionRefName {
+  return branchName === 'main' ? 'refs/heads/main' : (`refs/heads/${branchName}` as VersionRefName);
+}
+
+function isNormalCommitCaptureDrained(captureState: NormalCommitCaptureDirtyState): boolean {
+  return (
+    captureState.pendingCapturedNormalMutationCount === 0 &&
+    captureState.pendingUncapturedNormalMutationCount === 0
+  );
 }
 
 function readNormalCommitCaptureDirtyState(

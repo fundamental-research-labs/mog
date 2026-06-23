@@ -59,6 +59,7 @@ import {
   versionResultFromMergeEndpointDiagnostics,
 } from './version-result';
 import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
+import { resolveSavedConflictDetailSelection } from './version-merge-review-saved-resolution';
 
 export async function saveMergeResolutionsWorkbookVersion(
   ctx: DocumentContext,
@@ -254,6 +255,16 @@ export async function getMergeConflictDetailWorkbookVersion(
     return mergeEndpointFailure('getMergeConflictDetail', targetDiagnostics);
   }
 
+  if (artifact.payload.status !== 'clean' && artifact.payload.status !== 'conflicted') {
+    return mergeEndpointFailure('getMergeConflictDetail', [
+      mergeReviewDiagnostic(
+        'getMergeConflictDetail',
+        'VERSION_MERGE_RESOLUTION_MISMATCH',
+        'ancestry merge preview artifacts do not expose conflict detail.',
+      ),
+    ]);
+  }
+
   const conflictSet = await normalizeMergeReviewConflicts(
     'getMergeConflictDetail',
     artifact.payload.conflicts,
@@ -270,11 +281,22 @@ export async function getMergeConflictDetailWorkbookVersion(
   );
   if (!conflict.ok) return mergeEndpointFailure('getMergeConflictDetail', conflict.diagnostics);
 
+  const savedSelection = await resolveSavedConflictDetailSelection(
+    opened.graph,
+    'getMergeConflictDetail',
+    normalized.input,
+    conflictSet.conflictSet,
+    conflict.conflict,
+  );
+  if (!savedSelection.ok) {
+    return mergeEndpointFailure('getMergeConflictDetail', savedSelection.diagnostics);
+  }
+
   const selected = selectConflictDetailValue(
     'getMergeConflictDetail',
     conflictSet.conflictSet,
     conflict.conflict,
-    normalized.input,
+    savedSelection.selection,
   );
   if (!selected.ok) return mergeEndpointFailure('getMergeConflictDetail', selected.diagnostics);
 
@@ -294,7 +316,7 @@ export async function getMergeConflictDetailWorkbookVersion(
     schemaVersion: 1 as const,
     conflictId: conflict.conflict.conflictId,
     conflictDigest: conflict.conflict.conflictDigest,
-    valueRole: normalized.input.valueRole,
+    valueRole: savedSelection.selection.valueRole,
     purpose: normalized.input.purpose,
     resolutionOptions: resolutionOptions.options,
     value: value.value,
@@ -340,6 +362,16 @@ export async function putMergeResolutionPayloadWorkbookVersion(
     normalized.input.resultDigest,
   );
   if (!artifact.ok) return mergeEndpointFailure('putMergeResolutionPayload', artifact.diagnostics);
+
+  if (artifact.payload.status !== 'clean' && artifact.payload.status !== 'conflicted') {
+    return mergeEndpointFailure('putMergeResolutionPayload', [
+      mergeReviewDiagnostic(
+        'putMergeResolutionPayload',
+        'VERSION_MERGE_RESOLUTION_MISMATCH',
+        'ancestry merge preview artifacts do not accept resolution payloads.',
+      ),
+    ]);
+  }
 
   const conflictSet = await normalizeMergeReviewConflicts(
     'putMergeResolutionPayload',
@@ -577,7 +609,14 @@ function toMergePreviewArtifactPayload(value: unknown): MergePreviewArtifactPayl
   if (!isRecord(value) || value.schemaVersion !== 1 || value.recordKind !== 'mergePreview') {
     return null;
   }
-  if (value.status !== 'clean' && value.status !== 'conflicted') return null;
+  if (
+    value.status !== 'clean' &&
+    value.status !== 'conflicted' &&
+    value.status !== 'fastForward' &&
+    value.status !== 'alreadyMerged'
+  ) {
+    return null;
+  }
   if (
     !isWorkbookCommitId(value.base) ||
     !isWorkbookCommitId(value.ours) ||

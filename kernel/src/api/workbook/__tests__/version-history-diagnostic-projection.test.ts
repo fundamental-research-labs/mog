@@ -206,6 +206,29 @@ describe('version history diagnostic projection', () => {
     }
   });
 
+  it('omits denied diagnostic cardinality from access-projected summaries', () => {
+    const projected = projectVersionHistoryDiagnosticsForAccess(
+      [
+        sensitiveDiagnostic({ domain: 'hidden-sheet', capability: 'version:read' }),
+        sensitiveDiagnostic({ domain: 'external-link', capability: 'version:remotePromote' }),
+      ],
+      { kind: 'access-denied' },
+    );
+
+    expect(projected).toEqual([
+      {
+        code: 'version_access_denied',
+        severity: 'error',
+        message: 'Version history access is denied for this caller.',
+        data: {
+          kind: 'access-denied',
+        },
+      },
+    ]);
+    expect(JSON.stringify(projected)).not.toContain('diagnosticCount');
+    expectNoForbiddenDetails(projected);
+  });
+
   it('does not reflect custom access codes or non-public access metadata', () => {
     const nonPublicAccess = {
       kind: 'capability-denied',

@@ -252,14 +252,11 @@ function isSensitiveDiagnosticPayloadKey(key: string): boolean {
     normalized.includes('commit') ||
     normalized === 'head' ||
     normalized.includes('revision') ||
-    normalized === 'value' ||
-    normalized === 'values' ||
-    normalized.endsWith('value') ||
-    normalized.endsWith('values') ||
+    normalized.includes('value') ||
     normalized === 'before' ||
     normalized === 'after' ||
     normalized === 'formula' ||
-    normalized === 'result'
+    normalized.includes('result')
   );
 }
 

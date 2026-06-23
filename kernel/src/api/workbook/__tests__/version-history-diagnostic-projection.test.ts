@@ -98,6 +98,13 @@ describe('version history diagnostic projection', () => {
                   capability: 'version:commit',
                   deniedCapabilities: ['version:branch'],
                 },
+                valueDigest: {
+                  capability: 'version:proposal',
+                  deniedCapabilities: ['version:mergeApply'],
+                },
+                mergeResultId: {
+                  deniedCapabilities: ['version:remotePromote'],
+                },
               },
               {
                 capability: 'version:diff',
@@ -149,6 +156,7 @@ describe('version history diagnostic projection', () => {
     expect(JSON.stringify(projected)).not.toContain('version:mergeApply');
     expect(JSON.stringify(projected)).not.toContain('version:commit');
     expect(JSON.stringify(projected)).not.toContain('version:reviewWrite');
+    expect(JSON.stringify(projected)).not.toContain('version:remotePromote');
   });
 
   it('replaces source access-denied messages with a fixed public message', () => {

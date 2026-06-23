@@ -115,7 +115,7 @@ const VERSION_PROPOSAL_METHOD_NAMES = new Set([
 ]);
 const VERSION_REVERT_METHOD_NAMES = new Set(['revert']);
 const VERSION_PROVENANCE_METHOD_NAMES = new Set(['promotePendingRemote']);
-const VERSION_METHOD_MATRIX_ENTRY_NAMES = new Set(Object.keys(VERSION_METHOD_REQUIREMENTS));
+const VERSION_SPEC_SUPPLEMENT_METHOD_NAMES = new Set(['revert']);
 const VERSION_METHOD_GROUPS = [
   ['review', VERSION_REVIEW_METHOD_NAMES],
   ['proposal', VERSION_PROPOSAL_METHOD_NAMES],
@@ -262,8 +262,18 @@ for (const [interfaceName, interfaceSpec] of Object.entries(spec.interfaces)) {
   }
   matrix[interfaceName] = entries;
 }
-for (const methodName of VERSION_METHOD_MATRIX_ENTRY_NAMES) {
-  matrix.WorkbookVersion[methodName] ??= {
+for (const methodName of VERSION_SPEC_SUPPLEMENT_METHOD_NAMES) {
+  if (!Object.hasOwn(VERSION_METHOD_REQUIREMENTS, methodName)) {
+    throw new Error(
+      `WorkbookVersion.${methodName} spec supplement is missing explicit version capability requirements`,
+    );
+  }
+  if (matrix.WorkbookVersion[methodName]) {
+    throw new Error(
+      `WorkbookVersion.${methodName} no longer needs a workbook facade spec supplement`,
+    );
+  }
+  matrix.WorkbookVersion[methodName] = {
     decision: 'allow',
     ...versionMethodEntry(methodName),
   };
@@ -283,8 +293,15 @@ function assertVersionCapabilityMatrix() {
   if (!versionMatrix) {
     throw new Error('workbook facade capability matrix is missing WorkbookVersion');
   }
+  const versionSpecMethods = spec.interfaces.WorkbookVersion.functions ?? {};
 
   for (const [methodName] of Object.entries(VERSION_METHOD_REQUIREMENTS)) {
+    if (
+      !Object.hasOwn(versionSpecMethods, methodName) &&
+      !VERSION_SPEC_SUPPLEMENT_METHOD_NAMES.has(methodName)
+    ) {
+      throw new Error(`api spec is missing WorkbookVersion.${methodName}`);
+    }
     const expected = versionMethodEntry(methodName);
     const entry = versionMatrix[methodName];
     if (!entry) {

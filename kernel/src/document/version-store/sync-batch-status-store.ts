@@ -37,6 +37,8 @@ export type SyncBatchStatusIdentity = {
   readonly subUpdateCount?: number;
 };
 
+type SyncBatchStatusHighWaterIdentity = Omit<SyncBatchStatusIdentity, 'payloadHash'>;
+
 export type SyncBatchStatusOperationContext = VersionOperationContext & {
   readonly collaboration: VersionSyncOperationContext;
 };
@@ -176,13 +178,13 @@ export class SyncBatchStatusMemoryBackend {
 
   exportSnapshot(): SyncBatchStatusMemoryBackendSnapshot {
     return {
-      records: [...this.recordsByKey.values()].map((record) =>
-        cloneSyncBatchStatusRecord(record),
-      ),
+      records: [...this.recordsByKey.values()].map((record) => cloneSyncBatchStatusRecord(record)),
     };
   }
 
-  static fromSnapshot(snapshot: SyncBatchStatusMemoryBackendSnapshot): SyncBatchStatusMemoryBackend {
+  static fromSnapshot(
+    snapshot: SyncBatchStatusMemoryBackendSnapshot,
+  ): SyncBatchStatusMemoryBackend {
     const backend = new SyncBatchStatusMemoryBackend();
     for (const record of snapshot.records) backend.put(record);
     return backend;
@@ -209,7 +211,7 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
   ): Promise<SyncBatchStatusReserveResult> {
     let record: SyncBatchStatusRecord;
     try {
-      record = this.recordFromInput(input);
+      record = await this.recordFromInput(input);
     } catch {
       return failedReserve('Sync batch status reservation has invalid sync batch identity.');
     }
@@ -232,9 +234,7 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
     return { status: 'reserved', record, diagnostics: [] };
   }
 
-  async readByBatchStatusId(
-    batchStatusId: SyncBatchStatusId,
-  ): Promise<SyncBatchStatusReadResult> {
+  async readByBatchStatusId(batchStatusId: SyncBatchStatusId): Promise<SyncBatchStatusReadResult> {
     const record = this.backend.get(this.documentScope, batchStatusId);
     return record
       ? { status: 'found', record, diagnostics: [] }
@@ -283,16 +283,25 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
     return { status: 'completed', record: completed, diagnostics: [] };
   }
 
-  private recordFromInput(input: ReserveSyncBatchStatusInput): SyncBatchStatusRecord {
+  private async recordFromInput(
+    input: ReserveSyncBatchStatusInput,
+  ): Promise<SyncBatchStatusRecord> {
     const collaboration = syncBatchOperationContext(input.operationContext);
+    const keyMaterial = await syncBatchStatusKeyMaterialForOperationContext(
+      input.operationContext,
+      input,
+    );
+    if (input.batchStatusId !== keyMaterial.batchStatusId) {
+      throw new Error('Sync batch status id does not match operation context.');
+    }
     return cloneSyncBatchStatusRecord({
       schemaVersion: 1,
       recordKind: 'syncBatchStatus',
       batchStatusId: input.batchStatusId,
       documentScopeKey: this.documentScopeKey,
       sourceKind: collaboration.sourceKind,
-      identity: syncBatchStatusIdentityForOperationContext(input.operationContext, input),
-      operationContext: input.operationContext,
+      identity: keyMaterial.identity,
+      operationContext: sanitizeSyncBatchStatusOperationContext(input.operationContext),
       state: 'pending',
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
@@ -339,7 +348,10 @@ export async function syncBatchStatusKeyMaterialForOperationContext(
   input: SyncBatchStatusIdentityInput = {},
 ): Promise<SyncBatchStatusKeyMaterial> {
   const identity = syncBatchStatusIdentityForOperationContext(operationContext, input);
-  const digest = await objectDigestFor('mog.version.sync-batch-status.identity.v1', identity);
+  const digest = await objectDigestFor(
+    'mog.version.sync-batch-status.high-water-identity.v1',
+    syncBatchStatusHighWaterIdentity(identity),
+  );
   return {
     identity,
     batchStatusId: `sync-batch-status:sha256:${digest.digest}`,
@@ -354,7 +366,12 @@ export function cloneSyncBatchStatusRecord(
 export function cloneSyncBatchStatusRecord(
   record: SyncBatchStatusRecord | undefined,
 ): SyncBatchStatusRecord | undefined {
-  return record === undefined ? undefined : cloneJson(record);
+  if (record === undefined) return undefined;
+  const cloned = cloneJson(record);
+  return {
+    ...cloned,
+    operationContext: sanitizeSyncBatchStatusOperationContext(cloned.operationContext),
+  };
 }
 
 export function syncBatchStatusReservationsEquivalent(
@@ -400,6 +417,10 @@ export function isSyncBatchStatusRecord(value: unknown): value is SyncBatchStatu
   if (typeof value.sourceKind !== 'string') return false;
   if (!isSyncBatchStatusIdentity(value.identity)) return false;
   if (!isSyncBatchOperationContext(value.operationContext)) return false;
+  if (!syncBatchStatusIdentityMatchesOperationContext(value.identity, value.operationContext)) {
+    return false;
+  }
+  if (!isSanitizedSyncBatchStatusCollaboration(value.operationContext.collaboration)) return false;
   if (!isSyncBatchStatusState(value.state)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (value.state === 'pending') return value.terminal === undefined;
@@ -414,6 +435,99 @@ function syncBatchOperationContext(
     throw new Error('Sync batch status operation context must include collaboration.');
   }
   return operationContext.collaboration;
+}
+
+function syncBatchStatusHighWaterIdentity(
+  identity: SyncBatchStatusIdentity,
+): SyncBatchStatusHighWaterIdentity {
+  return {
+    schemaVersion: identity.schemaVersion,
+    originKind: identity.originKind,
+    stableOriginId: identity.stableOriginId,
+    epoch: identity.epoch,
+    batchId: identity.batchId,
+    ...(identity.orderedSubUpdatePayloadHashes === undefined
+      ? {}
+      : { orderedSubUpdatePayloadHashes: identity.orderedSubUpdatePayloadHashes }),
+    ...(identity.subUpdateCount === undefined ? {} : { subUpdateCount: identity.subUpdateCount }),
+  };
+}
+
+function sanitizeSyncBatchStatusOperationContext(
+  operationContext: SyncBatchStatusOperationContext,
+): SyncBatchStatusOperationContext {
+  const collaboration = operationContext.collaboration;
+  return cloneJson({
+    ...operationContext,
+    collaboration: {
+      sourceKind: collaboration.sourceKind,
+      originKind: collaboration.originKind,
+      payloadHash: collaboration.payloadHash,
+      trustStatus: collaboration.trustStatus,
+      authorState: collaboration.authorState,
+      replay: collaboration.replay,
+      system: collaboration.system,
+      commitGrouping: collaboration.commitGrouping,
+      validationDiagnosticCount: collaboration.validationDiagnosticCount,
+      ...(collaboration.stableOriginId === undefined
+        ? {}
+        : { stableOriginId: collaboration.stableOriginId }),
+      ...(collaboration.epoch === undefined ? {} : { epoch: collaboration.epoch }),
+      ...(collaboration.updateId === undefined ? {} : { updateId: collaboration.updateId }),
+      ...(collaboration.roomId === undefined ? {} : { roomId: collaboration.roomId }),
+      ...(collaboration.sequence === undefined ? {} : { sequence: collaboration.sequence }),
+      ...(collaboration.provenancePayloadHash === undefined
+        ? {}
+        : { provenancePayloadHash: collaboration.provenancePayloadHash }),
+      ...(collaboration.batchId === undefined ? {} : { batchId: collaboration.batchId }),
+      ...(collaboration.subUpdateIndex === undefined
+        ? {}
+        : { subUpdateIndex: collaboration.subUpdateIndex }),
+      ...(collaboration.subUpdateCount === undefined
+        ? {}
+        : { subUpdateCount: collaboration.subUpdateCount }),
+      ...(collaboration.batchStatusId === undefined
+        ? {}
+        : { batchStatusId: collaboration.batchStatusId }),
+      ...(collaboration.batchStatusState === undefined
+        ? {}
+        : { batchStatusState: collaboration.batchStatusState }),
+      ...(collaboration.exclusionReason === undefined
+        ? {}
+        : { exclusionReason: collaboration.exclusionReason }),
+      ...(collaboration.exclusionSubreason === undefined
+        ? {}
+        : { exclusionSubreason: collaboration.exclusionSubreason }),
+    },
+  });
+}
+
+function syncBatchStatusIdentityMatchesOperationContext(
+  identity: SyncBatchStatusIdentity,
+  operationContext: SyncBatchStatusOperationContext,
+): boolean {
+  const collaboration = operationContext.collaboration;
+  const batchId = collaboration.batchId ?? identity.batchId;
+  return (
+    identity.originKind === collaboration.originKind &&
+    identity.stableOriginId === collaboration.stableOriginId &&
+    identity.epoch === collaboration.epoch &&
+    identity.batchId === batchId &&
+    identity.payloadHash === collaboration.payloadHash
+  );
+}
+
+function isSanitizedSyncBatchStatusCollaboration(
+  collaboration: VersionSyncOperationContext,
+): boolean {
+  return (
+    collaboration.providerId === undefined &&
+    collaboration.providerKind === undefined &&
+    collaboration.authorityRef === undefined &&
+    collaboration.remoteSessionId === undefined &&
+    collaboration.correlationId === undefined &&
+    collaboration.causationIds === undefined
+  );
 }
 
 function normalizeSubUpdateIdentity(input: SyncBatchStatusIdentityInput): {
@@ -539,10 +653,7 @@ function syncBatchStatusReservationIdentity(record: SyncBatchStatusRecord) {
   };
 }
 
-function memoryKey(
-  documentScope: VersionDocumentScope,
-  batchStatusId: SyncBatchStatusId,
-): string {
+function memoryKey(documentScope: VersionDocumentScope, batchStatusId: SyncBatchStatusId): string {
   return `${versionDocumentScopeKey(documentScope)}\u0000syncBatchStatus\u0000${batchStatusId}`;
 }
 
@@ -607,15 +718,13 @@ function diagnostic(
 
 function optionalStringArray(value: unknown): boolean {
   return (
-    value === undefined ||
-    (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+    value === undefined || (Array.isArray(value) && value.every((item) => typeof item === 'string'))
   );
 }
 
 function optionalNonNegativeInteger(value: unknown): boolean {
   return (
-    value === undefined ||
-    (typeof value === 'number' && Number.isInteger(value) && value >= 0)
+    value === undefined || (typeof value === 'number' && Number.isInteger(value) && value >= 0)
   );
 }
 

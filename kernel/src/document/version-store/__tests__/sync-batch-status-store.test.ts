@@ -68,6 +68,23 @@ describe('sync batch status store', () => {
         orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
       },
     );
+    const localEchoWithRotatedRawProvider = await syncBatchStatusKeyMaterialForOperationContext(
+      syncOperationContext({
+        operationId: 'operation-local-echo',
+        collaboration: {
+          providerId: 'provider-rotated-2',
+          providerKind: 'other-provider',
+          authorityRef: 'authority-rotated-2',
+          remoteSessionId: 'remote-session-rotated-2',
+          correlationId: 'correlation-rotated-2',
+          causationIds: ['cause-rotated-2'],
+        },
+      }),
+      {
+        batchId: 'batch-1',
+        orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
+      },
+    );
     const changedSubUpdateOrder = await syncBatchStatusKeyMaterialForOperationContext(
       syncOperationContext(),
       {
@@ -78,7 +95,9 @@ describe('sync batch status store', () => {
 
     expect(first.batchStatusId).toMatch(/^sync-batch-status:sha256:[0-9a-f]{64}$/);
     expect(first).toEqual(replay);
-    expect(first.batchStatusId).not.toBe(changedPayload.batchStatusId);
+    expect(first.batchStatusId).toBe(changedPayload.batchStatusId);
+    expect(first.batchStatusId).toBe(localEchoWithRotatedRawProvider.batchStatusId);
+    expect(first.identity.payloadHash).not.toBe(changedPayload.identity.payloadHash);
     expect(first.batchStatusId).not.toBe(changedSubUpdateOrder.batchStatusId);
     expect(first.identity).toEqual({
       schemaVersion: 1,
@@ -106,17 +125,30 @@ describe('sync batch status store', () => {
       status: 'reserved',
       record: { batchStatusId: input.batchStatusId, state: 'pending' },
     });
-    await expect(store.readByBatchStatusId(input.batchStatusId)).resolves.toMatchObject({
+    const reserved = await store.readByBatchStatusId(input.batchStatusId);
+    expect(reserved).toMatchObject({
       status: 'found',
       record: { identity: { subUpdateCount: 2 } },
     });
+    if (reserved.status !== 'found') throw new Error('expected reserved batch status');
+    expectNoRawProviderIdentity(reserved.record.operationContext.collaboration);
     await expect(
       store.reserveBatchStatus({
         ...input,
         createdAt: '2026-06-21T00:00:02.000Z',
         operationContext: syncOperationContext({
           createdAt: '2026-06-21T00:00:02.000Z',
-          collaboration: { sourceKind: 'providerReplay', replay: true },
+          operationId: 'operation-local-echo',
+          collaboration: {
+            sourceKind: 'providerReplay',
+            replay: true,
+            providerId: 'provider-rotated-2',
+            providerKind: 'other-provider',
+            authorityRef: 'authority-rotated-2',
+            remoteSessionId: 'remote-session-rotated-2',
+            correlationId: 'correlation-rotated-2',
+            causationIds: ['cause-rotated-2'],
+          },
         }),
       }),
     ).resolves.toMatchObject({
@@ -125,7 +157,11 @@ describe('sync batch status store', () => {
     });
     await expect(
       store.reserveBatchStatus({
-        ...input,
+        ...(await syncBatchStatusInput(
+          syncOperationContext({
+            collaboration: { payloadHash: '4'.repeat(64) },
+          }),
+        )),
         operationContext: syncOperationContext({
           collaboration: { payloadHash: '4'.repeat(64) },
         }),
@@ -174,13 +210,16 @@ describe('sync batch status store', () => {
       durability: 'snapshot-test-double',
     });
     await expect(
-      (await reloadedProvider.openSyncBatchStatusStore()).readByBatchStatusId(
-        input.batchStatusId,
-      ),
+      (await reloadedProvider.openSyncBatchStatusStore()).readByBatchStatusId(input.batchStatusId),
     ).resolves.toMatchObject({
       status: 'found',
       record: { state: 'complete', terminal: { status: 'complete' } },
     });
+    const reloadedRead = await (
+      await reloadedProvider.openSyncBatchStatusStore()
+    ).readByBatchStatusId(input.batchStatusId);
+    if (reloadedRead.status !== 'found') throw new Error('expected reloaded batch status');
+    expectNoRawProviderIdentity(reloadedRead.record.operationContext.collaboration);
   });
 
   it('persists terminal IndexedDB statuses and isolates document scopes', async () => {
@@ -212,6 +251,9 @@ describe('sync batch status store', () => {
       status: 'found',
       record: { state: 'failedAfterMutation' },
     });
+    const reloadedStatus = await reloadedStore.readByBatchStatusId(input.batchStatusId);
+    if (reloadedStatus.status !== 'found') throw new Error('expected persisted batch status');
+    expectNoRawProviderIdentity(reloadedStatus.record.operationContext.collaboration);
     await expect(
       reloadedStore.completeBatchStatus({
         batchStatusId: input.batchStatusId,
@@ -299,22 +341,64 @@ describe('sync batch status store', () => {
       },
     });
   });
+
+  it('rejects mismatched in-memory batch status high-water ids', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openSyncBatchStatusStore();
+    const input = await syncBatchStatusInput();
+    const changedOrder = await syncBatchStatusInput(syncOperationContext(), [
+      SUB_UPDATE_B,
+      SUB_UPDATE_A,
+    ]);
+
+    await expect(
+      store.reserveBatchStatus({
+        ...input,
+        batchStatusId: changedOrder.batchStatusId,
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      diagnostics: [{ code: 'VERSION_INVALID_OPTIONS' }],
+    });
+    await expect(store.readByBatchStatusId(input.batchStatusId)).resolves.toMatchObject({
+      status: 'missing',
+    });
+    await expect(store.readByBatchStatusId(changedOrder.batchStatusId)).resolves.toMatchObject({
+      status: 'missing',
+    });
+  });
 });
 
 async function syncBatchStatusInput(
   operationContext: SyncBatchStatusOperationContext = syncOperationContext(),
+  orderedSubUpdatePayloadHashes: readonly string[] = [SUB_UPDATE_A, SUB_UPDATE_B],
 ): Promise<ReserveSyncBatchStatusInput> {
   const keyMaterial = await syncBatchStatusKeyMaterialForOperationContext(operationContext, {
     batchId: 'batch-1',
-    orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
+    orderedSubUpdatePayloadHashes,
   });
   return {
     batchStatusId: keyMaterial.batchStatusId,
     batchId: 'batch-1',
-    orderedSubUpdatePayloadHashes: [SUB_UPDATE_A, SUB_UPDATE_B],
+    orderedSubUpdatePayloadHashes,
     operationContext,
     createdAt: operationContext.createdAt,
   };
+}
+
+function expectNoRawProviderIdentity(
+  collaboration: NonNullable<VersionOperationContext['collaboration']>,
+): void {
+  expect(collaboration).not.toHaveProperty('providerId');
+  expect(collaboration).not.toHaveProperty('providerKind');
+  expect(collaboration).not.toHaveProperty('authorityRef');
+  expect(collaboration).not.toHaveProperty('remoteSessionId');
+  expect(collaboration).not.toHaveProperty('correlationId');
+  expect(collaboration).not.toHaveProperty('causationIds');
 }
 
 function syncOperationContext(

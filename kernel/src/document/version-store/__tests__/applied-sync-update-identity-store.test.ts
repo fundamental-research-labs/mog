@@ -58,9 +58,24 @@ describe('applied sync update identity store', () => {
     const changedPayload = await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
       syncOperationContext({ collaboration: { payloadHash: '4'.repeat(64) } }),
     );
+    const localEchoWithRotatedRawProvider =
+      await appliedSyncUpdateIdentityKeyMaterialForOperationContext(
+        syncOperationContext({
+          operationId: 'operation-local-echo',
+          collaboration: {
+            providerId: 'provider-rotated-2',
+            providerKind: 'other-provider',
+            authorityRef: 'authority-rotated-2',
+            remoteSessionId: 'remote-session-rotated-2',
+            correlationId: 'correlation-rotated-2',
+            causationIds: ['cause-rotated-2'],
+          },
+        }),
+      );
 
     expect(first.identityKey).toMatch(/^applied-sync-update:sha256:[0-9a-f]{64}$/);
     expect(first).toEqual(replay);
+    expect(first).toEqual(localEchoWithRotatedRawProvider);
     expect(first.identityKey).not.toBe(changedUpdate.identityKey);
     expect(first.identityKey).toBe(changedPayload.identityKey);
     expect(first.identity).toEqual({
@@ -86,11 +101,25 @@ describe('applied sync update identity store', () => {
       status: 'reserved',
       record: { identityKey: input.identityKey, state: 'reserved' },
     });
+    const reserved = await store.readByIdentityKey(input.identityKey);
+    if (reserved.status !== 'found') throw new Error('expected reserved identity');
+    expectNoRawProviderIdentity(reserved.record.operationContext.collaboration);
     await expect(
       store.reserveIdentity({
         ...input,
         createdAt: '2026-06-21T00:00:02.000Z',
-        operationContext: syncOperationContext({ createdAt: '2026-06-21T00:00:02.000Z' }),
+        operationContext: syncOperationContext({
+          createdAt: '2026-06-21T00:00:02.000Z',
+          operationId: 'operation-local-echo',
+          collaboration: {
+            providerId: 'provider-rotated-2',
+            providerKind: 'other-provider',
+            authorityRef: 'authority-rotated-2',
+            remoteSessionId: 'remote-session-rotated-2',
+            correlationId: 'correlation-rotated-2',
+            causationIds: ['cause-rotated-2'],
+          },
+        }),
       }),
     ).resolves.toMatchObject({
       status: 'existing',
@@ -168,6 +197,11 @@ describe('applied sync update identity store', () => {
       status: 'found',
       record: { identityKey: input.identityKey, state: 'applied' },
     });
+    const reloadedRead = await (
+      await reloadedProvider.openAppliedSyncUpdateIdentityStore()
+    ).readByIdentityKey(input.identityKey);
+    if (reloadedRead.status !== 'found') throw new Error('expected reloaded identity');
+    expectNoRawProviderIdentity(reloadedRead.record.operationContext.collaboration);
   });
 
   it('rejects invalid reservation identity keys without creating rows', async () => {
@@ -222,12 +256,13 @@ describe('applied sync update identity store', () => {
 
     const reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const reloadedStore = await reloadedProvider.openAppliedSyncUpdateIdentityStore();
-    await expect(
-      reloadedStore.readByIdentityKey(input.identityKey),
-    ).resolves.toMatchObject({
+    await expect(reloadedStore.readByIdentityKey(input.identityKey)).resolves.toMatchObject({
       status: 'found',
       record: { state: 'failedAfterMutation' },
     });
+    const reloadedIdentity = await reloadedStore.readByIdentityKey(input.identityKey);
+    if (reloadedIdentity.status !== 'found') throw new Error('expected persisted identity');
+    expectNoRawProviderIdentity(reloadedIdentity.record.operationContext.collaboration);
     await expect(reloadedStore.reserveIdentity(input)).resolves.toMatchObject({
       status: 'existing',
       record: { state: 'failedAfterMutation' },
@@ -371,6 +406,17 @@ function admittedContextFor(operationContext: VersionOperationContext): Admitted
     validationDiagnostics: [],
     operationContext,
   } as AdmittedSyncApplyContext;
+}
+
+function expectNoRawProviderIdentity(
+  collaboration: NonNullable<VersionOperationContext['collaboration']>,
+): void {
+  expect(collaboration).not.toHaveProperty('providerId');
+  expect(collaboration).not.toHaveProperty('providerKind');
+  expect(collaboration).not.toHaveProperty('authorityRef');
+  expect(collaboration).not.toHaveProperty('remoteSessionId');
+  expect(collaboration).not.toHaveProperty('correlationId');
+  expect(collaboration).not.toHaveProperty('causationIds');
 }
 
 function syncOperationContext(

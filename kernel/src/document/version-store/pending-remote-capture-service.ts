@@ -1,4 +1,7 @@
-import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
+import type {
+  VersionOperationContext,
+  VersionSyncOperationContext,
+} from '@mog-sdk/contracts/versioning';
 
 import type { VersionObjectType } from './object-digest';
 import {
@@ -8,11 +11,7 @@ import {
   type VersionObjectRecord,
   type VersionObjectStoreDiagnostic,
 } from './object-store';
-import type {
-  VersionAccessContext,
-  VersionGraphRegistry,
-  VersionStoreProvider,
-} from './provider';
+import type { VersionAccessContext, VersionGraphRegistry, VersionStoreProvider } from './provider';
 import type { VersionGraphStore } from './provider-graph-store';
 import {
   pendingRemoteSegmentKeyMaterialForOperationContext,
@@ -110,16 +109,17 @@ export async function capturePendingRemoteSemanticMutations<
   if (!isPendingRemoteOperationContext(operationContext)) {
     return { status: 'ignored', reason: 'not-pending-remote', diagnostics: [] };
   }
+  const identityOperationContext = sanitizePendingRemoteCaptureOperationContext(operationContext);
   const capture: VersionPendingRemoteCaptureInput & {
     readonly operationContext: PendingRemoteSegmentOperationContext;
-  } = { ...input.capture, operationContext };
+  } = { ...input.capture, operationContext: identityOperationContext };
 
-  const keyMaterial = await pendingRemoteKeyMaterial(operationContext);
+  const keyMaterial = await pendingRemoteKeyMaterial(identityOperationContext);
   if (!keyMaterial.ok) return keyMaterial.failure;
 
   const matchingRecords = await matchingPendingRemoteRecords(
     input.records,
-    operationContext,
+    identityOperationContext,
     keyMaterial.idempotencyKey,
   );
   const capturedRecordSequences = matchingRecords.map((record) => record.sequence);
@@ -154,7 +154,7 @@ export async function capturePendingRemoteSemanticMutations<
     input: {
       pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
       idempotencyKey: keyMaterial.idempotencyKey,
-      operationContext,
+      operationContext: identityOperationContext,
       mutationSegmentDigest: objectRecords.records.mutationSegmentRecord.digest,
       ...(objectRecords.records.snapshotRootRecord
         ? { snapshotRootDigest: objectRecords.records.snapshotRootRecord.digest }
@@ -199,7 +199,10 @@ async function pendingRemoteKeyMaterial(
   | (Awaited<ReturnType<typeof pendingRemoteSegmentKeyMaterialForOperationContext>> & {
       readonly ok: true;
     })
-  | { readonly ok: false; readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }> }
+  | {
+      readonly ok: false;
+      readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }>;
+    }
 > {
   try {
     return {
@@ -235,13 +238,13 @@ async function matchingPendingRemoteRecords<
 ): Promise<readonly TRecord[]> {
   const matching: TRecord[] = [];
   for (const record of records) {
-    if (!record.operationContext) continue;
-    if (record.operationContext.operationId !== operationContext.operationId) continue;
-    if (record.operationContext.kind !== operationContext.kind) continue;
-    if (classifySemanticMutationCaptureLane(record.operationContext) !== 'pendingRemote') continue;
+    const recordOperationContext = record.operationContext;
+    if (!recordOperationContext) continue;
+    if (recordOperationContext.kind !== operationContext.kind) continue;
+    if (!isPendingRemoteOperationContext(recordOperationContext)) continue;
     try {
       const recordKey = await pendingRemoteSegmentKeyMaterialForOperationContext(
-        record.operationContext,
+        sanitizePendingRemoteCaptureOperationContext(recordOperationContext),
       );
       if (recordKey.idempotencyKey === idempotencyKey) matching.push(record);
     } catch {
@@ -283,14 +286,19 @@ async function existingPendingRemoteSegment(
 
 async function materializePendingRemoteObjects<
   TRecord extends PendingRemoteSemanticMutationCaptureRecord,
->(input: VersionPendingRemoteCaptureInput & {
-  readonly operationContext: PendingRemoteSegmentOperationContext;
-  readonly records: readonly TRecord[];
-  readonly mutationSegmentPayload: (record: TRecord) => unknown;
-  readonly pendingRemoteSegmentId: string;
-}): Promise<
+>(
+  input: VersionPendingRemoteCaptureInput & {
+    readonly operationContext: PendingRemoteSegmentOperationContext;
+    readonly records: readonly TRecord[];
+    readonly mutationSegmentPayload: (record: TRecord) => unknown;
+    readonly pendingRemoteSegmentId: string;
+  },
+): Promise<
   | { readonly status: 'success'; readonly records: VersionPendingRemoteCaptureObjectRecords }
-  | { readonly status: 'failed'; readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }> }
+  | {
+      readonly status: 'failed';
+      readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }>;
+    }
 > {
   try {
     const semanticChanges = input.records.flatMap((record) => [...record.changes]);
@@ -343,7 +351,10 @@ async function persistPendingRemoteObjects(
   records: VersionPendingRemoteCaptureObjectRecords,
 ): Promise<
   | { readonly status: 'success' }
-  | { readonly status: 'failed'; readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }> }
+  | {
+      readonly status: 'failed';
+      readonly failure: Extract<VersionPendingRemoteCaptureResult, { status: 'failed' }>;
+    }
 > {
   const batch = [
     records.mutationSegmentRecord,
@@ -405,7 +416,9 @@ function pendingRemoteMutationSegmentPayload<
     graphId: input.registry.currentGraphId,
     documentId: input.provider.documentScope.documentId,
     changeIds: changes.map((change) => semanticChangeId(change)),
-    mutations: input.records.map((record) => input.mutationSegmentPayload(record)),
+    mutations: input.records.map((record) =>
+      sanitizePendingRemoteMutationPayload(input.mutationSegmentPayload(record)),
+    ),
   };
 }
 
@@ -449,7 +462,7 @@ function pendingRemoteCaptureDiagnosticFromSegmentStore(
     diagnostic.message,
     diagnostic.recoverability,
     'pendingRemoteSegmentStore',
-    diagnostic.details,
+    sanitizePendingRemoteDiagnosticDetails(diagnostic.details),
   );
 }
 
@@ -479,4 +492,118 @@ function pendingRemoteCaptureDiagnostic(
   return details === undefined
     ? { code, message, recoverability, source }
     : { code, message, recoverability, source, details };
+}
+
+function sanitizePendingRemoteCaptureOperationContext(
+  operationContext: PendingRemoteSegmentOperationContext,
+): PendingRemoteSegmentOperationContext {
+  const collaboration = operationContext.collaboration;
+  return cloneJson({
+    ...operationContext,
+    collaboration: sanitizePendingRemoteCaptureCollaboration(collaboration),
+  });
+}
+
+function sanitizePendingRemoteCaptureCollaboration(
+  collaboration: VersionSyncOperationContext,
+): VersionSyncOperationContext {
+  return {
+    sourceKind: normalizedPendingRemoteSourceKind(collaboration),
+    originKind: collaboration.originKind,
+    payloadHash: collaboration.payloadHash,
+    trustStatus: collaboration.trustStatus,
+    authorState: collaboration.authorState,
+    replay: collaboration.replay,
+    system: collaboration.system,
+    commitGrouping: collaboration.commitGrouping,
+    validationDiagnosticCount: collaboration.validationDiagnosticCount,
+    ...(collaboration.stableOriginId === undefined
+      ? {}
+      : { stableOriginId: collaboration.stableOriginId }),
+    ...(collaboration.roomId === undefined ? {} : { roomId: collaboration.roomId }),
+    ...(collaboration.epoch === undefined ? {} : { epoch: collaboration.epoch }),
+    ...(collaboration.updateId === undefined ? {} : { updateId: collaboration.updateId }),
+    ...(collaboration.sequence === undefined ? {} : { sequence: collaboration.sequence }),
+    ...(collaboration.provenancePayloadHash === undefined
+      ? {}
+      : { provenancePayloadHash: collaboration.provenancePayloadHash }),
+    ...(collaboration.batchId === undefined ? {} : { batchId: collaboration.batchId }),
+    ...(collaboration.subUpdateIndex === undefined
+      ? {}
+      : { subUpdateIndex: collaboration.subUpdateIndex }),
+    ...(collaboration.subUpdateCount === undefined
+      ? {}
+      : { subUpdateCount: collaboration.subUpdateCount }),
+    ...(collaboration.batchStatusId === undefined
+      ? {}
+      : { batchStatusId: collaboration.batchStatusId }),
+    ...(collaboration.batchStatusState === undefined
+      ? {}
+      : { batchStatusState: collaboration.batchStatusState }),
+    ...(collaboration.exclusionReason === undefined
+      ? {}
+      : { exclusionReason: collaboration.exclusionReason }),
+    ...(collaboration.exclusionSubreason === undefined
+      ? {}
+      : { exclusionSubreason: collaboration.exclusionSubreason }),
+  };
+}
+
+function normalizedPendingRemoteSourceKind(
+  collaboration: VersionSyncOperationContext,
+): VersionSyncOperationContext['sourceKind'] {
+  if (collaboration.originKind === 'provider') return 'providerLiveInbound';
+  if (collaboration.originKind === 'room') return 'collaborationLiveRemote';
+  return collaboration.sourceKind;
+}
+
+function sanitizePendingRemoteMutationPayload(payload: unknown): unknown {
+  if (
+    !isRecord(payload) ||
+    !isPendingRemoteMutationPayloadOperationContext(payload.operationContext)
+  ) {
+    return payload;
+  }
+  return cloneJson({
+    ...payload,
+    operationContext: sanitizePendingRemoteCaptureOperationContext(payload.operationContext),
+  });
+}
+
+function isPendingRemoteMutationPayloadOperationContext(
+  value: unknown,
+): value is PendingRemoteSegmentOperationContext {
+  return isRecord(value) && isRecord(value.collaboration);
+}
+
+function sanitizePendingRemoteDiagnosticDetails(
+  details: VersionPendingRemoteCaptureDiagnostic['details'] | undefined,
+): VersionPendingRemoteCaptureDiagnostic['details'] | undefined {
+  if (details === undefined) return undefined;
+  const sanitized: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (isRawProviderDiagnosticKey(key)) continue;
+    sanitized[key] = value;
+  }
+  return sanitized;
+}
+
+function isRawProviderDiagnosticKey(key: string): boolean {
+  return (
+    key === 'providerId' ||
+    key === 'providerRefId' ||
+    key === 'providerKind' ||
+    key === 'authorityRef' ||
+    key === 'remoteSessionId' ||
+    key === 'correlationId' ||
+    key === 'causationIds'
+  );
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }

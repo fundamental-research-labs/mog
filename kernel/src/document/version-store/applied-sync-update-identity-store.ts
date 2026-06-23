@@ -319,7 +319,7 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
       documentScopeKey: this.documentScopeKey,
       identity: keyMaterial.identity,
       payloadHash: collaboration.payloadHash,
-      operationContext: input.operationContext,
+      operationContext: sanitizeAppliedSyncUpdateIdentityOperationContext(input.operationContext),
       state: 'reserved',
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
@@ -374,7 +374,12 @@ export function cloneAppliedSyncUpdateIdentityRecord(
 export function cloneAppliedSyncUpdateIdentityRecord(
   record: AppliedSyncUpdateIdentityRecord | undefined,
 ): AppliedSyncUpdateIdentityRecord | undefined {
-  return record === undefined ? undefined : cloneJson(record);
+  if (record === undefined) return undefined;
+  const cloned = cloneJson(record);
+  return {
+    ...cloned,
+    operationContext: sanitizeAppliedSyncUpdateIdentityOperationContext(cloned.operationContext),
+  };
 }
 
 export function appliedSyncUpdateIdentityReservationsEquivalent(
@@ -427,9 +432,7 @@ export function isAppliedSyncUpdateIdentityRecord(
   if (operationContext.collaboration.payloadHash !== value.payloadHash) return false;
   try {
     if (
-      canonicalJsonStringify(
-        appliedSyncUpdateIdentityForOperationContext(operationContext),
-      ) !==
+      canonicalJsonStringify(appliedSyncUpdateIdentityForOperationContext(operationContext)) !==
       canonicalJsonStringify(identity)
     ) {
       return false;
@@ -439,6 +442,7 @@ export function isAppliedSyncUpdateIdentityRecord(
   }
   if (!isAppliedSyncUpdateIdentityState(value.state)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
+  if (!isSanitizedAppliedSyncUpdateCollaboration(operationContext.collaboration)) return false;
   if (value.state === 'reserved') return value.terminal === undefined;
   if (!isAppliedSyncUpdateIdentityTerminal(value.terminal)) return false;
   return value.terminal.status === value.state;
@@ -477,12 +481,73 @@ function isAppliedSyncOperationContext(
     typeof value.capturePolicy === 'string' &&
     typeof value.writeAdmissionMode === 'string' &&
     typeof value.collaboration.sourceKind === 'string' &&
-    (value.collaboration.originKind === 'provider' ||
-      value.collaboration.originKind === 'room') &&
+    (value.collaboration.originKind === 'provider' || value.collaboration.originKind === 'room') &&
     typeof value.collaboration.stableOriginId === 'string' &&
     typeof value.collaboration.epoch === 'string' &&
     typeof value.collaboration.updateId === 'string' &&
     typeof value.collaboration.payloadHash === 'string'
+  );
+}
+
+function sanitizeAppliedSyncUpdateIdentityOperationContext(
+  operationContext: AppliedSyncUpdateIdentityOperationContext,
+): AppliedSyncUpdateIdentityOperationContext {
+  const collaboration = operationContext.collaboration;
+  return cloneJson({
+    ...operationContext,
+    collaboration: {
+      sourceKind: collaboration.sourceKind,
+      originKind: collaboration.originKind,
+      payloadHash: collaboration.payloadHash,
+      trustStatus: collaboration.trustStatus,
+      authorState: collaboration.authorState,
+      replay: collaboration.replay,
+      system: collaboration.system,
+      commitGrouping: collaboration.commitGrouping,
+      validationDiagnosticCount: collaboration.validationDiagnosticCount,
+      ...(collaboration.stableOriginId === undefined
+        ? {}
+        : { stableOriginId: collaboration.stableOriginId }),
+      ...(collaboration.epoch === undefined ? {} : { epoch: collaboration.epoch }),
+      ...(collaboration.updateId === undefined ? {} : { updateId: collaboration.updateId }),
+      ...(collaboration.roomId === undefined ? {} : { roomId: collaboration.roomId }),
+      ...(collaboration.sequence === undefined ? {} : { sequence: collaboration.sequence }),
+      ...(collaboration.provenancePayloadHash === undefined
+        ? {}
+        : { provenancePayloadHash: collaboration.provenancePayloadHash }),
+      ...(collaboration.batchId === undefined ? {} : { batchId: collaboration.batchId }),
+      ...(collaboration.subUpdateIndex === undefined
+        ? {}
+        : { subUpdateIndex: collaboration.subUpdateIndex }),
+      ...(collaboration.subUpdateCount === undefined
+        ? {}
+        : { subUpdateCount: collaboration.subUpdateCount }),
+      ...(collaboration.batchStatusId === undefined
+        ? {}
+        : { batchStatusId: collaboration.batchStatusId }),
+      ...(collaboration.batchStatusState === undefined
+        ? {}
+        : { batchStatusState: collaboration.batchStatusState }),
+      ...(collaboration.exclusionReason === undefined
+        ? {}
+        : { exclusionReason: collaboration.exclusionReason }),
+      ...(collaboration.exclusionSubreason === undefined
+        ? {}
+        : { exclusionSubreason: collaboration.exclusionSubreason }),
+    },
+  });
+}
+
+function isSanitizedAppliedSyncUpdateCollaboration(
+  collaboration: VersionSyncOperationContext,
+): boolean {
+  return (
+    collaboration.providerId === undefined &&
+    collaboration.providerKind === undefined &&
+    collaboration.authorityRef === undefined &&
+    collaboration.remoteSessionId === undefined &&
+    collaboration.correlationId === undefined &&
+    collaboration.causationIds === undefined
   );
 }
 

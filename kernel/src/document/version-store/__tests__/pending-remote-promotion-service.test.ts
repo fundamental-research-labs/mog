@@ -77,60 +77,76 @@ describe('PendingRemotePromotionService', () => {
         },
       },
     });
-    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
-      {
-        status: 'found',
-        record: {
-          state: 'promoted',
-          updatedAt: PROMOTION_NOW.toISOString(),
-          terminal: { status: 'promoted', commitId },
-        },
+    await expect(
+      store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        state: 'promoted',
+        updatedAt: PROMOTION_NOW.toISOString(),
+        terminal: { status: 'promoted', commitId },
       },
-    );
+    });
   });
 
   it.each([
-    ['unknown', { authorityRef: null }, 'provider-authority-unknown'],
-    ['stale', { epoch: null }, 'provider-authority-stale'],
-  ] as const)('skips %s provider authority before creating a graph commit', async (_label, options, reason) => {
-    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const namespace = await initializeProvider(provider, `graph-${reason}`);
-    const graph = await provider.openGraph(namespace);
-    const store = await provider.openPendingRemoteSegmentStore(namespace);
-    const fixture = await pendingSegmentFixture(namespace, options);
-    await persistAndReservePendingSegment(graph, store, fixture);
-    const headBefore = await expectReadHeadSuccess(graph);
-
-    const result = await createPendingRemotePromotionService({
-      provider,
-      now: () => PROMOTION_NOW,
-    }).promotePendingRemoteSegments();
-
-    expect(result).toMatchObject({
-      status: 'failed',
-      promotedSegmentIds: [],
-      commitIds: [],
-      skipped: [
-        {
-          segmentId: fixture.input.pendingRemoteSegmentId,
-          reason,
-        },
-      ],
-      diagnostics: [
-        expect.objectContaining({
-          code: 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
-          reason,
-        }),
-      ],
-    });
-    await expectGraphHead(graph, headBefore);
-    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+    ['unknown', { authorityRef: null }, 'provider-authority-unknown', null, []],
+    ['stale', { epoch: null }, 'provider-authority-stale', null, []],
+    [
+      'malformed readback',
       {
-        status: 'found',
-        record: { state: 'pending' },
+        collaboration: {
+          validationDiagnosticCount: 0,
+          exclusionReason: 'provider-secret-ref',
+          exclusionSubreason: 'raw-authority-id',
+        },
       },
-    );
-  });
+      'provider-authority-unknown',
+      {
+        gate: 'provider-cycle-readback',
+        field: 'exclusionReason',
+        expected: 'absent-when-validation-clean',
+        malformed: true,
+      },
+      ['provider-secret-ref', 'raw-authority-id', 'provider-1', 'authority-1'],
+    ],
+  ] as const)(
+    'skips %s provider authority before creating a graph commit',
+    async (_label, options, reason, expectedDetails, redactedRawIds) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const namespace = await initializeProvider(provider, `graph-${reason}`);
+      const graph = await provider.openGraph(namespace);
+      const store = await provider.openPendingRemoteSegmentStore(namespace);
+      const fixture = await pendingSegmentFixture(namespace, options);
+      await persistAndReservePendingSegment(graph, store, fixture);
+      const headBefore = await expectReadHeadSuccess(graph);
+
+      const result = await createPendingRemotePromotionService({
+        provider,
+        now: () => PROMOTION_NOW,
+      }).promotePendingRemoteSegments();
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        commitIds: [],
+        skipped: [{ segmentId: fixture.input.pendingRemoteSegmentId, reason }],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
+            reason,
+            ...(expectedDetails === null
+              ? {}
+              : { details: expect.objectContaining(expectedDetails) }),
+          }),
+        ],
+      });
+      for (const raw of redactedRawIds) expect(JSON.stringify(result)).not.toContain(raw);
+      await expectGraphHead(graph, headBefore);
+      await expect(
+        store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+      ).resolves.toMatchObject({ status: 'found', record: { state: 'pending' } });
+    },
+  );
 
   it('promotes explicit grouped segments together with deterministic metadata', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
@@ -167,7 +183,9 @@ describe('PendingRemotePromotionService', () => {
       sharedSemanticChangeSetRecord: semanticChangeSetRecord,
       updateId: 'remote-update-2',
     });
-    await expect(graph.putObjects([...first.objectRecords, ...second.objectRecords])).resolves.toMatchObject({
+    await expect(
+      graph.putObjects([...first.objectRecords, ...second.objectRecords]),
+    ).resolves.toMatchObject({
       status: 'success',
     });
     await expect(store.reserveSegment(first.input)).resolves.toMatchObject({ status: 'created' });
@@ -201,10 +219,12 @@ describe('PendingRemotePromotionService', () => {
       status: 'found',
       record: { terminal: { commitId } },
     });
-    await expect(store.readBySegmentId(second.input.pendingRemoteSegmentId)).resolves.toMatchObject({
-      status: 'found',
-      record: { terminal: { commitId } },
-    });
+    await expect(store.readBySegmentId(second.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      {
+        status: 'found',
+        record: { terminal: { commitId } },
+      },
+    );
   });
 
   it('recovers an already-created promotion commit when completion failed', async () => {
@@ -234,12 +254,12 @@ describe('PendingRemotePromotionService', () => {
     });
     const headAfterFirst = await expectReadHeadSuccess(graph);
     expect(headAfterFirst.commitId).toBe(commitId);
-    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
-      {
-        status: 'found',
-        record: { state: 'pending' },
-      },
-    );
+    await expect(
+      store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: { state: 'pending' },
+    });
 
     const second = await createPendingRemotePromotionService({
       provider,
@@ -254,19 +274,19 @@ describe('PendingRemotePromotionService', () => {
       diagnostics: [{ code: 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED' }],
     });
     await expectGraphHead(graph, headAfterFirst);
-    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
-      {
-        status: 'found',
-        record: {
-          state: 'promoted',
-          terminal: {
-            status: 'promoted',
-            commitId,
-            promotionDigest: { algorithm: 'sha256', digest: expect.any(String) },
-          },
+    await expect(
+      store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        state: 'promoted',
+        terminal: {
+          status: 'promoted',
+          commitId,
+          promotionDigest: { algorithm: 'sha256', digest: expect.any(String) },
         },
       },
-    );
+    });
   });
 
   it('recovers remaining grouped segments from a promoted peer without a replacement commit', async () => {
@@ -304,7 +324,9 @@ describe('PendingRemotePromotionService', () => {
       sharedSemanticChangeSetRecord: semanticChangeSetRecord,
       updateId: 'remote-update-2',
     });
-    await expect(graph.putObjects([...first.objectRecords, ...second.objectRecords])).resolves.toMatchObject({
+    await expect(
+      graph.putObjects([...first.objectRecords, ...second.objectRecords]),
+    ).resolves.toMatchObject({
       status: 'success',
     });
     await expect(store.reserveSegment(first.input)).resolves.toMatchObject({ status: 'created' });
@@ -347,10 +369,12 @@ describe('PendingRemotePromotionService', () => {
       status: 'found',
       record: { terminal: { commitId } },
     });
-    await expect(store.readBySegmentId(second.input.pendingRemoteSegmentId)).resolves.toMatchObject({
-      status: 'found',
-      record: { terminal: { commitId } },
-    });
+    await expect(store.readBySegmentId(second.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      {
+        status: 'found',
+        record: { terminal: { commitId } },
+      },
+    );
   });
 
   it('skips missing snapshot roots and missing required objects without mutating refs', async () => {
@@ -436,12 +460,12 @@ describe('PendingRemotePromotionService', () => {
         },
       ],
     });
-    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
-      {
-        status: 'found',
-        record: { state: 'pending' },
-      },
-    );
+    await expect(
+      store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+    ).resolves.toMatchObject({
+      status: 'found',
+      record: { state: 'pending' },
+    });
   });
 
   it('blocks failed sync batches and allows absent batch status records', async () => {
@@ -559,6 +583,7 @@ async function pendingSegmentFixture(
   options: {
     readonly createdAt?: string;
     readonly authorityRef?: string | null;
+    readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
     readonly epoch?: string | null;
     readonly groupId?: string;
     readonly includeSnapshotRoot?: boolean;
@@ -617,6 +642,7 @@ function syncOperationContext(
   options: {
     readonly createdAt?: string;
     readonly authorityRef?: string | null;
+    readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
     readonly epoch?: string | null;
     readonly groupId?: string;
     readonly payloadHash?: string;
@@ -662,6 +688,7 @@ function syncOperationContext(
       system: false,
       commitGrouping: 'pendingRemote',
       validationDiagnosticCount: 0,
+      ...options.collaboration,
     },
   };
 }

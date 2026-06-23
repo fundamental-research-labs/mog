@@ -1,7 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
-import { diagnostic, failure, tombstoneDiagnostic } from './ref-store-diagnostics';
+import type { ObjectDigest, WorkbookCommitId } from './object-digest';
+import { diagnostic, failure } from './ref-store-diagnostics';
 import { compareAscii, compareLiveRefs, compareTombstoneRefs } from './ref-store-ordering';
 import {
   isCanonicalRefNamespace,
@@ -13,17 +13,14 @@ import {
   cloneDiagnostic,
   cloneLiveRefRecord,
   cloneProviderEpoch,
-  cloneRefVersion,
   cloneTombstoneRefRecord,
   copyAuthor,
   freezeLiveRefRecord,
   freezeProviderEpoch,
   freezeRefVersion,
   freezeTombstoneRefRecord,
-  isPlainRecord,
   nextProviderEpoch,
   nextRefVersion,
-  parseRefVersion,
   refVersionsEqual,
 } from './ref-store-revisions';
 import {
@@ -31,6 +28,20 @@ import {
   normalizeRfc3339Milliseconds,
   normalizeTombstoneRefRecordTimestamp,
 } from './ref-store-timestamps';
+import {
+  expectedHeadMismatch,
+  expectedRefVersionMismatch,
+  protectedRef,
+  refAlreadyExists,
+  refNotFound,
+  unsupportedRefMetadataMutation,
+} from './ref-store-conflicts';
+import { refTombstoned, validateTombstoneReuseMetadata } from './ref-store-tombstones';
+import {
+  parseCommitForResult,
+  parseRefNameForResult,
+  parseRefVersionForResult,
+} from './ref-store-validation';
 export {
   RefStoreValidationError,
   encodeRefVersionKey,
@@ -536,20 +547,7 @@ export class InMemoryRefStore {
       return expectedRefVersionMismatch(record, expectedRefVersion.refVersion);
     }
     if (record.targetCommitId === nextCommitId.commitId) {
-      const diagnostics = [
-        diagnostic(
-          'unsupportedRefMetadataMutation',
-          'Ref metadata-only mutation is not supported in VC-05.',
-          record.name,
-          record.targetCommitId,
-          record.refVersion,
-        ),
-      ];
-      return failure(
-        'unsupportedRefMetadataMutation',
-        'Ref metadata-only mutation is not supported in VC-05.',
-        diagnostics,
-      );
+      return unsupportedRefMetadataMutation(record);
     }
 
     const updated = freezeLiveRefRecord({
@@ -663,251 +661,4 @@ export class InMemoryRefStore {
 
 export function createInMemoryRefStore(options: InMemoryRefStoreOptions): InMemoryRefStore {
   return new InMemoryRefStore(options);
-}
-
-function parseRefNameForResult(
-  value: RefName | string,
-):
-  | { readonly ok: true; readonly name: RefName }
-  | { readonly ok: false; readonly result: RefFailureResult } {
-  const parsed = parseCanonicalRefName(value);
-  if (parsed.ok) {
-    return { ok: true, name: parsed.name };
-  }
-
-  return {
-    ok: false,
-    result: failure('invalidRefName', 'Invalid ref name.', parsed.diagnostics),
-  };
-}
-
-function parseCommitForResult(
-  value: WorkbookCommitId | string,
-  paramName: string,
-):
-  | { readonly ok: true; readonly commitId: WorkbookCommitId }
-  | { readonly ok: false; readonly result: RefFailureResult } {
-  try {
-    return { ok: true, commitId: parseWorkbookCommitId(value, paramName) };
-  } catch {
-    const diagnostics = [
-      diagnostic(
-        'invalidCommitId',
-        `${paramName} must be commit:sha256:<64 lowercase hex>.`,
-        undefined,
-      ),
-    ];
-    return {
-      ok: false,
-      result: failure('invalidCommitId', `Invalid ${paramName}.`, diagnostics),
-    };
-  }
-}
-
-function parseRefVersionForResult(
-  value: unknown,
-  paramName = 'refVersion',
-):
-  | { readonly ok: true; readonly refVersion: RefVersion }
-  | { readonly ok: false; readonly result: RefFailureResult } {
-  try {
-    return { ok: true, refVersion: parseRefVersion(value, paramName) };
-  } catch (error) {
-    const diagnostics =
-      error instanceof RefStoreValidationError
-        ? error.diagnostics
-        : [diagnostic('invalidRefVersion', 'Invalid RefVersion.')];
-    return {
-      ok: false,
-      result: failure('invalidRefVersion', 'Invalid RefVersion.', diagnostics),
-    };
-  }
-}
-
-function validateTombstoneReuseMetadata(
-  record: TombstoneRefRecord,
-  value: unknown,
-): { readonly ok: true } | { readonly ok: false; readonly result: RefFailureResult } {
-  if (value === undefined) return { ok: false, result: refTombstoned(record) };
-  const message =
-    'createBranch reuseTombstone requires expectedTombstoneRefVersion and expectedPreviousRefIncarnationId.';
-  if (!isPlainRecord(value)) {
-    return { ok: false, result: unsupportedTombstoneReuseMetadata(record, message) };
-  }
-
-  const expectedRefVersion = parseRefVersionForResult(
-    value.expectedTombstoneRefVersion,
-    'reuseTombstone.expectedTombstoneRefVersion',
-  );
-  if (!expectedRefVersion.ok) return expectedRefVersion;
-
-  const expectedPreviousRefIncarnationId = value.expectedPreviousRefIncarnationId;
-  if (
-    typeof expectedPreviousRefIncarnationId !== 'string' ||
-    expectedPreviousRefIncarnationId === ''
-  ) {
-    return { ok: false, result: unsupportedTombstoneReuseMetadata(record, message) };
-  }
-  if (!refVersionsEqual(record.refVersion, expectedRefVersion.refVersion)) {
-    return {
-      ok: false,
-      result: expectedTombstoneRefVersionMismatch(record, expectedRefVersion.refVersion),
-    };
-  }
-  if (record.previousRefIncarnationId !== expectedPreviousRefIncarnationId) {
-    return {
-      ok: false,
-      result: expectedPreviousRefIncarnationIdMismatch(record, expectedPreviousRefIncarnationId),
-    };
-  }
-  return { ok: true };
-}
-
-function refAlreadyExists(record: LiveRefRecord): RefFailureResult {
-  const diagnostics = [
-    diagnostic(
-      'refAlreadyExists',
-      `Ref ${record.name} already exists.`,
-      record.name,
-      record.targetCommitId,
-      record.refVersion,
-      record.refIncarnationId,
-    ),
-  ];
-  return failure('refAlreadyExists', `Ref ${record.name} already exists.`, diagnostics, {
-    code: 'refAlreadyExists',
-    actualHead: record.targetCommitId,
-    actualRefVersion: cloneRefVersion(record.refVersion),
-    actualRefIncarnationId: record.refIncarnationId,
-  });
-}
-
-function refTombstoned(record: TombstoneRefRecord): RefFailureResult {
-  const diagnostics = [
-    tombstoneDiagnostic(record, 'refTombstoned', `Ref ${record.name} is tombstoned.`),
-  ];
-  return failure('refTombstoned', `Ref ${record.name} is tombstoned.`, diagnostics, {
-    code: 'refTombstoned',
-    tombstoneRefVersion: cloneRefVersion(record.refVersion),
-    previousRefIncarnationId: record.previousRefIncarnationId,
-  });
-}
-
-function unsupportedTombstoneReuseMetadata(
-  record: TombstoneRefRecord,
-  message: string,
-): RefFailureResult {
-  return failure('unsupportedRefOption', message, [
-    tombstoneDiagnostic(record, 'unsupportedRefOption', message, { option: 'reuseTombstone' }),
-  ]);
-}
-
-function expectedTombstoneRefVersionMismatch(
-  record: TombstoneRefRecord,
-  expectedRefVersion: RefVersion,
-): RefFailureResult {
-  const message = `Tombstone for ref ${record.name} is at a different version than expected.`;
-  return failure(
-    'expectedRefVersionMismatch',
-    message,
-    [tombstoneDiagnostic(record, 'expectedRefVersionMismatch', message)],
-    {
-      code: 'expectedRefVersionMismatch',
-      expectedRefVersion: cloneRefVersion(expectedRefVersion),
-      actualRefVersion: cloneRefVersion(record.refVersion),
-      tombstoneRefVersion: cloneRefVersion(record.refVersion),
-      previousRefIncarnationId: record.previousRefIncarnationId,
-    },
-  );
-}
-
-function expectedPreviousRefIncarnationIdMismatch(
-  record: TombstoneRefRecord,
-  expectedPreviousRefIncarnationId: string,
-): RefFailureResult {
-  const message = `Tombstone for ref ${record.name} has a different previous incarnation than expected.`;
-  return failure(
-    'expectedPreviousRefIncarnationIdMismatch',
-    message,
-    [
-      tombstoneDiagnostic(record, 'expectedPreviousRefIncarnationIdMismatch', message, {
-        expectedPreviousRefIncarnationId,
-      }),
-    ],
-    {
-      code: 'expectedPreviousRefIncarnationIdMismatch',
-      expectedPreviousRefIncarnationId,
-      actualPreviousRefIncarnationId: record.previousRefIncarnationId,
-      tombstoneRefVersion: cloneRefVersion(record.refVersion),
-      previousRefIncarnationId: record.previousRefIncarnationId,
-    },
-  );
-}
-
-function refNotFound(name: RefName): RefFailureResult {
-  const diagnostics = [diagnostic('refNotFound', `Ref ${name} does not exist.`, name)];
-  return failure('refNotFound', `Ref ${name} does not exist.`, diagnostics);
-}
-
-function protectedRef(name: RefName, action: 'update' | 'delete'): RefFailureResult {
-  const diagnostics = [
-    diagnostic('protectedRef', `Protected ref ${name} cannot be ${action}d.`, name),
-  ];
-  return failure('protectedRef', `Protected ref ${name} cannot be ${action}d.`, diagnostics);
-}
-
-function expectedHeadMismatch(
-  record: LiveRefRecord,
-  expectedHead: WorkbookCommitId,
-): RefFailureResult {
-  const diagnostics = [
-    diagnostic(
-      'expectedHeadMismatch',
-      `Ref ${record.name} is at a different head than expected.`,
-      record.name,
-      record.targetCommitId,
-      record.refVersion,
-      record.refIncarnationId,
-    ),
-  ];
-  return failure(
-    'expectedHeadMismatch',
-    `Ref ${record.name} is at a different head than expected.`,
-    diagnostics,
-    {
-      code: 'expectedHeadMismatch',
-      expectedHead,
-      actualHead: record.targetCommitId,
-      actualRefVersion: cloneRefVersion(record.refVersion),
-      actualRefIncarnationId: record.refIncarnationId,
-    },
-  );
-}
-
-function expectedRefVersionMismatch(
-  record: LiveRefRecord,
-  expectedRefVersion: RefVersion,
-): RefFailureResult {
-  const diagnostics = [
-    diagnostic(
-      'expectedRefVersionMismatch',
-      `Ref ${record.name} is at a different version than expected.`,
-      record.name,
-      record.targetCommitId,
-      record.refVersion,
-      record.refIncarnationId,
-    ),
-  ];
-  return failure(
-    'expectedRefVersionMismatch',
-    `Ref ${record.name} is at a different version than expected.`,
-    diagnostics,
-    {
-      code: 'expectedRefVersionMismatch',
-      expectedRefVersion: cloneRefVersion(expectedRefVersion),
-      actualRefVersion: cloneRefVersion(record.refVersion),
-      actualHead: record.targetCommitId,
-      actualRefIncarnationId: record.refIncarnationId,
-    },
-  );
 }

@@ -541,6 +541,159 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     }
   });
 
+  it('rejects a mismatched artifact resolution digest before write services', async () => {
+    const graphId = 'graph-conflict-resolution-digest-mismatch';
+    const documentScope = documentScopeForGraph(graphId);
+    const provider = createInMemoryVersionStoreProvider({ documentScope });
+    const initialized = await provider.initializeGraph(
+      await initializeInput(graphId, 'root', documentScope),
+    );
+    expectInitializeSuccess(initialized);
+    let mergeCommitCallCount = 0;
+    const mergeCommit = async () => {
+      mergeCommitCallCount += 1;
+    };
+
+    const sourceHandle = await DocumentFactory.create({
+      documentId: documentScope.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const branchHandle = await DocumentFactory.create({
+      documentId: documentScope.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let branchWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({
+        versioning: withVersionManifest({
+          provider,
+          applyMergeService: { mergeCommit },
+        }),
+      });
+      await sourceWb.activeSheet.setCell('A1', 'base');
+      const baseCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        }),
+      );
+      const baseHead = await expectHead(sourceWb);
+
+      const branch = await sourceWb.version.createBranch({
+        name: 'scenario/persisted-resolution-digest-mismatch' as any,
+        targetCommitId: baseCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+
+      await sourceWb.activeSheet.setCell('A1', 'ours');
+      const oursCommit = await expectCommit(
+        sourceWb.version.commit({
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      const oursHead = await expectHead(sourceWb);
+
+      branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
+      if (!checkoutBase.ok) {
+        throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
+      }
+      await branchWb.activeSheet.setCell('A1', 'theirs');
+      const theirsCommit = await expectCommit(
+        branchWb.version.commit({
+          targetRef: 'scenario/persisted-resolution-digest-mismatch' as any,
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+
+      const expectedTargetHead = {
+        commitId: oursCommit.id,
+        revision: requireRefRevision(oursHead),
+      };
+      const preview = await sourceWb.version.merge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          mode: 'preview',
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          persistReviewRecord: true,
+        },
+      );
+      if (
+        !preview.ok ||
+        preview.value.status !== 'conflicted' ||
+        !preview.value.resultId ||
+        !preview.value.resultDigest ||
+        !preview.value.previewArtifactDigest
+      ) {
+        throw new Error('expected persisted conflicted preview metadata');
+      }
+
+      const resolution = resolutionFor(preview.value.conflicts[0], 'acceptTheirs');
+      const namespace = namespaceForDocumentScope(documentScope, graphId);
+      const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [
+        resolution,
+      ]);
+
+      const rejected = await sourceWb.version.applyMerge(
+        {
+          resultId: preview.value.resultId,
+          resultDigest: preview.value.resultDigest,
+          previewArtifactDigest: preview.value.previewArtifactDigest,
+          resolutionSetDigest: mutateDigest(expectedResolutionSet.digest),
+          resolutions: [resolution],
+        },
+        {
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+        },
+      );
+      expect(rejected).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.applyMerge',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
+              message: 'persisted merge resolutionSetDigest does not match the resolved artifact.',
+              data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+            }),
+          ]),
+        },
+      });
+      expect(mergeCommitCallCount).toBe(0);
+
+      const graph = await provider.openGraph(namespace, provider.accessContext);
+      await expect(
+        graph.hasObject(mergeResolutionSetArtifactRef(expectedResolutionSet.digest)),
+      ).resolves.toBe(false);
+    } finally {
+      if (branchWb) await branchWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await branchHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
   it('does not recover a conflicted staged intent from parent shape without commit-bound resolved attempt identity', async () => {
     const graphId = 'graph-conflict-no-identity';
     const documentScope = documentScopeForGraph(graphId);
@@ -770,6 +923,14 @@ function conflictDigestObject(conflictDigest: string): ObjectDigest {
     throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
   }
   return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
+}
+
+function mutateDigest(digest: ObjectDigest): ObjectDigest {
+  const first = digest.digest[0] === '0' ? '1' : '0';
+  return {
+    algorithm: digest.algorithm,
+    digest: `${first}${digest.digest.slice(1)}`,
+  };
 }
 
 async function initializeInput(

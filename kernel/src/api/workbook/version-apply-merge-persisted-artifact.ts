@@ -319,13 +319,6 @@ function validatePreviewDigestInput(
       ),
     );
   }
-  if (input.resolutionSetDigest || input.resolvedAttemptDigest) {
-    diagnostics.push(
-      resolutionMismatchDiagnostic(
-        'review-only persisted merge previews do not accept resolved-attempt digests.',
-      ),
-    );
-  }
   if (!isInternalSha256Digest(input.resultDigest)) {
     diagnostics.push(
       resolutionMismatchDiagnostic('persisted merge resultDigest is not a merge-preview digest.'),

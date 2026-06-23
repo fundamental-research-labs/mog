@@ -18,13 +18,21 @@ import {
   installVersionDomainDetectorNoopsOnWorkbook,
   withVersionManifest,
 } from './version-domain-support-test-utils';
-import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import type {
+  ObjectDigest as VersionStoreObjectDigest,
+  VersionObjectType,
+} from '../../../document/version-store/object-digest';
+import {
+  createMergeResolutionSetArtifactRecord,
+  createResolvedMergeAttemptArtifactRecord,
+  mergeResolutionSetArtifactRef,
+  resolvedMergeAttemptArtifactRef,
+} from '../../../document/version-store/merge-attempt-artifacts';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
-import { mergeResolutionSetArtifactRef } from '../../../document/version-store/merge-attempt-artifacts';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
@@ -111,7 +119,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
     let mergeCommitCallCount = 0;
     await withPersistedConflictPreview(
       'reject-mismatch',
-      async ({ sourceWb, preview, expectedTargetHead }) => {
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
         const conflict = preview.conflicts[0];
         const option = requireResolutionOption(conflict, 'acceptTheirs');
         const resolution = resolutionFor(conflict, 'acceptTheirs');
@@ -127,11 +135,14 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           purpose: 'chooseValue',
         });
         await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
           sourceWb,
           preview,
           expectedTargetHead,
           resolution: { ...resolution, sealedPayloadRef: mismatchedDigestPayload },
-          message: 'sealed payload object binding does not match.',
+          messages: ['sealed payload object binding does not match.'],
         });
 
         const customPurposePayload = await putResolutionPayload({
@@ -146,11 +157,17 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           purpose: 'custom',
         });
         await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
           sourceWb,
           preview,
           expectedTargetHead,
           resolution: { ...resolution, sealedPayloadRef: customPurposePayload },
-          message: 'sealed payload purpose is not executable.',
+          messages: [
+            'sealed payload purpose is not executable.',
+            'sealed payload value does not match resolution option.',
+          ],
         });
       },
       {
@@ -168,7 +185,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
     let mergeCommitCallCount = 0;
     await withPersistedConflictPreview(
       'reject-target-binding',
-      async ({ sourceWb, preview, expectedTargetHead }) => {
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
         const conflict = preview.conflicts[0];
         const option = requireResolutionOption(conflict, 'acceptTheirs');
         const payload = await putResolutionPayload({
@@ -183,6 +200,9 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
         });
 
         await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
           sourceWb,
           preview,
           expectedTargetHead: {
@@ -193,7 +213,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
             },
           },
           resolution: { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
-          message: 'sealed payload object binding does not match.',
+          messages: ['sealed payload object binding does not match.'],
         });
       },
       {
@@ -210,7 +230,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
   it('rejects sealed payload refs when a targeted save remains review-only', async () => {
     await withPersistedConflictPreview(
       'reject-review-only-sealed-ref',
-      async ({ sourceWb, preview, expectedTargetHead }) => {
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
         expect(preview.conflicts.length).toBeGreaterThan(1);
         const conflict = preview.conflicts[0];
         const option = requireResolutionOption(conflict, 'acceptTheirs');
@@ -224,6 +244,10 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           value: option.value as any,
           purpose: 'chooseValue',
         });
+        const resolution = {
+          ...resolutionFor(conflict, 'acceptTheirs'),
+          sealedPayloadRef: payload,
+        };
 
         const saved = await sourceWb.version.saveMergeResolutions({
           resultId: preview.resultId,
@@ -231,23 +255,30 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           redactionPolicyDigest: preview.resultDigest,
           targetRef: 'refs/heads/main' as any,
           expectedTargetHead,
-          resolutions: [
-            { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
-          ],
+          resolutions: [resolution],
         });
         expect(saved).toMatchObject({
           ok: false,
           error: {
             code: 'target_unavailable',
-            diagnostics: [
-              expect.objectContaining({
-                code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
-                message: 'review-only merge attempts cannot save sealed resolution payload refs.',
-                data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
-              }),
-            ],
+            target: 'workbook.version.saveMergeResolutions',
           },
         });
+        if (saved.ok) throw new Error('expected sealed resolution save to be rejected');
+        expectStableResolutionMismatchDiagnostics({
+          diagnostics: saved.error.diagnostics,
+          operation: 'saveMergeResolutions',
+          messages: ['review-only merge attempts cannot save sealed resolution payload refs.'],
+        });
+
+        const namespace = namespaceForDocumentScope(documentScope, graphId);
+        const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [
+          resolution,
+        ]);
+        const graph = await provider.openGraph(namespace, provider.accessContext);
+        await expect(
+          graph.hasObject(mergeResolutionSetArtifactRef(expectedResolutionSet.digest)),
+        ).resolves.toBe(false);
       },
       {},
       ['A1', 'B1'],
@@ -256,12 +287,26 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
 });
 
 async function expectSealedApplyRejected(input: {
+  readonly provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
+  readonly graphId: string;
+  readonly documentScope: VersionDocumentScope;
   readonly sourceWb: Workbook;
   readonly preview: PersistedConflictPreview;
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly resolution: VersionApplyMergeResolution;
-  readonly message: string;
+  readonly messages: readonly string[];
 }): Promise<void> {
+  const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
+  const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [
+    input.resolution,
+  ]);
+  const expectedResolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
+    resultDigest: internalSha256Digest(input.preview.resultDigest),
+    resolutionSetDigest: expectedResolutionSet.digest,
+    targetRef: 'refs/heads/main' as any,
+    expectedTargetHead: input.expectedTargetHead,
+  });
+
   const result = await input.sourceWb.version.applyMerge(
     {
       resultId: input.preview.resultId,
@@ -276,15 +321,45 @@ async function expectSealedApplyRejected(input: {
     error: {
       code: 'target_unavailable',
       target: 'workbook.version.applyMerge',
-      diagnostics: expect.arrayContaining([
-        expect.objectContaining({
-          code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
-          message: input.message,
-          data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
-        }),
-      ]),
     },
   });
+  if (result.ok) throw new Error('expected sealed apply to be rejected');
+  expectStableResolutionMismatchDiagnostics({
+    diagnostics: result.error.diagnostics,
+    operation: 'applyMerge',
+    messages: input.messages,
+  });
+
+  const graph = await input.provider.openGraph(namespace, input.provider.accessContext);
+  await expect(
+    graph.hasObject(mergeResolutionSetArtifactRef(expectedResolutionSet.digest)),
+  ).resolves.toBe(false);
+  await expect(
+    graph.hasObject(resolvedMergeAttemptArtifactRef(expectedResolvedAttempt.digest)),
+  ).resolves.toBe(false);
+}
+
+function expectStableResolutionMismatchDiagnostics(input: {
+  readonly diagnostics: readonly unknown[];
+  readonly operation: 'applyMerge' | 'saveMergeResolutions';
+  readonly messages: readonly string[];
+}): void {
+  expect(input.diagnostics).toStrictEqual(
+    input.messages.map((message) => ({
+      code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
+      severity: 'error',
+      message,
+      owner: 'version-store',
+      data: {
+        operation: input.operation,
+        recoverability: 'none',
+        messageTemplateId: `version.${input.operation}.VERSION_MERGE_RESOLUTION_MISMATCH`,
+        redacted: true,
+        payload: { operation: input.operation },
+        mutationGuarantee: 'no-write-attempted',
+      },
+    })),
+  );
 }
 
 async function putResolutionPayload(input: {
@@ -478,6 +553,13 @@ function conflictDigestObject(conflictDigest: string): ObjectDigest {
     throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
   }
   return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
+}
+
+function internalSha256Digest(digest: ObjectDigest): VersionStoreObjectDigest {
+  if (digest.algorithm !== 'sha256') {
+    throw new Error(`expected sha256 object digest: ${digest.algorithm}`);
+  }
+  return { algorithm: 'sha256', digest: digest.digest };
 }
 
 function mutateDigest(digest: ObjectDigest): ObjectDigest {

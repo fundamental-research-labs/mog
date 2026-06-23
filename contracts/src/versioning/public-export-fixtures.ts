@@ -113,8 +113,15 @@ import type {
 } from '@mog-sdk/contracts/api/workbook';
 import type {
   CapturePolicy,
+  DomainCapabilityPolicyManifest,
   DomainMutationReceipt,
   ObjectDigest,
+  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS as ContractsVersioningDomainExportRequiredMatrixRowIds,
+  PUBLIC_VERSION_DOMAIN_POLICY_IDS as ContractsVersioningDomainPolicyIds,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY as ContractsVersioningDomainPolicyRegistry,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsAllRows,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsRequiredRows,
+  PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT as ContractsVersioningDomainPolicyRowCount,
   VersionAgentProposalAcceptResolutionPolicy,
   VersionAgentProposalAcceptResult as VersioningAgentProposalAcceptResult,
   VersionAgentProposalEvent,
@@ -124,7 +131,9 @@ import type {
   VersionAgentProposalSummary,
   VersionAppendAgentProposalEventInput,
   VersionAuthor,
+  VersionDomainCapabilityStateMap,
   VersionDomainCapabilityState,
+  VersionDomainPolicyRegistry,
   VersionExportMetadataSummary,
   VersionJsonValue,
   VersionMergePreviewRecord,
@@ -166,6 +175,14 @@ import type {
   VersionWriteAdmissionMode,
   WorkbookCommitPersistedShape,
 } from '@mog-sdk/contracts/versioning';
+import {
+  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+  PUBLIC_VERSION_DOMAIN_POLICY_IDS,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
+  PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
+} from './domain-policy-registry';
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
@@ -351,6 +368,56 @@ type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnosticCode = Asser
     ContractsWorkbookPromotePendingRemoteDiagnosticCode
   >
 >;
+type _ContractsVersioningExportsDomainPolicyRegistryValue = Assert<
+  IsEqual<
+    typeof ContractsVersioningDomainPolicyRegistry,
+    typeof PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY
+  >
+>;
+type _ContractsVersioningExportsDomainPolicyIdsValue = Assert<
+  IsEqual<typeof ContractsVersioningDomainPolicyIds, typeof PUBLIC_VERSION_DOMAIN_POLICY_IDS>
+>;
+type _ContractsVersioningExportsDomainPolicyRowCountValue = Assert<
+  IsEqual<
+    typeof ContractsVersioningDomainPolicyRowCount,
+    typeof PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT
+  >
+>;
+type _ContractsVersioningExportsDomainExportRequiredRowsValue = Assert<
+  IsEqual<
+    typeof ContractsVersioningDomainExportRequiredMatrixRowIds,
+    typeof PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS
+  >
+>;
+type _ContractsVersioningExportsDomainPolicyRequiredExportSupportValue = Assert<
+  IsEqual<
+    typeof ContractsVersioningDomainPolicyRegistryExportSupportsRequiredRows,
+    typeof PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS
+  >
+>;
+type _ContractsVersioningExportsDomainPolicyAllRowsExportSupportValue = Assert<
+  IsEqual<
+    typeof ContractsVersioningDomainPolicyRegistryExportSupportsAllRows,
+    typeof PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS
+  >
+>;
+
+const PUBLIC_DOMAIN_POLICY_INTERNAL_FIELD_NAMES = Object.freeze([
+  'ownerWorkstream',
+  'requiredOracles',
+  'requiredOracleByCapability',
+  'supportEvidenceByCapability',
+  'scenarioIds',
+  'notes',
+  'reportPath',
+  'acceptedRisk',
+  'evidenceDigest',
+] as const);
+type PublicDomainPolicyInternalFieldName =
+  (typeof PUBLIC_DOMAIN_POLICY_INTERNAL_FIELD_NAMES)[number];
+type _DomainCapabilityPolicyManifestHasNoInternalOracleFields = Assert<
+  IsEqual<Extract<keyof DomainCapabilityPolicyManifest, PublicDomainPolicyInternalFieldName>, never>
+>;
 
 type PublicVersionApiSurface = {
   readonly workbook: ContractsApiWorkbook;
@@ -410,6 +477,18 @@ type PublicVersionApiSurface = {
   readonly page: ContractsApiPaged<string>;
 };
 
+type PublicVersioningDomainPolicySurface = {
+  readonly registry: VersionDomainPolicyRegistry;
+  readonly policy: DomainCapabilityPolicyManifest;
+  readonly capabilityStates: VersionDomainCapabilityStateMap;
+  readonly policyIds: readonly string[];
+  readonly rowCount: number;
+  readonly requiredExportMatrixRowIds: readonly string[];
+  readonly requiredRowsExportSupported: boolean;
+  readonly allRowsExportSupported: boolean;
+  readonly internalOracleFieldLeakCount: 0;
+};
+
 type PublicVersioningMetadataSurface = {
   readonly json: VersionJsonValue;
   readonly metadataDiagnostic: VersionMetadataDiagnostic;
@@ -461,6 +540,46 @@ const vc03ExportSurfaceDomainIds = Object.freeze([
 const contractedCapabilityState: VersionDomainCapabilityState = 'contracted';
 const capturePolicy: CapturePolicy = 'commitEligible';
 const writeAdmissionMode: VersionWriteAdmissionMode = 'capture';
+const publicDomainPolicyRegistry: VersionDomainPolicyRegistry = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY;
+
+function requirePublicDomainPolicy(matrixRowId: string): DomainCapabilityPolicyManifest {
+  const row = publicDomainPolicyRegistry.domains.find(
+    (candidate) => candidate.matrixRowId === matrixRowId,
+  );
+  if (!row) {
+    throw new Error(`Missing public version domain policy fixture row: ${matrixRowId}`);
+  }
+  return row;
+}
+
+const publicDomainPolicy = requirePublicDomainPolicy('workbook-metadata');
+const publicDomainCapabilityStates: VersionDomainCapabilityStateMap =
+  publicDomainPolicy.capabilityStates;
+const publicDomainPolicyInternalOracleFieldLeakCount =
+  publicDomainPolicyRegistry.domains.reduce((count, row) => {
+    const leakedFieldCount = PUBLIC_DOMAIN_POLICY_INTERNAL_FIELD_NAMES.filter((field) =>
+      Object.prototype.hasOwnProperty.call(row, field),
+    ).length;
+    return count + leakedFieldCount;
+  }, 0);
+
+if (publicDomainPolicyInternalOracleFieldLeakCount !== 0) {
+  throw new Error('Public version domain policy registry contains internal oracle fields.');
+}
+const publicDomainPolicyInternalOracleFieldLeakCountZero =
+  publicDomainPolicyInternalOracleFieldLeakCount as 0;
+
+const publicDomainPolicyExportSurface: PublicVersioningDomainPolicySurface = Object.freeze({
+  registry: publicDomainPolicyRegistry,
+  policy: publicDomainPolicy,
+  capabilityStates: publicDomainCapabilityStates,
+  policyIds: PUBLIC_VERSION_DOMAIN_POLICY_IDS,
+  rowCount: PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
+  requiredExportMatrixRowIds: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+  requiredRowsExportSupported: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
+  allRowsExportSupported: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS,
+  internalOracleFieldLeakCount: publicDomainPolicyInternalOracleFieldLeakCountZero,
+});
 const digest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
   value: 'sha256:vc03-05-public-export-surface',
@@ -618,10 +737,15 @@ export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   operationContext,
   domainReceipt,
   exportMetadata,
+  publicDomainPolicyExportSurface,
   syncProvenance,
   persistedCommit,
   shadowObservation,
   shadowObservationSink,
 });
 
-export type { PublicVersionApiSurface, PublicVersioningMetadataSurface };
+export type {
+  PublicVersionApiSurface,
+  PublicVersioningDomainPolicySurface,
+  PublicVersioningMetadataSurface,
+};

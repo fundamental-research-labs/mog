@@ -9,7 +9,7 @@ import type {
   VersionRedactionPolicy,
   VersionRolloutStage,
   VersionWriteAdmissionMode,
-} from './index';
+} from './domain-policy';
 
 export const VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION = 'version-domain-policy-registry.v1';
 export const VERSION_DOMAIN_POLICY_ID_PATTERN = '^[a-z0-9]+(?:[.-][a-z0-9]+)*$';

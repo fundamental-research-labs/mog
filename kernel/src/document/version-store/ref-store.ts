@@ -46,6 +46,7 @@ export type VersionErrorCode =
   | 'refTombstoned'
   | 'expectedHeadMismatch'
   | 'expectedRefVersionMismatch'
+  | 'expectedPreviousRefIncarnationIdMismatch'
   | 'unsupportedRefMetadataMutation'
   | 'lastLiveRef'
   | 'versionCapabilityDisabled';
@@ -132,6 +133,12 @@ export interface CreateBranchInput {
   readonly baseCommitId?: WorkbookCommitId | string;
   readonly createdBy: VersionAuthor;
   readonly protected?: boolean;
+  readonly reuseTombstone?: TombstoneRefReuseMetadata;
+}
+
+export interface TombstoneRefReuseMetadata {
+  readonly expectedTombstoneRefVersion: RefVersion;
+  readonly expectedPreviousRefIncarnationId: string;
 }
 
 export interface UpdateRefInput {
@@ -156,8 +163,25 @@ export interface ListRefsInput {
   readonly prefix?: RefNamespace;
 }
 
+export interface GetRefOptions {
+  readonly includeTombstone?: false;
+}
+
+export interface GetRefWithTombstoneOptions {
+  readonly includeTombstone: true;
+}
+
 export type GetRefResult =
   | { readonly ok: true; readonly ref: LiveRefRecord | null; readonly diagnostics: readonly [] }
+  | RefFailureResult;
+
+export type GetRefWithTombstoneResult =
+  | {
+      readonly ok: true;
+      readonly includeTombstone: true;
+      readonly ref: RefRecord | null;
+      readonly diagnostics: readonly [];
+    }
   | RefFailureResult;
 
 export type ListRefsResult =
@@ -280,24 +304,12 @@ export class InMemoryRefStore {
       return refTombstoned(existing);
     }
 
-    const now = this.now();
-    const ref = freezeLiveRefRecord({
-      state: 'live',
-      schemaVersion: 1,
-      versionDocumentId: this.versionDocumentId,
+    const ref = this.createLiveRef({
       name,
-      kind: 'branch',
       targetCommitId: targetCommitId.commitId,
       baseCommitId: baseCommitId?.commitId,
-      providerRefId: this.generateId('provider-ref'),
-      providerEpoch: freezeProviderEpoch({ kind: 'counter', value: '0' }),
-      refIncarnationId: this.generateId('ref-incarnation'),
       protected: input.protected ?? true,
-      createdAt: now,
-      createdBy: copyAuthor(input.createdBy),
-      updatedAt: now,
-      updatedBy: copyAuthor(input.createdBy),
-      refVersion: freezeRefVersion({ kind: 'counter', value: '0' }),
+      author: input.createdBy,
     });
 
     this.records.set(name, ref);
@@ -343,27 +355,29 @@ export class InMemoryRefStore {
       return refAlreadyExists(existing);
     }
     if (existing?.state === 'tombstone') {
-      return refTombstoned(existing);
+      const reuse = validateTombstoneReuseMetadata(existing, input.reuseTombstone);
+      if (!reuse.ok) return reuse.result;
+      const ref = this.createLiveRef({
+        name: parsedName.name,
+        targetCommitId: targetCommitId.commitId,
+        baseCommitId: baseCommitId?.commitId,
+        protected: input.protected ?? false,
+        author: input.createdBy,
+        providerEpoch: nextProviderEpoch(existing.previousProviderEpoch),
+        refVersion: nextRefVersion(existing.refVersion),
+      });
+
+      this.records.set(parsedName.name, ref);
+      this.liveRefCount += 1;
+      return { ok: true, ref: cloneLiveRefRecord(ref), attached: false, diagnostics: [] };
     }
 
-    const now = this.now();
-    const ref = freezeLiveRefRecord({
-      state: 'live',
-      schemaVersion: 1,
-      versionDocumentId: this.versionDocumentId,
+    const ref = this.createLiveRef({
       name: parsedName.name,
-      kind: 'branch',
       targetCommitId: targetCommitId.commitId,
       baseCommitId: baseCommitId?.commitId,
-      providerRefId: this.generateId('provider-ref'),
-      providerEpoch: freezeProviderEpoch({ kind: 'counter', value: '0' }),
-      refIncarnationId: this.generateId('ref-incarnation'),
       protected: input.protected ?? false,
-      createdAt: now,
-      createdBy: copyAuthor(input.createdBy),
-      updatedAt: now,
-      updatedBy: copyAuthor(input.createdBy),
-      refVersion: freezeRefVersion({ kind: 'counter', value: '0' }),
+      author: input.createdBy,
     });
 
     this.records.set(parsedName.name, ref);
@@ -371,16 +385,44 @@ export class InMemoryRefStore {
     return { ok: true, ref: cloneLiveRefRecord(ref), attached: false, diagnostics: [] };
   }
 
-  getRef(name: RefName | string): GetRefResult {
+  getRef(name: RefName | string): GetRefResult;
+  getRef(name: RefName | string, options: GetRefOptions): GetRefResult;
+  getRef(
+    name: RefName | string,
+    options: GetRefWithTombstoneOptions,
+  ): GetRefWithTombstoneResult;
+  getRef(
+    name: RefName | string,
+    options: GetRefOptions | GetRefWithTombstoneOptions = {},
+  ): GetRefResult | GetRefWithTombstoneResult {
     const parsedName = parseRefNameForResult(name);
     if (!parsedName.ok) return parsedName.result;
 
     const record = this.records.get(parsedName.name);
     if (record === undefined) {
+      if (options.includeTombstone === true) {
+        return { ok: true, includeTombstone: true, ref: null, diagnostics: [] };
+      }
       return { ok: true, ref: null, diagnostics: [] };
     }
     if (record.state === 'tombstone') {
+      if (options.includeTombstone === true) {
+        return {
+          ok: true,
+          includeTombstone: true,
+          ref: cloneTombstoneRefRecord(record),
+          diagnostics: [],
+        };
+      }
       return refTombstoned(record);
+    }
+    if (options.includeTombstone === true) {
+      return {
+        ok: true,
+        includeTombstone: true,
+        ref: cloneLiveRefRecord(record),
+        diagnostics: [],
+      };
     }
     return { ok: true, ref: cloneLiveRefRecord(record), diagnostics: [] };
   }
@@ -557,6 +599,36 @@ export class InMemoryRefStore {
     return normalizeRfc3339Milliseconds(this.nowFn());
   }
 
+  private createLiveRef(input: {
+    readonly name: RefName;
+    readonly targetCommitId: WorkbookCommitId;
+    readonly baseCommitId?: WorkbookCommitId;
+    readonly protected: boolean;
+    readonly author: VersionAuthor;
+    readonly providerEpoch?: ProviderEpoch;
+    readonly refVersion?: RefVersion;
+  }): LiveRefRecord {
+    const now = this.now();
+    return freezeLiveRefRecord({
+      state: 'live',
+      schemaVersion: 1,
+      versionDocumentId: this.versionDocumentId,
+      name: input.name,
+      kind: 'branch',
+      targetCommitId: input.targetCommitId,
+      baseCommitId: input.baseCommitId,
+      providerRefId: this.generateId('provider-ref'),
+      providerEpoch: input.providerEpoch ?? freezeProviderEpoch({ kind: 'counter', value: '0' }),
+      refIncarnationId: this.generateId('ref-incarnation'),
+      protected: input.protected,
+      createdAt: now,
+      createdBy: copyAuthor(input.author),
+      updatedAt: now,
+      updatedBy: copyAuthor(input.author),
+      refVersion: input.refVersion ?? freezeRefVersion({ kind: 'counter', value: '0' }),
+    });
+  }
+
   private generateId(prefix: string): string {
     this.nextGeneratedId += 1;
     return `${prefix}:${this.versionDocumentId}:${this.nextGeneratedId}`;
@@ -652,12 +724,13 @@ function parseCommitForResult(
 }
 
 function parseRefVersionForResult(
-  value: RefVersion,
+  value: unknown,
+  paramName = 'refVersion',
 ):
   | { readonly ok: true; readonly refVersion: RefVersion }
   | { readonly ok: false; readonly result: RefFailureResult } {
   try {
-    return { ok: true, refVersion: parseRefVersion(value) };
+    return { ok: true, refVersion: parseRefVersion(value, paramName) };
   } catch (error) {
     const diagnostics =
       error instanceof RefStoreValidationError
@@ -668,6 +741,45 @@ function parseRefVersionForResult(
       result: failure('invalidRefVersion', 'Invalid RefVersion.', diagnostics),
     };
   }
+}
+
+function validateTombstoneReuseMetadata(
+  record: TombstoneRefRecord,
+  value: unknown,
+): { readonly ok: true } | { readonly ok: false; readonly result: RefFailureResult } {
+  if (value === undefined) return { ok: false, result: refTombstoned(record) };
+  const message =
+    'createBranch reuseTombstone requires expectedTombstoneRefVersion and expectedPreviousRefIncarnationId.';
+  if (!isPlainRecord(value)) {
+    return { ok: false, result: unsupportedTombstoneReuseMetadata(record, message) };
+  }
+
+  const expectedRefVersion = parseRefVersionForResult(
+    value.expectedTombstoneRefVersion,
+    'reuseTombstone.expectedTombstoneRefVersion',
+  );
+  if (!expectedRefVersion.ok) return expectedRefVersion;
+
+  const expectedPreviousRefIncarnationId = value.expectedPreviousRefIncarnationId;
+  if (
+    typeof expectedPreviousRefIncarnationId !== 'string' ||
+    expectedPreviousRefIncarnationId === ''
+  ) {
+    return { ok: false, result: unsupportedTombstoneReuseMetadata(record, message) };
+  }
+  if (!refVersionsEqual(record.refVersion, expectedRefVersion.refVersion)) {
+    return {
+      ok: false,
+      result: expectedTombstoneRefVersionMismatch(record, expectedRefVersion.refVersion),
+    };
+  }
+  if (record.previousRefIncarnationId !== expectedPreviousRefIncarnationId) {
+    return {
+      ok: false,
+      result: expectedPreviousRefIncarnationIdMismatch(record, expectedPreviousRefIncarnationId),
+    };
+  }
+  return { ok: true };
 }
 
 function refAlreadyExists(record: LiveRefRecord): RefFailureResult {
@@ -691,15 +803,10 @@ function refAlreadyExists(record: LiveRefRecord): RefFailureResult {
 
 function refTombstoned(record: TombstoneRefRecord): RefFailureResult {
   const diagnostics = [
-    diagnostic(
+    tombstoneDiagnostic(
+      record,
       'refTombstoned',
       `Ref ${record.name} is tombstoned.`,
-      record.name,
-      record.previousTargetCommitId,
-      record.refVersion,
-      undefined,
-      record.previousRefIncarnationId,
-      record.refVersion,
     ),
   ];
   return failure('refTombstoned', `Ref ${record.name} is tombstoned.`, diagnostics, {
@@ -707,6 +814,66 @@ function refTombstoned(record: TombstoneRefRecord): RefFailureResult {
     tombstoneRefVersion: cloneRefVersion(record.refVersion),
     previousRefIncarnationId: record.previousRefIncarnationId,
   });
+}
+
+function unsupportedTombstoneReuseMetadata(
+  record: TombstoneRefRecord,
+  message: string,
+): RefFailureResult {
+  return failure('unsupportedRefOption', message, [
+    tombstoneDiagnostic(record, 'unsupportedRefOption', message, { option: 'reuseTombstone' }),
+  ]);
+}
+
+function expectedTombstoneRefVersionMismatch(
+  record: TombstoneRefRecord,
+  expectedRefVersion: RefVersion,
+): RefFailureResult {
+  const message = `Tombstone for ref ${record.name} is at a different version than expected.`;
+  return failure(
+    'expectedRefVersionMismatch',
+    message,
+    [
+      tombstoneDiagnostic(
+        record,
+        'expectedRefVersionMismatch',
+        message,
+      ),
+    ],
+    {
+      code: 'expectedRefVersionMismatch',
+      expectedRefVersion: cloneRefVersion(expectedRefVersion),
+      actualRefVersion: cloneRefVersion(record.refVersion),
+      tombstoneRefVersion: cloneRefVersion(record.refVersion),
+      previousRefIncarnationId: record.previousRefIncarnationId,
+    },
+  );
+}
+
+function expectedPreviousRefIncarnationIdMismatch(
+  record: TombstoneRefRecord,
+  expectedPreviousRefIncarnationId: string,
+): RefFailureResult {
+  const message = `Tombstone for ref ${record.name} has a different previous incarnation than expected.`;
+  return failure(
+    'expectedPreviousRefIncarnationIdMismatch',
+    message,
+    [
+      tombstoneDiagnostic(
+        record,
+        'expectedPreviousRefIncarnationIdMismatch',
+        message,
+        { expectedPreviousRefIncarnationId },
+      ),
+    ],
+    {
+      code: 'expectedPreviousRefIncarnationIdMismatch',
+      expectedPreviousRefIncarnationId,
+      actualPreviousRefIncarnationId: record.previousRefIncarnationId,
+      tombstoneRefVersion: cloneRefVersion(record.refVersion),
+      previousRefIncarnationId: record.previousRefIncarnationId,
+    },
+  );
 }
 
 function refNotFound(name: RefName): RefFailureResult {
@@ -841,6 +1008,25 @@ function diagnostic(
   });
 }
 
+function tombstoneDiagnostic(
+  record: TombstoneRefRecord,
+  code: string,
+  message: string,
+  details?: Record<string, string | boolean>,
+): VersionDiagnostic {
+  return diagnostic(
+    code,
+    message,
+    record.name,
+    record.previousTargetCommitId,
+    record.refVersion,
+    undefined,
+    record.previousRefIncarnationId,
+    record.refVersion,
+    details,
+  );
+}
+
 function matchesPrefix(name: RefName, prefix: RefNamespace | undefined): boolean {
   if (prefix === undefined) {
     return true;
@@ -888,6 +1074,13 @@ function compareCounterValues(left: string, right: string): number {
 
 function nextRefVersion(current: RefVersion): RefVersion {
   return freezeRefVersion({ kind: 'counter', value: incrementDecimalString(current.value) });
+}
+
+function nextProviderEpoch(current: ProviderEpoch): ProviderEpoch {
+  if (current.kind === 'counter' && REF_VERSION_VALUE_RE.test(current.value)) {
+    return freezeProviderEpoch({ kind: 'counter', value: incrementDecimalString(current.value) });
+  }
+  return freezeProviderEpoch({ kind: 'opaque', value: `${current.value}:reused` });
 }
 
 function incrementDecimalString(value: string): string {

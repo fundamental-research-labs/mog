@@ -38,6 +38,7 @@ describe('RefName validation', () => {
     ['unknown namespace', 'feature/budget', 'unknownNamespace'],
     ['reserved detached', 'detached', 'reservedDetached'],
     ['reserved system ref', 'refs/system/checkouts/a', 'reservedSystemRef'],
+    ['raw refs path', 'refs/heads/main', 'invalidFormat'],
     ['missing namespace slash', 'scenario', 'invalidFormat'],
     ['main child', 'main/child', 'unknownNamespace'],
     ['leading slash', '/scenario/budget', 'leadingSlash'],
@@ -50,6 +51,18 @@ describe('RefName validation', () => {
     ['non ascii', 'scenario/cafe\u00e9', 'nonAscii'],
     ['lock segment', 'scenario/.lock', 'lockSegment'],
     ['segment ending lock', 'scenario/foo.lock', 'segmentEndsWithLock'],
+    ['segment starts dot', 'scenario/.hidden', 'invalidFormat'],
+    ['segment ends dot', 'scenario/hidden.', 'invalidFormat'],
+    ['segment starts hyphen', 'scenario/-hidden', 'invalidFormat'],
+    ['segment ends hyphen', 'scenario/hidden-', 'invalidFormat'],
+    ['at brace sequence', 'scenario/foo@{bar', 'invalidFormat'],
+    ['tilde', 'scenario/foo~bar', 'invalidFormat'],
+    ['colon', 'scenario/foo:bar', 'invalidFormat'],
+    ['question mark', 'scenario/foo?bar', 'invalidFormat'],
+    ['asterisk', 'scenario/foo*bar', 'invalidFormat'],
+    ['open bracket', 'scenario/foo[bar', 'invalidFormat'],
+    ['caret', 'scenario/foo^bar', 'invalidFormat'],
+    ['backslash', 'scenario/foo\\bar', 'invalidFormat'],
     ['over 128 bytes', OVER_128_BYTES, 'tooLong'],
   ] satisfies readonly (readonly [string, string, RefNameValidationIssue])[])(
     'rejects invalid VC-05 ref name: %s',
@@ -63,6 +76,16 @@ describe('RefName validation', () => {
       expect(() => parseRefName(value)).toThrow(RefNameValidationError);
     },
   );
+
+  it.each([undefined, null, 42, {}, []])('rejects non-string ref name %p', (value) => {
+    const result = validateRefName(value);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected invalid RefName');
+    expect(result.diagnostics.map((diagnostic) => diagnostic.issue)).toContain('notString');
+    expect(isRefName(value)).toBe(false);
+    expect(() => parseRefName(value)).toThrow(RefNameValidationError);
+  });
 });
 
 describe('RefName storage encoding', () => {

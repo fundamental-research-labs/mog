@@ -19,6 +19,8 @@ pub(super) fn capacity_replay_sheets(
         .iter()
         .map(|change| change.sheet_id)
         .collect();
+    let structural_change_sheets: HashSet<SheetId> =
+        doc_changes.structural_changes.iter().copied().collect();
     let axis_sheets: HashSet<SheetId> = doc_changes
         .axis_order
         .iter()
@@ -29,7 +31,8 @@ pub(super) fn capacity_replay_sheets(
         .into_iter()
         .filter(|sheet_id| {
             grid_index_sheets.contains(sheet_id)
-                && has_paired_tail_axis_changes(doc_changes, *sheet_id)
+                && !structural_change_sheets.contains(sheet_id)
+                && has_tail_axis_changes(doc_changes, *sheet_id)
                 && doc_changes
                     .axis_order
                     .iter()
@@ -42,10 +45,8 @@ pub(super) fn capacity_replay_sheets(
         .collect()
 }
 
-fn has_paired_tail_axis_changes(doc_changes: &DocumentChanges, sheet_id: SheetId) -> bool {
-    let mut has_row = false;
-    let mut has_col = false;
-
+fn has_tail_axis_changes(doc_changes: &DocumentChanges, sheet_id: SheetId) -> bool {
+    let mut has_tail_change = false;
     for change in doc_changes
         .axis_order
         .iter()
@@ -54,13 +55,10 @@ fn has_paired_tail_axis_changes(doc_changes: &DocumentChanges, sheet_id: SheetId
         if matches!(change.kind, AxisOrderChangeKind::Structural) {
             return false;
         }
-        match change.axis {
-            AxisOrderAxis::Row => has_row = true,
-            AxisOrderAxis::Col => has_col = true,
-        }
+        has_tail_change = true;
     }
 
-    has_row && has_col
+    has_tail_change
 }
 
 fn tail_change_matches_current_grid(

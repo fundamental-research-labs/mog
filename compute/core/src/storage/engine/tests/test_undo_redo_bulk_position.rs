@@ -158,6 +158,68 @@ fn undo_redo_restores_bulk_dimension_growth() {
 }
 
 #[test]
+fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(crate::snapshot::WorkbookSnapshot {
+            sheets: vec![crate::snapshot::SheetSnapshot {
+                id: sheet_id().to_uuid_string(),
+                name: "Sheet1".to_string(),
+                rows: 1_335,
+                cols: 18,
+                cells: vec![],
+                ranges: vec![],
+            }],
+            ..Default::default()
+        })
+        .unwrap();
+    let sid = sheet_id();
+    assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
+    assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 18);
+
+    engine
+        .batch_set_cells_by_position(
+            vec![(
+                sid,
+                79,
+                18,
+                crate::storage::engine::mutation::CellInput::Parse {
+                    text: "atlas91 paste alpha".into(),
+                },
+            )],
+            true,
+        )
+        .unwrap();
+
+    assert_eq!(
+        cell_value_at(&engine, &sid, 79, 18),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
+    assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 19);
+
+    let (_patches, undo_result) = engine.undo().unwrap();
+    assert_eq!(cell_value_at(&engine, &sid, 79, 18), CellValue::Null);
+    assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
+    assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 18);
+    assert!(
+        undo_result.structure_changes.is_empty(),
+        "undo of implicit single-axis capacity grow must stay incremental"
+    );
+
+    let (_patches, redo_result) = engine.redo().unwrap();
+    assert_eq!(
+        cell_value_at(&engine, &sid, 79, 18),
+        CellValue::Text("atlas91 paste alpha".into())
+    );
+    assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
+    assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 19);
+    assert!(
+        redo_result.structure_changes.is_empty(),
+        "redo of implicit single-axis capacity grow must stay incremental"
+    );
+}
+
+#[test]
 fn explicit_tail_row_delete_undo_redo_stays_structural() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_bulk_snapshot()).unwrap();
     let sid = sheet_id();

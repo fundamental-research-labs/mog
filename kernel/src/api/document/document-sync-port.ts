@@ -27,6 +27,48 @@ interface CreateDocumentByteSyncPortOptions {
   readonly assertNotDisposed: (operation: string) => void;
 }
 
+type DocumentByteSyncAdmissionFailureCode = 'provenance.missingContext';
+type DocumentByteSyncAdmissionFailureReason = 'missingClassification';
+type DocumentByteSyncAdmissionFailureSubreason = 'rawUnclassified';
+
+interface DocumentByteSyncAdmissionFailureDiagnostic {
+  readonly code: DocumentByteSyncAdmissionFailureCode;
+  readonly reason: DocumentByteSyncAdmissionFailureReason;
+  readonly subreason: DocumentByteSyncAdmissionFailureSubreason;
+  readonly methodName: string;
+  readonly message: string;
+}
+
+class DocumentByteSyncAdmissionError extends Error {
+  readonly code: DocumentByteSyncAdmissionFailureCode;
+  readonly reason: DocumentByteSyncAdmissionFailureReason;
+  readonly subreason: DocumentByteSyncAdmissionFailureSubreason;
+  readonly diagnostic: DocumentByteSyncAdmissionFailureDiagnostic;
+  readonly diagnostics: readonly DocumentByteSyncAdmissionFailureDiagnostic[];
+
+  constructor(diagnostic: DocumentByteSyncAdmissionFailureDiagnostic) {
+    super(formatDocumentByteSyncAdmissionErrorMessage(diagnostic));
+    this.name = 'DocumentByteSyncAdmissionError';
+    this.code = diagnostic.code;
+    this.reason = diagnostic.reason;
+    this.subreason = diagnostic.subreason;
+    this.diagnostic = diagnostic;
+    this.diagnostics = [diagnostic];
+  }
+}
+
+function formatDocumentByteSyncAdmissionErrorMessage(
+  diagnostic: DocumentByteSyncAdmissionFailureDiagnostic,
+): string {
+  return [
+    `${diagnostic.methodName}: ${diagnostic.message}`,
+    `diagnostic=${diagnostic.code}`,
+    `reason=${diagnostic.reason}`,
+    `subreason=${diagnostic.subreason}`,
+    'use applyClassifiedRawUpdate, applyUpdateWithProvenance, or applyProviderEnvelope',
+  ].join('; ');
+}
+
 export function createDocumentByteSyncPort(
   options: CreateDocumentByteSyncPortOptions,
 ): DocumentByteSyncPort {
@@ -36,9 +78,7 @@ export function createDocumentByteSyncPort(
     docId: documentId,
     async applyUpdate(_update: Uint8Array): Promise<void> {
       assertNotDisposed('syncPort.applyUpdate');
-      throw new Error(
-        'DocumentHandle.syncPort.applyUpdate: raw sync bytes require classified provenance; use applyClassifiedRawUpdate, applyUpdateWithProvenance, or applyProviderEnvelope',
-      );
+      throw rawSyncFallbackAdmissionError('DocumentHandle.syncPort.applyUpdate');
     },
     async applyUpdateWithProvenance(
       update: Uint8Array,
@@ -148,6 +188,16 @@ export function createDocumentByteSyncPort(
       return getComputeBridge().currentStateVector();
     },
   };
+}
+
+function rawSyncFallbackAdmissionError(methodName: string): DocumentByteSyncAdmissionError {
+  return new DocumentByteSyncAdmissionError({
+    code: 'provenance.missingContext',
+    reason: 'missingClassification',
+    subreason: 'rawUnclassified',
+    methodName,
+    message: 'raw sync bytes require classified provenance',
+  });
 }
 
 type ComputeBridgeSyncAdmissionHooks = {

@@ -278,9 +278,36 @@ describe('DocumentHandle.createSyncPort', () => {
     const { handle, bridge } = createHandleFixture();
     const port = handle.createSyncPort();
 
-    await expect(port.applyUpdate(new Uint8Array([7]))).rejects.toThrow(
+    const error = await port.applyUpdate(new Uint8Array([7])).then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: 'DocumentByteSyncAdmissionError',
+      code: 'provenance.missingContext',
+      reason: 'missingClassification',
+      subreason: 'rawUnclassified',
+      diagnostic: {
+        code: 'provenance.missingContext',
+        reason: 'missingClassification',
+        subreason: 'rawUnclassified',
+        methodName: 'DocumentHandle.syncPort.applyUpdate',
+        message: 'raw sync bytes require classified provenance',
+      },
+      diagnostics: [
+        {
+          code: 'provenance.missingContext',
+          reason: 'missingClassification',
+          subreason: 'rawUnclassified',
+        },
+      ],
+    });
+    expect((error as Error).message).toContain(
       'DocumentHandle.syncPort.applyUpdate: raw sync bytes require classified provenance',
     );
+    expect((error as Error).message).toContain('subreason=rawUnclassified');
 
     expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
     expect(bridge.syncApply).not.toHaveBeenCalled();

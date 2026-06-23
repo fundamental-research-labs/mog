@@ -201,6 +201,52 @@ function makeClassifiedRawProvenance(payload: Uint8Array): ClassifiedRawSyncUpda
   };
 }
 
+function makeProviderReplayProvenance(payload: Uint8Array): ClassifiedRawSyncUpdateProvenance {
+  return {
+    schemaVersion: 'sync-update-provenance-v1',
+    sourceKind: 'providerReplay',
+    updateIdentity: {
+      originKind: 'provider',
+      providerRefId: 'ProviderA',
+      updateId: 'provider-replay-1',
+      payloadHash: sha256Hex(payload),
+    },
+    trust: { status: 'trustedLocalSystem' },
+    author: { kind: 'unknown', reason: 'providerReplay' },
+    replay: true,
+    system: true,
+    capturePolicy: 'excluded',
+    redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
+    exclusionDiagnostic: {
+      reason: 'providerReplay',
+      message: 'Provider replay is admitted as classified system replay.',
+    },
+  };
+}
+
+function makeHydrationProvenance(payload: Uint8Array): ClassifiedRawSyncUpdateProvenance {
+  return {
+    schemaVersion: 'sync-update-provenance-v1',
+    sourceKind: 'collaborationHydration',
+    updateIdentity: {
+      originKind: 'room',
+      roomId: 'room-1',
+      updateId: 'hydration-1',
+      payloadHash: sha256Hex(payload),
+    },
+    trust: { status: 'trustedLocalSystem' },
+    author: { kind: 'system', systemRef: 'collaboration-hydration' },
+    replay: true,
+    system: true,
+    capturePolicy: 'excluded',
+    redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
+    exclusionDiagnostic: {
+      reason: 'hydration',
+      message: 'Collaboration hydration is admitted as classified system replay.',
+    },
+  };
+}
+
 describe('DocumentHandle.createSyncPort', () => {
   it('returns one stable document byte-sync port', () => {
     const { handle } = createHandleFixture();
@@ -218,25 +264,27 @@ describe('DocumentHandle.createSyncPort', () => {
 
     await expect(port.currentStateVector()).resolves.toEqual(new Uint8Array([1]));
     await expect(port.encodeDiff(new Uint8Array([9]))).resolves.toEqual(new Uint8Array([1, 2]));
-    await expect(port.applyUpdate(new Uint8Array([7]))).resolves.toBeUndefined();
     expect(bridge.currentStateVector).toHaveBeenCalledTimes(1);
     expect(bridge.encodeDiff).toHaveBeenCalledWith(new Uint8Array([9]));
-    expect(bridge.syncApply).toHaveBeenCalledWith(new Uint8Array([7]), expect.any(Object));
-    expect(bridge.events).toEqual(['admission:classified-raw', 'syncApply']);
-    expect(bridge.admissions[0]).toMatchObject({
-      source: 'document-sync-port',
-      envelopeVersion: 'classified-raw',
-      provenance: expect.objectContaining({
-        sourceKind: 'legacyRawUnknown',
-        capturePolicy: 'excluded',
-      }),
-    });
 
     const recoveredBridge = createBridge(3);
     lifecycle.setComputeBridge(recoveredBridge);
 
     await expect(port.currentStateVector()).resolves.toEqual(new Uint8Array([3]));
     expect(recoveredBridge.currentStateVector).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed for raw applyUpdate without classified provenance before syncApply', async () => {
+    const { handle, bridge } = createHandleFixture();
+    const port = handle.createSyncPort();
+
+    await expect(port.applyUpdate(new Uint8Array([7]))).rejects.toThrow(
+      'DocumentHandle.syncPort.applyUpdate: raw sync bytes require classified provenance',
+    );
+
+    expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
+    expect(bridge.syncApply).not.toHaveBeenCalled();
+    expect(bridge.events).toEqual([]);
   });
 
   it('applies verified provenance after recording admission metadata', async () => {
@@ -299,6 +347,57 @@ describe('DocumentHandle.createSyncPort', () => {
       provenance,
       validationDiagnostics: [],
     });
+  });
+
+  it('applies replay and hydration only through explicitly classified raw provenance', async () => {
+    const providerReplayUpdate = new Uint8Array([0x31, 0x32]);
+    const hydrationUpdate = new Uint8Array([0x41, 0x42]);
+    const cases: readonly {
+      readonly update: Uint8Array;
+      readonly provenance: ClassifiedRawSyncUpdateProvenance;
+    }[] = [
+      {
+        update: providerReplayUpdate,
+        provenance: makeProviderReplayProvenance(providerReplayUpdate),
+      },
+      {
+        update: hydrationUpdate,
+        provenance: makeHydrationProvenance(hydrationUpdate),
+      },
+    ];
+
+    for (const { update, provenance } of cases) {
+      const { handle, bridge } = createHandleFixture();
+      const port = handle.createSyncPort();
+
+      await expect(port.applyClassifiedRawUpdate(update, provenance)).resolves.toBeUndefined();
+
+      expect(bridge.events).toEqual(['admission:classified-raw', 'syncApply']);
+      expect(bridge.admissions[0]).toMatchObject({
+        source: 'document-sync-port',
+        envelopeVersion: 'classified-raw',
+        updateId: provenance.updateIdentity.updateId,
+        payloadHash: sha256Hex(update),
+        provenance,
+        validationDiagnostics: [],
+      });
+    }
+  });
+
+  it('rejects live-authored provenance on the classified raw path before syncApply', async () => {
+    const { handle, bridge } = createHandleFixture();
+    const port = handle.createSyncPort();
+    const update = new Uint8Array([8, 8, 8]);
+    const provenance = makeLiveProvenance(
+      update,
+    ) as unknown as ClassifiedRawSyncUpdateProvenance;
+
+    await expect(port.applyClassifiedRawUpdate(update, provenance)).rejects.toThrow(
+      'DocumentHandle.syncPort.applyClassifiedRawUpdate: classified raw sync updates cannot be commit eligible or live-authored',
+    );
+
+    expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
+    expect(bridge.syncApply).not.toHaveBeenCalled();
   });
 
   it('rejects invalid provenance before syncApply', async () => {

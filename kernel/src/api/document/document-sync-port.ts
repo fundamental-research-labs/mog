@@ -1,5 +1,4 @@
 import {
-  classifyLegacyRawUpdate,
   validateProviderInboundUpdateEnvelope,
   validateSyncUpdateProvenance,
   type SyncUpdateProvenance,
@@ -35,27 +34,11 @@ export function createDocumentByteSyncPort(
 
   return {
     docId: documentId,
-    async applyUpdate(update: Uint8Array): Promise<void> {
+    async applyUpdate(_update: Uint8Array): Promise<void> {
       assertNotDisposed('syncPort.applyUpdate');
-      const payloadHash = await sha256Hex(update, 'DocumentHandle.syncPort.applyUpdate');
-      const provenance = classifyLegacyRawUpdate({
-        payloadHash,
-        updateId: `legacy-raw:${payloadHash}`,
-      });
-      const validation = validateSyncUpdateProvenance(provenance, {
-        expectedPayloadHash: payloadHash,
-      });
-      const metadata: DocumentByteSyncPortApplyUpdateMetadata = {
-        source: 'document-sync-port',
-        docId: documentId,
-        envelopeVersion: 'classified-raw',
-        updateId: provenance.updateIdentity.updateId,
-        payloadHash,
-        provenance,
-        validationDiagnostics: validation.diagnostics,
-      };
-      const bridge = getComputeBridge();
-      await bridge.syncApply(update, admitDocumentSyncUpdate(bridge, metadata));
+      throw new Error(
+        'DocumentHandle.syncPort.applyUpdate: raw sync bytes require classified provenance; use applyClassifiedRawUpdate, applyUpdateWithProvenance, or applyProviderEnvelope',
+      );
     },
     async applyUpdateWithProvenance(
       update: Uint8Array,

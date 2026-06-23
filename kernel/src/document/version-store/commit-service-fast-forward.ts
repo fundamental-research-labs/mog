@@ -7,7 +7,7 @@ import {
   type VersionGraphWriteResult,
 } from './graph-store';
 import { expectedHeadForMergeCommit } from './commit-service-merge-helpers';
-import type { WorkbookVersionCommitServiceFastForwardMergeInput } from './commit-service';
+import type { WorkbookVersionCommitServiceFastForwardMergeInput } from './commit-service-types';
 import type { WorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import {

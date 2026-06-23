@@ -8,7 +8,7 @@ import type {
   VersionMergeCommitCaptureSuccess,
   VersionNormalCommitCaptureFinalizeResult,
   WorkbookVersionCommitServiceMergeCommitInput,
-} from './commit-service';
+} from './commit-service-types';
 
 export function finalizeMergeCommitCapture(
   captured: VersionMergeCommitCaptureSuccess,

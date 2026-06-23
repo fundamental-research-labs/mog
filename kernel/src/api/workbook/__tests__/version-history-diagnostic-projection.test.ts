@@ -7,6 +7,7 @@ const FORBIDDEN_DETAIL_TERMS = [
   'hidden',
   'deleted',
   'protected',
+  'external',
   'agent',
   'opaque',
   'principal-secret',
@@ -16,6 +17,10 @@ const FORBIDDEN_DETAIL_TERMS = [
   'salary-secret',
   'raw-value-secret',
   'commit-secret',
+  'namespace-secret',
+  'client-secret',
+  'session-secret',
+  'graph-secret',
 ];
 
 describe('version history diagnostic projection', () => {
@@ -23,12 +28,14 @@ describe('version history diagnostic projection', () => {
     const projected = projectVersionHistoryDiagnosticsForAccess(
       [
         sensitiveDiagnostic({
-          capability: 'version:read',
-          deniedCapabilities: ['version:read', 'version:diff', 'agent:trace', 'protected:range'],
+          capability: 'version:commit',
+          deniedCapabilities: ['version:commit', 'agent:trace', 'protected:range'],
         }),
       ],
       {
         kind: 'capability-denied',
+        capability: 'version:read',
+        deniedCapabilities: ['version:read', 'version:diff', 'agent:trace', 'protected:range'],
         dependency: 'hostCapability',
         retryable: false,
       },
@@ -42,7 +49,6 @@ describe('version history diagnostic projection', () => {
         dependency: 'hostCapability',
         data: {
           kind: 'capability-denied',
-          diagnosticCount: 1,
           capability: 'version:read',
           deniedCapabilities: ['version:read', 'version:diff'],
           retryable: false,
@@ -62,7 +68,6 @@ describe('version history diagnostic projection', () => {
       ],
       {
         kind: 'access-denied',
-        code: 'version_access_denied',
         dependency: 'protected-workbook',
         deniedCapabilities: ['version:reviewRead', 'deleted:commit'],
       },
@@ -75,8 +80,6 @@ describe('version history diagnostic projection', () => {
         message: 'Version history access is denied for this caller.',
         data: {
           kind: 'access-denied',
-          diagnosticCount: 1,
-          capability: 'version:reviewRead',
           deniedCapabilities: ['version:reviewRead'],
         },
       },
@@ -84,7 +87,7 @@ describe('version history diagnostic projection', () => {
     expectNoForbiddenDetails(projected);
   });
 
-  it('extracts nested public capabilities without leaking raw principal, ref, path, or value payloads', () => {
+  it('does not derive public capabilities from denied diagnostic payloads', () => {
     const projected = projectVersionHistoryDiagnosticsForAccess(
       [
         sensitiveDiagnostic({
@@ -140,18 +143,14 @@ describe('version history diagnostic projection', () => {
         message: 'Version history access is denied for this caller.',
         data: {
           kind: 'access-denied',
-          diagnosticCount: 1,
-          capability: 'version:diff',
-          deniedCapabilities: [
-            'version:read',
-            'version:checkout',
-            'version:branch',
-            'version:diff',
-          ],
         },
       },
     ]);
     expectNoForbiddenDetails(projected);
+    expect(JSON.stringify(projected)).not.toContain('version:read');
+    expect(JSON.stringify(projected)).not.toContain('version:checkout');
+    expect(JSON.stringify(projected)).not.toContain('version:branch');
+    expect(JSON.stringify(projected)).not.toContain('version:diff');
     expect(JSON.stringify(projected)).not.toContain('version:proposal');
     expect(JSON.stringify(projected)).not.toContain('version:mergeApply');
     expect(JSON.stringify(projected)).not.toContain('version:commit');
@@ -187,9 +186,49 @@ describe('version history diagnostic projection', () => {
         message: 'Version history access is denied for this caller.',
         data: {
           kind: 'access-denied',
-          diagnosticCount: 1,
-          capability: 'version:read',
-          deniedCapabilities: ['version:read'],
+        },
+      },
+    ]);
+    expectNoForbiddenDetails(projected);
+  });
+
+  it('projects sensitive domain diagnostics identically regardless of hidden domain presence', () => {
+    const baseline = projectVersionHistoryDiagnosticsForAccess([], { kind: 'access-denied' });
+
+    for (const diagnostics of sensitiveDomainDiagnosticCases()) {
+      const projected = projectVersionHistoryDiagnosticsForAccess(diagnostics, {
+        kind: 'access-denied',
+      });
+
+      expect(projected).toEqual(baseline);
+      expectNoForbiddenDetails(projected);
+    }
+  });
+
+  it('does not reflect custom access codes or non-public access metadata', () => {
+    const nonPublicAccess = {
+      kind: 'capability-denied',
+      code: 'hidden_external_agent_opaque_access_code',
+      capability: 'agent:trace',
+      deniedCapabilities: ['external:link', 'version:diff', 'opaque:payload'],
+      dependency: 'deleted-domain-store',
+      retryable: true,
+    } as const;
+
+    const projected = projectVersionHistoryDiagnosticsForAccess(
+      [sensitiveDiagnostic({ capability: 'version:commit' })],
+      nonPublicAccess,
+    );
+
+    expect(projected).toEqual([
+      {
+        code: 'version_capability_unavailable',
+        severity: 'error',
+        message: 'Version history capability is denied for this caller.',
+        data: {
+          kind: 'capability-denied',
+          deniedCapabilities: ['version:diff'],
+          retryable: true,
         },
       },
     ]);
@@ -215,10 +254,84 @@ describe('version history diagnostic projection', () => {
             dependency: 'hostCapability',
             data: {
               kind: 'capability-denied',
-              diagnosticCount: 1,
               capability: 'version:read',
               deniedCapabilities: ['version:read'],
               retryable: false,
+            },
+          },
+        ],
+      },
+    });
+    expectNoForbiddenDetails(result);
+  });
+
+  it('projects provider stale-head diagnostics without namespace, ref, or client material', () => {
+    const result = versionFailureFromStoreDiagnostics('commit', [staleHeadStoreDiagnostic()]);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.commit',
+        diagnostics: [
+          {
+            code: 'VERSION_REF_CONFLICT',
+            severity: 'error',
+            message:
+              'Version history head changed before the operation completed; refresh and retry.',
+            owner: 'version-store',
+            data: {
+              operation: 'commitGraphWrite',
+              recoverability: 'retry',
+              messageTemplateId: 'version.ref.conflict',
+              redacted: true,
+              payload: {
+                operation: 'commitGraphWrite',
+                condition: 'stale-head',
+                completenessCondition: 'stale',
+                refName: 'redacted',
+                head: 'redacted',
+                historyHead: 'stale',
+              },
+              mutationGuarantee: 'ref-not-mutated',
+            },
+          },
+        ],
+      },
+    });
+    expectNoForbiddenDetails(result);
+  });
+
+  it('projects provider history-gap diagnostics with only coarse completeness markers', () => {
+    const result = versionFailureFromStoreDiagnostics('listCommits', [historyGapStoreDiagnostic()]);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.listCommits',
+        diagnostics: [
+          {
+            code: 'VERSION_MISSING_PARENT',
+            severity: 'error',
+            message:
+              'Version history has a gap; refresh or repair the provider history before retrying.',
+            owner: 'version-store',
+            data: {
+              operation: 'listCommits',
+              recoverability: 'repair',
+              messageTemplateId: 'version.integrity.missing-parent',
+              redacted: true,
+              payload: {
+                operation: 'listCommits',
+                completenessMarker: 'diagnostic-read',
+                completenessScope: 'graph-metadata',
+                completenessCondition: 'history-gap',
+                accessFiltered: true,
+                missingCommitRole: 'parent',
+                condition: 'history-gap',
+                historyCompleteness: 'history-gap',
+              },
             },
           },
         ],
@@ -246,6 +359,46 @@ function sensitiveDiagnostic(data: NonNullable<VersionDiagnostic['data']>): Vers
   };
 }
 
+function sensitiveDomainDiagnosticCases(): readonly (readonly VersionDiagnostic[])[] {
+  const cases = [
+    sensitiveDiagnostic({
+      domain: 'hidden-sheet',
+      capability: 'version:read',
+      hiddenSheetId: 'hidden-domain-secret',
+    }),
+    sensitiveDiagnostic({
+      domain: 'protected-range',
+      deniedCapabilities: ['version:diff'],
+      protectedRangeId: 'protected-domain-secret',
+    }),
+    sensitiveDiagnostic({
+      domain: 'deleted-object',
+      capability: 'version:commit',
+      deletedObjectId: 'deleted-domain-secret',
+    }),
+    sensitiveDiagnostic({
+      domain: 'external-link',
+      deniedCapabilities: ['version:remotePromote'],
+      externalTargetId: 'external-domain-secret',
+    }),
+    sensitiveDiagnostic({
+      domain: 'agent-proposal',
+      capability: 'version:proposal',
+      agentRunId: 'agent-domain-secret',
+    }),
+    sensitiveDiagnostic({
+      domain: 'opaque-payload',
+      deniedCapabilities: ['version:provenance'],
+      opaqueObjectDigest: 'opaque-domain-secret',
+    }),
+  ] as const;
+
+  return cases.map((diagnostic, index) => [
+    diagnostic,
+    ...cases.slice(0, index),
+  ]);
+}
+
 function hostDeniedStoreDiagnostic(): VersionStoreDiagnostic {
   return {
     issueCode: 'VERSION_CAPABILITY_DISABLED',
@@ -270,6 +423,89 @@ function hostDeniedStoreDiagnostic(): VersionStoreDiagnostic {
     },
     redacted: true,
   };
+}
+
+function staleHeadStoreDiagnostic(): VersionStoreDiagnostic {
+  return {
+    issueCode: 'VERSION_REF_CONFLICT',
+    severity: 'error',
+    recoverability: 'retry',
+    messageTemplateId: 'version.ref.conflict',
+    safeMessage:
+      'Ref refs/heads/secret moved from commit:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa for client-secret-id.',
+    payload: {
+      operation: 'commitGraphWrite',
+      reason: 'staleTargetHead',
+      clientId: 'client-secret-id',
+      sessionId: 'session-secret-id',
+    },
+    redacted: true,
+    mutationGuarantee: 'ref-not-mutated',
+    operation: 'commitGraphWrite',
+    namespace: {
+      documentId: 'namespace-secret-document',
+      workspaceId: 'namespace-secret-workspace',
+      graphId: 'graph-secret',
+    },
+    refName: 'refs/heads/secret',
+    commitId: 'commit:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    details: {
+      expectedHead: 'commit:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      actualHead: 'commit:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      providerRefId: 'ref-secret',
+      clientId: 'client-secret-id',
+      sessionId: 'session-secret-id',
+    },
+    sourceDiagnostics: [
+      {
+        message: 'client-secret-id saw refs/heads/secret',
+        details: { clientId: 'client-secret-id', sessionId: 'session-secret-id' },
+      },
+    ],
+  } as unknown as VersionStoreDiagnostic;
+}
+
+function historyGapStoreDiagnostic(): VersionStoreDiagnostic {
+  return {
+    issueCode: 'VERSION_MISSING_PARENT',
+    severity: 'error',
+    recoverability: 'repair',
+    messageTemplateId: 'version.integrity.missing-parent',
+    safeMessage:
+      'Missing parent commit:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd in refs/heads/secret for namespace-secret.',
+    redacted: true,
+    operation: 'listCommits',
+    namespace: {
+      documentId: 'namespace-secret-document',
+      workspaceId: 'namespace-secret-workspace',
+      graphId: 'graph-secret',
+    },
+    refName: 'refs/heads/secret',
+    commitId: 'commit:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    details: {
+      completenessMarker: 'diagnostic-read',
+      completenessScope: 'graph-metadata',
+      completenessCondition: 'history-gap',
+      accessFiltered: true,
+      missingCommitRole: 'parent',
+      childCommitId: 'commit:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+      clientId: 'client-secret-id',
+      sessionId: 'session-secret-id',
+      namespaceKey: 'namespace-secret-key',
+    },
+    sourceDiagnostics: [
+      {
+        code: 'VERSION_MISSING_PARENT',
+        severity: 'corruption',
+        message: 'history gap on refs/heads/secret for client-secret-id',
+        details: {
+          completenessCondition: 'history-gap',
+          missingCommitRole: 'parent',
+          clientId: 'client-secret-id',
+        },
+      },
+    ],
+  } as unknown as VersionStoreDiagnostic;
 }
 
 function expectNoForbiddenDetails(value: unknown): void {

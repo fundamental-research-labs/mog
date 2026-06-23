@@ -20,6 +20,24 @@ export type SyncBatchStatusState =
   | 'dropped'
   | 'rejected';
 
+export type SyncBatchStatusPendingBacklogReason =
+  | 'pending'
+  | 'complete'
+  | 'failedAfterMutation'
+  | 'terminalDropped'
+  | 'terminalRejected'
+  | 'blockedBatchFailure'
+  | 'missing'
+  | 'reservationConflict'
+  | 'reservationFailure'
+  | 'providerFailure';
+
+export type SyncBatchStatusPendingBacklogSemantics = {
+  readonly pendingForCheckout: boolean;
+  readonly backlogForAdmission: boolean;
+  readonly reason: SyncBatchStatusPendingBacklogReason;
+};
+
 export type SyncBatchStatusIdentityInput = {
   readonly batchId?: string;
   readonly orderedSubUpdatePayloadHashes?: readonly string[];
@@ -63,6 +81,7 @@ export type SyncBatchStatusRecord = {
   readonly identity: SyncBatchStatusIdentity;
   readonly operationContext: SyncBatchStatusOperationContext;
   readonly state: SyncBatchStatusState;
+  readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly terminal?: SyncBatchStatusTerminal;
@@ -98,16 +117,19 @@ export type SyncBatchStatusReadResult =
   | {
       readonly status: 'found';
       readonly record: SyncBatchStatusRecord;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly [];
     }
   | {
       readonly status: 'missing';
       readonly record: null;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
     }
   | {
       readonly status: 'failed';
       readonly record: null;
+      readonly pendingBacklogSemantics?: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
     };
 
@@ -115,16 +137,19 @@ export type SyncBatchStatusReserveResult =
   | {
       readonly status: 'reserved' | 'existing' | 'duplicate';
       readonly record: SyncBatchStatusRecord;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly [];
     }
   | {
       readonly status: 'conflict';
       readonly record: SyncBatchStatusRecord;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
     }
   | {
       readonly status: 'failed';
       readonly record: null;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
     };
 
@@ -132,11 +157,13 @@ export type SyncBatchStatusCompleteResult =
   | {
       readonly status: 'completed';
       readonly record: SyncBatchStatusRecord;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly [];
     }
   | {
       readonly status: 'missing' | 'conflict' | 'failed';
       readonly record: SyncBatchStatusRecord | null;
+      readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
       readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
     };
 
@@ -222,6 +249,7 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
         ? {
             status: existing.state === 'complete' ? 'duplicate' : 'existing',
             record: existing,
+            pendingBacklogSemantics: existing.pendingBacklogSemantics,
             diagnostics: [],
           }
         : conflictReserve(
@@ -231,13 +259,23 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
     }
 
     this.backend.put(record);
-    return { status: 'reserved', record, diagnostics: [] };
+    return {
+      status: 'reserved',
+      record,
+      pendingBacklogSemantics: record.pendingBacklogSemantics,
+      diagnostics: [],
+    };
   }
 
   async readByBatchStatusId(batchStatusId: SyncBatchStatusId): Promise<SyncBatchStatusReadResult> {
     const record = this.backend.get(this.documentScope, batchStatusId);
     return record
-      ? { status: 'found', record, diagnostics: [] }
+      ? {
+          status: 'found',
+          record,
+          pendingBacklogSemantics: record.pendingBacklogSemantics,
+          diagnostics: [],
+        }
       : missingRead('Sync batch status was not found.');
   }
 
@@ -249,6 +287,7 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
       return {
         status: 'missing',
         record: null,
+        pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('missing'),
         diagnostics: [
           diagnostic(
             'VERSION_SYNC_BATCH_STATUS_NOT_FOUND',
@@ -266,7 +305,12 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
     }
     if (existing.terminal) {
       return syncBatchStatusTerminalsEqual(existing.terminal, input.terminal)
-        ? { status: 'completed', record: existing, diagnostics: [] }
+        ? {
+            status: 'completed',
+            record: existing,
+            pendingBacklogSemantics: existing.pendingBacklogSemantics,
+            diagnostics: [],
+          }
         : conflictComplete(
             existing,
             'Sync batch status is already finalized with different terminal metadata.',
@@ -278,9 +322,18 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
       state: input.terminal.status,
       updatedAt: input.completedAt,
       terminal: cloneJson(input.terminal),
+      pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord({
+        ...existing,
+        state: input.terminal.status,
+      }),
     };
     this.backend.put(completed);
-    return { status: 'completed', record: completed, diagnostics: [] };
+    return {
+      status: 'completed',
+      record: completed,
+      pendingBacklogSemantics: completed.pendingBacklogSemantics,
+      diagnostics: [],
+    };
   }
 
   private async recordFromInput(
@@ -303,6 +356,10 @@ export class InMemorySyncBatchStatusStore implements SyncBatchStatusStore {
       identity: keyMaterial.identity,
       operationContext: sanitizeSyncBatchStatusOperationContext(input.operationContext),
       state: 'pending',
+      pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord({
+        state: 'pending',
+        operationContext: input.operationContext,
+      }),
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
     });
@@ -367,10 +424,14 @@ export function cloneSyncBatchStatusRecord(
   record: SyncBatchStatusRecord | undefined,
 ): SyncBatchStatusRecord | undefined {
   if (record === undefined) return undefined;
-  const cloned = cloneJson(record);
-  return {
+  const { pendingBacklogSemantics: _ignored, ...cloned } = cloneJson(record);
+  const normalized = {
     ...cloned,
     operationContext: sanitizeSyncBatchStatusOperationContext(cloned.operationContext),
+  };
+  return {
+    ...normalized,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord(normalized),
   };
 }
 
@@ -391,6 +452,46 @@ export function syncBatchStatusTerminalsEqual(
   return canonicalJsonStringify(left) === canonicalJsonStringify(right);
 }
 
+export function syncBatchStatusPendingBacklogSemanticsForRecord(
+  record: Pick<SyncBatchStatusRecord, 'operationContext' | 'state'>,
+): SyncBatchStatusPendingBacklogSemantics {
+  switch (record.state) {
+    case 'pending':
+      return isBlockedBatchFailureRecord(record)
+        ? syncBatchStatusPendingBacklogSemanticsForReason('blockedBatchFailure')
+        : syncBatchStatusPendingBacklogSemanticsForReason('pending');
+    case 'complete':
+      return syncBatchStatusPendingBacklogSemanticsForReason('complete');
+    case 'failedAfterMutation':
+      return syncBatchStatusPendingBacklogSemanticsForReason('failedAfterMutation');
+    case 'dropped':
+      return syncBatchStatusPendingBacklogSemanticsForReason('terminalDropped');
+    case 'rejected':
+      return syncBatchStatusPendingBacklogSemanticsForReason('terminalRejected');
+  }
+}
+
+export function syncBatchStatusPendingBacklogSemanticsForReason(
+  reason: SyncBatchStatusPendingBacklogReason,
+): SyncBatchStatusPendingBacklogSemantics {
+  switch (reason) {
+    case 'pending':
+      return { pendingForCheckout: true, backlogForAdmission: true, reason };
+    case 'complete':
+    case 'missing':
+      return { pendingForCheckout: false, backlogForAdmission: false, reason };
+    case 'providerFailure':
+      return { pendingForCheckout: true, backlogForAdmission: true, reason };
+    case 'failedAfterMutation':
+    case 'terminalDropped':
+    case 'terminalRejected':
+    case 'blockedBatchFailure':
+    case 'reservationConflict':
+    case 'reservationFailure':
+      return { pendingForCheckout: false, backlogForAdmission: true, reason };
+  }
+}
+
 export function syncBatchStatusStorageKey(
   documentScope: VersionDocumentScope,
   batchStatusId: SyncBatchStatusId,
@@ -404,7 +505,37 @@ export function hasSyncBatchStatusStoreProvider(
   return isRecord(value) && typeof value.openSyncBatchStatusStore === 'function';
 }
 
+export function normalizeSyncBatchStatusRecord(value: unknown): SyncBatchStatusRecord | null {
+  if (!isSyncBatchStatusRecordShape(value)) return null;
+  const { pendingBacklogSemantics: _ignored, ...record } = cloneJson(value) as Omit<
+    SyncBatchStatusRecord,
+    'pendingBacklogSemantics'
+  > & {
+    readonly pendingBacklogSemantics?: SyncBatchStatusPendingBacklogSemantics;
+  };
+  return cloneSyncBatchStatusRecord({
+    ...record,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord(record),
+  });
+}
+
 export function isSyncBatchStatusRecord(value: unknown): value is SyncBatchStatusRecord {
+  if (!isSyncBatchStatusRecordShape(value)) return false;
+  return (
+    isSyncBatchStatusPendingBacklogSemantics(value.pendingBacklogSemantics) &&
+    syncBatchStatusPendingBacklogSemanticsEqual(
+      value.pendingBacklogSemantics,
+      syncBatchStatusPendingBacklogSemanticsForRecord(value),
+    )
+  );
+}
+
+function isSyncBatchStatusRecordShape(value: unknown): value is Omit<
+  SyncBatchStatusRecord,
+  'pendingBacklogSemantics'
+> & {
+  readonly pendingBacklogSemantics?: unknown;
+} {
   if (!isRecord(value) || value.schemaVersion !== 1) return false;
   if (value.recordKind !== 'syncBatchStatus') return false;
   if (
@@ -426,6 +557,55 @@ export function isSyncBatchStatusRecord(value: unknown): value is SyncBatchStatu
   if (value.state === 'pending') return value.terminal === undefined;
   if (!isSyncBatchStatusTerminal(value.terminal)) return false;
   return value.terminal.status === value.state;
+}
+
+function isSyncBatchStatusPendingBacklogSemantics(
+  value: unknown,
+): value is SyncBatchStatusPendingBacklogSemantics {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.pendingForCheckout === 'boolean' &&
+    typeof value.backlogForAdmission === 'boolean' &&
+    isSyncBatchStatusPendingBacklogReason(value.reason)
+  );
+}
+
+function isSyncBatchStatusPendingBacklogReason(
+  value: unknown,
+): value is SyncBatchStatusPendingBacklogReason {
+  return (
+    value === 'pending' ||
+    value === 'complete' ||
+    value === 'failedAfterMutation' ||
+    value === 'terminalDropped' ||
+    value === 'terminalRejected' ||
+    value === 'blockedBatchFailure' ||
+    value === 'missing' ||
+    value === 'reservationConflict' ||
+    value === 'reservationFailure' ||
+    value === 'providerFailure'
+  );
+}
+
+function syncBatchStatusPendingBacklogSemanticsEqual(
+  left: SyncBatchStatusPendingBacklogSemantics,
+  right: SyncBatchStatusPendingBacklogSemantics,
+): boolean {
+  return (
+    left.pendingForCheckout === right.pendingForCheckout &&
+    left.backlogForAdmission === right.backlogForAdmission &&
+    left.reason === right.reason
+  );
+}
+
+function isBlockedBatchFailureRecord(
+  record: Pick<SyncBatchStatusRecord, 'operationContext'>,
+): boolean {
+  const collaboration = record.operationContext.collaboration;
+  return (
+    collaboration.commitGrouping === 'blockedBatchFailure' ||
+    collaboration.exclusionSubreason === 'blockedBatchFailure'
+  );
 }
 
 function syncBatchOperationContext(
@@ -668,6 +848,7 @@ function conflictReserve(
   return {
     status: 'conflict',
     record,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('reservationConflict'),
     diagnostics: [diagnostic('VERSION_SYNC_BATCH_STATUS_CONFLICT', message, 'none')],
   };
 }
@@ -678,11 +859,13 @@ function conflictComplete(
 ): {
   readonly status: 'conflict';
   readonly record: SyncBatchStatusRecord;
+  readonly pendingBacklogSemantics: SyncBatchStatusPendingBacklogSemantics;
   readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
 } {
   return {
     status: 'conflict',
     record,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('reservationConflict'),
     diagnostics: [diagnostic('VERSION_SYNC_BATCH_STATUS_CONFLICT', message, 'none')],
   };
 }
@@ -693,6 +876,7 @@ function failedReserve(
   return {
     status: 'failed',
     record: null,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('reservationFailure'),
     diagnostics: [diagnostic('VERSION_INVALID_OPTIONS', message, 'none')],
   };
 }
@@ -701,6 +885,7 @@ function missingRead(message: string): SyncBatchStatusReadResult {
   return {
     status: 'missing',
     record: null,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('missing'),
     diagnostics: [diagnostic('VERSION_SYNC_BATCH_STATUS_NOT_FOUND', message, 'repair')],
   };
 }

@@ -9,8 +9,10 @@ import {
   type SyncBatchStatusStore,
   type SyncBatchStatusStoreDiagnostic,
   cloneSyncBatchStatusRecord,
-  isSyncBatchStatusRecord,
-  syncBatchStatusIdentityForOperationContext,
+  normalizeSyncBatchStatusRecord,
+  syncBatchStatusKeyMaterialForOperationContext,
+  syncBatchStatusPendingBacklogSemanticsForReason,
+  syncBatchStatusPendingBacklogSemanticsForRecord,
   syncBatchStatusReservationsEquivalent,
   syncBatchStatusStorageKey,
   syncBatchStatusTerminalsEqual,
@@ -50,11 +52,13 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
   ): Promise<SyncBatchStatusReserveResult> {
     let record: SyncBatchStatusRecord;
     try {
-      record = this.recordFromInput(input);
+      record = await this.recordFromInput(input);
     } catch {
       return {
         status: 'failed',
         record: null,
+        pendingBacklogSemantics:
+          syncBatchStatusPendingBacklogSemanticsForReason('reservationFailure'),
         diagnostics: [
           {
             code: 'VERSION_INVALID_OPTIONS',
@@ -83,6 +87,7 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
           ? {
               status: existing.state === 'complete' ? 'duplicate' : 'existing',
               record: existing,
+              pendingBacklogSemantics: existing.pendingBacklogSemantics,
               diagnostics: [],
             }
           : conflictReserve(
@@ -95,11 +100,17 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
 
       await idbRequest(store.put(storedSyncBatchStatus(record), storageKey));
       await done;
-      return { status: 'reserved', record, diagnostics: [] };
+      return {
+        status: 'reserved',
+        record,
+        pendingBacklogSemantics: record.pendingBacklogSemantics,
+        diagnostics: [],
+      };
     } catch {
       return {
         status: 'failed',
         record: null,
+        pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('providerFailure'),
         diagnostics: [
           {
             code: 'VERSION_PROVIDER_FAILED',
@@ -111,13 +122,16 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
     }
   }
 
-  async readByBatchStatusId(
-    batchStatusId: SyncBatchStatusId,
-  ): Promise<SyncBatchStatusReadResult> {
+  async readByBatchStatusId(batchStatusId: SyncBatchStatusId): Promise<SyncBatchStatusReadResult> {
     try {
       const record = await this.findByBatchStatusId(batchStatusId);
       return record
-        ? { status: 'found', record, diagnostics: [] }
+        ? {
+            status: 'found',
+            record,
+            pendingBacklogSemantics: record.pendingBacklogSemantics,
+            diagnostics: [],
+          }
         : missingRead('Sync batch status was not found.');
     } catch {
       return failedRead('IndexedDB sync batch status read failed.');
@@ -141,6 +155,7 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
         const result: SyncBatchStatusCompleteResult = {
           status: 'missing',
           record: null,
+          pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('missing'),
           diagnostics: [
             {
               code: 'VERSION_SYNC_BATCH_STATUS_NOT_FOUND',
@@ -165,7 +180,12 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
           existing.terminal,
           input.terminal,
         )
-          ? { status: 'completed', record: existing, diagnostics: [] }
+          ? {
+              status: 'completed',
+              record: existing,
+              pendingBacklogSemantics: existing.pendingBacklogSemantics,
+              diagnostics: [],
+            }
           : conflictComplete(
               existing,
               'Sync batch status is already finalized with different terminal metadata.',
@@ -179,14 +199,24 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
         state: input.terminal.status,
         updatedAt: input.completedAt,
         terminal: cloneJson(input.terminal),
+        pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord({
+          ...existing,
+          state: input.terminal.status,
+        }),
       };
       await idbRequest(store.put(storedSyncBatchStatus(completed), storageKey));
       await done;
-      return { status: 'completed', record: completed, diagnostics: [] };
+      return {
+        status: 'completed',
+        record: completed,
+        pendingBacklogSemantics: completed.pendingBacklogSemantics,
+        diagnostics: [],
+      };
     } catch {
       return {
         status: 'failed',
         record: null,
+        pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('providerFailure'),
         diagnostics: [
           {
             code: 'VERSION_PROVIDER_FAILED',
@@ -211,10 +241,19 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
     return decodeStoredSyncBatchStatus(row, this.documentScopeKey);
   }
 
-  private recordFromInput(input: ReserveSyncBatchStatusInput): SyncBatchStatusRecord {
+  private async recordFromInput(
+    input: ReserveSyncBatchStatusInput,
+  ): Promise<SyncBatchStatusRecord> {
     const collaboration = input.operationContext.collaboration;
     if (!collaboration) {
       throw new Error('missing collaboration context');
+    }
+    const keyMaterial = await syncBatchStatusKeyMaterialForOperationContext(
+      input.operationContext,
+      input,
+    );
+    if (input.batchStatusId !== keyMaterial.batchStatusId) {
+      throw new Error('Sync batch status id does not match operation context.');
     }
     return cloneSyncBatchStatusRecord({
       schemaVersion: 1,
@@ -222,9 +261,13 @@ export class IndexedDbSyncBatchStatusStore implements SyncBatchStatusStore {
       batchStatusId: input.batchStatusId,
       documentScopeKey: this.documentScopeKey,
       sourceKind: collaboration.sourceKind,
-      identity: syncBatchStatusIdentityForOperationContext(input.operationContext, input),
+      identity: keyMaterial.identity,
       operationContext: input.operationContext,
       state: 'pending',
+      pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForRecord({
+        state: 'pending',
+        operationContext: input.operationContext,
+      }),
       createdAt: input.createdAt,
       updatedAt: input.createdAt,
     });
@@ -244,17 +287,13 @@ function decodeStoredSyncBatchStatus(
   value: unknown,
   documentScopeKey: string,
 ): SyncBatchStatusRecord | null {
-  if (
-    !isRecord(value) ||
-    value.schemaVersion !== 1 ||
-    value.operation !== 'sync-batch-status'
-  ) {
+  if (!isRecord(value) || value.schemaVersion !== 1 || value.operation !== 'sync-batch-status') {
     return null;
   }
   if (value.documentScopeKey !== documentScopeKey) {
     return null;
   }
-  return isSyncBatchStatusRecord(value.record) ? cloneJson(value.record) : null;
+  return normalizeSyncBatchStatusRecord(value.record);
 }
 
 function syncBatchCompletionIdentityConflicts(
@@ -285,6 +324,7 @@ function conflictReserve(
   return {
     status: 'conflict',
     record,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('reservationConflict'),
     diagnostics: [{ code: 'VERSION_SYNC_BATCH_STATUS_CONFLICT', message, recoverability: 'none' }],
   };
 }
@@ -295,11 +335,15 @@ function conflictComplete(
 ): {
   readonly status: 'conflict';
   readonly record: SyncBatchStatusRecord;
+  readonly pendingBacklogSemantics: ReturnType<
+    typeof syncBatchStatusPendingBacklogSemanticsForReason
+  >;
   readonly diagnostics: readonly SyncBatchStatusStoreDiagnostic[];
 } {
   return {
     status: 'conflict',
     record,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('reservationConflict'),
     diagnostics: [{ code: 'VERSION_SYNC_BATCH_STATUS_CONFLICT', message, recoverability: 'none' }],
   };
 }
@@ -308,6 +352,7 @@ function missingRead(message: string): SyncBatchStatusReadResult {
   return {
     status: 'missing',
     record: null,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('missing'),
     diagnostics: [
       { code: 'VERSION_SYNC_BATCH_STATUS_NOT_FOUND', message, recoverability: 'repair' },
     ],
@@ -318,6 +363,7 @@ function failedRead(message: string): SyncBatchStatusReadResult {
   return {
     status: 'failed',
     record: null,
+    pendingBacklogSemantics: syncBatchStatusPendingBacklogSemanticsForReason('providerFailure'),
     diagnostics: [{ code: 'VERSION_PROVIDER_FAILED', message, recoverability: 'retry' }],
   };
 }

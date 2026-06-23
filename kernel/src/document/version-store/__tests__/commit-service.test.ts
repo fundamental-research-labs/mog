@@ -11,7 +11,7 @@ import {
 } from '../commit-service';
 import { createProviderBackedBranchLifecycleService } from '../branch-provider-service';
 import { VERSION_GRAPH_MAIN_REF } from '../graph-store';
-import type { VersionObjectType } from '../object-digest';
+import type { VersionObjectType, WorkbookCommitId } from '../object-digest';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
@@ -121,6 +121,85 @@ describe('WorkbookVersionCommitService', () => {
     });
   });
 
+  it.each([
+    ['root', 'raw-root-mode-secret'],
+    ['import-root', 'raw-import-root-mode-secret'],
+  ])(
+    'rejects direct %s commit modes with public-safe diagnostics before capture',
+    async (kind, forbiddenPayload) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+      expectInitializeSuccess(initialized);
+      const captureNormalCommit = jest.fn(createNormalCommitCapture('must-not-run'));
+      const service = createWorkbookVersionCommitService({
+        provider,
+        captureNormalCommit,
+      });
+
+      const failed = await service.commit({
+        mode: { kind, rawPayload: forbiddenPayload },
+      } as any);
+
+      expect(failed).toMatchObject({
+        status: 'failed',
+        mutationGuarantee: 'no-write-attempted',
+        retryable: false,
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            operation: 'commitGraphWrite',
+            recoverability: 'none',
+            mutationGuarantee: 'no-write-attempted',
+            details: { option: 'mode.kind', issue: kind },
+          }),
+        ],
+      });
+      if (failed.status !== 'failed') {
+        throw new Error('expected direct root/import mode rejection');
+      }
+      expect(captureNormalCommit).not.toHaveBeenCalled();
+      expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+      await expectMainRefUnchanged(provider, initialized);
+    },
+  );
+
+  it('rejects malformed direct commit modes without leaking raw mode values', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const forbiddenPayload = 'raw-unsupported-mode-secret';
+    const captureNormalCommit = jest.fn(createNormalCommitCapture('must-not-run'));
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureNormalCommit,
+    });
+
+    const failed = await service.commit({
+      mode: { kind: forbiddenPayload, rawPayload: forbiddenPayload },
+    } as any);
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      retryable: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_INVALID_OPTIONS',
+          operation: 'commitGraphWrite',
+          recoverability: 'none',
+          mutationGuarantee: 'no-write-attempted',
+          details: { option: 'mode.kind', issue: 'unsupportedMode' },
+        }),
+      ],
+    });
+    if (failed.status !== 'failed') {
+      throw new Error('expected malformed mode rejection');
+    }
+    expect(captureNormalCommit).not.toHaveBeenCalled();
+    expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+    await expectMainRefUnchanged(provider, initialized);
+  });
+
   it('finalizes failed normal captures when graph commit creation fails without moving refs', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
@@ -153,6 +232,7 @@ describe('WorkbookVersionCommitService', () => {
         expect.objectContaining({
           code: 'VERSION_MISSING_DEPENDENCY',
           operation: 'commitGraphWrite',
+          recoverability: 'repair',
           redacted: true,
         }),
       ],
@@ -200,12 +280,101 @@ describe('WorkbookVersionCommitService', () => {
         expect.objectContaining({
           code: 'VERSION_PROVIDER_FAILED',
           operation: 'commitGraphWrite',
+          recoverability: 'retry',
           redacted: true,
         }),
       ],
     });
     if (failed.status !== 'failed') {
       throw new Error('expected snapshot materialization failure');
+    }
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expectFailedFinalize(finalize, failed.diagnostics);
+    expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+    await expectMainRefUnchanged(provider, initialized);
+  });
+
+  it('maps thrown normal captures to retryable public-safe failures without moving refs', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const forbiddenPayload = 'raw-normal-capture-throw-secret';
+    const captureNormalCommit = jest.fn(createThrowingNormalCommitCapture(forbiddenPayload));
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureNormalCommit,
+    });
+
+    const failed = await service.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+      },
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      retryable: true,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_PROVIDER_FAILED',
+          operation: 'commitGraphWrite',
+          recoverability: 'retry',
+          mutationGuarantee: 'no-write-attempted',
+          redacted: true,
+        }),
+      ],
+    });
+    if (failed.status !== 'failed') {
+      throw new Error('expected thrown capture failure');
+    }
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+    await expectMainRefUnchanged(provider, initialized);
+  });
+
+  it('finalizes empty normal captures as missing change sets without moving refs', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const forbiddenPayload = 'raw-empty-capture-secret';
+    const finalize = jest.fn((_: VersionNormalCommitCaptureFinalizeResult) => undefined);
+    const captureNormalCommit = jest.fn(
+      createNormalCommitCaptureWithoutMutationSegments(
+        'empty-capture',
+        finalize,
+        forbiddenPayload,
+      ),
+    );
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureNormalCommit,
+    });
+
+    const failed = await service.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+      },
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      retryable: false,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_MISSING_CHANGE_SET',
+          operation: 'commitGraphWrite',
+          recoverability: 'repair',
+          mutationGuarantee: 'no-write-attempted',
+          redacted: true,
+        }),
+      ],
+    });
+    if (failed.status !== 'failed') {
+      throw new Error('expected missing change set failure');
     }
     expect(captureNormalCommit).toHaveBeenCalledTimes(1);
     expectFailedFinalize(finalize, failed.diagnostics);
@@ -557,6 +726,12 @@ function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
   });
 }
 
+function createThrowingNormalCommitCapture(forbiddenPayload: string): VersionNormalCommitCapture {
+  return async () => {
+    throw new Error(forbiddenPayload);
+  };
+}
+
 function createNormalCommitCaptureWithInvalidSemanticRecord(
   label: string,
   finalize: (result: VersionNormalCommitCaptureFinalizeResult) => void,
@@ -580,6 +755,33 @@ function createNormalCommitCaptureWithInvalidSemanticRecord(
           baseCommitId: currentRef.commitId,
         }),
       ],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+    finalize,
+  });
+}
+
+function createNormalCommitCaptureWithoutMutationSegments(
+  label: string,
+  finalize: (result: VersionNormalCommitCaptureFinalizeResult) => void,
+  forbiddenPayload: string,
+): VersionNormalCommitCapture {
+  return async ({ namespace, currentRef }) => ({
+    status: 'success',
+    input: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        parent: currentRef.commitId,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        forbiddenPayload,
+        changes: [{ id: `${label}-change-1`, domain: 'test' }],
+      }),
+      mutationSegmentRecords: [],
       author: VERSION_AUTHOR,
       createdAt: CREATED_AT,
       completenessDiagnostics: [],
@@ -692,13 +894,21 @@ async function expectMainRefUnchanged(
   provider: VersionStoreProvider,
   initialized: Extract<VersionGraphInitializeResult, { status: 'success' }>,
 ): Promise<void> {
+  await expectMainRefMatches(provider, initialized.rootCommit.id, initialized.initialHead.revision);
+}
+
+async function expectMainRefMatches(
+  provider: VersionStoreProvider,
+  commitId: WorkbookCommitId,
+  revision: VersionRecordRevision,
+): Promise<void> {
   const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
   await expect(graph.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
     status: 'success',
     ref: {
       name: VERSION_GRAPH_MAIN_REF,
-      commitId: initialized.rootCommit.id,
-      revision: initialized.initialHead.revision,
+      commitId,
+      revision,
     },
   });
 }

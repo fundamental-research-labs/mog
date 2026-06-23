@@ -29,7 +29,7 @@ import {
   expectedHeadForMergeCommit,
   finalizeMergeCommitCapture,
 } from './commit-service-merge-helpers';
-import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
+import { type ObjectDigest, type WorkbookCommitId } from './object-digest';
 import { type VersionGraphNamespace } from './object-store';
 import {
   VersionStoreProviderError,
@@ -201,6 +201,16 @@ type NormalizedCommitTargetRefResult =
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
 
+type NormalizedCommitOptionsResult =
+  | {
+      readonly ok: true;
+      readonly options: VersionCommitOptions;
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
 export class WorkbookVersionCommitService {
   private readonly provider: VersionStoreProvider;
   private readonly captureNormalCommit?: VersionNormalCommitCapture;
@@ -243,20 +253,11 @@ export class WorkbookVersionCommitService {
   async commit(
     options: VersionCommitOptions = {},
   ): Promise<WorkbookVersionCommitServiceCommitResult> {
-    if (options.mode !== undefined && options.mode.kind !== 'normal') {
-      return failedStoreResult(
-        [
-          versionStoreDiagnostic('VERSION_INVALID_OPTIONS', {
-            operation: 'commitGraphWrite',
-            documentScope: this.provider.documentScope,
-            safeMessage: 'Provider-backed commit service supports only normal commits.',
-            mutationGuarantee: 'no-write-attempted',
-            details: { option: 'mode' },
-          }),
-        ],
-        'no-write-attempted',
-      );
+    const normalizedOptions = normalizeCommitOptions(options, this.provider);
+    if (!normalizedOptions.ok) {
+      return failedStoreResult(normalizedOptions.diagnostics, 'no-write-attempted');
     }
+    const commitOptionsInput = normalizedOptions.options;
 
     if (!this.provider.capabilities.reads.graphRegistry) {
       return failedStoreResult(
@@ -309,7 +310,7 @@ export class WorkbookVersionCommitService {
       );
     }
 
-    const normalizedTarget = normalizeCommitTargetRef(options, this.provider);
+    const normalizedTarget = normalizeCommitTargetRef(commitOptionsInput, this.provider);
     if (!normalizedTarget.ok) {
       return failedStoreResult(normalizedTarget.diagnostics, 'no-write-attempted');
     }
@@ -450,7 +451,7 @@ export class WorkbookVersionCommitService {
         },
       };
     }
-    const diagnostics = mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite');
+    const diagnostics = mapCommitGraphDiagnostics(result.diagnostics);
     finalizeNormalCommitCapture(captured, { status: 'failed', diagnostics });
     return failedStoreResult(
       diagnostics,
@@ -629,7 +630,7 @@ export class WorkbookVersionCommitService {
       };
     }
 
-    const diagnostics = mapGraphDiagnostics(result.diagnostics, 'commitGraphWrite');
+    const diagnostics = mapCommitGraphDiagnostics(result.diagnostics);
     finalizeMergeCommitCapture(captured, { status: 'failed', diagnostics });
     return failedStoreResult(
       diagnostics,
@@ -741,6 +742,69 @@ export class WorkbookVersionCommitService {
   }
 }
 
+function normalizeCommitOptions(
+  value: unknown,
+  provider: VersionStoreProvider,
+): NormalizedCommitOptionsResult {
+  if (!isRecord(value) || Array.isArray(value)) {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidCommitOptionsDiagnostic(
+          provider,
+          'Version commit options must be an object when supplied.',
+          { option: 'options', issue: 'notObject' },
+        ),
+      ],
+    };
+  }
+
+  const mode = value.mode;
+  if (mode === undefined) {
+    return { ok: true, options: value as VersionCommitOptions };
+  }
+  if (!isRecord(mode) || Array.isArray(mode)) {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidCommitOptionsDiagnostic(provider, 'Version commit mode must be an object.', {
+          option: 'mode',
+          issue: 'notObject',
+        }),
+      ],
+    };
+  }
+
+  const kind = mode.kind;
+  if (kind === 'normal') {
+    return { ok: true, options: value as VersionCommitOptions };
+  }
+
+  if (kind === 'root' || kind === 'import-root') {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidCommitOptionsDiagnostic(
+          provider,
+          'Root and import-root commit modes are not exposed by this provider-backed commit service.',
+          { option: 'mode.kind', issue: kind },
+        ),
+      ],
+    };
+  }
+
+  return {
+    ok: false,
+    diagnostics: [
+      invalidCommitOptionsDiagnostic(
+        provider,
+        'Provider-backed commit service supports only normal commits.',
+        { option: 'mode.kind', issue: 'unsupportedMode' },
+      ),
+    ],
+  };
+}
+
 function normalizeCommitTargetRef(
   options: VersionCommitOptions,
   provider: VersionStoreProvider,
@@ -798,7 +862,11 @@ function normalizeCommitTargetRef(
   };
 }
 
-function invalidTargetRefDiagnostic(
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function invalidCommitOptionsDiagnostic(
   provider: VersionStoreProvider,
   safeMessage: string,
   details: Readonly<Record<string, string | number | boolean | null>>,
@@ -811,6 +879,14 @@ function invalidTargetRefDiagnostic(
     mutationGuarantee: 'no-write-attempted',
     details,
   });
+}
+
+function invalidTargetRefDiagnostic(
+  provider: VersionStoreProvider,
+  safeMessage: string,
+  details: Readonly<Record<string, string | number | boolean | null>>,
+): VersionStoreDiagnostic {
+  return invalidCommitOptionsDiagnostic(provider, safeMessage, details);
 }
 
 function finalizeNormalCommitCapture(
@@ -845,7 +921,17 @@ function diagnosticsForGraphRead(
       }),
     ];
   }
-  return mapGraphDiagnostics(diagnostics as Parameters<typeof mapGraphDiagnostics>[0], operation);
+  return mapCommitGraphDiagnostics(diagnostics as Parameters<typeof mapGraphDiagnostics>[0]);
+}
+
+function mapCommitGraphDiagnostics(
+  diagnostics: Parameters<typeof mapGraphDiagnostics>[0],
+): readonly VersionStoreDiagnostic[] {
+  return mapGraphDiagnostics(diagnostics, 'commitGraphWrite').map((diagnostic) =>
+    diagnostic.code === 'VERSION_MISSING_DEPENDENCY'
+      ? { ...diagnostic, recoverability: 'repair' as const }
+      : diagnostic,
+  );
 }
 
 function isRetryableGraphWriteFailure(

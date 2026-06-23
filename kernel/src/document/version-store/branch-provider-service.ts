@@ -3,6 +3,8 @@ import {
   type BranchServiceErrorCode,
   type CreateBranchInput,
   type CreateBranchResult,
+  type DeleteBranchInput,
+  type DeleteBranchResult,
   type FastForwardBranchInput,
   type FastForwardBranchResult,
   type GetBranchHeadResult,
@@ -20,6 +22,7 @@ type BranchProviderOperation =
   | 'readBranch'
   | 'listBranches'
   | 'fastForwardBranch'
+  | 'deleteBranch'
   | 'getHead';
 
 type OpenBranchServiceResult =
@@ -31,6 +34,10 @@ type OpenBranchServiceResult =
       readonly ok: false;
       readonly result: BranchFailureResult;
     };
+
+type DeleteCapableBranchGraphStore = {
+  readonly deleteBranch: (input: DeleteBranchInput) => Promise<DeleteBranchResult>;
+};
 
 export interface ProviderBackedBranchLifecycleServiceOptions {
   readonly provider: VersionStoreProvider;
@@ -65,6 +72,20 @@ export class ProviderBackedBranchLifecycleService {
     const opened = await this.openVisibleBranchService('fastForwardBranch', true);
     if (!opened.ok) return opened.result;
     return opened.service.fastForwardBranch(input);
+  }
+
+  async deleteBranch(input: DeleteBranchInput): Promise<DeleteBranchResult> {
+    const opened = await this.openVisibleBranchService('deleteBranch', true);
+    if (!opened.ok) return opened.result;
+    const service = toDeleteCapableBranchGraphStore(opened.service);
+    if (!service) {
+      return branchFailure(
+        'versionCapabilityDisabled',
+        'Version ref lifecycle delete is unavailable for this document.',
+        'deleteBranch',
+      ).result;
+    }
+    return service.deleteBranch(input);
   }
 
   async getHead(): Promise<GetBranchHeadResult> {
@@ -124,11 +145,21 @@ export function createProviderBackedBranchLifecycleService(
   return new ProviderBackedBranchLifecycleService(options);
 }
 
+function toDeleteCapableBranchGraphStore(
+  service: VersionGraphStore,
+): DeleteCapableBranchGraphStore | null {
+  const method = (service as Partial<DeleteCapableBranchGraphStore>).deleteBranch;
+  if (typeof method !== 'function') return null;
+  return {
+    deleteBranch: (input) => Reflect.apply(method, service, [input]) as Promise<DeleteBranchResult>,
+  };
+}
+
 function branchFailure(
   code: BranchServiceErrorCode,
   message: string,
   operation: BranchProviderOperation,
-): OpenBranchServiceResult {
+): Extract<OpenBranchServiceResult, { readonly ok: false }> {
   const diagnostics = [diagnostic(code, message, operation)];
   return {
     ok: false,

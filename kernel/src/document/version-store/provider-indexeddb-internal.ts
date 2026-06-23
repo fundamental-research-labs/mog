@@ -125,6 +125,7 @@ export type StoredIndexManifest = {
   readonly documentScopeKey: string;
   readonly namespace: VersionGraphNamespace;
   readonly refStoreNextGeneratedId: InMemoryRefStoreSnapshot['nextGeneratedId'];
+  readonly refStoreLiveRefCount?: number;
   readonly updatedAt: string;
 };
 
@@ -147,16 +148,18 @@ type StoredRefCasProofIntent = {
 };
 
 export class RefCasConflictError extends Error {
-  readonly expectedHead: WorkbookCommitId;
+  readonly expectedHead?: WorkbookCommitId;
   readonly expectedRefVersion: RefVersion;
-  readonly actualHead: WorkbookCommitId;
-  readonly actualRefVersion: RefVersion;
+  readonly actualHead?: WorkbookCommitId;
+  readonly actualRefVersion?: RefVersion;
+  readonly actualRefState: 'missing' | RefRecord['state'];
 
   constructor(input: {
-    readonly expectedHead: WorkbookCommitId;
+    readonly expectedHead?: WorkbookCommitId;
     readonly expectedRefVersion: RefVersion;
-    readonly actualHead: WorkbookCommitId;
-    readonly actualRefVersion: RefVersion;
+    readonly actualHead?: WorkbookCommitId;
+    readonly actualRefVersion?: RefVersion;
+    readonly actualRefState: 'missing' | RefRecord['state'];
   }) {
     super('IndexedDB version graph ref CAS conflict.');
     this.name = 'RefCasConflictError';
@@ -164,6 +167,7 @@ export class RefCasConflictError extends Error {
     this.expectedRefVersion = input.expectedRefVersion;
     this.actualHead = input.actualHead;
     this.actualRefVersion = input.actualRefVersion;
+    this.actualRefState = input.actualRefState;
   }
 }
 
@@ -178,17 +182,20 @@ export class RefAlreadyExistsError extends Error {
 }
 
 export class RefStoreManifestConflictError extends Error {
-  readonly expectedRefStoreNextGeneratedId: number;
-  readonly actualRefStoreNextGeneratedId: number | null;
+  readonly expectedRefStoreNextGeneratedId?: number;
+  readonly actualRefStoreNextGeneratedId?: number | null;
+  readonly expectedRefStoreLiveRefCount?: number;
+  readonly actualRefStoreLiveRefCount?: number | null;
 
   constructor(input: {
-    readonly expectedRefStoreNextGeneratedId: number;
-    readonly actualRefStoreNextGeneratedId: number | null;
+    readonly expectedRefStoreNextGeneratedId?: number;
+    readonly actualRefStoreNextGeneratedId?: number | null;
+    readonly expectedRefStoreLiveRefCount?: number;
+    readonly actualRefStoreLiveRefCount?: number | null;
   }) {
     super('IndexedDB version graph ref manifest CAS conflict.');
     this.name = 'RefStoreManifestConflictError';
-    this.expectedRefStoreNextGeneratedId = input.expectedRefStoreNextGeneratedId;
-    this.actualRefStoreNextGeneratedId = input.actualRefStoreNextGeneratedId;
+    Object.assign(this, input);
   }
 }
 
@@ -211,6 +218,13 @@ export async function persistGraphSnapshot(options: {
         readonly refCasProof?: {
           readonly applyKind: MergeApplyIntentApplyKind;
         };
+      }
+    | {
+        readonly kind: 'deleteBranch';
+        readonly targetRefName: string;
+        readonly expectedHeadCommitId?: WorkbookCommitId;
+        readonly expectedRefVersion: RefVersion;
+        readonly expectedRefStoreLiveRefCount: number;
       };
 }): Promise<void> {
   const namespace = normalizeVersionGraphNamespace(options.snapshot.namespace);
@@ -226,7 +240,7 @@ export async function persistGraphSnapshot(options: {
   });
   const tx = options.db.transaction(VERSION_STORE_INDEXEDDB_STORES, 'readwrite');
 
-  if (options.mode.kind === 'commit') {
+  if (options.mode.kind === 'commit' || options.mode.kind === 'deleteBranch') {
     const currentRef = await idbRequest<StoredRefRecord | undefined>(
       tx.objectStore(REFS_STORE).get(refKey(namespaceKey, options.mode.targetRefName)),
     );
@@ -234,17 +248,23 @@ export async function persistGraphSnapshot(options: {
     if (
       !actual ||
       actual.state !== 'live' ||
-      actual.targetCommitId !== options.mode.expectedHeadCommitId ||
+      (options.mode.expectedHeadCommitId !== undefined &&
+        actual.targetCommitId !== options.mode.expectedHeadCommitId) ||
       !refVersionsEqual(actual.refVersion, options.mode.expectedRefVersion)
     ) {
       tx.abort();
       throw new RefCasConflictError({
-        expectedHead: options.mode.expectedHeadCommitId,
+        ...(options.mode.expectedHeadCommitId === undefined
+          ? {}
+          : { expectedHead: options.mode.expectedHeadCommitId }),
         expectedRefVersion: options.mode.expectedRefVersion,
-        actualHead:
-          actual?.state === 'live' ? actual.targetCommitId : options.mode.expectedHeadCommitId,
-        actualRefVersion:
-          actual?.state === 'live' ? actual.refVersion : { kind: 'counter', value: '-1' },
+        ...(actual?.state === 'live'
+          ? { actualHead: actual.targetCommitId }
+          : actual?.state === 'tombstone'
+            ? { actualHead: actual.previousTargetCommitId }
+            : {}),
+        ...(actual?.refVersion === undefined ? {} : { actualRefVersion: actual.refVersion }),
+        actualRefState: actual?.state ?? 'missing',
       });
     }
   }
@@ -266,6 +286,30 @@ export async function persistGraphSnapshot(options: {
       throw new RefStoreManifestConflictError({
         expectedRefStoreNextGeneratedId: options.mode.expectedRefStoreNextGeneratedId,
         actualRefStoreNextGeneratedId: manifest?.refStoreNextGeneratedId ?? null,
+      });
+    }
+  }
+  if (options.mode.kind === 'deleteBranch') {
+    const manifest = await idbRequest<StoredIndexManifest | undefined>(
+      tx.objectStore(INDEX_MANIFESTS_STORE).get(namespaceKey),
+    );
+    const actualLiveRefCount =
+      manifest === undefined
+        ? null
+        : typeof manifest.refStoreLiveRefCount === 'number'
+          ? manifest.refStoreLiveRefCount
+          : (
+              await readAllByIndex<StoredRefRecord>(
+                tx.objectStore(REFS_STORE),
+                'namespaceKey',
+                namespaceKey,
+              )
+            ).filter((row) => row.record.state === 'live').length;
+    if (actualLiveRefCount !== options.mode.expectedRefStoreLiveRefCount) {
+      tx.abort();
+      throw new RefStoreManifestConflictError({
+        expectedRefStoreLiveRefCount: options.mode.expectedRefStoreLiveRefCount,
+        actualRefStoreLiveRefCount: actualLiveRefCount,
       });
     }
   }
@@ -334,7 +378,7 @@ function refWritePlanForMode(
     kind: 'selected',
     refNames: Object.freeze([mode.targetRefName]),
     writeSymbolicHead: mode.targetRefName === 'main',
-    writeManifest: mode.kind === 'createBranch',
+    writeManifest: mode.kind === 'createBranch' || mode.kind === 'deleteBranch',
   };
 }
 
@@ -435,6 +479,9 @@ function writeSnapshotStores(
         documentScopeKey: options.documentScopeKey,
         namespace: cloneJson(options.namespace),
         refStoreNextGeneratedId: options.snapshot.refStore.nextGeneratedId,
+        refStoreLiveRefCount:
+          options.snapshot.refStore.liveRefCount ??
+          options.snapshot.refStore.records.filter((record) => record.state === 'live').length,
         updatedAt: new Date().toISOString(),
       } satisfies StoredIndexManifest,
       options.namespaceKey,

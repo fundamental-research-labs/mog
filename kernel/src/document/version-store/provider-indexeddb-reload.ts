@@ -114,6 +114,9 @@ export async function loadGraphSnapshot(
     refStore: {
       records: refs.map((entry) => cloneJson(entry.record)),
       nextGeneratedId: manifest.refStoreNextGeneratedId,
+      liveRefCount:
+        manifest.refStoreLiveRefCount ??
+        refs.filter((entry) => entry.record.state === 'live').length,
     },
   });
 }
@@ -223,6 +226,7 @@ function validateStoredIndexManifest(
     'documentScopeKey',
     'namespace',
     'refStoreNextGeneratedId',
+    'refStoreLiveRefCount',
     'updatedAt',
   ]);
   const manifestNamespace = normalizeGraphNamespaceForLoad(row.namespace, context, 'namespace');
@@ -269,6 +273,18 @@ function validateStoredIndexManifest(
       path: 'updatedAt',
     });
   }
+  const refStoreLiveRefCount = row.refStoreLiveRefCount;
+  if (
+    refStoreLiveRefCount !== undefined &&
+    (typeof refStoreLiveRefCount !== 'number' ||
+      !Number.isSafeInteger(refStoreLiveRefCount) ||
+      refStoreLiveRefCount < 0)
+  ) {
+    throwLoadError('corrupt', 'IndexedDB graph snapshot manifest has an invalid live ref count.', {
+      ...rowLocation(context),
+      path: 'refStoreLiveRefCount',
+    });
+  }
 
   return {
     schemaVersion: 1,
@@ -276,6 +292,7 @@ function validateStoredIndexManifest(
     documentScopeKey: context.documentScopeKey,
     namespace: manifestNamespace,
     refStoreNextGeneratedId,
+    ...(refStoreLiveRefCount === undefined ? {} : { refStoreLiveRefCount }),
     updatedAt: row.updatedAt,
   };
 }

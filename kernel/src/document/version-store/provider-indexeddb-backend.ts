@@ -808,14 +808,15 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
           [
             graphDiagnostic('VERSION_REF_CONFLICT', 'Graph ref no longer matches expected head.', {
               refName: result.ref.name,
-              commitId: error.actualHead,
               operation,
               namespace: this.namespace,
+              ...(error.actualHead ? { commitId: error.actualHead } : {}),
               details: {
-                expectedHead: error.expectedHead,
-                actualHead: error.actualHead,
+                expectedHead: error.expectedHead ?? null,
+                actualHead: error.actualHead ?? null,
                 expectedRefVersion: error.expectedRefVersion.value,
-                actualRefVersion: error.actualRefVersion.value,
+                actualRefVersion: error.actualRefVersion?.value ?? null,
+                actualRefState: error.actualRefState,
               },
             }),
           ],
@@ -915,6 +916,9 @@ class IndexedDbVersionGraphStore implements VersionGraphStore {
   }
   async fastForwardBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['fastForwardBranch']>) {
     return this.branchLifecycle.fastForwardBranch(...args);
+  }
+  async deleteBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['deleteBranch']>) {
+    return this.branchLifecycle.deleteBranch(...args);
   }
   async getHead() {
     return this.branchLifecycle.getHead();

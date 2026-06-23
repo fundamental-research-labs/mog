@@ -2,6 +2,8 @@ import type {
   BranchFailureResult,
   CreateBranchInput,
   CreateBranchResult,
+  DeleteBranchInput,
+  DeleteBranchResult,
   FastForwardBranchInput,
   FastForwardBranchResult,
   GetBranchHeadResult,
@@ -11,12 +13,14 @@ import type {
   ReadBranchResult,
 } from './branch-service';
 import type { InMemoryVersionGraphStore } from './graph-store';
+import { createGraphBranchLifecycle } from './graph-store-branch-lifecycle';
 import { parseWorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import {
   RefAlreadyExistsError,
   RefCasConflictError,
   RefStoreManifestConflictError,
+  errorMessage,
   persistGraphSnapshot,
 } from './provider-indexeddb-internal';
 import { loadGraphSnapshot } from './provider-indexeddb-reload';
@@ -28,6 +32,7 @@ export interface IndexedDbGraphBranchLifecycle {
   readBranch(input: ReadBranchInput | string): Promise<ReadBranchResult>;
   listBranches(input?: ListBranchesInput): Promise<ListBranchesResult>;
   fastForwardBranch(input: FastForwardBranchInput): Promise<FastForwardBranchResult>;
+  deleteBranch(input: DeleteBranchInput): Promise<DeleteBranchResult>;
   getHead(): Promise<GetBranchHeadResult>;
 }
 
@@ -70,6 +75,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'createBranch',
         'IndexedDB graph could not be loaded while creating a branch.',
         error,
+        'no-write-attempted',
       );
     }
 
@@ -98,6 +104,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
             'createBranch',
             'IndexedDB branch create conflicted and the graph could not be reloaded.',
             error,
+            'no-write-attempted',
           );
         }
       }
@@ -108,6 +115,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'createBranch',
         'IndexedDB graph could not persist the branch create.',
         error,
+        'ref-not-mutated',
       );
     }
   }
@@ -120,6 +128,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'readBranch',
         'IndexedDB graph could not be loaded while reading a branch.',
         error,
+        'no-write-attempted',
       );
     }
   }
@@ -132,6 +141,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'listBranches',
         'IndexedDB graph could not be loaded while listing branches.',
         error,
+        'no-write-attempted',
       );
     }
   }
@@ -145,6 +155,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'fastForwardBranch',
         'IndexedDB graph could not be loaded while fast-forwarding a branch.',
         error,
+        'no-write-attempted',
       );
     }
 
@@ -175,6 +186,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
             'fastForwardBranch',
             'IndexedDB branch fast-forward conflicted and the graph could not be reloaded.',
             error,
+            'no-write-attempted',
           );
         }
       }
@@ -182,6 +194,74 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'fastForwardBranch',
         'IndexedDB graph could not persist the branch fast-forward.',
         error,
+        'ref-not-mutated',
+      );
+    }
+  }
+
+  async deleteBranch(input: DeleteBranchInput): Promise<DeleteBranchResult> {
+    return this.deleteBranchInternal(input, true);
+  }
+
+  private async deleteBranchInternal(
+    input: DeleteBranchInput,
+    retryManifestConflict: boolean,
+  ): Promise<DeleteBranchResult> {
+    let graph: InMemoryVersionGraphStore;
+    try {
+      graph = await this.loadGraph();
+    } catch (error) {
+      return branchLifecycleFailure(
+        'deleteBranch',
+        'IndexedDB graph could not be loaded while deleting a branch.',
+        error,
+        'no-write-attempted',
+      );
+    }
+
+    const expectedRefStoreLiveRefCount = graph.refStore.exportSnapshot().liveRefCount ?? 0;
+    const result = createGraphBranchLifecycle(graph.refStore).deleteBranch(input);
+    if (!result.ok) return result;
+
+    try {
+      await persistGraphSnapshot({
+        db: await this.getDb(),
+        snapshot: await graph.exportSnapshot(),
+        documentScope: this.documentScope,
+        mode: {
+          kind: 'deleteBranch',
+          targetRefName: result.branch.name,
+          ...(input.expectedHead === undefined
+            ? {}
+            : { expectedHeadCommitId: parseWorkbookCommitId(input.expectedHead as string) }),
+          expectedRefVersion: input.expectedRefVersion as NonNullable<
+            DeleteBranchInput['expectedRefVersion']
+          >,
+          expectedRefStoreLiveRefCount,
+        },
+      });
+      return result;
+    } catch (error) {
+      if (error instanceof RefCasConflictError) {
+        try {
+          return createGraphBranchLifecycle((await this.loadGraph()).refStore).deleteBranch(input);
+        } catch {
+          return branchLifecycleFailure(
+            'deleteBranch',
+            'IndexedDB branch delete conflicted and the graph could not be reloaded.',
+            error,
+            'no-write-attempted',
+          );
+        }
+      }
+      if (error instanceof RefStoreManifestConflictError && retryManifestConflict) {
+        return this.deleteBranchInternal(input, false);
+      }
+      return branchLifecycleFailure(
+        'deleteBranch',
+        'IndexedDB graph could not persist the branch delete.',
+        error,
+        'ref-not-mutated',
       );
     }
   }
@@ -194,6 +274,7 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
         'getHead',
         'IndexedDB graph could not be loaded while reading HEAD.',
         error,
+        'no-write-attempted',
       );
     }
   }
@@ -204,16 +285,28 @@ class IndexedDbGraphBranchLifecycleService implements IndexedDbGraphBranchLifecy
 }
 
 function branchLifecycleFailure(
-  operation: 'createBranch' | 'readBranch' | 'listBranches' | 'fastForwardBranch' | 'getHead',
+  operation:
+    | 'createBranch'
+    | 'readBranch'
+    | 'listBranches'
+    | 'fastForwardBranch'
+    | 'deleteBranch'
+    | 'getHead',
   message: string,
-  _error: unknown,
+  error: unknown,
+  mutationGuarantee: 'no-write-attempted' | 'ref-not-mutated',
 ): BranchFailureResult {
   const diagnostics: readonly VersionDiagnostic[] = Object.freeze([
     Object.freeze({
       code: 'versionCapabilityDisabled',
       severity: 'error',
       message,
-      details: Object.freeze({ operation }),
+      details: Object.freeze({
+        operation,
+        mutationGuarantee,
+        cause: errorMessage(error),
+        ...(error instanceof Error ? { errorName: error.name } : {}),
+      }),
     }),
   ]);
   return Object.freeze({

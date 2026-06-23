@@ -11,6 +11,8 @@ import {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
+  VERSION_DOMAIN_POLICY_CONTRACT_VERSION,
+  VERSION_DOMAIN_PUBLIC_DIAGNOSTIC_CODE_PATTERN,
 } from '../domain-policy-registry';
 
 const INTERNAL_ONLY_FIELDS = Object.freeze([
@@ -24,6 +26,10 @@ const INTERNAL_ONLY_FIELDS = Object.freeze([
   'acceptedRisk',
   'evidenceDigest',
 ] as const);
+
+const PUBLIC_SAFE_SINK_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
+const UNSAFE_PUBLIC_DIAGNOSTIC_PAYLOAD =
+  /ownerWorkstream|requiredOracles|requiredOracleByCapability|supportEvidenceByCapability|scenarioIds|reportPath|acceptedRisk|evidenceDigest|mog-internal|dev\/version-control-eval|plans\/|\/Users\/|xl\/|\.xml\b|https?:\/\/|password\s*=|token\s*=/i;
 
 describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
   it('exports a closed public-safe policy id set for the current matrix projection', () => {
@@ -51,6 +57,9 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       expect(Object.keys(row.capabilityStates).sort()).toEqual(
         [...VERSION_DOMAIN_CAPABILITY_KEYS].sort(),
       );
+      expect(row.policyContractVersion).toBe(VERSION_DOMAIN_POLICY_CONTRACT_VERSION);
+      expect(row.publicDiagnosticCodes ?? []).toBeDefined();
+      expect(row.surfaceRedactionPolicies ?? []).toBeDefined();
       expect(row.historyAccess.diagnosticProjection).toEqual(
         VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
       );
@@ -146,5 +155,126 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     expect(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS).toBe(false);
     expect(unsupportedRows.length).toBeGreaterThan(0);
     expect(unsupportedRows.length).toBeLessThanOrEqual(PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT);
+  });
+
+  it('publishes redaction-scoped diagnostics for every opaque public row', () => {
+    const diagnosticCodePattern = new RegExp(VERSION_DOMAIN_PUBLIC_DIAGNOSTIC_CODE_PATTERN);
+    const rows = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.filter((row) =>
+      Object.values(row.capabilityStates).some(
+        (state) => state === 'opaque-preserved' || state === 'opaque-blocking',
+      ),
+    );
+
+    expect(rows.map((row) => row.domainPolicyId).sort()).toEqual([
+      'cells.formats.catalogs',
+      'external-links',
+      'ooxml-sidecars',
+      'pivots',
+      'protection',
+    ]);
+
+    for (const row of rows) {
+      expect(row.publicDiagnosticCodes?.length).toBeGreaterThan(0);
+      expect(row.surfaceRedactionPolicies?.length).toBeGreaterThan(0);
+      for (const diagnosticCode of row.publicDiagnosticCodes ?? []) {
+        expect(diagnosticCode).toMatch(diagnosticCodePattern);
+      }
+      for (const policy of row.surfaceRedactionPolicies ?? []) {
+        expect(policy.sinks.length).toBeGreaterThan(0);
+        for (const sink of policy.sinks) {
+          expect(sink).toMatch(PUBLIC_SAFE_SINK_PATTERN);
+        }
+      }
+      expect(
+        JSON.stringify({
+          publicDiagnosticCodes: row.publicDiagnosticCodes,
+          surfaceRedactionPolicies: row.surfaceRedactionPolicies,
+        }),
+      ).not.toMatch(UNSAFE_PUBLIC_DIAGNOSTIC_PAYLOAD);
+    }
+  });
+
+  it('keeps concrete opaque diagnostic policies public-safe for pivots, charts, and external links', () => {
+    const rows = new Map(
+      PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.domainPolicyId, row]),
+    );
+
+    expect(rows.get('pivots')?.publicDiagnosticCodes).toEqual(
+      expect.arrayContaining([
+        'version.domain.pivots.opaque-preserved',
+        'version.domain.pivots.review-blocked',
+        'version.domain.pivots.merge-blocked',
+      ]),
+    );
+    expect(rows.get('pivots')?.surfaceRedactionPolicies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          surfaceKind: 'object-store',
+          sensitivity: 'opaque-payload',
+          requiredPolicy: 'opaque-digest-only',
+          sinks: ['version-object-store'],
+        }),
+        expect.objectContaining({
+          surfaceKind: 'merge',
+          sensitivity: 'opaque-payload',
+          requiredPolicy: 'metadata-only',
+          sinks: ['merge-preview'],
+        }),
+      ]),
+    );
+
+    expect(rows.get('charts.source-range')?.publicDiagnosticCodes).toEqual(
+      expect.arrayContaining([
+        'version.domain.charts.unsupported-sidecar-redacted',
+        'version.domain.charts.opaque-payload-blocked',
+      ]),
+    );
+    expect(rows.get('charts.source-range')?.surfaceRedactionPolicies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          surfaceKind: 'diagnostics',
+          sensitivity: 'opaque-payload',
+          requiredPolicy: 'metadata-only',
+          sinks: ['version-history', 'domain-support-manifest'],
+        }),
+        expect.objectContaining({
+          surfaceKind: 'export',
+          sensitivity: 'opaque-payload',
+          requiredPolicy: 'metadata-only',
+          sinks: ['xlsx-export-metadata'],
+        }),
+      ]),
+    );
+
+    expect(rows.get('external-links')?.publicDiagnosticCodes).toEqual(
+      expect.arrayContaining([
+        'version.domain.external-links.opaque-preserved',
+        'version.domain.external-links.review-blocked',
+        'version.domain.external-links.export-blocked',
+        'version.domain.external-links.redacted-target',
+      ]),
+    );
+    expect(rows.get('external-links')?.surfaceRedactionPolicies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          surfaceKind: 'diagnostics',
+          sensitivity: 'external-target',
+          requiredPolicy: 'content-redacted',
+          sinks: ['version-history', 'domain-support-manifest'],
+        }),
+        expect.objectContaining({
+          surfaceKind: 'object-store',
+          sensitivity: 'credential',
+          requiredPolicy: 'opaque-digest-only',
+          sinks: ['version-object-store'],
+        }),
+        expect.objectContaining({
+          surfaceKind: 'export',
+          sensitivity: 'external-target',
+          requiredPolicy: 'content-redacted',
+          sinks: ['xlsx-export-metadata'],
+        }),
+      ]),
+    );
   });
 });

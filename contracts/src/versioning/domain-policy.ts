@@ -12,6 +12,10 @@ export {
   VERSION_ROLLOUT_STAGES,
   VERSION_WRITE_ADMISSION_MODES,
 } from './index';
+export {
+  VERSION_DOMAIN_POLICY_SURFACE_KINDS,
+  VERSION_DOMAIN_POLICY_SURFACE_SENSITIVITIES,
+} from './domain-policy-types';
 
 export type {
   CapturePolicy,
@@ -45,3 +49,8 @@ export type {
   VersionRolloutStage,
   VersionWriteAdmissionMode,
 } from './index';
+export type {
+  VersionDomainPolicySurfaceKind,
+  VersionDomainPolicySurfaceRedactionPolicy,
+  VersionDomainPolicySurfaceSensitivity,
+} from './domain-policy-types';

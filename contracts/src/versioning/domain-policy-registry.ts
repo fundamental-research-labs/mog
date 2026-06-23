@@ -11,9 +11,12 @@ import type {
   VersionWriteAdmissionMode,
 } from './domain-policy';
 import { VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY } from './domain-policy';
+import type { VersionDomainPolicySurfaceRedactionPolicy } from './domain-policy-types';
 
 export const VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION = 'version-domain-policy-registry.v1';
 export const VERSION_DOMAIN_POLICY_ID_PATTERN = '^[a-z0-9]+(?:[.-][a-z0-9]+)*$';
+export const VERSION_DOMAIN_POLICY_CONTRACT_VERSION = 'version-domain-policy.v2';
+export const VERSION_DOMAIN_PUBLIC_DIAGNOSTIC_CODE_PATTERN = '^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$';
 
 const VERSION_DOMAIN_CAPABILITY_KEYS = Object.freeze([
   'capture',
@@ -92,9 +95,21 @@ type PolicyInput = {
   readonly capturePolicy: CapturePolicy;
   readonly capabilityStates: VersionDomainCapabilityStateMap;
   readonly redactionPolicy?: VersionRedactionPolicy;
+  readonly publicDiagnosticCodes?: readonly string[];
+  readonly surfaceRedactionPolicies?: readonly VersionDomainPolicySurfaceRedactionPolicy[];
 };
 
-function domainPolicy(input: PolicyInput): DomainCapabilityPolicyManifest {
+export type PublicDomainCapabilityPolicyManifest = DomainCapabilityPolicyManifest & {
+  readonly policyContractVersion: typeof VERSION_DOMAIN_POLICY_CONTRACT_VERSION;
+  readonly publicDiagnosticCodes: readonly string[];
+  readonly surfaceRedactionPolicies: readonly VersionDomainPolicySurfaceRedactionPolicy[];
+};
+
+type PublicVersionDomainPolicyRegistry = Omit<VersionDomainPolicyRegistry, 'domains'> & {
+  readonly domains: readonly PublicDomainCapabilityPolicyManifest[];
+};
+
+function domainPolicy(input: PolicyInput): PublicDomainCapabilityPolicyManifest {
   const redactionPolicy = input.redactionPolicy ?? redactionPolicyFor(input.domainClass);
   const writeAdmissionMode = writeAdmissionFor(input.capturePolicy);
   return Object.freeze({
@@ -108,6 +123,37 @@ function domainPolicy(input: PolicyInput): DomainCapabilityPolicyManifest {
     rolloutStage: rolloutStageFor(input.capturePolicy),
     historyAccess: historyAccessFor(input.capturePolicy, redactionPolicy),
     redactionPolicy,
+    policyContractVersion: VERSION_DOMAIN_POLICY_CONTRACT_VERSION,
+    publicDiagnosticCodes: freezePublicDiagnosticCodes(input.publicDiagnosticCodes),
+    surfaceRedactionPolicies: freezeSurfaceRedactionPolicies(input.surfaceRedactionPolicies),
+  });
+}
+
+function freezePublicDiagnosticCodes(input: readonly string[] | undefined): readonly string[] {
+  return Object.freeze([...(input ?? [])]);
+}
+
+function freezeSurfaceRedactionPolicies(
+  input: readonly VersionDomainPolicySurfaceRedactionPolicy[] | undefined,
+): readonly VersionDomainPolicySurfaceRedactionPolicy[] {
+  return Object.freeze(
+    (input ?? []).map((policy) =>
+      Object.freeze({
+        surfaceKind: policy.surfaceKind,
+        sensitivity: policy.sensitivity,
+        requiredPolicy: policy.requiredPolicy,
+        sinks: Object.freeze([...policy.sinks]),
+      }),
+    ),
+  );
+}
+
+function surfaceRedactionPolicy(
+  input: VersionDomainPolicySurfaceRedactionPolicy,
+): VersionDomainPolicySurfaceRedactionPolicy {
+  return Object.freeze({
+    ...input,
+    sinks: Object.freeze([...input.sinks]),
   });
 }
 
@@ -182,6 +228,208 @@ function redactionPolicyFor(domainClass: VersionDomainClass): VersionRedactionPo
       return 'none';
   }
 }
+
+const PIVOT_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.pivots.opaque-preserved',
+  'version.domain.pivots.review-blocked',
+  'version.domain.pivots.merge-blocked',
+] as const);
+const PIVOT_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'merge',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'object-store',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'opaque-digest-only',
+    sinks: ['version-object-store'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
+
+const STYLE_CATALOG_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.cells.formats.catalogs.blocked',
+  'version.domain.cells.formats.catalogs.redacted',
+] as const);
+const STYLE_CATALOG_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'merge',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
+
+const CHART_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.charts.unsupported-sidecar-redacted',
+  'version.domain.charts.opaque-payload-blocked',
+] as const);
+const CHART_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
+
+const PROTECTION_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.protection.blocked',
+  'version.domain.protection.redacted',
+] as const);
+const PROTECTION_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'secret',
+    requiredPolicy: 'content-redacted',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'secret',
+    requiredPolicy: 'content-redacted',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'merge',
+    sensitivity: 'secret',
+    requiredPolicy: 'content-redacted',
+    sinks: ['merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'secret',
+    requiredPolicy: 'content-redacted',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
+
+const EXTERNAL_LINK_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.external-links.opaque-preserved',
+  'version.domain.external-links.review-blocked',
+  'version.domain.external-links.export-blocked',
+  'version.domain.external-links.redacted-target',
+] as const);
+const EXTERNAL_LINK_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'external-target',
+    requiredPolicy: 'content-redacted',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'external-target',
+    requiredPolicy: 'content-redacted',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'merge',
+    sensitivity: 'external-target',
+    requiredPolicy: 'content-redacted',
+    sinks: ['merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'object-store',
+    sensitivity: 'credential',
+    requiredPolicy: 'opaque-digest-only',
+    sinks: ['version-object-store'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'external-target',
+    requiredPolicy: 'content-redacted',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
+
+const OOXML_SIDECAR_PUBLIC_DIAGNOSTIC_CODES = Object.freeze([
+  'version.domain.ooxml-sidecars.opaque-preserved',
+  'version.domain.ooxml-sidecars.active-content-blocked',
+  'version.domain.ooxml-sidecars.owner-conflict',
+] as const);
+const OOXML_SIDECAR_SURFACE_REDACTION_POLICIES = Object.freeze([
+  surfaceRedactionPolicy({
+    surfaceKind: 'diagnostics',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-history', 'domain-support-manifest'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'review',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['version-review', 'merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'merge',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['merge-preview'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'object-store',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'opaque-digest-only',
+    sinks: ['version-object-store'],
+  }),
+  surfaceRedactionPolicy({
+    surfaceKind: 'export',
+    sensitivity: 'opaque-payload',
+    requiredPolicy: 'metadata-only',
+    sinks: ['xlsx-export-metadata'],
+  }),
+] as const);
 
 const DOMAINS = Object.freeze([
   domainPolicy({
@@ -351,6 +599,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'packageFidelity',
     capturePolicy: 'commitEligible',
     capabilityStates: OPAQUE_BLOCKING,
+    publicDiagnosticCodes: STYLE_CATALOG_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: STYLE_CATALOG_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'rows-columns',
@@ -379,6 +629,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'packageFidelity',
     capturePolicy: 'commitEligible',
     capabilityStates: OPAQUE_PRESERVED_PACKAGE,
+    publicDiagnosticCodes: PIVOT_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: PIVOT_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'charts.source-range',
@@ -386,6 +638,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
     capabilityStates: CONTRACTED,
+    publicDiagnosticCodes: CHART_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: CHART_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'floating-objects.anchors',
@@ -435,6 +689,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'secret',
     capturePolicy: 'commitEligible',
     capabilityStates: OPAQUE_BLOCKING,
+    publicDiagnosticCodes: PROTECTION_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: PROTECTION_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'external-links',
@@ -442,6 +698,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'external',
     capturePolicy: 'commitEligible',
     capabilityStates: OPAQUE_PRESERVED_EXTERNAL,
+    publicDiagnosticCodes: EXTERNAL_LINK_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: EXTERNAL_LINK_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'ooxml-sidecars',
@@ -449,6 +707,8 @@ const DOMAINS = Object.freeze([
     domainClass: 'packageFidelity',
     capturePolicy: 'commitEligible',
     capabilityStates: OPAQUE_PRESERVED_PACKAGE,
+    publicDiagnosticCodes: OOXML_SIDECAR_PUBLIC_DIAGNOSTIC_CODES,
+    surfaceRedactionPolicies: OOXML_SIDECAR_SURFACE_REDACTION_POLICIES,
   }),
   domainPolicy({
     matrixRowId: 'view-state.selection-scroll',
@@ -517,7 +777,7 @@ export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY = Object.freeze({
     allowDetachedRoots: false,
     gapPolicy: 'reject',
   }),
-} satisfies VersionDomainPolicyRegistry);
+} satisfies PublicVersionDomainPolicyRegistry);
 
 export const PUBLIC_VERSION_DOMAIN_POLICY_IDS = Object.freeze(
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.domainPolicyId),

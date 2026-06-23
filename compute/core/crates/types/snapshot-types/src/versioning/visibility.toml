@@ -4,6 +4,7 @@
 public_api = [
   "CapturePolicyWire",
   "ObjectDigest",
+  "OpaqueDomainAttachmentWire",
   "VersionActorKindWire",
   "VersionAuthorWire",
   "VersionCaptureDiagnosticsSinkRecordKindWire",
@@ -13,6 +14,8 @@ public_api = [
   "VersionDiagnosticSeverityWire",
   "VersionDomainCapabilityState",
   "VersionDomainClass",
+  "VersionMetadataDiagnosticWire",
+  "VersionMutationSegmentWire",
   "VersionObjectDigestAlgorithm",
   "VersionOperationContextWire",
   "VersionOperationKindWire",
@@ -55,4 +58,7 @@ kernel_bridge = [
   "SyncProvenanceApplyReport",
 ]
 
-rust_only = []
+rust_only = [
+  "VersionRuntimeOperationActorSummaryWire",
+  "VersionRuntimeOperationContextWire",
+]

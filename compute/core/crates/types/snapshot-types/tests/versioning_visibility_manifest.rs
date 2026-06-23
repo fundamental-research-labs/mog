@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::path::Path;
 
 use serde::Deserialize;
 use syn::{
@@ -7,7 +8,7 @@ use syn::{
 };
 
 const MANIFEST: &str = include_str!("../src/versioning/visibility.toml");
-const VERSIONING_MOD: &str = include_str!("../src/versioning/mod.rs");
+const VERSIONING_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/versioning");
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -247,15 +248,44 @@ fn visibility_by_type(manifest: &VisibilityManifest) -> BTreeMap<String, &'stati
 }
 
 fn versioning_inventory() -> VersioningInventory {
-    inventory_from_source(VERSIONING_MOD)
+    inventory_from_dir(Path::new(VERSIONING_DIR))
+}
+
+fn inventory_from_dir(versioning_dir: &Path) -> VersioningInventory {
+    let mut all_dependencies = BTreeMap::new();
+    let mut entries = std::fs::read_dir(versioning_dir)
+        .expect("versioning dir is readable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("versioning dir entries are readable");
+    entries.sort_by_key(|entry| entry.path());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+            continue;
+        }
+
+        let source = std::fs::read_to_string(&path).expect("versioning source is readable");
+        scan_source(&source, &mut all_dependencies);
+    }
+
+    inventory_from_dependencies(all_dependencies)
 }
 
 fn inventory_from_source(source: &str) -> VersioningInventory {
-    let file = syn::parse_file(source).expect("versioning module parses");
     let mut all_dependencies = BTreeMap::new();
+    scan_source(source, &mut all_dependencies);
+    inventory_from_dependencies(all_dependencies)
+}
 
-    scan_items(&file.items, &mut all_dependencies);
+fn scan_source(source: &str, all_dependencies: &mut BTreeMap<String, BTreeSet<String>>) {
+    let file = syn::parse_file(source).expect("versioning module parses");
+    scan_items(&file.items, all_dependencies);
+}
 
+fn inventory_from_dependencies(
+    all_dependencies: BTreeMap<String, BTreeSet<String>>,
+) -> VersioningInventory {
     let types = all_dependencies.keys().cloned().collect();
     let dependencies = all_dependencies
         .iter()

@@ -909,6 +909,8 @@ export interface VersionReviewRecord {
   readonly diagnostics?: readonly VersionMetadataDiagnostic[];
 }
 
+export * from './emergency-disable-policy';
+export * from './release-artifact-manifest';
 export * from './xlsx-interop';
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
 export {

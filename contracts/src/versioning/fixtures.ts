@@ -2,12 +2,21 @@ import type {
   ControlPlaneCompareAndSwapRequest,
   ControlPlaneDryRunRequest,
 } from '../control-plane';
+import {
+  EMERGENCY_DISABLE_AUDIT_RECORD_FIELDS,
+  EMERGENCY_DISABLE_POLICY_SCHEMA_VERSION,
+} from './emergency-disable-policy';
+import { RELEASE_ARTIFACT_MANIFEST_SCHEMA_VERSION } from './release-artifact-manifest';
 import { MOG_WORKBOOK_VERSION_XLSX_METADATA_PART } from './xlsx-interop';
 import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
   DomainPresenceDetector,
+  EmergencyDisablePolicy,
+  EmergencyDisablePolicySchemaVersion,
   ObjectDigest,
+  ReleaseArtifactManifest,
+  ReleaseArtifactManifestSchemaVersion,
   VersionAgentProposalAcceptResult,
   VersionAgentProposalEvent,
   VersionAgentProposalId,
@@ -144,6 +153,12 @@ type _ExactAgentProposalStatusSet = Assert<
 >;
 type _ExactMergePreviewRecordStatusSet = Assert<
   IsEqual<VersionMergePreviewRecordStatus, ExpectedMergePreviewRecordStatus>
+>;
+type _EmergencyDisablePolicySchemaVersionField = Assert<
+  IsEqual<EmergencyDisablePolicy['schemaVersion'], EmergencyDisablePolicySchemaVersion>
+>;
+type _ReleaseArtifactManifestSchemaVersionField = Assert<
+  IsEqual<ReleaseArtifactManifest['schemaVersion'], ReleaseArtifactManifestSchemaVersion>
 >;
 type _CapabilityStatesFieldUsesCapabilityMap = Assert<
   IsEqual<DomainCapabilityPolicyManifest['capabilityStates'], VersionDomainCapabilityStateMap>
@@ -399,6 +414,181 @@ const mergePreviewRecord: VersionMergePreviewRecord = Object.freeze({
   diagnostics: Object.freeze([metadataDiagnostic]),
 });
 
+const vc11ReleaseArtifactDigest: ObjectDigest = Object.freeze({
+  algorithm: 'sha256',
+  value: 'sha256:vc11-public-release-artifact-fixture',
+});
+
+const releaseArtifactManifest: ReleaseArtifactManifest = Object.freeze({
+  schemaVersion: RELEASE_ARTIFACT_MANIFEST_SCHEMA_VERSION,
+  manifestId: 'release-artifact-manifest:vc11-public-fixture',
+  releaseId: 'vc11-default-on-public-fixture',
+  createdAt: pendingRemotePromotionResult.promotedAt,
+  manifestBodyDigest: digest,
+  releaseArtifactDigest: vc11ReleaseArtifactDigest,
+  sourceRepoShas: Object.freeze({
+    mog: 'f'.repeat(40),
+  }),
+  buildEnvironmentDigest: digest,
+  artifacts: Object.freeze([
+    Object.freeze({
+      artifactId: 'mog-web-default-on-2026-06-22',
+      kind: 'web-bundle',
+      digest: vc11ReleaseArtifactDigest,
+      packageName: '@mog-sdk/spreadsheet-app',
+      packageVersion: '0.10.0',
+      fileName: 'mog-web-default-on.tgz',
+      mediaType: 'application/gzip',
+    }),
+  ]),
+  packageVersions: Object.freeze({
+    '@mog-sdk/contracts': '0.10.0',
+    '@mog-sdk/spreadsheet-app': '0.10.0',
+  }),
+  deployments: Object.freeze([
+    Object.freeze({
+      deployOrChannelId: 'public-web-default-on',
+      kind: 'channel',
+      artifactIds: Object.freeze(['mog-web-default-on-2026-06-22']),
+      runtimeRange: Object.freeze({
+        runtimeKind: 'browser',
+        channelId: 'public-web-default-on',
+        minClientVersion: '0.10.0',
+      }),
+      digest: vc11ReleaseArtifactDigest,
+    }),
+  ]),
+  testedClientRuntimeRange: '>=0.10.0 <0.11.0',
+  capabilityGateTargetRuntimeRange: '>=0.10.0 <0.11.0',
+  capabilityGateTargets: Object.freeze([
+    Object.freeze({
+      gateId: 'versioning.default-on.public-web',
+      targetStage: 'default-on',
+      scope: Object.freeze({
+        featureId: 'versioning',
+        channelIds: Object.freeze(['public-web-default-on']),
+      }),
+      runtimeRange: Object.freeze({
+        runtimeKind: 'browser',
+        channelId: 'public-web-default-on',
+        minClientVersion: '0.10.0',
+      }),
+      releaseArtifactDigest: vc11ReleaseArtifactDigest,
+    }),
+  ]),
+  provenanceAttestationDigest: digest,
+  rollback: Object.freeze({
+    strategy: 'disable-gate',
+    targetDeployOrChannelId: 'public-web-collab-interop-beta',
+    targetDigest: digest,
+    preserveOrBlockNewerObjects: true,
+  }),
+  retention: Object.freeze({
+    retentionClass: 'release',
+    quarantineBehavior: 'disable-channel',
+  }),
+  diagnostics: Object.freeze([metadataDiagnostic]),
+});
+
+const emergencyDisablePolicy: EmergencyDisablePolicy = Object.freeze({
+  schemaVersion: EMERGENCY_DISABLE_POLICY_SCHEMA_VERSION,
+  policyId: 'emergency-disable-policy:vc11-public-fixture',
+  policyDigest: digest,
+  createdAt: pendingRemotePromotionResult.promotedAt,
+  appliesTo: Object.freeze({
+    featureId: 'versioning',
+    channelIds: Object.freeze(['public-web-default-on']),
+    domainIds: Object.freeze(['workbook-metadata', 'cells.values', 'cells.formulas']),
+  }),
+  rolloutStages: Object.freeze(['ui-beta', 'collab-interop-beta', 'default-on'] as const),
+  authority: Object.freeze({
+    authorities: Object.freeze([
+      Object.freeze({
+        authorityId: 'vc-release-oncall',
+        kind: 'release-operator',
+        displayName: 'Version release on-call',
+      }),
+      Object.freeze({
+        authorityId: 'vc-security-oncall',
+        kind: 'security',
+        displayName: 'Version security on-call',
+      }),
+    ]),
+    requiredApprovalCount: 2,
+    minimumDistinctAuthorityKinds: 2,
+    allowedIncidentCategories: Object.freeze([
+      'security',
+      'privacy',
+      'integrity',
+      'availability',
+      'release',
+    ] as const),
+    authorizedScopes: Object.freeze([
+      Object.freeze({
+        featureId: 'versioning',
+      }),
+    ]),
+  }),
+  signature: Object.freeze({
+    acceptedPublicKeyIds: Object.freeze(['emergency-disable-public-key:vc11-public-fixture']),
+    signatureAlgorithm: 'ed25519',
+    keyCustodyDigest: digest,
+  }),
+  distribution: Object.freeze({
+    channels: Object.freeze([
+      Object.freeze({
+        channelId: 'break-glass.versioning.public',
+        kind: 'offline-signed-material',
+        independentOfNormalConfig: true,
+        scope: Object.freeze({
+          featureId: 'versioning',
+        }),
+      }),
+    ]),
+    maxPropagationMinutes: 15,
+    configRefreshIntervalMinutes: 15,
+  }),
+  replayProtection: Object.freeze({
+    monotonicIncidentIdRequired: true,
+    expiryRequired: true,
+    nonceRequired: true,
+    maxSignalAgeMinutes: 15,
+    clockSkewAllowanceMinutes: 2,
+  }),
+  offlineBehavior: Object.freeze({
+    versionApis: 'fail-closed',
+    metadataImportExport: 'fail-closed',
+    staleGateCache: 'override-with-break-glass',
+  }),
+  inFlight: Object.freeze({
+    defaultTransition: 'record-history-gap',
+    allowedTransitions: Object.freeze([
+      'finalize-if-committed',
+      'abort-before-mutation',
+      'record-history-gap',
+      'quarantine-provider-update',
+      'create-reconcile-root',
+    ] as const),
+  }),
+  audit: Object.freeze({
+    recordKind: 'version-emergency-disable',
+    requiredFields: EMERGENCY_DISABLE_AUDIT_RECORD_FIELDS,
+    redactionPolicy: 'metadata-only',
+  }),
+  drill: Object.freeze({
+    requiredCadenceDays: 30,
+    maxObservedPropagationMinutes: 15,
+    requiredChecks: Object.freeze([
+      'enabled-clients-observe-disable',
+      'stale-gate-cache-overridden',
+      'normal-config-channel-impaired',
+      'offline-version-apis-fail-closed',
+      'in-flight-transition-reconciled',
+    ] as const),
+  }),
+  diagnostics: Object.freeze([metadataDiagnostic]),
+});
+
 const xlsxSemanticChangeSetDigest: MogWorkbookVersionXlsxObjectDigest = Object.freeze({
   algorithm: 'sha256',
   digest: '1'.repeat(64),
@@ -480,6 +670,8 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   agentProposalAcceptedEvent,
   appendAgentProposalEventInput,
   mergePreviewRecord,
+  releaseArtifactManifest,
+  emergencyDisablePolicy,
   xlsxMetadata,
   xlsxTrustResult,
   xlsxImportRootProvenance,

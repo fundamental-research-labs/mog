@@ -115,6 +115,7 @@ import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
   DomainMutationReceipt,
+  EmergencyDisablePolicy,
   ObjectDigest,
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS as ContractsVersioningDomainExportRequiredMatrixRowIds,
   PUBLIC_VERSION_DOMAIN_POLICY_IDS as ContractsVersioningDomainPolicyIds,
@@ -122,6 +123,7 @@ import type {
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsAllRows,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsRequiredRows,
   PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT as ContractsVersioningDomainPolicyRowCount,
+  ReleaseArtifactManifest,
   VersionAgentProposalAcceptResolutionPolicy,
   VersionAgentProposalAcceptResult as VersioningAgentProposalAcceptResult,
   VersionAgentProposalEvent,
@@ -510,6 +512,8 @@ type PublicVersioningMetadataSurface = {
   readonly appendAgentProposalEventInput: VersionAppendAgentProposalEventInput;
   readonly mergePreviewRecordStatus: VersionMergePreviewRecordStatus;
   readonly mergePreviewRecord: VersionMergePreviewRecord;
+  readonly releaseArtifactManifest: ReleaseArtifactManifest;
+  readonly emergencyDisablePolicy: EmergencyDisablePolicy;
   readonly xlsxMetadataSchemaVersion: MogWorkbookVersionXlsxMetadataSchemaVersion;
   readonly xlsxMetadataPart: MogWorkbookVersionXlsxMetadataPart;
   readonly xlsxCommitId: MogWorkbookVersionXlsxCommitId;
@@ -583,6 +587,152 @@ const publicDomainPolicyExportSurface: PublicVersioningDomainPolicySurface = Obj
 const digest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
   value: 'sha256:vc03-05-public-export-surface',
+});
+const releaseArtifactManifest: ReleaseArtifactManifest = Object.freeze({
+  schemaVersion: 'mog.versioning.releaseArtifactManifest.v1',
+  manifestId: 'release-artifact-manifest:public-export-fixture',
+  releaseId: 'vc11-public-export-fixture',
+  createdAt: '2026-06-22T00:00:00.000Z',
+  manifestBodyDigest: digest,
+  releaseArtifactDigest: digest,
+  sourceRepoShas: Object.freeze({
+    mog: 'e'.repeat(40),
+  }),
+  buildEnvironmentDigest: digest,
+  artifacts: Object.freeze([
+    Object.freeze({
+      artifactId: 'mog-sdk-contracts-vc11-public-export',
+      kind: 'npm-package',
+      digest,
+      packageName: '@mog-sdk/contracts',
+      packageVersion: '0.10.0',
+    }),
+  ]),
+  packageVersions: Object.freeze({
+    '@mog-sdk/contracts': '0.10.0',
+  }),
+  deployments: Object.freeze([
+    Object.freeze({
+      deployOrChannelId: 'sdk-release-candidate',
+      kind: 'registry',
+      artifactIds: Object.freeze(['mog-sdk-contracts-vc11-public-export']),
+      runtimeRange: Object.freeze({
+        runtimeKind: 'node',
+        packageName: '@mog-sdk/contracts',
+        packageVersion: '0.10.0',
+      }),
+      digest,
+    }),
+  ]),
+  testedClientRuntimeRange: '>=0.10.0 <0.11.0',
+  capabilityGateTargetRuntimeRange: '>=0.10.0 <0.11.0',
+  capabilityGateTargets: Object.freeze([
+    Object.freeze({
+      gateId: 'versioning.public-export-fixture',
+      targetStage: 'shadow-only',
+      scope: Object.freeze({
+        featureId: 'versioning',
+        artifactIds: Object.freeze(['mog-sdk-contracts-vc11-public-export']),
+      }),
+      releaseArtifactDigest: digest,
+    }),
+  ]),
+  provenanceAttestationDigest: digest,
+  rollback: Object.freeze({
+    strategy: 'disable-gate',
+    targetArtifactId: 'mog-sdk-contracts-vc11-previous',
+    targetDigest: digest,
+    preserveOrBlockNewerObjects: true,
+  }),
+  retention: Object.freeze({
+    retentionClass: 'candidate',
+    quarantineBehavior: 'block-promotion',
+  }),
+});
+const emergencyDisablePolicy: EmergencyDisablePolicy = Object.freeze({
+  schemaVersion: 'mog.versioning.emergencyDisablePolicy.v1',
+  policyId: 'emergency-disable-policy:public-export-fixture',
+  policyDigest: digest,
+  createdAt: releaseArtifactManifest.createdAt,
+  appliesTo: Object.freeze({
+    featureId: 'versioning',
+    artifactIds: Object.freeze(['mog-sdk-contracts-vc11-public-export']),
+  }),
+  rolloutStages: Object.freeze(['shadow-only', 'headless-local', 'ui-beta'] as const),
+  authority: Object.freeze({
+    authorities: Object.freeze([
+      Object.freeze({
+        authorityId: 'vc11-release-owner',
+        kind: 'release-operator',
+      }),
+      Object.freeze({
+        authorityId: 'vc11-security-owner',
+        kind: 'security',
+      }),
+    ]),
+    requiredApprovalCount: 2,
+    minimumDistinctAuthorityKinds: 2,
+    allowedIncidentCategories: Object.freeze([
+      'security',
+      'privacy',
+      'integrity',
+      'release',
+    ] as const),
+  }),
+  signature: Object.freeze({
+    acceptedPublicKeyIds: Object.freeze(['emergency-disable-public-key:public-export-fixture']),
+    signatureAlgorithm: 'ed25519',
+    keyCustodyDigest: digest,
+  }),
+  distribution: Object.freeze({
+    channels: Object.freeze([
+      Object.freeze({
+        channelId: 'break-glass.public-export-fixture',
+        kind: 'offline-signed-material',
+        independentOfNormalConfig: true,
+      }),
+    ]),
+    maxPropagationMinutes: 15,
+    configRefreshIntervalMinutes: 15,
+  }),
+  replayProtection: Object.freeze({
+    monotonicIncidentIdRequired: true,
+    expiryRequired: true,
+    nonceRequired: true,
+    maxSignalAgeMinutes: 15,
+  }),
+  offlineBehavior: Object.freeze({
+    versionApis: 'fail-closed',
+    metadataImportExport: 'fail-closed',
+    staleGateCache: 'override-with-break-glass',
+  }),
+  inFlight: Object.freeze({
+    defaultTransition: 'abort-before-mutation',
+    allowedTransitions: Object.freeze(['abort-before-mutation', 'record-history-gap'] as const),
+  }),
+  audit: Object.freeze({
+    recordKind: 'version-emergency-disable',
+    requiredFields: Object.freeze([
+      'recordKind',
+      'incidentId',
+      'policyId',
+      'scopeDigest',
+      'createdAt',
+      'signerKeyIds',
+      'signalDigest',
+      'reconciliationStatus',
+    ] as const),
+    redactionPolicy: 'metadata-only',
+  }),
+  drill: Object.freeze({
+    requiredCadenceDays: 30,
+    maxObservedPropagationMinutes: 15,
+    requiredChecks: Object.freeze([
+      'enabled-clients-observe-disable',
+      'stale-gate-cache-overridden',
+      'offline-version-apis-fail-closed',
+    ] as const),
+  }),
 });
 const author: VersionAuthor = Object.freeze({
   authorId: 'vc03-05-export-surface-fixture',
@@ -742,6 +892,8 @@ export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   persistedCommit,
   shadowObservation,
   shadowObservationSink,
+  releaseArtifactManifest,
+  emergencyDisablePolicy,
 });
 
 export type {

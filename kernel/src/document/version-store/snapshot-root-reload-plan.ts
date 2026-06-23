@@ -461,7 +461,7 @@ async function validateSemanticIdentityProof<TMaterialized>(
 function invariantFailure<TMaterialized>(
   diagnostics: readonly SnapshotRootReloadDiagnostic[],
   decodedByteLength: number,
-): SnapshotRootReloadResult<TMaterialized> {
+): Extract<SnapshotRootReloadResult<TMaterialized>, { readonly ok: false }> {
   const firstCode = diagnostics[0]?.code;
   if (firstCode === 'VERSION_SNAPSHOT_ROOT_RELOAD_WRONG_NAMESPACE') {
     return failure(

@@ -28,6 +28,43 @@ export type SpreadsheetAttachmentCommandResult =
   | { readonly status: 'denied'; readonly reason: string }
   | { readonly status: 'not-handled' };
 
+export type SpreadsheetRuntimeDocumentVersioningDiagnostic = {
+  readonly code: string;
+  readonly severity: 'info' | 'warning' | 'error' | 'fatal';
+  readonly message: string;
+  readonly details?: Readonly<Record<string, string | number | boolean | null>>;
+};
+
+export type SpreadsheetRuntimeDocumentVersioningProviderSelection = {
+  readonly kind: 'indexeddb';
+  readonly requireDurablePersistence: true;
+};
+
+export type SpreadsheetRuntimeDocumentVersioningReadiness =
+  | {
+      readonly status: 'selected' | 'ready';
+      readonly providerSelection: SpreadsheetRuntimeDocumentVersioningProviderSelection;
+      readonly diagnostics: readonly SpreadsheetRuntimeDocumentVersioningDiagnostic[];
+      readonly statusRevision?: string;
+    }
+  | {
+      readonly status: 'skipped';
+      readonly providerSelection: null;
+      readonly reason: 'local-persistence-skipped';
+      readonly diagnostics: readonly SpreadsheetRuntimeDocumentVersioningDiagnostic[];
+      readonly statusRevision?: string;
+    }
+  | {
+      readonly status: 'failed';
+      readonly providerSelection: SpreadsheetRuntimeDocumentVersioningProviderSelection | null;
+      readonly diagnostics: readonly SpreadsheetRuntimeDocumentVersioningDiagnostic[];
+      readonly error: {
+        readonly message: string;
+        readonly name?: string;
+      };
+      readonly statusRevision?: string;
+    };
+
 export interface SpreadsheetAttachmentHostCommands {
   getOwner(command: SpreadsheetCommandRequest['command']): HostCommandOwner;
   request(
@@ -40,6 +77,7 @@ export interface SpreadsheetRuntimeAttachmentEnvironment {
   readonly workbookId: string;
   readonly workbook: SpreadsheetWorkbookSession;
   readonly documentId: string;
+  readonly documentVersioning: SpreadsheetRuntimeDocumentVersioningReadiness;
   readonly shell: ShellBootstrapResult;
   readonly appKernel: IAppKernelAPI;
   readonly capabilityRegistry: SpreadsheetAppCapabilityRegistry;

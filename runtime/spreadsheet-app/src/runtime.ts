@@ -17,6 +17,7 @@ import {
   SPREADSHEET_RUNTIME_ATTACHMENT_CONTROLLER,
   type SpreadsheetAttachmentCommandRequest,
   type SpreadsheetAttachmentCommandResult,
+  type SpreadsheetRuntimeDocumentVersioningReadiness,
   type SpreadsheetRuntimeAttachmentController,
   type SpreadsheetRuntimeAttachmentEnvironment,
   type SpreadsheetRuntimeAttachRequest,
@@ -54,7 +55,10 @@ import type {
   SpreadsheetWorkbookSession,
   SpreadsheetWorkbookStatus,
 } from './public-types';
-import { loadDocumentForSource } from './shell-documents';
+import {
+  loadDocumentForSource,
+  materializeSpreadsheetWorkbook,
+} from './shell-documents';
 import type {
   RegisteredSpreadsheetAppBridge,
   SpreadsheetAppDocumentHandle,
@@ -84,6 +88,7 @@ type ShellRuntimeAssetConfig = ShellBootstrapConfig & {
 type RuntimeWorkbookRecord = WorkbookRecord & {
   readonly appKernel: IAppKernelAPI;
   readonly displayName: string;
+  readonly documentVersioning: SpreadsheetRuntimeDocumentVersioningReadiness;
   attachmentState: SpreadsheetAttachmentState;
   readonly attachmentListeners: Set<(state: SpreadsheetAttachmentState) => void>;
 };
@@ -535,6 +540,7 @@ class SpreadsheetRuntimeController
       workbookId: record.workbookId,
       workbook: request.workbook,
       documentId: record.documentId,
+      documentVersioning: record.documentVersioning,
       shell: this.shell,
       appKernel: record.appKernel,
       capabilityRegistry: this.capabilityRegistry,
@@ -950,7 +956,7 @@ class SpreadsheetRuntimeController
     const source = cloneOpenSource(input.source);
     const skipLocalPersistence = this.options.host?.persistenceMode === 'host-owned-ephemeral';
     const documentId = workbookSessionId;
-    const handle = await loadDocumentForSource(this.shell, documentId, source, {
+    const loaded = await loadDocumentForSource(this.shell, documentId, source, {
       skipLocalPersistence,
     });
 
@@ -958,13 +964,13 @@ class SpreadsheetRuntimeController
       try {
         await this.shell.documentManager.disposeDocument(documentId);
       } catch {
-        await handle.dispose();
+        await loaded.handle.dispose();
       }
       throw createRuntimeDisposedError('openWorkbook', this.runtimeId, input.workbookId);
     }
 
     const record = await this.createRecord(
-      handle,
+      loaded.handle,
       workbookSessionId,
       documentId,
       input.workbookId,
@@ -972,6 +978,7 @@ class SpreadsheetRuntimeController
       input.displayName ??
         (source.kind === 'xlsx-bytes' ? source.fileName : undefined) ??
         'Embedded Mog workbook',
+      loaded.documentVersioning,
       source.kind === 'xlsx-bytes' ? source.versionId : undefined,
     );
     this.records.set(workbookSessionId, record);
@@ -987,9 +994,11 @@ class SpreadsheetRuntimeController
     workbookId: string,
     epoch: number,
     displayName: string,
+    documentVersioning: SpreadsheetRuntimeDocumentVersioningReadiness,
     versionId?: string,
   ): Promise<RuntimeWorkbookRecord> {
-    const workbook = (await handle.workbook()) as SpreadsheetAppWorkbook;
+    const { workbook, documentVersioning: resolvedDocumentVersioning } =
+      await materializeSpreadsheetWorkbook(handle, documentVersioning);
     workbook.markClean();
     const record: RuntimeWorkbookRecord = {
       workbookSessionId,
@@ -997,6 +1006,7 @@ class SpreadsheetRuntimeController
       workbookId,
       epoch,
       displayName,
+      documentVersioning: resolvedDocumentVersioning,
       foreground: false,
       handle,
       workbook,

@@ -1,13 +1,20 @@
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
+
 import type { DocumentContext } from '../../context';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from '../../document/version-store/provider';
+import {
+  REF_NAME_STORAGE_PREFIX,
+  validateRefName,
+} from '../../document/version-store/ref-name';
 import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
 import type { WorkbookVersioningConfig } from './types';
 
 const CHECKOUT_REBIND_IDENTITY_FIELD = '__mogCheckoutRebindIdentity';
+const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const MATERIALIZED_CONTEXT_ALLOWED_VERSIONING_KEYS = new Set([
   'surfaceStatusService',
   'versionSurfaceStatusService',
@@ -24,6 +31,8 @@ type CheckoutRebindIdentity = {
 type RebindIdentityErrorReason =
   | 'currentIdentityInvalid'
   | 'materializationIdentityStale'
+  | 'priorCheckoutRefInvalid'
+  | 'priorCheckoutRefStale'
   | 'providerDocumentMismatch'
   | 'providerScopeInvalid'
   | 'providerScopeMismatch';
@@ -32,9 +41,24 @@ type ProviderIdentityClass =
   | 'workspace'
   | 'document'
   | 'principal'
+  | 'ref'
   | 'scope'
   | 'provider'
   | 'materialization';
+
+type PriorCheckoutSession =
+  | {
+      readonly checkedOutCommitId: string;
+      readonly detached: true;
+    }
+  | {
+      readonly checkedOutCommitId: string;
+      readonly detached: false;
+      readonly branchName: string;
+      readonly refHeadAtMaterialization: string;
+    };
+
+type BoundMethod = (...args: readonly unknown[]) => unknown;
 
 class VersionCheckoutRebindIdentityError extends Error {
   readonly reason: RebindIdentityErrorReason;
@@ -62,17 +86,23 @@ export function checkoutRebindIdentityDiagnosticDetails(
 export function rebindVersioningAfterCheckout(input: {
   readonly versioning: unknown;
   readonly nextContext: DocumentContext;
+  readonly operationContext?: VersionOperationContext;
 }): WorkbookVersioningConfig {
   if (!isVersioningRecord(input.versioning)) return {};
   const identity = providerRebindIdentity(input.versioning);
   validateCurrentRebindIdentity(input.versioning, identity);
+  validatePriorCheckoutRefs(input.versioning);
   assertMaterializedContextIsUnbound(input.nextContext, identity);
   seedMaterializedContextRebindIdentity(input.nextContext, identity);
 
   const semanticStateReader = createComputeBridgeSemanticStateReader(
     input.nextContext.computeBridge,
   );
-  resetSemanticMutationCaptureAfterCheckout(input.versioning, semanticStateReader);
+  resetSemanticMutationCaptureAfterCheckout(
+    input.versioning,
+    semanticStateReader,
+    checkoutResetOperationContext(input.operationContext, input.versioning),
+  );
   const config = {
     ...input.versioning,
     snapshotRootByteSyncPort: {
@@ -128,6 +158,7 @@ function assertMaterializedContextIsUnbound(
       keys.length === 0 ||
       keys.every((key) => MATERIALIZED_CONTEXT_ALLOWED_VERSIONING_KEYS.has(key))
     ) {
+      validatePriorCheckoutRefs(runtime.versioning);
       return;
     }
 
@@ -272,6 +303,9 @@ function errorNameForReason(reason: RebindIdentityErrorReason): string {
     case 'providerScopeInvalid':
     case 'providerScopeMismatch':
       return 'VersionCheckoutRebindProviderIdentityError';
+    case 'priorCheckoutRefInvalid':
+    case 'priorCheckoutRefStale':
+      return 'VersionCheckoutRebindPriorCheckoutRefError';
     case 'materializationIdentityStale':
       return 'VersionCheckoutRebindMaterializationIdentityError';
   }
@@ -290,6 +324,9 @@ function providerIdentityClassForMismatch(
 
 function providerIdentityClassForReason(reason: RebindIdentityErrorReason): ProviderIdentityClass {
   switch (reason) {
+    case 'priorCheckoutRefInvalid':
+    case 'priorCheckoutRefStale':
+      return 'ref';
     case 'providerDocumentMismatch':
       return 'document';
     case 'providerScopeInvalid':
@@ -305,12 +342,219 @@ function providerIdentityClassForReason(reason: RebindIdentityErrorReason): Prov
 function resetSemanticMutationCaptureAfterCheckout(
   versioning: Record<string, unknown>,
   semanticStateReader: ReturnType<typeof createComputeBridgeSemanticStateReader>,
+  operationContext: VersionOperationContext | undefined,
 ): void {
   const semanticCapture = versioning.semanticMutationCapture;
   if (!isVersioningRecord(semanticCapture)) return;
   const reset = semanticCapture.resetNormalCaptureForCheckout;
   if (typeof reset !== 'function') return;
-  reset.call(semanticCapture, { semanticStateReader });
+  const resetInput: Record<string, unknown> = { semanticStateReader };
+  if (operationContext) resetInput.operationContext = operationContext;
+  reset.call(semanticCapture, resetInput);
+}
+
+function validatePriorCheckoutRefs(versioning: Record<string, unknown>): void {
+  const readActiveCheckoutSession = activeCheckoutSessionReader(versioning);
+  if (!readActiveCheckoutSession) return;
+
+  const sessionValue = callPriorCheckoutRefReader(readActiveCheckoutSession);
+  if (isThenable(sessionValue)) return;
+
+  const session = parsePriorCheckoutSession(sessionValue);
+  if (!session || session.detached) return;
+
+  if (session.checkedOutCommitId !== session.refHeadAtMaterialization) {
+    throw priorCheckoutRefError('priorCheckoutRefStale');
+  }
+
+  const readRef = checkoutRefReader(versioning);
+  if (!readRef) return;
+
+  const refValue = callPriorCheckoutRefReader(
+    () => readRef(publicRefNameFromBranchName(session.branchName)),
+  );
+  if (isThenable(refValue)) return;
+
+  const currentRefHeadId = projectRefHeadCommitId(refValue);
+  if (!currentRefHeadId) {
+    throw priorCheckoutRefError('priorCheckoutRefInvalid');
+  }
+  if (currentRefHeadId !== session.refHeadAtMaterialization) {
+    throw priorCheckoutRefError('priorCheckoutRefStale');
+  }
+}
+
+function callPriorCheckoutRefReader(read: () => unknown): unknown {
+  try {
+    return read();
+  } catch {
+    throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
+  }
+}
+
+function priorCheckoutRefError(
+  reason: Extract<RebindIdentityErrorReason, 'priorCheckoutRefInvalid' | 'priorCheckoutRefStale'>,
+): VersionCheckoutRebindIdentityError {
+  return new VersionCheckoutRebindIdentityError(reason, 'ref');
+}
+
+function activeCheckoutSessionReader(
+  versioning: Record<string, unknown>,
+): (() => unknown) | null {
+  for (const candidate of versioningServiceCandidates(versioning)) {
+    const read =
+      bindMethod(candidate, 'readActiveCheckoutSession') ??
+      bindMethod(candidate, 'getActiveCheckoutSession');
+    if (read) return () => read();
+  }
+  return null;
+}
+
+function checkoutRefReader(versioning: Record<string, unknown>): ((name: string) => unknown) | null {
+  for (const candidate of [
+    versioning.readService,
+    versioning.writeService,
+    versioning.commitService,
+    versioning.publicService,
+    versioning.refService,
+    versioning,
+  ]) {
+    const read = bindMethod(candidate, 'readRef') ?? bindMethod(candidate, 'getRef');
+    if (read) return (name) => read(name);
+  }
+  return null;
+}
+
+function versioningServiceCandidates(
+  versioning: Record<string, unknown>,
+): readonly unknown[] {
+  return [
+    versioning.surfaceStatusService,
+    versioning.versionSurfaceStatusService,
+    versioning.statusService,
+    versioning.dirtyStatusService,
+    versioning,
+  ];
+}
+
+function parsePriorCheckoutSession(value: unknown): PriorCheckoutSession | null {
+  if (value === null || value === undefined) return null;
+  if (!isVersioningRecord(value)) {
+    throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
+  }
+
+  const checkedOutCommitId = toCommitId(value.checkedOutCommitId);
+  if (!checkedOutCommitId || typeof value.detached !== 'boolean') {
+    throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
+  }
+
+  if (value.detached) {
+    return Object.freeze({ checkedOutCommitId, detached: true });
+  }
+
+  const branchName = normalizeCheckoutBranchName(value.branchName ?? value.refName);
+  const refHeadAtMaterialization = toCommitId(value.refHeadAtMaterialization);
+  if (!branchName || !refHeadAtMaterialization) {
+    throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
+  }
+
+  return Object.freeze({
+    checkedOutCommitId,
+    detached: false,
+    branchName,
+    refHeadAtMaterialization,
+  });
+}
+
+function checkoutResetOperationContext(
+  operationContext: VersionOperationContext | undefined,
+  versioning: Record<string, unknown>,
+): VersionOperationContext | undefined {
+  if (isVersionOperationContext(operationContext)) return operationContext;
+
+  for (const candidate of checkoutOperationContextCandidates(versioning)) {
+    if (isVersionOperationContext(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+function checkoutOperationContextCandidates(
+  versioning: Record<string, unknown>,
+): readonly unknown[] {
+  const semanticCapture = isVersioningRecord(versioning.semanticMutationCapture)
+    ? versioning.semanticMutationCapture
+    : {};
+  return [
+    versioning.checkoutOperationContext,
+    versioning.operationContext,
+    semanticCapture.checkoutOperationContext,
+    semanticCapture.operationContext,
+  ];
+}
+
+function isVersionOperationContext(value: unknown): value is VersionOperationContext {
+  if (!isVersioningRecord(value)) return false;
+  if (
+    typeof value.operationId !== 'string' ||
+    value.operationId.length === 0 ||
+    typeof value.kind !== 'string' ||
+    typeof value.createdAt !== 'string' ||
+    !Array.isArray(value.domainIds) ||
+    !value.domainIds.every((domainId) => typeof domainId === 'string') ||
+    typeof value.capturePolicy !== 'string' ||
+    typeof value.writeAdmissionMode !== 'string'
+  ) {
+    return false;
+  }
+
+  const author = value.author;
+  return (
+    isVersioningRecord(author) &&
+    typeof author.authorId === 'string' &&
+    author.authorId.length > 0 &&
+    typeof author.actorKind === 'string'
+  );
+}
+
+function projectRefHeadCommitId(value: unknown): string | null {
+  if (!isVersioningRecord(value)) return null;
+  if (value.status === 'success' && isVersioningRecord(value.ref)) {
+    return projectRefHeadCommitId(value.ref);
+  }
+  if (value.ok === true && isVersioningRecord(value.ref)) {
+    return projectRefHeadCommitId(value.ref);
+  }
+  if ('ref' in value) {
+    return value.ref === null ? null : projectRefHeadCommitId(value.ref);
+  }
+  return toCommitId(value.commitId) ?? toCommitId(value.targetCommitId);
+}
+
+function bindMethod(value: unknown, name: string): BoundMethod | null {
+  if (!isVersioningRecord(value)) return null;
+  const method = value[name];
+  if (typeof method !== 'function') return null;
+  return (...args) => Reflect.apply(method, value, args) as unknown;
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return isVersioningRecord(value) && typeof value.then === 'function';
+}
+
+function normalizeCheckoutBranchName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const branchName = value.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? value.slice(REF_NAME_STORAGE_PREFIX.length)
+    : value;
+  return validateRefName(branchName).ok ? branchName : null;
+}
+
+function publicRefNameFromBranchName(branchName: string): string {
+  return `${REF_NAME_STORAGE_PREFIX}${branchName}`;
+}
+
+function toCommitId(value: unknown): string | null {
+  return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value) ? value : null;
 }
 
 function deleteAttachedVersionServices(config: Record<string, unknown>): void {

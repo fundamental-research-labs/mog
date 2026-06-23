@@ -10,10 +10,10 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { AgentProposalStatus } from './proposal-store-status';
-import type { VersionDocumentScope } from './registry';
+import type { AgentProposalStatus } from './status';
+import type { VersionDocumentScope } from '../registry';
 
-export type { AgentProposalStatus } from './proposal-store-status';
+export type { AgentProposalStatus } from './status';
 
 export type AgentProposalId = `proposal:sha256:${string}`;
 

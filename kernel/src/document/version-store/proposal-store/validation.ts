@@ -1,14 +1,14 @@
 import type { VersionAuthor, VersionResult } from '@mog-sdk/contracts/api';
 
-import { isRecord } from './proposal-store-codec';
-import { invalidCreate, invalidUpdate } from './proposal-store-results';
-import { AGENT_PROPOSAL_STATUSES, isAgentProposalStatus } from './proposal-store-status';
+import { isRecord } from './codec';
+import { invalidCreate, invalidUpdate } from './results';
+import { AGENT_PROPOSAL_STATUSES, isAgentProposalStatus } from './status';
 import type {
   AgentProposalRecord,
   AgentProposalStatus,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store-types';
+} from './types';
 
 export function validateCreateProposalInput(
   input: CreateAgentProposalStoreInput,

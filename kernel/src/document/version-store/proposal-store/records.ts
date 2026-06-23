@@ -2,7 +2,7 @@ import {
   agentProposalRowWithIndexes,
   cloneAgentProposalRecord,
   cloneJson,
-} from './proposal-store-codec';
+} from './codec';
 import type {
   AgentProposalId,
   AgentProposalMutationLogEntry,
@@ -10,8 +10,8 @@ import type {
   AgentProposalStoreRow,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store-types';
-import type { VersionDocumentScope } from './registry';
+} from './types';
+import type { VersionDocumentScope } from '../registry';
 
 export function createProposalRecord(input: {
   readonly documentScope: VersionDocumentScope;

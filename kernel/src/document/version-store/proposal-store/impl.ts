@@ -1,7 +1,7 @@
 import type { Paged, VersionResult } from '@mog-sdk/contracts/api';
 
-import { cloneAgentProposalRecord } from './proposal-store-codec';
-import { listAgentProposalRecords } from './proposal-store-listing';
+import { cloneAgentProposalRecord } from './codec';
+import { listAgentProposalRecords } from './listing';
 import {
   clientRequestIdWasUsed,
   createProposalFingerprint,
@@ -9,20 +9,20 @@ import {
   mutationFingerprint,
   proposalIdForCreate,
   updateProposalFingerprint,
-} from './proposal-store-mutations';
+} from './mutations';
 import {
   appendMutationLog,
   applyStatusUpdate,
   createProposalRecord,
   createProposalRow,
-} from './proposal-store-records';
+} from './records';
 import {
   invalidClientRequestReuse,
   invalidState,
   notFound,
   ok,
   staleRevision,
-} from './proposal-store-results';
+} from './results';
 import type {
   AgentProposalId,
   AgentProposalMetadataStore,
@@ -32,13 +32,13 @@ import type {
   CreateAgentProposalStoreInput,
   ListAgentProposalsStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store-types';
-import { validateCreateProposalInput, validateStatusUpdate } from './proposal-store-validation';
+} from './types';
+import { validateCreateProposalInput, validateStatusUpdate } from './validation';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
-} from './registry';
+} from '../registry';
 
 export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStore {
   readonly documentScope: VersionDocumentScope;

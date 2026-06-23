@@ -1,12 +1,12 @@
 import type { PageCursor, Paged, VersionResult } from '@mog-sdk/contracts/api';
 
-import { cloneJson } from './proposal-store-codec';
-import { invalidState } from './proposal-store-results';
+import { cloneJson } from './codec';
+import { invalidState } from './results';
 import type {
   AgentProposalRecord,
   AgentProposalSummary,
   ListAgentProposalsStoreInput,
-} from './proposal-store-types';
+} from './types';
 
 const DEFAULT_PROPOSAL_LIST_LIMIT = 50;
 const PROPOSAL_LIST_CURSOR_PREFIX = 'proposal-list:';

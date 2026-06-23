@@ -1,6 +1,6 @@
 import type { VersionResult } from '@mog-sdk/contracts/api';
 
-import type { AgentProposalId, AgentProposalRecord } from './proposal-store-types';
+import type { AgentProposalId, AgentProposalRecord } from './types';
 
 export function ok<T>(value: T): VersionResult<T> {
   return { ok: true, value };

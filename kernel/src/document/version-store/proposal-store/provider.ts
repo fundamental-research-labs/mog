@@ -1,5 +1,5 @@
-import { isRecord } from './proposal-store-codec';
-import type { AgentProposalMetadataStoreProvider } from './proposal-store-types';
+import { isRecord } from './codec';
+import type { AgentProposalMetadataStoreProvider } from './types';
 
 export function hasAgentProposalMetadataStoreProvider(
   value: unknown,

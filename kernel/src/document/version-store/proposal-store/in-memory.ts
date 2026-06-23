@@ -1,11 +1,11 @@
-import { AgentProposalMetadataStoreImpl } from './proposal-store-impl';
-import { AgentProposalMetadataMemoryBackend } from './proposal-store-memory-backend';
-import type { AgentProposalMetadataStore } from './proposal-store-types';
+import { AgentProposalMetadataStoreImpl } from './impl';
+import { AgentProposalMetadataMemoryBackend } from './memory-backend';
+import type { AgentProposalMetadataStore } from './types';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
-} from './registry';
+} from '../registry';
 
 export class InMemoryAgentProposalMetadataStore
   extends AgentProposalMetadataStoreImpl

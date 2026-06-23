@@ -1,9 +1,9 @@
-import { agentProposalStorageKey, cloneAgentProposalRow } from './proposal-store-codec';
+import { agentProposalStorageKey, cloneAgentProposalRow } from './codec';
 import type {
   AgentProposalId,
   AgentProposalMetadataMemoryBackendSnapshot,
   AgentProposalStoreRow,
-} from './proposal-store-types';
+} from './types';
 
 export class AgentProposalMetadataMemoryBackend {
   private readonly rowsByKey = new Map<string, AgentProposalStoreRow>();

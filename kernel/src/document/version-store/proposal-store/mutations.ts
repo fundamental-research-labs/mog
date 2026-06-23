@@ -1,15 +1,15 @@
 import type { VersionResult } from '@mog-sdk/contracts/api';
 
-import { objectDigestFor } from './merge-apply-intent-store';
-import { canonicalJsonStringify, cloneAgentProposalRecord } from './proposal-store-codec';
-import { invalidClientRequestReuse, ok } from './proposal-store-results';
+import { objectDigestFor } from '../merge-apply-intent-store';
+import { canonicalJsonStringify, cloneAgentProposalRecord } from './codec';
+import { invalidClientRequestReuse, ok } from './results';
 import type {
   AgentProposalId,
   AgentProposalMutationOperation,
   AgentProposalStoreRow,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store-types';
+} from './types';
 
 export async function proposalIdForCreate(
   documentScopeKey: string,

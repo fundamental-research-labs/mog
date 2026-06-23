@@ -767,7 +767,7 @@ async function copyMainRefToBranch(
   branchName: string,
 ): Promise<void> {
   const db = await openVersionStoreIndexedDb();
-  const tx = db.transaction(REFS_STORE, 'readwrite');
+  const tx = db.transaction([REFS_STORE, INDEX_MANIFESTS_STORE], 'readwrite');
   const done = transactionDone(tx, 'branch ref seed transaction failed');
   const namespaceKey = versionGraphNamespaceKey(namespace);
   const mainRow = asRecord(
@@ -783,6 +783,17 @@ async function copyMainRefToBranch(
     refIncarnationId: `test-incarnation-${branchName}`,
   };
   tx.objectStore(REFS_STORE).put(branchRow, `${namespaceKey}\u0000${branchName}`);
+  const manifestStore = tx.objectStore(INDEX_MANIFESTS_STORE);
+  const manifest = asRecord(await requestValue(manifestStore.get(namespaceKey)));
+  const liveRefCount =
+    typeof manifest.refStoreLiveRefCount === 'number' ? manifest.refStoreLiveRefCount : 0;
+  manifestStore.put(
+    {
+      ...manifest,
+      refStoreLiveRefCount: liveRefCount + 1,
+    },
+    namespaceKey,
+  );
   await done;
   db.close();
 }

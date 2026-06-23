@@ -1,7 +1,10 @@
 import {
   createInMemoryVersionGraphStoreFromSnapshot,
+  VERSION_GRAPH_HEAD_REF,
+  VERSION_GRAPH_MAIN_REF,
   type InMemoryVersionGraphStore,
   type VersionGraphStoreDiagnostic,
+  type VersionGraphSymbolicRef,
 } from './graph-store';
 import { parseWorkbookCommitId } from './object-digest';
 import {
@@ -22,8 +25,14 @@ import {
   type StoredObjectRecord,
   type StoredRefRecord,
 } from './provider-indexeddb-internal';
-import { INDEX_MANIFESTS_STORE, OBJECTS_STORE, REFS_STORE } from './provider-indexeddb-schema';
-import { parseRefVersion, type RefRecord } from './ref-store';
+import {
+  INDEX_MANIFESTS_STORE,
+  OBJECTS_STORE,
+  REFS_STORE,
+  SYMBOLIC_REFS_STORE,
+} from './provider-indexeddb-schema';
+import { maxGeneratedRefRecordId } from './graph-store-snapshot';
+import { parseRefVersion, refVersionsEqual, type LiveRefRecord, type RefRecord } from './ref-store';
 import { parseRefName } from './ref-name';
 import {
   normalizeVersionDocumentScope,
@@ -67,7 +76,10 @@ export async function loadGraphSnapshot(
     );
   }
 
-  const tx = db.transaction([OBJECTS_STORE, REFS_STORE, INDEX_MANIFESTS_STORE], 'readonly');
+  const tx = db.transaction(
+    [OBJECTS_STORE, REFS_STORE, SYMBOLIC_REFS_STORE, INDEX_MANIFESTS_STORE],
+    'readonly',
+  );
   const objectRows = await readAllByIndex<unknown>(
     tx.objectStore(OBJECTS_STORE),
     'namespaceKey',
@@ -80,6 +92,9 @@ export async function loadGraphSnapshot(
   );
   const manifestRow = await idbRequest<unknown | undefined>(
     tx.objectStore(INDEX_MANIFESTS_STORE).get(namespaceKey),
+  );
+  const symbolicHeadRow = await idbRequest<unknown | undefined>(
+    tx.objectStore(SYMBOLIC_REFS_STORE).get(refKey(namespaceKey, VERSION_GRAPH_HEAD_REF)),
   );
   await idbTransactionDone(tx);
 
@@ -109,6 +124,22 @@ export async function loadGraphSnapshot(
       documentId: normalized.documentId,
     }),
   );
+  const symbolicHead = validateStoredSymbolicHead(symbolicHeadRow, {
+    store: SYMBOLIC_REFS_STORE,
+    namespaceKey,
+    documentScopeKey,
+  });
+  validateReloadedRefSnapshotManifest({
+    manifest,
+    refs: refs.map((entry) => entry.record),
+    symbolicHead,
+    namespace: normalized,
+    context: {
+      store: INDEX_MANIFESTS_STORE,
+      namespaceKey,
+      documentScopeKey,
+    },
+  });
 
   return createInMemoryVersionGraphStoreFromSnapshot({
     namespace: normalized,
@@ -128,6 +159,7 @@ export function graphLoadDiagnostic(
   namespace: VersionGraphNamespace,
   operation: VersionGraphStoreDiagnostic['operation'],
 ): VersionGraphStoreDiagnostic {
+  void namespace;
   const loadError = error instanceof IndexedDbGraphSnapshotLoadError ? error : null;
   const details = sanitizeLoadDetails({
     cause: errorMessage(error),
@@ -137,7 +169,6 @@ export function graphLoadDiagnostic(
     graphDiagnosticCodeForLoadIssue(loadError?.issue),
     loadError?.message ?? 'IndexedDB graph snapshot could not be loaded.',
     {
-      namespace,
       operation,
       details,
     },
@@ -344,6 +375,107 @@ function validateStoredIndexManifest(
     ...(refStoreLiveRefCount === undefined ? {} : { refStoreLiveRefCount }),
     updatedAt: row.updatedAt,
   };
+}
+
+function validateStoredSymbolicHead(
+  value: unknown,
+  context: RowValidationContext,
+): VersionGraphSymbolicRef {
+  if (value === undefined) {
+    throwLoadError(
+      'corrupt',
+      'IndexedDB graph snapshot symbolic HEAD is missing for a visible graph registry.',
+      rowLocation(context),
+    );
+  }
+
+  const row = validateStoredRowEnvelope(value, context, [
+    'schemaVersion',
+    'namespaceKey',
+    'documentScopeKey',
+    'ref',
+  ]);
+  const ref = requirePlainRecord(row.ref, context, 'ref');
+  if (!hasOnlyKeys(ref, ['name', 'target', 'revision'])) {
+    throwLoadError(
+      'corrupt',
+      'IndexedDB symbolic ref row has unsupported fields for its schema version.',
+      rowLocation(context),
+    );
+  }
+  if (ref.name !== VERSION_GRAPH_HEAD_REF || ref.target !== VERSION_GRAPH_MAIN_REF) {
+    throwLoadError('corrupt', 'IndexedDB symbolic ref row does not describe HEAD -> main.', {
+      ...rowLocation(context),
+      path: 'ref',
+    });
+  }
+
+  try {
+    return {
+      name: VERSION_GRAPH_HEAD_REF,
+      target: VERSION_GRAPH_MAIN_REF,
+      revision: parseRefVersion(cloneJson(ref.revision), 'ref.revision'),
+    };
+  } catch {
+    throwLoadError('corrupt', 'IndexedDB symbolic HEAD row has an invalid revision.', {
+      ...rowLocation(context),
+      path: 'ref.revision',
+    });
+  }
+}
+
+function validateReloadedRefSnapshotManifest(input: {
+  readonly manifest: StoredIndexManifest;
+  readonly refs: readonly RefRecord[];
+  readonly symbolicHead: VersionGraphSymbolicRef;
+  readonly namespace: VersionGraphNamespace;
+  readonly context: RowValidationContext;
+}): void {
+  const liveRefs = input.refs.filter((record): record is LiveRefRecord => record.state === 'live');
+  const liveRefCount = liveRefs.length;
+  if (
+    input.manifest.refStoreLiveRefCount !== undefined &&
+    input.manifest.refStoreLiveRefCount !== liveRefCount
+  ) {
+    throwLoadError('corrupt', 'IndexedDB graph snapshot manifest live ref count is stale.', {
+      ...rowLocation(input.context),
+      path: 'refStoreLiveRefCount',
+      expectedLiveRefCount: liveRefCount,
+      actualLiveRefCount: input.manifest.refStoreLiveRefCount,
+    });
+  }
+
+  const maxGeneratedId = maxGeneratedRefRecordId(input.refs, input.namespace.documentId);
+  if (input.manifest.refStoreNextGeneratedId < maxGeneratedId) {
+    throwLoadError('corrupt', 'IndexedDB graph snapshot manifest generated id counter is stale.', {
+      ...rowLocation(input.context),
+      path: 'refStoreNextGeneratedId',
+      expectedNextGeneratedIdAtLeast: maxGeneratedId,
+      actualNextGeneratedId: input.manifest.refStoreNextGeneratedId,
+    });
+  }
+
+  const main = liveRefs.find((record) => record.name === 'main');
+  if (main === undefined) {
+    throwLoadError(
+      'corrupt',
+      'IndexedDB graph snapshot is missing the live main ref required by symbolic HEAD.',
+      {
+        store: REFS_STORE,
+        path: 'record.name',
+      },
+    );
+  }
+  if (!refVersionsEqual(main.refVersion, input.symbolicHead.revision)) {
+    throwLoadError(
+      'corrupt',
+      'IndexedDB symbolic HEAD revision does not match the live main ref.',
+      {
+        store: SYMBOLIC_REFS_STORE,
+        path: 'ref.revision',
+      },
+    );
+  }
 }
 
 function validateStoredRowEnvelope(
@@ -686,6 +818,10 @@ function readAllByIndex<T>(store: IDBObjectStore, indexName: string, key: string
     };
     request.onerror = () => reject(request.error ?? new Error('IndexedDB cursor failed.'));
   });
+}
+
+function refKey(namespaceKey: string, name: string): string {
+  return `${namespaceKey}\u0000${name}`;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

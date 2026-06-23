@@ -1,6 +1,5 @@
 import 'fake-indexeddb/auto';
 
-import type { WorkbookCommitId as PublicWorkbookCommitId } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { createProviderBackedBranchLifecycleService } from '../branch-provider-service';
@@ -14,6 +13,7 @@ import {
 import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
 import { createIndexedDbGraphBranchLifecycle } from '../provider-indexeddb-branch-lifecycle';
 import {
+  INDEX_MANIFESTS_STORE,
   REFS_STORE,
   deleteVersionStoreIndexedDbForTesting,
   openVersionStoreIndexedDb,
@@ -36,11 +36,6 @@ const AUTHOR: VersionAuthor = {
   actorKind: 'user',
   displayName: 'User One',
 };
-
-const CONCURRENT_COMMIT_ID =
-  'commit:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' as PublicWorkbookCommitId;
-const ROLLBACK_COMMIT_ID =
-  'commit:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' as PublicWorkbookCommitId;
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -109,9 +104,18 @@ describe('IndexedDB provider-backed branch lifecycle CAS', () => {
     );
     expectInitializeSuccess(initialized);
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-branch-create-race');
+    const graph = await provider.openGraph(namespace);
+    const concurrentCommit = await graph.commit({
+      ...(await rootWrite('create-race-concurrent', namespace)),
+      expectedHeadCommitId: initialized.rootCommit.id,
+      expectedMainRefVersion: initialized.initialHead.revision,
+      parentCommitIds: [initialized.rootCommit.id],
+    });
+    expect(concurrentCommit.status).toBe('success');
+    if (concurrentCommit.status !== 'success') throw new Error('expected concurrent commit');
     const lifecycle = lifecycleWithPersistRace(namespace, () =>
       copyMainRefToBranch(namespace, 'scenario/idb-create-race', {
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommit.commit.id,
         refVersion: { kind: 'counter', value: '9' },
       }),
     );
@@ -128,31 +132,32 @@ describe('IndexedDB provider-backed branch lifecycle CAS', () => {
     expect(created.error.code).toBe('refAlreadyExists');
     expect(created.conflict).toMatchObject({
       code: 'refAlreadyExists',
-      actualHead: CONCURRENT_COMMIT_ID,
+      actualHead: concurrentCommit.commit.id,
       actualRefVersion: { kind: 'counter', value: '9' },
     });
     await expect(readRefRecord(namespace, 'scenario/idb-create-race')).resolves.toMatchObject({
       record: {
         state: 'live',
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommit.commit.id,
         refVersion: { kind: 'counter', value: '9' },
       },
     });
   });
 
   it('rolls back fast-forward when the provider ref row is stale at durable CAS', async () => {
-    const { initialized, namespace, branch } = await createBranchFixture('graph-branch-ff-race');
+    const { initialized, namespace, branch, concurrentCommitId, rollbackCommitId } =
+      await createBranchFixture('graph-branch-ff-race');
     const lifecycle = lifecycleWithPersistRace(namespace, () =>
       updateRefRecord(namespace, 'scenario/idb-race', (record) => ({
         ...record,
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommitId,
         refVersion: { kind: 'counter', value: '1' },
       })),
     );
 
     const advanced = await lifecycle.fastForwardBranch({
       name: 'scenario/idb-race',
-      nextCommitId: ROLLBACK_COMMIT_ID,
+      nextCommitId: rollbackCommitId,
       expectedOldCommitId: initialized.rootCommit.id,
       expectedRefVersion: branch.ref.refVersion,
       updatedBy: AUTHOR,
@@ -168,18 +173,19 @@ describe('IndexedDB provider-backed branch lifecycle CAS', () => {
     await expect(readRefRecord(namespace, 'scenario/idb-race')).resolves.toMatchObject({
       record: {
         state: 'live',
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommitId,
         refVersion: { kind: 'counter', value: '1' },
       },
     });
   });
 
   it('rolls back delete when the provider ref row is stale at durable CAS', async () => {
-    const { initialized, namespace, branch } = await createBranchFixture('graph-branch-delete-race');
+    const { initialized, namespace, branch, concurrentCommitId } =
+      await createBranchFixture('graph-branch-delete-race');
     const lifecycle = lifecycleWithPersistRace(namespace, () =>
       updateRefRecord(namespace, 'scenario/idb-race', (record) => ({
         ...record,
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommitId,
         refVersion: { kind: 'counter', value: '1' },
       })),
     );
@@ -201,7 +207,7 @@ describe('IndexedDB provider-backed branch lifecycle CAS', () => {
     await expect(readRefRecord(namespace, 'scenario/idb-race')).resolves.toMatchObject({
       record: {
         state: 'live',
-        targetCommitId: CONCURRENT_COMMIT_ID,
+        targetCommitId: concurrentCommitId,
         refVersion: { kind: 'counter', value: '1' },
       },
     });
@@ -214,6 +220,22 @@ async function createBranchFixture(graphId: string) {
   expectInitializeSuccess(initialized);
   const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
   const graph = await provider.openGraph(namespace);
+  const concurrentCommit = await graph.commit({
+    ...(await rootWrite('race-concurrent', namespace)),
+    expectedHeadCommitId: initialized.rootCommit.id,
+    expectedMainRefVersion: initialized.initialHead.revision,
+    parentCommitIds: [initialized.rootCommit.id],
+  });
+  expect(concurrentCommit.status).toBe('success');
+  if (concurrentCommit.status !== 'success') throw new Error('expected concurrent commit success');
+  const rollbackCommit = await graph.commit({
+    ...(await rootWrite('race-rollback', namespace)),
+    expectedHeadCommitId: concurrentCommit.commit.id,
+    expectedMainRefVersion: concurrentCommit.main.revision,
+    parentCommitIds: [concurrentCommit.commit.id],
+  });
+  expect(rollbackCommit.status).toBe('success');
+  if (rollbackCommit.status !== 'success') throw new Error('expected rollback commit success');
   const created = await graph.createBranch({
     name: 'scenario/idb-race',
     targetCommitId: initialized.rootCommit.id,
@@ -222,7 +244,13 @@ async function createBranchFixture(graphId: string) {
   });
   expect(created.ok).toBe(true);
   if (!created.ok) throw new Error('expected branch create success');
-  return { initialized, namespace, branch: created.branch };
+  return {
+    initialized,
+    namespace,
+    branch: created.branch,
+    concurrentCommitId: concurrentCommit.commit.id,
+    rollbackCommitId: rollbackCommit.commit.id,
+  };
 }
 
 function lifecycleWithPersistRace(namespace: VersionGraphNamespace, race: () => Promise<void>) {
@@ -243,17 +271,24 @@ async function initializeInput(graphId: string): Promise<VersionGraphInitializeI
   return {
     expectedRegistryRevision: null,
     graphId,
-    rootWrite: {
-      snapshotRootRecord: await objectRecord('workbook.snapshotRoot.v1', { sheets: [] }, namespace),
-      semanticChangeSetRecord: await objectRecord(
-        'workbook.semanticChangeSet.v1',
-        { changes: [] },
-        namespace,
-      ),
-      author: AUTHOR,
-      createdAt: '2026-06-20T00:00:00.000Z',
-      completenessDiagnostics: [],
-    },
+    rootWrite: await rootWrite('root', namespace),
+  };
+}
+
+async function rootWrite(
+  label: string,
+  namespace: VersionGraphNamespace,
+): Promise<VersionGraphInitializeInput['rootWrite']> {
+  return {
+    snapshotRootRecord: await objectRecord('workbook.snapshotRoot.v1', { label, sheets: [] }, namespace),
+    semanticChangeSetRecord: await objectRecord(
+      'workbook.semanticChangeSet.v1',
+      { label, changes: [] },
+      namespace,
+    ),
+    author: AUTHOR,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    completenessDiagnostics: [],
   };
 }
 
@@ -287,7 +322,7 @@ async function copyMainRefToBranch(
       providerRefId: `test-ref-${branchName}`,
       refIncarnationId: `test-incarnation-${branchName}`,
     },
-  });
+  }, 1);
 }
 
 async function updateRefRecord(
@@ -316,12 +351,26 @@ async function putRefRecord(
   namespace: VersionGraphNamespace,
   refName: string,
   row: Record<string, unknown>,
+  liveRefCountDelta = 0,
 ): Promise<void> {
   const db = await openVersionStoreIndexedDb();
   const namespaceKey = versionGraphNamespaceKey(namespace);
-  const tx = db.transaction(REFS_STORE, 'readwrite');
+  const tx = db.transaction([REFS_STORE, INDEX_MANIFESTS_STORE], 'readwrite');
   const done = transactionDone(tx, 'ref write transaction failed');
   tx.objectStore(REFS_STORE).put(row, `${namespaceKey}\u0000${refName}`);
+  if (liveRefCountDelta !== 0) {
+    const manifestStore = tx.objectStore(INDEX_MANIFESTS_STORE);
+    const manifest = asRecord(await requestValue(manifestStore.get(namespaceKey)));
+    const liveRefCount =
+      typeof manifest.refStoreLiveRefCount === 'number' ? manifest.refStoreLiveRefCount : 0;
+    manifestStore.put(
+      {
+        ...manifest,
+        refStoreLiveRefCount: liveRefCount + liveRefCountDelta,
+      },
+      namespaceKey,
+    );
+  }
   await done;
   db.close();
 }

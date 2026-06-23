@@ -1,6 +1,10 @@
 import type { WorkbookCommit } from './commit-store';
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
-import type { VersionGraphStoreDiagnostic, VersionGraphWriteSuccess } from './graph-store';
+import type {
+  VersionGraphCommitSummary,
+  VersionGraphStoreDiagnostic,
+  VersionGraphWriteSuccess,
+} from './graph-store';
 import { graphRefFromLiveRef } from './graph-store-refs';
 import type { LiveRefRecord } from './ref-store';
 
@@ -38,5 +42,14 @@ export function graphWriteSuccess(
     ref: graphRefFromLiveRef(ref),
     main: graphRefFromLiveRef(mainRef),
     diagnostics: [],
+  };
+}
+
+export function graphCommitSummary(commit: WorkbookCommit): VersionGraphCommitSummary {
+  return {
+    id: commit.id,
+    parents: [...commit.payload.parentCommitIds],
+    createdAt: commit.payload.createdAt,
+    author: { ...commit.payload.author },
   };
 }

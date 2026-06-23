@@ -33,12 +33,20 @@ import {
   type RefVersion,
   type VersionDiagnostic,
 } from './ref-store';
-import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
+import {
+  assertRefStoreSnapshotManifestInvariants,
+  assertSnapshotRefTargetsReadable,
+} from './graph-store-snapshot';
+import type { InMemoryVersionGraphStoreSnapshot } from './graph-store-snapshot';
 import {
   createGraphBranchLifecycle,
   type GraphBranchLifecycle,
 } from './graph-store-branch-lifecycle';
-import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
+import {
+  graphCommitSummary,
+  graphWriteSuccess,
+  parseGraphCommitExpectedHead,
+} from './graph-store-commit-helpers';
 import { fastForwardGraphRef } from './graph-store-fast-forward';
 import {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
@@ -251,12 +259,7 @@ export type InMemoryVersionGraphStoreOptions = {
   readonly commitStore?: InMemoryWorkbookCommitStore;
   readonly refStore?: InMemoryRefStore;
 };
-
-export type InMemoryVersionGraphStoreSnapshot = {
-  readonly namespace: VersionGraphNamespace;
-  readonly objectRecords: readonly VersionObjectRecord<unknown>[];
-  readonly refStore: InMemoryRefStoreSnapshot;
-};
+export type { InMemoryVersionGraphStoreSnapshot } from './graph-store-snapshot';
 
 export class InMemoryVersionGraphStore {
   readonly namespace: VersionGraphNamespace;
@@ -582,7 +585,7 @@ export class InMemoryVersionGraphStore {
 
     return {
       status: 'success',
-      commits: ordered.commits.map(commitSummary),
+      commits: ordered.commits.map(graphCommitSummary),
       readRevision: root.readRevision,
       order: 'topological-newest',
       pageSize: parsedOptions.pageSize,
@@ -614,15 +617,16 @@ export class InMemoryVersionGraphStore {
   }
 
   async exportSnapshot(): Promise<InMemoryVersionGraphStoreSnapshot> {
-    const listedRefs = this.refStore.listRefs({ includeTombstones: true });
-    if (!listedRefs.ok) {
-      throw new Error('Version graph refs could not be snapshotted.');
-    }
+    const refStore = this.refStore.exportSnapshot();
+    assertRefStoreSnapshotManifestInvariants(refStore, this.namespace.documentId);
+    await assertSnapshotRefTargetsReadable(refStore.records, (commitId) =>
+      this.readCommit(commitId),
+    );
 
     return Object.freeze({
       namespace: this.namespace,
       objectRecords: this.objectStore.listObjectRecords(),
-      refStore: this.refStore.exportSnapshot(),
+      refStore,
     });
   }
 
@@ -755,12 +759,13 @@ export async function createInMemoryVersionGraphStoreFromSnapshot(
   snapshot: InMemoryVersionGraphStoreSnapshot,
 ): Promise<InMemoryVersionGraphStore> {
   const namespace = normalizeVersionGraphNamespace(snapshot.namespace);
+  assertRefStoreSnapshotManifestInvariants(snapshot.refStore, namespace.documentId);
   const objectStore = createInMemoryVersionObjectStore(namespace);
   const putResult = await objectStore.putObjects(snapshot.objectRecords);
   if (putResult.status !== 'success') {
     throw new Error('Version graph object snapshot failed validation.');
   }
-  return createInMemoryVersionGraphStore({
+  const graph = createInMemoryVersionGraphStore({
     namespace,
     objectStore,
     refStore: createInMemoryRefStore({
@@ -768,6 +773,10 @@ export async function createInMemoryVersionGraphStoreFromSnapshot(
       snapshot: snapshot.refStore,
     }),
   });
+  await assertSnapshotRefTargetsReadable(snapshot.refStore.records, (commitId) =>
+    graph.readCommit(commitId),
+  );
+  return graph;
 }
 
 function validateInputNamespaces(
@@ -968,15 +977,6 @@ function failedWrite(
   mutationGuarantee: VersionGraphWriteFailure['mutationGuarantee'],
 ): VersionGraphWriteFailure {
   return { status: 'failed', diagnostics, mutationGuarantee };
-}
-
-function commitSummary(commit: WorkbookCommit): VersionGraphCommitSummary {
-  return {
-    id: commit.id,
-    parents: [...commit.payload.parentCommitIds],
-    createdAt: commit.payload.createdAt,
-    author: { ...commit.payload.author },
-  };
 }
 
 function diagnostic(

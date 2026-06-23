@@ -219,9 +219,9 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
               payload: expect.objectContaining({
                 diagnosticCode: 'domain-policy-registry-mismatch',
-                domainId: 'cells.values',
-                policyField: 'capabilityStates.merge',
-                policyValue: 'supported',
+                domainId: 'recalc-caches',
+                policyField: 'domainClass',
+                policyValue: 'authored',
               }),
             }),
           }),

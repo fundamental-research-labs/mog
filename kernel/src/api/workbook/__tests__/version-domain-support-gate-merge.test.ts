@@ -198,11 +198,14 @@ describe('WorkbookVersion domain support manifest merge gate', () => {
       versioning: {
         mergeService: { merge },
         domainSupportManifest: freshManifest({
-          domains: [domainRow('view-state', { matrixRowId: 'view-state.selection-scroll' })],
+          domains: [
+            ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+            domainRow('view-state', { matrixRowId: 'view-state.selection-scroll' }),
+          ],
         }),
         domainSupportManifestOptions: {
           now: NOW,
-          requiredMatrixRowIds: ['view-state.selection-scroll'],
+          requiredMatrixRowIds: [],
           detectorRows: [
             {
               matrixRowId: 'view-state.selection-scroll',
@@ -377,11 +380,14 @@ describe('WorkbookVersion domain support manifest merge gate', () => {
         mergeService: { merge },
         writeService: { fastForwardMerge, mergeCommit },
         domainSupportManifest: freshManifest({
-          domains: [domainRow('view-state', { matrixRowId: 'view-state.selection-scroll' })],
+          domains: [
+            ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+            domainRow('view-state', { matrixRowId: 'view-state.selection-scroll' }),
+          ],
         }),
         domainSupportManifestOptions: {
           now: NOW,
-          requiredMatrixRowIds: ['view-state.selection-scroll'],
+          requiredMatrixRowIds: [],
           detectorRows: [
             {
               matrixRowId: 'view-state.selection-scroll',
@@ -463,9 +469,12 @@ describe('WorkbookVersion domain support manifest merge gate', () => {
         mutationGuarantee: 'preview-only',
       },
     });
-    expect(merge).toHaveBeenCalledWith({ base: BASE, ours: OURS, theirs: THEIRS }, {
-      mode: 'preview',
-    });
+    expect(merge).toHaveBeenCalledWith(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      {
+        mode: 'preview',
+      },
+    );
     expect(fastForwardMerge).not.toHaveBeenCalled();
     expect(mergeCommit).not.toHaveBeenCalled();
   });

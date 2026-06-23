@@ -12,7 +12,9 @@ import {
 
 import type { DocumentContext } from '../../context';
 import {
+  REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   validateDomainSupportManifest,
+  type DomainSupportDetectorRow,
   type DomainSupportManifestDiagnostic,
   type DomainSupportManifestValidationOptions,
 } from '../../document/version-store/domain-support-manifest-validator';
@@ -52,6 +54,14 @@ const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
   Record<VersionDomainSupportManifestGateOperation, readonly VersionDomainCapabilityKey[]>
 >);
 
+const REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION = Object.freeze({
+  commit: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  checkout: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  merge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  applyMerge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  export: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+} satisfies Readonly<Record<VersionDomainSupportManifestGateOperation, readonly string[]>>);
+
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
@@ -83,7 +93,9 @@ export async function validateVersionDomainSupportManifestGate(
 
   const {
     domainPolicyRegistry: _ignoredCallerDomainPolicyRegistry,
-    requiredCapabilityKeys: _ignoredCallerCapabilityKeys,
+    requiredCapabilityKeys: callerRequiredCapabilityKeys,
+    requiredMatrixRowIds: callerRequiredMatrixRowIds,
+    requiredDomainIds: callerRequiredDomainIds,
     ...callerOptions
   } = gate.options ?? {};
   const options: DomainSupportManifestValidationOptions = {
@@ -91,8 +103,16 @@ export async function validateVersionDomainSupportManifestGate(
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
-    requiredCapabilityKeys: requiredManifestCapabilityKeys(operation),
-    ...requiredValidationOptionsForOperation(operation),
+    requiredCapabilityKeys: requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys),
+    requiredMatrixRowIds: requiredManifestMatrixRowIds(
+      operation,
+      callerRequiredMatrixRowIds,
+      callerOptions.detectorRows,
+    ),
+    requiredDomainIds: requiredManifestDomainIds(
+      callerRequiredDomainIds,
+      callerOptions.detectorRows,
+    ),
   };
   const validation = validateDomainSupportManifest(manifest, options);
   if (validation.ok) {
@@ -123,13 +143,27 @@ function mergeDetectedDomainDiagnostics(
   return diagnostics;
 }
 
-function requiredValidationOptionsForOperation(
+function requiredManifestMatrixRowIds(
   operation: VersionDomainSupportManifestGateOperation,
-): DomainSupportManifestValidationOptions {
-  if (operation !== 'export') return {};
-  return {
-    requiredMatrixRowIds: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
-  };
+  callerRequiredMatrixRowIds: readonly string[] | undefined,
+  detectorRows: readonly DomainSupportDetectorRow[] | undefined,
+): readonly string[] {
+  return uniquePublicIds(
+    REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION[operation],
+    callerRequiredMatrixRowIds,
+    detectorRows?.filter((row) => row.present).map((row) => row.matrixRowId),
+  );
+}
+
+function requiredManifestDomainIds(
+  callerRequiredDomainIds: readonly string[] | undefined,
+  detectorRows: readonly DomainSupportDetectorRow[] | undefined,
+): readonly string[] | undefined {
+  const requiredDomainIds = uniquePublicIds(
+    callerRequiredDomainIds,
+    detectorRows?.filter((row) => row.present).map((row) => row.domainId),
+  );
+  return requiredDomainIds.length > 0 ? requiredDomainIds : undefined;
 }
 
 function publicExportRegistryUnsupportedDiagnostics(
@@ -245,8 +279,27 @@ function hasVersionOperationService(services: Readonly<Record<string, unknown>>)
 
 function requiredManifestCapabilityKeys(
   operation: VersionDomainSupportManifestGateOperation,
+  callerRequiredCapabilityKeys: readonly VersionDomainCapabilityKey[] | undefined,
 ): readonly VersionDomainCapabilityKey[] {
-  return REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION[operation];
+  return uniquePublicIds(
+    REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION[operation],
+    callerRequiredCapabilityKeys,
+  ) as readonly VersionDomainCapabilityKey[];
+}
+
+function uniquePublicIds(
+  ...groups: readonly (readonly (string | undefined)[] | undefined)[]
+): readonly string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const group of groups) {
+    for (const value of group ?? []) {
+      if (typeof value !== 'string' || value === '' || seen.has(value)) continue;
+      seen.add(value);
+      ids.push(value);
+    }
+  }
+  return ids;
 }
 
 function hasCommitService(services: Readonly<Record<string, unknown>>): boolean {

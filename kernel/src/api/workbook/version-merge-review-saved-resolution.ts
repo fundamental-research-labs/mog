@@ -1,5 +1,5 @@
 import type {
-  ObjectDigest,
+  ObjectDigest as PublicObjectDigest,
   VersionMergeConflict,
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
@@ -12,6 +12,10 @@ import {
   type MergeResolutionSetArtifactPayload,
   type ResolvedMergeAttemptArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
+import {
+  isObjectDigest as isVersionObjectDigest,
+  type ObjectDigest as VersionObjectDigest,
+} from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import {
   mapPublicExpectedTargetHead,
@@ -173,7 +177,7 @@ export async function resolveSavedConflictDetailSelection(
 async function readResolutionSetArtifact(
   graph: VersionGraphStore,
   operation: VersionMergePublicOperation,
-  digest: ObjectDigest,
+  digest: PublicObjectDigest,
 ): Promise<MergeReviewResolutionSetReadResult> {
   const internalDigest = toInternalSha256Digest(digest);
   if (!internalDigest) {
@@ -215,7 +219,7 @@ async function readResolutionSetArtifact(
 async function readResolvedMergeAttemptArtifact(
   graph: VersionGraphStore,
   operation: VersionMergePublicOperation,
-  digest: ObjectDigest,
+  digest: PublicObjectDigest,
 ): Promise<MergeReviewResolvedAttemptReadResult> {
   const internalDigest = toInternalSha256Digest(digest);
   if (!internalDigest) {
@@ -379,11 +383,15 @@ function toResolvedMergeAttemptArtifactPayload(
   if (!isRecord(value)) return null;
   const targetRef = mapPublicTargetRef(value.targetRef);
   const expectedTargetHead = mapPublicExpectedTargetHead(value.expectedTargetHead);
+  const resultDigest = isVersionObjectDigest(value.resultDigest) ? value.resultDigest : null;
+  const resolutionSetDigest = isVersionObjectDigest(value.resolutionSetDigest)
+    ? value.resolutionSetDigest
+    : null;
   if (
     value.schemaVersion !== 1 ||
     value.recordKind !== 'resolvedMergeAttempt' ||
-    !isObjectDigest(value.resultDigest) ||
-    !isObjectDigest(value.resolutionSetDigest) ||
+    !resultDigest ||
+    !resolutionSetDigest ||
     !targetRef ||
     !expectedTargetHead
   ) {
@@ -392,23 +400,17 @@ function toResolvedMergeAttemptArtifactPayload(
   return {
     schemaVersion: 1,
     recordKind: 'resolvedMergeAttempt',
-    resultDigest: value.resultDigest,
-    resolutionSetDigest: value.resolutionSetDigest,
+    resultDigest,
+    resolutionSetDigest,
     targetRef,
     expectedTargetHead,
   };
 }
 
-function isObjectDigest(value: unknown): value is ObjectDigest {
-  return (
-    isRecord(value) &&
-    value.algorithm === 'sha256' &&
-    typeof value.digest === 'string' &&
-    /^[0-9a-f]{64}$/.test(value.digest)
-  );
-}
-
-function digestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
+function digestsEqual(
+  left: PublicObjectDigest | VersionObjectDigest,
+  right: PublicObjectDigest | VersionObjectDigest,
+): boolean {
   return left.algorithm === right.algorithm && left.digest === right.digest;
 }
 

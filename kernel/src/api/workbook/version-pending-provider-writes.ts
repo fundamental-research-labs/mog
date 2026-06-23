@@ -586,7 +586,7 @@ function diagnostic(
 }
 
 function isSafeCount(value: unknown): value is number {
-  return Number.isSafeInteger(value) && value >= 0;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isVersionGraphRegistry(value: unknown): value is VersionGraphRegistry {

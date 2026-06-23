@@ -8,6 +8,7 @@ import type {
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
+  'version:read': 'Read',
   'version:commit': 'Commit',
   'version:branch': 'Branch',
   'version:checkout': 'Checkout',
@@ -145,6 +146,8 @@ function actionSurfaceDisabledReason(
 ): string | undefined {
   if (!surface) return 'Version surface status is unavailable.';
   if (!surface.featureGateEnabled) return VERSIONING_DISABLED_REASON;
+  const readReason = capabilityDisabledReason(surface, 'version:read');
+  if (readReason) return readReason;
   return capabilityDisabledReason(surface, capability);
 }
 
@@ -153,8 +156,10 @@ function capabilityDisabledReason(
   capability: VersionCapability,
 ): string | undefined {
   const state = surface.capabilities[capability];
+  const fallbackReason = `${ACTION_CAPABILITY_LABELS[capability] ?? capability} is unavailable.`;
+  if (!state) return fallbackReason;
   if (state.enabled) return undefined;
-  return state.reason || `${ACTION_CAPABILITY_LABELS[capability] ?? capability} is unavailable.`;
+  return state.reason || fallbackReason;
 }
 
 function commitDirtyDisabledReason(surface: VersionSurfaceStatus): string | undefined {

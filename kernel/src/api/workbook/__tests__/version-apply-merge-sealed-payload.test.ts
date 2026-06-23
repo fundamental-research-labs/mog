@@ -159,6 +159,96 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
     );
     expect(mergeCommitCallCount).toBe(0);
   });
+
+  it('rejects sealed payload refs bound to a different target precondition before writes', async () => {
+    let mergeCommitCallCount = 0;
+    await withPersistedConflictPreview(
+      'reject-target-binding',
+      async ({ sourceWb, preview, expectedTargetHead }) => {
+        const conflict = preview.conflicts[0];
+        const option = requireResolutionOption(conflict, 'acceptTheirs');
+        const payload = await putResolutionPayload({
+          sourceWb,
+          preview,
+          conflict,
+          option,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+
+        await expectSealedApplyRejected({
+          sourceWb,
+          preview,
+          expectedTargetHead: {
+            ...expectedTargetHead,
+            revision: {
+              ...expectedTargetHead.revision,
+              value: `${expectedTargetHead.revision.value}:stale`,
+            },
+          },
+          resolution: { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
+          message: 'sealed payload object binding does not match.',
+        });
+      },
+      {
+        applyMergeService: {
+          mergeCommit: async () => {
+            mergeCommitCallCount += 1;
+          },
+        },
+      },
+    );
+    expect(mergeCommitCallCount).toBe(0);
+  });
+
+  it('rejects sealed payload refs when a targeted save remains review-only', async () => {
+    await withPersistedConflictPreview(
+      'reject-review-only-sealed-ref',
+      async ({ sourceWb, preview, expectedTargetHead }) => {
+        expect(preview.conflicts.length).toBeGreaterThan(1);
+        const conflict = preview.conflicts[0];
+        const option = requireResolutionOption(conflict, 'acceptTheirs');
+        const payload = await putResolutionPayload({
+          sourceWb,
+          preview,
+          conflict,
+          option,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+
+        const saved = await sourceWb.version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead,
+          resolutions: [
+            { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
+          ],
+        });
+        expect(saved).toMatchObject({
+          ok: false,
+          error: {
+            code: 'target_unavailable',
+            diagnostics: [
+              expect.objectContaining({
+                code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
+                message: 'review-only merge attempts cannot save sealed resolution payload refs.',
+                data: expect.objectContaining({ mutationGuarantee: 'no-write-attempted' }),
+              }),
+            ],
+          },
+        });
+      },
+      {},
+      ['A1', 'B1'],
+    );
+  });
 });
 
 async function expectSealedApplyRejected(input: {
@@ -233,6 +323,7 @@ async function withPersistedConflictPreview(
     readonly expectedTargetHead: VersionCommitExpectedHead;
   }) => Promise<void>,
   versioning: Record<string, unknown> = {},
+  conflictCells: readonly string[] = ['A1'],
 ): Promise<void> {
   const documentScope = documentScopeForGraph(graphId);
   const provider = createInMemoryVersionStoreProvider({ documentScope });
@@ -258,7 +349,9 @@ async function withPersistedConflictPreview(
     sourceWb = await sourceHandle.workbook({
       versioning: withVersionManifest({ provider, ...versioning }),
     });
-    await sourceWb.activeSheet.setCell('A1', 'base');
+    for (const cell of conflictCells) {
+      await sourceWb.activeSheet.setCell(cell, 'base');
+    }
     const baseCommit = await expectCommit(
       sourceWb.version.commit({
         expectedHead: {
@@ -277,7 +370,9 @@ async function withPersistedConflictPreview(
     });
     if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
 
-    await sourceWb.activeSheet.setCell('A1', 'ours');
+    for (const cell of conflictCells) {
+      await sourceWb.activeSheet.setCell(cell, 'ours');
+    }
     const oursCommit = await expectCommit(
       sourceWb.version.commit({
         expectedHead: {
@@ -293,7 +388,9 @@ async function withPersistedConflictPreview(
     if (!checkoutBase.ok) {
       throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
     }
-    await branchWb.activeSheet.setCell('A1', 'theirs');
+    for (const cell of conflictCells) {
+      await branchWb.activeSheet.setCell(cell, 'theirs');
+    }
     const theirsCommit = await expectCommit(
       branchWb.version.commit({
         targetRef: `scenario/${graphId}` as any,

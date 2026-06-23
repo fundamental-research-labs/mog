@@ -133,6 +133,7 @@ export async function saveMergeResolutionsWorkbookVersion(
   const sealedPayloadDiagnostics = await validateSealedResolutionPayloadRefs({
     graph: opened.graph,
     operation: 'saveMergeResolutions',
+    allowExecutablePayloadRefs: Boolean(target && resolutionValidation.status === 'readyToApply'),
     resultId: normalized.input.resultId,
     resultDigest: normalized.input.resultDigest,
     ...(target

@@ -158,6 +158,7 @@ export function normalizeSealedResolutionPayloadRefInput(
 export async function validateSealedResolutionPayloadRefs(input: {
   readonly graph: VersionGraphStore;
   readonly operation: VersionMergePublicOperation;
+  readonly allowExecutablePayloadRefs?: boolean;
   readonly resultId: VersionMergeResultId;
   readonly resultDigest: ObjectDigest;
   readonly redactionPolicyDigest?: ObjectDigest;
@@ -169,6 +170,15 @@ export async function validateSealedResolutionPayloadRefs(input: {
   const diagnostics: VersionStoreDiagnostic[] = [];
   for (const resolution of input.resolutions) {
     if (!resolution.sealedPayloadRef) continue;
+    if (input.allowExecutablePayloadRefs === false) {
+      diagnostics.push(
+        sealedPayloadMismatchDiagnostic(
+          input.operation,
+          'review-only merge attempts cannot save sealed resolution payload refs.',
+        ),
+      );
+      continue;
+    }
     const bindingDiagnostics = validateSealedRefBinding(input, resolution);
     diagnostics.push(...bindingDiagnostics);
     if (bindingDiagnostics.length > 0) continue;

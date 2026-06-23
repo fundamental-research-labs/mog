@@ -91,6 +91,11 @@ export interface EventSubscriptionConfig {
   setViewportConfig: (config: PersistedViewportConfig) => void;
 
   /**
+   * Rebind renderer-owned viewport registrations after workbook context swaps.
+   */
+  rebindWorkbookViewport?: () => void;
+
+  /**
    * Callback when workbook settings change that affect selection machine.
    * Issue 8: Settings Panel - allowDragFill affects selection machine guard.
    * Optional since not all coordinators need this.
@@ -476,6 +481,7 @@ export function setupEventSubscriptions(config: EventSubscriptionConfig): EventS
   // VERSION CHECKOUT EVENTS
   // ---------------------------------------------------------------------------
   const versionCheckoutUnsub = workbook.on('workbook:version-checkout-materialized', () => {
+    config.rebindWorkbookViewport?.();
     doInvalidateAll();
   });
   cleanups.set('versionCheckout', versionCheckoutUnsub);

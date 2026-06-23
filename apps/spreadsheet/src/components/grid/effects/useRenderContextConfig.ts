@@ -200,13 +200,11 @@ export interface UseRenderContextConfigOptions {
   // BINARY VIEWPORT
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** Optional binary cell reader for the cells layer hot path.
-   * When set, flag-based booleans and display text are read from the binary
-   * viewport buffer instead of individual CellDataSource calls. */
-  binaryCellReader?: BinaryCellReader | null;
+  /** Resolve the current binary cell reader for the cells layer hot path. */
+  getBinaryCellReader?: () => BinaryCellReader | null;
 
-  /** Per-viewport binary cell reader resolver. */
-  binaryCellReaderForViewport?: ((viewportId: string) => BinaryCellReader | undefined) | null;
+  /** Resolve a binary cell reader for the current materialization and viewport. */
+  getBinaryCellReaderForViewport?: (viewportId: string) => BinaryCellReader | undefined;
 
   // ═══════════════════════════════════════════════════════════════════════════
   // PASTE PREVIEW
@@ -362,9 +360,10 @@ export function useRenderContextConfig(options: UseRenderContextConfigOptions): 
       getPreviewFont: () => optionsRef.current.uiStoreApi.getState().previewFont,
       // Charts
       renderChart: (chartId, ctx, bounds) => optionsRef.current.renderChart(chartId, ctx, bounds),
-      // Binary Viewport — read from config directly in coordination
-      binaryCellReader: optionsRef.current.binaryCellReader ?? undefined,
-      binaryCellReaderForViewport: optionsRef.current.binaryCellReaderForViewport,
+      // Binary Viewport
+      getBinaryCellReader: () => optionsRef.current.getBinaryCellReader?.() ?? undefined,
+      getBinaryCellReaderForViewport: (viewportId) =>
+        optionsRef.current.getBinaryCellReaderForViewport?.(viewportId),
     });
 
     // Subscribe to shimmer state changes in the UI store and push them

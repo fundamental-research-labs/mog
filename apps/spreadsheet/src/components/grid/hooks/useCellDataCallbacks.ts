@@ -17,7 +17,7 @@ import { useCallback } from 'react';
 import type { SparklineManager } from '../../../coordinator/sparklines';
 
 interface UseCellDataCallbacksOptions {
-  viewport: ViewportReader;
+  getViewport: (sheetId: SheetId) => ViewportReader;
   sparklineManager: SparklineManager;
 }
 
@@ -35,22 +35,22 @@ export interface CellDataCallbacks {
  * RenderContext.currentSheetId is the authoritative source.
  */
 export function useCellDataCallbacks(options: UseCellDataCallbacksOptions): CellDataCallbacks {
-  const { viewport, sparklineManager } = options;
+  const { getViewport, sparklineManager } = options;
 
   const getCellValue = useCallback(
-    (_sheetId: SheetId, cell: CellCoord) => {
-      const cellData = viewport.getCellData(cell.row, cell.col);
+    (sheetId: SheetId, cell: CellCoord) => {
+      const cellData = getViewport(sheetId).getCellData(cell.row, cell.col);
       return cellData?.displayText ?? null;
     },
-    [viewport],
+    [getViewport],
   );
 
   const getCellFormat = useCallback(
-    (_sheetId: SheetId, cell: CellCoord) => {
-      const cellData = viewport.getCellData(cell.row, cell.col);
+    (sheetId: SheetId, cell: CellCoord) => {
+      const cellData = getViewport(sheetId).getCellData(cell.row, cell.col);
       return cellData?.format ?? null;
     },
-    [viewport],
+    [getViewport],
   );
 
   const getSparklineRenderData = useCallback(

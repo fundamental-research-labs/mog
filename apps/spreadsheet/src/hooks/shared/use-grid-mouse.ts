@@ -1896,6 +1896,7 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
       if (editorSnapshot.isEditing) {
         e.preventDefault();
       } else {
+        coordinator.input.focusGrid();
         container.focus();
       }
 

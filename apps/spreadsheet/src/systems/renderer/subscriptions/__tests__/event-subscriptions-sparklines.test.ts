@@ -37,7 +37,10 @@ function createMockWorkbook() {
 
 function setupWithWorkbook(
   workbook: ReturnType<typeof createMockWorkbook>,
-  overrides: { readonly invalidateAll?: () => void } = {},
+  overrides: {
+    readonly invalidateAll?: () => void;
+    readonly rebindWorkbookViewport?: () => void;
+  } = {},
 ) {
   return setupEventSubscriptions({
     workbook: workbook as any,
@@ -47,6 +50,7 @@ function setupWithWorkbook(
     updateRendererContext: jest.fn(),
     setFrozenPanes: jest.fn(),
     setViewportConfig: jest.fn(),
+    rebindWorkbookViewport: overrides.rebindWorkbookViewport,
   });
 }
 
@@ -54,7 +58,8 @@ describe('Event Subscriptions sparkline integration', () => {
   it('invalidates rendering after checkout materializes a new workbook context', () => {
     const workbook = createMockWorkbook();
     const invalidateAll = jest.fn();
-    setupWithWorkbook(workbook, { invalidateAll });
+    const rebindWorkbookViewport = jest.fn();
+    setupWithWorkbook(workbook, { invalidateAll, rebindWorkbookViewport });
 
     workbook.emit({
       type: 'workbook:version-checkout-materialized',
@@ -64,7 +69,11 @@ describe('Event Subscriptions sparkline integration', () => {
       timestamp: 1,
     });
 
+    expect(rebindWorkbookViewport).toHaveBeenCalledTimes(1);
     expect(invalidateAll).toHaveBeenCalledTimes(1);
+    expect(rebindWorkbookViewport.mock.invocationCallOrder[0]).toBeLessThan(
+      invalidateAll.mock.invocationCallOrder[0],
+    );
   });
 
   it('refreshes contextual selection state for the complete sparkline event family', () => {

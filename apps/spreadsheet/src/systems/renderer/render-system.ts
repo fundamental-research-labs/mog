@@ -767,6 +767,9 @@ export class RenderSystem implements IRenderSystem {
         setViewportConfig: (config) => {
           this.rendererExecution?.setViewportConfig(config);
         },
+        rebindWorkbookViewport: () => {
+          this.rendererExecution?.rebindWorkbookViewport();
+        },
       });
     }
 

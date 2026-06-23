@@ -717,24 +717,7 @@ export class SheetView {
     // Ordering rationale (design doc): if we refresh before subscribing, the
     // first fetch-committed event fires before we're listening, and the initial
     // data never populates VPI.
-    this._wiring = new ViewportWiring({
-      workbookViewport: workbook.viewport,
-      getViewportReader: () => this._getActiveViewportReader(),
-      positionIndex: this._positionIndex,
-      mergeIndex: this._mergeIndex,
-      scheduler: this._renderer.getRenderScheduler(),
-      expandableScheduler: this._renderer.getRenderScheduler() as unknown as {
-        setPositionIndex?: (index: ViewportPositionIndex) => void;
-        setMergeIndex?: (index: ViewportMergeIndex) => void;
-        setCellExpander?: (expander: import('@mog/canvas-engine').DirtyCellExpander) => void;
-      },
-      cellExpander: this._renderer.getCellExpander(),
-      onViewportGeometryChanged: () => {
-        this._recomputeLayout({ scheduleRefresh: 'if-changed' });
-        this._emit({ type: 'geometry-change' });
-      },
-      onViewportBufferChanged: () => this._syncWorkbookDataSources(),
-    });
+    this._wiring = this._createViewportWiring(this._workbookViewport);
     this._wiring.connect();
 
     // --- 2. Compute initial viewport layout. --------------------------------
@@ -750,6 +733,41 @@ export class SheetView {
     void this._immediateViewportRefresh();
 
     this._callbacks.onReady?.();
+  }
+
+  /**
+   * Rebind viewport wiring after the attached workbook swaps its backing context.
+   * Version-control checkout preserves the Workbook object but replaces the
+   * underlying compute bridge, so cached viewport coordinators must be refreshed.
+   */
+  rebindWorkbookViewport(): void {
+    this._ensureNotDisposed();
+    if (!this._workbook) {
+      throw new Error('SheetView.rebindWorkbookViewport: not attached');
+    }
+
+    this._viewportRefreshGeneration++;
+    if (this._refreshTimer) {
+      clearTimeout(this._refreshTimer);
+      this._refreshTimer = null;
+    }
+
+    this._wiring?.disconnect();
+    this._wiring = null;
+    this._workbookViewport?.setRenderScheduler(null);
+
+    for (const [, region] of this._regions) {
+      region.dispose();
+    }
+    this._regions.clear();
+
+    this._workbookViewport = this._workbook.viewport;
+    this._wiring = this._createViewportWiring(this._workbookViewport);
+    this._wiring.connect();
+    this._syncWorkbookDataSources();
+
+    this._recomputeLayout();
+    void this._immediateViewportRefresh();
   }
 
   // ===========================================================================
@@ -1392,6 +1410,27 @@ export class SheetView {
     }
   }
 
+  private _createViewportWiring(workbookViewport: WorkbookViewport): ViewportWiring {
+    return new ViewportWiring({
+      workbookViewport,
+      getViewportReader: () => this._getActiveViewportReader(),
+      positionIndex: this._positionIndex,
+      mergeIndex: this._mergeIndex,
+      scheduler: this._renderer.getRenderScheduler(),
+      expandableScheduler: this._renderer.getRenderScheduler() as unknown as {
+        setPositionIndex?: (index: ViewportPositionIndex) => void;
+        setMergeIndex?: (index: ViewportMergeIndex) => void;
+        setCellExpander?: (expander: import('@mog/canvas-engine').DirtyCellExpander) => void;
+      },
+      cellExpander: this._renderer.getCellExpander(),
+      onViewportGeometryChanged: () => {
+        this._recomputeLayout({ scheduleRefresh: 'if-changed' });
+        this._emit({ type: 'geometry-change' });
+      },
+      onViewportBufferChanged: () => this._syncWorkbookDataSources(),
+    });
+  }
+
   // ===========================================================================
   // INTERNAL — viewport data refresh (debounced + in-flight guards).
   //
@@ -1778,6 +1817,7 @@ export function createSheetView(
     attach: (source) => impl.attach(source),
     start: () => impl.start(),
     switchSheet: (sheetId) => impl.switchSheet(sheetId),
+    rebindWorkbookViewport: () => impl.rebindWorkbookViewport(),
     suspend: () => impl.suspend(),
     resume: () => impl.resume(),
     scrollTo: (row, col) => impl.scrollTo(row, col),

@@ -130,6 +130,7 @@ export interface RendererExecutionResult {
   removeOverlayViewport(id: string): void;
   getViewportLayout(): ViewportLayout | null;
   recomputeLayout(): void;
+  rebindWorkbookViewport(): void;
 
   // ---- Lifecycle ----------------------------------------------------------
   cleanup(): void;
@@ -595,6 +596,10 @@ export function setupRendererExecution(config: RendererExecutionConfig): Rendere
 
     recomputeLayout(): void {
       sheetView?.viewport.invalidateLayout();
+    },
+
+    rebindWorkbookViewport(): void {
+      sheetView?.rebindWorkbookViewport();
     },
 
     // ---- Lifecycle ---------------------------------------------------------

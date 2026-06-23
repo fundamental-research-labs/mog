@@ -13,7 +13,7 @@ import { useEffect } from 'react';
 
 import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { SheetCoordinator } from '../../../coordinator/sheet-coordinator';
-import { useActiveSheetId, useWorkbook } from '../../../infra/context';
+import { useWorkbook } from '../../../infra/context';
 
 /**
  * Options for the useEditorIntegration hook.
@@ -34,18 +34,16 @@ export interface UseEditorIntegrationOptions {
 export function useEditorIntegration(options: UseEditorIntegrationOptions): void {
   const { coordinator } = options;
   const wb = useWorkbook();
-  const activeSheetId = useActiveSheetId();
 
   // Set Checkbox Toggle Integration using feature module pattern
   // Issue 2: Cell Dropdowns / In-Cell Pickers
   // Wires up the coordinator to toggle checkbox cells directly.
   // Checkbox cells bypass the editor state machine entirely.
   useEffect(() => {
-    const ws = wb.getSheetById(activeSheetId);
     coordinator.grid.setCheckboxCoordination({
-      getCellValue: (_sheetId, row, col) => {
+      getCellValue: (sheetId, row, col) => {
         // Use ViewportReader for viewport cells (sync, fast)
-        const vpCell = ws.viewport.getCellData(row, col);
+        const vpCell = wb.getSheetById(toSheetId(sheetId)).viewport.getCellData(row, col);
         return vpCell?.value ?? null;
       },
       setCellValue: (sheetId, row, col, value) => {
@@ -54,12 +52,12 @@ export function useEditorIntegration(options: UseEditorIntegrationOptions): void
           typeof value === 'boolean' ? String(value).toUpperCase() : String(value);
         void wb.getSheetById(toSheetId(sheetId)).setCell(row, col, stringValue);
       },
-      isCheckboxCell: (_sheetId, row, col) => {
+      isCheckboxCell: (sheetId, row, col) => {
         // Check ViewportReader for schema/validation data indicating boolean type
-        const vpCell = ws.viewport.getCellData(row, col);
+        const vpCell = wb.getSheetById(toSheetId(sheetId)).viewport.getCellData(row, col);
         return vpCell?.schema_type === 'boolean';
       },
       setPendingUndoDescription: (description) => wb.setPendingUndoDescription(description),
     });
-  }, [coordinator, wb, activeSheetId]);
+  }, [coordinator, wb]);
 }

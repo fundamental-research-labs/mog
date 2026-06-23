@@ -26,7 +26,6 @@ import type { MutationResult } from '@mog-sdk/contracts/protection';
 import { withHandlerErrors } from '../../devtools/handler-error-boundary';
 import { useReadOnly, useUIStore, useUIStoreApi } from '../../infra/context';
 import { useEditorActions } from '../editing/use-editor-actions';
-import { useActiveCell } from '../selection/use-active-cell';
 import { useCoordinator } from '../shared/use-coordinator';
 import { useDispatch } from '../toolbar/use-action-dependencies';
 import { useFocus } from './use-focus';
@@ -88,9 +87,6 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
 
   // Compose state hooks
   const focus = useFocus();
-  // Performance optimization: Only subscribe to activeCell, not full selection state
-  // Type-to-edit only needs activeCell position
-  const { activeCell } = useActiveCell();
 
   // Performance optimization: Use coordinator for on-demand editor state reads
   // and useEditorActions for stable action references (no re-renders on editor state changes)
@@ -180,9 +176,11 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
 
       // Read activeSheetId from store at event time, not from stale closure.
       const currentActiveSheetId = uiStoreApi.getState().activeSheetId as string;
+      const currentActiveCell =
+        coordinator.grid.access.actors.selection.getSnapshot().context.activeCell;
       handleTypeToEdit(
         e,
-        activeCell,
+        currentActiveCell,
         editorActions.startEditing,
         toSheetId(currentActiveSheetId),
         showProtectionAlert,
@@ -193,7 +191,6 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
       coordinator,
       editorActions.startEditing,
       keyboard,
-      activeCell,
       uiStoreApi,
       showProtectionAlert,
       formatPainterActive,

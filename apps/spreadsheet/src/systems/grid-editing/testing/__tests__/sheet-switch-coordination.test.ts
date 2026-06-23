@@ -8,8 +8,9 @@ import {
 } from '../../subscriptions/sheet-switch-coordination';
 
 type SheetSwitchListener = Parameters<OnSheetSwitchCallback>[0];
+type WorkbookListener = (event?: any) => void;
 
-function createActorStubs() {
+function createActorStubs(options?: { currentSheetId?: string | null }) {
   const selectionSnapshot = {
     context: {
       activeCell: { row: 0, col: 0 },
@@ -33,6 +34,11 @@ function createActorStubs() {
     clipboardActor: {},
     rendererActor: {
       subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
+      getSnapshot: () => ({
+        context: {
+          currentSheetId: options?.currentSheetId ?? 'sheet-1',
+        },
+      }),
       send: jest.fn(),
     },
     selectionActor: {
@@ -50,15 +56,26 @@ function createHarness(options?: {
   topLeftCells?: Array<{ row: number; col: number }>;
 }) {
   const setScrollPosition = jest.fn(async () => undefined);
+  const workbookListeners = new Map<string, WorkbookListener[]>();
   const workbook = {
     getSheetById: jest.fn(() => ({
       view: { setScrollPosition },
     })),
-    on: jest.fn(() => jest.fn()),
+    on: jest.fn((event: string, handler: WorkbookListener) => {
+      const listeners = workbookListeners.get(event) ?? [];
+      listeners.push(handler);
+      workbookListeners.set(event, listeners);
+      return jest.fn(() => {
+        const nextListeners = workbookListeners.get(event)?.filter((listener) => listener !== handler);
+        if (nextListeners) workbookListeners.set(event, nextListeners);
+      });
+    }),
   };
   let listener: SheetSwitchListener | null = null;
   const topLeftCells = [...(options?.topLeftCells ?? [{ row: 5, col: 7 }])];
   const saveSheetViewState = jest.fn();
+  const refreshLayoutCallbacks = jest.fn();
+  const onSheetSwitchComplete = jest.fn();
   const durabilityPromise = options?.durabilityPromise;
   const actors = createActorStubs();
   const cleanup = setupSheetSwitchCoordination({
@@ -79,6 +96,8 @@ function createHarness(options?: {
     saveSheetViewState,
     getScrollPosition: () => ({ x: 100, y: 200 }),
     getTopLeftCell: () => topLeftCells.shift() ?? { row: 0, col: 0 },
+    refreshLayoutCallbacks,
+    onSheetSwitchComplete,
   });
 
   if (!listener) throw new Error('sheet switch listener was not registered');
@@ -86,8 +105,16 @@ function createHarness(options?: {
   return {
     cleanup,
     listener,
+    emitWorkbookEvent: (event: string, payload?: any) => {
+      for (const handler of workbookListeners.get(event) ?? []) {
+        handler(payload);
+      }
+    },
+    actors,
     setScrollPosition,
     saveSheetViewState,
+    refreshLayoutCallbacks,
+    onSheetSwitchComplete,
   };
 }
 
@@ -140,6 +167,28 @@ describe('setupSheetSwitchCoordination import durability', () => {
 
     expect(harness.setScrollPosition).toHaveBeenCalledTimes(1);
     expect(harness.setScrollPosition).toHaveBeenCalledWith(8, 9);
+    harness.cleanup();
+  });
+
+  it('refreshes active-sheet coordination after a same-sheet checkout materializes', () => {
+    const harness = createHarness();
+
+    harness.emitWorkbookEvent('workbook:version-checkout-materialized');
+
+    expect(harness.refreshLayoutCallbacks).toHaveBeenCalledTimes(1);
+    expect(harness.actors.selectionActor.send).toHaveBeenCalledWith({
+      type: 'SET_SELECTION',
+      ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+      activeCell: { row: 0, col: 0 },
+      anchor: null,
+      anchorCol: null,
+      anchorRow: null,
+      source: 'restore',
+    });
+    expect(harness.onSheetSwitchComplete).toHaveBeenCalledTimes(1);
+    expect(harness.actors.rendererActor.send).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'SWITCH_SHEET' }),
+    );
     harness.cleanup();
   });
 });

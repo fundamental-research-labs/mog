@@ -260,6 +260,30 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
     scheduleScrollFlushAfterDurability();
   };
 
+  const refreshActiveSheetRuntimeAfterCheckout = (): void => {
+    refreshLayoutCallbacks?.();
+
+    const selectionSnapshot = selectionActor.getSnapshot();
+    const selectionState = selectionSnapshot.context;
+    const isFormulaEditing = editorSelectors.isFormulaEditing(editorActor.getSnapshot());
+
+    selectionActor.send({
+      type: 'SET_SELECTION',
+      ranges: selectionSelectors.ranges(selectionSnapshot),
+      activeCell: selectionState.activeCell,
+      anchor: isFormulaEditing ? null : selectionState.anchor,
+      anchorCol: isFormulaEditing ? null : selectionState.anchorCol,
+      anchorRow: isFormulaEditing ? null : selectionState.anchorRow,
+      source: 'restore',
+    });
+
+    onSheetSwitchComplete?.();
+
+    if (chartActor) {
+      chartActor.send({ type: 'SHEET_SWITCHED' });
+    }
+  };
+
   const rendererSub = rendererActor.subscribe((state) => {
     // When renderer enters 'ready' state after a sheet switch, restore selection
     if (state.value === 'ready' && pendingRestoreSheetId !== null) {
@@ -426,6 +450,16 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
       })
     : () => {}; // No-op if callback not provided
 
+  const versionCheckoutMaterializedUnsub = workbook.on(
+    'workbook:version-checkout-materialized',
+    () => {
+      const currentSheetId = rendererActor.getSnapshot().context.currentSheetId;
+      if (currentSheetId) {
+        refreshActiveSheetRuntimeAfterCheckout();
+      }
+    },
+  );
+
   // Return cleanup function
   return () => {
     disposed = true;
@@ -433,5 +467,6 @@ export function setupSheetSwitchCoordination(config: SheetSwitchCoordinationConf
     rendererSub.unsubscribe();
     unsubSheetSwitch();
     sheetDeletedUnsub();
+    versionCheckoutMaterializedUnsub();
   };
 }

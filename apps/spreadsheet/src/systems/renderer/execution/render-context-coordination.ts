@@ -407,18 +407,11 @@ export interface RenderContextCoordinationConfig {
   // ===========================================================================
   // Binary Viewport
   // ===========================================================================
-  /**
-   * Optional binary cell reader for the canvas cells layer hot path.
-   * When set, flag-based booleans and display text are read from the binary
-   * viewport buffer via a flyweight accessor instead of individual CellDataSource calls.
-   */
-  binaryCellReader?: RenderContextConfig['binaryCellReader'];
+  /** Resolve the current binary cell reader for the canvas cells layer hot path. */
+  getBinaryCellReader?: () => RenderContextConfig['binaryCellReader'];
 
-  /**
-   * Per-viewport binary cell reader resolver.
-   * When set, resolves a binary cell reader for each viewport region.
-   */
-  binaryCellReaderForViewport?: RenderContextConfig['binaryCellReaderForViewport'];
+  /** Resolve a binary cell reader for the current materialization and viewport. */
+  getBinaryCellReaderForViewport?: RenderContextConfig['binaryCellReaderForViewport'];
 }
 
 /**
@@ -493,7 +486,8 @@ export function setupRenderContextCoordination(
     getPreviewFont,
     // Charts
     renderChart,
-    // binaryCellReader read from config directly in sendContextUpdate
+    getBinaryCellReader,
+    getBinaryCellReaderForViewport,
   } = config;
 
   const cleanupFns: (() => void)[] = [];
@@ -676,9 +670,10 @@ export function setupRenderContextCoordination(
       previewFont: getPreviewFont?.() ?? null,
       // Charts
       renderChart,
-      // Binary Viewport — read from config to pick up latest value
-      binaryCellReader: config.binaryCellReader,
-      binaryCellReaderForViewport: config.binaryCellReaderForViewport,
+      // Binary Viewport — resolve lazily so checkout materialization swaps cannot
+      // leave the cells layer pinned to a pre-checkout compute bridge.
+      binaryCellReader: getBinaryCellReader?.() ?? undefined,
+      binaryCellReaderForViewport: getBinaryCellReaderForViewport,
     };
 
     // Call the coordinator's update method directly (not via machine event)

@@ -101,7 +101,7 @@ function FormulaBarContainerImpl() {
   const activeSheetId = useActiveSheetId();
   const focus = useFocus();
   const deps = useActionDependencies();
-  const ws = useMemo(() => wb.getSheetById(activeSheetId), [wb, activeSheetId]);
+  const ws = wb.getSheetById(activeSheetId);
 
   // Protection alert for blocked edits
   const showProtectionAlert = useUIStore((s) => s.showProtectionAlert);

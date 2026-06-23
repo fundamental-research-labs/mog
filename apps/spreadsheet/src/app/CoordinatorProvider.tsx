@@ -26,14 +26,8 @@ import {
   type ReactNode,
 } from 'react';
 
-import type { ActionType } from '@mog-sdk/contracts/actions';
-import { objectSelectors } from '../selectors';
-import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
-import { dispatch } from '../actions/dispatcher';
-import { createActorAccessLayerFromBundle } from '../coordinator/actor-access';
-import { createKeyUpCapture } from './coordinator-keyup-capture';
 import {
   GENERAL_NUMBER_FORMAT,
   shouldNormalizeEnteredZeroFormat,
@@ -52,26 +46,23 @@ import {
   useCoordinator,
   type CoordinatorProviderProps as BaseProviderProps,
 } from '../hooks/shared/use-coordinator';
-import { usePlatform, usePlatformIdentity, useShellService } from '@mog/shell';
+import { usePlatformIdentity } from '@mog/shell';
 import {
   useActiveSheetId,
   useDocumentContext,
-  useFeatureGates,
   useReadOnly,
-  useSpreadsheetHostCommandsOptional,
   useUIStoreApi,
   useWorkbook,
 } from '../infra/context';
 import { setupRangeSelectionCoordination } from '../systems/grid-editing/coordination';
 import { setupUndoSelectionCoordination } from '../systems/grid-editing/coordination/undo-selection-coordination';
-import {
-  isDialogKeyboardTarget,
-  isEditableKeyboardTarget,
-  isGlobalShortcut,
-  keyboardEventTargetElement,
-  shouldDeferNavigationKeyToEditableTarget,
-} from '../systems/shared/utils/focus-utils';
 import { useCollabPresence, useSelectionPresenceBroadcast } from '../hooks/collab';
+import { KeyboardCaptureSetup } from './coordinator-keyboard-capture';
+
+export {
+  shouldCommitFormulaBarEnterInPlace,
+  shouldRouteSpreadsheetChromeNavigationShortcut,
+} from './coordinator-keyboard-capture';
 
 // =============================================================================
 // Pane Navigation Context (E1: F6 Pane Navigation)
@@ -93,40 +84,6 @@ interface PaneNavigationContextValue {
 }
 
 const PaneNavigationContext = createContext<PaneNavigationContextValue | null>(null);
-
-function isNativeEditableShortcut(e: KeyboardEvent, target: HTMLElement | null): boolean {
-  if (!isEditableKeyboardTarget(target)) return false;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
-
-  const key = e.key.toLowerCase();
-  return key === 'c' || key === 'x' || key === 'v' || key === 'z' || key === 'y';
-}
-
-const SPREADSHEET_CHROME_NAVIGATION_KEYS = new Set(['Home', 'End', 'PageDown', 'PageUp']);
-
-export function shouldRouteSpreadsheetChromeNavigationShortcut(
-  e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'>,
-  target: HTMLElement | null,
-): boolean {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
-  if (!SPREADSHEET_CHROME_NAVIGATION_KEYS.has(e.key)) return false;
-  if (isDialogKeyboardTarget(target) || isEditableKeyboardTarget(target)) return false;
-  return true;
-}
-
-export function shouldCommitFormulaBarEnterInPlace(
-  e: Pick<KeyboardEvent, 'key' | 'shiftKey' | 'ctrlKey' | 'metaKey' | 'altKey'>,
-  currentLayerType: string,
-): boolean {
-  return (
-    currentLayerType === 'formulaBar' &&
-    e.key === 'Enter' &&
-    !e.shiftKey &&
-    !e.ctrlKey &&
-    !e.metaKey &&
-    !e.altKey
-  );
-}
 
 /**
  * Hook to access pane navigation element registration.
@@ -248,333 +205,6 @@ function UndoSelectionCoordinatorSetup({
 
     return cleanup;
   }, [coordinator, pendingSelectionCheckpointRef, uiStoreApi, wb.history]);
-
-  return <>{children}</>;
-}
-
-// =============================================================================
-// Document-Level Keyboard Capture (Keyboard Single Source of Truth)
-// =============================================================================
-
-/**
- * Internal component that sets up document-level keyboard capture.
- * Must be rendered inside BaseCoordinatorProvider to access coordinator.
- *
- * ARCHITECTURE: This is the SINGLE entry point for navigation keys (Enter, Tab, Escape)
- * during editing. Editor components (InlineCellEditor, FormulaBar) do NOT handle these
- * keys locally - they only handle text input (onChange) and IME composition.
- *
- * Uses capture phase ({ capture: true }) to intercept events BEFORE they reach
- * the focused input element. This prevents dual handling that caused the
- * "Enter moves down 2 cells" bug.
- *
- * FIX (2026-02-03): Changed from DOM-based routing (data-spreadsheet-container ancestor)
- * to state machine-based routing (editor machine state). DOM ancestry failed for formula bar
- * because it's a sibling of SpreadsheetGrid, not a descendant. State machines are the
- * single source of truth for editing state.
- *
- */
-function KeyboardCaptureSetup({
-  children,
-  workbook,
-}: {
-  children: ReactNode;
-  workbook: WorkbookInternal;
-}) {
-  const coordinator = useCoordinator();
-  const uiStoreApi = useUIStoreApi();
-  const readOnly = useReadOnly();
-  const featureGates = useFeatureGates();
-  const hostCommands = useSpreadsheetHostCommandsOptional();
-
-  // typed platform + shell-service deps for handler dispatch.
-  const platform = usePlatform();
-  const shellService = useShellService();
-
-  // M9: Read action callbacks from coordinator config — no prop-drilling
-  const { onUIAction } = coordinator.input;
-
-  useEffect(() => {
-    const keyboardCoordinator = coordinator.input.keyboardCoordinator;
-
-    keyboardCoordinator.setDependencies({
-      workbook,
-      selectionActor: coordinator.grid.access.actors.selection,
-      editorActor: coordinator.grid.access.actors.editor,
-      clipboardActor: coordinator.grid.access.actors.clipboard,
-      objectInteractionActor: coordinator.objects.access.actors.object,
-      chartActor: coordinator.objects.access.actors.chart,
-      findReplaceActor: coordinator.grid.access.actors.findReplace,
-      commentActor: coordinator.grid.access.actors.comment,
-      paneFocusActor: coordinator.input.access.actors.paneFocus,
-      rendererActor: coordinator.renderer.access.actors.renderer,
-      getActiveSheetId: () => uiStoreApi.getState().activeSheetId,
-      // UIState is a superset of KeyboardUIStore — cast for DAG boundary compatibility
-      uiStore: uiStoreApi,
-      getCoordinator: () => coordinator,
-      // dispatch now accepts string (runtime handler lookup handles unknown actions)
-      dispatch: (action, deps, payload) => dispatch(action as ActionType, deps, payload),
-      readOnly,
-      featureGates,
-      createAccessLayer: createActorAccessLayerFromBundle,
-      // Object selection helpers — read fresh actor state when called
-      hasObjectSelection: () => {
-        const snapshot = coordinator.objects.access.actors.object.getSnapshot();
-        return objectSelectors.hasSelection(snapshot);
-      },
-      isEditingObjectText: () => {
-        const snapshot = coordinator.objects.access.actors.object.getSnapshot();
-        return objectSelectors.isEditingText(snapshot);
-      },
-      isFlashFillPreviewActive: () => uiStoreApi.getState().flashFillPreview.isShowingPreview,
-      platform,
-      shellService,
-      hostCommands,
-      onUIAction,
-    });
-
-    // After wiring, verify dependencies are set (should always succeed)
-    if (!keyboardCoordinator.hasDependencies()) {
-      return;
-    }
-
-    /**
-     * Document-level keyboard handler using capture phase.
-     * Intercepts navigation keys BEFORE they reach input elements.
-     */
-    const handleKeyDownCapture = (e: KeyboardEvent) => {
-      // IME composition guard - never intercept during IME (must be first)
-      if (e.isComposing || e.keyCode === 229) {
-        return;
-      }
-
-      // Check editor machine state - THE SOURCE OF TRUTH for editing state
-      // This replaces the DOM-based check (data-spreadsheet-container) which failed
-      // for formula bar since it's outside the grid container.
-      const editorSnapshot = coordinator.grid.access.actors.editor.getSnapshot();
-      const isEditing =
-        editorSnapshot.matches('editing') ||
-        editorSnapshot.matches('formulaEditing') ||
-        editorSnapshot.matches('richTextEditing') ||
-        editorSnapshot.matches('imeComposing');
-      const target = keyboardEventTargetElement(e);
-
-      if (
-        isGlobalShortcut(e) &&
-        !isDialogKeyboardTarget(target) &&
-        !isNativeEditableShortcut(e, target)
-      ) {
-        const result = keyboardCoordinator.handleKeyboardEvent(e);
-        if (result.handled) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        return;
-      }
-
-      if (!isEditing) {
-        // Not editing — normally grid's onKeyDown handles shortcuts via bubbling.
-        // But if focus is on BODY (e.g., after context menu close), the grid never
-        // receives the event. Route through the coordinator directly in that case.
-        const activeTag = document.activeElement?.tagName;
-
-        if (activeTag === 'BODY' || activeTag === 'HTML') {
-          // Escape with an open popover/dialog: let it bubble so the
-          // popover's own keydown handler can close it. Some popovers
-          // (e.g. CommentPopover) decline Radix's auto-focus to keep the
-          // grid usable, so focus is on BODY even though a dialog is
-          // visually present. Without this branch we'd consume Escape
-          // here, dispatch CLEAR_CLIPBOARD, and stopPropagation() —
-          // which is what kept dismissCommentPopover broken.
-          if (e.key === 'Escape' && document.querySelector('[role="dialog"]')) {
-            return;
-          }
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-          return;
-        }
-
-        // Sheet/workbook navigation shortcuts must also fire when focus is on
-        // spreadsheet chrome elements (e.g. sheet tabs or pivot field items)
-        // that sit outside the grid div and therefore never bubble to the
-        // grid's onKeyDown handler. Text inputs and dialogs retain their native
-        // keyboard ownership.
-        if (shouldRouteSpreadsheetChromeNavigationShortcut(e, target)) {
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }
-        return;
-      }
-
-      // Check focus machine to exclude dialog inputs
-      // When a dialog has focus, its inputs handle their own keyboard events.
-      // The focus machine tracks what layer has focus (grid, formulaBar, dialog, etc.)
-      const focusActor = coordinator.input.access.actors.focus;
-      if (!focusActor) return; // Focus not wired yet
-      const focusSnapshot = focusActor.getSnapshot();
-      const focusStack = focusSnapshot.context.stack;
-      const currentLayerType =
-        focusStack.length > 0 ? focusStack[focusStack.length - 1].type : 'grid';
-
-      // If focus is in a dialog, let the dialog handle keyboard events
-      // Only intercept when focus is on grid, editor, or formulaBar (spreadsheet editors)
-      if (
-        currentLayerType !== 'grid' &&
-        currentLayerType !== 'editor' &&
-        currentLayerType !== 'formulaBar'
-      ) {
-        return;
-      }
-
-      if (shouldDeferNavigationKeyToEditableTarget(e, target)) {
-        return;
-      }
-
-      // Only intercept navigation keys during editing
-      const isNavigationKey = ['Enter', 'Tab', 'Escape'].includes(e.key);
-      // Sheet switching (Ctrl/Cmd+PageDown/Up) should also be intercepted during editing
-      // so NEXT_SHEET/PREVIOUS_SHEET actions can fire while formula editing is active
-      const isSheetSwitch =
-        (e.key === 'PageDown' || e.key === 'PageUp') && (e.ctrlKey || e.metaKey);
-      const isPickerDropdownShortcut =
-        e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown';
-      if (!isNavigationKey && !isSheetSwitch) {
-        const isFormattingShortcut =
-          (e.ctrlKey || e.metaKey) && !e.altKey && ['b', 'i', 'u'].includes(e.key.toLowerCase());
-        const editorContext = editorSnapshot.context as {
-          hasSelection?: boolean;
-          hasCharSelection?: boolean;
-        };
-        if (
-          isFormattingShortcut &&
-          (editorContext.hasSelection || editorContext.hasCharSelection)
-        ) {
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-          return;
-        }
-
-        const isPrintableFormulaInput =
-          editorSnapshot.matches({ formulaEditing: 'enterMode' }) &&
-          e.key.length === 1 &&
-          !e.ctrlKey &&
-          !e.metaKey &&
-          !e.altKey &&
-          !isEditableKeyboardTarget(target) &&
-          !isDialogKeyboardTarget(target);
-
-        if (isPrintableFormulaInput) {
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        }
-
-        if (isPickerDropdownShortcut) {
-          const result = keyboardCoordinator.handleKeyboardEvent(e);
-          if (result.handled) {
-            e.preventDefault();
-            e.stopPropagation();
-          }
-          return;
-        }
-
-        // Not a navigation key - let it through for text input
-        return;
-      }
-
-      // Special case: Ctrl+Enter inserts newline (handled by FormulaBar)
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        // Let FormulaBar handle Ctrl+Enter for newline insertion
-        return;
-      }
-
-      // When autocomplete suggestions or a picker dropdown is open,
-      // let Tab/Enter/Escape propagate to the autocomplete handler
-      const { isSuggestionsOpen, isPickerOpen } = editorSnapshot.context;
-      if (isSuggestionsOpen || isPickerOpen) {
-        return;
-      }
-
-      if (shouldCommitFormulaBarEnterInPlace(e, currentLayerType)) {
-        const result = keyboardCoordinator.dispatchAction('COMMIT_IN_PLACE');
-        const handledInPlace = result instanceof Promise ? true : result?.handled === true;
-
-        if (handledInPlace) {
-          coordinator.input.access.commands.paneFocus?.resetToGrid();
-          coordinator.input.resetFocusToGrid();
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-      }
-
-      // Route to KeyboardCoordinator
-      const result = keyboardCoordinator.handleKeyboardEvent(e);
-
-      if (result.handled) {
-        // Prevent event from reaching the input element
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-
-    /**
-     * Document-level keyup handler.
-     *
-     * The keyboard-coordinator's Alt-tap detector requires the
-     * companion `keyup` event to promote a clean tap into keytip mode
-     * (the KeyTipContext's window-level keyup listener was deleted
-     * because it raced with this one). The grid's own `onKeyUp` only
-     * fires when the grid is focused; on a fresh page where focus is
-     * on `<body>`, the grid never sees the Alt-up. Routing it through
-     * the document-level listener here ensures the chord buffer can
-     * enter `'keyTipMode'` regardless of focus owner.
-     *
-     * The handler is conservative: `keyboardCoordinator.handleKeyUp`
-     * only acts on Alt-up (Alt-tap promotion) and Ctrl/Meta-up (paste
-     * options menu); every other key is a no-op.
-     *
-     * `preventDefault` is required on a successful Alt-tap promotion:
-     * Windows browsers focus the title-bar menu on bare-Alt release
-     * (Win32 menu-mnemonic convention), which yanks focus from the
-     * page after the coordinator has already entered `'keyTipMode'`.
-     * Without this, the next chord key (e.g. `H` after `Alt`) goes to
-     * the browser chrome instead of the matcher, and KeyTips never
-     * surface for Windows users. macOS has no equivalent default, so
-     * the bug was invisible there.
-     */
-    const handleKeyUpCapture = createKeyUpCapture((e) => keyboardCoordinator.handleKeyUp(e));
-
-    // Attach with capture: true to intercept before target
-    document.addEventListener('keydown', handleKeyDownCapture, { capture: true });
-    document.addEventListener('keyup', handleKeyUpCapture, { capture: true });
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDownCapture, { capture: true });
-      document.removeEventListener('keyup', handleKeyUpCapture, { capture: true });
-    };
-  }, [
-    coordinator,
-    featureGates,
-    hostCommands,
-    onUIAction,
-    platform,
-    readOnly,
-    shellService,
-    uiStoreApi,
-    workbook,
-  ]);
 
   return <>{children}</>;
 }

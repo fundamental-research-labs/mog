@@ -77,7 +77,7 @@ import { useRendererLifecycle } from './effects/useRendererLifecycle';
 import { useRendererSync } from './effects/useRendererSync';
 import { useRendererViewRestore } from './effects/useRendererViewRestore';
 import { useSparklineCFIntegration } from './effects/useSparklineCFIntegration';
-import { useVersionCheckoutMaterializationEpoch } from './effects/useVersionCheckoutMaterializationEpoch';
+import { createLiveViewportReader } from './hooks/liveViewportReader';
 import { useCellDataCallbacks } from './hooks/useCellDataCallbacks';
 // NOTE: useInputMessageTooltip is now called internally by InputMessageOverlay
 // for render isolation - see docs/ARCHITECTURE-CHECKLIST.md Section 15
@@ -167,8 +167,11 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Get data from Workbook/Worksheet API
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
-  const checkoutMaterializationEpoch = useVersionCheckoutMaterializationEpoch(wb, coordinator);
   const ws = wb.getSheetById(activeSheetId);
+  const getViewportForSheet = useCallback(
+    (sheetId: SheetId) => wb.getSheetById(sheetId).viewport,
+    [wb],
+  );
 
   // PERFORMANCE: Subscribe only to active sheet's zoom level to prevent re-renders
   // when other sheets' zoom levels change
@@ -390,8 +393,8 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   const remoteCursors = useRemoteCursors();
 
   const activeViewport = useMemo(() => {
-    return wb.getSheetById(activeSheetId).viewport;
-  }, [wb, activeSheetId, checkoutMaterializationEpoch]);
+    return createLiveViewportReader(() => getViewportForSheet(activeSheetId));
+  }, [getViewportForSheet, activeSheetId]);
 
   // NOTE: useInputMessageTooltip is now called internally by InputMessageOverlay
   // for render isolation - see docs/ARCHITECTURE-CHECKLIST.md Section 15
@@ -405,7 +408,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Use domain modules (Cells, Properties)
   // ==========================================================================
   const { getCellValue, getCellFormat, getSparklineRenderData } = useCellDataCallbacks({
-    viewport: ws.viewport,
+    getViewport: getViewportForSheet,
     sparklineManager,
   });
 
@@ -463,10 +466,6 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // ==========================================================================
   // Get page break preview mode from UI store
   const pageBreakPreviewMode = useUIStore((s) => s.pageBreakPreviewMode);
-
-  // Callback to check if a cell is a checkbox cell
-  // Use ViewportReader schema_type for sync checkbox detection.
-  // hasValidationErrors is now provided by useCellMetadataCache
 
   // Callback to get resolved table range (Cell Identity Model)
   // Inlined - resolveTableRange just returns table.range ?? null
@@ -757,8 +756,9 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     getCellPositionForTrace,
     uiStoreApi,
 
-    binaryCellReader: ws.viewport.binaryCellReader,
-    binaryCellReaderForViewport: ws.viewport.binaryCellReaderForViewport,
+    getBinaryCellReader: () => getViewportForSheet(activeSheetId).binaryCellReader,
+    getBinaryCellReaderForViewport: (viewportId) =>
+      getViewportForSheet(activeSheetId).binaryCellReaderForViewport?.(viewportId),
   });
 
   // Use extracted hook for editor integration (checkbox toggle)

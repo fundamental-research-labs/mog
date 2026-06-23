@@ -1,4 +1,7 @@
-type WorkbookRefreshEvent = 'sheet:renamed' | 'sheet:deleted';
+type WorkbookRefreshEvent =
+  | 'sheet:renamed'
+  | 'sheet:deleted'
+  | 'workbook:version-checkout-materialized';
 
 type WorkbookRefreshSource = {
   on(event: WorkbookRefreshEvent, handler: () => void): () => void;
@@ -7,6 +10,7 @@ type WorkbookRefreshSource = {
 export const FORMULA_BAR_WORKBOOK_REFRESH_EVENTS: readonly WorkbookRefreshEvent[] = [
   'sheet:renamed',
   'sheet:deleted',
+  'workbook:version-checkout-materialized',
 ];
 
 export function subscribeToFormulaBarWorkbookRefreshes(

@@ -56,6 +56,9 @@ export function normalizeCellFormatReadback(
  * Returns null if shell/doc not available.
  */
 export function getActiveComputeBridge(): any | null {
+  const workbookBridge = (window as any).__COORDINATOR__?.workbook?.ctx?.computeBridge;
+  if (workbookBridge) return workbookBridge;
+
   const shell = (window as any).__SHELL__;
   if (!shell) return null;
 

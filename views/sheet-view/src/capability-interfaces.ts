@@ -880,6 +880,12 @@ export interface SheetViewHandle {
   /** Switch the active sheet. */
   switchSheet(sheetId: string): void;
 
+  /**
+   * Rebind to the attached workbook's current viewport coordinator.
+   * Use after the workbook swaps its backing context while retaining identity.
+   */
+  rebindWorkbookViewport(): void;
+
   /** Pause the render loop. */
   suspend(): void;
   /** Resume the render loop. */

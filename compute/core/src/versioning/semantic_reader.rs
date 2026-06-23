@@ -5,10 +5,10 @@ use compute_document::schema::{KEY_CONDITIONAL_FORMAT, KEY_PROPERTIES, KEY_VALID
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    CanonicalCellValue, CanonicalDirectFormat, SemanticCellState, SemanticColumnState,
-    SemanticDomainState, SemanticObjectDigest, SemanticObjectKind, SemanticRowState,
-    SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
-    canonical_digest,
+    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, SemanticCellState,
+    SemanticColumnState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
+    SemanticRowState, SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState,
+    VersionDomainClass,
 };
 use value_types::CellValue;
 use yrs::{Map, Transact};
@@ -22,16 +22,16 @@ use crate::storage::{
 };
 
 use super::formula_reader::{
-    UNSUPPORTED_CELL_FORMULAS_DOMAIN, canonical_formula, canonical_formula_ref,
-    canonical_formula_ref_object_ids, record_unrepresented_persisted_formula,
+    canonical_formula, canonical_formula_ref, canonical_formula_ref_object_ids,
+    record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
 use super::{
-    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
-    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticStateReadError,
-    SemanticWorkbookStateReader,
+    SemanticStateReadError, SemanticWorkbookStateReader, CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN,
+    CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN,
+    SHEETS_DOMAIN,
 };
 
 const DATA_VALIDATION_DOMAIN: &str = "data-validation";

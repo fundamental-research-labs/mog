@@ -123,6 +123,76 @@ describe('WorkbookVersion public semantic diff projection', () => {
     ]);
   });
 
+  it('projects cross-sheet range fields through the review-safe range boundary', async () => {
+    const changes = [
+      semanticRecord({
+        changeId: 'validation-alpha-range',
+        domain: 'data-validation',
+        entityId: 'sheet-alpha!range:dv-alpha',
+        propertyPath: ['range'],
+        before: null,
+        after: semanticObject([
+          { key: 'kind', value: 'Set' },
+          { key: 'rangeKind', value: 'Validation' },
+          { key: 'rangeId', value: 'dv-alpha' },
+          { key: 'encoding', value: 'mog-range-meta-json-v1' },
+          { key: 'rowCount', value: 10 },
+          { key: 'colCount', value: 2 },
+          {
+            key: 'anchor',
+            value: semanticObject([
+              { key: 'kind', value: 'Elastic' },
+              { key: 'startRow', value: 1 },
+              { key: 'endRow', value: 10 },
+              { key: 'startCol', value: 1 },
+              { key: 'endCol', value: 2 },
+            ]),
+          },
+        ]),
+        display: entityLabelDisplay('Validation:dv-alpha'),
+      }),
+      semanticRecord({
+        changeId: 'chart-cross-sheet-range',
+        domain: 'charts.source-range',
+        entityId: 'sheet-beta!chart:chart-1',
+        propertyPath: ['sourceRange'],
+        before: null,
+        after: semanticObject([
+          { key: 'kind', value: 'updated' },
+          { key: 'objectId', value: 'chart-1' },
+          { key: 'objectType', value: 'chart' },
+          { key: 'dataRange', value: 'Alpha!$A$1:$B$10' },
+          { key: 'categoryRange', value: 'Beta!$C$1:$C$10' },
+        ]),
+        display: entityLabelDisplay('chart-1'),
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: validSemanticPayload('child', changes),
+    });
+    const version = createVersion(provider);
+
+    const result = await version.diff(rootCommitId, childCommitId);
+
+    if (!result.ok) throw new Error(`expected diff success: ${result.error.code}`);
+    expect(result.value.items.map((entry) => entry.structural)).toEqual([
+      expect.objectContaining({
+        domain: 'data-validation',
+        entityId: 'sheet-alpha!range:dv-alpha',
+      }),
+      expect.objectContaining({
+        domain: 'charts.source-range',
+        entityId: 'sheet-beta!chart:chart-1',
+      }),
+    ]);
+    expect((result.value.items[1]?.after as any).value.fields).toEqual(
+      expect.arrayContaining([
+        { key: 'dataRange', value: 'Alpha!$A$1:$B$10' },
+        { key: 'categoryRange', value: 'Beta!$C$1:$C$10' },
+      ]),
+    );
+  });
+
   it('projects redacted provider entries without leaking raw payload fields', async () => {
     const hiddenSheetName = 'Payroll FY27';
     const hiddenAddress = 'Payroll FY27!B9';
@@ -172,6 +242,59 @@ describe('WorkbookVersion public semantic diff projection', () => {
     expect(serialized).not.toContain(hiddenSheetName);
     expect(serialized).not.toContain(hiddenAddress);
     expect(serialized).not.toContain('salary-secret');
+  });
+
+  it('rejects unsupported row-domain entries without leaking raw row selectors', async () => {
+    const hiddenSheet = 'sheet-payroll-secret';
+    const hiddenRow = 'secret-row-17';
+    const changes = [
+      semanticRecord({
+        changeId: 'row-hidden-state',
+        domain: 'rows',
+        entityId: `${hiddenSheet}!row:17`,
+        propertyPath: ['hidden'],
+        before: null,
+        after: semanticObject([
+          { key: 'kind', value: 'Set' },
+          { key: 'rowId', value: hiddenRow },
+          { key: 'hidden', value: true },
+        ]),
+        display: entityLabelDisplay('Payroll row 17'),
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: validSemanticPayload('child', changes),
+    });
+    const version = createVersion(provider);
+
+    const result = await version.diff(rootCommitId, childCommitId);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'unsupportedDomain',
+            message: 'The requested version diff includes unsupported semantic state.',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              redacted: true,
+              payload: expect.objectContaining({
+                operation: 'diff',
+                category: 'unsupported',
+                domain: 'rows',
+                itemIndex: 0,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(hiddenSheet);
+    expect(serialized).not.toContain(hiddenRow);
+    expect(serialized).not.toContain('Payroll row 17');
   });
 
   it('rejects stale direct commit selectors without exposing the stale id', async () => {

@@ -137,6 +137,82 @@ describe('WorkbookVersion diff ref selectors', () => {
     );
   });
 
+  it.each([
+    ['base', 'HEAD'],
+    ['target', 'refs/heads/main'],
+  ] as const)('rejects stale %s ref selectors with redacted diagnostics', async (selector, refName) => {
+    const hiddenCommit = `commit:sha256:${'9'.repeat(64)}`;
+    const diff = jest.fn(async () => ({
+      status: 'degraded',
+      diagnostics: [
+        {
+          code: 'VERSION_DANGLING_REF',
+          severity: 'error',
+          selector,
+          message: `${refName} points at ${hiddenCommit}`,
+          details: { refName, commitId: hiddenCommit, rawRefDigest: 'sha256-secret' },
+        },
+      ],
+    }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(
+      selector === 'base' ? { kind: 'ref', name: refName } : ROOT_COMMIT_ID,
+      selector === 'target' ? { kind: 'ref', name: refName } : ROOT_COMMIT_ID,
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DANGLING_REF',
+            message: 'The version graph could not validate the requested diff commit closure.',
+            data: expect.objectContaining({
+              recoverability: 'repair',
+              redacted: true,
+              payload: expect.objectContaining({
+                operation: 'diff',
+                selector,
+                refName,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(hiddenCommit);
+    expect(serialized).not.toContain('sha256-secret');
+    expect(diff).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns structured diagnostics when no version diff provider is attached', async () => {
+    const version = new WorkbookVersionImpl({} as any);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.diff',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_GRAPH_UNINITIALIZED',
+            data: expect.objectContaining({
+              operation: 'diff',
+              recoverability: 'unsupported',
+              redacted: true,
+              payload: expect.objectContaining({ operation: 'diff' }),
+            }),
+          }),
+        ],
+      },
+    });
+  });
+
   it('rejects oversized public diff cursors before calling the attached diff service', async () => {
     const diff = jest.fn(async () => {
       throw new Error('diff service should not be called for oversized cursors');

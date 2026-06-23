@@ -34,19 +34,11 @@ import { recoverabilityForVersionObjectRead } from './version-object-read-diagno
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_DIFF_OPTION_KEYS = new Set([
-  'pageSize',
-  'pageToken',
-  'includeDerivedImpact',
-  'includeDiagnostics',
-]);
+const VERSION_DIFF_OPTION_KEYS = new Set(['pageSize', 'pageToken', 'includeDerivedImpact', 'includeDiagnostics']);
 const VERSION_COMMIT_SELECTOR_KEYS = new Set(['kind', 'id']);
 const VERSION_REF_SELECTOR_KEYS = new Set(['kind', 'name']);
-const REDACTED_VALUE_REASONS = new Set([
-  'permission-denied',
-  'redaction-policy',
-  'historical-acl-unavailable',
-]);
+const RAW_PUBLIC_DIFF_DOMAINS = new Set(['cell', 'sheet', 'cells.formats.direct', 'rows-columns']);
+const REDACTED_VALUE_REASONS = new Set(['permission-denied', 'redaction-policy', 'historical-acl-unavailable']);
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -464,16 +456,19 @@ function mapDiffEntries(values: readonly unknown[]): {
       return;
     }
 
+    const unsupportedDomain = unsupportedDiffDomain(value);
     diagnostics.push(
-      publicDiagnostic(
-        'VERSION_INVALID_COMMIT_PAYLOAD',
-        'A version diff entry could not be safely projected.',
-        {
-          severity: 'error',
-          recoverability: 'repair',
-          payload: { itemIndex: index },
-        },
-      ),
+      unsupportedDomain
+        ? unsupportedDiffDomainDiagnostic(unsupportedDomain, index)
+        : publicDiagnostic(
+            'VERSION_INVALID_COMMIT_PAYLOAD',
+            'A version diff entry could not be safely projected.',
+            {
+              severity: 'error',
+              recoverability: 'repair',
+              payload: { itemIndex: index },
+            },
+          ),
     );
   });
 
@@ -509,7 +504,11 @@ function mapReviewAccessDiffValue(
   value: unknown,
 ): VersionDiffValue | null {
   const reviewValue = projectReviewAccessDiffValue(structural, value);
-  return reviewValue === undefined ? mapDiffValue(value) : reviewValue;
+  if (reviewValue !== undefined) return reviewValue;
+  if (structural.kind !== 'metadata') return mapDiffValue(value);
+  return structural.kind === 'metadata' && RAW_PUBLIC_DIFF_DOMAINS.has(structural.domain)
+    ? mapDiffValue(value)
+    : null;
 }
 
 function mapStructuralMetadata(value: unknown): VersionDiffStructuralMetadata | null {
@@ -708,6 +707,10 @@ function sanitizeDiagnosticPayload(
   }
 
   const details = isRecord(value.details) ? value.details : null;
+  const detailRefName = details?.refName;
+  if (payload.refName === undefined && (detailRefName === VERSION_HEAD_REF || detailRefName === VERSION_MAIN_REF)) {
+    payload.refName = detailRefName;
+  }
   if (details) {
     for (const key of [
       'min',
@@ -766,7 +769,7 @@ function graphUninitializedDiagnostic(): VersionStoreDiagnostic {
 }
 
 function providerErrorDiagnostic(
-  payload: VersionDiagnosticPublicPayload = {},
+  payload: VersionDiagnosticPublicPayload = { source: 'provider' },
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_PROVIDER_ERROR',
@@ -777,6 +780,17 @@ function providerErrorDiagnostic(
       payload,
     },
   );
+}
+
+function unsupportedDiffDomain(value: unknown): string | null {
+  const structural = mapStructuralMetadata(isRecord(value) ? (value.structural ?? value) : value);
+  if (structural?.kind !== 'metadata' || RAW_PUBLIC_DIFF_DOMAINS.has(structural.domain)) return null;
+  const redacted = { kind: 'redacted', reason: 'permission-denied' };
+  return projectReviewAccessDiffValue(structural, redacted) === undefined ? structural.domain : null;
+}
+
+function unsupportedDiffDomainDiagnostic(domain: string, itemIndex: number): VersionStoreDiagnostic {
+  return publicDiagnostic('unsupportedDomain', 'The requested version diff includes unsupported semantic state.', { severity: 'error', recoverability: 'unsupported', payload: { category: 'unsupported', domain, itemIndex } });
 }
 
 function unsupportedRefDiagnostic(selector: string): VersionStoreDiagnostic {
@@ -821,7 +835,7 @@ function publicDiagnostic(
     recoverability: options.recoverability ?? recoverabilityForIssue(issueCode),
     messageTemplateId: `version.diff.${issueCode}`,
     safeMessage,
-    ...(options.payload ? { payload: { operation: 'diff', ...options.payload } } : {}),
+    payload: { operation: 'diff', ...options.payload },
     redacted: true,
   };
 }

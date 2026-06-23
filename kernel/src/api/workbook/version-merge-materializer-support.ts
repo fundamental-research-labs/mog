@@ -22,23 +22,37 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
   'cells.values',
   'cells.formulas',
   'cells.formats.direct',
+  'rows-columns',
 ]);
 const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
   ['cell', new Set(['cell', 'cells.values', 'cells.formulas'])],
   ['cells.values', new Set(['cell', 'cells.values'])],
   ['cells.formulas', new Set(['cell', 'cells.values', 'cells.formulas'])],
   ['cells.formats.direct', new Set(['cells.formats', 'cells.formats.direct'])],
+  ['rows-columns', new Set(['rows-columns'])],
 ]);
-const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set(['rows-columns', 'sheets']);
+const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set(['sheets']);
 const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS = new Set([
   'column',
   'columns',
   'row',
   'rows',
-  'rows-columns',
   'sheet',
   'sheets',
 ]);
+
+type RowColumnAxis = 'row' | 'column';
+
+type RowColumnMergeValue =
+  | {
+      readonly kind: 'absent';
+    }
+  | {
+      readonly kind: 'present';
+      readonly sheetId: string;
+      readonly axis: RowColumnAxis;
+      readonly index: number;
+    };
 
 export type MergeMaterializationSupport =
   | { readonly ok: true }
@@ -50,21 +64,43 @@ export type MergeMaterializationSupport =
     };
 
 export function inspectMaterializableMergeChange(
-  change: Pick<VersionMergeChange, 'structural' | 'merged'>,
+  change: Pick<VersionMergeChange, 'structural' | 'merged'> &
+    Partial<Pick<VersionMergeChange, 'base' | 'ours'>>,
 ): MergeMaterializationSupport {
   const structural = parseMaterializableStructural(change.structural);
   if (!structural) {
     return unsupported(change.structural, unsupportedStructuralReason(change.structural));
   }
-  if (!parseCellEntity(structural.entityId)) {
-    return unsupported(structural, 'unsupportedEntityId');
-  }
   if (structural.domain === 'cells.formats.direct') {
+    if (!parseCellEntity(structural.entityId)) {
+      return unsupported(structural, 'unsupportedEntityId');
+    }
     return parseDirectFormatMergeValue(change.merged)
       ? { ok: true }
       : unsupported(structural, 'unsupportedMergedValue');
   }
-  return parseCellMergeValue(change.merged)
+  if (structural.domain === 'rows-columns') {
+    const target = parseRowColumnEntity(structural.entityId);
+    if (!target) return unsupported(structural, 'unsupportedEntityId');
+    if (!parseRowColumnMergeValue(change.merged, target)) {
+      return unsupported(structural, 'unsupportedMergedValue');
+    }
+    if (change.base !== undefined) {
+      const transitionInput = {
+        base: change.base,
+        merged: change.merged,
+        ...(change.ours !== undefined ? { ours: change.ours } : {}),
+      };
+      if (!isSupportedRowColumnTransition(transitionInput, target)) {
+        return unsupported(structural, 'unsupportedRowsColumnsTransition');
+      }
+    }
+    return { ok: true };
+  }
+  if (!parseCellEntity(structural.entityId)) {
+    return unsupported(structural, 'unsupportedEntityId');
+  }
+  return parseCellMergeValue(change.merged, structural.domain)
     ? { ok: true }
     : unsupported(structural, 'unsupportedMergedValue');
 }
@@ -142,7 +178,25 @@ function parseMaterializableStructural(
       ? structural
       : null;
   }
-  if (structural.domain !== 'cell' && structural.domain !== 'cells.values') return null;
+  if (structural.domain === 'rows-columns') {
+    return structural.propertyPath.length === 1 && structural.propertyPath[0] === 'order'
+      ? structural
+      : null;
+  }
+  if (
+    structural.domain !== 'cell' &&
+    structural.domain !== 'cells.values' &&
+    structural.domain !== 'cells.formulas'
+  ) {
+    return null;
+  }
+  if (structural.domain === 'cells.formulas') {
+    return structural.propertyPath.length === 0 ||
+      (structural.propertyPath.length === 1 &&
+        (structural.propertyPath[0] === 'formula' || structural.propertyPath[0] === 'value'))
+      ? structural
+      : null;
+  }
   if (
     structural.propertyPath.length !== 0 &&
     !(structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')
@@ -158,8 +212,28 @@ function parseCellEntity(entityId: string): boolean {
   return Boolean(parseCellAddress(entityId.slice(separator + 1)));
 }
 
-function parseCellMergeValue(value: VersionDiffValue): boolean {
+function parseRowColumnEntity(entityId: string): {
+  readonly sheetId: string;
+  readonly axis: RowColumnAxis;
+  readonly index: number;
+} | null {
+  const separator = entityId.lastIndexOf('!');
+  if (separator <= 0 || separator === entityId.length - 1) return null;
+  const sheetId = entityId.slice(0, separator);
+  const axisAndIndex = entityId.slice(separator + 1);
+  const axisSeparator = axisAndIndex.lastIndexOf(':');
+  if (axisSeparator <= 0 || axisSeparator === axisAndIndex.length - 1) return null;
+  const rawAxis = axisAndIndex.slice(0, axisSeparator);
+  const axis = rawAxis === 'row' || rawAxis === 'column' ? rawAxis : null;
+  if (!axis) return null;
+  const index = Number(axisAndIndex.slice(axisSeparator + 1));
+  if (!Number.isSafeInteger(index) || index < 0) return null;
+  return { sheetId, axis, index };
+}
+
+function parseCellMergeValue(value: VersionDiffValue, domain: string): boolean {
   if (value.kind !== 'value') return false;
+  if (domain === 'cells.formulas') return isMaterializableFormulaCellValue(value.value);
   return isMaterializableSemanticCellValue(value.value);
 }
 
@@ -177,6 +251,60 @@ function isMaterializableSemanticCellValue(value: VersionSemanticValue): boolean
   if (typeof value !== 'object') return false;
   if (value.kind === 'blank') return true;
   return value.kind === 'formula' && typeof value.formula === 'string' && value.formula.length > 0;
+}
+
+function isMaterializableFormulaCellValue(value: VersionSemanticValue): boolean {
+  if (value === null) return true;
+  if (typeof value !== 'object') return false;
+  if (value.kind === 'blank') return true;
+  return value.kind === 'formula' && typeof value.formula === 'string' && value.formula.length > 0;
+}
+
+function isSupportedRowColumnTransition(
+  change: Pick<VersionMergeChange, 'base' | 'merged'> & Partial<Pick<VersionMergeChange, 'ours'>>,
+  target: { readonly sheetId: string; readonly axis: RowColumnAxis; readonly index: number },
+): boolean {
+  const current = parseRowColumnMergeValue(change.ours ?? change.base, target);
+  const merged = parseRowColumnMergeValue(change.merged, target);
+  if (!current || !merged) return false;
+  if (rowColumnValuesEqual(current, merged)) return true;
+  return (
+    (current.kind === 'absent' && merged.kind === 'present') ||
+    (current.kind === 'present' && merged.kind === 'absent')
+  );
+}
+
+function parseRowColumnMergeValue(
+  value: VersionDiffValue,
+  target: { readonly sheetId: string; readonly axis: RowColumnAxis; readonly index: number },
+): RowColumnMergeValue | null {
+  if (value.kind !== 'value') return null;
+  if (value.value === null) return { kind: 'absent' };
+  const fields = semanticObjectFieldMap(value.value);
+  if (!fields) return null;
+  const axis = fields.get('axis');
+  const sheetId = fields.get('sheetId');
+  const index = fields.get('index');
+  if (axis !== target.axis || sheetId !== target.sheetId || index !== target.index) return null;
+  return { kind: 'present', sheetId: target.sheetId, axis: target.axis, index: target.index };
+}
+
+function rowColumnValuesEqual(left: RowColumnMergeValue, right: RowColumnMergeValue): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'absent' || right.kind === 'absent') return true;
+  return left.sheetId === right.sheetId && left.axis === right.axis && left.index === right.index;
+}
+
+function semanticObjectFieldMap(
+  value: VersionSemanticValue,
+): Map<string, VersionSemanticValue> | null {
+  if (!isRecord(value) || value.kind !== 'object' || !Array.isArray(value.fields)) return null;
+  const fields = new Map<string, VersionSemanticValue>();
+  for (const field of value.fields) {
+    if (!isRecord(field) || typeof field.key !== 'string') return null;
+    fields.set(field.key, field.value as VersionSemanticValue);
+  }
+  return fields;
 }
 
 function semanticFormatJsonValue(value: VersionSemanticValue, depth = 0): unknown {
@@ -220,10 +348,7 @@ function unsupported(
 }
 
 function unsupportedStructuralReason(structural: VersionDiffStructuralMetadata): string {
-  if (
-    structural.kind === 'metadata' &&
-    isUnsupportedStructuralMergeDomainId(structural.domain)
-  ) {
+  if (structural.kind === 'metadata' && isUnsupportedStructuralMergeDomainId(structural.domain)) {
     return 'unsupportedStructuralDomain';
   }
   return 'unsupportedStructuralMetadata';

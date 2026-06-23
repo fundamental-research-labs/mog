@@ -43,6 +43,7 @@ export interface SemanticMergeCommitCaptureOptions {
 
 type ParsedCellMergeChange = {
   readonly kind: 'cellValue';
+  readonly itemIndex: number;
   readonly change: VersionMergeChange;
   readonly structural: Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
   readonly sheetId: string;
@@ -54,6 +55,7 @@ type ParsedCellMergeChange = {
 
 type ParsedDirectFormatMergeChange = {
   readonly kind: 'directCellFormat';
+  readonly itemIndex: number;
   readonly change: VersionMergeChange;
   readonly structural: Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
   readonly sheetId: string;
@@ -63,7 +65,21 @@ type ParsedDirectFormatMergeChange = {
   readonly merged: DirectFormatMergeValue;
 };
 
-type ParsedMergeChange = ParsedCellMergeChange | ParsedDirectFormatMergeChange;
+type ParsedRowColumnMergeChange = {
+  readonly kind: 'rowColumnOrder';
+  readonly itemIndex: number;
+  readonly change: VersionMergeChange;
+  readonly structural: Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
+  readonly sheetId: string;
+  readonly axis: RowColumnAxis;
+  readonly index: number;
+  readonly transition: RowColumnTransition;
+};
+
+type ParsedMergeChange =
+  | ParsedCellMergeChange
+  | ParsedDirectFormatMergeChange
+  | ParsedRowColumnMergeChange;
 
 type CellMergeValue =
   | {
@@ -85,6 +101,36 @@ type DirectFormatMergeValue =
   | {
       readonly kind: 'format';
       readonly format: CellFormat;
+    };
+
+type RowColumnAxis = 'row' | 'column';
+
+type RowColumnMergeValue =
+  | {
+      readonly kind: 'absent';
+    }
+  | {
+      readonly kind: 'present';
+      readonly sheetId: string;
+      readonly axis: RowColumnAxis;
+      readonly index: number;
+    };
+
+type RowColumnTransition =
+  | {
+      readonly kind: 'noop';
+    }
+  | {
+      readonly kind: 'insert';
+      readonly sheetId: string;
+      readonly axis: RowColumnAxis;
+      readonly index: number;
+    }
+  | {
+      readonly kind: 'delete';
+      readonly sheetId: string;
+      readonly axis: RowColumnAxis;
+      readonly index: number;
     };
 
 export function createSemanticMergeCommitCapture(
@@ -213,17 +259,19 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
       return unsupportedMergeChange(input, index, change.structural, { reason: support.reason });
     }
     const structural =
-      parseCellStructural(change.structural) ?? parseDirectFormatStructural(change.structural);
+      parseCellStructural(change.structural) ??
+      parseDirectFormatStructural(change.structural) ??
+      parseRowColumnStructural(change.structural);
     if (!structural) {
       return unsupportedMergeChange(input, index, change.structural);
     }
-    const target = parseCellEntity(structural.entityId);
-    if (!target) {
-      return unsupportedMergeChange(input, index, structural, {
-        reason: 'unsupportedEntityId',
-      });
-    }
     if (structural.domain === 'cells.formats.direct') {
+      const target = parseCellEntity(structural.entityId);
+      if (!target) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedEntityId',
+        });
+      }
       const merged = parseDirectFormatMergeValue(change.merged);
       if (!merged) {
         return unsupportedMergeChange(input, index, structural, {
@@ -232,6 +280,7 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
       }
       parsed.push({
         kind: 'directCellFormat',
+        itemIndex: index,
         change,
         structural,
         sheetId: target.sheetId,
@@ -242,7 +291,38 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
       });
       continue;
     }
-    const merged = parseCellMergeValue(change.merged);
+    if (structural.domain === 'rows-columns') {
+      const target = parseRowColumnEntity(structural.entityId);
+      if (!target) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedEntityId',
+        });
+      }
+      const transition = parseRowColumnTransition(change, target);
+      if (!transition) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedRowsColumnsTransition',
+        });
+      }
+      parsed.push({
+        kind: 'rowColumnOrder',
+        itemIndex: index,
+        change,
+        structural,
+        sheetId: target.sheetId,
+        axis: target.axis,
+        index: target.index,
+        transition,
+      });
+      continue;
+    }
+    const target = parseCellEntity(structural.entityId);
+    if (!target) {
+      return unsupportedMergeChange(input, index, structural, {
+        reason: 'unsupportedEntityId',
+      });
+    }
+    const merged = parseCellMergeValue(change.merged, structural.domain);
     if (!merged) {
       return unsupportedMergeChange(input, index, structural, {
         reason: 'unsupportedMergedValue',
@@ -250,6 +330,7 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
     }
     parsed.push({
       kind: 'cellValue',
+      itemIndex: index,
       change,
       structural,
       sheetId: target.sheetId,
@@ -266,7 +347,20 @@ function parseCellStructural(
   structural: VersionDiffStructuralMetadata,
 ): Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }> | null {
   if (structural.kind !== 'metadata') return null;
-  if (structural.domain !== 'cell' && structural.domain !== 'cells.values') return null;
+  if (
+    structural.domain !== 'cell' &&
+    structural.domain !== 'cells.values' &&
+    structural.domain !== 'cells.formulas'
+  ) {
+    return null;
+  }
+  if (structural.domain === 'cells.formulas') {
+    return structural.propertyPath.length === 0 ||
+      (structural.propertyPath.length === 1 &&
+        (structural.propertyPath[0] === 'formula' || structural.propertyPath[0] === 'value'))
+      ? structural
+      : null;
+  }
   if (
     structural.propertyPath.length !== 0 &&
     !(structural.propertyPath.length === 1 && structural.propertyPath[0] === 'value')
@@ -287,6 +381,17 @@ function parseDirectFormatStructural(
   return structural;
 }
 
+function parseRowColumnStructural(
+  structural: VersionDiffStructuralMetadata,
+): Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }> | null {
+  if (structural.kind !== 'metadata') return null;
+  if (structural.domain !== 'rows-columns') return null;
+  if (structural.propertyPath.length !== 1 || structural.propertyPath[0] !== 'order') {
+    return null;
+  }
+  return structural;
+}
+
 function parseCellEntity(entityId: string): {
   readonly sheetId: string;
   readonly address: string;
@@ -302,8 +407,28 @@ function parseCellEntity(entityId: string): {
   return { sheetId, address, row: parsed.row, col: parsed.col };
 }
 
-function parseCellMergeValue(value: VersionDiffValue): CellMergeValue | null {
+function parseRowColumnEntity(entityId: string): {
+  readonly sheetId: string;
+  readonly axis: RowColumnAxis;
+  readonly index: number;
+} | null {
+  const separator = entityId.lastIndexOf('!');
+  if (separator <= 0 || separator === entityId.length - 1) return null;
+  const sheetId = entityId.slice(0, separator);
+  const axisAndIndex = entityId.slice(separator + 1);
+  const axisSeparator = axisAndIndex.lastIndexOf(':');
+  if (axisSeparator <= 0 || axisSeparator === axisAndIndex.length - 1) return null;
+  const rawAxis = axisAndIndex.slice(0, axisSeparator);
+  const axis = rawAxis === 'row' || rawAxis === 'column' ? rawAxis : null;
+  if (!axis) return null;
+  const index = Number(axisAndIndex.slice(axisSeparator + 1));
+  if (!isSheetIndex(index)) return null;
+  return { sheetId, axis, index };
+}
+
+function parseCellMergeValue(value: VersionDiffValue, domain: string): CellMergeValue | null {
   if (value.kind !== 'value') return null;
+  if (domain === 'cells.formulas') return parseSemanticFormulaCellValue(value.value);
   return parseSemanticCellValue(value.value);
 }
 
@@ -330,15 +455,74 @@ function parseSemanticCellValue(value: VersionSemanticValue): CellMergeValue | n
   return null;
 }
 
+function parseSemanticFormulaCellValue(value: VersionSemanticValue): CellMergeValue | null {
+  if (value === null) return { kind: 'clear' };
+  if (typeof value !== 'object') return null;
+  if (value.kind === 'blank') return { kind: 'clear' };
+  if (value.kind !== 'formula') return null;
+  return typeof value.formula === 'string' && value.formula.length > 0
+    ? { kind: 'formula', formula: value.formula }
+    : null;
+}
+
+function parseRowColumnTransition(
+  change: VersionMergeChange,
+  target: { readonly sheetId: string; readonly axis: RowColumnAxis; readonly index: number },
+): RowColumnTransition | null {
+  const current = parseRowColumnMergeValue(change.ours ?? change.base, target);
+  const merged = parseRowColumnMergeValue(change.merged, target);
+  if (!current || !merged) return null;
+  if (rowColumnValuesEqual(current, merged)) return { kind: 'noop' };
+  if (current.kind === 'absent' && merged.kind === 'present') {
+    return { kind: 'insert', sheetId: target.sheetId, axis: target.axis, index: target.index };
+  }
+  if (current.kind === 'present' && merged.kind === 'absent') {
+    return { kind: 'delete', sheetId: target.sheetId, axis: target.axis, index: target.index };
+  }
+  return null;
+}
+
+function parseRowColumnMergeValue(
+  value: VersionDiffValue,
+  target: { readonly sheetId: string; readonly axis: RowColumnAxis; readonly index: number },
+): RowColumnMergeValue | null {
+  if (value.kind !== 'value') return null;
+  if (value.value === null) return { kind: 'absent' };
+  const fields = semanticObjectFieldMap(value.value);
+  if (!fields) return null;
+  const axis = fields.get('axis');
+  const sheetId = fields.get('sheetId');
+  const index = fields.get('index');
+  if (axis !== target.axis || sheetId !== target.sheetId || index !== target.index) {
+    return null;
+  }
+  return { kind: 'present', sheetId: target.sheetId, axis: target.axis, index: target.index };
+}
+
+function rowColumnValuesEqual(left: RowColumnMergeValue, right: RowColumnMergeValue): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'absent' || right.kind === 'absent') return true;
+  return left.sheetId === right.sheetId && left.axis === right.axis && left.index === right.index;
+}
+
 async function applyMergeChanges(
   ctx: DocumentContext,
   input: VersionMergeCommitCaptureInput,
   changes: readonly ParsedMergeChange[],
   createdAt: string,
 ): Promise<void> {
-  for (let index = 0; index < changes.length; index++) {
-    const change = changes[index];
-    const operationContext = mergeOperationContext(input, change, index, createdAt);
+  await applyRowColumnMergeChanges(
+    ctx,
+    input,
+    changes.filter(
+      (change): change is ParsedRowColumnMergeChange => change.kind === 'rowColumnOrder',
+    ),
+    createdAt,
+  );
+
+  for (const change of changes) {
+    if (change.kind === 'rowColumnOrder') continue;
+    const operationContext = mergeOperationContext(input, change, createdAt);
     const sheet = toSheetId(change.sheetId);
     if (change.kind === 'directCellFormat') {
       if (change.merged.kind === 'clear') {
@@ -374,6 +558,82 @@ async function applyMergeChanges(
   }
 }
 
+async function applyRowColumnMergeChanges(
+  ctx: DocumentContext,
+  input: VersionMergeCommitCaptureInput,
+  changes: readonly ParsedRowColumnMergeChange[],
+  createdAt: string,
+): Promise<void> {
+  const applicable = changes.filter(
+    (
+      change,
+    ): change is ParsedRowColumnMergeChange & {
+      readonly transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>;
+    } => change.transition.kind === 'insert' || change.transition.kind === 'delete',
+  );
+  const ordered = [
+    ...applicable
+      .filter((change) => change.transition.kind === 'delete')
+      .sort(compareRowColumnDeleteChanges),
+    ...applicable
+      .filter((change) => change.transition.kind === 'insert')
+      .sort(compareRowColumnInsertChanges),
+  ];
+
+  for (const change of ordered) {
+    await ctx.computeBridge.structureChange(
+      toSheetId(change.transition.sheetId),
+      rowColumnStructureChange(change.transition),
+      { operationContext: mergeOperationContext(input, change, createdAt) },
+    );
+  }
+}
+
+function rowColumnStructureChange(
+  transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>,
+): Parameters<DocumentContext['computeBridge']['structureChange']>[1] {
+  if (transition.axis === 'row') {
+    return transition.kind === 'insert'
+      ? { InsertRows: { at: transition.index, count: 1, new_row_ids: [] } }
+      : { DeleteRows: { at: transition.index, count: 1, deleted_cell_ids: [] } };
+  }
+  return transition.kind === 'insert'
+    ? { InsertCols: { at: transition.index, count: 1, new_col_ids: [] } }
+    : { DeleteCols: { at: transition.index, count: 1, deleted_cell_ids: [] } };
+}
+
+function compareRowColumnDeleteChanges(
+  left: ParsedRowColumnMergeChange & {
+    readonly transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>;
+  },
+  right: ParsedRowColumnMergeChange & {
+    readonly transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>;
+  },
+): number {
+  return (
+    compareStrings(left.sheetId, right.sheetId) ||
+    compareStrings(left.axis, right.axis) ||
+    right.index - left.index ||
+    left.itemIndex - right.itemIndex
+  );
+}
+
+function compareRowColumnInsertChanges(
+  left: ParsedRowColumnMergeChange & {
+    readonly transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>;
+  },
+  right: ParsedRowColumnMergeChange & {
+    readonly transition: Extract<RowColumnTransition, { readonly kind: 'insert' | 'delete' }>;
+  },
+): number {
+  return (
+    compareStrings(left.sheetId, right.sheetId) ||
+    compareStrings(left.axis, right.axis) ||
+    left.index - right.index ||
+    left.itemIndex - right.itemIndex
+  );
+}
+
 function assertFormatOperationSuccess(
   result: { readonly success: boolean; readonly error?: unknown },
   operation: string,
@@ -386,11 +646,10 @@ function assertFormatOperationSuccess(
 function mergeOperationContext(
   input: VersionMergeCommitCaptureInput,
   change: ParsedMergeChange,
-  index: number,
   createdAt: string,
 ): VersionOperationContext {
   return Object.freeze({
-    operationId: `version-merge:${shortCommitId(input.ours)}:${shortCommitId(input.theirs)}:${index}`,
+    operationId: `version-merge:${shortCommitId(input.ours)}:${shortCommitId(input.theirs)}:${change.itemIndex}`,
     kind: 'merge' as const,
     author: MERGE_CAPTURE_AUTHOR,
     createdAt,
@@ -441,12 +700,30 @@ function mergeMutationSegmentPayload(
     resolutionCount: input.resolutionCount,
     materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
     changeIds: changes.map((change) => change.structural.changeId),
-    directEdits: changes.map((change) => ({
-      sheetId: change.sheetId,
-      row: change.row,
-      col: change.col,
-      address: change.address,
-    })),
+    directEdits: changes.flatMap((change) =>
+      change.kind === 'rowColumnOrder'
+        ? []
+        : [
+            {
+              sheetId: change.sheetId,
+              row: change.row,
+              col: change.col,
+              address: change.address,
+            },
+          ],
+    ),
+    structureEdits: changes.flatMap((change) =>
+      change.kind === 'rowColumnOrder' && change.transition.kind !== 'noop'
+        ? [
+            {
+              sheetId: change.sheetId,
+              axis: change.axis,
+              index: change.index,
+              action: change.transition.kind,
+            },
+          ]
+        : [],
+    ),
   };
 }
 
@@ -525,6 +802,28 @@ function semanticFormatJsonValue(value: VersionSemanticValue, depth = 0): unknow
 
 function isMaterializableCellFormat(value: unknown): value is CellFormat {
   return isRecord(value) && Object.keys(value).length > 0 && value.kind !== 'Removed';
+}
+
+function semanticObjectFieldMap(
+  value: VersionSemanticValue,
+): Map<string, VersionSemanticValue> | null {
+  if (!isRecord(value) || value.kind !== 'object' || !Array.isArray(value.fields)) return null;
+  const fields = new Map<string, VersionSemanticValue>();
+  for (const field of value.fields) {
+    if (!isRecord(field) || typeof field.key !== 'string') return null;
+    fields.set(field.key, field.value as VersionSemanticValue);
+  }
+  return fields;
+}
+
+function isSheetIndex(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

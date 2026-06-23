@@ -9,7 +9,11 @@ import type {
 
 import { WorkbookVersionImpl } from '../version';
 import { isMaterializableMergeDomainReference } from '../version-merge-materializer-support';
-import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
+import {
+  freshVersionDomainSupportManifest,
+  versionDomainSupportManifestRow,
+  versionDomainSupportManifestRuntime,
+} from './version-domain-support-test-utils';
 
 const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
@@ -22,16 +26,6 @@ const EXPECTED_TARGET_HEAD = {
 
 describe('WorkbookVersion applyMerge materializer unsupported structural domains', () => {
   it.each([
-    {
-      label: 'row insertion',
-      change: rowColumnChange('merge-row-insert', 'row', 4, false),
-      domain: 'rows-columns',
-    },
-    {
-      label: 'column deletion',
-      change: rowColumnChange('merge-column-delete', 'column', 2, true),
-      domain: 'rows-columns',
-    },
     {
       label: 'sheet rename',
       change: sheetNameChange(),
@@ -77,9 +71,12 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
         ],
       },
     });
-    expect(merge).toHaveBeenCalledWith({ base: BASE, ours: OURS, theirs: THEIRS }, {
-      mode: 'preview',
-    });
+    expect(merge).toHaveBeenCalledWith(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      {
+        mode: 'preview',
+      },
+    );
     expect(mergeCommit).not.toHaveBeenCalled();
   });
 
@@ -92,11 +89,11 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
       expectedDomain: 'sheets',
     },
     {
-      label: 'registry row-column row',
-      matrixRowId: 'rows-columns',
-      domainId: 'rows-columns',
-      expectedMatrixRowId: 'rows-columns',
-      expectedDomain: 'rows-columns',
+      label: 'unsupported view-state row',
+      matrixRowId: 'view-state.selection-scroll',
+      domainId: 'view-state',
+      expectedMatrixRowId: 'view-state.selection-scroll',
+      expectedDomain: 'view-state',
     },
   ])(
     'blocks fast-forward apply before preview or ref movement when detector rows expose $label',
@@ -110,6 +107,14 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
           writeService: { fastForwardMerge, mergeCommit },
         },
         versionDomainSupportManifestRuntime({
+          manifest: {
+            domains: [
+              ...freshVersionDomainSupportManifest().domains,
+              versionDomainSupportManifestRow('view-state', {
+                matrixRowId: 'view-state.selection-scroll',
+              }),
+            ],
+          },
           options: {
             detectorRows: [
               {
@@ -187,6 +192,18 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
         domainId: 'cells.formats',
       }),
     ).toBe(true);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'rows-columns',
+        domainId: 'rows-columns',
+      }),
+    ).toBe(true);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'cells.formats.catalogs',
+        domainId: 'cells.formats',
+      }),
+    ).toBe(false);
   });
 });
 

@@ -127,3 +127,39 @@ fn imported_chart_ex_rich_title_keeps_opaque_package_replay_current() {
     assert!(!archive.contains("xl/charts/chartEx1.xml"));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
+
+#[test]
+fn chart_ex_raw_anchor_replay_remaps_provisional_relationship_id() {
+    let chart_ex = chart_ex_with_raw_anchor(7);
+    let raw_xml =
+        chart_replay::chart_ex_raw_anchor_replay_xml(&chart_ex, "xl/charts/chartEx7.xml", "rId2")
+            .expect("raw anchor should replay with remapped relationship id");
+
+    assert!(raw_xml.contains("RAW-CHARTEX-ANCHOR"));
+    assert!(raw_xml.contains(r#"r:id="rId2""#));
+    assert!(!raw_xml.contains(r#"r:id="rId1""#));
+    assert!(chart_replay::chart_ex_allows_raw_anchor_replay(
+        &chart_ex,
+        "xl/charts/chartEx7.xml",
+        "rId2"
+    ));
+}
+
+#[test]
+fn chart_ex_raw_anchor_replay_rejects_stale_frame_relationship_id() {
+    let mut chart_ex = chart_ex_with_raw_anchor(7);
+    chart_ex
+        .chart_frame
+        .as_mut()
+        .expect("test fixture has chart frame")
+        .relationship_id = Some("rIdStale".to_string());
+
+    assert!(
+        chart_replay::chart_ex_raw_anchor_replay_xml(
+            &chart_ex,
+            "xl/charts/chartEx7.xml",
+            "rIdStale",
+        )
+        .is_none()
+    );
+}

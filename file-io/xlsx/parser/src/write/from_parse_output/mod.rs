@@ -891,20 +891,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                         .or(chart_spec.anchor_edit_as.as_deref())
                         .map(ooxml_types::drawings::EditAs::from_ooxml);
                     let chart_object = DrawingObject::ChartEx(cx_ref);
-                    let raw_alternate_content = if chart_replay::chart_ex_allows_raw_anchor_replay(
+                    let raw_alternate_content = chart_replay::chart_ex_raw_anchor_replay_xml(
                         chart_spec,
                         &cx_path,
                         match &chart_object {
                             DrawingObject::ChartEx(cx_ref) => cx_ref.r_id.as_str(),
                             _ => "",
                         },
-                    ) {
-                        chart_frame
-                            .and_then(|frame| frame.raw_alternate_content.clone())
-                            .map(|raw_xml| crate::domain::drawings::McAlternateContent { raw_xml })
-                    } else {
-                        None
-                    };
+                    )
+                    .map(|raw_xml| crate::domain::drawings::McAlternateContent { raw_xml });
                     let drawing_anchor = if let (Some(x), Some(y)) = (
                         chart_spec.position.absolute_x,
                         chart_spec.position.absolute_y,

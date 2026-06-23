@@ -36,6 +36,7 @@ const BASE = commitId('0');
 const OURS = commitId('1');
 const THEIRS = commitId('2');
 const MERGE = commitId('6');
+const ADVANCED = commitId('7');
 const RESULT_DIGEST = digest('3');
 const RESOLVED_ATTEMPT_DIGEST = digest('4');
 const RESOLUTION_SET_DIGEST = digest('5');
@@ -245,6 +246,86 @@ describe('applyPersistedMergeResult ref CAS proof recovery', () => {
       headAfter: THEIRS,
       mutationGuarantee: 'ref-not-mutated',
     });
+    expect(readRef).toHaveBeenCalledWith(TARGET_REF);
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(store.readRefCasProof).not.toHaveBeenCalled();
+    expect(store.completeIntent).not.toHaveBeenCalled();
+  });
+
+  it('returns staleTargetHead for terminal alreadyApplied replay after the target advances', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'terminal-already-applied-stale');
+    const registry = await createVersionGraphRegistry({
+      documentScope: DOCUMENT_SCOPE,
+      graphId: namespace.graphId,
+      rootCommitId: BASE,
+      createdAt: CREATED_AT,
+    });
+    const record: MergeApplyIntentRecord = {
+      ...fastForwardIntentRecord(namespace),
+      state: 'finalized',
+      terminal: {
+        status: 'alreadyApplied',
+        headBefore: OURS,
+        headAfter: THEIRS,
+        commitId: THEIRS,
+      },
+    };
+    const fastForwardMerge = jest.fn();
+    const store: MergeApplyIntentStore = {
+      namespace,
+      beginIntent: jest.fn(),
+      readByIntentId: jest.fn(async () => ({ status: 'found', record, diagnostics: [] })),
+      readByIdempotencyKey: jest.fn(),
+      readRefCasProof: jest.fn(),
+      completeIntent: jest.fn(),
+    };
+    const readRef = jest.fn(async () => ({
+      status: 'success' as const,
+      ref: {
+        name: TARGET_REF,
+        commitId: ADVANCED,
+        revision: { kind: 'counter' as const, value: '3' },
+        updatedAt: CREATED_AT,
+      },
+      diagnostics: [],
+    }));
+    const provider = {
+      accessContext: {},
+      readGraphRegistry: jest.fn(async () => ({
+        status: 'ok',
+        registry,
+        diagnostics: [],
+      })),
+      openGraph: jest.fn(async () => ({ readRef })),
+      openMergeApplyIntentStore: jest.fn(async () => store),
+    };
+
+    const result = await applyPersistedMergeResult(
+      {
+        versioning: {
+          provider,
+          writeService: { fastForwardMerge },
+        },
+      } as Parameters<typeof applyPersistedMergeResult>[0],
+      { resultId: RESULT_ID, resultDigest: RESULT_DIGEST },
+      { targetRef: TARGET_REF, expectedTargetHead: EXPECTED_TARGET_HEAD },
+    );
+
+    expect(result).toMatchObject({
+      status: 'staleTargetHead',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      resultId: RESULT_ID,
+      resultDigest: RESULT_DIGEST,
+      resolutionSetDigest: RESOLUTION_SET_DIGEST,
+      resolvedAttemptDigest: RESOLVED_ATTEMPT_DIGEST,
+      targetRef: TARGET_REF,
+      headBefore: OURS,
+      headAfter: ADVANCED,
+      mutationGuarantee: 'ref-not-mutated',
+    });
+    expect(result).not.toHaveProperty('commitRef');
     expect(readRef).toHaveBeenCalledWith(TARGET_REF);
     expect(fastForwardMerge).not.toHaveBeenCalled();
     expect(store.readRefCasProof).not.toHaveBeenCalled();

@@ -1,15 +1,4 @@
-import type {
-  VersionOperationContext,
-  VersionSyncOperationContext,
-} from '@mog-sdk/contracts/versioning';
-
-import {
-  isObjectDigest,
-  type ObjectDigest,
-  type VersionObjectType,
-  type WorkbookCommitId,
-} from './object-digest';
-import { objectDigestFor, objectDigestsEqual } from './merge-apply-intent-store';
+import { objectDigestsEqual } from './merge-apply-intent-store';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
@@ -20,203 +9,74 @@ import {
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from './registry';
-import type { VersionGraphStore } from './provider-graph-store';
-
-export type PendingRemoteSegmentState = 'pending' | 'promoted' | 'dropped';
-
-export type PendingRemoteSegmentId = `pending-remote-segment:sha256:${string}`;
-export type PendingRemoteSegmentIdempotencyKey = `pending-remote:sha256:${string}`;
-
-export type PendingRemoteSegmentOperationContext = VersionOperationContext & {
-  readonly collaboration: VersionSyncOperationContext;
-};
-
-export type PendingRemoteSegmentSyncIdentity = {
-  readonly schemaVersion: 1;
-  readonly sourceKind: VersionSyncOperationContext['sourceKind'];
-  readonly originKind: VersionSyncOperationContext['originKind'];
-  readonly stableOriginId?: string;
-  readonly providerId?: string;
-  readonly authorityRef?: string;
-  readonly roomId?: string;
-  readonly epoch?: string;
-  readonly updateId?: string;
-  readonly sequence?: string;
-  readonly payloadHash: string;
-};
-
-export type PendingRemoteSegmentTerminal =
-  | {
-      readonly status: 'promoted';
-      readonly commitId?: WorkbookCommitId;
-      readonly promotionDigest?: ObjectDigest;
-    }
-  | {
-      readonly status: 'dropped';
-      readonly reason: string;
-      readonly diagnosticDigest?: ObjectDigest;
-    };
-
-export type PendingRemoteSegmentRecord = {
-  readonly schemaVersion: 1;
-  readonly recordKind: 'pendingRemoteSegment';
-  readonly pendingRemoteSegmentId: PendingRemoteSegmentId;
-  readonly idempotencyKey: PendingRemoteSegmentIdempotencyKey;
-  readonly namespaceKey: string;
-  readonly documentScopeKey: string;
-  readonly syncIdentity: PendingRemoteSegmentSyncIdentity;
-  readonly operationContext: PendingRemoteSegmentOperationContext;
-  readonly mutationSegmentDigest: ObjectDigest;
-  readonly snapshotRootDigest?: ObjectDigest;
-  readonly semanticChangeSetDigest?: ObjectDigest;
-  readonly state: PendingRemoteSegmentState;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly terminal?: PendingRemoteSegmentTerminal;
-};
-
-export type ReservePendingRemoteSegmentInput = Omit<
+import {
+  clonePendingRemoteSegmentRecord,
+  comparePendingRemoteSegmentRecords,
+  pendingRemoteSegmentReservationRecord,
+  pendingRemoteSegmentStorageKey,
+  pendingRemoteSegmentStorageKeyFromRecord,
+  pendingRemoteSegmentTerminalsEqual,
+  pendingRemoteSegmentsEquivalent,
+} from './pending-remote-segment-codec';
+import type {
+  CompletePendingRemoteSegmentInput,
+  PendingRemoteSegmentCompleteResult,
+  PendingRemoteSegmentId,
+  PendingRemoteSegmentIdempotencyKey,
+  PendingRemoteSegmentListResult,
+  PendingRemoteSegmentMemoryBackendSnapshot,
+  PendingRemoteSegmentReadResult,
   PendingRemoteSegmentRecord,
-  | 'schemaVersion'
-  | 'recordKind'
-  | 'namespaceKey'
-  | 'documentScopeKey'
-  | 'syncIdentity'
-  | 'state'
-  | 'updatedAt'
-  | 'terminal'
->;
+  PendingRemoteSegmentReserveResult,
+  PendingRemoteSegmentState,
+  PendingRemoteSegmentStore,
+  PendingRemoteSegmentStoreDiagnostic,
+  PendingRemoteSegmentStoreProvider,
+  ReservePendingRemoteSegmentInput,
+} from './pending-remote-segment-types';
 
-export type CompletePendingRemoteSegmentInput = {
-  readonly pendingRemoteSegmentId: PendingRemoteSegmentId;
-  readonly mutationSegmentDigest: ObjectDigest;
-  readonly completedAt: string;
-  readonly terminal: PendingRemoteSegmentTerminal;
-};
-
-export type PendingRemoteSegmentStoreDiagnostic = {
-  readonly code:
-    | 'VERSION_INVALID_OPTIONS'
-    | 'VERSION_PENDING_REMOTE_CONFLICT'
-    | 'VERSION_PENDING_REMOTE_MISSING_OBJECT'
-    | 'VERSION_PENDING_REMOTE_OBJECT_CORRUPTION'
-    | 'VERSION_PENDING_REMOTE_NOT_FOUND'
-    | 'VERSION_PROVIDER_FAILED';
-  readonly message: string;
-  readonly recoverability: 'retry' | 'repair' | 'none';
-  readonly details?: Readonly<Record<string, string | number | boolean | null>>;
-};
-
-export type PendingRemoteSegmentReadResult =
-  | {
-      readonly status: 'found';
-      readonly record: PendingRemoteSegmentRecord;
-      readonly diagnostics: readonly [];
-    }
-  | {
-      readonly status: 'missing';
-      readonly record: null;
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'failed';
-      readonly record: null;
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    };
-
-export type PendingRemoteSegmentListResult =
-  | {
-      readonly status: 'success';
-      readonly records: readonly PendingRemoteSegmentRecord[];
-      readonly diagnostics: readonly [];
-    }
-  | {
-      readonly status: 'failed';
-      readonly records: readonly [];
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    };
-
-export type PendingRemoteSegmentReserveResult =
-  | {
-      readonly status: 'created' | 'existing';
-      readonly record: PendingRemoteSegmentRecord;
-      readonly diagnostics: readonly [];
-    }
-  | {
-      readonly status: 'conflict';
-      readonly record: PendingRemoteSegmentRecord;
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'failed';
-      readonly record: null;
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    };
-
-export type PendingRemoteSegmentCompleteResult =
-  | {
-      readonly status: 'completed';
-      readonly record: PendingRemoteSegmentRecord;
-      readonly diagnostics: readonly [];
-    }
-  | {
-      readonly status: 'missing' | 'conflict' | 'failed';
-      readonly record: PendingRemoteSegmentRecord | null;
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    };
-
-export interface PendingRemoteSegmentStore {
-  readonly namespace: VersionGraphNamespace;
-  reserveSegment(
-    input: ReservePendingRemoteSegmentInput,
-  ): Promise<PendingRemoteSegmentReserveResult>;
-  readBySegmentId(segmentId: PendingRemoteSegmentId): Promise<PendingRemoteSegmentReadResult>;
-  readByIdempotencyKey(
-    idempotencyKey: PendingRemoteSegmentIdempotencyKey,
-  ): Promise<PendingRemoteSegmentReadResult>;
-  listByState(state: PendingRemoteSegmentState): Promise<PendingRemoteSegmentListResult>;
-  completeSegment(
-    input: CompletePendingRemoteSegmentInput,
-  ): Promise<PendingRemoteSegmentCompleteResult>;
-}
-
-export type PendingRemoteSegmentStoreProvider = {
-  openPendingRemoteSegmentStore(
-    namespace: VersionGraphNamespace,
-  ): Promise<PendingRemoteSegmentStore>;
-};
-
-export type PendingRemoteSegmentKeyMaterial = {
-  readonly syncIdentity: PendingRemoteSegmentSyncIdentity;
-  readonly idempotencyKey: PendingRemoteSegmentIdempotencyKey;
-  readonly pendingRemoteSegmentId: PendingRemoteSegmentId;
-};
-
-export type PendingRemoteSegmentObjectValidationResult =
-  | {
-      readonly status: 'success';
-      readonly diagnostics: readonly [];
-    }
-  | {
-      readonly status: 'failed';
-      readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-    };
-
-export type ReservePersistedPendingRemoteSegmentOptions = {
-  readonly graph: Pick<VersionGraphStore, 'getObjectRecord'>;
-  readonly store: PendingRemoteSegmentStore;
-  readonly input: ReservePendingRemoteSegmentInput;
-};
-
-export type PendingRemoteSegmentReservationRecordOptions = {
-  readonly namespaceKey: string;
-  readonly documentScopeKey: string;
-  readonly input: ReservePendingRemoteSegmentInput;
-};
-
-export type PendingRemoteSegmentMemoryBackendSnapshot = {
-  readonly records: readonly PendingRemoteSegmentRecord[];
-};
+export {
+  clonePendingRemoteSegmentRecord,
+  comparePendingRemoteSegmentRecords,
+  isPendingRemoteSegmentRecord,
+  pendingRemoteSegmentReservationRecord,
+  pendingRemoteSegmentStorageKey,
+  pendingRemoteSegmentTerminalsEqual,
+  pendingRemoteSegmentsEquivalent,
+} from './pending-remote-segment-codec';
+export {
+  idempotencyKeyForPendingRemoteSegment,
+  pendingRemoteSegmentIdForOperationContext,
+  pendingRemoteSegmentIdentityForOperationContext,
+  pendingRemoteSegmentKeyMaterialForOperationContext,
+} from './pending-remote-segment-keys';
+export {
+  reservePersistedPendingRemoteSegment,
+  validatePendingRemoteSegmentObjects,
+} from './pending-remote-segment-validation';
+export type {
+  CompletePendingRemoteSegmentInput,
+  PendingRemoteSegmentCompleteResult,
+  PendingRemoteSegmentId,
+  PendingRemoteSegmentIdempotencyKey,
+  PendingRemoteSegmentKeyMaterial,
+  PendingRemoteSegmentListResult,
+  PendingRemoteSegmentMemoryBackendSnapshot,
+  PendingRemoteSegmentObjectValidationResult,
+  PendingRemoteSegmentOperationContext,
+  PendingRemoteSegmentReadResult,
+  PendingRemoteSegmentRecord,
+  PendingRemoteSegmentReservationRecordOptions,
+  PendingRemoteSegmentReserveResult,
+  PendingRemoteSegmentState,
+  PendingRemoteSegmentStore,
+  PendingRemoteSegmentStoreDiagnostic,
+  PendingRemoteSegmentStoreProvider,
+  PendingRemoteSegmentSyncIdentity,
+  PendingRemoteSegmentTerminal,
+  ReservePendingRemoteSegmentInput,
+  ReservePersistedPendingRemoteSegmentOptions,
+} from './pending-remote-segment-types';
 
 export class PendingRemoteSegmentMemoryBackend {
   private readonly recordsByKey = new Map<string, PendingRemoteSegmentRecord>();
@@ -226,7 +86,7 @@ export class PendingRemoteSegmentMemoryBackend {
     idempotencyKey: PendingRemoteSegmentIdempotencyKey,
   ): PendingRemoteSegmentRecord | undefined {
     return clonePendingRemoteSegmentRecord(
-      this.recordsByKey.get(memoryKey(namespace, idempotencyKey)),
+      this.recordsByKey.get(pendingRemoteSegmentStorageKey(namespace, idempotencyKey)),
     );
   }
 
@@ -261,7 +121,10 @@ export class PendingRemoteSegmentMemoryBackend {
   }
 
   put(record: PendingRemoteSegmentRecord): void {
-    this.recordsByKey.set(memoryKeyFromRecord(record), clonePendingRemoteSegmentRecord(record));
+    this.recordsByKey.set(
+      pendingRemoteSegmentStorageKeyFromRecord(record),
+      clonePendingRemoteSegmentRecord(record),
+    );
   }
 
   exportSnapshot(): PendingRemoteSegmentMemoryBackendSnapshot {
@@ -417,273 +280,10 @@ export class InMemoryPendingRemoteSegmentStore implements PendingRemoteSegmentSt
   }
 }
 
-export function pendingRemoteSegmentIdentityForOperationContext(
-  operationContext: VersionOperationContext,
-): PendingRemoteSegmentSyncIdentity {
-  const collaboration = operationContext.collaboration;
-  if (!collaboration) {
-    throw new Error('Pending remote segment operation context must include collaboration.');
-  }
-  return {
-    schemaVersion: 1,
-    sourceKind: collaboration.sourceKind,
-    originKind: collaboration.originKind,
-    ...(collaboration.stableOriginId === undefined
-      ? {}
-      : { stableOriginId: collaboration.stableOriginId }),
-    ...(collaboration.providerId === undefined ? {} : { providerId: collaboration.providerId }),
-    ...(collaboration.authorityRef === undefined
-      ? {}
-      : { authorityRef: collaboration.authorityRef }),
-    ...(collaboration.roomId === undefined ? {} : { roomId: collaboration.roomId }),
-    ...(collaboration.epoch === undefined ? {} : { epoch: collaboration.epoch }),
-    ...(collaboration.updateId === undefined ? {} : { updateId: collaboration.updateId }),
-    ...(collaboration.sequence === undefined ? {} : { sequence: collaboration.sequence }),
-    payloadHash: collaboration.payloadHash,
-  };
-}
-
-export async function pendingRemoteSegmentReservationRecord(
-  options: PendingRemoteSegmentReservationRecordOptions,
-): Promise<PendingRemoteSegmentRecord> {
-  const keyMaterial = await pendingRemoteSegmentKeyMaterialForOperationContext(
-    options.input.operationContext,
-  );
-  if (
-    options.input.idempotencyKey !== keyMaterial.idempotencyKey ||
-    options.input.pendingRemoteSegmentId !== keyMaterial.pendingRemoteSegmentId
-  ) {
-    throw new Error('Pending remote segment key material does not match collaboration identity.');
-  }
-
-  return clonePendingRemoteSegmentRecord({
-    ...options.input,
-    schemaVersion: 1,
-    recordKind: 'pendingRemoteSegment',
-    pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
-    idempotencyKey: keyMaterial.idempotencyKey,
-    namespaceKey: options.namespaceKey,
-    documentScopeKey: options.documentScopeKey,
-    syncIdentity: keyMaterial.syncIdentity,
-    state: 'pending',
-    updatedAt: options.input.createdAt,
-  });
-}
-
-export async function pendingRemoteSegmentKeyMaterialForOperationContext(
-  operationContext: VersionOperationContext,
-): Promise<PendingRemoteSegmentKeyMaterial> {
-  const syncIdentity = pendingRemoteSegmentIdentityForOperationContext(operationContext);
-  const digest = await objectDigestFor(
-    'mog.version.pending-remote-segment.identity.v1',
-    syncIdentity,
-  );
-  return {
-    syncIdentity,
-    idempotencyKey: `pending-remote:sha256:${digest.digest}`,
-    pendingRemoteSegmentId: `pending-remote-segment:sha256:${digest.digest}`,
-  };
-}
-
-export async function idempotencyKeyForPendingRemoteSegment(
-  operationContext: VersionOperationContext,
-): Promise<PendingRemoteSegmentIdempotencyKey> {
-  return (await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext))
-    .idempotencyKey;
-}
-
-export async function pendingRemoteSegmentIdForOperationContext(
-  operationContext: VersionOperationContext,
-): Promise<PendingRemoteSegmentId> {
-  return (await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext))
-    .pendingRemoteSegmentId;
-}
-
-export async function reservePersistedPendingRemoteSegment(
-  options: ReservePersistedPendingRemoteSegmentOptions,
-): Promise<PendingRemoteSegmentReserveResult> {
-  const validation = await validatePendingRemoteSegmentObjects(options.graph, options.input);
-  if (validation.status !== 'success') {
-    return { status: 'failed', record: null, diagnostics: validation.diagnostics };
-  }
-  return options.store.reserveSegment(options.input);
-}
-
-export async function validatePendingRemoteSegmentObjects(
-  graph: Pick<VersionGraphStore, 'getObjectRecord'>,
-  input: Pick<
-    ReservePendingRemoteSegmentInput,
-    'mutationSegmentDigest' | 'snapshotRootDigest' | 'semanticChangeSetDigest'
-  >,
-): Promise<PendingRemoteSegmentObjectValidationResult> {
-  const diagnostics: PendingRemoteSegmentStoreDiagnostic[] = [];
-  await validatePendingRemoteObject(
-    graph,
-    'workbook.mutationSegment.v1',
-    input.mutationSegmentDigest,
-    'mutationSegmentDigest',
-    diagnostics,
-  );
-  if (input.snapshotRootDigest !== undefined) {
-    await validatePendingRemoteObject(
-      graph,
-      'workbook.snapshotRoot.v1',
-      input.snapshotRootDigest,
-      'snapshotRootDigest',
-      diagnostics,
-    );
-  }
-  if (input.semanticChangeSetDigest !== undefined) {
-    await validatePendingRemoteObject(
-      graph,
-      'workbook.semanticChangeSet.v1',
-      input.semanticChangeSetDigest,
-      'semanticChangeSetDigest',
-      diagnostics,
-    );
-  }
-
-  return diagnostics.length === 0
-    ? { status: 'success', diagnostics: [] }
-    : { status: 'failed', diagnostics };
-}
-
-export function clonePendingRemoteSegmentRecord(
-  record: PendingRemoteSegmentRecord,
-): PendingRemoteSegmentRecord;
-export function clonePendingRemoteSegmentRecord(record: undefined): undefined;
-export function clonePendingRemoteSegmentRecord(
-  record: PendingRemoteSegmentRecord | undefined,
-): PendingRemoteSegmentRecord | undefined;
-export function clonePendingRemoteSegmentRecord(
-  record: PendingRemoteSegmentRecord | undefined,
-): PendingRemoteSegmentRecord | undefined {
-  return record === undefined ? undefined : cloneJson(record);
-}
-
-export function pendingRemoteSegmentsEquivalent(
-  left: PendingRemoteSegmentRecord,
-  right: PendingRemoteSegmentRecord,
-): boolean {
-  return (
-    canonicalJsonStringify(pendingRemoteSegmentReservationIdentity(left)) ===
-    canonicalJsonStringify(pendingRemoteSegmentReservationIdentity(right))
-  );
-}
-
-export function pendingRemoteSegmentTerminalsEqual(
-  left: PendingRemoteSegmentTerminal,
-  right: PendingRemoteSegmentTerminal,
-): boolean {
-  return canonicalJsonStringify(left) === canonicalJsonStringify(right);
-}
-
-export function pendingRemoteSegmentStorageKey(
-  namespace: VersionGraphNamespace,
-  idempotencyKey: PendingRemoteSegmentIdempotencyKey,
-): string {
-  return memoryKey(namespace, idempotencyKey);
-}
-
 export function hasPendingRemoteSegmentStoreProvider(
   value: unknown,
 ): value is PendingRemoteSegmentStoreProvider {
   return isRecord(value) && typeof value.openPendingRemoteSegmentStore === 'function';
-}
-
-export function isPendingRemoteSegmentRecord(value: unknown): value is PendingRemoteSegmentRecord {
-  if (!isRecord(value) || value.schemaVersion !== 1) return false;
-  if (value.recordKind !== 'pendingRemoteSegment') return false;
-  if (
-    typeof value.pendingRemoteSegmentId !== 'string' ||
-    !/^pending-remote-segment:sha256:[0-9a-f]{64}$/.test(value.pendingRemoteSegmentId)
-  ) {
-    return false;
-  }
-  if (
-    typeof value.idempotencyKey !== 'string' ||
-    !/^pending-remote:sha256:[0-9a-f]{64}$/.test(value.idempotencyKey)
-  ) {
-    return false;
-  }
-  if (typeof value.namespaceKey !== 'string' || typeof value.documentScopeKey !== 'string') {
-    return false;
-  }
-  if (value.state !== 'pending' && value.state !== 'promoted' && value.state !== 'dropped') {
-    return false;
-  }
-  if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
-  if (!isPendingRemoteSyncIdentity(value.syncIdentity)) return false;
-  if (!isPendingRemoteOperationContext(value.operationContext)) return false;
-  if (!isObjectDigest(value.mutationSegmentDigest)) return false;
-  if (value.snapshotRootDigest !== undefined && !isObjectDigest(value.snapshotRootDigest)) {
-    return false;
-  }
-  if (
-    value.semanticChangeSetDigest !== undefined &&
-    !isObjectDigest(value.semanticChangeSetDigest)
-  ) {
-    return false;
-  }
-  if (value.state === 'pending') return value.terminal === undefined;
-  if (!isPendingRemoteTerminal(value.terminal)) return false;
-  if (value.terminal.status !== value.state) return false;
-  return true;
-}
-
-function pendingRemoteSegmentReservationIdentity(record: PendingRemoteSegmentRecord) {
-  return {
-    schemaVersion: record.schemaVersion,
-    recordKind: record.recordKind,
-    pendingRemoteSegmentId: record.pendingRemoteSegmentId,
-    idempotencyKey: record.idempotencyKey,
-    namespaceKey: record.namespaceKey,
-    documentScopeKey: record.documentScopeKey,
-    syncIdentity: record.syncIdentity,
-    operationContext: stableOperationContextIdentity(record.operationContext),
-    mutationSegmentDigest: record.mutationSegmentDigest,
-    snapshotRootDigest: record.snapshotRootDigest,
-    semanticChangeSetDigest: record.semanticChangeSetDigest,
-  };
-}
-
-function stableOperationContextIdentity(context: PendingRemoteSegmentOperationContext) {
-  return {
-    operationId: context.operationId,
-    kind: context.kind,
-    author: context.author,
-    workbookId: context.workbookId,
-    sheetIds: context.sheetIds,
-    domainIds: context.domainIds,
-    groupId: context.groupId,
-    capturePolicy: context.capturePolicy,
-    writeAdmissionMode: context.writeAdmissionMode,
-    rolloutStage: context.rolloutStage,
-    capabilityGate: context.capabilityGate,
-    clientRequestId: context.clientRequestId,
-    collaboration: context.collaboration,
-  };
-}
-
-export function comparePendingRemoteSegmentRecords(
-  left: PendingRemoteSegmentRecord,
-  right: PendingRemoteSegmentRecord,
-): number {
-  return (
-    left.createdAt.localeCompare(right.createdAt) ||
-    left.pendingRemoteSegmentId.localeCompare(right.pendingRemoteSegmentId)
-  );
-}
-
-function memoryKey(
-  namespace: VersionGraphNamespace,
-  idempotencyKey: PendingRemoteSegmentIdempotencyKey,
-): string {
-  return `${versionGraphNamespaceKey(namespace)}\u0000pendingRemote\u0000${idempotencyKey}`;
-}
-
-function memoryKeyFromRecord(record: PendingRemoteSegmentRecord): string {
-  return `${record.namespaceKey}\u0000pendingRemote\u0000${record.idempotencyKey}`;
 }
 
 function conflictReserve(
@@ -739,134 +339,6 @@ function diagnostic(
   return details === undefined
     ? { code, message, recoverability }
     : { code, message, recoverability, details };
-}
-
-async function validatePendingRemoteObject(
-  graph: Pick<VersionGraphStore, 'getObjectRecord'>,
-  objectType: VersionObjectType,
-  digest: ObjectDigest,
-  field: string,
-  diagnostics: PendingRemoteSegmentStoreDiagnostic[],
-): Promise<void> {
-  try {
-    await graph.getObjectRecord({ kind: 'object', objectType, digest });
-  } catch (error) {
-    diagnostics.push(diagnosticForPendingRemoteObjectReadError(error, objectType, digest, field));
-  }
-}
-
-function diagnosticForPendingRemoteObjectReadError(
-  error: unknown,
-  objectType: VersionObjectType,
-  digest: ObjectDigest,
-  field: string,
-): PendingRemoteSegmentStoreDiagnostic {
-  const sourceCode = diagnosticCodeFromError(error);
-  const details = { objectType, digest: digest.digest, field, sourceCode: sourceCode ?? null };
-  if (sourceCode === 'VERSION_OBJECT_NOT_FOUND') {
-    return diagnostic(
-      'VERSION_PENDING_REMOTE_MISSING_OBJECT',
-      'Pending remote segment references a version object that is not persisted.',
-      'repair',
-      details,
-    );
-  }
-  if (
-    sourceCode === 'VERSION_OBJECT_TYPE_MISMATCH' ||
-    sourceCode === 'VERSION_OBJECT_CORRUPTION' ||
-    sourceCode === 'VERSION_DIGEST_MISMATCH'
-  ) {
-    return diagnostic(
-      'VERSION_PENDING_REMOTE_OBJECT_CORRUPTION',
-      'Pending remote segment references an invalid version object.',
-      'repair',
-      details,
-    );
-  }
-  return diagnostic(
-    'VERSION_PROVIDER_FAILED',
-    'Pending remote segment object validation failed.',
-    'retry',
-    details,
-  );
-}
-
-function diagnosticCodeFromError(error: unknown): string | undefined {
-  if (!isRecord(error) || !isRecord(error.diagnostic)) return undefined;
-  return typeof error.diagnostic.code === 'string' ? error.diagnostic.code : undefined;
-}
-
-function isPendingRemoteSyncIdentity(value: unknown): value is PendingRemoteSegmentSyncIdentity {
-  if (!isRecord(value) || value.schemaVersion !== 1) return false;
-  return (
-    typeof value.sourceKind === 'string' &&
-    typeof value.originKind === 'string' &&
-    optionalString(value.stableOriginId) &&
-    optionalString(value.providerId) &&
-    optionalString(value.authorityRef) &&
-    optionalString(value.roomId) &&
-    optionalString(value.epoch) &&
-    optionalString(value.updateId) &&
-    optionalString(value.sequence) &&
-    typeof value.payloadHash === 'string' &&
-    value.payloadHash.length > 0
-  );
-}
-
-function isPendingRemoteOperationContext(
-  value: unknown,
-): value is PendingRemoteSegmentOperationContext {
-  if (!isRecord(value) || !isRecord(value.collaboration)) return false;
-  return (
-    typeof value.operationId === 'string' &&
-    typeof value.kind === 'string' &&
-    isRecord(value.author) &&
-    typeof value.createdAt === 'string' &&
-    Array.isArray(value.domainIds) &&
-    typeof value.capturePolicy === 'string' &&
-    typeof value.writeAdmissionMode === 'string' &&
-    typeof value.collaboration.sourceKind === 'string' &&
-    typeof value.collaboration.originKind === 'string' &&
-    typeof value.collaboration.payloadHash === 'string'
-  );
-}
-
-function isPendingRemoteTerminal(value: unknown): value is PendingRemoteSegmentTerminal {
-  if (!isRecord(value)) return false;
-  if (value.status === 'promoted') {
-    return (
-      optionalString(value.commitId) &&
-      (value.promotionDigest === undefined || isObjectDigest(value.promotionDigest))
-    );
-  }
-  if (value.status === 'dropped') {
-    return (
-      typeof value.reason === 'string' &&
-      (value.diagnosticDigest === undefined || isObjectDigest(value.diagnosticDigest))
-    );
-  }
-  return false;
-}
-
-function optionalString(value: unknown): boolean {
-  return value === undefined || typeof value === 'string';
-}
-
-function canonicalJsonStringify(value: unknown): string {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error('canonical JSON number must be finite');
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJsonStringify).join(',')}]`;
-  if (!isRecord(value)) throw new Error('value must be canonical JSON');
-  return `{${Object.keys(value)
-    .sort()
-    .filter((key) => value[key] !== undefined)
-    .map((key) => `${JSON.stringify(key)}:${canonicalJsonStringify(value[key])}`)
-    .join(',')}}`;
 }
 
 function cloneJson<T>(value: T): T {

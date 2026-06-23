@@ -7,6 +7,7 @@ import {
 } from '../object-digest';
 import {
   InMemoryVersionObjectStore,
+  VersionObjectMemoryBackend,
   createVersionObjectRecord,
   type VersionGraphNamespace,
   type VersionObjectPutBatchResult,
@@ -320,6 +321,143 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
     });
   });
 
+  it('returns structured diagnostics when a persisted dependency object is missing on read', async () => {
+    const backend = new VersionObjectMemoryBackend();
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE, { backend });
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+    const payload: WorkbookCommitPayload = {
+      schemaVersion: 1,
+      documentId: NAMESPACE.documentId,
+      parentCommitIds: [],
+      snapshotRootDigest: snapshotRoot.digest,
+      semanticChangeSetDigest: semanticChangeSet.digest,
+      author: AUTHOR,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      completenessDiagnostics: [],
+    };
+    const record = await createVersionObjectRecord(NAMESPACE, {
+      objectType: 'workbook.commit.v1',
+      schemaVersion: 1,
+      payloadEncoding: 'mog-canonical-json-v1',
+      dependencies: [
+        {
+          kind: 'object',
+          objectType: 'workbook.semanticChangeSet.v1',
+          digest: semanticChangeSet.digest,
+        },
+        {
+          kind: 'object',
+          objectType: 'workbook.snapshotRoot.v1',
+          digest: snapshotRoot.digest,
+        },
+      ],
+      payload,
+    });
+    expect(await objectStore.putObjects([snapshotRoot])).toMatchObject({ status: 'success' });
+    backend.putCorruptRecordForTesting(NAMESPACE, record.digest, record);
+    const commitId = workbookCommitIdFromObjectDigest(record.digest);
+
+    const read = await commitStore.readCommit(commitId);
+
+    expectReadFailed(read);
+    expect(read.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_MISSING_DEPENDENCY',
+        commitId,
+        objectDigest: semanticChangeSet.digest,
+        dependency: {
+          kind: 'object',
+          objectType: 'workbook.semanticChangeSet.v1',
+          digest: semanticChangeSet.digest,
+        },
+        sourceDiagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_OBJECT_NOT_FOUND',
+            digest: semanticChangeSet.digest,
+          }),
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(read.diagnostics)).not.toContain('"path"');
+  });
+
+  it('returns structured diagnostics when a dependency object digest is corrupted on read', async () => {
+    const backend = new VersionObjectMemoryBackend();
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE, { backend });
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+    const corruptSemanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: ['corrupt'],
+    });
+    const payload: WorkbookCommitPayload = {
+      schemaVersion: 1,
+      documentId: NAMESPACE.documentId,
+      parentCommitIds: [],
+      snapshotRootDigest: snapshotRoot.digest,
+      semanticChangeSetDigest: semanticChangeSet.digest,
+      author: AUTHOR,
+      createdAt: '2026-06-20T00:00:00.000Z',
+      completenessDiagnostics: [],
+    };
+    const record = await createVersionObjectRecord(NAMESPACE, {
+      objectType: 'workbook.commit.v1',
+      schemaVersion: 1,
+      payloadEncoding: 'mog-canonical-json-v1',
+      dependencies: [
+        {
+          kind: 'object',
+          objectType: 'workbook.semanticChangeSet.v1',
+          digest: semanticChangeSet.digest,
+        },
+        {
+          kind: 'object',
+          objectType: 'workbook.snapshotRoot.v1',
+          digest: snapshotRoot.digest,
+        },
+      ],
+      payload,
+    });
+    expect(await objectStore.putObjects([snapshotRoot])).toMatchObject({ status: 'success' });
+    backend.putCorruptRecordForTesting(NAMESPACE, semanticChangeSet.digest, {
+      ...corruptSemanticChangeSet,
+      digest: semanticChangeSet.digest,
+    });
+    backend.putCorruptRecordForTesting(NAMESPACE, record.digest, record);
+    const commitId = workbookCommitIdFromObjectDigest(record.digest);
+
+    const read = await commitStore.readCommit(commitId);
+
+    expectReadFailed(read);
+    expect(read.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_OBJECT_STORE_FAILURE',
+        severity: 'corruption',
+        commitId,
+        objectDigest: semanticChangeSet.digest,
+        dependency: {
+          kind: 'object',
+          objectType: 'workbook.semanticChangeSet.v1',
+          digest: semanticChangeSet.digest,
+        },
+        sourceDiagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_OBJECT_CORRUPTION',
+            digest: semanticChangeSet.digest,
+            details: { cause: 'VERSION_DIGEST_MISMATCH' },
+          }),
+        ],
+      }),
+    ]);
+    expect(JSON.stringify(read.diagnostics)).not.toContain('"path"');
+  });
+
   it('rejects malformed persisted commit payload fields on read', async () => {
     const objectStore = new InMemoryVersionObjectStore(NAMESPACE);
     const commitStore = createInMemoryWorkbookCommitStore(objectStore);
@@ -435,18 +573,20 @@ describe('InMemoryWorkbookCommitStore merge commit parents', () => {
       (dependency) => dependency.kind === 'commit',
     );
     expect(parentDependencies).toHaveLength(2);
-    expect(parentDependencies).toEqual(expect.arrayContaining([
-      {
-        kind: 'commit',
-        commitId: parentA.commit.id,
-        digest: parentA.commit.record.digest,
-      },
-      {
-        kind: 'commit',
-        commitId: parentB.commit.id,
-        digest: parentB.commit.record.digest,
-      },
-    ]));
+    expect(parentDependencies).toEqual(
+      expect.arrayContaining([
+        {
+          kind: 'commit',
+          commitId: parentA.commit.id,
+          digest: parentA.commit.record.digest,
+        },
+        {
+          kind: 'commit',
+          commitId: parentB.commit.id,
+          digest: parentB.commit.record.digest,
+        },
+      ]),
+    );
 
     const read = await commitStore.readCommit(merge.commit.id);
     expectReadSuccess(read);

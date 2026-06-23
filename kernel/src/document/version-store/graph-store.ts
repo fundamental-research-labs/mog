@@ -2,6 +2,7 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import {
   objectDigestFromWorkbookCommitId,
+  type ObjectDigest,
   type VersionDependencyRef,
   type WorkbookCommitId,
 } from './object-digest';
@@ -46,10 +47,7 @@ import {
 } from './graph-store-list-options';
 import { resolveListCommitsRoot } from './graph-store-list-commits-root';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
-import {
-  parseGraphCommitParentPlan,
-  type GraphCommitParentPlan,
-} from './graph-store-parent-plans';
+import { parseGraphCommitParentPlan, type GraphCommitParentPlan } from './graph-store-parent-plans';
 import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
 import type { RefName } from './ref-name';
 import {
@@ -209,6 +207,8 @@ export type VersionGraphStoreDiagnostic = {
   readonly message: string;
   readonly refName?: string;
   readonly commitId?: WorkbookCommitId;
+  readonly objectDigest?: ObjectDigest;
+  readonly dependency?: VersionDependencyRef;
   readonly objectKind?: 'commit';
   readonly operation?: VersionGraphStoreOperation;
   readonly option?: 'pageSize' | 'pageToken' | 'ref' | 'from';
@@ -365,9 +365,10 @@ export class InMemoryVersionGraphStore {
       );
     }
 
-    const current = target.refName === 'main'
-      ? this.readMainRef('commit')
-      : this.readBranchRef(target.refName, 'commit');
+    const current =
+      target.refName === 'main'
+        ? this.readMainRef('commit')
+        : this.readBranchRef(target.refName, 'commit');
     if (!current.ok) {
       return failedWrite(current.diagnostics, 'no-write-attempted');
     }
@@ -510,11 +511,21 @@ export class InMemoryVersionGraphStore {
     return { status: 'success', ref, diagnostics: [] };
   }
 
-  async createBranch(...args: Parameters<GraphBranchLifecycle['createBranch']>) { return this.branchService().createBranch(...args); }
-  async readBranch(...args: Parameters<GraphBranchLifecycle['readBranch']>) { return this.branchService().readBranch(...args); }
-  async listBranches(...args: Parameters<GraphBranchLifecycle['listBranches']>) { return this.branchService().listBranches(...args); }
-  async fastForwardBranch(...args: Parameters<GraphBranchLifecycle['fastForwardBranch']>) { return this.branchService().fastForwardBranch(...args); }
-  async getHead() { return this.branchService().getHead(); }
+  async createBranch(...args: Parameters<GraphBranchLifecycle['createBranch']>) {
+    return this.branchService().createBranch(...args);
+  }
+  async readBranch(...args: Parameters<GraphBranchLifecycle['readBranch']>) {
+    return this.branchService().readBranch(...args);
+  }
+  async listBranches(...args: Parameters<GraphBranchLifecycle['listBranches']>) {
+    return this.branchService().listBranches(...args);
+  }
+  async fastForwardBranch(...args: Parameters<GraphBranchLifecycle['fastForwardBranch']>) {
+    return this.branchService().fastForwardBranch(...args);
+  }
+  async getHead() {
+    return this.branchService().getHead();
+  }
 
   async listCommits(
     options: VersionGraphListCommitsOptions = {},
@@ -534,20 +545,17 @@ export class InMemoryVersionGraphStore {
 
     const collected = await this.collectReachableCommits(root.commitId, 'listCommits');
     if (!collected.ok) {
-      const diagnostics = root.ref && !collected.commits.has(root.commitId)
-        ? [
-            danglingRefDiagnostic(
-              root.ref,
-              'listCommits',
-              collected.sourceDiagnostics,
-            ),
-            ...collected.diagnostics,
-          ]
-        : collected.diagnostics;
+      const diagnostics =
+        root.ref && !collected.commits.has(root.commitId)
+          ? [
+              danglingRefDiagnostic(root.ref, 'listCommits', collected.sourceDiagnostics),
+              ...collected.diagnostics,
+            ]
+          : collected.diagnostics;
       return { status: 'failed', diagnostics };
     }
 
-    const ordered = orderTopologicalNewestFirst(root.commitId, collected.commits);
+    const ordered = orderTopologicalNewestFirst(root.commitId, collected.commits, 'listCommits');
     if (ordered.diagnostics.length > 0) {
       return { status: 'failed', diagnostics: ordered.diagnostics };
     }
@@ -594,7 +602,11 @@ export class InMemoryVersionGraphStore {
     if (!collected.ok) {
       return { status: 'failed', diagnostics: collected.diagnostics };
     }
-    const ordered = orderTopologicalNewestFirst(start.commitId, collected.commits);
+    const ordered = orderTopologicalNewestFirst(
+      start.commitId,
+      collected.commits,
+      'readCommitClosure',
+    );
     if (ordered.diagnostics.length > 0) {
       return { status: 'failed', diagnostics: ordered.diagnostics };
     }
@@ -810,7 +822,8 @@ function mapCommitDiagnostics(
   operation?: VersionGraphStoreOperation,
 ): readonly VersionGraphStoreDiagnostic[] {
   return diagnostics.map((item) => {
-    const wrongNamespace = item.sourceDiagnostics?.find(
+    const sourceItem = sanitizeCommitDiagnostic(item);
+    const wrongNamespace = sourceItem.sourceDiagnostics?.find(
       (source) => source.code === 'VERSION_WRONG_NAMESPACE',
     );
     if (wrongNamespace) {
@@ -824,23 +837,26 @@ function mapCommitDiagnostics(
       );
     }
 
-    const missingObject = item.sourceDiagnostics?.find(
+    const missingObject = sourceItem.sourceDiagnostics?.find(
       (source) => source.code === 'VERSION_OBJECT_NOT_FOUND',
     );
-    if (missingObject) {
+    if (missingObject && sourceItem.code === 'VERSION_OBJECT_STORE_FAILURE') {
       return missingCommitDiagnostic(
-        item.commitId,
+        sourceItem.commitId,
         operation,
-        [item],
+        [sourceItem],
         'Commit object is missing from the graph store.',
       );
     }
 
-    const code = graphDiagnosticCodeFromCommit(item.code);
-    return diagnostic(code, item.message, {
-      commitId: item.commitId,
+    const code = graphDiagnosticCodeFromCommit(sourceItem.code);
+    return diagnostic(code, sourceItem.message, {
+      commitId: sourceItem.commitId,
+      objectDigest: sourceItem.objectDigest,
+      dependency: sourceItem.dependency,
       operation,
-      sourceDiagnostics: [item],
+      sourceDiagnostics: [sourceItem],
+      details: sourceItem.details,
     });
   });
 }
@@ -889,7 +905,7 @@ function missingCommitDiagnostic(
     commitId,
     objectKind: 'commit',
     operation,
-    sourceDiagnostics,
+    sourceDiagnostics: sourceDiagnostics.map(sanitizeCommitDiagnostic),
   });
 }
 
@@ -898,17 +914,23 @@ function danglingRefDiagnostic(
   operation: VersionGraphStoreOperation,
   sourceDiagnostics: readonly WorkbookCommitStoreDiagnostic[],
 ): VersionGraphStoreDiagnostic {
-  return diagnostic(
-    'VERSION_DANGLING_REF',
-    'Graph ref points at a missing or unreadable commit.',
-    {
-      refName: ref.name,
-      commitId: ref.commitId,
-      objectKind: 'commit',
-      operation,
-      sourceDiagnostics,
-    },
-  );
+  return diagnostic('VERSION_DANGLING_REF', 'Graph ref points at a missing or unreadable commit.', {
+    refName: ref.name,
+    commitId: ref.commitId,
+    objectKind: 'commit',
+    operation,
+    sourceDiagnostics: sourceDiagnostics.map(sanitizeCommitDiagnostic),
+  });
+}
+
+function sanitizeCommitDiagnostic(
+  diagnostic: WorkbookCommitStoreDiagnostic,
+): WorkbookCommitStoreDiagnostic {
+  if (diagnostic.sourceDiagnostics === undefined) return diagnostic;
+  return {
+    ...diagnostic,
+    sourceDiagnostics: diagnostic.sourceDiagnostics.map(({ path: _path, ...source }) => source),
+  };
 }
 
 function refConflictDiagnostic(

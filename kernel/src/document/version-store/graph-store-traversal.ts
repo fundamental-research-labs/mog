@@ -1,10 +1,12 @@
 import type { WorkbookCommit } from './commit-store';
 import type { WorkbookCommitId } from './object-digest';
 import type { VersionGraphStoreDiagnostic } from './graph-store';
+import type { VersionGraphStoreOperation } from './graph-store-operation';
 
 export function orderTopologicalNewestFirst(
   rootCommitId: WorkbookCommitId,
   commits: ReadonlyMap<WorkbookCommitId, WorkbookCommit>,
+  operation: VersionGraphStoreOperation = 'listCommits',
 ):
   | { readonly commits: readonly WorkbookCommit[]; readonly diagnostics: readonly [] }
   | {
@@ -15,7 +17,9 @@ export function orderTopologicalNewestFirst(
   if (root === undefined) {
     return {
       commits: [],
-      diagnostics: [missingCommitDiagnostic(rootCommitId, 'Traversal root commit is missing.')],
+      diagnostics: [
+        missingCommitDiagnostic(rootCommitId, operation, 'Traversal root commit is missing.'),
+      ],
     };
   }
 
@@ -72,8 +76,7 @@ export function orderTopologicalNewestFirst(
           code: 'VERSION_INVALID_COMMIT_PAYLOAD',
           severity: 'error',
           message: 'Commit graph traversal could not reach a stable topological order.',
-          operation: 'listCommits',
-          refName: 'refs/heads/main',
+          operation,
           details: {
             orderedCommitCount: ordered.length,
             reachableCommitCount: commits.size,
@@ -111,6 +114,7 @@ function compareQueueEntries(
 
 function missingCommitDiagnostic(
   commitId: WorkbookCommitId,
+  operation: VersionGraphStoreOperation,
   message: string,
 ): VersionGraphStoreDiagnostic {
   return {
@@ -119,6 +123,6 @@ function missingCommitDiagnostic(
     message,
     commitId,
     objectKind: 'commit',
-    operation: 'listCommits',
+    operation,
   };
 }

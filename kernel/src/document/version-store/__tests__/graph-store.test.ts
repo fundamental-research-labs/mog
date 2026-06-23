@@ -2,12 +2,14 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import {
   parseWorkbookCommitId,
+  workbookCommitIdFromObjectDigest,
   type VersionDependencyRef,
   type VersionObjectType,
   type WorkbookCommitId,
 } from '../object-digest';
 import {
   InMemoryVersionObjectStore,
+  VersionObjectMemoryBackend,
   createVersionObjectRecord,
   type VersionGraphNamespace,
   type VersionObjectRecord,
@@ -161,6 +163,55 @@ async function graphInput(
     author: AUTHOR,
     createdAt: '2026-06-20T00:00:00.000Z',
     completenessDiagnostics: [],
+  };
+}
+
+async function persistRootCommitForReadDiagnostics(
+  backend: VersionObjectMemoryBackend,
+  objectStore: InMemoryVersionObjectStore,
+  label: string,
+): Promise<{
+  readonly commitId: WorkbookCommitId;
+  readonly semanticChangeSet: VersionObjectRecord<unknown>;
+}> {
+  const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { label, sheets: [] });
+  const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+    label,
+    changes: [],
+  });
+  const payload = {
+    schemaVersion: 1,
+    documentId: NAMESPACE.documentId,
+    parentCommitIds: [],
+    snapshotRootDigest: snapshotRoot.digest,
+    semanticChangeSetDigest: semanticChangeSet.digest,
+    author: AUTHOR,
+    createdAt: '2026-06-20T00:00:00.000Z',
+    completenessDiagnostics: [],
+  };
+  const commitRecord = await createVersionObjectRecord(NAMESPACE, {
+    objectType: 'workbook.commit.v1',
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [
+      {
+        kind: 'object',
+        objectType: 'workbook.semanticChangeSet.v1',
+        digest: semanticChangeSet.digest,
+      },
+      {
+        kind: 'object',
+        objectType: 'workbook.snapshotRoot.v1',
+        digest: snapshotRoot.digest,
+      },
+    ],
+    payload,
+  });
+  expect(await objectStore.putObjects([snapshotRoot])).toMatchObject({ status: 'success' });
+  backend.putCorruptRecordForTesting(NAMESPACE, commitRecord.digest, commitRecord);
+  return {
+    commitId: workbookCommitIdFromObjectDigest(commitRecord.digest),
+    semanticChangeSet,
   };
 }
 
@@ -481,6 +532,67 @@ describe('InMemoryVersionGraphStore normal commits', () => {
     expect(listed.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'VERSION_DANGLING_REF',
       'VERSION_MISSING_OBJECT',
+    ]);
+  });
+
+  it.each([
+    { label: 'missing-dependency', code: 'VERSION_MISSING_DEPENDENCY' },
+    { label: 'corrupt-dependency', code: 'VERSION_OBJECT_STORE_FAILURE' },
+  ] as const)('returns structured graph read diagnostics for $label', async ({ label, code }) => {
+    const backend = new VersionObjectMemoryBackend();
+    const objectStore = new InMemoryVersionObjectStore(NAMESPACE, { backend });
+    const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE, objectStore });
+    const persisted = await persistRootCommitForReadDiagnostics(backend, objectStore, label);
+    if (code === 'VERSION_OBJECT_STORE_FAILURE') {
+      const corrupt = await objectRecord('workbook.semanticChangeSet.v1', {
+        changes: ['corrupt'],
+      });
+      backend.putCorruptRecordForTesting(NAMESPACE, persisted.semanticChangeSet.digest, {
+        ...corrupt,
+        digest: persisted.semanticChangeSet.digest,
+      });
+    }
+    expect(
+      graph.refStore.initializeMain({ targetCommitId: persisted.commitId, createdBy: AUTHOR }),
+    ).toMatchObject({ ok: true });
+
+    const dependency = {
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: persisted.semanticChangeSet.digest,
+    };
+    const head = await graph.readHead();
+    expectReadHeadDegraded(head);
+    expect(head.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_DANGLING_REF',
+      code,
+    ]);
+    expect(head.diagnostics[1]).toMatchObject({
+      code,
+      operation: 'readHead',
+      commitId: persisted.commitId,
+      objectDigest: persisted.semanticChangeSet.digest,
+      dependency,
+    });
+    expect(JSON.stringify(head.diagnostics)).not.toContain('"path"');
+
+    const closure = await graph.readCommitClosure(persisted.commitId);
+    expect(closure.status).toBe('failed');
+    if (closure.status !== 'failed') throw new Error('expected closure failure');
+    expect(closure.diagnostics).toEqual([
+      expect.objectContaining({
+        code,
+        operation: 'readCommitClosure',
+        commitId: persisted.commitId,
+        objectDigest: persisted.semanticChangeSet.digest,
+      }),
+    ]);
+
+    const listed = await graph.listCommits();
+    expectListFailed(listed);
+    expect(listed.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'VERSION_DANGLING_REF',
+      code,
     ]);
   });
 

@@ -272,6 +272,7 @@ export class InMemoryWorkbookCommitStore {
 
       const dependencyDiagnostics = await validateCommitDependenciesPresent(
         this.objectStore,
+        commitId,
         record.preimage.dependencies,
       );
       if (dependencyDiagnostics.length > 0) {
@@ -468,30 +469,36 @@ function validateCommitRecord(
 
 async function validateCommitDependenciesPresent(
   objectStore: InMemoryVersionObjectStore,
+  commitId: WorkbookCommitId,
   dependencies: readonly VersionDependencyRef[],
 ): Promise<readonly WorkbookCommitStoreDiagnostic[]> {
   const diagnostics: WorkbookCommitStoreDiagnostic[] = [];
   for (const dependency of dependencies) {
     try {
-      if (!(await objectStore.hasObject(dependency))) {
-        const code =
-          dependency.kind === 'commit' ? 'VERSION_MISSING_PARENT' : 'VERSION_MISSING_DEPENDENCY';
-        diagnostics.push(
-          diagnostic(
-            code,
-            dependency.kind === 'commit'
-              ? 'Commit parent object is missing.'
-              : 'Commit dependency object is missing.',
-            { dependency },
-          ),
-        );
-      }
+      await objectStore.getObjectRecord(dependency);
     } catch (error) {
+      const source = error instanceof VersionObjectStoreError ? error.diagnostic : undefined;
+      const missing =
+        source?.code === 'VERSION_OBJECT_NOT_FOUND' ||
+        source?.code === 'VERSION_OBJECT_TYPE_MISMATCH';
+      const code = missing
+        ? dependency.kind === 'commit'
+          ? 'VERSION_MISSING_PARENT'
+          : 'VERSION_MISSING_DEPENDENCY'
+        : 'VERSION_OBJECT_STORE_FAILURE';
       diagnostics.push(
-        diagnostic('VERSION_OBJECT_STORE_FAILURE', 'Commit dependency validation failed.', {
-          sourceDiagnostics:
-            error instanceof VersionObjectStoreError ? [error.diagnostic] : undefined,
-        }),
+        diagnostic(
+          code,
+          missing
+            ? 'Commit dependency object is missing or has the wrong object type.'
+            : 'Commit dependency object failed integrity validation.',
+          {
+            commitId,
+            objectDigest: dependency.digest,
+            dependency,
+            ...(source === undefined ? {} : { sourceDiagnostics: [source] }),
+          },
+        ),
       );
     }
   }

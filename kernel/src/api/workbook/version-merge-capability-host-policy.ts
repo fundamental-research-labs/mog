@@ -2,11 +2,11 @@ import type { VersionCapability } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import {
-  operationAliasCapability,
   VERSION_CAPABILITY_KEYS,
   VERSION_MERGE_BROAD_CAPABILITY_ALIASES,
   VERSION_MERGE_NARROW_CAPABILITY_ALIASES,
 } from './version-merge-capability-constants';
+import { operationAliasCapability } from './version-merge-capability-operations';
 import type {
   HostCapabilityDecision,
   HostCapabilityDecisions,

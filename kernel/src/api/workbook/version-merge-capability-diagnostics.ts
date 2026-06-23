@@ -1,9 +1,7 @@
 import type { VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
-import {
-  versionMergeCapabilityForOperation,
-  type VersionMergePublicOperation,
-} from './version-merge-capability-constants';
+import type { VersionMergePublicOperation } from './version-merge-capability-constants';
+import { versionMergeCapabilityForOperation } from './version-merge-capability-operations';
 import type {
   VersionMergeCapabilityDecision,
   VersionMergeCapabilityDisabledReason,

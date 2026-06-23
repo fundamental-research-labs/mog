@@ -1,6 +1,5 @@
 export {
   VERSION_CAPABILITY_KEYS,
-  versionMergeCapabilityForOperation,
 } from './version-merge-capability-constants';
 export type {
   VersionMergePublicCapability,
@@ -10,6 +9,7 @@ export { getVersionMergeCapabilityDecision } from './version-merge-capability-de
 export { versionMergeCapabilityDisabledDiagnostic } from './version-merge-capability-diagnostics';
 export { getVersionControlGateStatus } from './version-merge-capability-gates';
 export { getVersionHostCapabilityDecisions } from './version-merge-capability-host-policy';
+export { versionMergeCapabilityForOperation } from './version-merge-capability-operations';
 export type {
   HostCapabilityDecision,
   HostCapabilityDecisions,

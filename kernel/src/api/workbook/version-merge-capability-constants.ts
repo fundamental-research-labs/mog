@@ -49,17 +49,3 @@ export const VERSION_CAPABILITY_KEYS = [
   'version:provenance',
   'version:remotePromote',
 ] as const satisfies readonly VersionCapability[];
-
-export function versionMergeCapabilityForOperation(
-  operation: VersionMergePublicOperation,
-): VersionMergePublicCapability {
-  return VERSION_MERGE_OPERATION_CAPABILITIES[operation];
-}
-
-export function operationAliasCapability(value: string): VersionMergePublicCapability | null {
-  return isVersionMergePublicOperation(value) ? VERSION_MERGE_OPERATION_CAPABILITIES[value] : null;
-}
-
-function isVersionMergePublicOperation(value: string): value is VersionMergePublicOperation {
-  return Object.prototype.hasOwnProperty.call(VERSION_MERGE_OPERATION_CAPABILITIES, value);
-}

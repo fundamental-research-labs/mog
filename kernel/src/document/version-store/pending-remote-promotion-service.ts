@@ -5,8 +5,10 @@ import type {
   VersionGraphStoreDiagnostic,
   VersionGraphWriteResult,
 } from './graph-store';
+import type { WorkbookCommit } from './commit-store';
 import type { ObjectDigest, VersionObjectType, WorkbookCommitId } from './object-digest';
 import type { VersionObjectRecord } from './object-store';
+import { objectDigestFor } from './merge-apply-intent-store';
 import {
   hasPendingRemoteSegmentStoreProvider,
   type PendingRemoteSegmentId,
@@ -54,6 +56,7 @@ export type PendingRemotePromotionDiagnosticCode =
   | 'VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE'
   | 'VERSION_PENDING_REMOTE_PROMOTION_OBJECT_READ_FAILED'
+  | 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE';
 
 export type PendingRemotePromotionSourceDiagnostic =
@@ -159,6 +162,36 @@ type BatchStatusDecision =
       readonly diagnostics: readonly PendingRemotePromotionDiagnostic[];
     };
 
+type PromotionCompletion = {
+  readonly commitId: WorkbookCommitId;
+  readonly promotionDigest: ObjectDigest;
+};
+
+type ExistingPromotionCommitResolution =
+  | {
+      readonly status: 'found';
+      readonly completion: PromotionCompletion;
+      readonly diagnostics: readonly PendingRemotePromotionDiagnostic[];
+    }
+  | {
+      readonly status: 'not-found';
+      readonly diagnostics: readonly PendingRemotePromotionDiagnostic[];
+    }
+  | {
+      readonly status: 'skipped';
+      readonly reason: PendingRemotePromotionSkipReason;
+      readonly message: string;
+      readonly diagnostics: readonly PendingRemotePromotionDiagnostic[];
+    };
+
+type PromotedRecoveryRecord = PendingRemoteSegmentRecord & {
+  readonly terminal: {
+    readonly status: 'promoted';
+    readonly commitId: WorkbookCommitId;
+    readonly promotionDigest?: ObjectDigest;
+  };
+};
+
 export class PendingRemotePromotionService {
   readonly providerWriteActivityTracker: VersionProviderWriteActivityTracker;
   private readonly provider: VersionStoreProvider;
@@ -192,6 +225,14 @@ export class PendingRemotePromotionService {
       ]);
     }
 
+    const promotedRecoveryRecords = await listPromotedRecoveryRecords(
+      opened.stores.pendingStore,
+      listed.records.length,
+    );
+    if (promotedRecoveryRecords.status === 'failed') {
+      return failedResult(promotedRecoveryRecords.diagnostics);
+    }
+
     const promotedSegmentIds: PendingRemoteSegmentId[] = [];
     const commitIds: WorkbookCommitId[] = [];
     const skipped: PendingRemotePromotionSkippedSegment[] = [];
@@ -214,6 +255,30 @@ export class PendingRemotePromotionService {
         const skippedGroup = skipGroup(prepared.prepared.records, head.reason, head.message);
         skipped.push(...skippedGroup);
         diagnostics.push(...head.diagnostics);
+        continue;
+      }
+
+      const existing = await resolveExistingPromotionCommit({
+        graph: opened.stores.graph,
+        prepared: prepared.prepared,
+        promotedPeers: promotedPeersForGroup(group, promotedRecoveryRecords.records),
+        visibleHeadCommitId: head.main.commitId,
+      });
+      diagnostics.push(...existing.diagnostics);
+      if (existing.status === 'skipped') {
+        skipped.push(...skipGroup(prepared.prepared.records, existing.reason, existing.message));
+        continue;
+      }
+      if (existing.status === 'found') {
+        pushUnique(commitIds, existing.completion.commitId);
+        const completed = await this.completePromotedSegments(
+          opened.stores.pendingStore,
+          prepared.prepared.records,
+          existing.completion,
+        );
+        promotedSegmentIds.push(...completed.promotedSegmentIds);
+        skipped.push(...completed.skipped);
+        diagnostics.push(...completed.diagnostics);
         continue;
       }
 
@@ -254,10 +319,14 @@ export class PendingRemotePromotionService {
       }
 
       pushUnique(commitIds, committed.commit.id);
+      const completion = await promotionCompletionForCommit(
+        committed.commit,
+        prepared.prepared.records,
+      );
       const completed = await this.completePromotedSegments(
         opened.stores.pendingStore,
         prepared.prepared.records,
-        committed.commit.id,
+        completion,
       );
       promotedSegmentIds.push(...completed.promotedSegmentIds);
       skipped.push(...completed.skipped);
@@ -442,7 +511,7 @@ export class PendingRemotePromotionService {
   private async completePromotedSegments(
     store: PendingRemoteSegmentStore,
     records: readonly PendingRemoteSegmentRecord[],
-    commitId: WorkbookCommitId,
+    completion: PromotionCompletion,
   ): Promise<{
     readonly promotedSegmentIds: readonly PendingRemoteSegmentId[];
     readonly skipped: readonly PendingRemotePromotionSkippedSegment[];
@@ -460,7 +529,11 @@ export class PendingRemotePromotionService {
           pendingRemoteSegmentId: record.pendingRemoteSegmentId,
           mutationSegmentDigest: record.mutationSegmentDigest,
           completedAt,
-          terminal: { status: 'promoted', commitId },
+          terminal: {
+            status: 'promoted',
+            commitId: completion.commitId,
+            promotionDigest: completion.promotionDigest,
+          },
         });
       } catch (error) {
         completed = {
@@ -486,7 +559,7 @@ export class PendingRemotePromotionService {
         segmentId: record.pendingRemoteSegmentId,
         reason: 'completion-failed',
         message: 'Pending remote segment was committed but could not be marked promoted.',
-        commitId,
+        commitId: completion.commitId,
       });
       diagnostics.push(
         diagnostic(
@@ -496,7 +569,7 @@ export class PendingRemotePromotionService {
           {
             reason: 'completion-failed',
             segmentId: record.pendingRemoteSegmentId,
-            commitId,
+            commitId: completion.commitId,
             sourceDiagnostics: completed.diagnostics,
           },
         ),
@@ -515,6 +588,179 @@ export function createPendingRemotePromotionService(
   options: PendingRemotePromotionServiceOptions,
 ): PendingRemotePromotionService {
   return new PendingRemotePromotionService(options);
+}
+
+async function listPromotedRecoveryRecords(
+  store: PendingRemoteSegmentStore,
+  pendingCount: number,
+): Promise<
+  | { readonly status: 'success'; readonly records: readonly PromotedRecoveryRecord[] }
+  | { readonly status: 'failed'; readonly diagnostics: readonly PendingRemotePromotionDiagnostic[] }
+> {
+  if (pendingCount === 0) return { status: 'success', records: [] };
+  const listed = await store.listByState('promoted');
+  if (listed.status !== 'success') {
+    return {
+      status: 'failed',
+      diagnostics: [
+        diagnostic(
+          'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE',
+          'error',
+          'Promoted pending remote segments could not be listed for promotion recovery.',
+          { sourceDiagnostics: listed.diagnostics },
+        ),
+      ],
+    };
+  }
+  return { status: 'success', records: listed.records.filter(isPromotedRecoveryRecord) };
+}
+
+function promotedPeersForGroup(
+  group: PendingRemotePromotionGroup,
+  promotedRecords: readonly PromotedRecoveryRecord[],
+): readonly PromotedRecoveryRecord[] {
+  const first = group.records[0];
+  if (!first) return [];
+  const key = promotionGroupKey(first);
+  return promotedRecords.filter((record) => promotionGroupKey(record) === key);
+}
+
+async function resolveExistingPromotionCommit(input: {
+  readonly graph: VersionGraphStore;
+  readonly prepared: PreparedPendingRemotePromotionGroup;
+  readonly promotedPeers: readonly PromotedRecoveryRecord[];
+  readonly visibleHeadCommitId: WorkbookCommitId;
+}): Promise<ExistingPromotionCommitResolution> {
+  const recoveryRecords = sortPendingRemoteSegments([
+    ...input.prepared.records,
+    ...input.promotedPeers,
+  ]);
+  const consistency = validateGroupConsistency(recoveryRecords);
+  if (consistency.status === 'skipped') {
+    return {
+      status: 'skipped',
+      reason: 'inconsistent-group',
+      message: 'Pending remote promotion recovery found inconsistent grouped segments.',
+      diagnostics: consistency.diagnostics,
+    };
+  }
+  const peerCommitIds = uniqueCommitIds(input.promotedPeers.map((record) => record.terminal.commitId));
+  if (peerCommitIds.length > 1) {
+    return {
+      status: 'skipped',
+      reason: 'inconsistent-group',
+      message: 'Pending remote promotion recovery found multiple promoted commit ids.',
+      diagnostics: [recoverySkippedDiagnostic('multiple-promoted-commit-ids')],
+    };
+  }
+
+  const closure = await readVisiblePromotionClosure(input.graph, input.visibleHeadCommitId);
+  if (closure.status === 'skipped') return closure;
+  const match = peerCommitIds[0]
+    ? closure.commits.find((commit) => commit.id === peerCommitIds[0])
+    : closure.commits.find((commit) => promotionCommitMatches(commit, recoveryRecords));
+
+  if (!match || !promotionCommitMatches(match, recoveryRecords)) {
+    if (peerCommitIds.length === 0) return { status: 'not-found', diagnostics: [] };
+    return {
+      status: 'skipped',
+      reason: 'inconsistent-group',
+      message: 'Pending remote promotion recovery could not verify the promoted peer commit.',
+      diagnostics: [recoverySkippedDiagnostic('promoted-peer-commit-mismatch')],
+    };
+  }
+
+  return {
+    status: 'found',
+    completion: await promotionCompletionForCommit(match, recoveryRecords),
+    diagnostics: [
+      diagnostic(
+        'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED',
+        'info',
+        'Pending remote promotion recovered an already-visible commit.',
+        { commitId: match.id, details: { segmentCount: recoveryRecords.length } },
+      ),
+    ],
+  };
+}
+
+async function readVisiblePromotionClosure(
+  graph: VersionGraphStore,
+  headCommitId: WorkbookCommitId,
+): Promise<
+  | { readonly status: 'success'; readonly commits: readonly WorkbookCommit[] }
+  | {
+      readonly status: 'skipped';
+      readonly reason: PendingRemotePromotionSkipReason;
+      readonly message: string;
+      readonly diagnostics: readonly PendingRemotePromotionDiagnostic[];
+    }
+> {
+  const message = 'The visible graph commit closure could not be read for pending remote promotion.';
+  try {
+    const closure = await graph.readCommitClosure(headCommitId);
+    if (closure.status === 'success') return closure;
+    return {
+      status: 'skipped',
+      reason: 'graph-ref-unavailable',
+      message,
+      diagnostics: [
+        diagnostic('VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED', 'error', message, {
+          reason: 'graph-ref-unavailable',
+          sourceDiagnostics: closure.diagnostics,
+        }),
+      ],
+    };
+  } catch (error) {
+    return {
+      status: 'skipped',
+      reason: 'graph-ref-unavailable',
+      message,
+      diagnostics: [
+        diagnostic('VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED', 'error', message, {
+          reason: 'graph-ref-unavailable',
+          details: { cause: errorMessage(error) },
+        }),
+      ],
+    };
+  }
+}
+
+function promotionCommitMatches(
+  commit: WorkbookCommit,
+  records: readonly PendingRemoteSegmentRecord[],
+): boolean {
+  const ordered = sortPendingRemoteSegments(records);
+  const first = ordered[0];
+  if (!first || !first.snapshotRootDigest || !first.semanticChangeSetDigest) return false;
+  return (
+    digestKey(commit.payload.snapshotRootDigest) === digestKey(first.snapshotRootDigest) &&
+    digestKey(commit.payload.semanticChangeSetDigest) === digestKey(first.semanticChangeSetDigest) &&
+    stableJson(commit.payload.author) === stableJson(first.operationContext.author) &&
+    commit.payload.createdAt === first.operationContext.createdAt &&
+    digestKeys(commit.payload.mutationSegmentDigests ?? []).join('\n') ===
+      digestKeys(ordered.map((record) => record.mutationSegmentDigest)).join('\n')
+  );
+}
+
+async function promotionCompletionForCommit(
+  commit: WorkbookCommit,
+  records: readonly PendingRemoteSegmentRecord[],
+): Promise<PromotionCompletion> {
+  const ordered = sortPendingRemoteSegments(records);
+  return {
+    commitId: commit.id,
+    promotionDigest: await objectDigestFor('mog.version.pending-remote-promotion.v1', {
+      schemaVersion: 1,
+      commitId: commit.id,
+      pendingRemoteSegmentIds: ordered.map((record) => record.pendingRemoteSegmentId),
+      snapshotRootDigest: commit.payload.snapshotRootDigest,
+      semanticChangeSetDigest: commit.payload.semanticChangeSetDigest,
+      mutationSegmentDigests: ordered.map((record) => record.mutationSegmentDigest),
+      author: commit.payload.author,
+      createdAt: commit.payload.createdAt,
+    }),
+  };
 }
 
 function groupPendingRemoteSegments(
@@ -955,6 +1201,33 @@ function sortPendingRemoteSegments(
 }
 function digestKey(digest: ObjectDigest): string {
   return `${digest.algorithm}:${digest.digest}`;
+}
+function digestKeys(digests: readonly ObjectDigest[]): readonly string[] {
+  return digests.map(digestKey);
+}
+function uniqueCommitIds(commitIds: readonly WorkbookCommitId[]): readonly WorkbookCommitId[] {
+  return [...new Set(commitIds)];
+}
+function isPromotedRecoveryRecord(
+  record: PendingRemoteSegmentRecord,
+): record is PromotedRecoveryRecord {
+  return (
+    record.state === 'promoted' &&
+    record.terminal?.status === 'promoted' &&
+    !!record.terminal.commitId &&
+    record.operationContext.kind === 'sync-import' &&
+    record.operationContext.collaboration?.commitGrouping === 'pendingRemote' &&
+    record.snapshotRootDigest !== undefined &&
+    record.semanticChangeSetDigest !== undefined
+  );
+}
+function recoverySkippedDiagnostic(reason: string): PendingRemotePromotionDiagnostic {
+  return diagnostic(
+    'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+    'warning',
+    'Pending remote promotion recovery could not safely reuse an existing commit.',
+    { reason: 'inconsistent-group', details: { reason } },
+  );
 }
 function stableJson(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') {

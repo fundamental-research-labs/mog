@@ -164,6 +164,152 @@ describe('PendingRemotePromotionService', () => {
     });
   });
 
+  it('recovers an already-created promotion commit when completion failed', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await persistAndReservePendingSegment(graph, store, fixture);
+
+    const first = await createPendingRemotePromotionService({
+      provider: providerWithCompletionFailures(provider, (attempt) => attempt === 1),
+      now: () => PROMOTION_NOW,
+    }).promotePendingRemoteSegments();
+
+    const commitId = expectSingleCommit(first.commitIds);
+    expect(first).toMatchObject({
+      status: 'failed',
+      promotedSegmentIds: [],
+      skipped: [
+        {
+          segmentId: fixture.input.pendingRemoteSegmentId,
+          reason: 'completion-failed',
+          commitId,
+        },
+      ],
+    });
+    const headAfterFirst = await expectReadHeadSuccess(graph);
+    expect(headAfterFirst.commitId).toBe(commitId);
+    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      {
+        status: 'found',
+        record: { state: 'pending' },
+      },
+    );
+
+    const second = await createPendingRemotePromotionService({
+      provider,
+      now: () => PROMOTION_NOW,
+    }).promotePendingRemoteSegments();
+
+    expect(second).toMatchObject({
+      status: 'success',
+      promotedSegmentIds: [fixture.input.pendingRemoteSegmentId],
+      commitIds: [commitId],
+      skipped: [],
+      diagnostics: [{ code: 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED' }],
+    });
+    await expectGraphHead(graph, headAfterFirst);
+    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      {
+        status: 'found',
+        record: {
+          state: 'promoted',
+          terminal: {
+            status: 'promoted',
+            commitId,
+            promotionDigest: { algorithm: 'sha256', digest: expect.any(String) },
+          },
+        },
+      },
+    );
+  });
+
+  it('recovers remaining grouped segments from a promoted peer without a replacement commit', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const snapshotRootRecord = await objectRecord(
+      'workbook.snapshotRoot.v1',
+      { sheets: [] },
+      namespace,
+    );
+    const semanticChangeSetRecord = await objectRecord(
+      'workbook.semanticChangeSet.v1',
+      { schemaVersion: 1, changes: [{ id: 'remote-change-1' }, { id: 'remote-change-2' }] },
+      namespace,
+    );
+    const first = await pendingSegmentFixture(namespace, {
+      createdAt: '2026-06-21T00:00:03.000Z',
+      groupId: 'remote-group-recovery',
+      mutationSegmentId: 'remote-segment-1',
+      payloadHash: '5'.repeat(64),
+      sequence: '1',
+      sharedSnapshotRootRecord: snapshotRootRecord,
+      sharedSemanticChangeSetRecord: semanticChangeSetRecord,
+      updateId: 'remote-update-1',
+    });
+    const second = await pendingSegmentFixture(namespace, {
+      createdAt: '2026-06-21T00:00:02.000Z',
+      groupId: 'remote-group-recovery',
+      mutationSegmentId: 'remote-segment-2',
+      payloadHash: '6'.repeat(64),
+      sequence: '2',
+      sharedSnapshotRootRecord: snapshotRootRecord,
+      sharedSemanticChangeSetRecord: semanticChangeSetRecord,
+      updateId: 'remote-update-2',
+    });
+    await expect(graph.putObjects([...first.objectRecords, ...second.objectRecords])).resolves.toMatchObject({
+      status: 'success',
+    });
+    await expect(store.reserveSegment(first.input)).resolves.toMatchObject({ status: 'created' });
+    await expect(store.reserveSegment(second.input)).resolves.toMatchObject({ status: 'created' });
+
+    const firstRun = await createPendingRemotePromotionService({
+      provider: providerWithCompletionFailures(provider, (attempt) => attempt === 2),
+      now: () => PROMOTION_NOW,
+    }).promotePendingRemoteSegments();
+
+    const commitId = expectSingleCommit(firstRun.commitIds);
+    expect(firstRun).toMatchObject({
+      status: 'partial',
+      promotedSegmentIds: [second.input.pendingRemoteSegmentId],
+      skipped: [
+        {
+          segmentId: first.input.pendingRemoteSegmentId,
+          reason: 'completion-failed',
+          commitId,
+        },
+      ],
+    });
+    const headAfterFirst = await expectReadHeadSuccess(graph);
+    expect(headAfterFirst.commitId).toBe(commitId);
+
+    const secondRun = await createPendingRemotePromotionService({
+      provider,
+      now: () => PROMOTION_NOW,
+    }).promotePendingRemoteSegments();
+
+    expect(secondRun).toMatchObject({
+      status: 'success',
+      promotedSegmentIds: [first.input.pendingRemoteSegmentId],
+      commitIds: [commitId],
+      skipped: [],
+      diagnostics: [{ code: 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED' }],
+    });
+    await expectGraphHead(graph, headAfterFirst);
+    await expect(store.readBySegmentId(first.input.pendingRemoteSegmentId)).resolves.toMatchObject({
+      status: 'found',
+      record: { terminal: { commitId } },
+    });
+    await expect(store.readBySegmentId(second.input.pendingRemoteSegmentId)).resolves.toMatchObject({
+      status: 'found',
+      record: { terminal: { commitId } },
+    });
+  });
+
   it('skips missing snapshot roots and missing required objects without mutating refs', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const namespace = await initializeProvider(provider);
@@ -624,6 +770,55 @@ function providerWithGatedCommit(
     openGraph: async (requestedNamespace, accessContext) => {
       const graph = await provider.openGraph(requestedNamespace, accessContext);
       return graphWithGatedCommit(graph, gate);
+    },
+  };
+}
+
+function providerWithCompletionFailures(
+  provider: InMemoryProvider,
+  shouldFail: (
+    attempt: number,
+    input: Parameters<PendingRemoteSegmentStore['completeSegment']>[0],
+  ) => boolean,
+): ConflictProvider {
+  let completionAttempts = 0;
+  return {
+    documentScope: provider.documentScope,
+    accessContext: provider.accessContext,
+    capabilities: provider.capabilities,
+    readGraphRegistry: provider.readGraphRegistry.bind(provider),
+    initializeGraph: provider.initializeGraph.bind(provider),
+    scanDocumentIntegrity: provider.scanDocumentIntegrity.bind(provider),
+    close: provider.close.bind(provider),
+    dispose: provider.dispose.bind(provider),
+    openGraph: provider.openGraph.bind(provider),
+    openSyncBatchStatusStore: provider.openSyncBatchStatusStore.bind(provider),
+    openPendingRemoteSegmentStore: async (namespace) => {
+      const store = await provider.openPendingRemoteSegmentStore(namespace);
+      const wrapped: PendingRemoteSegmentStore = {
+        namespace: store.namespace,
+        reserveSegment: (input) => store.reserveSegment(input),
+        readBySegmentId: (segmentId) => store.readBySegmentId(segmentId),
+        readByIdempotencyKey: (idempotencyKey) => store.readByIdempotencyKey(idempotencyKey),
+        listByState: (state) => store.listByState(state),
+        completeSegment: (input) => {
+          completionAttempts += 1;
+          if (!shouldFail(completionAttempts, input)) return store.completeSegment(input);
+          const failed: Awaited<ReturnType<PendingRemoteSegmentStore['completeSegment']>> = {
+            status: 'failed',
+            record: null,
+            diagnostics: [
+              {
+                code: 'VERSION_PROVIDER_FAILED',
+                message: 'Injected pending remote completion failure.',
+                recoverability: 'retry',
+              },
+            ],
+          };
+          return Promise.resolve(failed);
+        },
+      };
+      return wrapped;
     },
   };
 }

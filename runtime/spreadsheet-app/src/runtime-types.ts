@@ -1,6 +1,10 @@
 import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
 import type { IChartBridge } from '@mog-sdk/contracts/bridges';
+import {
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  type DomainSupportManifest,
+} from '@mog-sdk/contracts/versioning';
 import type {
   AppId,
   CapabilityGrant,
@@ -10,6 +14,7 @@ import type {
   GrantOptions,
 } from '@mog-sdk/contracts/capabilities';
 import type { CallableDisposable } from '@mog-sdk/contracts/core';
+import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
 import type { ShellBootstrapResult } from '@mog/shell/bootstrap';
 
 import type { Deferred } from './deferred';
@@ -45,8 +50,118 @@ export type SpreadsheetAppDocumentHandle = SpreadsheetAppChartImageExporterRegis
     onAll(handler: (event: unknown) => void): (() => void) | undefined;
   };
   dispose(): Promise<void> | void;
-  workbook(): Promise<Workbook>;
+  workbook(config?: DocumentHandleWorkbookConfig): Promise<Workbook>;
 };
+
+export type RuntimeDefaultVersioningAttachmentState =
+  | { readonly status: 'attached'; readonly documentId: string }
+  | {
+      readonly status: 'unavailable';
+      readonly documentId: string;
+      readonly reason:
+        | 'document-not-loaded'
+        | 'document-versioning-skipped'
+        | 'document-versioning-failed';
+    };
+
+const DEFAULT_VERSIONING_DECORATED_HANDLE = Symbol.for(
+  '@mog-sdk/spreadsheet-app.defaultVersioningDecoratedHandle',
+);
+const DEFAULT_VERSION_PROVIDER_SELECTION = {
+  kind: 'indexeddb',
+  requireDurablePersistence: true,
+} as const satisfies NonNullable<
+  NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
+>;
+const DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS = Object.freeze([
+  'workbook-metadata',
+  'sheets',
+  'rows-columns',
+  'cells.values',
+  'cells.formulas',
+  'recalc-caches',
+] as const);
+
+type RuntimeDefaultVersioningDocumentHandle = DocumentHandle & {
+  [DEFAULT_VERSIONING_DECORATED_HANDLE]?: true;
+};
+
+type RuntimeDocumentVersioningReadinessLike = {
+  readonly status?: string;
+};
+
+function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {
+  return {
+    schemaVersion: 'domain-support-manifest.v2',
+    generatedAt: new Date().toISOString(),
+    workbookId: documentId,
+    domains: DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS.map((matrixRowId) => {
+      const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
+        (domain) => domain.matrixRowId === matrixRowId,
+      );
+      if (!row) throw new Error(`Missing public version domain policy row: ${matrixRowId}`);
+      return row;
+    }),
+  };
+}
+
+export function decorateRuntimeOwnedHandleWithDefaultVersioning(
+  handle: DocumentHandle,
+): DocumentHandle {
+  const runtimeHandle = handle as RuntimeDefaultVersioningDocumentHandle;
+  if (runtimeHandle[DEFAULT_VERSIONING_DECORATED_HANDLE]) return handle;
+
+  const originalWorkbook = handle.workbook.bind(handle);
+  runtimeHandle.workbook = ((config?: DocumentHandleWorkbookConfig) =>
+    originalWorkbook({
+      ...config,
+      versioning: {
+        providerSelection: DEFAULT_VERSION_PROVIDER_SELECTION,
+        domainSupportManifest: createDefaultDomainSupportManifest(handle.documentId),
+        ...config?.versioning,
+      },
+    })) as DocumentHandle['workbook'];
+  Object.defineProperty(runtimeHandle, DEFAULT_VERSIONING_DECORATED_HANDLE, {
+    configurable: false,
+    enumerable: false,
+    value: true,
+  });
+  return handle;
+}
+
+export function attachRuntimeDefaultVersioning(environment: {
+  readonly documentId: string;
+  readonly shell: ShellBootstrapResult;
+  readonly documentVersioning?: RuntimeDocumentVersioningReadinessLike;
+}): RuntimeDefaultVersioningAttachmentState {
+  if (environment.documentVersioning?.status === 'skipped') {
+    return {
+      status: 'unavailable',
+      documentId: environment.documentId,
+      reason: 'document-versioning-skipped',
+    };
+  }
+  if (environment.documentVersioning?.status === 'failed') {
+    return {
+      status: 'unavailable',
+      documentId: environment.documentId,
+      reason: 'document-versioning-failed',
+    };
+  }
+
+  const handle = environment.shell.documentManager.getDocument(environment.documentId);
+  if (!handle) {
+    return {
+      status: 'unavailable',
+      documentId: environment.documentId,
+      reason: 'document-not-loaded',
+    };
+  }
+  if (!environment.documentVersioning) {
+    decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  }
+  return { status: 'attached', documentId: environment.documentId };
+}
 
 export type SpreadsheetAppCapabilityRegistry = {
   dispose(): void;

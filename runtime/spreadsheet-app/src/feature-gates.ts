@@ -26,6 +26,10 @@ type SpreadsheetEditModelPolicy = {
   readonly automation?: SpreadsheetEditLevel;
 };
 
+type SpreadsheetRuntimeFeatureAvailability = {
+  readonly versionControl?: boolean;
+};
+
 const ALL_COMMAND_BAR_TABS: readonly CommandBarTabId[] = [
   'home',
   'insert',
@@ -42,6 +46,7 @@ export function mergeFeatureGates(
   chrome: MogSpreadsheetChromePolicy | undefined,
   commands: MogSpreadsheetCommandPolicy | undefined,
   editModel: SpreadsheetEditModelPolicy | undefined,
+  runtimeAvailability: SpreadsheetRuntimeFeatureAvailability = {},
 ): FeatureGates {
   const next: FeatureGates = {
     ...(base as FeatureGates | undefined),
@@ -83,6 +88,11 @@ export function mergeFeatureGates(
   if (chrome?.sheetTabs === false) next.capabilities!.sheetTabs = false;
   if (chrome?.statusBar === false) {
     (next.capabilities as Record<string, boolean>).statusBar = false;
+  }
+  if (runtimeAvailability.versionControl !== true) {
+    next.capabilities!.versionControl = false;
+    next.capabilities!.versionControlMerge = false;
+    next.capabilities!['versionControl.merge'] = false;
   }
 
   if (editModel?.user === 'none' || editModel?.user === 'read') {

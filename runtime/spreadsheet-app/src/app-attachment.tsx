@@ -40,7 +40,11 @@ import type {
   SpreadsheetViewHandle,
   SpreadsheetWorkbookSession,
 } from './public-types';
-import type { RegisteredSpreadsheetAppBridge } from './runtime-types';
+import {
+  attachRuntimeDefaultVersioning,
+  type RegisteredSpreadsheetAppBridge,
+  type RuntimeDefaultVersioningAttachmentState,
+} from './runtime-types';
 
 type AttachmentBridgeSelection = ReturnType<RegisteredSpreadsheetAppBridge['getSelection']>;
 type AttachmentBridgeActiveSheet = ReturnType<RegisteredSpreadsheetAppBridge['getActiveSheet']>;
@@ -55,6 +59,7 @@ type AttachmentRuntimeState = {
   status: SpreadsheetAppStatus;
   error: SpreadsheetAppError | null;
   detached: boolean;
+  defaultVersioning: RuntimeDefaultVersioningAttachmentState | null;
 };
 
 type EffectiveSpreadsheetTheme = {
@@ -339,6 +344,7 @@ const MogSpreadsheetAppImpl = forwardRef<
     status: 'loading',
     error: null,
     detached: false,
+    defaultVersioning: null,
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [slots, setSlots] = useState<Record<string, ReactNode>>(() => ({ ...(props.slots ?? {}) }));
@@ -668,7 +674,13 @@ const MogSpreadsheetAppImpl = forwardRef<
     statusRef.current = 'loading';
     errorRef.current = null;
     readyNotifiedRef.current = false;
-    setState({ environment: null, status: 'loading', error: null, detached: false });
+    setState({
+      environment: null,
+      status: 'loading',
+      error: null,
+      detached: false,
+      defaultVersioning: null,
+    });
 
     void (async () => {
       const release = claimWorkbookAttachment(
@@ -699,10 +711,11 @@ const MogSpreadsheetAppImpl = forwardRef<
         return;
       }
 
+      const defaultVersioning = attachRuntimeDefaultVersioning(environment);
       environmentRef.current = environment;
       statusRef.current = 'ready';
       if (mountedRef.current) {
-        setState({ environment, status: 'ready', error: null, detached: false });
+        setState({ environment, status: 'ready', error: null, detached: false, defaultVersioning });
       }
     })().catch((attachError) => {
       releaseClaimRef.current?.();
@@ -717,7 +730,13 @@ const MogSpreadsheetAppImpl = forwardRef<
       errorRef.current = publicError;
       statusRef.current = 'error';
       if (mountedRef.current) {
-        setState({ environment: null, status: 'error', error: publicError, detached: false });
+        setState({
+          environment: null,
+          status: 'error',
+          error: publicError,
+          detached: false,
+          defaultVersioning: null,
+        });
       }
       readyRef.current?.reject(publicError);
       notifyError(publicError);
@@ -733,8 +752,11 @@ const MogSpreadsheetAppImpl = forwardRef<
 
   const environment = state.environment;
   const effectiveFeatureGates = useMemo(
-    () => mergeFeatureGates(props.featurePolicy, props.chrome, props.commands, props.editModel),
-    [props.featurePolicy, props.chrome, props.commands, props.editModel],
+    () =>
+      mergeFeatureGates(props.featurePolicy, props.chrome, props.commands, props.editModel, {
+        versionControl: state.defaultVersioning?.status === 'attached',
+      }),
+    [props.featurePolicy, props.chrome, props.commands, props.editModel, state.defaultVersioning],
   );
 
   const hostCommands = useMemo(

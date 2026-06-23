@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
+
+import { mergeFeatureGates } from '../feature-gates';
 import { createSpreadsheetRuntime } from '../runtime';
 import { WORKBOOK_FACADE_CAPABILITY_MATRIX } from '../workbook-facade-capability-matrix';
 import type {
@@ -11,7 +14,13 @@ import type {
   SpreadsheetSaveResult,
 } from '../public-types';
 import { SPREADSHEET_RUNTIME_ATTACHMENT_CONTROLLER } from '../attachment-runtime';
-import type { RegisteredSpreadsheetAppBridge } from '../runtime-types';
+import {
+  attachRuntimeDefaultVersioning,
+  decorateRuntimeOwnedHandleWithDefaultVersioning,
+  type RegisteredSpreadsheetAppBridge,
+} from '../runtime-types';
+
+type WorkbookConfig = DocumentHandleWorkbookConfig;
 
 function savedResult(request: SpreadsheetSaveRequest): SpreadsheetSaveResult {
   return {
@@ -84,6 +93,104 @@ async function disposeRuntime(runtime: SpreadsheetRuntime | undefined): Promise<
   if (!runtime) return;
   await runtime.dispose();
 }
+
+test('runtime attachment default versioning decorates document handle workbook creation', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  const handle = {
+    documentId: 'runtime-default-versioning-doc',
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  } as DocumentHandle;
+
+  decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  await handle.workbook({ name: 'Runtime default versioning' });
+
+  const config = capturedConfigs[0];
+  assert.equal(config.versioning?.providerSelection?.kind, 'indexeddb');
+  assert.equal(config.versioning?.providerSelection?.requireDurablePersistence, true);
+  assert.equal(config.versioning?.domainSupportManifest?.workbookId, handle.documentId);
+  assert.deepEqual(
+    config.versioning?.domainSupportManifest?.domains.map((domain) => domain.matrixRowId),
+    ['workbook-metadata', 'sheets', 'rows-columns', 'cells.values', 'cells.formulas', 'recalc-caches'],
+  );
+});
+
+test('runtime attachment default versioning preserves caller versioning overrides', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  const handle = {
+    documentId: 'runtime-default-versioning-overrides-doc',
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  } as DocumentHandle;
+  const providerSelection = {
+    kind: 'memory',
+    requireDurablePersistence: false,
+  } as const satisfies NonNullable<NonNullable<WorkbookConfig['versioning']>['providerSelection']>;
+
+  decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  await handle.workbook({
+    versioning: {
+      providerSelection,
+      requireDomainSupportManifest: true,
+    },
+  });
+
+  assert.equal(capturedConfigs.length, 1);
+  assert.equal(capturedConfigs[0].versioning?.providerSelection, providerSelection);
+  assert.equal(capturedConfigs[0].versioning?.requireDomainSupportManifest, true);
+  assert.equal(
+    capturedConfigs[0].versioning?.domainSupportManifest?.workbookId,
+    'runtime-default-versioning-overrides-doc',
+  );
+});
+
+test('runtime version feature gates fail closed until default versioning is attached', () => {
+  const unavailable = mergeFeatureGates(undefined, undefined, undefined, undefined, {
+    versionControl: false,
+  });
+  assert.equal(unavailable.capabilities?.versionControl, false);
+  assert.equal(unavailable.capabilities?.versionControlMerge, false);
+  assert.equal(unavailable.capabilities?.['versionControl.merge'], false);
+
+  const available = mergeFeatureGates(undefined, undefined, undefined, undefined, {
+    versionControl: true,
+  });
+  assert.equal(available.capabilities?.versionControl, undefined);
+
+  const hostDisabled = mergeFeatureGates(
+    { capabilities: { versionControl: false } },
+    undefined,
+    undefined,
+    undefined,
+    { versionControl: true },
+  );
+  assert.equal(hostDisabled.capabilities?.versionControl, false);
+});
+
+test('runtime default versioning attachment honors skipped document readiness', () => {
+  const result = attachRuntimeDefaultVersioning({
+    documentId: 'runtime-default-versioning-skipped-doc',
+    shell: {
+      documentManager: {
+        getDocument() {
+          throw new Error('skip must not read document handle');
+        },
+      },
+    } as never,
+    documentVersioning: { status: 'skipped' },
+  });
+
+  assert.deepEqual(result, {
+    status: 'unavailable',
+    documentId: 'runtime-default-versioning-skipped-doc',
+    reason: 'document-versioning-skipped',
+  });
+});
 
 test('runtime-owned workbook session stays usable headlessly and is disposed explicitly', async () => {
   let runtime: SpreadsheetRuntime | undefined;

@@ -4,7 +4,9 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
+import type { DocumentHandleInternal } from '../../document/document-handle-types';
 import type { CheckoutSnapshotMaterializer } from '../../../document/version-store/checkout-apply';
+import type { DocumentContext } from '../../../context';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -147,7 +149,10 @@ describe('WorkbookVersion checkout atomicity', () => {
       });
       await checkoutWb.activeSheet.setCell('A1', 'active-before-invalid-root');
       await checkoutWb.activeSheet.setCell('B1', '=10+5');
+      const localOnly = await checkoutWb.sheets.add('LocalOnly');
+      await localOnly.setCell('C1', 'local-only-before-invalid-root');
       checkoutWb.markClean();
+      const beforeState = await readActiveDocumentState(checkoutWb);
 
       const result = await checkoutWb.version.checkout({
         kind: 'commit',
@@ -174,18 +179,155 @@ describe('WorkbookVersion checkout atomicity', () => {
           ],
         },
       });
-      expect(checkoutWb.sheetNames).toEqual(['Sheet1']);
-      expect(checkoutWb.activeSheet.name).toBe('Sheet1');
-      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
-        value: 'active-before-invalid-root',
-      });
-      await expect(checkoutWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 15 });
+      await expectActiveDocumentState(checkoutWb, beforeState);
     } finally {
       if (checkoutWb) await checkoutWb.close('skipSave');
       await checkoutHandle.dispose();
     }
   });
+
+  it('keeps the active workbook unchanged when production publish fails after fresh materialization', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, checkoutHandle);
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setCell('A1', 'target-after-publish-failure');
+      await sourceWb.activeSheet.setCell('B1', '=6*7');
+      const targetOnly = await sourceWb.sheets.add('TargetOnly');
+      await targetOnly.setCell('C1', 'target-only-after-publish-failure');
+      const commitResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      const committed = commitResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({
+        versioning: withVersionManifest({ provider }),
+      });
+      await checkoutWb.activeSheet.setCell('A1', 'active-before-publish-failure');
+      await checkoutWb.activeSheet.setCell('B1', '=10+5');
+      const localOnly = await checkoutWb.sheets.add('LocalOnly');
+      await localOnly.setCell('C1', 'local-only-before-publish-failure');
+      checkoutWb.markClean();
+      const beforeState = await readActiveDocumentState(checkoutWb);
+
+      versioningRuntimeForHandle(checkoutHandle).provider = createInMemoryVersionStoreProvider({
+        documentScope: {
+          ...DOCUMENT_SCOPE,
+          documentId: 'checkout-atomicity-rebound-doc',
+        },
+      });
+
+      const result = await checkoutWb.version.checkout({ kind: 'commit', id: committed.id });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+              data: expect.objectContaining({
+                recoverability: 'repair',
+                redacted: true,
+                payload: expect.objectContaining({
+                  commitId: committed.id,
+                  cause: 'VersionCheckoutRebindProviderIdentityError',
+                  identityFenceReason: 'providerDocumentMismatch',
+                  providerIdentityClass: 'document',
+                  mutationGuarantee: 'unknown-after-partial-mutation',
+                  rollbackSafe: false,
+                  partialSnapshot: true,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain('checkout-atomicity-rebound-doc');
+      await expectActiveDocumentState(checkoutWb, beforeState);
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
 });
+
+type ActiveDocumentState = {
+  readonly sheetNames: readonly string[];
+  readonly activeSheetName: string;
+  readonly sheet1A1: unknown;
+  readonly sheet1B1: unknown;
+  readonly hasLocalOnly: boolean;
+  readonly localOnlyC1: unknown;
+  readonly hasTargetOnly: boolean;
+  readonly dirtyStatusRevision: string;
+};
+
+async function readActiveDocumentState(wb: Workbook): Promise<ActiveDocumentState> {
+  const sheetNames = [...wb.sheetNames];
+  const sheet1 = await wb.getSheet('Sheet1');
+  const [sheet1A1, sheet1B1] = await Promise.all([
+    sheet1.getCell('A1'),
+    sheet1.getCell('B1'),
+  ]);
+  const hasLocalOnly = sheetNames.includes('LocalOnly');
+  const localOnlyC1 = hasLocalOnly
+    ? (await (await wb.getSheet('LocalOnly')).getCell('C1')).value
+    : null;
+  const surface = await wb.version.getSurfaceStatus();
+
+  return {
+    sheetNames,
+    activeSheetName: wb.activeSheet.name,
+    sheet1A1: sheet1A1.value,
+    sheet1B1: sheet1B1.value,
+    hasLocalOnly,
+    localOnlyC1,
+    hasTargetOnly: sheetNames.includes('TargetOnly'),
+    dirtyStatusRevision: surface.dirty.statusRevision,
+  };
+}
+
+async function expectActiveDocumentState(
+  wb: Workbook,
+  expected: ActiveDocumentState,
+): Promise<void> {
+  await expect(readActiveDocumentState(wb)).resolves.toEqual(expected);
+}
+
+function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFactory.create>>) {
+  const context = (handle as DocumentHandleInternal).context as DocumentContext & {
+    versioning?: unknown;
+  };
+  if (!isMutableRecord(context.versioning)) {
+    throw new Error('expected attached versioning runtime');
+  }
+  return context.versioning;
+}
+
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 function expectInitializeSuccess(
   result: VersionGraphInitializeResult,

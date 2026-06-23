@@ -6,6 +6,7 @@ import type {
   GateEvidencePreflightDigest,
 } from '../control-plane';
 import type { VersionHistoryAccessPolicy, VersionRedactionPolicy } from './access-policy';
+import type { VersionSyncOperationContext } from './sync-provenance';
 
 export {
   VERSION_HISTORY_DENIED_SUMMARY_KINDS,
@@ -144,60 +145,6 @@ export interface VersionAuthor {
   readonly displayName?: string;
   readonly clientId?: string;
   readonly sessionId?: string;
-}
-
-export type VersionSyncSourceKind =
-  | 'providerReplay'
-  | 'providerLiveInbound'
-  | 'providerMixedInbound'
-  | 'collaborationHydration'
-  | 'collaborationLiveRemote'
-  | 'collaborationMixedRemote'
-  | 'importHydration'
-  | 'systemRepair'
-  | 'legacyRawUnknown';
-
-export type VersionSyncOriginKind = 'provider' | 'room' | 'import' | 'system' | 'legacyRaw';
-export type VersionSyncTrustStatus = 'verified' | 'trustedLocalSystem' | 'unverified' | 'legacyRaw';
-export type VersionSyncAuthorState =
-  | 'singleRemote'
-  | 'mixedRemote'
-  | 'unknown'
-  | 'agent'
-  | 'system';
-export type VersionSyncCommitGrouping =
-  | 'none'
-  | 'pendingRemote'
-  | 'excludedLifecycle'
-  | 'blockedMissingRedactionKey'
-  | 'blockedMixedRemote'
-  | 'blockedUnknownRemote'
-  | 'blockedUnverified';
-
-export interface VersionSyncOperationContext {
-  readonly sourceKind: VersionSyncSourceKind;
-  readonly originKind: VersionSyncOriginKind;
-  readonly stableOriginId?: string;
-  readonly providerId?: string;
-  readonly providerKind?: string;
-  readonly authorityRef?: string;
-  readonly roomId?: string;
-  readonly epoch?: string;
-  readonly updateId?: string;
-  readonly sequence?: string;
-  readonly payloadHash: string;
-  readonly provenancePayloadHash?: string;
-  readonly trustStatus: VersionSyncTrustStatus;
-  readonly authorState: VersionSyncAuthorState;
-  readonly remoteSessionId?: string;
-  readonly correlationId?: string;
-  readonly causationIds?: readonly string[];
-  readonly replay: boolean;
-  readonly system: boolean;
-  readonly commitGrouping: VersionSyncCommitGrouping;
-  readonly validationDiagnosticCount: number;
-  readonly exclusionReason?: string;
-  readonly exclusionSubreason?: string;
 }
 
 export interface VersionCapabilityGate {
@@ -976,6 +923,15 @@ export interface VersionReviewRecord {
 
 export * from './emergency-disable-policy';
 export * from './release-artifact-manifest';
+export type {
+  VersionSyncAuthorState,
+  VersionSyncBatchStatusState,
+  VersionSyncCommitGrouping,
+  VersionSyncOperationContext,
+  VersionSyncOriginKind,
+  VersionSyncSourceKind,
+  VersionSyncTrustStatus,
+} from './sync-provenance';
 export * from './sync-provenance-fixtures';
 export * from './xlsx-interop';
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';

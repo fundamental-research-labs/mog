@@ -5,7 +5,7 @@ import type {
   AgentProposalStatus,
   AgentProposalStoreRow,
   AgentProposalMutationLogEntry,
-} from './proposal-store';
+} from './proposal-store-types';
 import type { RedactionSummary, VersionAuthor } from '@mog-sdk/contracts/api';
 
 const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;

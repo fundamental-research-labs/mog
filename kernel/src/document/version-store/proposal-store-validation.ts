@@ -8,7 +8,7 @@ import type {
   AgentProposalStatus,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store';
+} from './proposal-store-types';
 
 export function validateCreateProposalInput(
   input: CreateAgentProposalStoreInput,

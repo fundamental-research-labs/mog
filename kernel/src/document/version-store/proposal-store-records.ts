@@ -10,7 +10,7 @@ import type {
   AgentProposalStoreRow,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store';
+} from './proposal-store-types';
 import type { VersionDocumentScope } from './registry';
 
 export function createProposalRecord(input: {

@@ -9,7 +9,7 @@ import type {
   AgentProposalStoreRow,
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
-} from './proposal-store';
+} from './proposal-store-types';
 
 export async function proposalIdForCreate(
   documentScopeKey: string,

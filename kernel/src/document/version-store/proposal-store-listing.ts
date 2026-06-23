@@ -6,7 +6,7 @@ import type {
   AgentProposalRecord,
   AgentProposalSummary,
   ListAgentProposalsStoreInput,
-} from './proposal-store';
+} from './proposal-store-types';
 
 const DEFAULT_PROPOSAL_LIST_LIMIT = 50;
 const PROPOSAL_LIST_CURSOR_PREFIX = 'proposal-list:';

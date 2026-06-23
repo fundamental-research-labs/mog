@@ -36,6 +36,7 @@ const REDACTED_SYNC_BATCH = '[sync batch]';
 const REDACTED_INTERNAL_REFERENCE = '[internal reference]';
 const REDACTED_EXTERNAL_LINK = '[external link]';
 const REDACTED_SECRET = '[secret]';
+const REDACTED_DIAGNOSTIC_PAYLOAD = '[diagnostic payload]';
 
 const INCOMPLETE_HISTORY_DIAGNOSTIC_CODES = new Set([
   'VERSION_DANGLING_REF',
@@ -58,8 +59,6 @@ const STALE_HEAD_DIAGNOSTIC_CODES = new Set([
 ]);
 
 const UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODES = new Set([
-  'VERSION_REVIEW_DIFF_COMPLETENESS_BLOCKED',
-  'VERSION_REVIEW_DIFF_INCOMPLETE',
   'VERSION_REVERT_OPAQUE_DOMAIN',
   'VERSION_REVERT_UNSUPPORTED_DOMAIN',
   'VERSION_UNSUPPORTED_AUTHORED_DOMAIN',
@@ -75,6 +74,8 @@ const UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODES = new Set([
   'unsupportedFormat',
 ]);
 
+const INCOMPLETE_DIFF_DIAGNOSTIC_CODES = new Set(['VERSION_REVIEW_DIFF_COMPLETENESS_BLOCKED', 'VERSION_REVIEW_DIFF_INCOMPLETE']);
+
 export type VersionActionDisabledReasonId =
   | 'version-action-busy'
   | 'version-branch-name-invalid'
@@ -84,6 +85,7 @@ export type VersionActionDisabledReasonId =
   | 'version-commit-message-required'
   | 'version-commit-no-eligible-changes'
   | 'version-commit-no-local-changes'
+  | 'version-diff-incomplete'
   | 'version-dirty-status-unavailable'
   | 'version-head-stale'
   | 'version-history-incomplete'
@@ -360,6 +362,10 @@ function redactSensitiveVersionDiagnosticText(message: string): string {
     )
     .replace(/\bhttps?:\/\/[^\s"'`<>),;]+/gi, REDACTED_EXTERNAL_LINK)
     .replace(
+      /["']?\b(?:rawPayload|raw_payload|providerPayload|provider_payload|diagnosticPayload|diagnostic_payload|rawWorkbookBytes|raw_workbook_bytes|workbookBytes|workbook_bytes|payloadBytes|payload_bytes)\b["']?\s*[:=]\s*(?:"[^"]*"|'[^']*'|\{[^}]*\}|\[[^\]]*\]|[^\s,;)}]+)/gi,
+      `diagnosticPayload ${REDACTED_DIAGNOSTIC_PAYLOAD}`,
+    )
+    .replace(
       /\b(password|token|secret|api[_-]?key)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
       (_match, label: string) => `${label} ${REDACTED_SECRET}`,
     );
@@ -429,7 +435,7 @@ function publicStatusDisabledReason(
     if (unsupportedDomainReason) return unsupportedDomainReason;
   }
 
-  return publicStatusDiagnosticDisabledReason(surface);
+  return publicStatusDiagnosticDisabledReason(surface, capability);
 }
 
 function publicStatusActionForCapability(
@@ -491,9 +497,7 @@ function hostCapabilityDiagnosticDisabledReason(
 
   return {
     id: 'version-capability-host-denied',
-    message:
-      diagnostic.message.trim() ||
-      `Host policy denies ${ACTION_CAPABILITY_LABELS[capability] ?? capability}.`,
+    message: fallbackDiagnosticMessage('version-capability-host-denied'),
   };
 }
 
@@ -520,13 +524,14 @@ function hostCapabilityDiagnosticApplies(
 
 function publicStatusDiagnosticDisabledReason(
   surface: VersionSurfaceStatus,
+  capability: VersionCapability,
 ): DisabledActionReason | undefined {
   for (const diagnostic of allSurfaceDiagnostics(surface)) {
-    const reasonId = publicStatusDiagnosticReasonId(diagnostic);
+    const reasonId = publicStatusDiagnosticReasonId(diagnostic, capability);
     if (!reasonId) continue;
     return {
       id: reasonId,
-      message: diagnostic.message.trim() || fallbackDiagnosticMessage(reasonId),
+      message: fallbackDiagnosticMessage(reasonId),
     };
   }
   return undefined;
@@ -534,8 +539,12 @@ function publicStatusDiagnosticDisabledReason(
 
 function publicStatusDiagnosticReasonId(
   diagnostic: VersionDiagnostic,
+  capability: VersionCapability,
 ): VersionActionDisabledReasonId | undefined {
   if (isStaleHeadDiagnostic(diagnostic)) return 'version-head-stale';
+  if (isIncompleteDiffDiagnostic(diagnostic) && incompleteDiffDiagnosticApplies(capability)) {
+    return 'version-diff-incomplete';
+  }
   if (isUnsupportedDomainDiagnostic(diagnostic)) return 'version-unsupported-domain';
   if (isIncompleteHistoryDiagnostic(diagnostic)) return 'version-history-incomplete';
   return undefined;
@@ -559,13 +568,25 @@ function isUnsupportedDomainDiagnostic(diagnostic: VersionDiagnostic): boolean {
 
   return (
     UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODES.has(code) ||
-    code.startsWith('VERSION_REVIEW_DIFF_') ||
     category === 'unsupported' ||
     category === 'opaque' ||
     category === 'subset-hidden' ||
     reason === 'unsupportedDomain' ||
     reason === 'opaqueDomain'
   );
+}
+
+function isIncompleteDiffDiagnostic(diagnostic: VersionDiagnostic): boolean {
+  const code = String(diagnostic.code);
+  return INCOMPLETE_DIFF_DIAGNOSTIC_CODES.has(code) || code.includes('DIFF_COMPLETENESS');
+}
+
+function incompleteDiffDiagnosticApplies(capability: VersionCapability): boolean {
+  return capability === 'version:reviewRead' ||
+    capability === 'version:reviewWrite' ||
+    capability === 'version:proposal' ||
+    capability === 'version:mergePreview' ||
+    capability === 'version:mergeApply';
 }
 
 function isIncompleteHistoryDiagnostic(diagnostic: VersionDiagnostic): boolean {
@@ -584,6 +605,8 @@ function fallbackDiagnosticMessage(reasonId: VersionActionDisabledReasonId): str
   switch (reasonId) {
     case 'version-capability-host-denied':
       return 'Host policy denies this version capability.';
+    case 'version-diff-incomplete':
+      return 'Review or merge diff diagnostics are incomplete; refresh version status before continuing.';
     case 'version-dirty-status-unavailable':
       return DIRTY_STATUS_UNAVAILABLE_REASON;
     case 'version-head-stale':

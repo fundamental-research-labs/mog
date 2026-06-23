@@ -329,30 +329,31 @@ describe('version action availability', () => {
       'VERSION_GRAPH_UNINITIALIZED',
     );
     const surface = createSurfaceStatus({ diagnostics: [historyDiagnostic] });
+    const historyReason = 'Version history is incomplete for this action.';
 
     expectDisabled(
       getCommitAvailability({ surface }, false, false, 'Checkpoint'),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
     expectDisabled(
       getCheckoutAvailability({ surface }, false, false),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
     expectDisabled(
       getCapabilityAvailability({ surface }, false, false, 'version:reviewRead'),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
     expectDisabled(
       getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
     expectDisabled(
       getCapabilityAvailability({ surface }, false, false, 'version:provenance'),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
     expect(
@@ -361,7 +362,7 @@ describe('version action availability', () => {
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
     expectDisabled(
       getRemotePromoteAvailability({ surface }, false, false),
-      historyDiagnostic.message,
+      historyReason,
       'version-history-incomplete',
     );
   });
@@ -384,7 +385,7 @@ describe('version action availability', () => {
 
     expectDisabled(
       getCapabilityAvailability({ surface: mergeSurface }, false, false, 'version:mergeApply'),
-      deniedMergeApply.message,
+      'Host policy denies this version capability.',
       'version-capability-host-denied',
     );
     expect(
@@ -392,7 +393,7 @@ describe('version action availability', () => {
     ).toEqual({ enabled: true });
     expectDisabled(
       getCommitAvailability({ surface: readSurface }, false, false, 'Checkpoint'),
-      deniedRead.message,
+      'Host policy denies this version capability.',
       'version-capability-host-denied',
     );
   });

@@ -26,6 +26,7 @@ const DIRTY_STATUS_UNAVAILABLE_REASON =
 const RAW_PRIVATE_REF = 'refs/provider-internal/sync/private-main';
 const RAW_PRIVATE_PRINCIPAL = 'alice@example.com';
 const PRIVATE_COMMIT_ID = `commit:sha256:${'d'.repeat(64)}`;
+const RAW_DIAGNOSTIC_PAYLOAD = 'rawPayload={"cell":"A1","value":"secret"}';
 
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:read',
@@ -223,6 +224,16 @@ describe('version action availability W11 hardening', () => {
       'version-dirty-status-unavailable',
     );
     expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:reviewWrite'),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:proposal'),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
       getRemotePromoteAvailability({ surface }, false, false),
       DIRTY_STATUS_UNAVAILABLE_REASON,
       'version-dirty-status-unavailable',
@@ -231,6 +242,133 @@ describe('version action availability W11 hardening', () => {
     expect(getCapabilityAvailability({ surface }, false, false, 'version:reviewRead')).toEqual({
       enabled: true,
     });
+    expect(getCapabilityAvailability({ surface }, false, false, 'version:mergePreview')).toEqual({
+      enabled: true,
+    });
+  });
+
+  it('distinguishes disabled backing services for VC-08 G4 review, proposal, merge, revert, and remote actions', () => {
+    const cases = [
+      {
+        capability: 'version:reviewRead',
+        reason: 'Review metadata read services are not attached.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getCapabilityAvailability({ surface }, false, false, 'version:reviewRead'),
+      },
+      {
+        capability: 'version:reviewWrite',
+        reason: 'Review metadata write services are not attached.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getCapabilityAvailability({ surface }, false, false, 'version:reviewWrite'),
+      },
+      {
+        capability: 'version:proposal',
+        reason: 'Agent proposal workflows require an attached proposal service.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getCapabilityAvailability({ surface }, false, false, 'version:proposal'),
+      },
+      {
+        capability: 'version:mergePreview',
+        reason: 'Version merge preview services are not attached.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
+      },
+      {
+        capability: 'version:mergeApply',
+        reason: 'Version merge apply requires merge preview and merge-commit write services.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getCapabilityAvailability({ surface }, false, false, 'version:mergeApply'),
+      },
+      {
+        capability: 'version:revert',
+        reason: 'Authored revert is reserved until an upstream revert contract exists.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getRollbackAvailability(
+            { surface },
+            false,
+            false,
+            'Rollback selected commit',
+            TARGET_COMMIT_ID,
+          ),
+      },
+      {
+        capability: 'version:remotePromote',
+        reason: 'No document-scoped pending remote promotion service is attached.',
+        availability: (surface: VersionSurfaceStatus) =>
+          getRemotePromoteAvailability({ surface }, false, false),
+      },
+    ] as const satisfies readonly {
+      readonly capability: VersionCapability;
+      readonly reason: string;
+      readonly availability: (surface: VersionSurfaceStatus) => VersionActionAvailability;
+    }[];
+
+    for (const item of cases) {
+      const surface = createSurfaceStatus({
+        capabilityOverrides: {
+          [item.capability]: disabledCapability(item.reason, 'storage', true),
+        },
+      });
+
+      expectDisabled(
+        item.availability(surface),
+        item.reason,
+        'version-capability-unavailable',
+      );
+    }
+  });
+
+  it('uses generic incomplete review and merge diff reasons without raw diagnostic payloads', () => {
+    const incompleteReviewDiff = diagnostic(
+      `Review diff incomplete for ${RAW_PRIVATE_REF} ${PRIVATE_COMMIT_ID} ${RAW_DIAGNOSTIC_PAYLOAD}.`,
+      'VERSION_REVIEW_DIFF_INCOMPLETE',
+    );
+    const surface = createSurfaceStatus({ diagnostics: [incompleteReviewDiff] });
+    const reason =
+      'Review or merge diff diagnostics are incomplete; refresh version status before continuing.';
+
+    for (const capability of [
+      'version:reviewRead',
+      'version:reviewWrite',
+      'version:proposal',
+      'version:mergePreview',
+      'version:mergeApply',
+    ] as const satisfies readonly VersionCapability[]) {
+      const availability = getCapabilityAvailability({ surface }, false, false, capability);
+      expectDisabled(availability, reason, 'version-diff-incomplete');
+      expectNoRawDiagnosticPayload(availability);
+    }
+
+    expect(
+      getRollbackAvailability(
+        { surface },
+        false,
+        false,
+        'Rollback selected commit',
+        TARGET_COMMIT_ID,
+      ),
+    ).toEqual({ enabled: true });
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+  });
+
+  it('uses stable capability-denied copy for host diagnostics without raw diagnostic payloads', () => {
+    const surface = createSurfaceStatus({
+      diagnostics: [
+        diagnostic(
+          `Host denied ${RAW_PRIVATE_PRINCIPAL} for ${RAW_PRIVATE_REF} ${RAW_DIAGNOSTIC_PAYLOAD}.`,
+          'version.surfaceStatus.hostCapabilityDenied',
+          { deniedCapabilities: ['version:remotePromote'] },
+        ),
+      ],
+    });
+
+    const availability = getRemotePromoteAvailability({ surface }, false, false);
+    expectDisabled(
+      availability,
+      'Host policy denies this version capability.',
+      'version-capability-host-denied',
+    );
+    expectNoRawDiagnosticPayload(availability);
   });
 
   it('blocks split write capabilities while provider writes are pending', () => {
@@ -360,11 +498,16 @@ function disabledCapability(
   return { enabled: false, dependency, reason, retryable };
 }
 
-function diagnostic(message: string, code: string): VersionDiagnostic {
+function diagnostic(
+  message: string,
+  code: string,
+  data?: VersionDiagnostic['data'],
+): VersionDiagnostic {
   return {
     code,
     severity: 'warning',
     message,
+    ...(data ? { data } : {}),
   };
 }
 
@@ -377,4 +520,14 @@ function expectDisabled(
   if (availability.enabled) return;
   expect(availability.disabledReason).toBe(disabledReason);
   expect(availability.disabledReasonId).toBe(disabledReasonId);
+}
+
+function expectNoRawDiagnosticPayload(availability: VersionActionAvailability): void {
+  expect(availability.enabled).toBe(false);
+  if (availability.enabled) return;
+  expect(availability.disabledReason).not.toContain(RAW_PRIVATE_REF);
+  expect(availability.disabledReason).not.toContain(RAW_PRIVATE_PRINCIPAL);
+  expect(availability.disabledReason).not.toContain(PRIVATE_COMMIT_ID);
+  expect(availability.disabledReason).not.toContain('rawPayload');
+  expect(availability.disabledReason).not.toContain('secret');
 }

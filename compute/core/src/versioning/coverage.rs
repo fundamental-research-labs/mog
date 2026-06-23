@@ -351,11 +351,11 @@ fn scan_sheet_map<T: ReadTxn>(
     objects: &mut BTreeMap<String, SemanticObjectDigest>,
 ) -> Result<(), SemanticStateReadError> {
     for (key, value) in sheet_map.iter(txn) {
-        let scope = sheet_scope_for_key(key.as_ref());
+        let scope = sheet_scope_for_key(key);
         let source_path = format!("/sheets/{{sheetId}}/{key}");
         record_unclassified_if_missing(records, objects, scope, &source_path)?;
 
-        match (key.as_ref(), value) {
+        match (key, value) {
             (KEY_CELLS, Out::YMap(cells)) => scan_cells_map(txn, &cells, records, objects)?,
             (KEY_CELL_PROPERTIES, Out::YMap(cell_properties)) => {
                 scan_cell_properties_map(txn, &cell_properties, records, objects)?

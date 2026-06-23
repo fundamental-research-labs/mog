@@ -14,7 +14,7 @@ use yrs::{Any, Map, Out, Transact};
 
 use crate::storage::engine::YrsComputeEngine;
 use crate::storage::properties::{self, CellProperties};
-use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
+use crate::versioning::{coverage_for_states, SemanticWorkbookStateReader};
 
 use super::{cell, workbook};
 

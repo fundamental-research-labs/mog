@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use compute_document::hex::{id_to_hex, parse_cell_id};
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    CanonicalDirectFormat, SemanticCellState, SemanticColumnState, SemanticDomainState,
-    SemanticObjectDigest, SemanticObjectKind, SemanticRowState, SemanticSheetState,
-    SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
+    canonical_digest, CanonicalDirectFormat, SemanticCellState, SemanticColumnState,
+    SemanticDomainState, SemanticObjectDigest, SemanticObjectKind, SemanticRowState,
+    SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 use value_types::CellValue;
 
@@ -23,16 +23,16 @@ use super::coverage::{
     UNCLASSIFIED_SCHEMA_KEYS_DOMAIN,
 };
 use super::formula_reader::{
-    UNSUPPORTED_CELL_FORMULAS_DOMAIN, canonical_formula, canonical_formula_ref,
-    canonical_formula_ref_object_ids, record_unrepresented_persisted_formula,
+    canonical_formula, canonical_formula_ref, canonical_formula_ref_object_ids,
+    record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
 use super::{
-    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
-    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticStateReadError,
-    SemanticWorkbookStateReader,
+    SemanticStateReadError, SemanticWorkbookStateReader, CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN,
+    CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN,
+    SHEETS_DOMAIN,
 };
 use value_provenance::{
     ambiguous_cell_value, canonical_cell_value, cell_value_provenance,

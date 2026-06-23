@@ -7,7 +7,7 @@ use compute_document::schema::{
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    CanonicalCellValue, SemanticObjectDigest, SemanticObjectKind, canonical_digest,
+    canonical_digest, CanonicalCellValue, SemanticObjectDigest, SemanticObjectKind,
 };
 use value_types::CellValue;
 use yrs::{Map, Out, Transact};
@@ -18,7 +18,7 @@ use crate::storage::{
     properties,
 };
 
-use super::{SemanticStateReadError, UNSUPPORTED_CELL_VALUES_DOMAIN, canonicalize_json_value};
+use super::{canonicalize_json_value, SemanticStateReadError, UNSUPPORTED_CELL_VALUES_DOMAIN};
 
 const FORMULA_METADATA_CATEGORY: &str = "formula-metadata";
 const RICH_STRING_CELL_KEY: &str = "rt";
@@ -162,9 +162,12 @@ fn record_property_value_provenance(
             Value::Bool(true),
         );
     }
-    if !props.formula_cache_provenance.is_absent_or_unknown()
-        && let Ok(value) = serde_json::to_value(&props.formula_cache_provenance)
-    {
+    let formula_cache_provenance_value = if props.formula_cache_provenance.is_absent_or_unknown() {
+        None
+    } else {
+        serde_json::to_value(&props.formula_cache_provenance).ok()
+    };
+    if let Some(value) = formula_cache_provenance_value {
         provenance.insert_marker(FORMULA_METADATA_CATEGORY, "formulaCacheProvenance", value);
     }
     if let Some(value) = props.original_sst_index {

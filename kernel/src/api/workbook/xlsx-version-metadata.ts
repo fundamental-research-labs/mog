@@ -2,16 +2,22 @@ import type {
   ObjectDigest,
   VersionDiagnosticPublicPayload,
   VersionHead,
-  VersionResult,
   WorkbookVersion,
   WorkbookXlsxExportOptions,
 } from '@mog-sdk/contracts/api';
 import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
 import type { DocumentContext } from '../../context';
-import type { VersionStoreProvider } from '../../document/version-store/provider';
 import { readCurrentHeadLocalObjectStoreAuthority } from './version-xlsx-metadata-export-authority';
-import { createMogVersionMetadataExportBlockedError } from './version-xlsx-metadata-export-gate';
+import {
+  authorizeMetadataSinkWrite,
+  createMogWorkbookVersionXlsxMetadata,
+  createMogVersionMetadataExportBlockedError,
+  hasVersionHeadFailureDiagnostics,
+  type MogVersionMetadataExportSink,
+  type MogVersionMetadataExportSinkAuthorization,
+} from './version-xlsx-metadata-export-gate';
 
+export { createMogWorkbookVersionXlsxMetadata };
 export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 const MOG_VERSION_METADATA_MAX_BYTES = 64 * 1024;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -133,50 +139,6 @@ export type MogWorkbookVersionXlsxMetadataTrustResult =
       readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'untrusted' }>;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     };
-
-export function createMogWorkbookVersionXlsxMetadata(
-  ctx: DocumentContext,
-  head: VersionResult<VersionHead>,
-  authority?: {
-    readonly semanticChangeSetDigest: ObjectDigest;
-    readonly snapshotRootDigest: ObjectDigest;
-  },
-): MogWorkbookVersionXlsxMetadata {
-  return {
-    schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
-    exportedAt: new Date(ctx.clock.dateNow()).toISOString(),
-    documentId: resolveVersionDocumentId(ctx),
-    ...optionalMetadataWorkspaceId(ctx),
-    head: head.ok
-      ? {
-          commitId: head.value.id,
-          ...(head.value.refName ? { refName: head.value.refName } : {}),
-          ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
-          ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
-          ...(authority
-            ? {
-                semanticChangeSetDigest: authority.semanticChangeSetDigest,
-                snapshotRootDigest: authority.snapshotRootDigest,
-              }
-            : {}),
-        }
-      : null,
-    diagnostics: head.ok ? [] : diagnosticsFromVersionError(head.error),
-    redaction: {
-      policy: 'commit-document-and-object-digests-only',
-      omitted: [
-        'authors',
-        'agentTraces',
-        'rawWorkbookBytes',
-        'credentials',
-        'externalDataSecrets',
-        'objectStoreNamespace',
-        'principalScope',
-        ...(optionalMetadataWorkspaceId(ctx).workspaceId ? [] : ['workspaceId']),
-      ],
-    },
-  };
-}
 
 export function addMogVersionMetadataToXlsx(
   xlsxBytes: Uint8Array,
@@ -387,22 +349,39 @@ export async function maybeAddMogVersionMetadataToXlsx(
   version: Pick<WorkbookVersion, 'getHead'>,
   xlsxBytes: Uint8Array,
   options: WorkbookXlsxExportOptions | undefined,
+  sink: MogVersionMetadataExportSink = MOG_VERSION_METADATA_EXPORT_SINK,
 ): Promise<Uint8Array> {
   if (options?.versionMetadata !== 'include') return removeMogVersionMetadataFromXlsx(xlsxBytes);
+  const authorization = await authorizeMogVersionMetadataExportSink(ctx, version);
+  return sink.write(xlsxBytes, authorization);
+}
+
+const MOG_VERSION_METADATA_EXPORT_SINK: MogVersionMetadataExportSink = {
+  write: (xlsxBytes, authorization) =>
+    addMogVersionMetadataToXlsx(xlsxBytes, authorization.metadata),
+};
+
+async function authorizeMogVersionMetadataExportSink(
+  ctx: DocumentContext,
+  version: Pick<WorkbookVersion, 'getHead'>,
+): Promise<MogVersionMetadataExportSinkAuthorization> {
   const head = await version.getHead();
   if (!head.ok) {
-    const reason =
-      diagnosticsFromVersionError(head.error).length > 0 ? 'redaction-failed' : 'head-read-failed';
+    const reason = hasVersionHeadFailureDiagnostics(head.error)
+      ? 'redaction-failed'
+      : 'head-read-failed';
     throw createMogVersionMetadataExportBlockedError(reason);
   }
   const authority = await readCurrentHeadLocalObjectStoreAuthority(ctx, head);
   if (!authority.ok) {
     throw createMogVersionMetadataExportBlockedError(authority.reason);
   }
-  return addMogVersionMetadataToXlsx(
-    xlsxBytes,
-    createMogWorkbookVersionXlsxMetadata(ctx, head, authority.value),
-  );
+  const metadata = createMogWorkbookVersionXlsxMetadata(ctx, head, authority.value);
+  const sinkAuthorization = authorizeMetadataSinkWrite(metadata, authority.value);
+  if (!sinkAuthorization.ok) {
+    throw createMogVersionMetadataExportBlockedError(sinkAuthorization.reason);
+  }
+  return sinkAuthorization.value;
 }
 
 function readMogVersionMetadataXmlFromXlsx(
@@ -688,69 +667,6 @@ function mogVersionMetadataStaleDiagnostic(): ImportDiagnosticDto {
     importPhases: ['parser'],
     firstImportPhase: 'parser',
   };
-}
-
-function resolveVersionDocumentId(ctx: DocumentContext): string {
-  const runtime = ctx as {
-    readonly versioning?: unknown;
-    readonly versionStore?: unknown;
-    readonly version?: unknown;
-  };
-  for (const services of [runtime.versioning, runtime.versionStore, runtime.version]) {
-    if (!isRecord(services)) continue;
-    const provider = services.provider;
-    if (isRecord(provider)) {
-      const scope = provider.documentScope;
-      if (isRecord(scope) && typeof scope.documentId === 'string') return scope.documentId;
-    }
-  }
-  return ctx.workbookLinkScope().requestingDocumentId;
-}
-
-function optionalMetadataWorkspaceId(ctx: DocumentContext): { readonly workspaceId?: string } {
-  const workspaceId = versionStoreProviderFromContext(ctx)?.documentScope.workspaceId;
-  return workspaceId ? { workspaceId } : {};
-}
-
-function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProvider | undefined {
-  const runtime = ctx as {
-    readonly versioning?: unknown;
-    readonly versionStore?: unknown;
-    readonly version?: unknown;
-  };
-  for (const services of [runtime.versioning, runtime.versionStore, runtime.version]) {
-    if (!isRecord(services)) continue;
-    if (isVersionStoreProvider(services.provider)) return services.provider;
-  }
-  return undefined;
-}
-
-function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
-  return (
-    isRecord(value) &&
-    isRecord(value.documentScope) &&
-    isRecord(value.accessContext) &&
-    typeof value.readGraphRegistry === 'function' &&
-    typeof value.openGraph === 'function'
-  );
-}
-
-function diagnosticsFromVersionError(
-  error: Extract<VersionResult<VersionHead>, { readonly ok: false }>['error'],
-): readonly VersionDiagnosticPublicPayload[] {
-  return 'diagnostics' in error && Array.isArray(error.diagnostics)
-    ? error.diagnostics.map(diagnosticPublicPayload)
-    : [];
-}
-
-function diagnosticPublicPayload(value: unknown): VersionDiagnosticPublicPayload {
-  if (!isRecord(value)) return {};
-  const payload: Record<string, string | number | boolean | null> = {};
-  for (const key of ['code', 'severity', 'message', 'dependency']) {
-    const field = value[key];
-    if (isPublicPrimitive(field)) payload[key] = field;
-  }
-  return payload;
 }
 
 function versionMetadataXml(metadata: MogWorkbookVersionXlsxMetadata): string {

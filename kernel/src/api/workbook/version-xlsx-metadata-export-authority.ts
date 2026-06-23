@@ -14,12 +14,19 @@ type VersionMetadataHeadIdentity = {
   readonly refRevision?: VersionHead['refRevision'];
 };
 
+export type MogVersionMetadataAuthoritativeHeadIdentity = VersionMetadataHeadIdentity & {
+  readonly refName: NonNullable<VersionHead['refName']>;
+  readonly resolvedFrom: NonNullable<VersionHead['resolvedFrom']>;
+  readonly refRevision: NonNullable<VersionHead['refRevision']>;
+};
+
 export type MogVersionMetadataHeadAuthorityResult =
   | {
       readonly ok: true;
       readonly value: {
         readonly semanticChangeSetDigest: ObjectDigest;
         readonly snapshotRootDigest: ObjectDigest;
+        readonly currentHead: MogVersionMetadataAuthoritativeHeadIdentity;
       };
     }
   | { readonly ok: false; readonly reason: MogVersionMetadataExportBlockReason };
@@ -29,6 +36,11 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
   head: VersionResult<VersionHead>,
 ): Promise<MogVersionMetadataHeadAuthorityResult> {
   if (!head.ok) return { ok: false, reason: 'head-read-failed' };
+  const expectedHead = graphHeadIdentity(head.value);
+  if (!hasAuthoritativeHeadIdentity(expectedHead)) {
+    return { ok: false, reason: 'head-unverified' };
+  }
+
   const provider = versionStoreProviderFromContext(ctx);
   if (!provider) return { ok: false, reason: 'head-unverified' };
 
@@ -42,12 +54,11 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
     );
     const currentHead = await graph.readHead();
     if (currentHead.status !== 'success') return { ok: false, reason: 'head-unverified' };
-    if (
-      !metadataHeadIdentityMatchesExpected(
-        graphHeadIdentity(currentHead.head),
-        graphHeadIdentity(head.value),
-      )
-    ) {
+    const currentHeadIdentity = graphHeadIdentity(currentHead.head);
+    if (!hasAuthoritativeHeadIdentity(currentHeadIdentity)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+    if (!metadataHeadIdentityMatchesExpected(currentHeadIdentity, expectedHead)) {
       return { ok: false, reason: 'stale-head' };
     }
 
@@ -58,6 +69,7 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
       value: {
         semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest,
         snapshotRootDigest: commit.commit.payload.snapshotRootDigest,
+        currentHead: currentHeadIdentity,
       },
     };
   } catch {
@@ -107,6 +119,17 @@ function versionRecordRevisionMatches(
   return left.kind === right.kind && left.value === right.value;
 }
 
+function hasAuthoritativeHeadIdentity(
+  value: VersionMetadataHeadIdentity,
+): value is MogVersionMetadataAuthoritativeHeadIdentity {
+  return (
+    isNonEmptyString(value.commitId) &&
+    isNonEmptyString(value.refName) &&
+    isNonEmptyString(value.resolvedFrom) &&
+    isVersionRecordRevision(value.refRevision)
+  );
+}
+
 function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProvider | undefined {
   const runtime = ctx as {
     readonly versioning?: unknown;
@@ -136,6 +159,10 @@ function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHe
     (value.kind === 'counter' || value.kind === 'opaque') &&
     typeof value.value === 'string'
   );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

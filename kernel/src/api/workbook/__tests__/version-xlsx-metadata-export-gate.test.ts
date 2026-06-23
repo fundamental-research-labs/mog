@@ -1,11 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import type {
-  ObjectDigest,
-  VersionHead,
-  Workbook,
-  WorkbookCommitId,
-} from '@mog-sdk/contracts/api';
+import type { ObjectDigest, VersionHead, Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
@@ -17,6 +12,10 @@ import {
   readAndValidateMogVersionMetadataFromXlsx,
   type MogWorkbookVersionXlsxMetadata,
 } from '../xlsx-version-metadata';
+import type {
+  MogVersionMetadataExportSink,
+  MogVersionMetadataExportSinkAuthorization,
+} from '../version-xlsx-metadata-export-gate';
 import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 
@@ -107,13 +106,106 @@ describe('VC-10 XLSX metadata export gating', () => {
         >[1],
         await createSourceXlsx(),
         { versionMetadata: 'include' },
+        blockedMetadataSink(),
       ),
       'stale-head',
     );
   });
 
+  it('authorizes the metadata sink only after redaction and object-store authority preflight', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+    const captured: {
+      writes: number;
+      authorization?: MogVersionMetadataExportSinkAuthorization;
+    } = { writes: 0 };
+    const sinkResult = new Uint8Array([1, 2, 3]);
+
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        provider: metadataExportAuthorityProvider({
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          head: currentHead,
+        }),
+      }),
+      { getHead: async () => ({ ok: true, value: currentHead }) } as Parameters<
+        typeof maybeAddMogVersionMetadataToXlsx
+      >[1],
+      await createSourceXlsx(),
+      { versionMetadata: 'include' },
+      recordingMetadataSink(captured, sinkResult),
+    );
+
+    expect(exported).toBe(sinkResult);
+    expect(captured.writes).toBe(1);
+    expect(captured.authorization).toMatchObject({
+      sidecarPart: MOG_VERSION_METADATA_PART,
+      currentHead: {
+        commitId: OLD_METADATA_COMMIT_ID,
+        refName: 'refs/heads/main',
+        resolvedFrom: 'HEAD',
+        refRevision: REF_REVISION,
+      },
+      objectStoreAuthority: {
+        semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+        snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+      },
+      redaction: {
+        diagnostics: 'none',
+        redacted: true,
+      },
+      metadata: {
+        diagnostics: [],
+        redaction: {
+          policy: 'commit-document-and-object-digests-only',
+          omitted: expect.arrayContaining([
+            'authors',
+            'agentTraces',
+            'rawWorkbookBytes',
+            'credentials',
+            'externalDataSecrets',
+            'objectStoreNamespace',
+            'principalScope',
+          ]),
+        },
+        head: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      },
+    });
+  });
+
+  it('blocks Mog version metadata sidecar export when stale-head revision proof is missing', async () => {
+    const unprovenHead = versionHead({ id: OLD_METADATA_COMMIT_ID });
+
+    await expectMogMetadataExportBlocked(
+      maybeAddMogVersionMetadataToXlsx(
+        metadataExportContext({
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          provider: metadataExportAuthorityProvider({
+            documentId: METADATA_EXPORT_DOCUMENT_ID,
+            head: unprovenHead,
+          }),
+        }),
+        { getHead: async () => ({ ok: true, value: unprovenHead }) } as Parameters<
+          typeof maybeAddMogVersionMetadataToXlsx
+        >[1],
+        await createSourceXlsx(),
+        { versionMetadata: 'include' },
+        blockedMetadataSink(),
+      ),
+      'head-unverified',
+    );
+  });
+
   it('blocks Mog version metadata sidecar export instead of serializing failed-head diagnostics', async () => {
     const leakSentinel = 'vc10-metadata-export-redaction-leak';
+    const sinkWrites = { count: 0 };
 
     try {
       await maybeAddMogVersionMetadataToXlsx(
@@ -136,6 +228,7 @@ describe('VC-10 XLSX metadata export gating', () => {
         } as Parameters<typeof maybeAddMogVersionMetadataToXlsx>[1],
         await createSourceXlsx(),
         { versionMetadata: 'include' },
+        blockedMetadataSink(sinkWrites),
       );
       throw new Error('expected metadata export to be blocked');
     } catch (error) {
@@ -147,6 +240,7 @@ describe('VC-10 XLSX metadata export gating', () => {
       });
       expect(JSON.stringify(error)).not.toContain(leakSentinel);
     }
+    expect(sinkWrites.count).toBe(0);
   });
 });
 
@@ -237,6 +331,33 @@ async function expectMogMetadataExportBlocked(
   });
 }
 
+function blockedMetadataSink(
+  writes: { count: number } = { count: 0 },
+): MogVersionMetadataExportSink {
+  return {
+    write: () => {
+      writes.count += 1;
+      throw new Error('metadata export sink must not be called before authorization');
+    },
+  };
+}
+
+function recordingMetadataSink(
+  captured: {
+    writes: number;
+    authorization?: MogVersionMetadataExportSinkAuthorization;
+  },
+  result: Uint8Array,
+): MogVersionMetadataExportSink {
+  return {
+    write: (_xlsxBytes, authorization) => {
+      captured.writes += 1;
+      captured.authorization = authorization;
+      return result;
+    },
+  };
+}
+
 function testVersionMetadata(input: {
   readonly documentId: string;
   readonly commitId: WorkbookCommitId;
@@ -272,13 +393,13 @@ function testVersionMetadata(input: {
 
 function versionHead(input: {
   readonly id: WorkbookCommitId;
-  readonly refRevision: NonNullable<VersionHead['refRevision']>;
+  readonly refRevision?: NonNullable<VersionHead['refRevision']>;
 }): VersionHead {
   return {
     id: input.id,
     refName: 'refs/heads/main',
     resolvedFrom: 'HEAD',
-    refRevision: input.refRevision,
+    ...(input.refRevision ? { refRevision: input.refRevision } : {}),
   };
 }
 

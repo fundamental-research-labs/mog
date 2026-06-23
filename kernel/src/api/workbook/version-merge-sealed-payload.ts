@@ -10,6 +10,7 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
+import { mergePreviewArtifactRef } from '../../document/version-store/merge-attempt-artifacts';
 import {
   REVIEW_EXTENSION_OBJECT_TYPE,
   mergeReviewDiagnostic,
@@ -18,7 +19,10 @@ import {
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import { findResolutionOption, projectReviewValue } from './version-merge-review-conflicts';
 import { mapPublicObjectDigest } from './version-attempt-metadata';
-import { VersionObjectStoreError } from '../../document/version-store/object-store';
+import {
+  VersionObjectStoreError,
+  type VersionObjectRecord,
+} from '../../document/version-store/object-store';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 
 const SEALED_REF_KEYS = new Set([
@@ -33,6 +37,22 @@ const SEALED_REF_KEYS = new Set([
   'optionId',
   'resolutionKind',
   'expiresAt',
+]);
+const MERGE_RESOLUTION_PAYLOAD_KEYS = new Set([
+  'schemaVersion',
+  'recordKind',
+  'resultId',
+  'resultDigest',
+  'redactionPolicyDigest',
+  'conflictId',
+  'expectedConflictDigest',
+  'optionId',
+  'kind',
+  'targetRef',
+  'expectedTargetHead',
+  'purpose',
+  'domainPayloadSchema',
+  'value',
 ]);
 
 type InvalidDiagnostic = (path: string, safeMessage: string) => VersionStoreDiagnostic;
@@ -50,6 +70,7 @@ type MergeResolutionPayloadRecord = {
   readonly targetRef: string;
   readonly expectedTargetHead: unknown;
   readonly purpose: string;
+  readonly domainPayloadSchema?: string;
   readonly value: unknown;
 };
 
@@ -168,8 +189,17 @@ export async function validateSealedResolutionPayloadRefs(input: {
   readonly resolutions: readonly VersionApplyMergeResolution[];
 }): Promise<readonly VersionStoreDiagnostic[]> {
   const diagnostics: VersionStoreDiagnostic[] = [];
+  const seenPayloadDigests = new Set<string>();
   for (const resolution of input.resolutions) {
     if (!resolution.sealedPayloadRef) continue;
+    const payloadDigestKey = objectDigestKey(resolution.sealedPayloadRef.payloadDigest);
+    if (seenPayloadDigests.has(payloadDigestKey)) {
+      diagnostics.push(
+        sealedPayloadMismatchDiagnostic(input.operation, 'duplicate sealed payload ref supplied.'),
+      );
+      continue;
+    }
+    seenPayloadDigests.add(payloadDigestKey);
     if (input.allowExecutablePayloadRefs === false) {
       diagnostics.push(
         sealedPayloadMismatchDiagnostic(
@@ -192,7 +222,9 @@ export async function validateSealedResolutionPayloadRefs(input: {
       diagnostics.push(...payloadRead.diagnostics);
       continue;
     }
-    diagnostics.push(...validateSealedPayloadRecord(input, resolution, payloadRead.payload));
+    diagnostics.push(
+      ...validateSealedPayloadRecord(input, resolution, payloadRead.record, payloadRead.payload),
+    );
   }
   return diagnostics;
 }
@@ -283,7 +315,11 @@ async function readMergeResolutionPayload(
   operation: VersionMergePublicOperation,
   digest: ObjectDigest,
 ): Promise<
-  | { readonly ok: true; readonly payload: MergeResolutionPayloadRecord }
+  | {
+      readonly ok: true;
+      readonly record: VersionObjectRecord<unknown>;
+      readonly payload: MergeResolutionPayloadRecord;
+    }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const internalDigest = toInternalSha256Digest(digest);
@@ -310,7 +346,7 @@ async function readMergeResolutionPayload(
         ],
       };
     }
-    return { ok: true, payload };
+    return { ok: true, record, payload };
   } catch (error) {
     return {
       ok: false,
@@ -340,10 +376,13 @@ function validateSealedPayloadRecord(
     readonly conflicts: readonly VersionMergeConflict[];
   },
   resolution: VersionApplyMergeResolution,
+  record: VersionObjectRecord<unknown>,
   payload: MergeResolutionPayloadRecord,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
   const expectedRedactionPolicyDigest = input.redactionPolicyDigest ?? input.resultDigest;
+  const artifactBindingDiagnostics = validateSealedPayloadArtifactBinding(input, record);
+  diagnostics.push(...artifactBindingDiagnostics);
   if (
     payload.resultId !== input.resultId ||
     !digestsEqual(payload.resultDigest, input.resultDigest) ||
@@ -401,6 +440,9 @@ function toMergeResolutionPayloadRecord(value: unknown): MergeResolutionPayloadR
   ) {
     return null;
   }
+  for (const key of Object.keys(value)) {
+    if (!MERGE_RESOLUTION_PAYLOAD_KEYS.has(key)) return null;
+  }
   if (
     typeof value.resultId !== 'string' ||
     !isObjectDigest(value.resultDigest) ||
@@ -411,12 +453,53 @@ function toMergeResolutionPayloadRecord(value: unknown): MergeResolutionPayloadR
     typeof value.kind !== 'string' ||
     typeof value.targetRef !== 'string' ||
     typeof value.purpose !== 'string' ||
+    (value.domainPayloadSchema !== undefined && typeof value.domainPayloadSchema !== 'string') ||
     !('expectedTargetHead' in value) ||
     !('value' in value)
   ) {
     return null;
   }
   return value as unknown as MergeResolutionPayloadRecord;
+}
+
+function validateSealedPayloadArtifactBinding(
+  input: {
+    readonly operation: VersionMergePublicOperation;
+    readonly resultDigest: ObjectDigest;
+  },
+  record: VersionObjectRecord<unknown>,
+): readonly VersionStoreDiagnostic[] {
+  const expectedResultDigest = toInternalSha256Digest(input.resultDigest);
+  const expectedDependency = expectedResultDigest
+    ? mergePreviewArtifactRef(expectedResultDigest)
+    : null;
+  const dependencies = record.preimage.dependencies;
+  if (
+    !expectedDependency ||
+    dependencies.length !== 1 ||
+    !isExpectedPreviewDependency(dependencies[0], expectedDependency)
+  ) {
+    return [
+      sealedPayloadMismatchDiagnostic(
+        input.operation,
+        'sealed payload artifact binding does not match.',
+      ),
+    ];
+  }
+  return [];
+}
+
+function isExpectedPreviewDependency(
+  actual: unknown,
+  expected: ReturnType<typeof mergePreviewArtifactRef>,
+): actual is ReturnType<typeof mergePreviewArtifactRef> {
+  return (
+    isRecord(actual) &&
+    actual.kind === 'object' &&
+    actual.objectType === expected.objectType &&
+    isObjectDigest(actual.digest) &&
+    digestsEqual(actual.digest, expected.digest)
+  );
 }
 
 function sealedPayloadMismatchDiagnostic(
@@ -432,6 +515,10 @@ function digestsEqual(left: ObjectDigest | undefined, right: ObjectDigest | unde
   return Boolean(
     left && right && left.algorithm === right.algorithm && left.digest === right.digest,
   );
+}
+
+function objectDigestKey(digest: ObjectDigest): string {
+  return `${digest.algorithm}:${digest.digest}`;
 }
 
 function isObjectDigest(value: unknown): value is ObjectDigest {

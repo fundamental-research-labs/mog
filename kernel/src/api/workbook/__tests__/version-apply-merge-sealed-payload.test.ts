@@ -24,8 +24,10 @@ import type {
   VersionObjectType,
 } from '../../../document/version-store/object-digest';
 import {
+  MERGE_PREVIEW_OBJECT_TYPE,
   createMergeResolutionSetArtifactRecord,
   createResolvedMergeAttemptArtifactRecord,
+  mergePreviewArtifactRef,
   mergeResolutionSetArtifactRef,
   resolvedMergeAttemptArtifactRef,
 } from '../../../document/version-store/merge-attempt-artifacts';
@@ -41,6 +43,7 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
+import { REVIEW_EXTENSION_OBJECT_TYPE } from '../version-merge-review-artifacts';
 
 const DOCUMENT_ID = 'vc07-apply-merge-sealed-payload';
 const DOCUMENT_RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -244,6 +247,136 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
     expect(mergeCommitCallCount).toBe(0);
   });
 
+  it('rejects stale digests, wrong artifact refs, principal metadata, and duplicate refs before writes', async () => {
+    let mergeCommitCallCount = 0;
+    await withPersistedConflictPreview(
+      'reject-hardened-bindings',
+      async ({ provider, graphId, documentScope, sourceWb, preview, expectedTargetHead }) => {
+        expect(preview.conflicts.length).toBeGreaterThan(1);
+        const firstConflict = preview.conflicts[0];
+        const secondConflict = preview.conflicts[1];
+        const firstOption = requireResolutionOption(firstConflict, 'acceptTheirs');
+        const firstResolution = resolutionFor(firstConflict, 'acceptTheirs');
+        const secondResolution = resolutionFor(secondConflict, 'acceptTheirs');
+        const firstPayload = await putResolutionPayload({
+          sourceWb,
+          preview,
+          conflict: firstConflict,
+          option: firstOption,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          value: firstOption.value as any,
+          purpose: 'chooseValue',
+        });
+
+        await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
+          sourceWb,
+          preview,
+          expectedTargetHead,
+          resolution: [
+            {
+              ...firstResolution,
+              expectedConflictDigest: `${firstConflict.conflictDigest}:stale`,
+              sealedPayloadRef: firstPayload,
+            },
+            secondResolution,
+          ],
+          messages: ['resolution does not match the merge conflict.'],
+          leakCanaries: [firstOption.optionId, 'theirs'],
+          expectPayloadOperation: false,
+        });
+
+        const wrongPreviewDigest = await putWrongPreviewArtifact({
+          provider,
+          graphId,
+          documentScope,
+          preview,
+        });
+        const wrongArtifactPayload = await putForgedResolutionPayload({
+          provider,
+          graphId,
+          documentScope,
+          preview,
+          conflict: firstConflict,
+          option: firstOption,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          dependencyResultDigest: wrongPreviewDigest,
+          value: firstOption.value as any,
+        });
+        await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
+          sourceWb,
+          preview,
+          expectedTargetHead,
+          resolution: [
+            { ...firstResolution, sealedPayloadRef: wrongArtifactPayload },
+            secondResolution,
+          ],
+          messages: ['sealed payload artifact binding does not match.'],
+          leakCanaries: [wrongPreviewDigest.digest, firstOption.optionId, 'theirs'],
+        });
+
+        const principalCanary = 'principal-secret-sealed-payload';
+        const principalPayload = await putForgedResolutionPayload({
+          provider,
+          graphId,
+          documentScope,
+          preview,
+          conflict: firstConflict,
+          option: firstOption,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          value: firstOption.value as any,
+          extraPayload: { principalScope: principalCanary },
+        });
+        await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
+          sourceWb,
+          preview,
+          expectedTargetHead,
+          resolution: [
+            { ...firstResolution, sealedPayloadRef: principalPayload },
+            secondResolution,
+          ],
+          messages: ['sealed payload object is invalid.'],
+          leakCanaries: [principalCanary, firstOption.optionId, 'theirs'],
+        });
+
+        await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
+          sourceWb,
+          preview,
+          expectedTargetHead,
+          resolution: [
+            { ...firstResolution, sealedPayloadRef: firstPayload },
+            { ...secondResolution, sealedPayloadRef: firstPayload },
+          ],
+          messages: ['duplicate sealed payload ref supplied.'],
+          leakCanaries: [firstOption.optionId, 'theirs'],
+        });
+      },
+      {
+        applyMergeService: {
+          mergeCommit: async () => {
+            mergeCommitCallCount += 1;
+          },
+        },
+      },
+      ['A1', 'B1'],
+    );
+    expect(mergeCommitCallCount).toBe(0);
+  });
+
   it('rejects sealed payload refs when a targeted save remains review-only', async () => {
     await withPersistedConflictPreview(
       'reject-review-only-sealed-ref',
@@ -332,16 +465,19 @@ async function expectSealedApplyRejected(input: {
   readonly sourceWb: Workbook;
   readonly preview: PersistedConflictPreview;
   readonly expectedTargetHead: VersionCommitExpectedHead;
-  readonly resolution: VersionApplyMergeResolution;
+  readonly resolution: VersionApplyMergeResolution | readonly VersionApplyMergeResolution[];
   readonly messages: readonly string[];
   readonly targetRef?: VersionMainRefName | VersionRefName;
   readonly leakCanaries?: readonly string[];
+  readonly expectPayloadOperation?: boolean;
 }): Promise<void> {
   const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
   const targetRef = input.targetRef ?? ('refs/heads/main' as VersionMainRefName);
-  const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [
-    input.resolution,
-  ]);
+  const resolutions = Array.isArray(input.resolution) ? input.resolution : [input.resolution];
+  const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(
+    namespace,
+    resolutions,
+  );
   const expectedResolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
     resultDigest: internalSha256Digest(input.preview.resultDigest),
     resolutionSetDigest: expectedResolutionSet.digest,
@@ -354,7 +490,7 @@ async function expectSealedApplyRejected(input: {
       resultId: input.preview.resultId,
       resultDigest: input.preview.resultDigest,
       previewArtifactDigest: input.preview.previewArtifactDigest,
-      resolutions: [input.resolution],
+      resolutions,
     },
     { targetRef, expectedTargetHead: input.expectedTargetHead },
   );
@@ -370,9 +506,10 @@ async function expectSealedApplyRejected(input: {
     diagnostics: result.error.diagnostics,
     operation: 'applyMerge',
     messages: input.messages,
+    expectPayloadOperation: input.expectPayloadOperation,
     leakCanaries: diagnosticLeakCanaries({
       preview: input.preview,
-      resolution: input.resolution,
+      resolutions,
       targetRef,
       expectedTargetHead: input.expectedTargetHead,
       extra: input.leakCanaries ?? [],
@@ -393,6 +530,7 @@ function expectStableResolutionMismatchDiagnostics(input: {
   readonly operation: 'applyMerge' | 'saveMergeResolutions';
   readonly messages: readonly string[];
   readonly leakCanaries?: readonly string[];
+  readonly expectPayloadOperation?: boolean;
 }): void {
   expect(input.diagnostics).toStrictEqual(
     input.messages.map((message) => ({
@@ -401,11 +539,13 @@ function expectStableResolutionMismatchDiagnostics(input: {
       message,
       owner: 'version-store',
       data: {
-        operation: input.operation,
+        ...(input.expectPayloadOperation === false ? {} : { operation: input.operation }),
         recoverability: 'none',
         messageTemplateId: `version.${input.operation}.VERSION_MERGE_RESOLUTION_MISMATCH`,
         redacted: true,
-        payload: { operation: input.operation },
+        ...(input.expectPayloadOperation === false
+          ? {}
+          : { payload: { operation: input.operation } }),
         mutationGuarantee: 'no-write-attempted',
       },
     })),
@@ -415,7 +555,7 @@ function expectStableResolutionMismatchDiagnostics(input: {
 
 function diagnosticLeakCanaries(input: {
   readonly preview: PersistedConflictPreview;
-  readonly resolution: VersionApplyMergeResolution;
+  readonly resolutions: readonly VersionApplyMergeResolution[];
   readonly targetRef: VersionMainRefName | VersionRefName;
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly extra: readonly string[];
@@ -423,11 +563,13 @@ function diagnosticLeakCanaries(input: {
   return compactStrings([
     input.preview.resultId,
     input.preview.resultDigest.digest,
-    input.resolution.conflictId,
-    input.resolution.expectedConflictDigest,
-    input.resolution.optionId,
-    input.resolution.sealedPayloadRef?.payloadId,
-    input.resolution.sealedPayloadRef?.payloadDigest.digest,
+    ...input.resolutions.flatMap((resolution) => [
+      resolution.conflictId,
+      resolution.expectedConflictDigest,
+      resolution.optionId,
+      resolution.sealedPayloadRef?.payloadId,
+      resolution.sealedPayloadRef?.payloadDigest.digest,
+    ]),
     input.targetRef,
     input.expectedTargetHead.commitId,
     input.expectedTargetHead.revision.value,
@@ -468,6 +610,85 @@ async function putResolutionPayload(input: {
   });
   if (!result.ok) throw new Error(`expected sealed payload put success: ${result.error.code}`);
   return result.value;
+}
+
+async function putWrongPreviewArtifact(input: {
+  readonly provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
+  readonly graphId: string;
+  readonly documentScope: VersionDocumentScope;
+  readonly preview: PersistedConflictPreview;
+}): Promise<ObjectDigest> {
+  const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
+  const graph = await input.provider.openGraph(namespace, input.provider.accessContext);
+  const record = await objectRecord(namespace, MERGE_PREVIEW_OBJECT_TYPE, {
+    schemaVersion: 1,
+    recordKind: 'mergePreview',
+    status: 'conflicted',
+    base: input.preview.base,
+    ours: input.preview.ours,
+    theirs: input.preview.theirs,
+    changes: [],
+    conflicts: input.preview.conflicts,
+  });
+  const persisted = await graph.putObjects([record]);
+  expect(persisted).toMatchObject({ status: 'success' });
+  return record.digest;
+}
+
+async function putForgedResolutionPayload(input: {
+  readonly provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
+  readonly graphId: string;
+  readonly documentScope: VersionDocumentScope;
+  readonly preview: PersistedConflictPreview;
+  readonly conflict: VersionMergeConflict;
+  readonly option: VersionMergeConflict['resolutionOptions'][number];
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly redactionPolicyDigest: ObjectDigest;
+  readonly dependencyResultDigest?: ObjectDigest;
+  readonly value: any;
+  readonly extraPayload?: Readonly<Record<string, unknown>>;
+}): Promise<VersionSealedResolutionPayloadRef> {
+  const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
+  const graph = await input.provider.openGraph(namespace, input.provider.accessContext);
+  const dependencyDigest = internalSha256Digest(
+    input.dependencyResultDigest ?? input.preview.resultDigest,
+  );
+  const record = await createVersionObjectRecord(namespace, {
+    objectType: REVIEW_EXTENSION_OBJECT_TYPE,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [mergePreviewArtifactRef(dependencyDigest)],
+    payload: {
+      schemaVersion: 1,
+      recordKind: 'mergeResolutionPayload',
+      resultId: input.preview.resultId,
+      resultDigest: input.preview.resultDigest,
+      redactionPolicyDigest: input.redactionPolicyDigest,
+      conflictId: input.conflict.conflictId,
+      expectedConflictDigest: input.conflict.conflictDigest,
+      optionId: input.option.optionId,
+      kind: input.option.kind,
+      targetRef: 'refs/heads/main' as VersionMainRefName,
+      expectedTargetHead: input.expectedTargetHead,
+      purpose: 'chooseValue',
+      value: input.value,
+      ...(input.extraPayload ?? {}),
+    },
+  });
+  const persisted = await graph.putObjects([record]);
+  expect(persisted).toMatchObject({ status: 'success' });
+  return {
+    schemaVersion: 1,
+    kind: 'sealedResolutionPayload',
+    payloadId: `merge-payload:${record.digest.digest}` as `merge-payload:${string}`,
+    payloadDigest: record.digest,
+    storageMode: 'serverEncrypted',
+    resultId: input.preview.resultId,
+    resultDigest: input.preview.resultDigest,
+    conflictId: input.conflict.conflictId,
+    optionId: input.option.optionId,
+    resolutionKind: input.option.kind,
+  };
 }
 
 async function withPersistedConflictPreview(

@@ -37,6 +37,18 @@ type MaybeDomainSupportManifestContext = DocumentContext & {
   readonly version?: unknown;
 };
 
+type DomainSupportDetectionResult = {
+  readonly detectorRows: readonly DomainSupportDetectorRow[];
+  readonly diagnostics: readonly VersionStoreDiagnostic[];
+};
+
+type WorkbookMutableDomainDetector = {
+  readonly matrixRowId: string;
+  readonly domainId: string;
+  readonly detectorId: string;
+  readonly isPresent: (ctx: DocumentContext) => MaybePromise<boolean | null>;
+};
+
 type AttachedDomainSupportManifestGate = {
   readonly hasManifestSource: boolean;
   readonly manifest?: unknown;
@@ -65,6 +77,28 @@ const REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION = Object.freeze({
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
+
+const WORKBOOK_MUTABLE_DOMAIN_DETECTORS = Object.freeze([
+  {
+    matrixRowId: 'named-ranges',
+    domainId: 'named-ranges',
+    detectorId: 'detector.named-ranges',
+    isPresent: hasNamedRangesPresent,
+  },
+  {
+    matrixRowId: 'external-links',
+    domainId: 'external-links',
+    detectorId: 'detector.hyperlinks',
+    isPresent: hasHyperlinksPresent,
+  },
+  {
+    matrixRowId: 'data-validation',
+    domainId: 'data-validation',
+    detectorId: 'detector.data-validation',
+    isPresent: hasDataValidationPresent,
+  },
+] satisfies readonly WorkbookMutableDomainDetector[]);
+
 export async function validateVersionDomainSupportManifestGate(
   ctx: DocumentContext,
   operation: VersionDomainSupportManifestGateOperation,
@@ -98,6 +132,13 @@ export async function validateVersionDomainSupportManifestGate(
     requiredDomainIds: callerRequiredDomainIds,
     ...callerOptions
   } = gate.options ?? {};
+  const detected = await detectWorkbookMutableDomainRows(ctx, operation);
+  if (detected.diagnostics.length > 0) return detected.diagnostics;
+
+  const detectorRows = mergeDomainSupportDetectorRows(
+    callerOptions.detectorRows,
+    detected.detectorRows,
+  );
   const options: DomainSupportManifestValidationOptions = {
     ...callerOptions,
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
@@ -107,12 +148,10 @@ export async function validateVersionDomainSupportManifestGate(
     requiredMatrixRowIds: requiredManifestMatrixRowIds(
       operation,
       callerRequiredMatrixRowIds,
-      callerOptions.detectorRows,
+      detectorRows,
     ),
-    requiredDomainIds: requiredManifestDomainIds(
-      callerRequiredDomainIds,
-      callerOptions.detectorRows,
-    ),
+    requiredDomainIds: requiredManifestDomainIds(callerRequiredDomainIds, detectorRows),
+    ...(detectorRows ? { detectorRows } : {}),
   };
   const validation = validateDomainSupportManifest(manifest, options);
   if (validation.ok) {
@@ -124,6 +163,128 @@ export async function validateVersionDomainSupportManifestGate(
   return validation.diagnostics.map((diagnostic) =>
     domainSupportManifestInvalidDiagnostic(operation, diagnostic),
   );
+}
+
+async function detectWorkbookMutableDomainRows(
+  ctx: DocumentContext,
+  operation: VersionDomainSupportManifestGateOperation,
+): Promise<DomainSupportDetectionResult> {
+  if (!isRecord((ctx as Partial<DocumentContext>).computeBridge)) {
+    return { detectorRows: [], diagnostics: [] };
+  }
+
+  const results = await Promise.all(
+    WORKBOOK_MUTABLE_DOMAIN_DETECTORS.map(async (detector) => {
+      try {
+        const present = await detector.isPresent(ctx);
+        return { detector, present, diagnostic: null };
+      } catch {
+        return {
+          detector,
+          present: null,
+          diagnostic: domainSupportDetectorReadFailedDiagnostic(operation, detector),
+        };
+      }
+    }),
+  );
+
+  const detectorRows: DomainSupportDetectorRow[] = [];
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  for (const result of results) {
+    if (result.diagnostic) {
+      diagnostics.push(result.diagnostic);
+      continue;
+    }
+    if (result.present === null) continue;
+    detectorRows.push({
+      matrixRowId: result.detector.matrixRowId,
+      domainId: result.detector.domainId,
+      present: result.present,
+      detectorId: result.detector.detectorId,
+    });
+  }
+
+  return { detectorRows, diagnostics };
+}
+
+function mergeDomainSupportDetectorRows(
+  callerRows: readonly DomainSupportDetectorRow[] | undefined,
+  detectedRows: readonly DomainSupportDetectorRow[],
+): readonly DomainSupportDetectorRow[] | undefined {
+  const rows: DomainSupportDetectorRow[] = [];
+  const rowIndexes = new Map<string, number>();
+
+  for (const row of [...(callerRows ?? []), ...detectedRows]) {
+    const key = domainSupportDetectorRowKey(row);
+    const existingIndex = rowIndexes.get(key);
+    if (existingIndex === undefined) {
+      rowIndexes.set(key, rows.length);
+      rows.push(row);
+      continue;
+    }
+
+    const existing = rows[existingIndex];
+    if (existing.present || !row.present) continue;
+    rows[existingIndex] = {
+      ...existing,
+      ...row,
+      detectorId: existing.detectorId ?? row.detectorId,
+      present: true,
+    };
+  }
+
+  return rows.length > 0 ? rows : undefined;
+}
+
+function domainSupportDetectorRowKey(row: DomainSupportDetectorRow): string {
+  return row.matrixRowId ? `matrix:${row.matrixRowId}` : `domain:${row.domainId}`;
+}
+
+async function hasNamedRangesPresent(ctx: DocumentContext): Promise<boolean | null> {
+  const namedRangeCount = bindMethod(ctx.computeBridge as unknown, 'namedRangeCount');
+  if (namedRangeCount) {
+    const count = await namedRangeCount();
+    return typeof count === 'number' && count > 0;
+  }
+
+  const getAllNamedRangesWire = bindMethod(ctx.computeBridge as unknown, 'getAllNamedRangesWire');
+  if (!getAllNamedRangesWire) return null;
+
+  const names = await getAllNamedRangesWire();
+  return Array.isArray(names) && names.length > 0;
+}
+
+async function hasHyperlinksPresent(ctx: DocumentContext): Promise<boolean | null> {
+  const getHyperlinks = bindMethod(ctx.computeBridge as unknown, 'getHyperlinks');
+  if (!getHyperlinks) return null;
+  return hasAnySheetScopedRows(ctx, (sheetId) => getHyperlinks(sheetId));
+}
+
+async function hasDataValidationPresent(ctx: DocumentContext): Promise<boolean | null> {
+  const getRangeSchemasForSheet = bindMethod(
+    ctx.computeBridge as unknown,
+    'getRangeSchemasForSheet',
+  );
+  if (!getRangeSchemasForSheet) return null;
+  return hasAnySheetScopedRows(ctx, (sheetId) => getRangeSchemasForSheet(sheetId));
+}
+
+async function hasAnySheetScopedRows(
+  ctx: DocumentContext,
+  readRows: (sheetId: string) => MaybePromise<unknown>,
+): Promise<boolean | null> {
+  const getAllSheetIds = bindMethod(ctx.computeBridge as unknown, 'getAllSheetIds');
+  if (!getAllSheetIds) return null;
+
+  const sheetIds = await getAllSheetIds();
+  if (!Array.isArray(sheetIds)) return false;
+
+  for (const sheetId of sheetIds) {
+    if (typeof sheetId !== 'string' || sheetId === '') continue;
+    const rows = await readRows(sheetId);
+    if (Array.isArray(rows) && rows.length > 0) return true;
+  }
+  return false;
 }
 
 function mergeDetectedDomainDiagnostics(
@@ -405,13 +566,22 @@ function bindManifestReader(
   value: Readonly<Record<string, unknown>>,
   name: string,
 ): (() => MaybePromise<unknown>) | null {
-  const method = value[name];
-  if (typeof method !== 'function') return null;
-  return () => Reflect.apply(method, value, []) as MaybePromise<unknown>;
+  const method = bindMethod(value, name);
+  return method ? () => method() : null;
 }
 
 function hasMethod(value: unknown, name: string): boolean {
   return isRecord(value) && typeof value[name] === 'function';
+}
+
+function bindMethod(
+  value: unknown,
+  name: string,
+): ((...args: readonly unknown[]) => MaybePromise<unknown>) | null {
+  if (!isRecord(value)) return null;
+  const method = value[name];
+  if (typeof method !== 'function') return null;
+  return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
 function isRawGraphStore(value: unknown): boolean {
@@ -462,6 +632,23 @@ function domainSupportManifestReadFailedDiagnostic(
     'VERSION_DOMAIN_SUPPORT_MANIFEST_READ_FAILED',
     'The document domain support manifest could not be read before the durable version operation.',
     { capabilityKey },
+    'retry',
+  );
+}
+
+function domainSupportDetectorReadFailedDiagnostic(
+  operation: VersionDomainSupportManifestGateOperation,
+  detector: Pick<WorkbookMutableDomainDetector, 'matrixRowId' | 'domainId' | 'detectorId'>,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    operation,
+    'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
+    'Workbook mutable domain detection failed before the durable version operation.',
+    {
+      detectorId: detector.detectorId,
+      matrixRowId: detector.matrixRowId,
+      domainId: detector.domainId,
+    },
     'retry',
   );
 }

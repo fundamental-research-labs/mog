@@ -14,6 +14,35 @@ import {
   versionDomainSupportManifestRow as domainRow,
 } from './version-domain-support-test-utils';
 
+const DETECTOR_SHEET_ID = 'sheet-detector-1';
+
+function mutableDomainDetectorBridge() {
+  return {
+    getAllNamedRangesWire: jest.fn(async () => [
+      {
+        id: 'name-secret-1',
+        name: 'SecretRevenueRange',
+        refersTo: { template: '=Sheet1!$A$1:$A$10', refs: [] },
+      },
+    ]),
+    getAllSheetIds: jest.fn(async () => [DETECTOR_SHEET_ID]),
+    getHyperlinks: jest.fn(async () => [
+      {
+        cellRef: 'B2',
+        target: 'https://secret.example.invalid/deal-room',
+        tooltip: 'private target',
+      },
+    ]),
+    getRangeSchemasForSheet: jest.fn(async () => [
+      {
+        id: 'validation-secret-1',
+        ranges: [{ startId: '0:0', endId: '0:0' }],
+        schema: { constraints: { list: ['Confidential'] } },
+      },
+    ]),
+  };
+}
+
 describe('WorkbookVersion domain support policy gate closure', () => {
   it('fails closed per required capability when a manifest source is missing', async () => {
     const diagnostics = await validateVersionDomainSupportManifestGate(
@@ -43,6 +72,157 @@ describe('WorkbookVersion domain support policy gate closure', () => {
         }),
       ]),
     );
+  });
+
+  it('auto-detects named ranges, hyperlinks, and data validations as required manifest rows', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest(),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+          },
+        },
+        computeBridge: mutableDomainDetectorBridge(),
+      } as any,
+      'commit',
+    );
+
+    for (const row of [
+      ['named-ranges', 'named-ranges'],
+      ['external-links', 'external-links'],
+      ['data-validation', 'data-validation'],
+    ] as const) {
+      const [matrixRowId, domainId] = row;
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              operation: 'commit',
+              diagnosticCode: 'required-matrix-row-missing',
+              matrixRowId,
+            }),
+          }),
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              operation: 'commit',
+              diagnosticCode: 'detector-row-missing',
+              matrixRowId,
+              domainId,
+            }),
+          }),
+        ]),
+      );
+    }
+    expect(JSON.stringify(diagnostics)).not.toContain('SecretRevenueRange');
+    expect(JSON.stringify(diagnostics)).not.toContain('https://secret.example.invalid');
+    expect(JSON.stringify(diagnostics)).not.toContain('validation-secret-1');
+  });
+
+  it('auto-detected mutable domains enforce their public policy capability states', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest({
+            domains: [
+              ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+              domainRow('named-ranges'),
+              domainRow('external-links'),
+              domainRow('data-validation'),
+            ],
+          }),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+          },
+        },
+        computeBridge: mutableDomainDetectorBridge(),
+      } as any,
+      'commit',
+    );
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'commit',
+            diagnosticCode: 'capability-state-blocked',
+            matrixRowId: 'named-ranges',
+            domainId: 'named-ranges',
+            capabilityKey: 'capture',
+            capabilityState: 'contracted',
+          }),
+        }),
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'commit',
+            diagnosticCode: 'capability-state-blocked',
+            matrixRowId: 'external-links',
+            domainId: 'external-links',
+            capabilityKey: 'capture',
+            capabilityState: 'opaque-preserved',
+          }),
+        }),
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'commit',
+            diagnosticCode: 'capability-state-blocked',
+            matrixRowId: 'data-validation',
+            domainId: 'data-validation',
+            capabilityKey: 'capture',
+            capabilityState: 'contracted',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('fails closed with redacted diagnostics when mutable domain detection cannot read workbook state', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest(),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+          },
+        },
+        computeBridge: {
+          getAllNamedRangesWire: jest.fn(async () => {
+            throw new Error('SecretRevenueRange read failed for https://secret.example.invalid');
+          }),
+        },
+      } as any,
+      'commit',
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        issueCode: 'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
+        recoverability: 'retry',
+        mutationGuarantee: 'no-write-attempted',
+        redacted: true,
+        payload: expect.objectContaining({
+          operation: 'commit',
+          detectorId: 'detector.named-ranges',
+          matrixRowId: 'named-ranges',
+          domainId: 'named-ranges',
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(diagnostics)).not.toContain('SecretRevenueRange');
+    expect(JSON.stringify(diagnostics)).not.toContain('https://secret.example.invalid');
   });
 
   it('does not let caller options downgrade merge or applyMerge required row floors', async () => {

@@ -75,9 +75,7 @@ export type VersionGraphCommitContentInput = Omit<
   CreateWorkbookCommitInput,
   'documentId' | 'parentCommitIds'
 >;
-
 export type InitializeVersionGraphInput = VersionGraphCommitContentInput;
-
 export type CommitVersionGraphInput = VersionGraphCommitContentInput & {
   readonly targetRef?: VersionGraphBranchRefName | string;
   readonly expectedHeadCommitId: WorkbookCommitId | string;
@@ -85,7 +83,6 @@ export type CommitVersionGraphInput = VersionGraphCommitContentInput & {
   readonly expectedTargetRefVersion?: RefVersion;
   readonly parentCommitIds?: readonly (WorkbookCommitId | string)[];
 };
-
 export type MergeVersionGraphInput = VersionGraphCommitContentInput & {
   readonly targetRef?: VersionGraphBranchRefName | string;
   readonly expectedHeadCommitId: WorkbookCommitId | string;
@@ -932,7 +929,9 @@ function sanitizeCommitDiagnostic(
   if (diagnostic.sourceDiagnostics === undefined) return diagnostic;
   return {
     ...diagnostic,
-    sourceDiagnostics: diagnostic.sourceDiagnostics.map(({ path: _path, ...source }) => source),
+    sourceDiagnostics: diagnostic.sourceDiagnostics.map(
+      ({ namespace: _namespace, path: _path, ...source }) => source,
+    ),
   };
 }
 

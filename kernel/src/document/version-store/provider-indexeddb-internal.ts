@@ -850,6 +850,7 @@ function recoverabilityForCode(
     code === 'VERSION_DANGLING_REF' ||
     code === 'VERSION_MISSING_OBJECT' ||
     code === 'VERSION_MISSING_PARENT' ||
+    code === 'VERSION_MISSING_DEPENDENCY' ||
     code === 'VERSION_MISSING_CHANGE_SET' ||
     code === 'VERSION_OBJECT_STORE_FAILURE'
   )

@@ -1,19 +1,6 @@
 import {
-  VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
-  type InMemoryVersionGraphStore,
-  type InMemoryVersionGraphStoreSnapshot,
-  type CommitVersionGraphInput,
-  type FastForwardVersionGraphInput,
-  type MergeVersionGraphInput,
-  type VersionGraphClosureReadResult,
-  type VersionGraphCommitPageResult,
-  type VersionGraphListCommitsOptions,
-  type VersionGraphReadHeadResult,
-  type VersionGraphReadRefResult,
-  type VersionGraphRef,
-  type VersionGraphRefSelector,
   type VersionGraphWriteResult,
 } from './graph-store';
 import {
@@ -28,7 +15,6 @@ import {
   type VersionIntegrityReport,
   type VersionStoreCapabilities,
   type VersionStoreCloseReason,
-  type VersionStoreDiagnostic,
   type VersionStoreFailure,
   type VersionStoreLifecycleState,
   type VersionStoreOperation,
@@ -47,46 +33,18 @@ import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
-  type VersionObjectPutBatchResult,
-  type VersionObjectRecord,
 } from './object-store';
-import type { ReadWorkbookCommitResult } from './commit-store';
+import { openVersionStoreIndexedDb } from './provider-indexeddb-schema';
 import {
-  parseWorkbookCommitId,
-  type VersionDependencyRef,
-  type WorkbookCommitId,
-} from './object-digest';
-import { REGISTRIES_STORE, openVersionStoreIndexedDb } from './provider-indexeddb-schema';
-import { REF_NAME_STORAGE_PREFIX } from './ref-name';
-import {
-  RefCasConflictError,
-  cloneJson,
-  decodeRegistryEnvelope,
-  errorMessage,
-  failedGraphWrite,
   failedStoreResult,
-  graphDiagnostic,
-  idbRequest,
-  idbTransactionDone,
   initializeSuccess,
-  liveMainFromSnapshot,
   mapGraphDiagnostics,
   normalizeVersionAccessContext,
-  persistObjectRecords,
-  persistGraphSnapshot,
   readOnlyCapabilities,
-  registryEnvelope,
   registryRecordResult,
-  rootCommitFromSnapshot,
-  versionGraphRefFromLiveRef,
   versionStoreDiagnostic,
   type RegistryRecordRead,
-  type StoredRegistryEnvelope,
 } from './provider-indexeddb-internal';
-import {
-  createIndexedDbGraphBranchLifecycle,
-  type IndexedDbGraphBranchLifecycle,
-} from './provider-indexeddb-branch-lifecycle';
 import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
 import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
 import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending-remote-segments';
@@ -94,39 +52,22 @@ import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-ap
 import { IndexedDbSyncBatchStatusStore } from './provider-indexeddb-sync-batch-statuses';
 import { IndexedDbWorkbookVersionReviewRecordStore } from './provider-indexeddb-review-records';
 import { IndexedDbAgentProposalMetadataStore } from './provider-indexeddb-proposals';
+import { IndexedDbVersionGraphStore } from './provider-indexeddb-backend-graph-store';
+import {
+  indexedDbBackendLifecycleUnavailableDiagnostic,
+  indexedDbBackendLifecycleUnavailableFailure,
+  indexedDbBackendReadOnlyFailure,
+} from './provider-indexeddb-backend-diagnostics';
+import {
+  persistInitializedIndexedDbBackendGraphSnapshot,
+  publishIndexedDbBackendRegistryVisibleLast,
+  readIndexedDbBackendRegistryRecord,
+} from './provider-indexeddb-backend-registry';
+import { INDEXEDDB_VERSION_STORE_CAPABILITIES } from './provider-indexeddb-backend-capabilities';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 
-export const INDEXEDDB_VERSION_STORE_CAPABILITIES: VersionStoreCapabilities =
-  cloneVersionStoreCapabilities({
-    durableGraphRegistry: true,
-    durableObjects: true,
-    atomicObjectBatch: true,
-    casRefs: true,
-    casGraphRegistry: true,
-    multiProcessCasGraphRegistry: false,
-    multiProcessCasRefs: false,
-    readOnlyHistory: false,
-    integrityScan: false,
-    corruptionQuarantine: false,
-    reads: {
-      graphRegistry: true,
-      objects: true,
-      refs: true,
-      commits: true,
-      snapshots: false,
-      integrityReports: false,
-    },
-    writes: {
-      initializeGraph: true,
-      putObjects: true,
-      updateRefs: true,
-      updateSymbolicRefs: true,
-      commitGraphWrite: true,
-      repairIndexes: false,
-      quarantineCorruptRecords: false,
-    },
-  });
+export { INDEXEDDB_VERSION_STORE_CAPABILITIES };
 
 export type IndexedDbVersionStoreProviderOptions = {
   readonly documentScope: VersionDocumentScope;
@@ -261,7 +202,11 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
     }
 
     const snapshot = await dryRun.exportSnapshot();
-    const persisted = await this.persistInitializedGraphSnapshot(snapshot, this.documentScope);
+    const persisted = await persistInitializedIndexedDbBackendGraphSnapshot({
+      db: await this.getDb(),
+      snapshot,
+      documentScope: this.documentScope,
+    });
     if (persisted.status !== 'success') {
       return persisted;
     }
@@ -272,7 +217,12 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
       rootCommitId: dryRunInitialized.commit.id,
       createdAt: dryRunInitialized.commit.payload.createdAt,
     });
-    const published = await this.publishRegistryVisibleLast(registry);
+    const published = await publishIndexedDbBackendRegistryVisibleLast({
+      db: await this.getDb(),
+      registry,
+      scopeKey: this.scopeKey,
+      documentScope: this.documentScope,
+    });
     if (published.status === 'published') {
       return initializeSuccess(registry, dryRunInitialized.main);
     }
@@ -490,143 +440,39 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
   }
 
   private async readRegistryRecord(): Promise<RegistryRecordRead> {
-    const db = await this.getDb();
-    const value = await idbRequest<StoredRegistryEnvelope | undefined>(
-      db.transaction(REGISTRIES_STORE, 'readonly').objectStore(REGISTRIES_STORE).get(this.scopeKey),
-    );
-    if (value === undefined) return { status: 'absent' };
-    return decodeRegistryEnvelope(value, this.documentScope);
-  }
-
-  private async persistInitializedGraphSnapshot(
-    snapshot: InMemoryVersionGraphStoreSnapshot,
-    documentScope: VersionDocumentScope,
-  ): Promise<Extract<VersionGraphInitializeResult, { status: 'success' }> | VersionStoreFailure> {
-    try {
-      await persistGraphSnapshot({
-        db: await this.getDb(),
-        snapshot,
-        documentScope,
-        mode: { kind: 'initialize' },
-      });
-      const main = liveMainFromSnapshot(snapshot);
-      const rootCommit = rootCommitFromSnapshot(snapshot, main.targetCommitId);
-      return initializeSuccess(
-        await createVersionGraphRegistry({
-          documentScope,
-          graphId: snapshot.namespace.graphId,
-          rootCommitId: rootCommit,
-          createdAt: main.createdAt,
-        }),
-        versionGraphRefFromLiveRef(main),
-      );
-    } catch (error) {
-      return failedStoreResult(
-        [
-          versionStoreDiagnostic('VERSION_PROVIDER_FAILED', {
-            operation: 'initializeGraph',
-            documentScope,
-            namespace: snapshot.namespace,
-            recoverability: 'retry',
-            safeMessage: 'IndexedDB version graph bootstrap failed before registry publication.',
-            details: { cause: errorMessage(error) },
-          }),
-        ],
-        'registry-not-visible',
-        true,
-      );
-    }
-  }
-
-  private async publishRegistryVisibleLast(
-    registry: VersionGraphRegistry,
-  ): Promise<
-    | { readonly status: 'published' }
-    | { readonly status: 'same'; readonly registry: VersionGraphRegistry }
-    | { readonly status: 'failed'; readonly failure: VersionStoreFailure }
-  > {
-    const db = await this.getDb();
-    const tx = db.transaction(REGISTRIES_STORE, 'readwrite');
-    const store = tx.objectStore(REGISTRIES_STORE);
-    const existing = await idbRequest<StoredRegistryEnvelope | undefined>(store.get(this.scopeKey));
-    if (existing === undefined) {
-      store.put(registryEnvelope(registry), this.scopeKey);
-      await idbTransactionDone(tx);
-      return { status: 'published' };
-    }
-    await idbTransactionDone(tx);
-
-    const decoded = await decodeRegistryEnvelope(existing, this.documentScope);
-    if (decoded.status === 'valid') {
-      if (
-        decoded.registry.currentGraphId === registry.currentGraphId &&
-        decoded.registry.rootCommitId === registry.rootCommitId
-      ) {
-        return { status: 'same', registry: decoded.registry };
-      }
-      return {
-        status: 'failed',
-        failure: failedStoreResult(
-          [
-            versionStoreDiagnostic('VERSION_GRAPH_CONFLICT', {
-              operation: 'initializeGraph',
-              documentScope: this.documentScope,
-              commitId: decoded.registry.rootCommitId,
-              recoverability: 'retry',
-              safeMessage: 'A version graph registry already exists for this document.',
-            }),
-          ],
-          'registry-not-visible',
-          true,
-        ),
-      };
-    }
-
-    return {
-      status: 'failed',
-      failure: failedStoreResult(
-        registryRecordResult(decoded.status, 'initializeGraph', this.documentScope).diagnostics,
-        'registry-not-visible',
-      ),
-    };
+    return readIndexedDbBackendRegistryRecord({
+      db: await this.getDb(),
+      scopeKey: this.scopeKey,
+      documentScope: this.documentScope,
+    });
   }
 
   private assertAvailable(operation: VersionStoreOperation): void {
     if (this.lifecycleState === 'open') return;
-    throw new VersionStoreProviderError(this.lifecycleUnavailableDiagnostic(operation));
+    throw new VersionStoreProviderError(
+      indexedDbBackendLifecycleUnavailableDiagnostic({
+        operation,
+        documentScope: this.documentScope,
+        lifecycleState: this.lifecycleState,
+      }),
+    );
   }
 
   private writeUnavailableFailure(operation: VersionStoreOperation): VersionStoreFailure | null {
     if (this.lifecycleState !== 'open') {
-      return failedStoreResult(
-        [this.lifecycleUnavailableDiagnostic(operation)],
-        'no-write-attempted',
-        true,
-      );
+      return indexedDbBackendLifecycleUnavailableFailure({
+        operation,
+        documentScope: this.documentScope,
+        lifecycleState: this.lifecycleState,
+      });
     }
     if (!this.capabilities.writes.initializeGraph) {
-      return failedStoreResult(
-        [
-          versionStoreDiagnostic('VERSION_STORE_READ_ONLY', {
-            operation,
-            documentScope: this.documentScope,
-            safeMessage: 'Version store provider is opened read-only.',
-          }),
-        ],
-        'no-write-attempted',
-      );
+      return indexedDbBackendReadOnlyFailure({
+        operation,
+        documentScope: this.documentScope,
+      });
     }
     return null;
-  }
-
-  private lifecycleUnavailableDiagnostic(operation: VersionStoreOperation): VersionStoreDiagnostic {
-    return versionStoreDiagnostic('VERSION_STORE_UNAVAILABLE', {
-      operation,
-      documentScope: this.documentScope,
-      recoverability: 'retry',
-      lifecycleState: this.lifecycleState,
-      safeMessage: 'Version store provider is closed or disposing.',
-    });
   }
 
   private async getDb(): Promise<IDBDatabase> {
@@ -644,338 +490,4 @@ export function createIndexedDbVersionStoreProvider(
   options: IndexedDbVersionStoreProviderOptions,
 ): IndexedDbVersionStoreProvider {
   return new IndexedDbVersionStoreProvider(options);
-}
-
-class IndexedDbVersionGraphStore implements VersionGraphStore {
-  readonly namespace: VersionGraphNamespace;
-
-  private readonly documentScope: VersionDocumentScope;
-  private readonly accessContext: VersionAccessContext;
-  private readonly getDb: () => Promise<IDBDatabase>;
-  private readonly branchLifecycle: IndexedDbGraphBranchLifecycle;
-
-  constructor(options: {
-    readonly namespace: VersionGraphNamespace;
-    readonly documentScope: VersionDocumentScope;
-    readonly accessContext: VersionAccessContext;
-    readonly getDb: () => Promise<IDBDatabase>;
-  }) {
-    this.namespace = normalizeVersionGraphNamespace(options.namespace);
-    this.documentScope = normalizeVersionDocumentScope(options.documentScope);
-    this.accessContext = normalizeVersionAccessContext(options.accessContext);
-    this.getDb = options.getDb;
-    this.branchLifecycle = createIndexedDbGraphBranchLifecycle({
-      namespace: this.namespace,
-      documentScope: this.documentScope,
-      getDb: this.getDb,
-    });
-  }
-
-  async initializeGraph(
-    input: VersionGraphInitializeInput['rootWrite'],
-  ): Promise<VersionGraphWriteResult> {
-    const graph = createInMemoryVersionGraphStore({ namespace: this.namespace });
-    const initialized = await graph.initializeGraph(input);
-    if (initialized.status !== 'success') return initialized;
-
-    try {
-      await persistGraphSnapshot({
-        db: await this.getDb(),
-        snapshot: await graph.exportSnapshot(),
-        documentScope: this.documentScope,
-        mode: { kind: 'initialize' },
-      });
-      return initialized;
-    } catch (error) {
-      return failedGraphWrite(
-        [
-          graphDiagnostic(
-            'VERSION_OBJECT_STORE_FAILURE',
-            'IndexedDB graph initialization failed.',
-            {
-              operation: 'initializeGraph',
-              namespace: this.namespace,
-              details: { cause: errorMessage(error) },
-            },
-          ),
-        ],
-        'no-write-attempted',
-      );
-    }
-  }
-
-  async commit(input: CommitVersionGraphInput): Promise<VersionGraphWriteResult> {
-    return this.commitWithLoadedGraph('commit', input, (graph) => graph.commit(input));
-  }
-
-  async mergeCommit(input: MergeVersionGraphInput): Promise<VersionGraphWriteResult> {
-    return this.commitWithLoadedGraph('mergeCommit', input, (graph) => graph.mergeCommit(input));
-  }
-
-  async fastForwardRef(input: FastForwardVersionGraphInput): Promise<VersionGraphWriteResult> {
-    return this.commitWithLoadedGraph('fastForwardRef', input, (graph) =>
-      graph.fastForwardRef(input),
-    );
-  }
-
-  async putObjects(
-    batch: readonly VersionObjectRecord<unknown>[],
-  ): Promise<VersionObjectPutBatchResult> {
-    let graph: InMemoryVersionGraphStore;
-    try {
-      graph = await this.loadGraph('putObjects');
-    } catch (error) {
-      return failedObjectBatch('IndexedDB graph could not be loaded while writing objects.', {
-        cause: errorMessage(error),
-      });
-    }
-
-    const putResult = await graph.putObjects(batch);
-    if (putResult.status !== 'success') return putResult;
-
-    try {
-      await persistObjectRecords({
-        db: await this.getDb(),
-        namespace: this.namespace,
-        documentScope: this.documentScope,
-        records: putResult.records,
-      });
-      return putResult;
-    } catch (error) {
-      return failedObjectBatch('IndexedDB graph object batch could not be persisted.', {
-        cause: errorMessage(error),
-      });
-    }
-  }
-
-  private async commitWithLoadedGraph(
-    operation: 'commit' | 'mergeCommit' | 'fastForwardRef',
-    input: CommitVersionGraphInput | MergeVersionGraphInput | FastForwardVersionGraphInput,
-    write: (graph: InMemoryVersionGraphStore) => Promise<VersionGraphWriteResult>,
-  ): Promise<VersionGraphWriteResult> {
-    let graph: InMemoryVersionGraphStore;
-    try {
-      graph = await this.loadGraph(operation);
-    } catch (error) {
-      return failedGraphWrite(
-        [graphLoadDiagnostic(error, this.namespace, operation)],
-        'no-write-attempted',
-      );
-    }
-
-    const result = await write(graph);
-    if (result.status !== 'success') return result;
-    const expectedRefVersion = input.expectedTargetRefVersion ?? input.expectedMainRefVersion;
-    if (expectedRefVersion === undefined) {
-      return failedGraphWrite(
-        [
-          graphDiagnostic(
-            'VERSION_INVALID_OPTIONS',
-            'IndexedDB graph commit is missing target ref CAS metadata.',
-            {
-              refName: result.ref.name,
-              operation,
-              namespace: this.namespace,
-              details: { missingField: 'expectedTargetRefVersion' },
-            },
-          ),
-        ],
-        'no-write-attempted',
-      );
-    }
-
-    try {
-      await persistGraphSnapshot({
-        db: await this.getDb(),
-        snapshot: await graph.exportSnapshot(),
-        documentScope: this.documentScope,
-        mode: {
-          kind: 'commit',
-          targetRefName: storageRefNameFromGraphRefName(result.ref.name),
-          expectedHeadCommitId: parseWorkbookCommitId(input.expectedHeadCommitId),
-          expectedRefVersion,
-          ...(operation === 'fastForwardRef'
-            ? { refCasProof: { applyKind: 'fastForward' as const } }
-            : operation === 'mergeCommit'
-              ? { refCasProof: { applyKind: 'mergeCommit' as const } }
-              : {}),
-        },
-      });
-      return result;
-    } catch (error) {
-      if (error instanceof RefCasConflictError) {
-        return failedGraphWrite(
-          [
-            graphDiagnostic('VERSION_REF_CONFLICT', 'Graph ref no longer matches expected head.', {
-              refName: result.ref.name,
-              operation,
-              namespace: this.namespace,
-              ...(error.actualHead ? { commitId: error.actualHead } : {}),
-              details: {
-                expectedHead: error.expectedHead ?? null,
-                actualHead: error.actualHead ?? null,
-                expectedRefVersion: error.expectedRefVersion.value,
-                actualRefVersion: error.actualRefVersion?.value ?? null,
-                actualRefState: error.actualRefState,
-              },
-            }),
-          ],
-          'no-write-attempted',
-        );
-      }
-      return failedGraphWrite(
-        [
-          graphDiagnostic('VERSION_OBJECT_STORE_FAILURE', 'IndexedDB graph commit failed.', {
-            operation,
-            namespace: this.namespace,
-            details: { cause: errorMessage(error) },
-          }),
-        ],
-        'ref-not-mutated',
-      );
-    }
-  }
-
-  async readCommit(commitId: WorkbookCommitId | string): Promise<ReadWorkbookCommitResult> {
-    let parsedCommitId: WorkbookCommitId;
-    try {
-      parsedCommitId = parseWorkbookCommitId(commitId);
-    } catch {
-      return {
-        status: 'failed',
-        diagnostics: [
-          {
-            code: 'VERSION_INVALID_COMMIT_ID',
-            severity: 'error',
-            message: 'Commit id must be commit:sha256:<64 hex>.',
-          },
-        ],
-      };
-    }
-
-    try {
-      return await (await this.loadGraph('readCommit')).readCommit(parsedCommitId);
-    } catch (error) {
-      return {
-        status: 'failed',
-        diagnostics: [
-          {
-            code: 'VERSION_OBJECT_STORE_FAILURE',
-            severity: 'error',
-            message: 'IndexedDB graph could not be loaded while reading commit.',
-            commitId: parsedCommitId,
-            details: { cause: errorMessage(error) },
-          },
-        ],
-      };
-    }
-  }
-
-  async getObjectRecord<TPayload>(
-    ref: VersionDependencyRef,
-  ): Promise<VersionObjectRecord<TPayload>> {
-    return (await this.loadGraph('getObjectRecord')).getObjectRecord<TPayload>(ref);
-  }
-
-  async hasObject(ref: VersionDependencyRef): Promise<boolean> {
-    return (await this.loadGraph('hasObject')).hasObject(ref);
-  }
-
-  async readHead(): Promise<VersionGraphReadHeadResult> {
-    try {
-      return await (await this.loadGraph('readHead')).readHead();
-    } catch (error) {
-      return {
-        status: 'degraded',
-        head: null,
-        diagnostics: [graphLoadDiagnostic(error, this.namespace, 'readHead')],
-      };
-    }
-  }
-
-  async readRef(name: VersionGraphRefSelector | string): Promise<VersionGraphReadRefResult> {
-    try {
-      return await (await this.loadGraph('readRef')).readRef(name);
-    } catch (error) {
-      return {
-        status: 'degraded',
-        ref: null,
-        diagnostics: [graphLoadDiagnostic(error, this.namespace, 'readRef')],
-      };
-    }
-  }
-
-  async createBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['createBranch']>) {
-    return this.branchLifecycle.createBranch(...args);
-  }
-  async readBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['readBranch']>) {
-    return this.branchLifecycle.readBranch(...args);
-  }
-  async listBranches(...args: Parameters<IndexedDbGraphBranchLifecycle['listBranches']>) {
-    return this.branchLifecycle.listBranches(...args);
-  }
-  async fastForwardBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['fastForwardBranch']>) {
-    return this.branchLifecycle.fastForwardBranch(...args);
-  }
-  async deleteBranch(...args: Parameters<IndexedDbGraphBranchLifecycle['deleteBranch']>) {
-    return this.branchLifecycle.deleteBranch(...args);
-  }
-  async getHead() {
-    return this.branchLifecycle.getHead();
-  }
-
-  async listCommits(
-    options?: VersionGraphListCommitsOptions,
-  ): Promise<VersionGraphCommitPageResult> {
-    try {
-      return await (await this.loadGraph('listCommits')).listCommits(options);
-    } catch (error) {
-      return {
-        status: 'failed',
-        diagnostics: [graphLoadDiagnostic(error, this.namespace, 'listCommits')],
-      };
-    }
-  }
-
-  async readCommitClosure(
-    commitId: WorkbookCommitId | string,
-  ): Promise<VersionGraphClosureReadResult> {
-    try {
-      return await (await this.loadGraph('readCommitClosure')).readCommitClosure(commitId);
-    } catch (error) {
-      return {
-        status: 'failed',
-        diagnostics: [graphLoadDiagnostic(error, this.namespace, 'readCommitClosure')],
-      };
-    }
-  }
-
-  private async loadGraph(operation: string): Promise<InMemoryVersionGraphStore> {
-    void operation;
-    return loadGraphSnapshot(await this.getDb(), this.namespace, this.documentScope);
-  }
-}
-
-function storageRefNameFromGraphRefName(name: string): string {
-  return name.startsWith(REF_NAME_STORAGE_PREFIX)
-    ? name.slice(REF_NAME_STORAGE_PREFIX.length)
-    : name;
-}
-
-function failedObjectBatch(
-  message: string,
-  details: Readonly<Record<string, string | number | boolean | null>>,
-): VersionObjectPutBatchResult {
-  return {
-    status: 'failed',
-    diagnostics: [
-      {
-        code: 'VERSION_STORE_UNAVAILABLE',
-        severity: 'error',
-        message,
-        details,
-      },
-    ],
-    mutationGuarantee: 'no-objects-written',
-  };
 }

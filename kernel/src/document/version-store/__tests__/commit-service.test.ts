@@ -6,6 +6,7 @@ import {
   createWorkbookVersionCommitService,
   type VersionMergeCommitCapture,
   type VersionNormalCommitCapture,
+  type VersionNormalCommitCaptureFinalizeResult,
   type WorkbookVersionCommitServiceCommitResult,
 } from '../commit-service';
 import { createProviderBackedBranchLifecycleService } from '../branch-provider-service';
@@ -22,6 +23,8 @@ import {
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionStoreDiagnostic,
+  type VersionStoreProvider,
 } from '../provider';
 
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
@@ -116,6 +119,98 @@ describe('WorkbookVersionCommitService', () => {
         revision: initialized.initialHead.revision,
       },
     });
+  });
+
+  it('finalizes failed normal captures when graph commit creation fails without moving refs', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const forbiddenPayload = 'raw-capture-secret-graph-write';
+    const finalize = jest.fn((_: VersionNormalCommitCaptureFinalizeResult) => undefined);
+    const captureNormalCommit = jest.fn(
+      createNormalCommitCaptureWithInvalidSemanticRecord(
+        'graph-write-fails',
+        finalize,
+        forbiddenPayload,
+      ),
+    );
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureNormalCommit,
+    });
+
+    const failed = await service.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+      },
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'ref-not-mutated',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_MISSING_DEPENDENCY',
+          operation: 'commitGraphWrite',
+          redacted: true,
+        }),
+      ],
+    });
+    if (failed.status !== 'failed') {
+      throw new Error('expected commit creation failure');
+    }
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expectFailedFinalize(finalize, failed.diagnostics);
+    expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+    await expectMainRefUnchanged(provider, initialized);
+  });
+
+  it('finalizes failed normal captures when snapshot materialization fails without moving refs', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const forbiddenPayload = 'raw-snapshot-secret-materialization';
+    const finalize = jest.fn((_: VersionNormalCommitCaptureFinalizeResult) => undefined);
+    const captureNormalCommit = jest.fn(
+      createNormalCommitCaptureWithoutSnapshotRoot('materialization-fails', finalize),
+    );
+    const service = createWorkbookVersionCommitService({
+      provider,
+      captureNormalCommit,
+      snapshotRootByteSyncPort: {
+        encodeDiff: async () => {
+          throw new Error(forbiddenPayload);
+        },
+      },
+    });
+
+    const failed = await service.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+      },
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      retryable: true,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_PROVIDER_FAILED',
+          operation: 'commitGraphWrite',
+          redacted: true,
+        }),
+      ],
+    });
+    if (failed.status !== 'failed') {
+      throw new Error('expected snapshot materialization failure');
+    }
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expectFailedFinalize(finalize, failed.diagnostics);
+    expectPublicSafeDiagnostics(failed.diagnostics, forbiddenPayload);
+    await expectMainRefUnchanged(provider, initialized);
   });
 
   it('creates two-parent merge commits through the production commit service', async () => {
@@ -462,6 +557,62 @@ function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
   });
 }
 
+function createNormalCommitCaptureWithInvalidSemanticRecord(
+  label: string,
+  finalize: (result: VersionNormalCommitCaptureFinalizeResult) => void,
+  forbiddenPayload: string,
+): VersionNormalCommitCapture {
+  return async ({ namespace, currentRef }) => ({
+    status: 'success',
+    input: {
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        parent: currentRef.commitId,
+        sheets: [],
+      }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+        label,
+        forbiddenPayload,
+      }),
+      mutationSegmentRecords: [
+        await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+          segmentId: `${label}-segment-1`,
+          baseCommitId: currentRef.commitId,
+        }),
+      ],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+    finalize,
+  });
+}
+
+function createNormalCommitCaptureWithoutSnapshotRoot(
+  label: string,
+  finalize: (result: VersionNormalCommitCaptureFinalizeResult) => void,
+): VersionNormalCommitCapture {
+  return async ({ namespace, currentRef }) => ({
+    status: 'success',
+    input: {
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+        label,
+        changes: [{ id: `${label}-change-1`, domain: 'test' }],
+      }),
+      mutationSegmentRecords: [
+        await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+          segmentId: `${label}-segment-1`,
+          baseCommitId: currentRef.commitId,
+        }),
+      ],
+      author: VERSION_AUTHOR,
+      createdAt: CREATED_AT,
+      completenessDiagnostics: [],
+    },
+    finalize,
+  });
+}
+
 function createMergeCommitCapture(label: string): VersionMergeCommitCapture {
   return async ({ namespace, currentRef, base, ours, theirs, changes, resolutionCount }) => ({
     status: 'success',
@@ -534,5 +685,45 @@ function expectInitializeSuccess(
   expect(result.status).toBe('success');
   if (result.status !== 'success') {
     throw new Error(`expected version graph initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+async function expectMainRefUnchanged(
+  provider: VersionStoreProvider,
+  initialized: Extract<VersionGraphInitializeResult, { status: 'success' }>,
+): Promise<void> {
+  const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+  await expect(graph.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
+    status: 'success',
+    ref: {
+      name: VERSION_GRAPH_MAIN_REF,
+      commitId: initialized.rootCommit.id,
+      revision: initialized.initialHead.revision,
+    },
+  });
+}
+
+function expectFailedFinalize(
+  finalize: { mock: { calls: readonly (readonly unknown[])[] } },
+  diagnostics: readonly VersionStoreDiagnostic[],
+): void {
+  expect(finalize.mock.calls).toHaveLength(1);
+  expect(finalize.mock.calls[0]?.[0]).toEqual({
+    status: 'failed',
+    diagnostics,
+  } satisfies VersionNormalCommitCaptureFinalizeResult);
+}
+
+function expectPublicSafeDiagnostics(
+  diagnostics: readonly VersionStoreDiagnostic[],
+  forbiddenPayload: string,
+): void {
+  expect(JSON.stringify(diagnostics)).not.toContain(forbiddenPayload);
+  expect(JSON.stringify(diagnostics)).not.toContain('Error:');
+  for (const diagnostic of diagnostics) {
+    expect(diagnostic).toMatchObject({
+      redacted: true,
+      message: diagnostic.safeMessage,
+    });
   }
 }

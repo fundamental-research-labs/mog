@@ -3,12 +3,9 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 import type { WorkbookCommit } from './commit-store';
-import type {
-  CommitVersionGraphInput,
-  VersionGraphCommitRef,
-} from './graph-store';
+import type { CommitVersionGraphInput, VersionGraphBranchRefName } from './graph-store';
 import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
-import type { WorkbookCommitId } from './object-digest';
+import { isObjectDigest, type ObjectDigest, type WorkbookCommitId } from './object-digest';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
 import {
   mapGraphDiagnostics,
@@ -54,6 +51,7 @@ export type XlsxVersionImportRootProvenance = {
 };
 
 export const XLSX_IMPORT_ROOT_GRAPH_ID = 'xlsx-import-root';
+const XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX = 'import/external-change';
 
 const XLSX_IMPORT_ROOT_AUTHOR: VersionAuthor = {
   authorId: 'mog.xlsx-import',
@@ -76,6 +74,8 @@ type XlsxVersionMetadataHeadCandidate = {
     readonly refRevision?:
       | VersionRecordRevision
       | { readonly kind: 'opaque'; readonly value: string };
+    readonly semanticChangeSetDigest?: unknown;
+    readonly snapshotRootDigest?: unknown;
   };
 };
 
@@ -150,37 +150,21 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   const candidate = input.provenance.versionMetadataHeadCandidate;
   if (!candidate) return { status: 'skipped', diagnostics: [] };
 
-  const head = await input.graph.readHead();
-  if (head.status !== 'success') {
+  const visibleHead = await input.graph.readHead();
+  if (visibleHead.status !== 'success') {
     return {
       status: 'failed',
-      diagnostics: mapGraphDiagnostics(head.diagnostics, 'commitGraphWrite'),
-    };
-  }
-  if (!metadataHeadCandidateMatchesCurrentHead(candidate, input.namespace.documentId, head.head)) {
-    return { status: 'skipped', diagnostics: [] };
-  }
-
-  const parentCommit = await input.graph.readCommit(head.head.id);
-  if (parentCommit.status !== 'success') {
-    return {
-      status: 'failed',
-      diagnostics: [
-        versionStoreDiagnostic('VERSION_MISSING_PARENT', {
-          operation: 'commitGraphWrite',
-          namespace: input.namespace,
-          safeMessage: 'Trusted XLSX reimport base commit could not be read.',
-          recoverability: 'repair',
-          mutationGuarantee: 'no-write-attempted',
-          details: { source: 'xlsx-import-change' },
-        }),
-      ],
+      diagnostics: mapGraphDiagnostics(visibleHead.diagnostics, 'commitGraphWrite'),
     };
   }
 
+  const trustedBase = await readTrustedBaseCommit(input, candidate);
+  if (trustedBase.status !== 'success') return trustedBase;
+
+  const parentCommit = trustedBase.commit;
   const previousSemanticState = await readCommitSemanticState(
     input.graph,
-    parentCommit.commit,
+    parentCommit,
     input.namespace,
   );
   if (!previousSemanticState.ok) {
@@ -199,6 +183,14 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
     previousSemanticState.semanticState.state,
     currentSemanticState.state,
   );
+  const targetBranch = await createOrReadExternalChangeBranch({
+    graph: input.graph,
+    namespace: input.namespace,
+    baseCommitId: parentCommit.id,
+    branchName: externalChangeBranchName(parentCommit.id, semanticDiff.afterDigest),
+  });
+  if (targetBranch.status !== 'success') return targetBranch;
+
   const snapshotRootRecord = await captureWorkbookSnapshotRootRecord(
     input.namespace,
     input.snapshotRootByteSyncPort,
@@ -231,8 +223,9 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
     author: XLSX_IMPORT_CHANGE_AUTHOR,
     createdAt: input.createdAt,
     completenessDiagnostics: [],
-    expectedHeadCommitId: head.head.id,
-    expectedMainRefVersion: head.main.revision,
+    targetRef: targetBranch.branch.refName,
+    expectedHeadCommitId: parentCommit.id,
+    expectedTargetRefVersion: targetBranch.branch.ref.refVersion,
   } satisfies CommitVersionGraphInput);
   if (committed.status !== 'success') {
     return {
@@ -248,18 +241,132 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   };
 }
 
-function metadataHeadCandidateMatchesCurrentHead(
+async function readTrustedBaseCommit(
+  input: XlsxVersionExistingGraphImportInput,
   candidate: XlsxVersionMetadataHeadCandidate,
-  documentId: string,
-  head: VersionGraphCommitRef,
+): Promise<
+  | {
+      readonly status: 'success';
+      readonly commit: WorkbookCommit;
+      readonly diagnostics: readonly [];
+    }
+  | { readonly status: 'skipped'; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+  | { readonly status: 'failed'; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  if (
+    candidate.documentId !== input.namespace.documentId ||
+    !metadataHeadCandidateNamesSupportedRef(candidate)
+  ) {
+    return { status: 'skipped', diagnostics: [] };
+  }
+
+  const read = await input.graph.readCommit(candidate.head.commitId);
+  if (read.status !== 'success') {
+    return {
+      status: 'failed',
+      diagnostics: [
+        versionStoreDiagnostic('VERSION_MISSING_PARENT', {
+          operation: 'commitGraphWrite',
+          namespace: input.namespace,
+          safeMessage: 'Trusted XLSX reimport base commit could not be read.',
+          recoverability: 'repair',
+          mutationGuarantee: 'no-write-attempted',
+          details: { source: 'xlsx-import-change' },
+        }),
+      ],
+    };
+  }
+
+  if (!metadataHeadCandidateMatchesTrustedBase(candidate, read.commit)) {
+    return { status: 'skipped', diagnostics: [] };
+  }
+
+  return { status: 'success', commit: read.commit, diagnostics: [] };
+}
+
+function metadataHeadCandidateNamesSupportedRef(
+  candidate: XlsxVersionMetadataHeadCandidate,
 ): boolean {
   return (
-    candidate.documentId === documentId &&
-    candidate.head.commitId === head.id &&
     optionalStringMatches(candidate.head.refName, VERSION_GRAPH_MAIN_REF) &&
-    optionalStringMatches(candidate.head.resolvedFrom, VERSION_GRAPH_HEAD_REF) &&
-    versionRecordRevisionMatches(candidate.head.refRevision, head.refRevision)
+    optionalStringMatches(candidate.head.resolvedFrom, VERSION_GRAPH_HEAD_REF)
   );
+}
+
+function metadataHeadCandidateMatchesTrustedBase(
+  candidate: XlsxVersionMetadataHeadCandidate,
+  baseCommit: WorkbookCommit,
+): boolean {
+  return (
+    candidate.head.commitId === baseCommit.id &&
+    isObjectDigest(candidate.head.semanticChangeSetDigest) &&
+    isObjectDigest(candidate.head.snapshotRootDigest) &&
+    objectDigestMatches(
+      candidate.head.semanticChangeSetDigest,
+      baseCommit.payload.semanticChangeSetDigest,
+    ) &&
+    objectDigestMatches(candidate.head.snapshotRootDigest, baseCommit.payload.snapshotRootDigest)
+  );
+}
+
+async function createOrReadExternalChangeBranch(input: {
+  readonly graph: VersionGraphStore;
+  readonly namespace: VersionGraphNamespace;
+  readonly baseCommitId: WorkbookCommitId;
+  readonly branchName: string;
+}): Promise<
+  | {
+      readonly status: 'success';
+      readonly branch: {
+        readonly refName: VersionGraphBranchRefName;
+        readonly ref: { readonly refVersion: VersionRecordRevision };
+      };
+      readonly diagnostics: readonly [];
+    }
+  | Extract<XlsxVersionExistingGraphImportResult, { readonly status: 'failed' }>
+> {
+  const created = await input.graph.createBranch({
+    name: input.branchName,
+    targetCommitId: input.baseCommitId,
+    expectedAbsent: true,
+    baseCommitId: input.baseCommitId,
+    createdBy: XLSX_IMPORT_CHANGE_AUTHOR,
+  });
+  if (created.ok) {
+    return { status: 'success', branch: created.branch, diagnostics: [] };
+  }
+
+  const existing = await input.graph.readBranch(input.branchName);
+  if (
+    existing.ok &&
+    existing.branch !== null &&
+    existing.branch.ref.targetCommitId === input.baseCommitId
+  ) {
+    return { status: 'success', branch: existing.branch, diagnostics: [] };
+  }
+
+  return {
+    status: 'failed',
+    diagnostics: [
+      versionStoreDiagnostic('VERSION_REF_CONFLICT', {
+        operation: 'commitGraphWrite',
+        namespace: input.namespace,
+        safeMessage: 'Trusted XLSX reimport external-change branch could not be created.',
+        recoverability: 'retry',
+        mutationGuarantee: 'no-write-attempted',
+        details: {
+          source: 'xlsx-import-change',
+          branchNamespace: XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX,
+        },
+      }),
+    ],
+  };
+}
+
+function externalChangeBranchName(baseCommitId: WorkbookCommitId, afterDigest: unknown): string {
+  const baseSegment = baseCommitId.slice('commit:sha256:'.length, 'commit:sha256:'.length + 16);
+  const afterSegment = digestBranchSegment(afterDigest);
+  return `${XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX}/${baseSegment}/${afterSegment}`;
 }
 
 function trustedVersionMetadataTrust(
@@ -334,16 +441,31 @@ function semanticDigestKey(digest: unknown): string {
   return JSON.stringify(digest);
 }
 
-function optionalStringMatches(left: string | undefined, right: string | undefined): boolean {
-  return left === right;
+function objectDigestMatches(left: ObjectDigest, right: ObjectDigest): boolean {
+  return left.algorithm === right.algorithm && left.digest === right.digest;
 }
 
-function versionRecordRevisionMatches(
-  left: XlsxVersionMetadataHeadCandidate['head']['refRevision'],
-  right: VersionGraphCommitRef['refRevision'] | undefined,
-): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  return left.kind === right.kind && left.value === right.value;
+function digestBranchSegment(value: unknown): string {
+  if (isObjectDigest(value)) return value.digest.slice(0, 16);
+  if (isRecord(value) && typeof value.value === 'string') {
+    return safeBranchSegment(value.value);
+  }
+  if (isRecord(value) && typeof value.digest === 'string') {
+    return safeBranchSegment(value.digest);
+  }
+  return 'unknown-digest';
+}
+
+function safeBranchSegment(value: string): string {
+  const segment = value
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .slice(0, 16);
+  return segment.length > 0 ? segment : 'unknown-digest';
+}
+
+function optionalStringMatches(left: string | undefined, right: string | undefined): boolean {
+  return left === right;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

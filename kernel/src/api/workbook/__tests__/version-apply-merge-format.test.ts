@@ -201,7 +201,7 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
     }
   });
 
-  it('materializes direct first-slice formula and row/column changes from a clean plan', async () => {
+  it('materializes direct first-slice formulas and all row/column order transitions from a clean plan', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = expectInitializeSuccess(
       await provider.initializeGraph(await initializeInput('graph-expanded-domain-clean', 'root')),
@@ -242,7 +242,10 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       const sheetId = String(sourceWb.activeSheet.sheetId);
       await sourceWb.activeSheet.setCell('A1', 1);
       await sourceWb.activeSheet.setCell('A2', 'shifted');
+      await sourceWb.activeSheet.setCell('A4', 'deleted-row');
+      await sourceWb.activeSheet.setCell('A6', 'insert-shifted-row');
       await sourceWb.activeSheet.setCell('C1', 'deleted-column');
+      await sourceWb.activeSheet.setCell('F1', 'insert-shifted-column');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
           expectedHead: {
@@ -291,6 +294,8 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       previewResult = cleanMergeResult(baseCommit.id, oursCommit.id, theirsCommit.id, [
         formulaChange('merge-formula-a2', sheetId, 'A2', '=A1+1'),
         rowColumnChange('merge-row-insert', sheetId, 'row', 1, 'insert'),
+        rowColumnChange('merge-row-delete', sheetId, 'row', 3, 'delete'),
+        rowColumnChange('merge-column-insert', sheetId, 'column', 4, 'insert'),
         rowColumnChange('merge-column-delete', sheetId, 'column', 2, 'delete'),
       ]);
 
@@ -331,8 +336,17 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       await expect(mergedWb.activeSheet.getCell('A3')).resolves.toMatchObject({
         value: 'shifted',
       });
+      await expect(mergedWb.activeSheet.getCell('A4')).resolves.toMatchObject({ value: null });
+      await expect(mergedWb.activeSheet.getCell('A5')).resolves.toMatchObject({ value: null });
+      await expect(mergedWb.activeSheet.getCell('A6')).resolves.toMatchObject({
+        value: 'insert-shifted-row',
+      });
       await expect(mergedWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
       await expect(mergedWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: null });
+      await expect(mergedWb.activeSheet.getCell('E1')).resolves.toMatchObject({ value: null });
+      await expect(mergedWb.activeSheet.getCell('F1')).resolves.toMatchObject({
+        value: 'insert-shifted-column',
+      });
     } finally {
       if (mergedWb) await mergedWb.close('skipSave');
       if (branchWb) await branchWb.close('skipSave');

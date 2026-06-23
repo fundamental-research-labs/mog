@@ -8,7 +8,10 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { WorkbookVersionImpl } from '../version';
-import { isMaterializableMergeDomainReference } from '../version-merge-materializer-support';
+import {
+  inspectMaterializableMergeChange,
+  isMaterializableMergeDomainReference,
+} from '../version-merge-materializer-support';
 import {
   freshVersionDomainSupportManifest,
   versionDomainSupportManifestRow,
@@ -161,6 +164,27 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
     },
   );
 
+  it.each([
+    {
+      label: 'row insert',
+      change: rowColumnChange('merge-row-insert', 'row', 1, 'insert'),
+    },
+    {
+      label: 'row delete',
+      change: rowColumnChange('merge-row-delete', 'row', 3, 'delete'),
+    },
+    {
+      label: 'column insert',
+      change: rowColumnChange('merge-column-insert', 'column', 4, 'insert'),
+    },
+    {
+      label: 'column delete',
+      change: rowColumnChange('merge-column-delete', 'column', 2, 'delete'),
+    },
+  ])('accepts first-slice rows-columns $label merge changes', ({ change }) => {
+    expect(inspectMaterializableMergeChange(change)).toEqual({ ok: true });
+  });
+
   it('does not treat materializable matrix rows as support for structural domain aliases', () => {
     expect(
       isMaterializableMergeDomainReference({
@@ -204,6 +228,12 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
         domainId: 'cells.formats',
       }),
     ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'pivots',
+        domainId: 'pivots',
+      }),
+    ).toBe(false);
   });
 });
 
@@ -224,7 +254,7 @@ function rowColumnChange(
   changeId: string,
   axis: 'row' | 'column',
   index: number,
-  removed: boolean,
+  action: 'insert' | 'delete',
 ): VersionMergeChange {
   const displayRef = axis === 'row' ? `${index + 1}:${index + 1}` : 'C:C';
   const value = semanticObject([
@@ -233,11 +263,13 @@ function rowColumnChange(
     { key: 'index', value: index },
     { key: 'displayRef', value: displayRef },
   ]);
+  const present = { kind: 'value' as const, value };
+  const absent = { kind: 'value' as const, value: null };
   return {
     structural: metadata(changeId, `sheet-1!${axis}:${index}`, 'rows-columns', ['order']),
-    base: { kind: 'value', value: removed ? value : null },
-    theirs: { kind: 'value', value: removed ? null : value },
-    merged: { kind: 'value', value: removed ? null : value },
+    base: action === 'insert' ? absent : present,
+    theirs: action === 'insert' ? present : absent,
+    merged: action === 'insert' ? present : absent,
   };
 }
 

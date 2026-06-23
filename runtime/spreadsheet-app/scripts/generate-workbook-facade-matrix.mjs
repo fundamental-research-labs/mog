@@ -2,11 +2,16 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { format as formatWithPrettier, resolveConfig as resolvePrettierConfig } from 'prettier';
+import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(__dirname, '..');
 const repoRoot = resolve(packageRoot, '../..');
 const specPath = resolve(repoRoot, 'runtime/sdk/src/generated/api-spec.json');
+const publicWorkbookVersionContractPath = resolve(
+  repoRoot,
+  'types/api/src/api/workbook/version-workbook.ts',
+);
 const outPath = resolve(packageRoot, 'src/workbook-facade-capability-matrix.ts');
 
 const spec = JSON.parse(readFileSync(specPath, 'utf8'));
@@ -156,6 +161,47 @@ function versionMethodEntry(methodName) {
   return requirements;
 }
 
+function propertyNameText(name) {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+  return null;
+}
+
+function publicWorkbookVersionMethodNames() {
+  const sourceText = readFileSync(publicWorkbookVersionContractPath, 'utf8');
+  const sourceFile = ts.createSourceFile(
+    publicWorkbookVersionContractPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const methodNames = new Set();
+
+  function visit(node) {
+    if (ts.isInterfaceDeclaration(node) && node.name.text === 'WorkbookVersion') {
+      for (const member of node.members) {
+        if (!ts.isMethodSignature(member)) continue;
+        const name = propertyNameText(member.name);
+        if (name) methodNames.add(name);
+      }
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+
+  if (methodNames.size === 0) {
+    throw new Error(
+      `public WorkbookVersion contract has no methods in ${publicWorkbookVersionContractPath}`,
+    );
+  }
+
+  return methodNames;
+}
+
 function classify(interfaceName, methodName) {
   if (DENY.has(methodName)) {
     return {
@@ -294,6 +340,40 @@ function assertVersionCapabilityMatrix() {
     throw new Error('workbook facade capability matrix is missing WorkbookVersion');
   }
   const versionSpecMethods = spec.interfaces.WorkbookVersion.functions ?? {};
+  const publicContractMethods = publicWorkbookVersionMethodNames();
+  const versionSpecMethodNames = new Set(Object.keys(versionSpecMethods));
+
+  for (const methodName of publicContractMethods) {
+    if (!Object.hasOwn(VERSION_METHOD_REQUIREMENTS, methodName)) {
+      throw new Error(
+        `public WorkbookVersion.${methodName} is missing explicit version capability requirements`,
+      );
+    }
+    if (
+      !versionSpecMethodNames.has(methodName) &&
+      !VERSION_SPEC_SUPPLEMENT_METHOD_NAMES.has(methodName)
+    ) {
+      throw new Error(
+        `api spec is stale: public WorkbookVersion.${methodName} exists in types/api/src/api/workbook/version-workbook.ts but is missing from runtime/sdk/src/generated/api-spec.json`,
+      );
+    }
+  }
+
+  for (const methodName of versionSpecMethodNames) {
+    if (!publicContractMethods.has(methodName)) {
+      throw new Error(
+        `api spec is stale: runtime/sdk/src/generated/api-spec.json still includes WorkbookVersion.${methodName}, but types/api/src/api/workbook/version-workbook.ts no longer declares it`,
+      );
+    }
+  }
+
+  for (const methodName of VERSION_SPEC_SUPPLEMENT_METHOD_NAMES) {
+    if (!publicContractMethods.has(methodName)) {
+      throw new Error(
+        `WorkbookVersion.${methodName} facade spec supplement is not present in the public contract`,
+      );
+    }
+  }
 
   for (const [methodName] of Object.entries(VERSION_METHOD_REQUIREMENTS)) {
     if (
@@ -330,6 +410,33 @@ function assertVersionCapabilityMatrix() {
       [
         ...entry.capabilities,
         ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
+      ].some((capability) => capability === 'workbook:read' || capability === 'workbook:write')
+    ) {
+      throw new Error(
+        `WorkbookVersion.${methodName} must not map to generic workbook capabilities`,
+      );
+    }
+  }
+
+  for (const [methodName, entry] of Object.entries(versionMatrix)) {
+    if (!Object.hasOwn(VERSION_METHOD_REQUIREMENTS, methodName)) {
+      throw new Error(
+        `WorkbookVersion.${methodName} was backfilled into the facade matrix without explicit version capability requirements`,
+      );
+    }
+    if (
+      !versionSpecMethodNames.has(methodName) &&
+      !VERSION_SPEC_SUPPLEMENT_METHOD_NAMES.has(methodName)
+    ) {
+      throw new Error(
+        `WorkbookVersion.${methodName} was backfilled into the facade matrix without generated spec coverage or an explicit supplement`,
+      );
+    }
+    if (
+      [
+        ...(entry.capabilities ?? []),
+        ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
+        ...(entry.capability ? [entry.capability] : []),
       ].some((capability) => capability === 'workbook:read' || capability === 'workbook:write')
     ) {
       throw new Error(

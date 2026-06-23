@@ -86,7 +86,8 @@ function sanitizePublicProposalDiagnostic(
   for (const [key, child] of Object.entries(value)) {
     if (key in output || key === 'issueCode' || key === 'safeMessage') continue;
     if (key === 'data' || key === 'payload' || key === 'details') continue;
-    output[key] = sanitizeDiagnosticContainer(child);
+    const sanitized = sanitizeDiagnosticData(child, key);
+    if (sanitized !== OMIT_DIAGNOSTIC_FIELD) output[key] = sanitized;
   }
   return output;
 }
@@ -101,6 +102,7 @@ function fallbackProposalDiagnostic(): Readonly<Record<string, unknown>> {
 }
 
 const OMIT_DIAGNOSTIC_FIELD = Symbol('omitDiagnosticField');
+const PUBLIC_PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
 const SENSITIVE_PRINCIPAL_TOKEN_RE =
   /\b(?:principal|actor|reviewer|agent|user)[_-][A-Za-z0-9_.:-]+\b/g;
 
@@ -108,6 +110,9 @@ function sanitizeDiagnosticData(
   value: unknown,
   key?: string,
 ): unknown | typeof OMIT_DIAGNOSTIC_FIELD {
+  if (key && isProposalIdDiagnosticKey(key)) {
+    return sanitizeProposalIdDiagnosticValue(value);
+  }
   if (key && isSensitiveDiagnosticKey(key)) return OMIT_DIAGNOSTIC_FIELD;
   if (Array.isArray(value)) {
     return value
@@ -133,11 +138,38 @@ function isSensitiveDiagnosticKey(key: string): boolean {
   const normalized = key.toLowerCase();
   return (
     normalized.includes('principal') ||
-    normalized === 'actorid' ||
-    normalized === 'reviewerid' ||
-    normalized === 'agentrunid' ||
-    normalized === 'userid' ||
-    normalized === 'useremail'
+    normalized === 'actor' ||
+    normalized === 'reviewer' ||
+    normalized === 'agent' ||
+    normalized === 'user' ||
+    isSensitiveIdentifierKey(normalized) ||
+    normalized === 'useremail' ||
+    normalized === 'useremails'
+  );
+}
+
+function isProposalIdDiagnosticKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return normalized.endsWith('proposalid') || normalized.endsWith('proposalids');
+}
+
+function sanitizeProposalIdDiagnosticValue(value: unknown): unknown | typeof OMIT_DIAGNOSTIC_FIELD {
+  if (typeof value === 'string') {
+    return PUBLIC_PROPOSAL_ID_RE.test(value) ? value : OMIT_DIAGNOSTIC_FIELD;
+  }
+  if (Array.isArray(value)) {
+    const proposalIds = value.filter(
+      (item): item is string => typeof item === 'string' && PUBLIC_PROPOSAL_ID_RE.test(item),
+    );
+    return proposalIds.length > 0 ? proposalIds : OMIT_DIAGNOSTIC_FIELD;
+  }
+  return OMIT_DIAGNOSTIC_FIELD;
+}
+
+function isSensitiveIdentifierKey(normalizedKey: string): boolean {
+  return (
+    /(actor|reviewer|agent|user).*(id|ids|email|emails)$/.test(normalizedKey) ||
+    /(id|ids|email|emails).*(actor|reviewer|agent|user)$/.test(normalizedKey)
   );
 }
 

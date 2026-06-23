@@ -120,6 +120,12 @@ describe('ComputeBridge DATE formula format compatibility', () => {
         if (command === 'compute_batch_set_cells_by_position') {
           return [new Uint8Array(), mutationResult()];
         }
+        if (command === 'compute_get_range_schemas_for_sheet') {
+          return [];
+        }
+        if (command === 'compute_get_all_column_schemas') {
+          return [];
+        }
         if (command === 'compute_get_resolved_format') {
           return resolvedFormat;
         }

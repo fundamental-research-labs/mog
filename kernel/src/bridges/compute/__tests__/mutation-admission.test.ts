@@ -314,10 +314,11 @@ describe('Compute mutation admission', () => {
       },
     });
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async (command: string) => [
-        new Uint8Array(),
-        command === 'compute_set_time_value' ? timeResult : dateResult,
-      ]),
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_get_range_schemas_for_sheet') return [];
+        if (command === 'compute_get_all_column_schemas') return [];
+        return [new Uint8Array(), command === 'compute_set_time_value' ? timeResult : dateResult];
+      }),
     };
     const bridge = createStartedBridge(ctx, transport);
     const operationContext = {

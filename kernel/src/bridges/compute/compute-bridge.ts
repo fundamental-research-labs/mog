@@ -20,7 +20,7 @@ import {
   type SheetId,
   sheetId as toSheetId,
 } from '@mog-sdk/contracts/core';
-import { toCellId } from '@mog-sdk/contracts/cell-identity';
+import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
 import type { RawSecurityEvent } from '@mog-sdk/contracts/events';
 import type { ViewportRefreshDetails } from '@mog-sdk/contracts/api';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
@@ -48,6 +48,7 @@ import {
 } from './table-header-write-intercept';
 import { prepareVersionMutationCapture, type MutationAdmissionOptions } from './mutation-admission';
 import type { AdmittedSyncApplyContext } from './sync-apply-admission';
+import { assertStrictValidationAdmission } from './validation-admission';
 
 export interface PivotCreateWithSheetOptions {
   insertBeforeSheetId?: SheetId;
@@ -585,7 +586,12 @@ export class ComputeBridge extends GeneratedBridgeBase {
     json: unknown,
     admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
-    return super.setFloatingObject(sheetId, objectId, normalizeFloatingObjectForStorage(json), admissionOptions);
+    return super.setFloatingObject(
+      sheetId,
+      objectId,
+      normalizeFloatingObjectForStorage(json),
+      admissionOptions,
+    );
   }
 
   createFloatingObject(
@@ -593,7 +599,11 @@ export class ComputeBridge extends GeneratedBridgeBase {
     config: unknown,
     admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
-    return super.createFloatingObject(sheetId, normalizeFloatingObjectForStorage(config), admissionOptions);
+    return super.createFloatingObject(
+      sheetId,
+      normalizeFloatingObjectForStorage(config),
+      admissionOptions,
+    );
   }
 
   updateFloatingObject(
@@ -1468,18 +1478,20 @@ export class ComputeBridge extends GeneratedBridgeBase {
     commentType: 'note' | 'threadedComment',
     admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
-    return this.core.mutatePublic('compute_add_comment_by_position', () =>
-      this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', {
-        docId: this.core.docId,
-        sheetId,
-        row,
-        col,
-        text,
-        author,
-        authorId,
-        parentId,
-        commentType,
-      }),
+    return this.core.mutatePublic(
+      'compute_add_comment_by_position',
+      () =>
+        this.core.transport.call<[Uint8Array, MutationResult]>('compute_add_comment_by_position', {
+          docId: this.core.docId,
+          sheetId,
+          row,
+          col,
+          text,
+          author,
+          authorId,
+          parentId,
+          commentType,
+        }),
       undefined,
       admissionOptions,
     );
@@ -1731,23 +1743,38 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.applyChanges(edits, true);
   }
 
+  async setCell(
+    sheetId: SheetId,
+    cellId: CellId,
+    row: number,
+    col: number,
+    input: CellInput,
+    admissionOptions?: MutationAdmissionOptions,
+  ): Promise<MutationResult> {
+    await assertStrictValidationAdmission(this, sheetId, [{ row, col, input }]);
+    return super.setCell(sheetId, cellId, row, col, input, admissionOptions);
+  }
+
   async setCellValueParsed(
     sheetId: SheetId,
     row: number,
     col: number,
     rawInput: string,
+    admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(this, sheetId, [
       { row, col, input: { kind: 'parse', text: rawInput } },
     ]);
+    await assertStrictValidationAdmission(this, sheetId, normalEdits);
     const headerResult = await this.applyTableHeaderRenames(headerRenames);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
-    return super.setCellValueParsed(sheetId, row, col, rawInput);
+    return super.setCellValueParsed(sheetId, row, col, rawInput, admissionOptions);
   }
 
   async setCellValuesParsed(
     sheetId: SheetId,
     updates: [number, number, string][],
+    admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const edits = updates.map(
       ([row, col, text]) => ({ row, col, input: { kind: 'parse', text } }) as const,
@@ -1757,6 +1784,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
       sheetId,
       edits,
     );
+    await assertStrictValidationAdmission(this, sheetId, normalEdits);
     const headerResult = await this.applyTableHeaderRenames(headerRenames);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
     return super.setCellValuesParsed(
@@ -1767,6 +1795,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
         }
         return [edit.row, edit.col, edit.input.text] as [number, number, string];
       }),
+      admissionOptions,
     );
   }
 
@@ -1775,13 +1804,15 @@ export class ComputeBridge extends GeneratedBridgeBase {
     row: number,
     col: number,
     value: string,
+    admissionOptions?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const { normalEdits, headerRenames } = await splitTableHeaderWritesForSetCells(this, sheetId, [
       { row, col, input: { kind: 'literal', text: value } },
     ]);
+    await assertStrictValidationAdmission(this, sheetId, normalEdits);
     const headerResult = await this.applyTableHeaderRenames(headerRenames);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
-    return super.setCellValueAsText(sheetId, row, col, value);
+    return super.setCellValueAsText(sheetId, row, col, value, admissionOptions);
   }
 
   batchSetCellsByPosition(
@@ -1827,6 +1858,8 @@ export class ComputeBridge extends GeneratedBridgeBase {
       sheetId,
       edits,
     );
+
+    await assertStrictValidationAdmission(this, sheetId, normalEdits);
     const headerResult = await this.applyTableHeaderRenames(headerRenames);
 
     if (normalEdits.length === 0) {
@@ -1840,7 +1873,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
   }
 
-  setDateValue(
+  async setDateValue(
     sheetId: SheetId,
     row: number,
     col: number,
@@ -1849,6 +1882,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     day: number,
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
+    await assertStrictValidationAdmission(this, sheetId, [
+      {
+        row,
+        col,
+        input: {
+          kind: 'literal',
+          text: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+        },
+      },
+    ]);
     return this.core.mutatePublic(
       'compute_set_date_value',
       () =>
@@ -1866,7 +1909,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     );
   }
 
-  setTimeValue(
+  async setTimeValue(
     sheetId: SheetId,
     row: number,
     col: number,
@@ -1875,6 +1918,16 @@ export class ComputeBridge extends GeneratedBridgeBase {
     seconds: number,
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
+    await assertStrictValidationAdmission(this, sheetId, [
+      {
+        row,
+        col,
+        input: {
+          kind: 'literal',
+          text: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
+        },
+      },
+    ]);
     return this.core.mutatePublic(
       'compute_set_time_value',
       () =>

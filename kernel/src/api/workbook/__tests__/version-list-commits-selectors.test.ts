@@ -4,8 +4,12 @@ const { WorkbookVersionImpl } = await import('../version');
 
 const ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
+const MERGE_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}`;
+const PARENT_A_COMMIT_ID = `commit:sha256:${'4'.repeat(64)}`;
+const PARENT_B_COMMIT_ID = `commit:sha256:${'5'.repeat(64)}`;
 const MISSING_COMMIT_ID = `commit:sha256:${'9'.repeat(64)}`;
 const PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
+const PUBLIC_LIST_PAGE_TOKEN = 'mog-vcommits-v1.topological-newest.cursor-handle';
 const DIFF_PAGE_TOKEN = 'mog-vdiff-v1.semantic-change-order.cursor-handle';
 const REF_REVISION = { kind: 'counter', value: '2' } as const;
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
@@ -52,6 +56,24 @@ function rootCommitSummary() {
   };
 }
 
+function mergeCommitSummary() {
+  return {
+    id: MERGE_COMMIT_ID,
+    parents: [PARENT_A_COMMIT_ID, PARENT_B_COMMIT_ID],
+    createdAt: CREATED_AT,
+    author: { actorKind: 'user', displayName: 'Merge Author' },
+  };
+}
+
+function parentCommitSummary(id: string) {
+  return {
+    id,
+    parents: [],
+    createdAt: CREATED_AT,
+    author: { actorKind: 'user', displayName: 'Parent Author' },
+  };
+}
+
 function successPage(overrides: Record<string, unknown> = {}) {
   return {
     status: 'success',
@@ -94,6 +116,7 @@ describe('WorkbookVersion listCommits selectors', () => {
       .mockResolvedValueOnce(successPage())
       .mockResolvedValueOnce(successPage())
       .mockResolvedValueOnce(successPage({ commits: [rootCommitSummary()] }))
+      .mockResolvedValueOnce(successPage())
       .mockResolvedValueOnce(successPage());
     const version = createVersion(graphStore);
 
@@ -148,6 +171,14 @@ describe('WorkbookVersion listCommits selectors', () => {
       value: { limit: 50 },
     });
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
+
+    await expect(version.listCommits({ pageToken: PUBLIC_LIST_PAGE_TOKEN })).resolves.toMatchObject({
+      ok: true,
+      value: { limit: 50 },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({
+      pageToken: PUBLIC_LIST_PAGE_TOKEN,
+    });
   });
 
   it('rejects provider pages that violate root traversal and topological order', async () => {
@@ -181,6 +212,46 @@ describe('WorkbookVersion listCommits selectors', () => {
             code: 'VERSION_INVALID_COMMIT_PAYLOAD',
             data: expect.objectContaining({
               payload: expect.objectContaining({ itemIndex: 1, rootTraversal: false }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({});
+
+    graphStore.listCommits.mockResolvedValueOnce(successPage({ order: 'semantic-change-order' }));
+    await expect(version.listCommits()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ orderMismatch: true }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({});
+
+    graphStore.listCommits.mockResolvedValueOnce(
+      successPage({
+        commits: [
+          mergeCommitSummary(),
+          parentCommitSummary(PARENT_B_COMMIT_ID),
+          parentCommitSummary(PARENT_A_COMMIT_ID),
+        ],
+      }),
+    );
+    await expect(version.listCommits()).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({ deterministicOrder: false }),
             }),
           }),
         ],
@@ -231,6 +302,18 @@ describe('WorkbookVersion listCommits selectors', () => {
       [
         'wrong-operation pageToken',
         { pageToken: DIFF_PAGE_TOKEN },
+        'VERSION_STALE_PAGE_CURSOR',
+        'pageToken',
+      ],
+      [
+        'wrong-order list pageToken',
+        { pageToken: 'mog-vcommits-v1.semantic-change-order.cursor-handle' },
+        'VERSION_STALE_PAGE_CURSOR',
+        'pageToken',
+      ],
+      [
+        'pageToken with ref scope',
+        { pageToken: PAGE_TOKEN, ref: 'refs/heads/main' },
         'VERSION_STALE_PAGE_CURSOR',
         'pageToken',
       ],
@@ -307,8 +390,31 @@ describe('WorkbookVersion listCommits selectors', () => {
           },
         ],
       })
+      .mockResolvedValueOnce({
+        status: 'failed',
+        diagnostics: [
+          {
+            code: 'VERSION_INDEX_REBUILD_REQUIRED',
+            severity: 'error',
+            message: 'missing index manifest at /private/path/raw-ref-secret',
+            operation: 'listCommits:/private/path/raw-ref-secret',
+            option: 'pageToken',
+            refName: 'refs/heads/scenario/raw-ref-secret',
+            objectKind: 'index',
+            details: {
+              indexManifestMissing: true,
+              indexRebuildRequired: true,
+              objectKind: 'index',
+              category: 'raw-ref-secret',
+              cursor: 'cursor-secret',
+              path: '/private/path/raw-ref-secret',
+            },
+          },
+        ],
+      })
       .mockResolvedValueOnce(successPage({ nextPageToken: 'bad-token' }))
-      .mockResolvedValueOnce(successPage({ nextPageToken: 'vpt_next_page' }));
+      .mockResolvedValueOnce(successPage({ nextPageToken: 'vpt_next_page' }))
+      .mockResolvedValueOnce(successPage({ nextPageToken: PUBLIC_LIST_PAGE_TOKEN }));
     const version = createVersion(graphStore);
 
     await expect(
@@ -345,6 +451,32 @@ describe('WorkbookVersion listCommits selectors', () => {
     );
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({ pageToken: PAGE_TOKEN });
 
+    const missingIndexResult = await version.listCommits({ ref: 'refs/heads/main' });
+    expect(missingIndexResult).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INDEX_REBUILD_REQUIRED',
+            data: expect.objectContaining({
+              recoverability: 'repair',
+              payload: expect.objectContaining({
+                operation: 'listCommits',
+                option: 'pageToken',
+                objectKind: 'index',
+                indexManifestMissing: true,
+                indexRebuildRequired: true,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(missingIndexResult)).not.toContain('raw-ref-secret');
+    expect(JSON.stringify(missingIndexResult)).not.toContain('/private/path');
+    expect(JSON.stringify(missingIndexResult)).not.toContain('cursor-secret');
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({ ref: 'refs/heads/main' });
+
     await expect(version.listCommits()).resolves.toMatchObject({
       ok: false,
       error: {
@@ -367,6 +499,15 @@ describe('WorkbookVersion listCommits selectors', () => {
       ok: true,
       value: {
         nextCursor: 'vpt_next_page',
+        limit: 50,
+      },
+    });
+    expect(graphStore.listCommits).toHaveBeenLastCalledWith({});
+
+    await expect(version.listCommits()).resolves.toMatchObject({
+      ok: true,
+      value: {
+        nextCursor: PUBLIC_LIST_PAGE_TOKEN,
         limit: 50,
       },
     });

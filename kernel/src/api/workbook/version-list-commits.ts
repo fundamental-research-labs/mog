@@ -21,10 +21,13 @@ import { versionResultFromCommitPage } from './version-result';
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const VERSION_LIST_COMMITS_PAGE_ORDER = 'topological-newest';
 const VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX = 'vpt_';
-const VERSION_LIST_COMMITS_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
+const VERSION_LIST_COMMITS_PUBLIC_CURSOR_PREFIX =
+  `mog-vcommits-v1.${VERSION_LIST_COMMITS_PAGE_ORDER}.` as const;
+const VERSION_LIST_COMMITS_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 const VERSION_LIST_COMMITS_MAX_PAGE_TOKEN_BYTES = 2048;
-const VERSION_OPERATION_PAGE_TOKEN_RE = /^mog-v[a-z0-9-]+-v[0-9]+\.[A-Za-z0-9_.:-]+$/;
+const VERSION_OPERATION_PAGE_TOKEN_RE = /^mog-v[a-z0-9-]+-v[0-9]+\.[A-Za-z0-9_.-]+$/;
 const VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 const VERSION_LIST_COMMITS_MAX_PAGE_SIZE = 500;
 const VERSION_LIST_COMMITS_OPTION_KEYS = new Set([
@@ -191,6 +194,24 @@ function validateListCommitsOptions(
         ),
       );
     }
+
+    if (options.ref !== undefined || options.from !== undefined) {
+      diagnostics.push(
+        publicDiagnostic(
+          'VERSION_STALE_PAGE_CURSOR',
+          'listCommits pageToken cannot be combined with a new root selector.',
+          {
+            severity: 'error',
+            recoverability: 'retry',
+            payload: {
+              option: 'pageToken',
+              category: 'refScopeMismatch',
+              cursorRootMismatch: true,
+            },
+          },
+        ),
+      );
+    }
   }
 
   if (options.ref !== undefined && options.from !== undefined) {
@@ -302,18 +323,25 @@ function mapCommitPageResult(
   }
 
   const readRevision = toRevision(value.readRevision);
+  const order = value.order;
   const sourceItems = Array.isArray(value.commits)
     ? value.commits
     : Array.isArray(value.items)
       ? value.items
       : null;
 
-  if (!readRevision || !sourceItems) {
+  if (!readRevision || order !== VERSION_LIST_COMMITS_PAGE_ORDER || !sourceItems) {
     return degradedCommitPage([
       publicDiagnostic(
         'VERSION_INVALID_COMMIT_PAYLOAD',
         'The version graph commit page did not contain a valid public page shape.',
-        { severity: 'error', recoverability: 'repair' },
+        {
+          severity: 'error',
+          recoverability: 'repair',
+          payload: {
+            ...(order !== VERSION_LIST_COMMITS_PAGE_ORDER ? { orderMismatch: true } : {}),
+          },
+        },
       ),
     ]);
   }
@@ -324,7 +352,7 @@ function mapCommitPageResult(
       status: 'degraded',
       items,
       readRevision,
-      order: 'topological-newest',
+      order: VERSION_LIST_COMMITS_PAGE_ORDER,
       diagnostics,
     };
   }
@@ -335,7 +363,7 @@ function mapCommitPageResult(
       status: 'degraded',
       items: [],
       readRevision,
-      order: 'topological-newest',
+      order: VERSION_LIST_COMMITS_PAGE_ORDER,
       diagnostics: pageDiagnostics,
     };
   }
@@ -347,7 +375,7 @@ function mapCommitPageResult(
       status: 'degraded',
       items: [],
       readRevision,
-      order: 'topological-newest',
+      order: VERSION_LIST_COMMITS_PAGE_ORDER,
       diagnostics: [
         publicDiagnostic(
           'VERSION_INVALID_COMMIT_PAYLOAD',
@@ -367,7 +395,7 @@ function mapCommitPageResult(
     items,
     ...(nextPageToken ? { nextPageToken } : {}),
     readRevision,
-    order: 'topological-newest',
+    order: VERSION_LIST_COMMITS_PAGE_ORDER,
     diagnostics: [],
   };
 }
@@ -453,7 +481,66 @@ function validateCommitPageOrder(
     }
   }
 
+  const deterministicDiagnostics = validateDeterministicParentTieBreaks(items, indexByCommitId);
+  if (deterministicDiagnostics.length > 0) return deterministicDiagnostics;
+
   return [];
+}
+
+function validateDeterministicParentTieBreaks(
+  items: readonly WorkbookCommitSummary[],
+  indexByCommitId: ReadonlyMap<WorkbookCommitId, number>,
+): readonly VersionStoreDiagnostic[] {
+  const itemByCommitId = new Map(items.map((item) => [item.id, item] as const));
+
+  for (const item of items) {
+    const visibleParents = item.parents.flatMap((parentId) => {
+      const index = indexByCommitId.get(parentId);
+      const parent = itemByCommitId.get(parentId);
+      return index === undefined || !parent ? [] : [{ index, parent }];
+    });
+    if (visibleParents.length < 2) continue;
+
+    const expected = [...visibleParents].sort((left, right) =>
+      compareCommitSummariesForPageOrder(left.parent, right.parent),
+    );
+    for (let index = 1; index < expected.length; index += 1) {
+      const previous = expected[index - 1]!;
+      const current = expected[index]!;
+      if (previous.index < current.index) continue;
+      return [
+        publicDiagnostic(
+          'VERSION_INVALID_COMMIT_PAYLOAD',
+          'The version graph returned commits without deterministic listCommits tie-break order.',
+          {
+            severity: 'error',
+            recoverability: 'repair',
+            payload: {
+              itemIndex: current.index,
+              parentItemIndex: previous.index,
+              deterministicOrder: false,
+            },
+          },
+        ),
+      ];
+    }
+  }
+
+  return [];
+}
+
+function compareCommitSummariesForPageOrder(
+  left: WorkbookCommitSummary,
+  right: WorkbookCommitSummary,
+): number {
+  const createdAt = compareStrings(right.createdAt, left.createdAt);
+  return createdAt === 0 ? compareStrings(left.id, right.id) : createdAt;
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
 }
 
 function mapCommitSummaries(values: readonly unknown[]): {
@@ -528,11 +615,7 @@ function mapGraphDiagnostic(value: unknown): VersionStoreDiagnostic {
   }
 
   const issueCode =
-    typeof value.issueCode === 'string'
-      ? value.issueCode
-      : typeof value.code === 'string'
-        ? value.code
-        : 'VERSION_PROVIDER_ERROR';
+    safeIssueCode(value.issueCode) ?? safeIssueCode(value.code) ?? 'VERSION_PROVIDER_ERROR';
   const severity = value.severity === 'corruption' ? 'error' : value.severity;
 
   return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
@@ -550,44 +633,125 @@ function sanitizeDiagnosticPayload(
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = { operation: 'listCommits' };
 
-  if (typeof value.operation === 'string') payload.operation = value.operation;
-  if (typeof value.option === 'string') payload.option = value.option;
+  if (isPublicListCommitsOption(value.option)) payload.option = value.option;
   const refName = value.refName;
   if (refName === VERSION_HEAD_REF || refName === VERSION_MAIN_REF) {
     payload.refName = refName;
   }
+  const objectKind = safeObjectKind(value.objectKind);
+  if (objectKind) payload.objectKind = objectKind;
 
   const details = isRecord(value.details) ? value.details : null;
   if (details) {
-    for (const key of [
-      'category',
-      'commitCount',
+    copyBooleanPayloadFields(payload, details, [
       'cursorMalformed',
       'cursorRootMismatch',
       'cursorRevisionMismatch',
-      'duplicateOfItemIndex',
-      'itemIndex',
-      'min',
-      'max',
-      'orderedCommitCount',
-      'parentItemIndex',
-      'pageSize',
-      'receivedPageSize',
+      'deterministicOrder',
+      'indexManifestCorrupt',
+      'indexManifestMissing',
+      'indexManifestStale',
+      'indexRebuildRequired',
+      'manifestCorrupt',
+      'manifestMissing',
+      'manifestStale',
+      'pageTokenUnsupported',
       'refMissing',
-      'rootKind',
       'rootMissing',
       'rootMismatch',
       'rootTraversal',
-      'pageTokenUnsupported',
+    ]);
+    copyNumberPayloadFields(payload, details, [
+      'commitCount',
+      'duplicateOfItemIndex',
+      'itemIndex',
+      'max',
+      'min',
+      'orderedCommitCount',
+      'pageSize',
+      'parentItemIndex',
       'reachableCommitCount',
       'receivedCursorBytes',
-    ] as const) {
-      const detailValue = details[key];
-      if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
-    }
+    ]);
+    const category = safeCursorCategory(details.category) ?? safeCursorCategory(details.cursorCategory);
+    if (category) payload.category = category;
+    const rootKind = safeObjectKind(details.rootKind);
+    if (rootKind) payload.rootKind = rootKind;
+    const detailObjectKind = safeObjectKind(details.objectKind);
+    if (!payload.objectKind && detailObjectKind) payload.objectKind = detailObjectKind;
   }
 
   return payload;
+}
+
+function copyBooleanPayloadFields(
+  payload: Record<string, string | number | boolean | null>,
+  source: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): void {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'boolean') payload[key] = value;
+  }
+}
+
+function copyNumberPayloadFields(
+  payload: Record<string, string | number | boolean | null>,
+  source: Readonly<Record<string, unknown>>,
+  keys: readonly string[],
+): void {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) payload[key] = value;
+  }
+}
+
+function safeCursorCategory(value: unknown): string | undefined {
+  switch (value) {
+    case 'forgedCursor':
+    case 'malformedCursor':
+    case 'oversizedCursor':
+    case 'refScopeMismatch':
+    case 'staleCursor':
+    case 'unsupportedCursor':
+    case 'unsupportedCursorOrder':
+    case 'unsupportedCursorVersion':
+    case 'wrongOperationCursor':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function safeObjectKind(value: unknown): string | undefined {
+  switch (value) {
+    case 'commit':
+    case 'index':
+    case 'mutable-record':
+    case 'redaction-summary':
+    case 'semantic-change-set':
+    case 'snapshot-chunk':
+    case 'snapshot-root':
+    case 'verification-summary':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function isPublicListCommitsOption(value: unknown): value is string {
+  return (
+    value === 'from' ||
+    value === 'includeDiagnostics' ||
+    value === 'includeOrphans' ||
+    value === 'pageSize' ||
+    value === 'pageToken' ||
+    value === 'ref'
+  );
+}
+
+function safeIssueCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^VERSION_[A-Z0-9_]+$/.test(value) ? value : undefined;
 }
 
 function serviceUnavailableDiagnostic(): VersionStoreDiagnostic {
@@ -649,6 +813,10 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The workbook version graph is not initialized for this document.';
     case 'VERSION_STALE_PAGE_CURSOR':
       return 'The version page token is stale or unsupported by this read slice.';
+    case 'VERSION_INDEX_REBUILD_REQUIRED':
+      return 'The version graph index must be rebuilt before commit history can be listed.';
+    case 'VERSION_CORRUPT_MANIFEST':
+      return 'The version graph index manifest is corrupt or stale.';
     case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
       return 'The version graph cannot serve a follow-up page token in this slice.';
     case 'VERSION_INVALID_OPTIONS':
@@ -657,10 +825,15 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The requested version read is not exposed by this public slice.';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_MISSING_PARENT':
     case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_WRONG_DOCUMENT':
+    case 'VERSION_WRONG_NAMESPACE':
       return 'The version graph could not validate the requested commit closure.';
     case 'VERSION_REF_CONFLICT':
       return 'The version ref changed while the read was in progress.';
+    case 'VERSION_STORE_UNAVAILABLE':
+      return 'The version store is unavailable for this document.';
     default:
       return 'The version graph could not complete listCommits.';
   }
@@ -670,10 +843,16 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
   switch (issueCode) {
     case 'VERSION_STALE_PAGE_CURSOR':
     case 'VERSION_REF_CONFLICT':
+    case 'VERSION_STORE_UNAVAILABLE':
       return 'retry';
     case 'VERSION_DANGLING_REF':
+    case 'VERSION_CORRUPT_MANIFEST':
+    case 'VERSION_INDEX_REBUILD_REQUIRED':
     case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_MISSING_PARENT':
     case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_WRONG_DOCUMENT':
+    case 'VERSION_WRONG_NAMESPACE':
       return 'repair';
     case 'VERSION_GRAPH_UNINITIALIZED':
     case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
@@ -688,7 +867,7 @@ function degradedCommitPage(diagnostics: readonly VersionStoreDiagnostic[]): Ver
   return {
     status: 'degraded',
     items: [],
-    order: 'topological-newest',
+    order: VERSION_LIST_COMMITS_PAGE_ORDER,
     diagnostics,
   };
 }
@@ -744,6 +923,32 @@ function classifyPageToken(value: unknown):
     )
   ) {
     return { kind: 'valid' };
+  }
+
+  if (
+    value.length > VERSION_LIST_COMMITS_PUBLIC_CURSOR_PREFIX.length &&
+    value.startsWith(VERSION_LIST_COMMITS_PUBLIC_CURSOR_PREFIX) &&
+    VERSION_LIST_COMMITS_PAGE_TOKEN_RE.test(
+      value.slice(VERSION_LIST_COMMITS_PUBLIC_CURSOR_PREFIX.length),
+    )
+  ) {
+    return { kind: 'valid' };
+  }
+
+  if (value.startsWith(VERSION_LIST_COMMITS_PAGE_TOKEN_PREFIX)) {
+    return {
+      kind: 'invalid',
+      safeMessage: 'listCommits pageToken is malformed or unsupported.',
+      payload: { category: 'forgedCursor' },
+    };
+  }
+
+  if (value.startsWith('mog-vcommits-v')) {
+    return {
+      kind: 'stale',
+      safeMessage: 'listCommits pageToken uses an unsupported public cursor order or version.',
+      payload: { category: 'unsupportedCursorVersion' },
+    };
   }
 
   if (VERSION_OPERATION_PAGE_TOKEN_RE.test(value)) {

@@ -17,6 +17,11 @@ type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const SYNC_BATCH_STATUS_ID_RE = /^sync-batch-status:sha256:[0-9a-f]{64}$/;
+const DIAGNOSTIC_DEPENDENCIES = new Set<VersionCapabilityDependency>([
+  'VC-04', 'VC-05', 'VC-07', 'VC-09', 'storage', 'featureGate', 'hostCapability',
+  'upstreamRevertContract',
+]);
 
 export type SurfaceOnlyVersionCapability = 'version:refAdmin';
 export type SurfaceVersionCapability = VersionCapability | SurfaceOnlyVersionCapability;
@@ -787,22 +792,71 @@ function diagnosticArray(value: unknown): readonly VersionDiagnostic[] | null {
     if (!isRecord(entry)) return null;
     if (
       typeof entry.code !== 'string' ||
-      typeof entry.severity !== 'string' ||
+      !isDiagnosticSeverity(entry.severity) ||
       typeof entry.message !== 'string'
     ) {
       return null;
     }
+    const dependency = isDiagnosticDependency(entry.dependency) ? entry.dependency : undefined;
+    const data = sanitizeDiagnosticData(entry.data);
     diagnostics.push({
       code: entry.code,
-      severity: entry.severity as VersionDiagnostic['severity'],
+      severity: entry.severity,
       message: entry.message,
-      ...(typeof entry.dependency === 'string'
-        ? { dependency: entry.dependency as VersionDiagnostic['dependency'] }
-        : {}),
-      ...(isRecord(entry.data) ? { data: entry.data as VersionDiagnostic['data'] } : {}),
+      ...(dependency ? { dependency } : {}),
+      ...(data ? { data } : {}),
     });
   }
   return Object.freeze(diagnostics);
+}
+
+function isDiagnosticSeverity(value: unknown): value is VersionDiagnostic['severity'] {
+  return value === 'info' || value === 'warning' || value === 'error';
+}
+
+function isDiagnosticDependency(value: unknown): value is VersionCapabilityDependency {
+  return (
+    typeof value === 'string' && DIAGNOSTIC_DEPENDENCIES.has(value as VersionCapabilityDependency)
+  );
+}
+
+function sanitizeDiagnosticData(value: unknown): VersionDiagnostic['data'] | undefined {
+  if (!isRecord(value)) return undefined;
+  const data: Record<string, string | number | boolean | null> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isPublicDiagnosticDataValue(entry)) continue;
+    data[key] = shouldRedactDiagnosticDataValue(key, entry) ? 'redacted' : entry;
+  }
+  return Object.keys(data).length > 0 ? data : undefined;
+}
+
+function isPublicDiagnosticDataValue(value: unknown): value is string | number | boolean | null {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function shouldRedactDiagnosticDataValue(
+  key: string,
+  value: string | number | boolean | null,
+): boolean {
+  const normalizedKey = key.toLowerCase();
+  if (
+    normalizedKey.includes('secret') ||
+    normalizedKey.includes('credential') ||
+    normalizedKey.includes('password') ||
+    normalizedKey.includes('authorization') ||
+    normalizedKey.includes('token') ||
+    normalizedKey.includes('cursor') ||
+    normalizedKey.includes('trace') ||
+    normalizedKey.includes('opaque') ||
+    normalizedKey.includes('hidden') ||
+    normalizedKey.includes('deleted') ||
+    normalizedKey.includes('protected') ||
+    normalizedKey.endsWith('batchid') ||
+    normalizedKey.endsWith('batchstatusid')
+  ) {
+    return true;
+  }
+  return typeof value === 'string' && SYNC_BATCH_STATUS_ID_RE.test(value);
 }
 
 function surfaceDiagnostic(

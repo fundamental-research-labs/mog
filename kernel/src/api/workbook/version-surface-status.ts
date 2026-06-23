@@ -41,6 +41,14 @@ import {
 } from './version-surface-status-service';
 import type { VersionSurfaceCheckoutSession } from './version-surface-status-service';
 import {
+  deriveVersionSurfaceCapabilityBlocks,
+  getVersionSurfaceOperationFeatureGates,
+  type VersionSurfaceCapabilityAvailability,
+  type VersionSurfaceCapabilityBlocks,
+  type VersionSurfaceCapabilityBlock,
+  type VersionSurfaceOperationFeatureGates,
+} from './version-surface-status-derivation';
+import {
   hasAttachedVersionReviewReadService,
   hasAttachedVersionReviewWriteService,
 } from './version-review-service-discovery';
@@ -121,22 +129,6 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly docId?: unknown;
 };
 
-type CapabilityAvailability = {
-  readonly read: boolean;
-  readonly diff: boolean;
-  readonly commit: boolean;
-  readonly branch: boolean;
-  readonly checkout: boolean;
-  readonly reviewRead: boolean;
-  readonly reviewWrite: boolean;
-  readonly proposal: boolean;
-  readonly mergePreview: boolean;
-  readonly mergeApply: boolean;
-  readonly refAdmin: boolean;
-  readonly provenance: boolean;
-  readonly remotePromote: boolean;
-};
-
 type ProjectedHead = {
   readonly id: string;
   readonly refName?: VersionMainRefName | VersionRefName;
@@ -159,6 +151,7 @@ export async function getWorkbookVersionSurfaceStatus(
     ctx,
     getVersionHostCapabilityDecisions(ctx),
   );
+  const operationFeatureGates = getVersionSurfaceOperationFeatureGates(ctx);
   const diagnostics: VersionDiagnostic[] = [];
 
   if (!featureGate.discovered) {
@@ -209,13 +202,33 @@ export async function getWorkbookVersionSurfaceStatus(
       ),
     );
   }
+  if (operationFeatureGates.checkoutDiscovered && !operationFeatureGates.checkoutEnabled) {
+    diagnostics.push(
+      surfaceDiagnostic(
+        'version.surfaceStatus.checkoutCapabilityDisabled',
+        'warning',
+        'The versionControl.checkout feature gate is disabled for this workbook.',
+        'featureGate',
+      ),
+    );
+  }
+  if (operationFeatureGates.revertDiscovered && !operationFeatureGates.revertEnabled) {
+    diagnostics.push(
+      surfaceDiagnostic(
+        'version.surfaceStatus.revertCapabilityDisabled',
+        'warning',
+        'The versionControl.revert feature gate is disabled for this workbook.',
+        'featureGate',
+      ),
+    );
+  }
 
   const readService = featureGate.enabled ? getAttachedVersionReadService(services) : null;
   const storage = readVersionSurfaceStorageStatus({
     services,
     hasVersionAttachment: Boolean(services && hasAnyVersionAttachment(services)),
   });
-  const availability: CapabilityAvailability = {
+  const availability: VersionSurfaceCapabilityAvailability = {
     read: Boolean(readService),
     diff: hasAttachedVersionDiffService(services),
     commit: Boolean(workbookStatus?.commitApi.available || hasAttachedVersionWriteService(ctx)),
@@ -237,6 +250,10 @@ export async function getWorkbookVersionSurfaceStatus(
   };
 
   diagnostics.push(...storage.diagnostics);
+  const capabilityBlocks =
+    featureGate.enabled && storage.ready
+      ? await deriveVersionSurfaceCapabilityBlocks({ ctx, services, availability })
+      : {};
   const activeCheckoutSession = await readVersionSurfaceCheckoutSession(
     surfaceStatusService,
     diagnostics,
@@ -251,6 +268,8 @@ export async function getWorkbookVersionSurfaceStatus(
     storage.ready,
     availability,
     hostCapabilityDecisions,
+    operationFeatureGates,
+    capabilityBlocks,
     diagnostics,
   );
 
@@ -354,8 +373,10 @@ async function readCurrentStatus(
 function buildCapabilityStates(
   featureGate: VersionControlGateStatus,
   storageReady: boolean,
-  availability: CapabilityAvailability,
+  availability: VersionSurfaceCapabilityAvailability,
   hostCapabilityDecisions: SurfaceHostCapabilityDecisions,
+  operationFeatureGates: VersionSurfaceOperationFeatureGates,
+  capabilityBlocks: VersionSurfaceCapabilityBlocks,
   diagnostics: VersionDiagnostic[],
 ): SurfaceCapabilityStates {
   const disabledByGate = (capability: SurfaceVersionCapability): VersionCapabilityState =>
@@ -396,6 +417,38 @@ function buildCapabilityStates(
       false,
       'version.surfaceStatus.hostCapabilityDenied',
     );
+  const disabledByOperationFeatureGate = (
+    capability: Extract<SurfaceVersionCapability, 'version:checkout' | 'version:revert'>,
+  ): VersionCapabilityState =>
+    disabledCapability(
+      diagnostics,
+      capability,
+      'featureGate',
+      capability === 'version:checkout'
+        ? 'The versionControl.checkout feature gate is disabled.'
+        : 'The versionControl.revert feature gate is disabled.',
+      false,
+      capability === 'version:checkout'
+        ? 'version.surfaceStatus.checkoutCapabilityDisabled'
+        : 'version.surfaceStatus.revertCapabilityDisabled',
+    );
+  const disabledByCapabilityBlock = (
+    capability: SurfaceVersionCapability,
+    block: VersionSurfaceCapabilityBlock,
+  ): VersionCapabilityState => {
+    if (block.diagnostics) diagnostics.push(...block.diagnostics);
+    return disabledCapability(
+      diagnostics,
+      capability,
+      block.dependency,
+      block.reason,
+      block.retryable,
+      block.code,
+    );
+  };
+  const operationFeatureGateDisabled = (capability: SurfaceVersionCapability): boolean =>
+    (capability === 'version:checkout' && !operationFeatureGates.checkoutEnabled) ||
+    (capability === 'version:revert' && !operationFeatureGates.revertEnabled);
   const availableCapability = (
     capability: SurfaceVersionCapability,
     available: boolean,
@@ -404,7 +457,18 @@ function buildCapabilityStates(
     retryable: boolean,
     code: VersionDiagnostic['code'],
   ): VersionCapabilityState => {
+    if (
+      capability === 'version:checkout' &&
+      operationFeatureGateDisabled(capability)
+    ) {
+      return disabledByOperationFeatureGate(capability);
+    }
+    if (capability === 'version:revert' && operationFeatureGateDisabled(capability)) {
+      return disabledByOperationFeatureGate(capability);
+    }
     if (hostDenied(capability)) return disabledByHostCapability(capability);
+    const block = capabilityBlocks[capability];
+    if (block) return disabledByCapabilityBlock(capability, block);
     return available
       ? enabledCapability()
       : disabledCapability(diagnostics, capability, dependency, reason, retryable, code);

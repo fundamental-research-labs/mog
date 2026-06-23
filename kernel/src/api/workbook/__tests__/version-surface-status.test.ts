@@ -76,7 +76,15 @@ function createCompleteProposalService(overrides: Record<string, unknown> = {}) 
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
-    computeBridge: {},
+    computeBridge: {
+      getAllSheetIds: jest.fn(async () => []),
+      getAllTablesInSheet: jest.fn(async () => []),
+      getFiltersInSheet: jest.fn(async () => []),
+      namedRangeCount: jest.fn(async () => 0),
+      getAllNamedRangesWire: jest.fn(async () => []),
+      getHyperlinks: jest.fn(async () => []),
+      getRangeSchemasForSheet: jest.fn(async () => []),
+    },
     writeGate: {
       assertWritable: jest.fn(),
     },
@@ -142,37 +150,39 @@ function createSurfaceReadyVersionWithContext(
     createMockCtx({
       ...ctxOverrides,
       versioning: {
-        provider: {
-          kind: 'memory',
-          documentScope: { documentId: 'document-1' },
-          capabilities: {
-            reads: {
-              graphRegistry: true,
-              objects: true,
-              refs: true,
-              commits: true,
+        ...withVersionManifest({
+          provider: {
+            kind: 'memory',
+            documentScope: { documentId: 'document-1' },
+            capabilities: {
+              reads: {
+                graphRegistry: true,
+                objects: true,
+                refs: true,
+                commits: true,
+              },
             },
           },
-        },
-        readService: {
-          readHead,
-          readRef,
-          listCommits,
-        },
-        diffService: { diff },
-        writeService: {
-          commit,
-          mergeCommit,
-        },
-        branchService: {
-          createBranch,
-          readBranch,
-          listBranches,
-          fastForwardBranch,
-        },
-        checkoutService: { planCheckout },
-        mergeService: { merge },
-        ...versioningOverrides,
+          readService: {
+            readHead,
+            readRef,
+            listCommits,
+          },
+          diffService: { diff },
+          writeService: {
+            commit,
+            mergeCommit,
+          },
+          branchService: {
+            createBranch,
+            readBranch,
+            listBranches,
+            fastForwardBranch,
+          },
+          checkoutService: { planCheckout },
+          mergeService: { merge },
+          ...versioningOverrides,
+        }),
       },
     }),
   );

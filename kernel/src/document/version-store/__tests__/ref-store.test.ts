@@ -2,6 +2,7 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
 import {
+  RefStoreValidationError,
   createInMemoryRefStore,
   type CreateBranchResult,
   type DeleteRefResult,
@@ -10,6 +11,7 @@ import {
   type RefMutationResult,
   type RefVersion,
 } from '../ref-store';
+import type { InMemoryRefStoreSnapshot } from '../ref-store-snapshot';
 
 const COMMIT_A = commit('aa');
 const COMMIT_B = commit('bb');
@@ -471,6 +473,51 @@ describe('InMemoryRefStore list filters and ordering', () => {
   });
 });
 
+describe('InMemoryRefStore snapshot revision validation', () => {
+  it('rejects malformed live ref revision counters with redacted diagnostics', () => {
+    const store = createStore();
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+
+    const snapshot = store.exportSnapshot();
+    const malformedSnapshot = withMalformedRefVersion(snapshot, 'main', refVersion('01'));
+
+    expectSnapshotRejectedWithRedactedRevision(malformedSnapshot, 'counterFormat');
+  });
+
+  it('rejects malformed tombstone ref revision counters with redacted diagnostics', () => {
+    const store = createStore([
+      '2026-06-20T00:00:00.000Z',
+      '2026-06-20T00:00:01.000Z',
+      '2026-06-20T00:00:02.000Z',
+    ]);
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+    const created = store.createBranch({
+      name: 'scenario/malformed-tombstone',
+      targetCommitId: COMMIT_A,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+    expectCreateOk(created);
+    expectDeleteOk(
+      store.deleteRef({
+        name: 'scenario/malformed-tombstone',
+        expectedHead: COMMIT_A,
+        expectedRefVersion: created.ref.refVersion,
+        deletedBy: AUTHOR,
+      }),
+    );
+
+    const snapshot = store.exportSnapshot();
+    const malformedSnapshot = withMalformedRefVersion(
+      snapshot,
+      'scenario/malformed-tombstone',
+      refVersion('01'),
+    );
+
+    expectSnapshotRejectedWithRedactedRevision(malformedSnapshot, 'counterFormat');
+  });
+});
+
 function createBranch(store: ReturnType<typeof createInMemoryRefStore>, name: string) {
   const result = store.createBranch({
     name,
@@ -480,4 +527,50 @@ function createBranch(store: ReturnType<typeof createInMemoryRefStore>, name: st
   });
   expectCreateOk(result);
   return result.ref;
+}
+
+function withMalformedRefVersion(
+  snapshot: InMemoryRefStoreSnapshot,
+  name: string,
+  refVersion: RefVersion,
+): InMemoryRefStoreSnapshot {
+  return Object.freeze({
+    ...snapshot,
+    records: Object.freeze(
+      snapshot.records.map((record) =>
+        record.name === name ? Object.freeze({ ...record, refVersion }) : record,
+      ),
+    ),
+  });
+}
+
+function expectSnapshotRejectedWithRedactedRevision(
+  snapshot: InMemoryRefStoreSnapshot,
+  expectedIssue: string,
+): void {
+  let caught: unknown;
+  try {
+    createInMemoryRefStore({
+      versionDocumentId: 'version-doc-1',
+      snapshot,
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(RefStoreValidationError);
+  if (!(caught instanceof RefStoreValidationError)) {
+    throw new Error('expected RefStoreValidationError');
+  }
+  expect(caught.code).toBe('invalidRefVersion');
+  expect(caught.diagnostics).toHaveLength(1);
+  expect(caught.diagnostics[0]).toMatchObject({
+    code: 'invalidRefVersion',
+    severity: 'error',
+    details: {
+      issue: expectedIssue,
+      redacted: true,
+    },
+  });
+  expect(JSON.stringify(caught.diagnostics)).not.toContain('01');
 }

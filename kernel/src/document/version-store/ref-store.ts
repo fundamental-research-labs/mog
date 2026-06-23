@@ -1,15 +1,39 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
-import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
+import { compareAscii, compareLiveRefs, compareTombstoneRefs } from './ref-store-ordering';
 import {
-  REF_NAMESPACES,
-  parseRefName,
-  validateRefName,
-  type RefName,
-  type RefNameDiagnostic,
-  type RefNamespace,
-} from './ref-name';
+  isCanonicalRefNamespace,
+  matchesRefNamespacePrefix,
+  parseCanonicalRefName,
+} from './ref-store-ref-names';
+import {
+  RefStoreValidationError,
+  cloneDiagnostic,
+  cloneLiveRefRecord,
+  cloneProviderEpoch,
+  cloneRefVersion,
+  cloneTombstoneRefRecord,
+  copyAuthor,
+  freezeLiveRefRecord,
+  freezeProviderEpoch,
+  freezeRefVersion,
+  freezeTombstoneRefRecord,
+  isPlainRecord,
+  nextProviderEpoch,
+  nextRefVersion,
+  parseRefVersion,
+  refVersionsEqual,
+} from './ref-store-revisions';
+export {
+  RefStoreValidationError,
+  encodeRefVersionKey,
+  normalizePersistedRefVersion,
+  parseRefVersion,
+  refVersionsEqual,
+} from './ref-store-revisions';
+import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
+import { parseRefName, type RefName, type RefNamespace } from './ref-name';
 
 export type ProviderEpoch =
   | { readonly kind: 'counter'; readonly value: string }
@@ -226,20 +250,7 @@ export interface InMemoryRefStoreOptions {
   readonly snapshot?: InMemoryRefStoreSnapshot;
 }
 
-const REF_VERSION_VALUE_RE = /^(0|[1-9][0-9]*)$/;
 const RFC3339_MILLISECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
-export class RefStoreValidationError extends Error {
-  readonly code: VersionErrorCode;
-  readonly diagnostics: readonly VersionDiagnostic[];
-
-  constructor(code: VersionErrorCode, message: string, diagnostics: readonly VersionDiagnostic[]) {
-    super(message);
-    this.name = 'RefStoreValidationError';
-    this.code = code;
-    this.diagnostics = diagnostics;
-  }
-}
 
 export class InMemoryRefStore {
   private readonly records = new Map<string, RefRecord>();
@@ -429,7 +440,7 @@ export class InMemoryRefStore {
 
   listRefs(input: ListRefsInput = {}): ListRefsResult {
     const prefix = input.prefix;
-    if (prefix !== undefined && !isRefNamespace(prefix)) {
+    if (prefix !== undefined && !isCanonicalRefNamespace(prefix)) {
       const diagnostics = [
         diagnostic(
           'invalidRefPrefix',
@@ -442,7 +453,7 @@ export class InMemoryRefStore {
 
     const liveRefs = [...this.records.values()]
       .filter((record): record is LiveRefRecord => record.state === 'live')
-      .filter((record) => matchesPrefix(record.name, prefix))
+      .filter((record) => matchesRefNamespacePrefix(record.name, prefix))
       .sort(compareLiveRefs)
       .map(cloneLiveRefRecord);
 
@@ -457,7 +468,7 @@ export class InMemoryRefStore {
 
     const tombstones = [...this.records.values()]
       .filter((record): record is TombstoneRefRecord => record.state === 'tombstone')
-      .filter((record) => matchesPrefix(record.name, prefix))
+      .filter((record) => matchesRefNamespacePrefix(record.name, prefix))
       .sort(compareTombstoneRefs)
       .map(cloneTombstoneRefRecord);
 
@@ -639,64 +650,19 @@ export function createInMemoryRefStore(options: InMemoryRefStoreOptions): InMemo
   return new InMemoryRefStore(options);
 }
 
-export function parseRefVersion(value: unknown, paramName = 'refVersion'): RefVersion {
-  if (!isPlainRecord(value)) {
-    throw new RefStoreValidationError(
-      'invalidRefVersion',
-      `${paramName} must be a structured RefVersion.`,
-      [diagnostic('invalidRefVersion', `${paramName} must be a structured RefVersion.`)],
-    );
-  }
-  if (
-    value.kind !== 'counter' ||
-    typeof value.value !== 'string' ||
-    !REF_VERSION_VALUE_RE.test(value.value)
-  ) {
-    throw new RefStoreValidationError(
-      'invalidRefVersion',
-      `${paramName} must be { kind: "counter", value: <non-negative base-10 integer> }.`,
-      [
-        diagnostic(
-          'invalidRefVersion',
-          `${paramName} must be { kind: "counter", value: <non-negative base-10 integer> }.`,
-        ),
-      ],
-    );
-  }
-
-  return freezeRefVersion({ kind: 'counter', value: value.value });
-}
-
-export function normalizePersistedRefVersion(value: unknown, paramName = 'refVersion'): RefVersion {
-  if (typeof value === 'string' && value.startsWith('rv:n:')) {
-    return parseRefVersion({ kind: 'counter', value: value.slice('rv:n:'.length) }, paramName);
-  }
-  return parseRefVersion(value, paramName);
-}
-
-export function encodeRefVersionKey(refVersion: RefVersion): `rv:n:${string}` {
-  const parsed = parseRefVersion(refVersion);
-  return `rv:n:${parsed.value}`;
-}
-
-export function refVersionsEqual(left: RefVersion, right: RefVersion): boolean {
-  return left.kind === right.kind && left.value === right.value;
-}
-
 function parseRefNameForResult(
   value: RefName | string,
 ):
   | { readonly ok: true; readonly name: RefName }
   | { readonly ok: false; readonly result: RefFailureResult } {
-  const parsed = validateRefName(value);
+  const parsed = parseCanonicalRefName(value);
   if (parsed.ok) {
     return { ok: true, name: parsed.name };
   }
 
-  const diagnostics = refNameDiagnosticsToVersionDiagnostics(parsed.diagnostics);
   return {
     ok: false,
-    result: failure('invalidRefName', 'Invalid ref name.', diagnostics),
+    result: failure('invalidRefName', 'Invalid ref name.', parsed.diagnostics),
   };
 }
 
@@ -962,26 +928,6 @@ function failure(
   };
 }
 
-function refNameDiagnosticsToVersionDiagnostics(
-  diagnostics: readonly RefNameDiagnostic[],
-): readonly VersionDiagnostic[] {
-  return diagnostics.map((item) =>
-    diagnostic(
-      item.code,
-      item.message,
-      item.value,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        issue: item.issue,
-      },
-    ),
-  );
-}
-
 function diagnostic(
   code: string,
   message: string,
@@ -1027,80 +973,6 @@ function tombstoneDiagnostic(
   );
 }
 
-function matchesPrefix(name: RefName, prefix: RefNamespace | undefined): boolean {
-  if (prefix === undefined) {
-    return true;
-  }
-  return name.startsWith(`${prefix}/`);
-}
-
-function isRefNamespace(value: unknown): value is RefNamespace {
-  return typeof value === 'string' && (REF_NAMESPACES as readonly string[]).includes(value);
-}
-
-function compareLiveRefs(left: LiveRefRecord, right: LiveRefRecord): number {
-  return compareAscii(left.name, right.name);
-}
-
-function compareTombstoneRefs(left: TombstoneRefRecord, right: TombstoneRefRecord): number {
-  const leftDeletedAt = Date.parse(left.deletedAt);
-  const rightDeletedAt = Date.parse(right.deletedAt);
-  if (leftDeletedAt !== rightDeletedAt) {
-    return rightDeletedAt - leftDeletedAt;
-  }
-
-  const nameCompare = compareAscii(left.name, right.name);
-  if (nameCompare !== 0) {
-    return nameCompare;
-  }
-
-  return compareCounterValues(left.refVersion.value, right.refVersion.value);
-}
-
-function compareAscii(left: string, right: string): number {
-  if (left < right) return -1;
-  if (left > right) return 1;
-  return 0;
-}
-
-function compareCounterValues(left: string, right: string): number {
-  const trimmedLeft = left.replace(/^0+(?=\d)/, '');
-  const trimmedRight = right.replace(/^0+(?=\d)/, '');
-  if (trimmedLeft.length !== trimmedRight.length) {
-    return trimmedLeft.length - trimmedRight.length;
-  }
-  return compareAscii(trimmedLeft, trimmedRight);
-}
-
-function nextRefVersion(current: RefVersion): RefVersion {
-  return freezeRefVersion({ kind: 'counter', value: incrementDecimalString(current.value) });
-}
-
-function nextProviderEpoch(current: ProviderEpoch): ProviderEpoch {
-  if (current.kind === 'counter' && REF_VERSION_VALUE_RE.test(current.value)) {
-    return freezeProviderEpoch({ kind: 'counter', value: incrementDecimalString(current.value) });
-  }
-  return freezeProviderEpoch({ kind: 'opaque', value: `${current.value}:reused` });
-}
-
-function incrementDecimalString(value: string): string {
-  let carry = 1;
-  let result = '';
-
-  for (let i = value.length - 1; i >= 0; i--) {
-    const digit = value.charCodeAt(i) - 48 + carry;
-    if (digit === 10) {
-      result = `0${result}`;
-      carry = 1;
-    } else {
-      result = `${digit}${result}`;
-      carry = 0;
-    }
-  }
-
-  return carry === 1 ? `1${result}` : result;
-}
-
 function normalizeRfc3339Milliseconds(value: Date | string): string {
   const timestamp = typeof value === 'string' ? value : value.toISOString();
   if (!RFC3339_MILLISECONDS_RE.test(timestamp)) {
@@ -1116,74 +988,4 @@ function normalizeRfc3339Milliseconds(value: Date | string): string {
     );
   }
   return timestamp;
-}
-
-function freezeLiveRefRecord(record: LiveRefRecord): LiveRefRecord {
-  return Object.freeze({
-    ...record,
-    providerEpoch: freezeProviderEpoch(record.providerEpoch),
-    refVersion: freezeRefVersion(record.refVersion),
-    createdBy: copyAuthor(record.createdBy),
-    updatedBy: copyAuthor(record.updatedBy),
-  });
-}
-
-function freezeTombstoneRefRecord(record: TombstoneRefRecord): TombstoneRefRecord {
-  return Object.freeze({
-    ...record,
-    previousProviderEpoch: freezeProviderEpoch(record.previousProviderEpoch),
-    refVersion: freezeRefVersion(record.refVersion),
-    deletedBy: copyAuthor(record.deletedBy),
-    deleteDiagnostics: record.deleteDiagnostics?.map(cloneDiagnostic),
-  });
-}
-
-function cloneLiveRefRecord(record: LiveRefRecord): LiveRefRecord {
-  return freezeLiveRefRecord({ ...record });
-}
-
-function cloneTombstoneRefRecord(record: TombstoneRefRecord): TombstoneRefRecord {
-  return freezeTombstoneRefRecord({ ...record });
-}
-
-function freezeProviderEpoch(providerEpoch: ProviderEpoch): ProviderEpoch {
-  return Object.freeze({ ...providerEpoch });
-}
-
-function cloneProviderEpoch(providerEpoch: ProviderEpoch): ProviderEpoch {
-  return freezeProviderEpoch(providerEpoch);
-}
-
-function freezeRefVersion(refVersion: RefVersion): RefVersion {
-  return Object.freeze({ kind: refVersion.kind, value: refVersion.value });
-}
-
-function cloneRefVersion(refVersion: RefVersion): RefVersion {
-  return freezeRefVersion(refVersion);
-}
-
-function cloneDiagnostic(item: VersionDiagnostic): VersionDiagnostic {
-  return diagnostic(
-    item.code,
-    item.message,
-    item.refName,
-    item.commitId,
-    item.refVersion,
-    item.refIncarnationId,
-    item.previousRefIncarnationId,
-    item.tombstoneRefVersion,
-    item.details,
-  );
-}
-
-function copyAuthor(author: VersionAuthor): VersionAuthor {
-  return Object.freeze({ ...author });
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false;
-  }
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }

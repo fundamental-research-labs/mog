@@ -30,10 +30,14 @@ import {
   hasAttachedVersionDiffService,
   hasAttachedVersionRefAdminService,
   readCheckoutSessionCurrentStatus,
+  redactedVersionSurfaceCurrentStatus,
+  redactVersionSurfaceDirtyStatus,
   readVersionSurfaceCheckoutSession,
   readVersionSurfaceDirtyStatus,
   readVersionSurfaceStorageStatus,
   remotePromoteSurfaceCapabilityState,
+  shouldRedactVersionSurfaceCurrentStatus,
+  shouldRedactVersionSurfaceDirtyStatus,
   SURFACE_VERSION_CAPABILITY_KEYS,
   type SurfaceCapabilityStates,
   type SurfaceHostCapabilityDecisions,
@@ -223,7 +227,10 @@ export async function getWorkbookVersionSurfaceStatus(
     );
   }
 
-  const readService = featureGate.enabled ? getAttachedVersionReadService(services) : null;
+  const redactCurrentStatus = shouldRedactVersionSurfaceCurrentStatus(hostCapabilityDecisions);
+  const redactDirtyStatus = shouldRedactVersionSurfaceDirtyStatus(hostCapabilityDecisions);
+  const readService =
+    featureGate.enabled && !redactCurrentStatus ? getAttachedVersionReadService(services) : null;
   const storage = readVersionSurfaceStorageStatus({
     services,
     hasVersionAttachment: Boolean(services && hasAnyVersionAttachment(services)),
@@ -254,14 +261,16 @@ export async function getWorkbookVersionSurfaceStatus(
     featureGate.enabled && storage.ready
       ? await deriveVersionSurfaceCapabilityBlocks({ ctx, services, availability })
       : {};
-  const activeCheckoutSession = await readVersionSurfaceCheckoutSession(
-    surfaceStatusService,
-    diagnostics,
-  );
+  const activeCheckoutSession = redactCurrentStatus
+    ? null
+    : await readVersionSurfaceCheckoutSession(surfaceStatusService, diagnostics);
   const current = featureGate.enabled
-    ? await readCurrentStatus(readService, diagnostics, activeCheckoutSession)
+    ? redactCurrentStatus
+      ? redactedVersionSurfaceCurrentStatus()
+      : await readCurrentStatus(readService, diagnostics, activeCheckoutSession)
     : defaultCurrentStatus();
-  const dirty = await readVersionSurfaceDirtyStatus(surfaceStatusService, diagnostics);
+  const rawDirty = await readVersionSurfaceDirtyStatus(surfaceStatusService, diagnostics);
+  const dirty = redactDirtyStatus ? redactVersionSurfaceDirtyStatus(rawDirty) : rawDirty;
   diagnostics.push(...dirty.diagnostics);
   const capabilities = buildCapabilityStates(
     featureGate,
@@ -457,10 +466,7 @@ function buildCapabilityStates(
     retryable: boolean,
     code: VersionDiagnostic['code'],
   ): VersionCapabilityState => {
-    if (
-      capability === 'version:checkout' &&
-      operationFeatureGateDisabled(capability)
-    ) {
+    if (capability === 'version:checkout' && operationFeatureGateDisabled(capability)) {
       return disabledByOperationFeatureGate(capability);
     }
     if (capability === 'version:revert' && operationFeatureGateDisabled(capability)) {

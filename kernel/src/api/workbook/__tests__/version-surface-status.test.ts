@@ -857,6 +857,79 @@ describe('WorkbookVersion surface status', () => {
     },
   );
 
+  it('redacts capability-free status fields when read and checkout grants are denied', async () => {
+    const sensitiveDirtyDiagnostic = {
+      code: 'version.surfaceStatus.dirtyWorkingState',
+      severity: 'warning' as const,
+      message: 'Workbook dirty-secret-message has uncommitted local changes.',
+      dependency: 'VC-05' as const,
+      data: {
+        safeCount: 1,
+        secretToken: 'dirty-secret-token',
+        cursor: 'dirty-secret-cursor',
+      },
+    };
+    const readDirtyStatus = jest.fn(() => ({
+      statusRevision: 'dirty:secret-revision',
+      checkoutPreflightToken: 'checkout-preflight-secret-token',
+      hasUncommittedLocalChanges: true,
+      commitEligibleChanges: true,
+      unsupportedDirtyDomains: [],
+      pendingProviderWrites: false,
+      pendingRecalc: false,
+      liveCollaboration: {
+        state: 'idle',
+        statusRevision: 'live:secret-room',
+        roomId: 'room-secret-id',
+      },
+      checkoutSafe: false,
+      unsafeReasons: [sensitiveDirtyDiagnostic],
+      source: 'VC-05' as const,
+      diagnostics: [sensitiveDirtyDiagnostic],
+    }));
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {
+        policySnapshot: {
+          decisions: [
+            { capability: 'version:read', decision: 'denied' },
+            { capability: 'version:checkout', decision: 'denied' },
+          ],
+        },
+      },
+      {
+        surfaceStatusService: {
+          readDirtyStatus,
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.current).toEqual({ detached: false, stale: true, staleReason: 'unknown' });
+    expect(surface.dirty).toMatchObject({
+      statusRevision: 'redacted',
+      checkoutPreflightToken: 'redacted',
+      hasUncommittedLocalChanges: true,
+      liveCollaboration: {
+        state: 'idle',
+        statusRevision: 'redacted',
+        roomId: 'redacted',
+      },
+    });
+    for (const capability of ['version:read', 'version:checkout'] as const) {
+      expect(capabilityState(surface, capability)).toMatchObject({
+        enabled: false,
+        dependency: 'hostCapability',
+      });
+    }
+    expect(readDirtyStatus).toHaveBeenCalledTimes(1);
+    expect(surfaceReady.readHead).not.toHaveBeenCalled();
+    expect(surfaceReady.readRef).not.toHaveBeenCalled();
+    expect(JSON.stringify(surface)).not.toMatch(
+      /commit:sha256:222|dirty-secret-message|dirty-secret-token|dirty-secret-cursor|dirty:secret-revision|checkout-preflight-secret-token|live:secret-room|room-secret-id/,
+    );
+  });
+
   it('keeps read surfaces available and disables mutating capabilities when editing is false', async () => {
     const { version } = createSurfaceReadyVersionWithContext({
       featureGates: { editing: false },

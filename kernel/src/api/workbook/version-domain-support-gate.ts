@@ -259,32 +259,37 @@ async function hasNamedRangesPresent(ctx: DocumentContext): Promise<boolean | nu
   const namedRangeCount = bindMethod(ctx.computeBridge as unknown, 'namedRangeCount');
   if (namedRangeCount) {
     const count = await namedRangeCount();
-    return typeof count === 'number' && count > 0;
+    if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
+      throw new Error('namedRangeCount returned a malformed count.');
+    }
+    return count > 0;
   }
 
   const getAllNamedRangesWire = bindMethod(ctx.computeBridge as unknown, 'getAllNamedRangesWire');
   if (!getAllNamedRangesWire) return null;
 
   const names = await getAllNamedRangesWire();
-  return Array.isArray(names) && names.length > 0;
+  return expectArrayResult(names, 'getAllNamedRangesWire').length > 0;
 }
 
 async function hasTablesPresent(ctx: DocumentContext): Promise<boolean | null> {
   const getAllTablesInSheet = bindMethod(ctx.computeBridge as unknown, 'getAllTablesInSheet');
   if (!getAllTablesInSheet) return null;
-  return hasAnySheetScopedRows(ctx, (sheetId) => getAllTablesInSheet(sheetId));
+  return hasAnySheetScopedRows(ctx, 'getAllTablesInSheet', (sheetId) =>
+    getAllTablesInSheet(sheetId),
+  );
 }
 
 async function hasFiltersPresent(ctx: DocumentContext): Promise<boolean | null> {
   const getFiltersInSheet = bindMethod(ctx.computeBridge as unknown, 'getFiltersInSheet');
   if (!getFiltersInSheet) return null;
-  return hasAnySheetScopedRows(ctx, (sheetId) => getFiltersInSheet(sheetId));
+  return hasAnySheetScopedRows(ctx, 'getFiltersInSheet', (sheetId) => getFiltersInSheet(sheetId));
 }
 
 async function hasHyperlinksPresent(ctx: DocumentContext): Promise<boolean | null> {
   const getHyperlinks = bindMethod(ctx.computeBridge as unknown, 'getHyperlinks');
   if (!getHyperlinks) return null;
-  return hasAnySheetScopedRows(ctx, (sheetId) => getHyperlinks(sheetId));
+  return hasAnySheetScopedRows(ctx, 'getHyperlinks', (sheetId) => getHyperlinks(sheetId));
 }
 
 async function hasDataValidationPresent(ctx: DocumentContext): Promise<boolean | null> {
@@ -293,25 +298,41 @@ async function hasDataValidationPresent(ctx: DocumentContext): Promise<boolean |
     'getRangeSchemasForSheet',
   );
   if (!getRangeSchemasForSheet) return null;
-  return hasAnySheetScopedRows(ctx, (sheetId) => getRangeSchemasForSheet(sheetId));
+  return hasAnySheetScopedRows(ctx, 'getRangeSchemasForSheet', (sheetId) =>
+    getRangeSchemasForSheet(sheetId),
+  );
 }
 
 async function hasAnySheetScopedRows(
   ctx: DocumentContext,
+  readRowsMethodName: string,
   readRows: (sheetId: string) => MaybePromise<unknown>,
 ): Promise<boolean | null> {
   const getAllSheetIds = bindMethod(ctx.computeBridge as unknown, 'getAllSheetIds');
   if (!getAllSheetIds) return null;
 
-  const sheetIds = await getAllSheetIds();
-  if (!Array.isArray(sheetIds)) return false;
+  const sheetIds = expectStringArrayResult(await getAllSheetIds(), 'getAllSheetIds');
 
   for (const sheetId of sheetIds) {
-    if (typeof sheetId !== 'string' || sheetId === '') continue;
-    const rows = await readRows(sheetId);
-    if (Array.isArray(rows) && rows.length > 0) return true;
+    const rows = expectArrayResult(await readRows(sheetId), readRowsMethodName);
+    if (rows.length > 0) return true;
   }
   return false;
+}
+
+function expectArrayResult(value: unknown, methodName: string): readonly unknown[] {
+  if (Array.isArray(value)) return value;
+  throw new Error(`${methodName} returned a malformed non-array result.`);
+}
+
+function expectStringArrayResult(value: unknown, methodName: string): readonly string[] {
+  const values = expectArrayResult(value, methodName);
+  for (const item of values) {
+    if (typeof item !== 'string' || item === '') {
+      throw new Error(`${methodName} returned a malformed string array result.`);
+    }
+  }
+  return values as readonly string[];
 }
 
 function mergeDetectedDomainDiagnostics(

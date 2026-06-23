@@ -66,6 +66,24 @@ const MUTABLE_DOMAIN_DETECTOR_CASES = [
     throwingMethod: 'getRangeSchemasForSheet',
   },
 ] as const;
+const SHEET_SCOPED_MUTABLE_DOMAIN_DETECTOR_CASES = [
+  {
+    detector: MUTABLE_DOMAIN_DETECTOR_CASES[0],
+    rowReadMethod: 'getAllTablesInSheet',
+  },
+  {
+    detector: MUTABLE_DOMAIN_DETECTOR_CASES[1],
+    rowReadMethod: 'getFiltersInSheet',
+  },
+  {
+    detector: MUTABLE_DOMAIN_DETECTOR_CASES[3],
+    rowReadMethod: 'getHyperlinks',
+  },
+  {
+    detector: MUTABLE_DOMAIN_DETECTOR_CASES[4],
+    rowReadMethod: 'getRangeSchemasForSheet',
+  },
+] as const;
 
 type MutableDomainDetectorCase = (typeof MUTABLE_DOMAIN_DETECTOR_CASES)[number];
 
@@ -102,6 +120,32 @@ function mutableDomainDetectorBridgeWithThrowingMethod(
   return bridge;
 }
 
+function mutableDomainDetectorBridgeWithPresentRows(
+  detector: MutableDomainDetectorCase,
+): Record<string, unknown> {
+  const bridge = mutableDomainDetectorNoopBridge();
+  switch (detector.matrixRowId) {
+    case 'tables':
+      bridge.getAllTablesInSheet = jest.fn(async () => [{ id: 'table-1' }]);
+      break;
+    case 'filters.auto-filter':
+      bridge.getFiltersInSheet = jest.fn(async () => [{ id: 'filter-1' }]);
+      break;
+    case 'named-ranges':
+      bridge.namedRangeCount = jest.fn(async () => 1);
+      break;
+    case 'external-links':
+      bridge.getHyperlinks = jest.fn(async () => [
+        { cellRef: 'A1', target: 'https://example.test' },
+      ]);
+      break;
+    case 'data-validation':
+      bridge.getRangeSchemasForSheet = jest.fn(async () => [{ id: 'validation-1' }]);
+      break;
+  }
+  return bridge;
+}
+
 function versionWithMutableDomainDetectorBridge(
   computeBridge: Record<string, unknown>,
   commit: ReturnType<typeof jest.fn>,
@@ -123,6 +167,7 @@ function expectDetectorPublicDiagnostic(
     | 'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
   detector: MutableDomainDetectorCase,
   recoverability: 'none' | 'retry',
+  expectedDiagnosticCount = 1,
 ): void {
   expect(result).toMatchObject({
     ok: false,
@@ -135,8 +180,14 @@ function expectDetectorPublicDiagnostic(
     throw new Error('expected version.commit to fail');
   }
 
-  expect(result.error.diagnostics).toHaveLength(1);
-  const diagnostic = result.error.diagnostics.find((item) => item.code === code);
+  expect(result.error.diagnostics).toHaveLength(expectedDiagnosticCount);
+  const diagnostic = result.error.diagnostics.find(
+    (item) =>
+      item.code === code &&
+      item.data?.payload?.detectorId === detector.detectorId &&
+      item.data.payload.matrixRowId === detector.matrixRowId &&
+      item.data.payload.domainId === detector.domainId,
+  );
   expect(diagnostic).toMatchObject({
     code,
     severity: 'error',
@@ -721,6 +772,130 @@ describe('WorkbookVersion domain support manifest gate', () => {
         'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE',
         detector,
         'none',
+      );
+      expect(commit).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fails closed before invoking the write service when getAllSheetIds is unavailable or malformed', async () => {
+    const cases = [
+      {
+        code: 'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE' as const,
+        recoverability: 'none' as const,
+        bridge: () => {
+          const bridge = mutableDomainDetectorNoopBridge();
+          delete bridge.getAllSheetIds;
+          return bridge;
+        },
+      },
+      {
+        code: 'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED' as const,
+        recoverability: 'retry' as const,
+        bridge: () => ({
+          ...mutableDomainDetectorNoopBridge(),
+          getAllSheetIds: jest.fn(async () => ({
+            leakedSheetName: 'SecretSheetIds',
+          })),
+        }),
+      },
+      {
+        code: 'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED' as const,
+        recoverability: 'retry' as const,
+        bridge: () => ({
+          ...mutableDomainDetectorNoopBridge(),
+          getAllSheetIds: jest.fn(async () => [DETECTOR_SHEET_ID, { id: 'SecretSheetIds' }]),
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const commit = jest.fn();
+      const version = versionWithMutableDomainDetectorBridge(testCase.bridge(), commit);
+
+      const result = await version.commit();
+
+      for (const { detector } of SHEET_SCOPED_MUTABLE_DOMAIN_DETECTOR_CASES) {
+        expectDetectorPublicDiagnostic(
+          result,
+          testCase.code,
+          detector,
+          testCase.recoverability,
+          SHEET_SCOPED_MUTABLE_DOMAIN_DETECTOR_CASES.length,
+        );
+      }
+      expect(JSON.stringify(result)).not.toContain('SecretSheetIds');
+      expect(commit).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fails closed before invoking the write service when sheet-scoped detectors return non-array rows', async () => {
+    for (const { detector, rowReadMethod } of SHEET_SCOPED_MUTABLE_DOMAIN_DETECTOR_CASES) {
+      const commit = jest.fn();
+      const bridge = mutableDomainDetectorNoopBridge();
+      bridge[rowReadMethod] = jest.fn(async () => ({
+        leakedRowName: `SecretDetectorRows-${detector.label}`,
+      }));
+      const version = versionWithMutableDomainDetectorBridge(bridge, commit);
+
+      const result = await version.commit();
+
+      expectDetectorPublicDiagnostic(
+        result,
+        'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
+        detector,
+        'retry',
+      );
+      expect(JSON.stringify(result)).not.toContain('SecretDetectorRows');
+      expect(commit).not.toHaveBeenCalled();
+    }
+  });
+
+  it('maps present mutable detector rows to required manifest rows before invoking the write service', async () => {
+    for (const detector of MUTABLE_DOMAIN_DETECTOR_CASES) {
+      const commit = jest.fn();
+      const version = versionWithMutableDomainDetectorBridge(
+        mutableDomainDetectorBridgeWithPresentRows(detector),
+        commit,
+      );
+
+      const result = await version.commit();
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.commit',
+        },
+      });
+      if (result.ok) {
+        throw new Error('expected version.commit to fail');
+      }
+      expect(result.error.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'required-matrix-row-missing',
+                matrixRowId: detector.matrixRowId,
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            code: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            data: expect.objectContaining({
+              operation: 'commit',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                diagnosticCode: 'detector-row-missing',
+                matrixRowId: detector.matrixRowId,
+                domainId: detector.domainId,
+              }),
+            }),
+          }),
+        ]),
       );
       expect(commit).not.toHaveBeenCalled();
     }

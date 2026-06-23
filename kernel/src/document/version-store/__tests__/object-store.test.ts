@@ -6,7 +6,12 @@ import {
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
 } from '../object-store';
-import type { ObjectDigest, VersionDependencyRef, VersionObjectType } from '../object-digest';
+import type {
+  ObjectDigest,
+  VersionDependencyRef,
+  VersionObjectType,
+  WorkbookCommitId,
+} from '../object-digest';
 
 const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',
@@ -25,6 +30,7 @@ const OTHER_NAMESPACE: VersionGraphNamespace = {
 const HEX_A = 'aa'.repeat(32);
 const HEX_B = 'bb'.repeat(32);
 const HEX_C = 'cc'.repeat(32);
+const HEX_D = 'dd'.repeat(32);
 
 function digest(hex: string): ObjectDigest {
   return { algorithm: 'sha256', digest: hex };
@@ -124,6 +130,80 @@ describe('InMemoryVersionObjectStore putObjects', () => {
 
     expectFailedCode(result, 'VERSION_MISSING_DEPENDENCY');
     await expect(store.hasObject(objectRef(semanticChangeSet))).resolves.toBe(false);
+  });
+
+  it('redacts merge and review artifact payload details from dependency diagnostics', async () => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const missingCommitId = `commit:sha256:${HEX_D}` as WorkbookCommitId;
+    const missingCommitDependency: VersionDependencyRef = {
+      kind: 'commit',
+      commitId: missingCommitId,
+      digest: digest(HEX_D),
+    };
+    const mergePreview = await record(
+      {
+        schemaVersion: 1,
+        recordKind: 'mergePreview',
+        base: missingCommitId,
+        ours: missingCommitId,
+        theirs: missingCommitId,
+        privateEntityId: 'Sheet1!Secret42',
+        reviewerNote: 'private merge payload must not leak',
+      },
+      [missingCommitDependency],
+      'workbook.mergePreview.v1',
+    );
+    const reviewExtension = await record(
+      {
+        schemaVersion: 1,
+        recordKind: 'reviewExtension',
+        mergePreviewId: 'merge-preview/private-secret',
+        reviewerNote: 'private review payload must not leak',
+      },
+      [],
+      'workbook.reviewExtension.v1',
+      OTHER_NAMESPACE,
+    );
+
+    const missingDependency = await store.putObjects([mergePreview]);
+    const wrongNamespace = await store.putObjects([reviewExtension]);
+
+    expectFailedCode(missingDependency, 'VERSION_MISSING_DEPENDENCY');
+    expectFailedCode(wrongNamespace, 'VERSION_WRONG_NAMESPACE');
+    if (missingDependency.status !== 'failed' || wrongNamespace.status !== 'failed') {
+      throw new Error('expected failed diagnostic results');
+    }
+
+    expect(missingDependency.diagnostics[0]).toMatchObject({
+      code: 'VERSION_MISSING_DEPENDENCY',
+      objectType: 'workbook.mergePreview.v1',
+      details: { dependencyKind: 'commit' },
+    });
+    expect(missingDependency.diagnostics[0]).not.toHaveProperty('digest');
+    expect(missingDependency.diagnostics[0]).not.toHaveProperty('dependency');
+    expect(wrongNamespace.diagnostics[0]).toMatchObject({
+      code: 'VERSION_WRONG_NAMESPACE',
+      details: { namespace: 'redacted' },
+    });
+    expect(wrongNamespace.diagnostics[0]).not.toHaveProperty('namespace');
+
+    const diagnosticText = JSON.stringify([
+      ...missingDependency.diagnostics,
+      ...wrongNamespace.diagnostics,
+    ]);
+    for (const leakedValue of [
+      missingCommitId,
+      HEX_D,
+      mergePreview.digest.digest,
+      reviewExtension.digest.digest,
+      OTHER_NAMESPACE.documentId,
+      'Sheet1!Secret42',
+      'private merge payload must not leak',
+      'merge-preview/private-secret',
+      'private review payload must not leak',
+    ]) {
+      expect(diagnosticText).not.toContain(leakedValue);
+    }
   });
 
   it('is idempotent for the same record', async () => {

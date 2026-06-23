@@ -180,8 +180,8 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
             'VERSION_WRONG_NAMESPACE',
             'Version object record namespace does not match this store namespace.',
             {
-              namespace,
               path: `batch[${index}].namespace`,
+              details: { namespace: 'redacted' },
             },
           );
         }
@@ -237,14 +237,7 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
         );
         const satisfiedByStore = hasDependencyRecord(this.backend, this.namespace, dependency);
         if (!satisfiedByBatch && !satisfiedByStore) {
-          diagnostics.push(
-            diagnostic('VERSION_MISSING_DEPENDENCY', 'Version object dependency is missing.', {
-              namespace: this.namespace,
-              digest: stagedRecord.record.digest,
-              objectType: stagedRecord.record.preimage.objectType,
-              dependency,
-            }),
-          );
+          diagnostics.push(missingDependencyDiagnostic(stagedRecord.record, dependency));
         }
       }
     }
@@ -578,6 +571,13 @@ function hasDependencyRecord(
 ): boolean {
   const record = backend.get(namespace, dependency.digest);
   return Boolean(record && dependencyMatchesRecord(dependency, record));
+}
+
+function missingDependencyDiagnostic(record: VersionObjectRecord<unknown>, dependency: VersionDependencyRef): VersionObjectStoreDiagnostic {
+  const details: Readonly<Record<string, string>> = dependency.kind === 'object'
+    ? { dependencyKind: dependency.kind, dependencyObjectType: dependency.objectType }
+    : { dependencyKind: dependency.kind };
+  return diagnostic('VERSION_MISSING_DEPENDENCY', 'Version object dependency is missing.', { objectType: record.preimage.objectType, details });
 }
 
 function dependencyMatchesRecord(

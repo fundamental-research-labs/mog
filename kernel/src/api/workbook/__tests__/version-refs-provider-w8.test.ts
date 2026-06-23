@@ -299,8 +299,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(createRace.failure, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: initialized.rootCommit.id,
-        actualRefRevision: 'rv:n:0',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
 
@@ -327,8 +327,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(advanceRace.failure, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: advanceRace.success.value.commitId,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
 
@@ -354,8 +354,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(deleteRace.failure, 'VERSION_DANGLING_REF', {
       recoverability: 'unsupported',
       payload: expect.objectContaining({
-        actualHead: advanceRace.success.value.commitId,
-        actualRefRevision: 'rv:n:2',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
     expectNoDiagnosticLeak(createRace.failure, 'scenario/cas-race');
@@ -438,8 +438,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(recreated, 'VERSION_DANGLING_REF', {
       recoverability: 'unsupported',
       payload: expect.objectContaining({
-        actualHead: initialized.rootCommit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
     expectNoDiagnosticLeak(recreated, 'scenario/reload-tombstone');
@@ -520,8 +520,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: child.commit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
         conflict: 'expectedHeadMismatch',
       }),
     });
@@ -675,8 +675,8 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoWriteFailure(conflict, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: AUX_COMMIT_ID,
-        actualRefRevision: 'rv:n:4',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
         conflict: 'expectedPreviousRefIncarnationIdMismatch',
       }),
     });
@@ -698,7 +698,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     ],
   ])(
     'fails closed for %s active-ref provider reads before delete preflight',
-    async (_label, active, phase) => {
+    async (_label, active, _phase) => {
       const branchService = {
         readActiveCheckoutSession: jest.fn(async () => active),
         readBranch: jest.fn(),
@@ -713,7 +713,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
       });
       expectNoWriteFailure(blocked, 'VERSION_PROVIDER_ERROR', {
         recoverability: 'retry',
-        payload: expect.objectContaining({ phase }),
+        payload: expect.objectContaining({ phase: 'redacted' }),
       });
       expectNoDiagnosticLeak(blocked, SECRET_REF_NAME, SECRET_MESSAGE);
       expect(branchService.readBranch).not.toHaveBeenCalled();

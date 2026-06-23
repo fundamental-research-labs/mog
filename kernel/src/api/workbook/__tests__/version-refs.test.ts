@@ -377,8 +377,8 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
           data: expect.objectContaining({
             mutationGuarantee: 'no-write-attempted',
             payload: expect.objectContaining({
-              actualHead: COMMIT_C,
-              actualRefRevision: 'rv:n:2',
+              actualHead: 'redacted',
+              actualRefRevision: 'redacted',
               conflict: 'expectedHeadMismatch',
             }),
             recoverability: 'retry',
@@ -416,8 +416,8 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
           data: expect.objectContaining({
             mutationGuarantee: 'no-write-attempted',
             payload: expect.objectContaining({
-              actualHead: COMMIT_A,
-              actualRefRevision: 'rv:n:0',
+              actualHead: 'redacted',
+              actualRefRevision: 'redacted',
               conflict: 'expectedHeadMismatch',
             }),
           }),
@@ -650,7 +650,7 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
             code: 'VERSION_INVALID_OPTIONS',
             data: expect.objectContaining({
               mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({ option: 'protected' }),
+              payload: expect.objectContaining({ option: 'redacted' }),
             }),
           }),
         ],

@@ -342,7 +342,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       targetCommitId: initialized.rootCommit.id,
     });
     expectNoWriteFailure(protectedCreate, 'VERSION_PERMISSION_DENIED', {
-      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+      payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
     const protectedAdvance = await wb.version.fastForwardBranch({
@@ -352,7 +352,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       expectedRefRevision: initialized.initialHead.revision,
     });
     expectNoWriteFailure(protectedAdvance, 'VERSION_PERMISSION_DENIED', {
-      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+      payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
     const protectedDelete = await wb.version.deleteRef({
@@ -361,7 +361,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       expectedRefRevision: initialized.initialHead.revision,
     });
     expectNoWriteFailure(protectedDelete, 'VERSION_PERMISSION_DENIED', {
-      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+      payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
     const protectedDeleteBranch = await wb.version.deleteBranch({
@@ -370,7 +370,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       expectedRefRevision: initialized.initialHead.revision,
     });
     expectNoWriteFailure(protectedDeleteBranch, 'VERSION_PERMISSION_DENIED', {
-      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+      payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
     const tagCreate = await wb.version.createBranch({
@@ -438,8 +438,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expectNoWriteFailure(duplicate, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: initialized.rootCommit.id,
-        actualRefRevision: 'rv:n:0',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
     expectNoDiagnosticLeak(duplicate, 'scenario/duplicate');
@@ -535,8 +535,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: child.commit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
         conflict: 'expectedHeadMismatch',
       }),
     });
@@ -613,8 +613,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expectNoWriteFailure(staleAdvance, 'VERSION_DANGLING_REF', {
       recoverability: 'unsupported',
       payload: expect.objectContaining({
-        actualHead: initialized.rootCommit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
     expectNoDiagnosticLeak(staleAdvance, 'scenario/deleted-stale');
@@ -627,8 +627,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expectNoWriteFailure(staleDelete, 'VERSION_DANGLING_REF', {
       recoverability: 'unsupported',
       payload: expect.objectContaining({
-        actualHead: initialized.rootCommit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
       }),
     });
     expectNoDiagnosticLeak(staleDelete, 'scenario/deleted-stale');
@@ -688,8 +688,8 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
       recoverability: 'retry',
       payload: expect.objectContaining({
-        actualHead: child.commit.id,
-        actualRefRevision: 'rv:n:1',
+        actualHead: 'redacted',
+        actualRefRevision: 'redacted',
         conflict: 'expectedRefVersionMismatch',
       }),
     });

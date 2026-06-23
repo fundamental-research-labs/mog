@@ -4,7 +4,10 @@ import { jest } from '@jest/globals';
 
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import { withVersionManifest } from '../../../api/workbook/__tests__/version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from '../../../api/workbook/__tests__/version-domain-support-test-utils';
 import type { VersionNormalCommitCapture } from '../commit-service';
 import type { VersionObjectType } from '../object-digest';
 import {
@@ -429,6 +432,7 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
       userTimezone: 'UTC',
     });
     const wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+    installVersionDomainDetectorNoopsOnWorkbook(wb);
 
     await expect(wb.version.getHead()).resolves.toMatchObject({
       ok: false,
@@ -461,6 +465,7 @@ async function openWorkbook(
     userTimezone: 'UTC',
   });
   const wb = await handle.workbook({ versioning: withVersionManifest(versioning) });
+  installVersionDomainDetectorNoopsOnWorkbook(wb);
   return { handle, wb };
 }
 

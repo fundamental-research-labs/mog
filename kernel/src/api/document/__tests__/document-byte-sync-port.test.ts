@@ -247,6 +247,48 @@ function makeHydrationProvenance(payload: Uint8Array): ClassifiedRawSyncUpdatePr
   };
 }
 
+interface RawFallbackAdmissionPayload {
+  readonly bin: 'document-byte-sync-port.raw-fallback-rejected';
+  readonly sourceKind: 'legacyRawUnknown';
+  readonly byteMaterial: 'omitted';
+}
+
+interface RawFallbackAdmissionDiagnostic {
+  readonly code: 'provenance.missingContext';
+  readonly reason: 'missingClassification';
+  readonly subreason: 'rawUnclassified';
+  readonly retryable: true;
+  readonly retryStrategy: 'retry-with-classified-provenance';
+  readonly methodName: 'DocumentHandle.syncPort.applyUpdate';
+  readonly message: 'raw sync bytes require classified provenance';
+  readonly payload: RawFallbackAdmissionPayload;
+}
+
+type RawFallbackAdmissionError = Error & {
+  readonly code: 'provenance.missingContext';
+  readonly reason: 'missingClassification';
+  readonly subreason: 'rawUnclassified';
+  readonly retryable: true;
+  readonly retryStrategy: 'retry-with-classified-provenance';
+  readonly bin: RawFallbackAdmissionPayload['bin'];
+  readonly sourceKind: RawFallbackAdmissionPayload['sourceKind'];
+  readonly payload: RawFallbackAdmissionPayload;
+  readonly diagnostic: RawFallbackAdmissionDiagnostic;
+  readonly diagnostics: readonly RawFallbackAdmissionDiagnostic[];
+};
+
+async function rejectRawApplyUpdate(
+  port: { applyUpdate(update: Uint8Array): Promise<unknown> },
+  update: Uint8Array,
+): Promise<RawFallbackAdmissionError> {
+  return port.applyUpdate(update).then(
+    () => {
+      throw new Error('expected raw applyUpdate rejection');
+    },
+    (err: unknown) => err as RawFallbackAdmissionError,
+  );
+}
+
 describe('DocumentHandle.createSyncPort', () => {
   it('returns one stable document byte-sync port', () => {
     const { handle } = createHandleFixture();
@@ -308,6 +350,65 @@ describe('DocumentHandle.createSyncPort', () => {
       'DocumentHandle.syncPort.applyUpdate: raw sync bytes require classified provenance',
     );
     expect((error as Error).message).toContain('subreason=rawUnclassified');
+    expect((error as Error).message).toContain('retryable=true');
+    expect((error as Error).message).toContain(
+      'bin=document-byte-sync-port.raw-fallback-rejected',
+    );
+    expect((error as Error).message).toContain('sourceKind=legacyRawUnknown');
+
+    expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
+    expect(bridge.syncApply).not.toHaveBeenCalled();
+    expect(bridge.events).toEqual([]);
+  });
+
+  it('rejects raw fallback with retryable stable diagnostics and no raw bytes', async () => {
+    const { handle, bridge } = createHandleFixture();
+    const port = handle.createSyncPort();
+    const rawUpdate = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    const otherRawUpdate = new Uint8Array([0xca, 0xfe, 0xba, 0xbe]);
+    const payload: RawFallbackAdmissionPayload = {
+      bin: 'document-byte-sync-port.raw-fallback-rejected',
+      sourceKind: 'legacyRawUnknown',
+      byteMaterial: 'omitted',
+    };
+
+    const error = await rejectRawApplyUpdate(port, rawUpdate);
+    const otherError = await rejectRawApplyUpdate(port, otherRawUpdate);
+
+    expect(error).toMatchObject({
+      name: 'DocumentByteSyncAdmissionError',
+      code: 'provenance.missingContext',
+      reason: 'missingClassification',
+      subreason: 'rawUnclassified',
+      retryable: true,
+      retryStrategy: 'retry-with-classified-provenance',
+      bin: payload.bin,
+      sourceKind: payload.sourceKind,
+      payload,
+      diagnostic: {
+        code: 'provenance.missingContext',
+        reason: 'missingClassification',
+        subreason: 'rawUnclassified',
+        retryable: true,
+        retryStrategy: 'retry-with-classified-provenance',
+        methodName: 'DocumentHandle.syncPort.applyUpdate',
+        message: 'raw sync bytes require classified provenance',
+        payload,
+      },
+    });
+    expect(error.diagnostics).toEqual([error.diagnostic]);
+    expect(otherError.diagnostic).toEqual(error.diagnostic);
+
+    const diagnosticsJson = JSON.stringify(error.diagnostics);
+    expect(diagnosticsJson).toContain('"bin":"document-byte-sync-port.raw-fallback-rejected"');
+    expect(diagnosticsJson).toContain('"sourceKind":"legacyRawUnknown"');
+    expect(diagnosticsJson).not.toContain('rawBytes');
+    expect(diagnosticsJson).not.toContain('payloadHash');
+    expect(diagnosticsJson).not.toContain('deadbeef');
+    expect(diagnosticsJson).not.toContain('222');
+    expect(diagnosticsJson).not.toContain('173');
+    expect(diagnosticsJson).not.toContain('190');
+    expect(diagnosticsJson).not.toContain('239');
 
     expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
     expect(bridge.syncApply).not.toHaveBeenCalled();

@@ -30,19 +30,37 @@ interface CreateDocumentByteSyncPortOptions {
 type DocumentByteSyncAdmissionFailureCode = 'provenance.missingContext';
 type DocumentByteSyncAdmissionFailureReason = 'missingClassification';
 type DocumentByteSyncAdmissionFailureSubreason = 'rawUnclassified';
+type DocumentByteSyncAdmissionFailureBin = 'document-byte-sync-port.raw-fallback-rejected';
+type DocumentByteSyncAdmissionFailureSourceKind = 'legacyRawUnknown';
+type DocumentByteSyncAdmissionRetryStrategy = 'retry-with-classified-provenance';
+type DocumentByteSyncAdmissionByteMaterial = 'omitted';
+
+interface DocumentByteSyncAdmissionFailurePayload {
+  readonly bin: DocumentByteSyncAdmissionFailureBin;
+  readonly sourceKind: DocumentByteSyncAdmissionFailureSourceKind;
+  readonly byteMaterial: DocumentByteSyncAdmissionByteMaterial;
+}
 
 interface DocumentByteSyncAdmissionFailureDiagnostic {
   readonly code: DocumentByteSyncAdmissionFailureCode;
   readonly reason: DocumentByteSyncAdmissionFailureReason;
   readonly subreason: DocumentByteSyncAdmissionFailureSubreason;
+  readonly retryable: true;
+  readonly retryStrategy: DocumentByteSyncAdmissionRetryStrategy;
   readonly methodName: string;
   readonly message: string;
+  readonly payload: DocumentByteSyncAdmissionFailurePayload;
 }
 
 class DocumentByteSyncAdmissionError extends Error {
   readonly code: DocumentByteSyncAdmissionFailureCode;
   readonly reason: DocumentByteSyncAdmissionFailureReason;
   readonly subreason: DocumentByteSyncAdmissionFailureSubreason;
+  readonly retryable: true;
+  readonly retryStrategy: DocumentByteSyncAdmissionRetryStrategy;
+  readonly bin: DocumentByteSyncAdmissionFailureBin;
+  readonly sourceKind: DocumentByteSyncAdmissionFailureSourceKind;
+  readonly payload: DocumentByteSyncAdmissionFailurePayload;
   readonly diagnostic: DocumentByteSyncAdmissionFailureDiagnostic;
   readonly diagnostics: readonly DocumentByteSyncAdmissionFailureDiagnostic[];
 
@@ -52,8 +70,13 @@ class DocumentByteSyncAdmissionError extends Error {
     this.code = diagnostic.code;
     this.reason = diagnostic.reason;
     this.subreason = diagnostic.subreason;
+    this.retryable = diagnostic.retryable;
+    this.retryStrategy = diagnostic.retryStrategy;
+    this.bin = diagnostic.payload.bin;
+    this.sourceKind = diagnostic.payload.sourceKind;
+    this.payload = diagnostic.payload;
     this.diagnostic = diagnostic;
-    this.diagnostics = [diagnostic];
+    this.diagnostics = Object.freeze([diagnostic]);
   }
 }
 
@@ -65,6 +88,10 @@ function formatDocumentByteSyncAdmissionErrorMessage(
     `diagnostic=${diagnostic.code}`,
     `reason=${diagnostic.reason}`,
     `subreason=${diagnostic.subreason}`,
+    `retryable=${diagnostic.retryable}`,
+    `retryStrategy=${diagnostic.retryStrategy}`,
+    `bin=${diagnostic.payload.bin}`,
+    `sourceKind=${diagnostic.payload.sourceKind}`,
     'use applyClassifiedRawUpdate, applyUpdateWithProvenance, or applyProviderEnvelope',
   ].join('; ');
 }
@@ -195,8 +222,15 @@ function rawSyncFallbackAdmissionError(methodName: string): DocumentByteSyncAdmi
     code: 'provenance.missingContext',
     reason: 'missingClassification',
     subreason: 'rawUnclassified',
+    retryable: true,
+    retryStrategy: 'retry-with-classified-provenance',
     methodName,
     message: 'raw sync bytes require classified provenance',
+    payload: {
+      bin: 'document-byte-sync-port.raw-fallback-rejected',
+      sourceKind: 'legacyRawUnknown',
+      byteMaterial: 'omitted',
+    },
   });
 }
 

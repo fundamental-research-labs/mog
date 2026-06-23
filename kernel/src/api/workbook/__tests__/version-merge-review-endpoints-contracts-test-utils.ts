@@ -123,9 +123,10 @@ export function conflictDigestObject(conflictDigest: string): ObjectDigest {
 }
 
 export function mutateDigest(digest: ObjectDigest): ObjectDigest {
+  const first = digest.digest[0] === '0' ? '1' : '0';
   return {
-    algorithm: 'sha256',
-    digest: `${digest.digest === `${'f'.repeat(64)}` ? 'e' : 'f'}${digest.digest.slice(1)}`,
+    algorithm: digest.algorithm,
+    digest: `${first}${digest.digest.slice(1)}`,
   };
 }
 
@@ -151,9 +152,13 @@ export function expectInvalidMergeReviewOptions(
   operation: string,
   options: readonly string[],
 ): void {
+  expectInvalidMergeReviewRequest(value, operation);
+  expect(diagnosticOptions(value)).toEqual(expect.arrayContaining(options));
+}
+
+export function expectInvalidMergeReviewRequest(value: unknown, operation: string): void {
   expectMergeReviewFailure(value, operation, 'VERSION_INVALID_OPTIONS');
   expectPublicRedactedDiagnostics(value, operation);
-  expect(diagnosticOptions(value)).toEqual(expect.arrayContaining(options));
 }
 
 export function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): void {

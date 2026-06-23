@@ -192,9 +192,10 @@ export function conflictDigestObject(conflictDigest: string): ObjectDigest {
 }
 
 export function mutateDigest(digest: ObjectDigest): ObjectDigest {
+  const first = digest.digest[0] === '0' ? '1' : '0';
   return {
-    algorithm: 'sha256',
-    digest: `${digest.digest === `${'f'.repeat(64)}` ? 'e' : 'f'}${digest.digest.slice(1)}`,
+    algorithm: digest.algorithm,
+    digest: `${first}${digest.digest.slice(1)}`,
   };
 }
 

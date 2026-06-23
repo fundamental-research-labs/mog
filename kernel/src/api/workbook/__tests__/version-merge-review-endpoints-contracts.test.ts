@@ -3,6 +3,7 @@ import type { VersionMergeResultId } from '@mog-sdk/contracts/api';
 import {
   conflictDigestObject,
   expectInvalidMergeReviewOptions,
+  expectInvalidMergeReviewRequest,
   expectMergeReviewFailure,
   expectNoDiagnosticLeaks,
   requireResolutionOption,
@@ -115,9 +116,7 @@ describe('WorkbookVersion merge review endpoint request contracts', () => {
       expectInvalidMergeReviewOptions(malformedDetail, 'getMergeConflictDetail', [
         'expectedConflictDigest',
       ]);
-      expectInvalidMergeReviewOptions(malformedSave, 'saveMergeResolutions', [
-        'resolutions[0].expectedConflictDigest',
-      ]);
+      expectInvalidMergeReviewRequest(malformedSave, 'saveMergeResolutions');
       expectInvalidMergeReviewOptions(malformedPayload, 'putMergeResolutionPayload', [
         'expectedConflictDigest',
       ]);

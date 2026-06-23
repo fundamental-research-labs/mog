@@ -18,6 +18,7 @@ import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
   type VersionDocumentScope,
+  type VersionGraphStore,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
   type VersionStoreProvider,
@@ -112,6 +113,74 @@ describe('WorkbookVersion VC-07 merge-base gate', () => {
     expectPublicSafeMergeFailure(result, 'VERSION_MISSING_OBJECT');
     expect(merge).not.toHaveBeenCalled();
   });
+
+  it('blocks public ancestry shortcuts without a base proof before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-missing-base-proof');
+    const staleBase = await createCommit(graph, {
+      label: 'stale-base',
+      parentCommitIds: [],
+    });
+    const ours = await createCommit(graph, {
+      label: 'ours-related-to-main-root',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({ base: staleBase, ours, theirs: ours });
+
+    expectPublicSafeMergeFailure(result, 'VERSION_MERGE_BASE_MISMATCH', {
+      diagnosticCode: 'missingBaseProof',
+      baseInOurs: false,
+      baseInTheirs: false,
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it.each(['base', 'ours', 'theirs'] as const)(
+    'blocks public %s closure ref mismatches with redacted diagnostics',
+    async (mergeRef) => {
+      const graph = await graphWithRoot('graph-public-ref-mismatch');
+      const unrelatedRoot = await createCommit(graph, {
+        label: 'unrelated-root',
+        parentCommitIds: [],
+      });
+      const ours = await createCommit(graph, {
+        label: 'ours-related-to-main-root',
+        parentCommitIds: [graph.rootCommitId],
+      });
+      const theirs = await createCommit(graph, {
+        label: 'theirs-related-to-main-root',
+        parentCommitIds: [graph.rootCommitId],
+      });
+      const merge = mergeServiceMustNotRun();
+      const input = { base: graph.rootCommitId, ours, theirs };
+      const provider = providerWithClosureSubstitution(
+        graph.provider,
+        input[mergeRef],
+        mergeRef === 'base' ? unrelatedRoot : graph.rootCommitId,
+      );
+      const version = publicWorkbookVersion(provider, merge);
+
+      const result = await version.merge(input);
+
+      const diagnostic = expectPublicSafeMergeFailure(result, 'VERSION_UNMATERIALIZABLE_COMMIT', {
+        diagnosticCode: 'commitClosureRefMismatch',
+        mergeRef,
+      });
+      expect(diagnostic.data).toMatchObject({
+        operation: 'merge',
+        redacted: true,
+        payload: {
+          operation: 'merge',
+          diagnosticCode: 'commitClosureRefMismatch',
+          mergeRef,
+        },
+      });
+      expect(JSON.stringify(diagnostic.data.payload)).not.toContain('commit:sha256:');
+      expect(merge).not.toHaveBeenCalled();
+    },
+  );
 
   it('allows public already-merged ancestor previews to reach the merge service', async () => {
     const graph = await graphWithRoot('graph-public-already-merged-ancestor');
@@ -306,6 +375,40 @@ function mergeServiceMustNotRun() {
   });
 }
 
+function providerWithClosureSubstitution(
+  provider: VersionStoreProvider,
+  requestedCommitId: WorkbookCommitId,
+  returnedCommitId: WorkbookCommitId,
+): VersionStoreProvider {
+  const readGraphRegistry: VersionStoreProvider['readGraphRegistry'] = () =>
+    provider.readGraphRegistry();
+  const openGraph: VersionStoreProvider['openGraph'] = async (namespace, accessContext) =>
+    graphWithClosureSubstitution(
+      await provider.openGraph(namespace, accessContext),
+      requestedCommitId,
+      returnedCommitId,
+    );
+
+  return {
+    readGraphRegistry,
+    openGraph,
+  } as VersionStoreProvider;
+}
+
+function graphWithClosureSubstitution(
+  graph: VersionGraphStore,
+  requestedCommitId: WorkbookCommitId,
+  returnedCommitId: WorkbookCommitId,
+): VersionGraphStore {
+  return new Proxy(graph, {
+    get(target, property, receiver) {
+      if (property !== 'readCommitClosure') return Reflect.get(target, property, receiver);
+      return (commitId: WorkbookCommitId | string) =>
+        target.readCommitClosure(commitId === requestedCommitId ? returnedCommitId : commitId);
+    },
+  });
+}
+
 function expectPublicSafeMergeFailure(
   result: Awaited<ReturnType<WorkbookVersionImpl['merge']>>,
   code: string,
@@ -339,6 +442,7 @@ function expectPublicSafeMergeFailure(
   const diagnostic = result.error.diagnostics.find((item) => item.code === code);
   expect(diagnostic).toBeDefined();
   expect(JSON.stringify(diagnostic)).not.toContain('commit:sha256:');
+  return diagnostic!;
 }
 
 async function createCommit(

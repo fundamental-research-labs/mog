@@ -23,6 +23,7 @@ import {
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+type MergeInputRef = 'base' | 'ours' | 'theirs';
 
 type AttachedVersionGraphProvider = Pick<VersionStoreProvider, 'readGraphRegistry' | 'openGraph'> &
   Partial<Pick<VersionStoreProvider, 'accessContext'>>;
@@ -37,15 +38,18 @@ export async function validatePublicMergeBaseGate(
   const opened = await openPublicMergeBaseGraph(provider);
   if (!opened.ok) return opened.diagnostics;
 
-  const base = await readPublicMergeBaseCommit(opened.graph, input.base);
+  const base = await readPublicMergeBaseCommit(opened.graph, input.base, 'base');
   if (!base.ok) return base.diagnostics;
-  const ours = await readPublicMergeBaseCommit(opened.graph, input.ours);
+  const ours = await readPublicMergeBaseCommit(opened.graph, input.ours, 'ours');
   if (!ours.ok) return ours.diagnostics;
-  const theirs = await readPublicMergeBaseCommit(opened.graph, input.theirs);
+  const theirs = await readPublicMergeBaseCommit(opened.graph, input.theirs, 'theirs');
   if (!theirs.ok) return theirs.diagnostics;
 
   const resolution = resolveVersionMergeBase(input, ours.commit, theirs.commit);
-  return resolution.status === 'blocked' ? [resolution.diagnostic] : [];
+  if (resolution.status === 'blocked') return [resolution.diagnostic];
+
+  const baseProofDiagnostic = validatePublicMergeBaseProof(input, ours.commit, theirs.commit);
+  return baseProofDiagnostic ? [baseProofDiagnostic] : [];
 }
 
 export async function publicMergeBaseGateResult(
@@ -142,13 +146,19 @@ async function openPublicMergeBaseGraph(
 async function readPublicMergeBaseCommit(
   graph: VersionGraphStore,
   commitId: WorkbookCommitId,
+  mergeRef: MergeInputRef,
 ): Promise<
   | { readonly ok: true; readonly commit: VersionMergeBaseCommitRead }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const closure = await graph.readCommitClosure(commitId);
   if (closure.status !== 'success') {
-    return { ok: false, diagnostics: mapGraphDiagnostics(closure.diagnostics) };
+    return {
+      ok: false,
+      diagnostics: mapGraphDiagnostics(closure.diagnostics).map((diagnostic) =>
+        diagnosticWithMergeRef(diagnostic, mergeRef),
+      ),
+    };
   }
 
   const commit = closure.commits.find((candidate) => candidate.id === commitId);
@@ -159,13 +169,63 @@ async function readPublicMergeBaseCommit(
         publicDiagnostic(
           'VERSION_UNMATERIALIZABLE_COMMIT',
           'The requested version merge is not previewable by the attached service.',
-          { recoverability: 'unsupported' },
+          {
+            recoverability: 'unsupported',
+            payload: {
+              diagnosticCode: 'commitClosureRefMismatch',
+              mergeRef,
+            },
+          },
         ),
       ],
     };
   }
 
   return { ok: true, commit: { commit, closure: closure.commits } };
+}
+
+function validatePublicMergeBaseProof(
+  input: VersionMergeInput,
+  ours: VersionMergeBaseCommitRead,
+  theirs: VersionMergeBaseCommitRead,
+): VersionStoreDiagnostic | null {
+  const baseInOurs = commitClosureContains(ours, input.base);
+  const baseInTheirs = commitClosureContains(theirs, input.base);
+  if (baseInOurs && baseInTheirs) return null;
+
+  return publicDiagnostic(
+    'VERSION_MERGE_BASE_MISMATCH',
+    'Merge preview requires the requested base to be present in both branch histories.',
+    {
+      recoverability: 'unsupported',
+      payload: {
+        diagnosticCode: 'missingBaseProof',
+        baseInOurs,
+        baseInTheirs,
+      },
+    },
+  );
+}
+
+function commitClosureContains(
+  read: VersionMergeBaseCommitRead,
+  commitId: WorkbookCommitId,
+): boolean {
+  return read.closure.some((candidate) => candidate.id === commitId);
+}
+
+function diagnosticWithMergeRef(
+  diagnostic: VersionStoreDiagnostic,
+  mergeRef: MergeInputRef,
+): VersionStoreDiagnostic {
+  return {
+    ...diagnostic,
+    payload: {
+      ...(diagnostic.payload ?? {}),
+      mergeRef,
+    },
+    redacted: true,
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

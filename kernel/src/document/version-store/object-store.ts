@@ -128,7 +128,9 @@ export class VersionObjectMemoryBackend {
     const out = [...this.records.entries()]
       .filter(([key]) => key.startsWith(prefix))
       .map(([, record]) => cloneVersionObjectRecord(record));
-    return Object.freeze(out.sort((left, right) => left.digest.digest.localeCompare(right.digest.digest)));
+    return Object.freeze(
+      out.sort((left, right) => left.digest.digest.localeCompare(right.digest.digest)),
+    );
   }
   putCorruptRecordForTesting(
     namespace: VersionGraphNamespace,
@@ -186,6 +188,23 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
           );
         }
 
+        const digest = parseObjectDigest(record.digest, `batch[${index}].digest`);
+        const duplicate = staged.get(digest.digest);
+        if (duplicate) {
+          if (!versionObjectRecordsMatch(duplicate.record, record)) {
+            throwValidation(
+              'VERSION_OBJECT_CORRUPTION',
+              'Batch contains two different records for the same digest.',
+              {
+                digest,
+                path: `batch[${index}]`,
+                severity: 'corruption',
+              },
+            );
+          }
+          continue;
+        }
+
         const validated = await validateVersionObjectRecord(record, `batch[${index}]`);
         const existing = this.backend.get(this.namespace, validated.record.digest);
         if (existing && !versionObjectRecordsMatch(existing, validated.record)) {
@@ -202,23 +221,6 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
         }
 
         const key = validated.record.digest.digest;
-        const duplicate = staged.get(key);
-        if (duplicate) {
-          if (!versionObjectRecordsMatch(duplicate.record, validated.record)) {
-            throwValidation(
-              'VERSION_OBJECT_CORRUPTION',
-              'Batch contains two different records for the same digest.',
-              {
-                namespace: this.namespace,
-                digest: validated.record.digest,
-                path: `batch[${index}]`,
-                severity: 'corruption',
-              },
-            );
-          }
-          continue;
-        }
-
         staged.set(key, validated);
       } catch (error) {
         diagnostics.push(diagnosticFromError(error));
@@ -330,7 +332,9 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
     const record = this.backend.get(this.namespace, dependency.digest);
     return Boolean(record && dependencyMatchesRecord(dependency, record));
   }
-  listObjectRecords(): readonly VersionObjectRecord<unknown>[] { return this.backend.list(this.namespace); }
+  listObjectRecords(): readonly VersionObjectRecord<unknown>[] {
+    return this.backend.list(this.namespace);
+  }
 }
 
 export function createInMemoryVersionObjectStore(
@@ -573,11 +577,18 @@ function hasDependencyRecord(
   return Boolean(record && dependencyMatchesRecord(dependency, record));
 }
 
-function missingDependencyDiagnostic(record: VersionObjectRecord<unknown>, dependency: VersionDependencyRef): VersionObjectStoreDiagnostic {
-  const details: Readonly<Record<string, string>> = dependency.kind === 'object'
-    ? { dependencyKind: dependency.kind, dependencyObjectType: dependency.objectType }
-    : { dependencyKind: dependency.kind };
-  return diagnostic('VERSION_MISSING_DEPENDENCY', 'Version object dependency is missing.', { objectType: record.preimage.objectType, details });
+function missingDependencyDiagnostic(
+  record: VersionObjectRecord<unknown>,
+  dependency: VersionDependencyRef,
+): VersionObjectStoreDiagnostic {
+  const details: Readonly<Record<string, string>> =
+    dependency.kind === 'object'
+      ? { dependencyKind: dependency.kind, dependencyObjectType: dependency.objectType }
+      : { dependencyKind: dependency.kind };
+  return diagnostic('VERSION_MISSING_DEPENDENCY', 'Version object dependency is missing.', {
+    objectType: record.preimage.objectType,
+    details,
+  });
 }
 
 function dependencyMatchesRecord(

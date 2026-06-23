@@ -132,6 +132,55 @@ describe('InMemoryVersionObjectStore putObjects', () => {
     await expect(store.hasObject(objectRef(semanticChangeSet))).resolves.toBe(false);
   });
 
+  it('rejects partial admission failures without writing earlier valid records', async () => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const admittedFirst = await record({ changes: [{ id: 'admitted-first' }] });
+    const invalidSecond = await record({ changes: [{ id: 'invalid-second' }] });
+
+    const result = await store.putObjects([
+      admittedFirst,
+      {
+        ...invalidSecond,
+        payloadByteLength: invalidSecond.payloadByteLength + 1,
+      },
+    ]);
+
+    expectFailedCode(result, 'VERSION_BYTE_LENGTH_MISMATCH');
+    await expect(store.hasObject(objectRef(admittedFirst))).resolves.toBe(false);
+    await expect(store.hasObject(objectRef(invalidSecond))).resolves.toBe(false);
+  });
+
+  it('rejects duplicate object refs with mismatched payloads without choosing a winner', async () => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const original = await record({ changes: [{ id: 'original' }] });
+    const conflictingPayload = await record({ changes: [{ id: 'conflicting' }] });
+    const duplicateRefWithDifferentPayload: VersionObjectRecord<unknown> = {
+      ...conflictingPayload,
+      digest: original.digest,
+    };
+
+    const result = await store.putObjects([original, duplicateRefWithDifferentPayload]);
+
+    expectFailedCode(result, 'VERSION_OBJECT_CORRUPTION');
+    await expect(store.hasObject(objectRef(original))).resolves.toBe(false);
+    await expect(store.hasObject(objectRef(conflictingPayload))).resolves.toBe(false);
+  });
+
+  it('rejects dependency validation failures without writing independent batch records', async () => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const independent = await record({ changes: [{ id: 'independent' }] });
+    const missingSnapshot = await record({ sheets: [] }, [], 'workbook.snapshotRoot.v1');
+    const dependent = await record({ changes: [{ id: 'dependent' }] }, [
+      objectRef(missingSnapshot),
+    ]);
+
+    const result = await store.putObjects([independent, dependent]);
+
+    expectFailedCode(result, 'VERSION_MISSING_DEPENDENCY');
+    await expect(store.hasObject(objectRef(independent))).resolves.toBe(false);
+    await expect(store.hasObject(objectRef(dependent))).resolves.toBe(false);
+  });
+
   it('redacts merge and review artifact payload details from dependency diagnostics', async () => {
     const store = createInMemoryVersionObjectStore(NAMESPACE);
     const missingCommitId = `commit:sha256:${HEX_D}` as WorkbookCommitId;

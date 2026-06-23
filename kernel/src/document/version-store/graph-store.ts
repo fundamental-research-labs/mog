@@ -781,8 +781,7 @@ function validateInputNamespaces(
       if (versionGraphNamespaceKey(record.namespace) !== expectedNamespaceKey) {
         diagnostics.push(
           diagnostic('VERSION_WRONG_NAMESPACE', 'Object record namespace is outside this graph.', {
-            namespace: record.namespace,
-            details: { path },
+            details: { path, namespace: 'redacted' },
           }),
         );
       }

@@ -19,6 +19,7 @@ import { versionFailureFromStoreDiagnostics } from './version-result';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const PENDING_REMOTE_SEGMENT_ID_RE = /^pending-remote-segment:sha256:[0-9a-f]{64}$/;
+const SYNC_BATCH_STATUS_ID_RE = /^sync-batch-status:sha256:[0-9a-f]{64}$/;
 const OPTION_KEYS = new Set(['includeDiagnostics']);
 const REQUIRED_PROMOTION_CAPABILITIES = [
   'version:remotePromote',
@@ -220,7 +221,10 @@ function validateOptions(
     typeof input.includeDiagnostics !== 'boolean'
   ) {
     diagnostics.push(
-      invalidOptionsDiagnostic('includeDiagnostics must be a boolean when supplied.', 'includeDiagnostics'),
+      invalidOptionsDiagnostic(
+        'includeDiagnostics must be a boolean when supplied.',
+        'includeDiagnostics',
+      ),
     );
   }
   return diagnostics;
@@ -280,7 +284,9 @@ function toStringArray<T extends string>(
   return Object.freeze(mapped);
 }
 
-function toSkippedSegments(value: unknown): readonly VersionPromotePendingRemoteSkippedSegment[] | null {
+function toSkippedSegments(
+  value: unknown,
+): readonly VersionPromotePendingRemoteSkippedSegment[] | null {
   if (!Array.isArray(value)) return null;
   const skipped: VersionPromotePendingRemoteSkippedSegment[] = [];
   for (const item of value) {
@@ -302,7 +308,9 @@ function toSkippedSegments(value: unknown): readonly VersionPromotePendingRemote
   return Object.freeze(skipped);
 }
 
-function toSegmentId(value: unknown): VersionPromotePendingRemoteSkippedSegment['segmentId'] | null {
+function toSegmentId(
+  value: unknown,
+): VersionPromotePendingRemoteSkippedSegment['segmentId'] | null {
   return typeof value === 'string' && PENDING_REMOTE_SEGMENT_ID_RE.test(value)
     ? (value as VersionPromotePendingRemoteSkippedSegment['segmentId'])
     : null;
@@ -327,13 +335,17 @@ function mapDiagnostic(value: unknown): VersionPromotePendingRemoteDiagnostic {
       message: 'The pending remote promotion service returned an invalid diagnostic.',
     };
   }
-  const code = typeof value.code === 'string' ? value.code : 'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE';
+  const code =
+    typeof value.code === 'string'
+      ? value.code
+      : 'VERSION_PENDING_REMOTE_PROMOTION_STORE_UNAVAILABLE';
   const severity = value.severity;
   const commitId = toCommitId(value.commitId);
   const reason = toSkipReason(value.reason);
   return {
     code: code as VersionPromotePendingRemoteDiagnostic['code'],
-    severity: severity === 'info' || severity === 'warning' || severity === 'error' ? severity : 'error',
+    severity:
+      severity === 'info' || severity === 'warning' || severity === 'error' ? severity : 'error',
     message:
       typeof value.message === 'string'
         ? value.message
@@ -348,7 +360,8 @@ function mapDiagnostic(value: unknown): VersionPromotePendingRemoteDiagnostic {
 }
 
 function toSkipReason(value: unknown): VersionPromotePendingRemoteSkipReason | null {
-  return typeof value === 'string' && SKIP_REASONS.has(value as VersionPromotePendingRemoteSkipReason)
+  return typeof value === 'string' &&
+    SKIP_REASONS.has(value as VersionPromotePendingRemoteSkipReason)
     ? (value as VersionPromotePendingRemoteSkipReason)
     : null;
 }
@@ -358,9 +371,32 @@ function sanitizeDetails(
 ): VersionPromotePendingRemoteDiagnostic['data'] {
   const data: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(details)) {
-    if (isPublicPayloadValue(value)) data[key] = value;
+    if (isPublicPayloadValue(value)) data[key] = sanitizeDetailValue(key, value);
   }
   return data;
+}
+
+function sanitizeDetailValue(
+  key: string,
+  value: string | number | boolean | null,
+): string | number | boolean | null {
+  if (shouldRedactDetailValue(key, value)) return 'redacted';
+  return value;
+}
+
+function shouldRedactDetailValue(key: string, value: string | number | boolean | null): boolean {
+  const normalizedKey = key.toLowerCase();
+  if (
+    normalizedKey === 'cursor' ||
+    normalizedKey === 'pagetoken' ||
+    normalizedKey === 'nextpagetoken'
+  ) {
+    return true;
+  }
+  if (normalizedKey.endsWith('batchid') || normalizedKey.endsWith('batchstatusid')) {
+    return true;
+  }
+  return typeof value === 'string' && SYNC_BATCH_STATUS_ID_RE.test(value);
 }
 
 function invalidOptionsDiagnostic(message: string, option?: string): VersionStoreDiagnostic {
@@ -393,7 +429,8 @@ function publicDiagnostic(
     issueCode,
     severity,
     recoverability,
-    messageTemplateId: `version.promotePendingRemote.${issueCode}` as VersionStoreDiagnostic['messageTemplateId'],
+    messageTemplateId:
+      `version.promotePendingRemote.${issueCode}` as VersionStoreDiagnostic['messageTemplateId'],
     safeMessage,
     payload,
     redacted: true,

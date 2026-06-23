@@ -7,6 +7,11 @@ import {
 
 const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}`;
 const SEGMENT_ID = `pending-remote-segment:sha256:${'b'.repeat(64)}`;
+const PROMOTED_SEGMENT_ID = `pending-remote-segment:sha256:${'c'.repeat(64)}`;
+const DROPPED_SEGMENT_ID = `pending-remote-segment:sha256:${'d'.repeat(64)}`;
+const BATCH_STATUS_ID = `sync-batch-status:sha256:${'e'.repeat(64)}`;
+const RAW_BATCH_ID = 'provider-batch-secret-42';
+const RAW_CURSOR = 'mog-pending-remote-v1.pending.cursor-handle';
 
 function createCtx(versioning: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
   return { versioning, ...overrides } as any;
@@ -96,6 +101,206 @@ describe('version pending remote promotion runtime helper', () => {
         ],
       },
     });
+    expect(promotePendingRemoteSegments).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps pending, promoted, and dropped filter outcomes through the public result', async () => {
+    const promotePendingRemoteSegments = jest.fn(async () => ({
+      status: 'partial',
+      promotedSegmentIds: [PROMOTED_SEGMENT_ID],
+      commitIds: [COMMIT_ID],
+      skipped: [
+        {
+          segmentId: SEGMENT_ID,
+          reason: 'provider-authority-stale',
+          message: 'The pending filter read observed stale provider authority.',
+        },
+        {
+          segmentId: DROPPED_SEGMENT_ID,
+          reason: 'ineligible-state',
+          message: 'The dropped filter returned a non-promotable pending remote segment.',
+        },
+      ],
+      diagnostics: [
+        {
+          code: 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
+          severity: 'warning',
+          message: 'Pending filter read observed stale provider authority.',
+          reason: 'provider-authority-stale',
+          segmentId: SEGMENT_ID,
+          details: {
+            requestedStateFilter: 'pending',
+            cursorRevisionMismatch: true,
+            expectedRevision: 41,
+            actualRevision: 42,
+          },
+        },
+        {
+          code: 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED',
+          severity: 'info',
+          message: 'Promoted filter recovered an already-visible segment.',
+          segmentId: PROMOTED_SEGMENT_ID,
+          commitId: COMMIT_ID,
+          details: {
+            requestedStateFilter: 'promoted',
+            recoveredFromPromotedFilter: true,
+          },
+        },
+        {
+          code: 'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+          severity: 'warning',
+          message: 'Dropped filter segment was intentionally skipped.',
+          reason: 'ineligible-state',
+          segmentId: DROPPED_SEGMENT_ID,
+          details: {
+            requestedStateFilter: 'dropped',
+            returnedState: 'dropped',
+          },
+        },
+      ],
+    }));
+
+    await expect(
+      promotePendingRemoteWorkbookVersion(authorizedCtx({ promotePendingRemoteSegments })),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'partial',
+        promotedSegmentIds: [PROMOTED_SEGMENT_ID],
+        commitIds: [COMMIT_ID],
+        skipped: [
+          {
+            segmentId: SEGMENT_ID,
+            reason: 'provider-authority-stale',
+            message: 'The pending filter read observed stale provider authority.',
+          },
+          {
+            segmentId: DROPPED_SEGMENT_ID,
+            reason: 'ineligible-state',
+            message: 'The dropped filter returned a non-promotable pending remote segment.',
+          },
+        ],
+        diagnostics: [
+          {
+            code: 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
+            severity: 'warning',
+            message: 'Pending filter read observed stale provider authority.',
+            reason: 'provider-authority-stale',
+            segmentId: SEGMENT_ID,
+            data: {
+              requestedStateFilter: 'pending',
+              cursorRevisionMismatch: true,
+              expectedRevision: 41,
+              actualRevision: 42,
+            },
+          },
+          {
+            code: 'VERSION_PENDING_REMOTE_PROMOTION_RECOVERED',
+            severity: 'info',
+            message: 'Promoted filter recovered an already-visible segment.',
+            segmentId: PROMOTED_SEGMENT_ID,
+            commitId: COMMIT_ID,
+            data: {
+              requestedStateFilter: 'promoted',
+              recoveredFromPromotedFilter: true,
+            },
+          },
+          {
+            code: 'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+            severity: 'warning',
+            message: 'Dropped filter segment was intentionally skipped.',
+            reason: 'ineligible-state',
+            segmentId: DROPPED_SEGMENT_ID,
+            data: {
+              requestedStateFilter: 'dropped',
+              returnedState: 'dropped',
+            },
+          },
+        ],
+      },
+    });
+    expect(promotePendingRemoteSegments).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves stale cursor and revision diagnostics while redacting cursor and batch ids', async () => {
+    const promotePendingRemoteSegments = jest.fn(async () => ({
+      status: 'failed',
+      promotedSegmentIds: [],
+      commitIds: [],
+      skipped: [
+        {
+          segmentId: SEGMENT_ID,
+          reason: 'provider-read-failed',
+          message: 'The pending remote read cursor is stale.',
+        },
+      ],
+      diagnostics: [
+        {
+          code: 'VERSION_STALE_PAGE_CURSOR',
+          severity: 'warning',
+          message: 'The pending remote read cursor is stale.',
+          reason: 'provider-read-failed',
+          segmentId: SEGMENT_ID,
+          details: {
+            stateFilter: 'pending',
+            cursorRevisionMismatch: true,
+            cursorRootMismatch: false,
+            expectedRevision: 7,
+            actualRevision: 8,
+            cursor: RAW_CURSOR,
+            pageToken: RAW_CURSOR,
+            batchId: RAW_BATCH_ID,
+            batchStatusId: BATCH_STATUS_ID,
+            syncBatchStatusFirstBatchStatusId: BATCH_STATUS_ID,
+          },
+        },
+      ],
+    }));
+
+    const result = await promotePendingRemoteWorkbookVersion(
+      authorizedCtx({ promotePendingRemoteSegments }),
+      { includeDiagnostics: true },
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        status: 'failed',
+        promotedSegmentIds: [],
+        commitIds: [],
+        skipped: [
+          {
+            segmentId: SEGMENT_ID,
+            reason: 'provider-read-failed',
+            message: 'The pending remote read cursor is stale.',
+          },
+        ],
+        diagnostics: [
+          {
+            code: 'VERSION_STALE_PAGE_CURSOR',
+            severity: 'warning',
+            message: 'The pending remote read cursor is stale.',
+            reason: 'provider-read-failed',
+            segmentId: SEGMENT_ID,
+            data: {
+              stateFilter: 'pending',
+              cursorRevisionMismatch: true,
+              cursorRootMismatch: false,
+              expectedRevision: 7,
+              actualRevision: 8,
+              cursor: 'redacted',
+              pageToken: 'redacted',
+              batchId: 'redacted',
+              batchStatusId: 'redacted',
+              syncBatchStatusFirstBatchStatusId: 'redacted',
+            },
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(RAW_CURSOR);
+    expect(JSON.stringify(result)).not.toContain(RAW_BATCH_ID);
+    expect(JSON.stringify(result)).not.toContain(BATCH_STATUS_ID);
     expect(promotePendingRemoteSegments).toHaveBeenCalledTimes(1);
   });
 

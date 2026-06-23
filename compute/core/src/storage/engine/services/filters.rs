@@ -349,6 +349,29 @@ fn resolve_header_col(
     Some(id_to_hex(cell_id.as_u128()).into())
 }
 
+fn ensure_header_col(
+    stores: &mut EngineStores,
+    mirror: &mut CellMirror,
+    sheet_id: &SheetId,
+    filter_id: &str,
+    header_col: u32,
+) -> Option<String> {
+    let filter = filters::get_filter(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        filter_id,
+    )?;
+    let header_pos =
+        resolve_filter_cell_pos(stores, mirror, sheet_id, &filter.header_start_cell_id)?;
+    let cell_id = stores
+        .grid_indexes
+        .get_mut(sheet_id)?
+        .ensure_cell_id(header_pos.0, header_col);
+    mirror.register_identity_only(sheet_id, SheetPos::new(header_pos.0, header_col), cell_id);
+    Some(id_to_hex(cell_id.as_u128()).into())
+}
+
 pub(in crate::storage::engine) fn set_column_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
@@ -359,7 +382,7 @@ pub(in crate::storage::engine) fn set_column_filter(
     criteria: filters::ColumnFilter,
 ) -> Result<MutationResult, ComputeError> {
     let header_cell_id =
-        resolve_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
+        ensure_header_col(stores, mirror, sheet_id, filter_id, header_col).unwrap_or_default();
     filters::set_column_filter(
         stores.storage.doc(),
         stores.storage.sheets(),

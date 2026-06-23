@@ -259,6 +259,61 @@ fn color_filter_matches_conditional_format_fill() {
 }
 
 #[test]
+fn multiple_filters_on_empty_interior_headers_keep_distinct_criteria() {
+    use crate::storage::sheet::filters::ColumnFilter;
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
+    let sheet_id = sid();
+
+    engine
+        .create_filter(
+            &sheet_id,
+            serde_json::json!({
+                "startRow": 0u32,
+                "startCol": 0u32,
+                "endRow": 5u32,
+                "endCol": 9u32,
+            }),
+        )
+        .expect("create wide filter");
+    let filter_id = engine.get_filters_in_sheet(&sheet_id)[0].id.clone();
+
+    engine
+        .set_column_filter(
+            &sheet_id,
+            &filter_id,
+            7,
+            ColumnFilter::Values {
+                values: vec![serde_json::Value::String("High".to_string())],
+                include_blanks: false,
+            },
+        )
+        .expect("set first empty-header filter");
+    engine
+        .set_column_filter(
+            &sheet_id,
+            &filter_id,
+            3,
+            ColumnFilter::Values {
+                values: vec![serde_json::Value::String("May 2026".to_string())],
+                include_blanks: false,
+            },
+        )
+        .expect("set second empty-header filter");
+
+    let filter = engine
+        .get_filters_in_sheet(&sheet_id)
+        .into_iter()
+        .find(|filter| filter.id == filter_id)
+        .expect("filter remains");
+    assert_eq!(filter.column_filters.len(), 2);
+    assert!(
+        !filter.column_filters.contains_key(""),
+        "empty fallback key would collapse distinct columns"
+    );
+}
+
+#[test]
 fn color_sort_matches_conditional_format_fill() {
     let (mut engine, _) = YrsComputeEngine::from_snapshot(sort_filter_snapshot()).unwrap();
     let sheet_id = sid();

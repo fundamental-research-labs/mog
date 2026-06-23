@@ -152,7 +152,7 @@ describe('WorkbookVersion applyMerge preview planner', () => {
     const sheets = manifestRuntime.domainSupportManifest.domains.find(
       (row) => row.matrixRowId === 'sheets',
     );
-    expect(sheets?.capabilityStates.merge).toBe('contracted');
+    expect(sheets?.capabilityStates.merge).toBe('supported');
 
     const result: VersionMergeResult = {
       status: 'clean',

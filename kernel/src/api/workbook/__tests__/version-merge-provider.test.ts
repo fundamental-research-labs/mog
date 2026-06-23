@@ -22,7 +22,7 @@ describe('WorkbookVersion merge facade', () => {
     const cellsValues = manifestRuntime.domainSupportManifest.domains.find(
       (row) => row.matrixRowId === 'cells.values',
     );
-    expect(cellsValues?.capabilityStates.merge).toBe('contracted');
+    expect(cellsValues?.capabilityStates.merge).toBe('supported');
 
     const result: VersionMergeResult = {
       status: 'clean',

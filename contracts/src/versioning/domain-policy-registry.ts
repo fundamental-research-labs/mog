@@ -50,6 +50,7 @@ const WORKBOOK_METADATA = capabilityStates('contracted', {
   capture: 'supported',
   replay: 'supported',
   checkout: 'supported',
+  merge: 'supported',
   persistence: 'supported',
   export: 'supported',
 });
@@ -58,6 +59,7 @@ const SHEETS = capabilityStates('contracted', {
   replay: 'supported',
   diff: 'supported',
   checkout: 'supported',
+  merge: 'supported',
   persistence: 'supported',
   export: 'supported',
 });
@@ -66,6 +68,7 @@ const AUTHORED_GRID = capabilityStates('contracted', {
   replay: 'supported',
   diff: 'supported',
   checkout: 'supported',
+  merge: 'supported',
   persistence: 'supported',
   export: 'supported',
 });

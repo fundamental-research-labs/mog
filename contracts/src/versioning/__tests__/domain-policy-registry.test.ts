@@ -61,7 +61,7 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     expect(JSON.stringify(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY)).not.toContain('expected-failing');
   });
 
-  it('keeps first-slice public runtime states conservative and explicit', () => {
+  it('keeps first-slice public runtime states promoted and explicit', () => {
     const rows = new Map(
       PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.domainPolicyId, row]),
     );
@@ -71,7 +71,16 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       replay: 'supported',
       checkout: 'supported',
       persistence: 'supported',
-      merge: 'contracted',
+      merge: 'supported',
+      export: 'supported',
+    });
+    expect(rows.get('sheets')?.capabilityStates).toMatchObject({
+      capture: 'supported',
+      replay: 'supported',
+      diff: 'supported',
+      checkout: 'supported',
+      persistence: 'supported',
+      merge: 'supported',
       export: 'supported',
     });
     expect(rows.get('cells.values')?.capabilityStates).toMatchObject({
@@ -80,7 +89,25 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       diff: 'supported',
       checkout: 'supported',
       persistence: 'supported',
-      merge: 'contracted',
+      merge: 'supported',
+      export: 'supported',
+    });
+    expect(rows.get('cells.formulas')?.capabilityStates).toMatchObject({
+      capture: 'supported',
+      replay: 'supported',
+      diff: 'supported',
+      checkout: 'supported',
+      persistence: 'supported',
+      merge: 'supported',
+      export: 'supported',
+    });
+    expect(rows.get('rows-columns')?.capabilityStates).toMatchObject({
+      capture: 'supported',
+      replay: 'supported',
+      diff: 'supported',
+      checkout: 'supported',
+      persistence: 'supported',
+      merge: 'supported',
       export: 'supported',
     });
     expect(rows.get('recalc-caches')?.capabilityStates).toMatchObject({

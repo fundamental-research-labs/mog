@@ -393,7 +393,7 @@ describe('version action availability', () => {
     );
   });
 
-  it('disables commit and checkout while provider writes are pending', () => {
+  it('disables commit, checkout, and rollback while provider writes are pending', () => {
     const surface = createSurfaceStatus({
       dirty: {
         pendingProviderWrites: true,
@@ -409,11 +409,7 @@ describe('version action availability', () => {
       getCheckoutAvailability({ surface }, false, false),
       'Wait for provider writes to settle before checking out.',
     );
-    expect(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
-    ).toEqual({ enabled: true });
-    expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
-    expect(
+    expectDisabled(
       getRollbackAvailability(
         { surface },
         false,
@@ -421,7 +417,12 @@ describe('version action availability', () => {
         'Rollback selected commit',
         TARGET_COMMIT_ID,
       ),
+      'Wait for provider writes to settle before staging rollback.',
+    );
+    expect(
+      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
+    expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
     expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
 

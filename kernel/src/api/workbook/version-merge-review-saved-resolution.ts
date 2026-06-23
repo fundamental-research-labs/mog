@@ -13,6 +13,10 @@ import {
   type ResolvedMergeAttemptArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
+import {
+  mapPublicExpectedTargetHead,
+  mapPublicTargetRef,
+} from './version-attempt-metadata';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import {
   type NormalizedMergeReviewConflictSet,
@@ -24,6 +28,8 @@ import {
   toInternalSha256Digest,
 } from './version-merge-review-artifacts';
 import type { NormalizedGetMergeConflictDetailInput } from './version-merge-review-normalization';
+import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
+import { normalizeVersionApplyMergeResolutions } from './version-merge-resolution-normalization';
 
 type ConflictDetailSelectionInput = Pick<
   NormalizedGetMergeConflictDetailInput,
@@ -42,6 +48,11 @@ type MergeReviewResolvedAttemptReadResult =
   | { readonly ok: true; readonly payload: ResolvedMergeAttemptArtifactPayload }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
+type SavedResolutionPayloadTarget = Pick<
+  ResolvedMergeAttemptArtifactPayload,
+  'targetRef' | 'expectedTargetHead'
+>;
+
 export async function resolveSavedConflictDetailSelection(
   graph: VersionGraphStore,
   operation: 'getMergeConflictDetail',
@@ -50,6 +61,7 @@ export async function resolveSavedConflictDetailSelection(
   conflict: VersionMergeConflict,
 ): Promise<SavedConflictDetailSelectionResult> {
   let resolutionSetDigest = input.resolutionSetDigest;
+  let attemptTarget: SavedResolutionPayloadTarget | undefined;
   if (input.resolvedAttemptDigest) {
     const attempt = await readResolvedMergeAttemptArtifact(
       graph,
@@ -61,6 +73,10 @@ export async function resolveSavedConflictDetailSelection(
     if (attemptDiagnostics.length > 0) {
       return { ok: false, diagnostics: attemptDiagnostics };
     }
+    attemptTarget = {
+      targetRef: attempt.payload.targetRef,
+      expectedTargetHead: attempt.payload.expectedTargetHead,
+    };
     if (
       resolutionSetDigest &&
       !digestsEqual(resolutionSetDigest, attempt.payload.resolutionSetDigest)
@@ -100,6 +116,18 @@ export async function resolveSavedConflictDetailSelection(
     resolutionSet.payload.resolutions,
   );
   if (!resolutionValidation.ok) return resolutionValidation;
+
+  const payloadRefDiagnostics = await validateSavedResolutionPayloadRefs(
+    graph,
+    operation,
+    input,
+    attemptTarget,
+    conflictSet,
+    resolutionValidation.resolutions,
+  );
+  if (payloadRefDiagnostics.length > 0) {
+    return { ok: false, diagnostics: payloadRefDiagnostics };
+  }
 
   const resolution = resolutionValidation.resolutions.find(
     (candidate) => candidate.conflictId === conflict.conflictId,
@@ -159,7 +187,7 @@ async function readResolutionSetArtifact(
     const record = await graph.getObjectRecord<unknown>(
       mergeResolutionSetArtifactRef(internalDigest),
     );
-    const payload = toMergeResolutionSetArtifactPayload(record.preimage.payload);
+    const payload = toMergeResolutionSetArtifactPayload(operation, record.preimage.payload);
     if (record.preimage.objectType !== MERGE_RESOLUTION_SET_OBJECT_TYPE || !payload) {
       return {
         ok: false,
@@ -265,6 +293,35 @@ function validateResolvedAttemptBinding(
   return diagnostics;
 }
 
+async function validateSavedResolutionPayloadRefs(
+  graph: VersionGraphStore,
+  operation: VersionMergePublicOperation,
+  input: NormalizedGetMergeConflictDetailInput,
+  attemptTarget: SavedResolutionPayloadTarget | undefined,
+  conflictSet: NormalizedMergeReviewConflictSet,
+  resolutions: readonly MergeResolutionSetArtifactPayload['resolutions'][number][],
+): Promise<readonly VersionStoreDiagnostic[]> {
+  if (!resolutions.some((resolution) => resolution.sealedPayloadRef)) return [];
+  const target =
+    input.targetRef && input.expectedTargetHead
+      ? { targetRef: input.targetRef, expectedTargetHead: input.expectedTargetHead }
+      : attemptTarget;
+
+  return validateSealedResolutionPayloadRefs({
+    graph,
+    operation,
+    allowExecutablePayloadRefs: true,
+    resultId: input.resultId,
+    resultDigest: input.resultDigest,
+    redactionPolicyDigest: input.redactionPolicyDigest,
+    ...(target
+      ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead }
+      : {}),
+    conflicts: conflictSet.conflicts,
+    resolutions,
+  });
+}
+
 function invalidReviewArtifactDiagnostic(
   operation: VersionMergePublicOperation,
   safeMessage: string,
@@ -287,6 +344,7 @@ function invalidArtifactDigestDiagnostic(
 }
 
 function toMergeResolutionSetArtifactPayload(
+  operation: VersionMergePublicOperation,
   value: unknown,
 ): MergeResolutionSetArtifactPayload | null {
   if (
@@ -297,24 +355,48 @@ function toMergeResolutionSetArtifactPayload(
   ) {
     return null;
   }
-  return value as unknown as MergeResolutionSetArtifactPayload;
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  const resolutions = normalizeVersionApplyMergeResolutions(value.resolutions, diagnostics, {
+    allowUndefined: false,
+    invalidDiagnostic: () =>
+      invalidReviewArtifactDiagnostic(
+        operation,
+        'Persisted merge resolution set artifact payload is invalid or unsupported.',
+      ),
+  });
+  return resolutions && diagnostics.length === 0
+    ? {
+        schemaVersion: 1,
+        recordKind: 'mergeResolutionSet',
+        resolutions,
+      }
+    : null;
 }
 
 function toResolvedMergeAttemptArtifactPayload(
   value: unknown,
 ): ResolvedMergeAttemptArtifactPayload | null {
+  if (!isRecord(value)) return null;
+  const targetRef = mapPublicTargetRef(value.targetRef);
+  const expectedTargetHead = mapPublicExpectedTargetHead(value.expectedTargetHead);
   if (
-    !isRecord(value) ||
     value.schemaVersion !== 1 ||
     value.recordKind !== 'resolvedMergeAttempt' ||
     !isObjectDigest(value.resultDigest) ||
     !isObjectDigest(value.resolutionSetDigest) ||
-    typeof value.targetRef !== 'string' ||
-    !isRecord(value.expectedTargetHead)
+    !targetRef ||
+    !expectedTargetHead
   ) {
     return null;
   }
-  return value as unknown as ResolvedMergeAttemptArtifactPayload;
+  return {
+    schemaVersion: 1,
+    recordKind: 'resolvedMergeAttempt',
+    resultDigest: value.resultDigest,
+    resolutionSetDigest: value.resolutionSetDigest,
+    targetRef,
+    expectedTargetHead,
+  };
 }
 
 function isObjectDigest(value: unknown): value is ObjectDigest {

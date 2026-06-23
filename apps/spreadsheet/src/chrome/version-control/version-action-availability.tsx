@@ -225,6 +225,11 @@ export function getRollbackAvailability(
   const staleReason = currentStaleDisabledReason(surface, 'rollback');
   if (staleReason) return disabledAction(staleReason);
 
+  const providerWriteReason =
+    providerWritesDiagnosticReason(surface) ??
+    providerWritesDisabledReason(surface, 'staging rollback');
+  if (providerWriteReason) return disabledAction(providerWriteReason);
+
   if (!targetCommitId) {
     return disabledAction('version-target-required', 'Select a commit target first.');
   }
@@ -638,7 +643,7 @@ function checkoutUnsafeDisabledReason(
 
 function providerWritesDisabledReason(
   surface: VersionSurfaceStatus,
-  action: 'committing' | 'checking out',
+  action: 'committing' | 'checking out' | 'staging rollback',
 ): DisabledActionReason | undefined {
   return surface.dirty.pendingProviderWrites
     ? {

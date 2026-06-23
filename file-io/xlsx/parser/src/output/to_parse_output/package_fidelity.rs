@@ -96,6 +96,7 @@ pub(super) fn build_package_fidelity_metadata(
     }
 
     metadata.opaque_parts = build_opaque_package_part_hints(result, raw_parts);
+    drop_mog_version_metadata_package_inventory(&mut metadata);
     append_webextension_cluster_diagnostic(&mut metadata);
 
     (!metadata.is_empty()).then_some(metadata)
@@ -378,11 +379,277 @@ fn build_opaque_package_part_hints(
         .collect()
 }
 
+const MOG_VERSION_METADATA_PART: &str = "customXml/mog-version-metadata.xml";
+
+fn drop_mog_version_metadata_package_inventory(
+    metadata: &mut domain_types::PackageFidelityMetadata,
+) {
+    let cluster_paths = mog_version_metadata_cluster_paths(metadata);
+    if cluster_paths.is_empty() {
+        return;
+    }
+
+    metadata
+        .opaque_parts
+        .retain(|part| !cluster_paths.contains(&domain_types::normalize_package_path(&part.path)));
+    for part in &mut metadata.opaque_parts {
+        let owner_path = domain_types::normalize_package_path(&part.path);
+        part.relationships.retain(|relationship| {
+            !relationship_targets_mog_version_metadata(
+                Some(&owner_path),
+                relationship,
+                &cluster_paths,
+            )
+        });
+    }
+
+    metadata.content_type_overrides.retain(|hint| {
+        let part_name = domain_types::normalize_package_path(&hint.part_name);
+        !cluster_paths.contains(&part_name) && !has_mog_version_metadata_marker(&hint.part_name)
+    });
+    metadata.root_relationships.retain(|relationship| {
+        !relationship_targets_mog_version_metadata(None, relationship, &cluster_paths)
+    });
+    metadata.workbook_relationships.retain(|relationship| {
+        !relationship_targets_mog_version_metadata(
+            Some("xl/workbook.xml"),
+            relationship,
+            &cluster_paths,
+        )
+    });
+    for info in &mut metadata.part_relationships {
+        let owner_path = domain_types::normalize_package_path(&info.owner_path);
+        info.relationships.retain(|relationship| {
+            !relationship_targets_mog_version_metadata(
+                Some(&owner_path),
+                relationship,
+                &cluster_paths,
+            )
+        });
+    }
+    metadata.part_relationships.retain(|info| {
+        !cluster_paths.contains(&domain_types::normalize_package_path(&info.owner_path))
+            && !info.relationships.is_empty()
+    });
+}
+
+fn mog_version_metadata_cluster_paths(
+    metadata: &domain_types::PackageFidelityMetadata,
+) -> HashSet<String> {
+    let mut cluster_paths = HashSet::new();
+    for part in &metadata.opaque_parts {
+        let path = domain_types::normalize_package_path(&part.path);
+        if path == MOG_VERSION_METADATA_PART || has_mog_version_metadata_marker(&path) {
+            cluster_paths.insert(path);
+        }
+    }
+
+    if !metadata
+        .opaque_parts
+        .iter()
+        .any(|part| domain_types::normalize_package_path(&part.path) == MOG_VERSION_METADATA_PART)
+    {
+        return cluster_paths;
+    }
+    cluster_paths.insert(MOG_VERSION_METADATA_PART.to_string());
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for part in &metadata.opaque_parts {
+            let owner_path = domain_types::normalize_package_path(&part.path);
+            if !cluster_paths.contains(&owner_path) {
+                continue;
+            }
+            for relationship in &part.relationships {
+                if let Some(target) = internal_relationship_target(Some(&owner_path), relationship)
+                {
+                    if cluster_paths.insert(target) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+        for info in &metadata.part_relationships {
+            let owner_path = domain_types::normalize_package_path(&info.owner_path);
+            if !cluster_paths.contains(&owner_path) {
+                continue;
+            }
+            for relationship in &info.relationships {
+                if let Some(target) = internal_relationship_target(Some(&owner_path), relationship)
+                {
+                    if cluster_paths.insert(target) {
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    cluster_paths
+}
+
+fn relationship_targets_mog_version_metadata(
+    owner_path: Option<&str>,
+    relationship: &domain_types::PackageRelationshipHint,
+    cluster_paths: &HashSet<String>,
+) -> bool {
+    has_mog_version_metadata_marker(&relationship.relationship_type)
+        || has_mog_version_metadata_marker(&relationship.target)
+        || internal_relationship_target(owner_path, relationship)
+            .is_some_and(|target| cluster_paths.contains(&target))
+}
+
+fn internal_relationship_target(
+    owner_path: Option<&str>,
+    relationship: &domain_types::PackageRelationshipHint,
+) -> Option<String> {
+    if relationship
+        .target_mode
+        .as_deref()
+        .is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
+    {
+        return None;
+    }
+    resolve_relationship_target(owner_path, &relationship.target)
+        .ok()
+        .map(|target| domain_types::normalize_package_path(&target))
+}
+
+fn has_mog_version_metadata_marker(value: &str) -> bool {
+    let normalized = value.to_ascii_lowercase();
+    normalized.contains("customxml/mog-version-metadata")
+        || normalized.contains("mog-version-metadata")
+        || normalized.contains("mogversionmetadata")
+        || normalized.contains("schemas.mog.dev/workbook/version-metadata")
+        || normalized.contains("schemas.mog.dev/officedocument/relationships/mogversionmetadata")
+        || normalized.contains("mog.workbookversion.xlsxmetadata")
+}
+
 fn package_part_is_forbidden_active_content(path: &str) -> bool {
     matches!(
         crate::write::package_ownership::auxiliary_package_part_policy(path),
         Some(crate::write::package_ownership::AuxiliaryPackagePartPolicy::ActiveForbidden)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drops_mog_version_metadata_opaque_cluster_before_package_replay() {
+        let mut metadata = domain_types::PackageFidelityMetadata {
+            content_type_overrides: vec![
+                content_type_override(
+                    "/customXml/mog-version-metadata.xml",
+                    "application/vnd.mog.workbook-version-metadata+xml",
+                ),
+                content_type_override(
+                    "/customXml/itemProps1.xml",
+                    "application/vnd.openxmlformats-officedocument.customXmlProperties+xml",
+                ),
+                content_type_override("/customXml/item2.xml", "application/xml"),
+            ],
+            root_relationships: vec![
+                relationship(
+                    "rIdMog",
+                    "https://schemas.mog.dev/officeDocument/relationships/mogVersionMetadata",
+                    "customXml/mog-version-metadata.xml",
+                ),
+                relationship(
+                    "rIdCustom",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+                    "customXml/item2.xml",
+                ),
+            ],
+            part_relationships: vec![domain_types::PartRelationshipPackageInfo {
+                owner_path: "customXml/mog-version-metadata.xml".to_string(),
+                relationships: vec![relationship(
+                    "rIdProps",
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps",
+                    "itemProps1.xml",
+                )],
+            }],
+            opaque_parts: vec![
+                opaque_part(
+                    "customXml/mog-version-metadata.xml",
+                    vec![relationship(
+                        "rIdProps",
+                        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps",
+                        "itemProps1.xml",
+                    )],
+                ),
+                opaque_part("customXml/itemProps1.xml", Vec::new()),
+                opaque_part("customXml/item2.xml", Vec::new()),
+            ],
+            ..Default::default()
+        };
+
+        drop_mog_version_metadata_package_inventory(&mut metadata);
+
+        assert_eq!(
+            metadata
+                .opaque_parts
+                .iter()
+                .map(|part| part.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["customXml/item2.xml"]
+        );
+        assert_eq!(
+            metadata
+                .content_type_overrides
+                .iter()
+                .map(|hint| hint.part_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["customXml/item2.xml"]
+        );
+        assert_eq!(
+            metadata
+                .root_relationships
+                .iter()
+                .map(|relationship| relationship.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["rIdCustom"]
+        );
+        assert!(metadata.part_relationships.is_empty());
+    }
+
+    fn content_type_override(
+        part_name: &str,
+        content_type: &str,
+    ) -> domain_types::PackageContentTypeOverrideHint {
+        domain_types::PackageContentTypeOverrideHint {
+            part_name: domain_types::normalize_package_path(part_name),
+            original_part_name: part_name.to_string(),
+            content_type: content_type.to_string(),
+        }
+    }
+
+    fn relationship(
+        id: &str,
+        relationship_type: &str,
+        target: &str,
+    ) -> domain_types::PackageRelationshipHint {
+        domain_types::PackageRelationshipHint {
+            id: id.to_string(),
+            relationship_type: relationship_type.to_string(),
+            target: target.to_string(),
+            target_mode: None,
+        }
+    }
+
+    fn opaque_part(
+        path: &str,
+        relationships: Vec<domain_types::PackageRelationshipHint>,
+    ) -> domain_types::OpaquePackagePartHint {
+        domain_types::OpaquePackagePartHint {
+            path: path.to_string(),
+            bytes: b"<xml/>".to_vec(),
+            content_type: Some("application/xml".to_string()),
+            relationships,
+        }
+    }
 }
 
 fn build_raw_doc_props_hints(result: &FullParseResult) -> Vec<domain_types::RawDocPropsHint> {

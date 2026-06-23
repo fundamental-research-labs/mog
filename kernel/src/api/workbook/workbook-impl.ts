@@ -131,6 +131,7 @@ import {
   normalizeWorkbookSavePath,
 } from './save-errors';
 import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
+import { removeMogVersionMetadataPackageInventoryFromXlsx } from './xlsx-clean-export-package';
 import { maybeAddMogVersionMetadataToXlsx } from './xlsx-version-metadata';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
@@ -1623,10 +1624,20 @@ export class WorkbookImpl implements WorkbookInternal {
         throw new Error('context-stripped XLSX export is not available on this compute bridge');
       }
       const bytes = await bridge.exportToXlsxBytesContextStripped();
-      return maybeAddMogVersionMetadataToXlsx(this.ctx, this.version, bytes, options);
+      return maybeAddMogVersionMetadataToXlsx(
+        this.ctx,
+        this.version,
+        await removeMogVersionMetadataPackageInventoryFromXlsx(bytes),
+        options,
+      );
     }
     const bytes = await this.ctx.computeBridge.exportToXlsxBytes();
-    return maybeAddMogVersionMetadataToXlsx(this.ctx, this.version, bytes, options);
+    return maybeAddMogVersionMetadataToXlsx(
+      this.ctx,
+      this.version,
+      await removeMogVersionMetadataPackageInventoryFromXlsx(bytes),
+      options,
+    );
   }
 
   async insertWorksheets(

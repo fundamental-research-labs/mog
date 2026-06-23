@@ -10,10 +10,9 @@ import {
   accessDiagnosticDomId,
   accessDiffBlockedReason,
   displayRefName,
-  proposalTargetEvidence,
-  reviewTargetEvidence,
   shouldDescribeAccessDiagnostic,
 } from './review-proposal-formatting';
+import { proposalTargetEvidence, reviewTargetEvidence } from './review-proposal-targets';
 import type {
   CapabilityState,
   ReviewProposalAcceptTarget,

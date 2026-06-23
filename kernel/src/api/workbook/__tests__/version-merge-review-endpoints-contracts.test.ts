@@ -166,6 +166,109 @@ describe('WorkbookVersion merge review endpoint contracts', () => {
     });
   });
 
+  it('rejects partial target proof and malformed conflict digests during normalization', async () => {
+    await withReviewArtifact('normalization-target-digest', async ({ version, preview, target }) => {
+      const conflict = preview.conflicts[0];
+      const option = requireResolutionOption(conflict, 'acceptTheirs');
+      const malformedDetailDigest = 'sha256:not-a-digest-sk_live_detail_secret';
+      const malformedResolutionDigest = 'sha256:not-a-digest-sk_live_resolution_secret';
+
+      const partialTarget = await version.getMergeConflictDetail({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+        valueRole: 'theirs',
+        purpose: 'review',
+        targetRef: TARGET_REF,
+      });
+      const malformedDetail = await version.getMergeConflictDetail({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: malformedDetailDigest as any,
+        valueRole: 'theirs',
+        purpose: 'review',
+      });
+      const malformedSave = await version.saveMergeResolutions({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        targetRef: TARGET_REF,
+        expectedTargetHead: target,
+        resolutions: [
+          {
+            ...resolutionFor(conflict, 'acceptTheirs'),
+            expectedConflictDigest: malformedResolutionDigest,
+          },
+        ],
+      });
+      const malformedPayload = await version.putMergeResolutionPayload({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: malformedDetailDigest as any,
+        optionId: option.optionId,
+        kind: option.kind,
+        targetRef: TARGET_REF,
+        expectedTargetHead: target,
+        value: option.value as any,
+        purpose: 'chooseValue',
+      });
+
+      expectInvalidMergeReviewOptions(partialTarget, 'getMergeConflictDetail', ['targetRef']);
+      expectInvalidMergeReviewOptions(malformedDetail, 'getMergeConflictDetail', [
+        'expectedConflictDigest',
+      ]);
+      expectInvalidMergeReviewOptions(malformedSave, 'saveMergeResolutions', [
+        'resolutions[0].expectedConflictDigest',
+      ]);
+      expectInvalidMergeReviewOptions(malformedPayload, 'putMergeResolutionPayload', [
+        'expectedConflictDigest',
+      ]);
+      expectNoDiagnosticLeaks(
+        [malformedDetail, malformedSave, malformedPayload],
+        [malformedDetailDigest, malformedResolutionDigest],
+      );
+    });
+  });
+
+  it('rejects unknown valueRole and purpose aliases during normalization', async () => {
+    await withReviewArtifact('normalization-aliases', async ({ version, preview, target }) => {
+      const conflict = preview.conflicts[0];
+      const option = requireResolutionOption(conflict, 'acceptTheirs');
+      const detail = await version.getMergeConflictDetail({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+        valueRole: 'incoming' as any,
+        purpose: 'reviewValue' as any,
+      });
+      const payload = await version.putMergeResolutionPayload({
+        resultId: preview.resultId,
+        resultDigest: preview.resultDigest,
+        redactionPolicyDigest: preview.resultDigest,
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+        optionId: option.optionId,
+        kind: option.kind,
+        targetRef: TARGET_REF,
+        expectedTargetHead: target,
+        value: option.value as any,
+        purpose: 'choose-value' as any,
+      });
+
+      expectInvalidMergeReviewOptions(detail, 'getMergeConflictDetail', ['valueRole', 'purpose']);
+      expectInvalidMergeReviewOptions(payload, 'putMergeResolutionPayload', ['purpose']);
+      expectNoDiagnosticLeaks([detail, payload], ['incoming', 'reviewValue', 'choose-value']);
+    });
+  });
+
   it('rejects non-replayable sealed payload refs without leaking binding values', async () => {
     await withReviewArtifact('sealed-ref-contract', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
@@ -418,7 +521,7 @@ function expectMergeReviewFailure(value: unknown, operation: string, code: strin
   expect(value).toMatchObject({
     ok: false,
     error: {
-      diagnostics: [
+      diagnostics: expect.arrayContaining([
         expect.objectContaining({
           code,
           data: expect.objectContaining({
@@ -426,15 +529,67 @@ function expectMergeReviewFailure(value: unknown, operation: string, code: strin
             payload: expect.objectContaining({ operation }),
           }),
         }),
-      ],
+      ]),
     },
   });
+}
+
+function expectInvalidMergeReviewOptions(
+  value: unknown,
+  operation: string,
+  options: readonly string[],
+): void {
+  expectMergeReviewFailure(value, operation, 'VERSION_INVALID_OPTIONS');
+  expectPublicRedactedDiagnostics(value, operation);
+  expect(diagnosticOptions(value)).toEqual(expect.arrayContaining(options));
+}
+
+function expectPublicRedactedDiagnostics(value: unknown, operation: string): void {
+  expect(value).toMatchObject({
+    ok: false,
+    error: {
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          code: expect.any(String),
+          severity: 'error',
+          message: expect.any(String),
+          owner: 'version-store',
+          data: expect.objectContaining({
+            operation,
+            redacted: true,
+            payload: expect.objectContaining({ operation }),
+          }),
+        }),
+      ]),
+    },
+  });
+  const serialized = JSON.stringify(value);
+  expect(serialized).not.toContain('"issueCode"');
+  expect(serialized).not.toContain('"safeMessage"');
+  expect(serialized).not.toContain('"redacted":false');
+}
+
+function diagnosticOptions(value: unknown): string[] {
+  const diagnostics =
+    (value as { readonly error?: { readonly diagnostics?: readonly PublicDiagnostic[] } }).error
+      ?.diagnostics ?? [];
+  return diagnostics
+    .map((diagnostic) => diagnostic.data?.payload?.option)
+    .filter((option): option is string => typeof option === 'string');
 }
 
 function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): void {
   const serialized = JSON.stringify(value);
   for (const canary of canaries) expect(serialized).not.toContain(canary);
 }
+
+type PublicDiagnostic = {
+  readonly data?: {
+    readonly payload?: {
+      readonly option?: unknown;
+    };
+  };
+};
 
 function conflictRecord(
   digit: string,

@@ -66,6 +66,7 @@ const PUT_MERGE_RESOLUTION_PAYLOAD_KEYS = new Set([
   'value',
   'purpose',
 ]);
+const CONFLICT_DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 export type NormalizedSaveMergeResolutionsInput = {
   readonly resultId: VersionSaveMergeResolutionsRequest['resultId'];
   readonly resultDigest: ObjectDigest;
@@ -300,6 +301,15 @@ export function normalizeGetMergeConflictDetailInput(
   if (input.expectedTargetHead !== undefined && !expectedTargetHead) {
     diagnostics.push(
       invalidInputDiagnostic(operation, 'expectedTargetHead', 'expectedTargetHead is invalid.'),
+    );
+  }
+  if ((targetRef && !expectedTargetHead) || (!targetRef && expectedTargetHead)) {
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'targetRef',
+        'targetRef and expectedTargetHead must be supplied together.',
+      ),
     );
   }
 
@@ -578,10 +588,22 @@ function normalizeResolutions(
   value: unknown,
   diagnostics: VersionStoreDiagnostic[],
 ): readonly VersionApplyMergeResolution[] | null {
-  return normalizeVersionApplyMergeResolutions(value, diagnostics, {
+  const resolutions = normalizeVersionApplyMergeResolutions(value, diagnostics, {
     allowUndefined: false,
     invalidDiagnostic: invalidInputDiagnostic.bind(null, operation),
   });
+  if (!resolutions) return null;
+  for (let index = 0; index < resolutions.length; index++) {
+    if (mapConflictDigest(resolutions[index].expectedConflictDigest)) continue;
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        `resolutions[${index}].expectedConflictDigest`,
+        'expectedConflictDigest is invalid.',
+      ),
+    );
+  }
+  return diagnostics.length === 0 ? resolutions : null;
 }
 
 function rejectUnknownKeys(
@@ -623,7 +645,7 @@ function mapMergeResultId(value: unknown): VersionSaveMergeResolutionsRequest['r
 }
 
 function mapConflictDigest(value: unknown): string | null {
-  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'string') return CONFLICT_DIGEST_RE.test(value) ? value : null;
   const digest = mapPublicObjectDigest(value);
   return digest?.algorithm === 'sha256' ? `sha256:${digest.digest}` : null;
 }

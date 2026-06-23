@@ -277,12 +277,11 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
         },
       });
 
-      await expect(
-        checkoutWb.version.checkout({
-          kind: 'ref',
-          name: 'refs/heads/scenario/provider-admission' as any,
-        }),
-      ).resolves.toMatchObject({
+      const staleCheckout = await checkoutWb.version.checkout({
+        kind: 'ref',
+        name: 'refs/heads/scenario/provider-admission' as any,
+      });
+      expect(staleCheckout).toMatchObject({
         ok: false,
         error: {
           diagnostics: [
@@ -295,6 +294,8 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   staleReason: 'refMoved',
                   targetKind: 'ref',
                   refName: 'refs/heads/scenario/provider-admission',
+                  branchName: 'scenario/provider-admission',
+                  checkedOutCommitId: branchBase.id,
                   currentRefHeadId: moved.id,
                   refHeadAtMaterialization: branchBase.id,
                 }),
@@ -303,6 +304,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
           ],
         },
       });
+      expectPublicDiagnosticsNotToLeak(staleCheckout, ['providerDocumentScopeKey']);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'branch-v1',
       });
@@ -359,9 +361,11 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
       await replaceVisibleRegistryGraph(backend, 'graph-2', 'replacement-root');
       stale.useStaleRegistryAfterLiveReads(1);
 
-      await expect(
-        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
-      ).resolves.toMatchObject({
+      const identityResult = await checkoutWb.version.checkout({
+        kind: 'commit',
+        id: committed.id,
+      });
+      expect(identityResult).toMatchObject({
         ok: false,
         error: {
           diagnostics: [
@@ -434,9 +438,8 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
         },
       });
 
-      await expect(
-        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
-      ).resolves.toMatchObject({
+      const identityResult = await checkoutWb.version.checkout({ kind: 'commit', id: committed.id });
+      expect(identityResult).toMatchObject({
         ok: false,
         error: {
           diagnostics: [
@@ -451,12 +454,14 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   providerIdentityClass: 'document',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
+                  partialSnapshot: true,
                 }),
               }),
             }),
           ],
         },
       });
+      expectPublicDiagnosticsNotToLeak(identityResult, ['checkout-provider-lifecycle-other-doc', 'providerDocumentScopeKey']);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'active-before-provider-identity-fence',
       });
@@ -576,6 +581,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   providerIdentityClass: 'document',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
+                  partialSnapshot: true,
                 }),
               }),
             }),
@@ -600,11 +606,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
 
   it.each([
     ['workspace', { ...DOCUMENT_SCOPE, workspaceId: 'workspace-2' }, ['workspace-2']],
-    [
-      'document',
-      { ...DOCUMENT_SCOPE, documentId: 'checkout-provider-lifecycle-stale-materialized-doc' },
-      ['checkout-provider-lifecycle-stale-materialized-doc'],
-    ],
+    ['document', { ...DOCUMENT_SCOPE, documentId: 'checkout-provider-lifecycle-stale-materialized-doc' }, ['checkout-provider-lifecycle-stale-materialized-doc']],
     ['principal', { ...DOCUMENT_SCOPE, principalScope: 'principal-2' }, ['principal-2']],
   ] as const)(
     'fails closed when a fresh checkout reload carries stale %s materializer identity',
@@ -665,16 +667,14 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                     providerIdentityClass,
                     mutationGuarantee: 'unknown-after-partial-mutation',
                     rollbackSafe: false,
+                    partialSnapshot: true,
                   }),
                 }),
               }),
             ],
           },
         });
-        expectPublicDiagnosticsNotToLeak(checkoutResult, [
-          ...forbiddenRawIds,
-          'providerDocumentScopeKey',
-        ]);
+        expectPublicDiagnosticsNotToLeak(checkoutResult, [...forbiddenRawIds, 'providerDocumentScopeKey']);
         expect(internalMaterializationCreateCount).toBeGreaterThan(0);
         await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
           value: 'active-before-materialization-identity-fence',

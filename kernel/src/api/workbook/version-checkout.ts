@@ -633,6 +633,8 @@ function sanitizeCheckoutDiagnosticPayload(
       'cause',
       'identityFenceReason',
       'providerIdentityClass',
+      'accessCategory',
+      'partialSnapshot',
     ] as const) {
       const detailValue = details[key];
       if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;

@@ -41,7 +41,11 @@ export function createWorkbookCheckoutSnapshotMaterializer(
         return {
           status: 'failed',
           diagnostics: reloaded.diagnostics.map((entry) =>
-            checkoutApplyDiagnostic(input, entry),
+            checkoutApplyDiagnostic(
+              input,
+              entry,
+              reloaded.freshLifecycleMutationGuarantee === 'unknown-after-hydrator-failure',
+            ),
           ),
           mutationGuarantee:
             reloaded.freshLifecycleMutationGuarantee === 'unknown-after-hydrator-failure'
@@ -72,7 +76,10 @@ export function createWorkbookCheckoutSnapshotMaterializer(
               severity: 'error',
               message: 'Fresh lifecycle checkout materialization could not be published.',
               commitId: input.commitId,
-              details: checkoutPublishErrorDetails(error),
+              details: {
+                ...checkoutPublishErrorDetails(error),
+                partialSnapshot: true,
+              },
             },
           ],
           mutationGuarantee: 'unknown-after-partial-mutation',
@@ -87,6 +94,7 @@ export function createWorkbookCheckoutSnapshotMaterializer(
 function checkoutApplyDiagnostic(
   input: CheckoutSnapshotApplyInput,
   diagnostic: SnapshotRootReloadDiagnostic,
+  partialSnapshot: boolean,
 ): CheckoutMaterializationDiagnostic {
   return {
     code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
@@ -96,6 +104,7 @@ function checkoutApplyDiagnostic(
     objectDigest: input.plan.snapshotRootDigest,
     details: {
       cause: diagnostic.code,
+      ...(partialSnapshot ? { partialSnapshot: true } : {}),
       ...(diagnostic.path ? { path: diagnostic.path } : {}),
     },
   };

@@ -11,6 +11,10 @@ import { namespaceForRegistry } from './registry';
 import type { LiveRefRecord, RefVersion, VersionDiagnostic } from './ref-store';
 import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from './ref-name';
 import {
+  checkoutAccessDeniedDiagnosticDetails,
+  hasCheckoutAccessDeniedDiagnostic,
+} from './checkout-access-diagnostics';
+import {
   createCheckoutMaterializationService,
   type CheckoutHeadReadResult,
   type CheckoutMaterializationDiagnostic,
@@ -126,17 +130,20 @@ function createGraphCheckoutService(
           if (result.ref === null && isMissingGraphRef(result.diagnostics)) {
             return { ok: true, ref: null, diagnostics: [] };
           }
+          const denied = checkoutRefAccessDeniedDiagnostic(result.diagnostics);
           return {
             ok: false,
             error: {
               code: 'versionCapabilityDisabled',
               message: 'Version graph ref could not be read.',
             },
-            diagnostics: refDiagnostics(
-              'VERSION_CHECKOUT_REF_READ_FAILED',
-              'Version graph ref could not be read.',
-              result.diagnostics,
-            ),
+            diagnostics: denied
+              ? [denied]
+              : refDiagnostics(
+                  'VERSION_CHECKOUT_REF_READ_FAILED',
+                  'Version graph ref could not be read.',
+                  result.diagnostics,
+                ),
           };
         }
         if (result.ref.name === 'HEAD') {
@@ -217,13 +224,19 @@ function providerFailure(
   message: string,
   sourceDiagnostics: readonly VersionStoreDiagnostic[],
 ): CheckoutMaterializationResult {
+  const accessDenied = checkoutAccessDeniedDiagnosticDetails(sourceDiagnostics);
   const diagnostics = [
-    diagnostic('VERSION_CHECKOUT_PROVIDER_ERROR', message, { sourceDiagnostics }),
+    accessDenied
+      ? diagnostic('VERSION_PERMISSION_DENIED', 'Checkout access is denied for this caller.', {
+          sourceDiagnostics,
+          details: accessDenied,
+        })
+      : diagnostic('VERSION_CHECKOUT_PROVIDER_ERROR', message, { sourceDiagnostics }),
   ];
   return {
     ok: false,
     error: Object.freeze({
-      code: 'checkoutProviderUnavailable',
+      code: accessDenied ? 'checkoutAccessDenied' : 'checkoutProviderUnavailable',
       message,
       diagnostics,
     }),
@@ -234,6 +247,14 @@ function providerFailure(
 
 function diagnosticsFromProviderError(error: unknown): readonly VersionStoreDiagnostic[] {
   if (error instanceof VersionStoreProviderError) return error.diagnostics;
+  if (isRecord(error)) {
+    if (Array.isArray(error.diagnostics)) {
+      return error.diagnostics.filter(isRecord) as VersionStoreDiagnostic[];
+    }
+    if (isRecord(error.diagnostic)) {
+      return [error.diagnostic as VersionStoreDiagnostic];
+    }
+  }
   return [];
 }
 
@@ -262,6 +283,24 @@ function refDiagnostics(
       details: { cause: sourceDiagnostics[0]?.code ?? 'unknown' },
     },
   ];
+}
+
+function checkoutRefAccessDeniedDiagnostic(
+  sourceDiagnostics: readonly { readonly code: string; readonly details?: unknown }[],
+): VersionDiagnostic | null {
+  if (!hasCheckoutAccessDeniedDiagnostic(sourceDiagnostics)) return null;
+  const details = checkoutAccessDeniedDiagnosticDetails(sourceDiagnostics);
+  return {
+    code: 'VERSION_PERMISSION_DENIED',
+    severity: 'error',
+    message: 'Version graph ref access is denied for this caller.',
+    details: {
+      cause: 'VERSION_PERMISSION_DENIED',
+      ...(details?.accessCategory === undefined
+        ? {}
+        : { accessCategory: String(details.accessCategory) }),
+    },
+  };
 }
 
 function diagnostic(
@@ -306,4 +345,8 @@ function isMissingGraphRef(
       item.code === 'VERSION_INVALID_OPTIONS' &&
       item.details?.refMissing === true,
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

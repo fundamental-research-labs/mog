@@ -97,6 +97,8 @@ export function safeMessageForCheckoutIssue(issueCode: string): string {
       return 'Checkout could not acquire a local write fence before materialization.';
     case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
       return 'Workbook state changed while checkout materialization was in progress.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'Checkout is not authorized for the requested version target.';
     default:
       return 'The checkout materialization service could not complete checkout planning.';
   }
@@ -133,6 +135,7 @@ export function recoverabilityForCheckoutIssue(
     case 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE':
     case 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE':
     case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
+    case 'VERSION_PERMISSION_DENIED':
       return 'unsupported';
     default:
       return 'none';

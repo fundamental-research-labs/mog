@@ -16,6 +16,7 @@ import { validateRefName, type RefName, type RefNameDiagnostic } from './ref-nam
 import type { GetRefResult, RefVersion, VersionDiagnostic } from './ref-store';
 import type { VersionObjectStoreDiagnostic } from './object-store';
 import type { VersionStoreDiagnostic as ProviderVersionStoreDiagnostic } from './provider';
+import { checkoutAccessDeniedDiagnosticDetails } from './checkout-access-diagnostics';
 import {
   applyCheckoutMaterializationPlan,
   type CheckoutMaterializationMutationGuarantee,
@@ -38,6 +39,7 @@ export type CheckoutMaterializationRequest =
 export type CheckoutMaterializationErrorCode =
   | 'invalidCheckoutTarget'
   | 'unsupportedCheckoutTarget'
+  | 'checkoutAccessDenied'
   | 'checkoutRefNotFound'
   | 'checkoutCommitNotFound'
   | 'checkoutCommitUnmaterializable'
@@ -71,7 +73,8 @@ export type CheckoutMaterializationDiagnosticCode =
   | 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE'
   | 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED'
   | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'
-  | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE';
+  | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE'
+  | 'VERSION_PERMISSION_DENIED';
 
 export type CheckoutMaterializationDiagnosticSource =
   | CheckoutMaterializationDiagnostic
@@ -409,6 +412,17 @@ export class CheckoutMaterializationService {
     }
 
     if (!result.ok) {
+      const denied = accessDeniedDiagnosticFromSources(
+        result.diagnostics,
+        'HEAD checkout is not authorized for this caller.',
+      );
+      if (denied) {
+        return failureResult(
+          'checkoutAccessDenied',
+          'HEAD checkout is not authorized for this caller.',
+          [denied],
+        );
+      }
       return failureResult('checkoutRefReadFailed', 'Head reader failed while resolving HEAD.', [
         diagnostic('VERSION_CHECKOUT_REF_READ_FAILED', 'Head reader failed while resolving HEAD.', {
           sourceDiagnostics: result.diagnostics,
@@ -482,6 +496,18 @@ export class CheckoutMaterializationService {
     }
 
     if (!result.ok) {
+      const denied = accessDeniedDiagnosticFromSources(
+        result.diagnostics,
+        'Ref checkout is not authorized for this caller.',
+        refName,
+      );
+      if (denied) {
+        return failureResult(
+          'checkoutAccessDenied',
+          'Ref checkout is not authorized for this caller.',
+          [denied],
+        );
+      }
       return failureResult('checkoutRefReadFailed', 'Ref reader failed while resolving checkout.', [
         diagnostic(
           'VERSION_CHECKOUT_REF_READ_FAILED',
@@ -817,6 +843,20 @@ function diagnosticsContainCode(
       return diagnosticsContainCode(entry.sourceDiagnostics, code);
     }
     return false;
+  });
+}
+
+function accessDeniedDiagnosticFromSources(
+  diagnostics: readonly CheckoutMaterializationDiagnosticSource[],
+  message: string,
+  refName?: RefName,
+): CheckoutMaterializationDiagnostic | null {
+  const details = checkoutAccessDeniedDiagnosticDetails(diagnostics);
+  if (!details) return null;
+  return diagnostic('VERSION_PERMISSION_DENIED', message, {
+    ...(refName ? { refName } : {}),
+    sourceDiagnostics: diagnostics,
+    details,
   });
 }
 

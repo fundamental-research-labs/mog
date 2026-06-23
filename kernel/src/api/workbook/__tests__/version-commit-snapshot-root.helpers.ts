@@ -157,6 +157,27 @@ export function emptyMutationResult() {
   };
 }
 
+export function cellValueMutationResult(value: unknown) {
+  return {
+    recalc: {
+      changedCells: [
+        {
+          cellId: 'cell-a1',
+          sheetId: 'sheet-1',
+          position: { row: 0, col: 0 },
+          oldValue: null,
+          value,
+          extraFlags: 0,
+        },
+      ],
+      projectionChanges: [],
+      errors: [],
+      validationAnnotations: [],
+      metrics: {},
+    },
+  };
+}
+
 export function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
   return async ({ namespace, currentMain }) => ({
     status: 'success',

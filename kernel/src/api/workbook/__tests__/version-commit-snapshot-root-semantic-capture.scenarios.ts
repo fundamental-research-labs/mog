@@ -9,6 +9,7 @@ import { attachWorkbookVersioning } from '../version-wiring';
 import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 import {
   DOCUMENT_SCOPE,
+  cellValueMutationResult,
   createProviderBackedVersion,
   emptyMutationResult,
   expectInitializeSuccess,
@@ -40,24 +41,7 @@ export function registerSnapshotRootSemanticCaptureScenarios(): void {
         domainIds: ['cells.values'],
       }),
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
-      result: {
-        recalc: {
-          changedCells: [
-            {
-              cellId: 'cell-a1',
-              sheetId: 'sheet-1',
-              position: { row: 0, col: 0 },
-              oldValue: null,
-              value: 42,
-              extraFlags: 0,
-            },
-          ],
-          projectionChanges: [],
-          errors: [],
-          validationAnnotations: [],
-          metrics: {},
-        },
-      },
+      result: cellValueMutationResult(42),
     });
     const version = new WorkbookVersionImpl(ctx);
 
@@ -168,24 +152,7 @@ export function registerSnapshotRootSemanticCaptureScenarios(): void {
       versionContext(version).versioning.mutationCapture.recordMutationResult({
         operation: 'compute_batch_set_cells_by_position',
         directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
-        result: {
-          recalc: {
-            changedCells: [
-              {
-                cellId: 'cell-a1',
-                sheetId: 'sheet-1',
-                position: { row: 0, col: 0 },
-                oldValue: null,
-                value: forbiddenPayload,
-                extraFlags: 0,
-              },
-            ],
-            projectionChanges: [],
-            errors: [],
-            validationAnnotations: [],
-            metrics: {},
-          },
-        },
+        result: cellValueMutationResult(forbiddenPayload),
       });
 
       const commitResult = await version.commit();

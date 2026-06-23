@@ -77,6 +77,11 @@ export async function validateApplyMergeTargetRefCasProof(
   if (!provider) return { ok: true, checked: false };
 
   try {
+    const expectedRevisionDiagnostics = expectedTargetHeadRevisionDiagnostics(input);
+    if (expectedRevisionDiagnostics.length > 0) {
+      return { ok: false, kind: 'blocked', diagnostics: expectedRevisionDiagnostics };
+    }
+
     const registry = await provider.readGraphRegistry();
     if (registry.status !== 'ok') {
       return {
@@ -98,17 +103,17 @@ export async function validateApplyMergeTargetRefCasProof(
       return { ok: false, kind: 'staleTargetHead', diagnostics: staleTarget };
     }
 
-    if (input.expectedTargetHead.symbolicHeadRevision === undefined) {
-      return { ok: true, checked: true };
+    if (shouldReadSymbolicHead(input)) {
+      const symbolic = await readSymbolicHead(graph);
+      if (!symbolic.ok) return { ok: false, kind: 'blocked', diagnostics: symbolic.diagnostics };
+
+      const symbolicDiagnostics = symbolicHeadDiagnostics(symbolic.head, input);
+      if (symbolicDiagnostics.length > 0) {
+        return { ok: false, kind: 'blocked', diagnostics: symbolicDiagnostics };
+      }
     }
 
-    const symbolic = await readSymbolicHead(graph);
-    if (!symbolic.ok) return { ok: false, kind: 'blocked', diagnostics: symbolic.diagnostics };
-
-    const symbolicDiagnostics = symbolicHeadDiagnostics(symbolic.head, input);
-    return symbolicDiagnostics.length === 0
-      ? { ok: true, checked: true }
-      : { ok: false, kind: 'blocked', diagnostics: symbolicDiagnostics };
+    return { ok: true, checked: true };
   } catch {
     return { ok: false, kind: 'blocked', diagnostics: [providerErrorDiagnostic()] };
   }
@@ -122,8 +127,24 @@ async function readTargetRef(
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const read = await graph.readRef(targetRef);
-  if (read.status !== 'success' || read.ref.name === VERSION_GRAPH_HEAD_REF) {
+  if (read.status !== 'success' || !read.ref) {
     return { ok: false, diagnostics: mapProviderDiagnostics(read.diagnostics) };
+  }
+  if (read.ref.name === VERSION_GRAPH_HEAD_REF) {
+    return {
+      ok: false,
+      diagnostics: [
+        refConflictDiagnostic(
+          'The provider resolved applyMerge targetRef to a symbolic ref.',
+          {
+            reason: 'symbolicTargetRefResolved',
+            expectedTargetRef: safePublicRefPayload(targetRef),
+            actualTargetRef: redactedRefPayload(read.ref.name),
+          },
+          'no-write-attempted',
+        ),
+      ],
+    };
   }
   if (read.ref.name !== targetRef) {
     return {
@@ -133,12 +154,18 @@ async function readTargetRef(
           'The current target ref does not match applyMerge targetRef.',
           {
             reason: 'targetRefMismatch',
-            expectedTargetRef: targetRef,
-            actualTargetRef: read.ref.name,
+            expectedTargetRef: safePublicRefPayload(targetRef),
+            actualTargetRef: safePublicRefPayload(read.ref.name),
           },
           'no-write-attempted',
         ),
       ],
+    };
+  }
+  if (!isVersionRecordRevision(read.ref.revision)) {
+    return {
+      ok: false,
+      diagnostics: [missingRefRevisionDiagnostic('missingTargetRefRevision', targetRef)],
     };
   }
   return { ok: true, ref: read.ref };
@@ -151,10 +178,62 @@ async function readSymbolicHead(
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   const read = await graph.readRef(VERSION_GRAPH_HEAD_REF);
-  if (read.status !== 'success' || read.ref.name !== VERSION_GRAPH_HEAD_REF) {
+  if (read.status !== 'success' || !read.ref) {
     return { ok: false, diagnostics: mapProviderDiagnostics(read.diagnostics) };
   }
+  if (read.ref.name !== VERSION_GRAPH_HEAD_REF) {
+    return {
+      ok: false,
+      diagnostics: [
+        refConflictDiagnostic(
+          'The provider did not resolve symbolic HEAD consistently.',
+          {
+            reason: 'symbolicHeadRefMismatch',
+            expectedTargetRef: redactedRefPayload(VERSION_GRAPH_HEAD_REF),
+            actualTargetRef: safePublicRefPayload(read.ref.name),
+          },
+          'no-write-attempted',
+        ),
+      ],
+    };
+  }
+  if (!isVersionRecordRevision(read.ref.revision)) {
+    return {
+      ok: false,
+      diagnostics: [missingRefRevisionDiagnostic('missingSymbolicHeadRevision')],
+    };
+  }
   return { ok: true, head: read.ref };
+}
+
+function shouldReadSymbolicHead(input: ApplyMergeTargetRefCasValidationInput): boolean {
+  return (
+    input.targetRef === VERSION_MAIN_REF ||
+    input.expectedTargetHead.symbolicHeadRevision !== undefined
+  );
+}
+
+function expectedTargetHeadRevisionDiagnostics(
+  input: ApplyMergeTargetRefCasValidationInput,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  const expectedTargetHead = input.expectedTargetHead as unknown;
+  if (!isRecord(expectedTargetHead)) {
+    diagnostics.push(
+      missingRefRevisionDiagnostic('missingExpectedTargetRefRevision', input.targetRef),
+    );
+    return diagnostics;
+  }
+  if (!isVersionRecordRevision(expectedTargetHead.revision)) {
+    diagnostics.push(
+      missingRefRevisionDiagnostic('missingExpectedTargetRefRevision', input.targetRef),
+    );
+  }
+  const symbolicRevision = expectedTargetHead.symbolicHeadRevision;
+  if (symbolicRevision !== undefined && !isVersionRecordRevision(symbolicRevision)) {
+    diagnostics.push(missingRefRevisionDiagnostic('missingExpectedSymbolicHeadRevision'));
+  }
+  return diagnostics;
 }
 
 function staleTargetHeadDiagnostics(
@@ -173,7 +252,7 @@ function staleTargetHeadDiagnostics(
       'The target ref head no longer matches expectedTargetHead.',
       {
         reason: 'staleTargetHead',
-        targetRef: input.targetRef,
+        targetRef: safePublicRefPayload(input.targetRef),
         expectedHead: input.expectedTargetHead.commitId,
         actualHead: ref.commitId,
         expectedRevisionKind: input.expectedTargetHead.revision.kind,
@@ -196,8 +275,8 @@ function symbolicHeadDiagnostics(
         'The current symbolic HEAD target does not match applyMerge targetRef.',
         {
           reason: 'symbolicTargetMismatch',
-          expectedTargetRef: input.targetRef,
-          actualTargetRef: head.target,
+          expectedTargetRef: safePublicRefPayload(input.targetRef),
+          actualTargetRef: safePublicRefPayload(head.target),
         },
         'no-write-attempted',
       ),
@@ -211,7 +290,7 @@ function symbolicHeadDiagnostics(
         'The symbolic HEAD revision no longer matches expectedTargetHead.',
         {
           reason: 'staleSymbolicHead',
-          targetRef: input.targetRef,
+          targetRef: safePublicRefPayload(input.targetRef),
           expectedRevisionKind: expectedRevision.kind,
           expectedRevision: expectedRevision.value,
           actualRevisionKind: head.revision.kind,
@@ -261,16 +340,8 @@ function mapProviderDiagnostics(
   return diagnostics.map((diagnostic) => {
     if (!isRecord(diagnostic)) return providerErrorDiagnostic();
     return publicDiagnostic(
-      typeof diagnostic.issueCode === 'string'
-        ? diagnostic.issueCode
-        : typeof diagnostic.code === 'string'
-          ? diagnostic.code
-          : 'VERSION_PROVIDER_FAILED',
-      typeof diagnostic.safeMessage === 'string'
-        ? diagnostic.safeMessage
-        : typeof diagnostic.message === 'string'
-          ? diagnostic.message
-          : 'Version applyMerge target-ref CAS validation failed.',
+      safeProviderIssueCode(diagnostic.issueCode ?? diagnostic.code),
+      'Version applyMerge target-ref CAS validation failed.',
       {
         recoverability: isRecoverability(diagnostic.recoverability)
           ? diagnostic.recoverability
@@ -279,6 +350,50 @@ function mapProviderDiagnostics(
       },
     );
   });
+}
+
+function missingRefRevisionDiagnostic(
+  reason:
+    | 'missingExpectedTargetRefRevision'
+    | 'missingExpectedSymbolicHeadRevision'
+    | 'missingTargetRefRevision'
+    | 'missingSymbolicHeadRevision',
+  targetRef?: VersionMainRefName | VersionRefName,
+): VersionStoreDiagnostic {
+  const expectedProofMissing =
+    reason === 'missingExpectedTargetRefRevision' ||
+    reason === 'missingExpectedSymbolicHeadRevision';
+  return publicDiagnostic(
+    expectedProofMissing ? 'VERSION_INVALID_OPTIONS' : 'VERSION_PROVIDER_FAILED',
+    safeMissingRevisionMessage(reason),
+    {
+      recoverability: expectedProofMissing ? 'none' : 'retry',
+      payload: {
+        reason,
+        ...(targetRef ? { targetRef: safePublicRefPayload(targetRef) } : {}),
+      },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function safeMissingRevisionMessage(
+  reason:
+    | 'missingExpectedTargetRefRevision'
+    | 'missingExpectedSymbolicHeadRevision'
+    | 'missingTargetRefRevision'
+    | 'missingSymbolicHeadRevision',
+): string {
+  switch (reason) {
+    case 'missingExpectedTargetRefRevision':
+      return 'expectedTargetHead.revision is required for applyMerge CAS validation.';
+    case 'missingExpectedSymbolicHeadRevision':
+      return 'expectedTargetHead.symbolicHeadRevision is invalid for applyMerge CAS validation.';
+    case 'missingTargetRefRevision':
+      return 'The target ref revision is unavailable for applyMerge CAS validation.';
+    case 'missingSymbolicHeadRevision':
+      return 'The symbolic HEAD revision is unavailable for applyMerge CAS validation.';
+  }
 }
 
 function refConflictDiagnostic(
@@ -326,8 +441,36 @@ function revisionsEqual(left: VersionRecordRevision, right: VersionRecordRevisio
   return left.kind === right.kind && left.value === right.value;
 }
 
+function safePublicRefPayload(value: unknown): string {
+  return safePublicRefName(value) ?? 'redacted';
+}
+
+function redactedRefPayload(_value: unknown): string {
+  return 'redacted';
+}
+
+function safePublicRefName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const mapped = mapPublicApplyTargetRef(value);
+  return mapped === value ? mapped : null;
+}
+
+function isVersionRecordRevision(value: unknown): value is VersionRecordRevision {
+  return (
+    isRecord(value) &&
+    (value.kind === 'counter' || value.kind === 'opaque') &&
+    typeof value.value === 'string'
+  );
+}
+
 function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
   return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
+}
+
+function safeProviderIssueCode(value: unknown): string {
+  return typeof value === 'string' && /^VERSION_[A-Z0-9_]+$/.test(value)
+    ? value
+    : 'VERSION_PROVIDER_FAILED';
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

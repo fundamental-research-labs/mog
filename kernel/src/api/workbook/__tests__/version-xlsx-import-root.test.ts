@@ -38,6 +38,7 @@ const OTHER_SEMANTIC_CHANGE_SET_DIGEST = objectDigest('3');
 const OTHER_SNAPSHOT_ROOT_DIGEST = objectDigest('4');
 const REF_REVISION = { kind: 'counter', value: '1' } as const;
 const OTHER_REF_REVISION = { kind: 'counter', value: '2' } as const;
+const RAW_METADATA_DIAGNOSTIC_SECRET = 'vc10-raw-metadata-diagnostic-secret';
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -450,6 +451,19 @@ describe('WorkbookVersion XLSX import root', () => {
       reason: 'missing-object-digests',
     });
 
+    const missingHeadXlsxBytes = addMogVersionMetadataToXlsx(await createSourceXlsx(), {
+      ...testVersionMetadata({
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+      }),
+      head: null,
+    });
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(missingHeadXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+      }),
+    ).toMatchObject({ status: 'untrusted', reason: 'missing-head' });
+
     const digestBoundXlsxBytes = addMogVersionMetadataToXlsx(
       await createSourceXlsx(),
       testVersionMetadata({
@@ -654,6 +668,62 @@ describe('WorkbookVersion XLSX import root', () => {
       });
       expect(JSON.stringify(semanticPayload)).not.toContain('copied-source-document');
       expect(JSON.stringify(semanticPayload)).not.toContain(OLD_METADATA_COMMIT_ID);
+    } finally {
+      await wb?.close('skipSave').catch(() => {});
+      await imported.handle.dispose().catch(() => {});
+    }
+  });
+
+  it('redacts raw metadata diagnostics when creating an import root', async () => {
+    const xlsxBytes = addMogVersionMetadataToXlsx(await createSourceXlsx('Raw diagnostics'), {
+      ...testVersionMetadata({
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+        refRevision: REF_REVISION,
+        semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+        snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+      }),
+      diagnostics: [{ message: RAW_METADATA_DIAGNOSTIC_SECRET }],
+    });
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: xlsxBytes },
+      { documentId: METADATA_TRUST_DOCUMENT_ID, environment: 'headless', userTimezone: 'UTC' },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected raw diagnostic import success: ${imported.error?.message}`);
+    }
+    expect(imported.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'import_error', reason: 'invalid-schema' }),
+      ]),
+    );
+    expect(JSON.stringify(imported.warnings)).not.toContain(RAW_METADATA_DIAGNOSTIC_SECRET);
+
+    let wb: Workbook | undefined;
+    try {
+      wb = await imported.handle.workbook({
+        versioning: {
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        },
+      });
+      const head = await wb.version.getHead();
+      expect(head).toMatchObject({ ok: true });
+      if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+      const semanticPayload = await readRootSemanticChangeSetPayload(
+        head.value.id,
+        METADATA_TRUST_DOCUMENT_ID,
+      );
+      expect(semanticPayload).toMatchObject({
+        source: {
+          kind: 'xlsxImportRoot',
+          versionMetadataTrust: { status: 'untrusted', reason: 'invalid-schema', redacted: true },
+        },
+      });
+      expect(JSON.stringify(semanticPayload)).not.toContain(RAW_METADATA_DIAGNOSTIC_SECRET);
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});

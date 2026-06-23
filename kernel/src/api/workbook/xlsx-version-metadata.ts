@@ -13,6 +13,8 @@ import {
   createMogWorkbookVersionXlsxMetadata,
   createMogVersionMetadataExportBlockedError,
   hasVersionHeadFailureDiagnostics,
+  MOG_VERSION_METADATA_REDACTION_POLICY,
+  REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS,
   type MogVersionMetadataExportSink,
   type MogVersionMetadataExportSinkAuthorization,
 } from './version-xlsx-metadata-export-gate';
@@ -181,6 +183,9 @@ export function readAndValidateMogVersionMetadataFromXlsx(
 
     const metadata = parseMogWorkbookVersionXlsxMetadata(parsed);
     if (!metadata) return untrustedMetadataResult('invalid-schema');
+    if (!hasRequiredVersionMetadataImportRedaction(metadata)) {
+      return untrustedMetadataResult('invalid-schema');
+    }
 
     const validation = validateMogWorkbookVersionXlsxMetadata(metadata, context);
     if (validation.status === 'trusted') {
@@ -208,7 +213,10 @@ export function readAndValidateMogVersionMetadataFromXlsx(
       };
     }
 
-    return untrustedMetadataResult(validation.reason, metadata);
+    return untrustedMetadataResult(
+      validation.reason,
+      validation.reason === 'head-unverified' ? metadata : undefined,
+    );
   } catch {
     return untrustedMetadataResult('malformed-sidecar');
   }
@@ -533,6 +541,20 @@ function isVersionMetadataRedaction(
       value.policy === 'commit-document-and-object-digests-only') &&
     Array.isArray(value.omitted) &&
     value.omitted.every((item) => typeof item === 'string')
+  );
+}
+
+function hasRequiredVersionMetadataImportRedaction(
+  metadata: MogWorkbookVersionXlsxMetadata,
+): boolean {
+  const redaction = metadata.redaction;
+  return (
+    metadata.diagnostics.length === 0 &&
+    redaction.policy === MOG_VERSION_METADATA_REDACTION_POLICY &&
+    REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS.every((item) =>
+      redaction.omitted.includes(item),
+    ) &&
+    (metadata.workspaceId !== undefined || redaction.omitted.includes('workspaceId'))
   );
 }
 

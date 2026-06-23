@@ -180,7 +180,7 @@ describe('VC-10 XLSX external-change branch routing', () => {
     expect(mainPage.commits.map((commit) => commit.id)).toEqual([localCommit.id, baseCommit.id]);
   });
 
-  it('does not attach same-document metadata to an arbitrary lexical commit id', async () => {
+  it('routes a missing trusted base to a redacted import-root branch', async () => {
     const namespace = testNamespace('vc10-xlsx-missing-external-base');
     const graph = createInMemoryVersionGraphStore({ namespace });
     const baseState = semanticState('base', '4');
@@ -210,11 +210,11 @@ describe('VC-10 XLSX external-change branch routing', () => {
       createdAt: CREATED_AT,
     });
 
-    expect(result).toMatchObject({
-      status: 'failed',
-      diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_PARENT' })],
-    });
-    expect(reader.readCurrentSemanticState).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected missing-base import root, got ${result.status}`);
+    }
+    expect(reader.readCurrentSemanticState).toHaveBeenCalledTimes(1);
     expect(reader.diffSemanticStates).not.toHaveBeenCalled();
 
     const headAfter = await graph.readHead();
@@ -222,8 +222,42 @@ describe('VC-10 XLSX external-change branch routing', () => {
       status: 'success',
       head: { id: localCommit.id, refName: VERSION_GRAPH_MAIN_REF },
     });
-    const branches = await graph.listBranches({ prefix: 'import' });
-    expect(branches).toMatchObject({ ok: true, branches: [] });
+    const branch = await findOnlyImportNewRootBranch(graph);
+    expect(branch.ref.targetCommitId).toBe(result.commitId);
+
+    const rootCommit = await graph.readCommit(result.commitId);
+    expect(rootCommit.status).toBe('success');
+    if (rootCommit.status !== 'success') {
+      throw new Error(`expected missing-base root readable: ${rootCommit.diagnostics[0]?.code}`);
+    }
+    expect(rootCommit.commit.payload.parentCommitIds).toEqual([]);
+
+    const semanticRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: rootCommit.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticRecord.preimage.payload).toMatchObject({
+      source: {
+        kind: 'xlsxImportRoot',
+        versionMetadataTrust: {
+          status: 'untrusted',
+          reason: 'commit-missing',
+          redacted: true,
+        },
+      },
+      importDiagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataUntrusted',
+          reason: 'commit-missing',
+          details: expect.objectContaining({ redacted: true }),
+        }),
+      ],
+      semanticState: externalState,
+    });
+    const serializedPayload = JSON.stringify(semanticRecord.preimage.payload);
+    expect(serializedPayload).not.toContain(missingCommitId);
+    expect(serializedPayload).not.toContain(namespace.documentId);
   });
 
   it('does not attach same-document metadata by commit id when object digests do not match', async () => {
@@ -288,12 +322,145 @@ describe('VC-10 XLSX external-change branch routing', () => {
         kind: 'xlsxImportRoot',
         versionMetadataTrust: {
           status: 'untrusted',
-          reason: 'head-unverified',
+          reason: 'object-digest-mismatch',
           redacted: true,
         },
       },
+      importDiagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataUntrusted',
+          reason: 'object-digest-mismatch',
+          details: expect.objectContaining({ redacted: true }),
+        }),
+      ],
       semanticState: externalState,
     });
+  });
+
+  it('ignores forged head candidates when the trust summary is untrusted', async () => {
+    const namespace = testNamespace('vc10-xlsx-untrusted-candidate-new-root');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base', 'u');
+    const localState = semanticState('local-main', 'v');
+    const externalState = semanticState('forged-untrusted-candidate', 'w');
+
+    const { baseCommit, baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    const localCommit = await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-main',
+    });
+    const reader = semanticStateReader(externalState, baseState);
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x43),
+      semanticStateReader: reader,
+      provenance: {
+        ...trustedProvenance(namespace.documentId, baseCommit, baseHead.head),
+        versionMetadataTrust: {
+          status: 'untrusted',
+          sidecarPart: SIDE_CAR_PART,
+          reason: 'wrong-document',
+          redacted: true,
+        },
+      },
+      createdAt: CREATED_AT,
+    });
+
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected untrusted candidate import root, got ${result.status}`);
+    }
+    expect(reader.readCurrentSemanticState).toHaveBeenCalledTimes(1);
+    expect(reader.diffSemanticStates).not.toHaveBeenCalled();
+    await expect(graph.readHead()).resolves.toMatchObject({
+      status: 'success',
+      head: { id: localCommit.id, refName: VERSION_GRAPH_MAIN_REF },
+    });
+
+    const branch = await findOnlyImportNewRootBranch(graph);
+    expect(branch.ref.targetCommitId).toBe(result.commitId);
+    const branches = await graph.listBranches({ prefix: 'import' });
+    expect(branches).toMatchObject({ ok: true });
+    if (!branches.ok) throw new Error(`expected import branches`);
+    expect(
+      branches.branches.filter((candidateBranch) =>
+        /^import\/external-change\//.test(candidateBranch.name),
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('downgrades a trusted summary without a head candidate to missing-head', async () => {
+    const namespace = testNamespace('vc10-xlsx-trusted-missing-candidate');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base', 'm');
+    const localState = semanticState('local-main', 'n');
+    const importedState = semanticState('trusted-missing-candidate', 'o');
+
+    const { baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-main',
+    });
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x44),
+      semanticStateReader: semanticStateReader(importedState, baseState),
+      provenance: {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 640 },
+        diagnostics: [staleTrustedBaseDiagnostic()],
+        versionMetadataTrust: {
+          status: 'trusted',
+          sidecarPart: SIDE_CAR_PART,
+          redacted: true,
+        },
+      },
+      createdAt: CREATED_AT,
+    });
+
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected missing-candidate import root, got ${result.status}`);
+    }
+
+    const rootCommit = await graph.readCommit(result.commitId);
+    expect(rootCommit.status).toBe('success');
+    if (rootCommit.status !== 'success') {
+      throw new Error(`expected missing-candidate root readable`);
+    }
+    const semanticRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: rootCommit.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticRecord.preimage.payload).toMatchObject({
+      source: {
+        kind: 'xlsxImportRoot',
+        versionMetadataTrust: {
+          status: 'untrusted',
+          reason: 'missing-head',
+          redacted: true,
+        },
+      },
+      importDiagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataUntrusted',
+          reason: 'missing-head',
+          details: expect.objectContaining({ redacted: true }),
+        }),
+      ],
+    });
+    expect(JSON.stringify(semanticRecord.preimage.payload)).not.toContain('trusted-stale-base');
   });
 
   it('records stale trusted-base diagnostics when routing to an external-change branch', async () => {

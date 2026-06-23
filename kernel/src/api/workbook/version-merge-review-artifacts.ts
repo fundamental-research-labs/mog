@@ -23,6 +23,10 @@ import type { VersionStoreProvider } from '../../document/version-store/provider
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import { namespaceForRegistry } from '../../document/version-store/registry';
 import type { VersionMergePublicOperation } from './version-merge-capability';
+import {
+  recoverabilityForVersionObjectRead,
+  versionObjectReadDiagnosticCode,
+} from './version-object-read-diagnostics';
 
 const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
 const PUBLIC_DIAGNOSTIC_PAYLOAD_KEY_RE = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
@@ -37,6 +41,10 @@ const STRUCTURAL_PATH_TEXT_RE =
   /\b(?:cells?|cols?|columns?|rows?|sheets?|packages?|parts?)\/[^\s"',)]+/i;
 const UNSAFE_VALUE_TEXT_RE =
   /\b(?:secret|password|credential|api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer\s+[A-Za-z0-9._-]+|sk_(?:live|test)_[A-Za-z0-9_-]+)\b/i;
+const SENSITIVE_PRINCIPAL_TOKEN_RE =
+  /\b(?:principal|actor|reviewer|agent|user)[_-][A-Za-z0-9_.:-]+\b/i;
+const PERSISTED_ARTIFACT_REF_TEXT_RE =
+  /\b(?:[0-9a-f]{64}|(?:commit:sha256:|sha256:|merge-result:|merge-payload:|conflict:[A-Za-z0-9_.:-]*:|option:[A-Za-z0-9_.:-]*:)[0-9A-Za-z_.:-]+)\b/i;
 export const REVIEW_EXTENSION_OBJECT_TYPE = 'workbook.reviewExtension.v1' as const;
 
 type AttachedVersionServices = {
@@ -133,23 +141,14 @@ export async function readMergePreviewArtifact(
     }
     return { ok: true, payload };
   } catch (error) {
-    if (
-      error instanceof VersionObjectStoreError &&
-      error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
-    ) {
-      return {
-        ok: false,
-        diagnostics: [
-          mergeReviewDiagnostic(
-            operation,
-            'VERSION_MISSING_OBJECT',
-            'Persisted merge preview artifact could not be found.',
-            { recoverability: 'repair' },
-          ),
-        ],
-      };
-    }
-    return { ok: false, diagnostics: [mergeReviewProviderErrorDiagnostic(operation)] };
+    return {
+      ok: false,
+      diagnostics: persistedReviewArtifactReadDiagnostics(
+        operation,
+        error,
+        'Persisted merge preview artifact could not be found.',
+      ),
+    };
   }
 }
 
@@ -275,12 +274,48 @@ export function mapMergeReviewProviderDiagnostics(
         ? diagnostic.safeMessage
         : defaultSafeMessageForIssue(issueCode),
       {
-        recoverability: isRecoverability(diagnostic.recoverability)
-          ? diagnostic.recoverability
-          : recoverabilityForIssue(issueCode),
+        recoverability: recoverabilityForVersionObjectRead(
+          issueCode,
+          isRecoverability(diagnostic.recoverability)
+            ? diagnostic.recoverability
+            : recoverabilityForIssue(issueCode),
+        ),
       },
     );
   });
+}
+
+export function persistedReviewArtifactReadDiagnostics(
+  operation: VersionMergePublicOperation,
+  error: unknown,
+  missingMessage: string,
+): readonly VersionStoreDiagnostic[] {
+  if (
+    error instanceof VersionObjectStoreError &&
+    error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
+  ) {
+    return [
+      mergeReviewDiagnostic(operation, 'VERSION_MISSING_OBJECT', missingMessage, {
+        recoverability: 'repair',
+      }),
+    ];
+  }
+  const diagnostic = providerDiagnosticFromError(error);
+  if (!diagnostic) return [mergeReviewProviderErrorDiagnostic(operation)];
+  const issueCode = publicArtifactIssueCode(diagnostic);
+  return [
+    mergeReviewDiagnostic(
+      operation,
+      issueCode,
+      reviewArtifactSafeMessage(issueCode, missingMessage),
+      {
+        recoverability: recoverabilityForVersionObjectRead(
+          versionObjectReadDiagnosticCode(diagnostic),
+          recoverabilityForIssue(issueCode),
+        ),
+      },
+    ),
+  ];
 }
 
 export function mergeReviewDiagnostic(
@@ -395,6 +430,59 @@ function defaultSafeMessageForIssue(issueCode: string): string {
   }
 }
 
+function providerDiagnosticFromError(error: unknown): Readonly<Record<string, unknown>> | null {
+  if (!isRecord(error)) return null;
+  const first = Array.isArray(error.diagnostics) ? error.diagnostics[0] : error.diagnostic;
+  return isRecord(first) ? first : null;
+}
+
+function publicArtifactIssueCode(diagnostic: Readonly<Record<string, unknown>>): string {
+  const raw = versionObjectReadDiagnosticCode(diagnostic) ?? 'VERSION_PROVIDER_FAILED';
+  switch (raw) {
+    case 'VERSION_OBJECT_NOT_FOUND':
+      return 'VERSION_MISSING_OBJECT';
+    case 'VERSION_BYTE_LENGTH_MISMATCH':
+    case 'VERSION_DIGEST_MISMATCH':
+    case 'VERSION_INVALID_PAYLOAD':
+    case 'VERSION_INVALID_PREIMAGE':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_TYPE_MISMATCH':
+    case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
+    case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
+      return 'VERSION_INVALID_COMMIT_PAYLOAD';
+    case 'VERSION_INVALID_COMMIT_PAYLOAD':
+    case 'VERSION_MISSING_DEPENDENCY':
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_PERMISSION_DENIED':
+    case 'VERSION_PROVIDER_FAILED':
+    case 'VERSION_REF_CONFLICT':
+    case 'VERSION_STALE_PAGE_CURSOR':
+    case 'VERSION_STORE_UNAVAILABLE':
+    case 'VERSION_UNSUPPORTED_SCHEMA':
+      return raw;
+    default:
+      return 'VERSION_PROVIDER_FAILED';
+  }
+}
+
+function reviewArtifactSafeMessage(issueCode: string, missingMessage: string): string {
+  switch (issueCode) {
+    case 'VERSION_INVALID_COMMIT_PAYLOAD':
+      return 'Persisted merge review artifact payload is invalid or unsupported.';
+    case 'VERSION_MISSING_OBJECT':
+      return missingMessage;
+    case 'VERSION_PERMISSION_DENIED':
+      return 'Version merge review is not authorized for this caller.';
+    case 'VERSION_REF_CONFLICT':
+      return 'Version merge review target is stale.';
+    case 'VERSION_STALE_PAGE_CURSOR':
+      return 'Version merge review cursor is stale.';
+    default:
+      return 'Version merge review provider failed.';
+  }
+}
+
 function sanitizePublicIssueCode(issueCode: string): string {
   return isUnsafeDiagnosticText(issueCode, MAX_PUBLIC_DIAGNOSTIC_PAYLOAD_STRING_BYTES)
     ? 'VERSION_PROVIDER_FAILED'
@@ -415,7 +503,7 @@ function sanitizePublicDiagnosticPayload(
   if (payload) {
     for (const [key, value] of Object.entries(payload)) {
       if (key === 'operation' || !PUBLIC_DIAGNOSTIC_PAYLOAD_KEY_RE.test(key)) continue;
-      const sanitizedValue = sanitizePublicDiagnosticPayloadValue(value);
+      const sanitizedValue = sanitizePublicDiagnosticPayloadValue(key, value);
       if (sanitizedValue !== undefined) sanitized[key] = sanitizedValue;
     }
   }
@@ -424,8 +512,10 @@ function sanitizePublicDiagnosticPayload(
 }
 
 function sanitizePublicDiagnosticPayloadValue(
+  key: string,
   value: unknown,
 ): string | number | boolean | null | undefined {
+  if (isSensitiveDiagnosticPayloadKey(key)) return 'redacted';
   switch (typeof value) {
     case 'string':
       return isUnsafeDiagnosticText(value, MAX_PUBLIC_DIAGNOSTIC_PAYLOAD_STRING_BYTES)
@@ -448,7 +538,34 @@ function isUnsafeDiagnosticText(value: string, maxUtf8Bytes: number): boolean {
     HOST_OBJECT_TEXT_RE.test(value) ||
     PACKAGE_PATH_TEXT_RE.test(value) ||
     STRUCTURAL_PATH_TEXT_RE.test(value) ||
-    UNSAFE_VALUE_TEXT_RE.test(value)
+    UNSAFE_VALUE_TEXT_RE.test(value) ||
+    SENSITIVE_PRINCIPAL_TOKEN_RE.test(value) ||
+    PERSISTED_ARTIFACT_REF_TEXT_RE.test(value)
+  );
+}
+
+function isSensitiveDiagnosticPayloadKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.includes('principal') ||
+    normalized.includes('digest') ||
+    normalized.includes('hidden') ||
+    normalized === 'conflictid' ||
+    normalized === 'optionid' ||
+    normalized === 'payloadid' ||
+    normalized === 'resultid' ||
+    normalized === 'resolutionsetdigest' ||
+    normalized === 'resolvedattemptdigest' ||
+    normalized === 'targetref' ||
+    normalized === 'expectedtargethead' ||
+    normalized === 'commitid' ||
+    normalized === 'basecommitid' ||
+    normalized === 'headcommitid' ||
+    normalized === 'value' ||
+    normalized === 'before' ||
+    normalized === 'after' ||
+    normalized === 'rawvalue' ||
+    normalized === 'cellvalue'
   );
 }
 

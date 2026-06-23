@@ -638,6 +638,7 @@ function isSensitiveDiagnosticKey(key: string): boolean {
   return (
     normalized.includes('principal') ||
     normalized.includes('hidden') ||
+    normalized.includes('digest') ||
     normalized === 'actorid' ||
     normalized === 'reviewerid' ||
     normalized === 'agentrunid' ||
@@ -653,8 +654,24 @@ function isSensitiveDiagnosticKey(key: string): boolean {
     normalized === 'proposalid' ||
     normalized === 'mergepreviewid' ||
     normalized === 'conflictid' ||
+    normalized === 'optionid' ||
+    normalized === 'payloadid' ||
+    normalized === 'resultid' ||
+    normalized === 'resolutionsetdigest' ||
+    normalized === 'resolvedattemptdigest' ||
     normalized === 'basecommitid' ||
-    normalized === 'headcommitid'
+    normalized === 'headcommitid' ||
+    normalized === 'value' ||
+    normalized === 'values' ||
+    normalized === 'before' ||
+    normalized === 'after' ||
+    normalized === 'oldvalue' ||
+    normalized === 'newvalue' ||
+    normalized === 'rawvalue' ||
+    normalized === 'cellvalue' ||
+    normalized === 'displayvalue' ||
+    normalized === 'formula' ||
+    normalized === 'result'
   );
 }
 

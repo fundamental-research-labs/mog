@@ -12,7 +12,6 @@ import {
   type MergeResolutionSetArtifactPayload,
   type ResolvedMergeAttemptArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
-import { VersionObjectStoreError } from '../../document/version-store/object-store';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import {
@@ -21,7 +20,7 @@ import {
 } from './version-merge-review-conflicts';
 import {
   mergeReviewDiagnostic,
-  mergeReviewProviderErrorDiagnostic,
+  persistedReviewArtifactReadDiagnostics,
   toInternalSha256Digest,
 } from './version-merge-review-artifacts';
 import type { NormalizedGetMergeConflictDetailInput } from './version-merge-review-normalization';
@@ -264,80 +263,6 @@ function validateResolvedAttemptBinding(
     );
   }
   return diagnostics;
-}
-
-function persistedReviewArtifactReadDiagnostics(
-  operation: VersionMergePublicOperation,
-  error: unknown,
-  missingMessage: string,
-): readonly VersionStoreDiagnostic[] {
-  if (
-    error instanceof VersionObjectStoreError &&
-    error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
-  ) {
-    return [
-      mergeReviewDiagnostic(operation, 'VERSION_MISSING_OBJECT', missingMessage, {
-        recoverability: 'repair',
-      }),
-    ];
-  }
-  const diagnostic = providerDiagnosticFromError(error);
-  if (!diagnostic) return [mergeReviewProviderErrorDiagnostic(operation)];
-  const issueCode = publicArtifactIssueCode(diagnostic);
-  return [
-    mergeReviewDiagnostic(
-      operation,
-      issueCode,
-      reviewArtifactSafeMessage(issueCode, missingMessage),
-    ),
-  ];
-}
-
-function providerDiagnosticFromError(error: unknown): Readonly<Record<string, unknown>> | null {
-  if (!isRecord(error)) return null;
-  const first = Array.isArray(error.diagnostics) ? error.diagnostics[0] : error.diagnostic;
-  return isRecord(first) ? first : null;
-}
-
-function publicArtifactIssueCode(diagnostic: Readonly<Record<string, unknown>>): string {
-  const raw =
-    typeof diagnostic.issueCode === 'string'
-      ? diagnostic.issueCode
-      : typeof diagnostic.code === 'string'
-        ? diagnostic.code
-        : 'VERSION_PROVIDER_FAILED';
-  switch (raw) {
-    case 'VERSION_OBJECT_NOT_FOUND':
-      return 'VERSION_MISSING_OBJECT';
-    case 'VERSION_INVALID_COMMIT_PAYLOAD':
-    case 'VERSION_MISSING_DEPENDENCY':
-    case 'VERSION_MISSING_OBJECT':
-    case 'VERSION_OBJECT_STORE_FAILURE':
-    case 'VERSION_PERMISSION_DENIED':
-    case 'VERSION_PROVIDER_FAILED':
-    case 'VERSION_REF_CONFLICT':
-    case 'VERSION_STALE_PAGE_CURSOR':
-    case 'VERSION_STORE_UNAVAILABLE':
-    case 'VERSION_UNSUPPORTED_SCHEMA':
-      return raw;
-    default:
-      return 'VERSION_PROVIDER_FAILED';
-  }
-}
-
-function reviewArtifactSafeMessage(issueCode: string, missingMessage: string): string {
-  switch (issueCode) {
-    case 'VERSION_MISSING_OBJECT':
-      return missingMessage;
-    case 'VERSION_PERMISSION_DENIED':
-      return 'Version merge review is not authorized for this caller.';
-    case 'VERSION_REF_CONFLICT':
-      return 'Version merge review target is stale.';
-    case 'VERSION_STALE_PAGE_CURSOR':
-      return 'Version merge review cursor is stale.';
-    default:
-      return 'Version merge review provider failed.';
-  }
 }
 
 function invalidReviewArtifactDiagnostic(

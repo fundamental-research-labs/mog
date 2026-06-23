@@ -1,148 +1,42 @@
-import type { ObjectDigest, VersionHead } from '@mog-sdk/contracts/api';
-import type { SheetId } from '@mog-sdk/contracts/core';
-import type {
-  DocumentImportOptions,
-  DocumentImportResult,
-  DocumentImportWarning,
-  DocumentSource,
-} from '@mog-sdk/contracts/document';
+import type { DocumentImportResult, DocumentSource } from '@mog-sdk/contracts/document';
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
-import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
 import { DocumentLifecycleSystem } from '../../document';
-import {
-  namespaceForDocumentScope,
-  type VersionDocumentScope,
-  type VersionStoreProvider,
-} from '../../document/version-store/provider';
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-} from '../../document/version-store/graph-store';
-import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
-import { selectVersionStoreProvider } from '../../document/version-store/provider-registry';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb-backend';
-import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';
-import type { KernelClock } from '../../context';
-import { LegacyOptionRejectedError } from '../../errors/document';
 import { slog } from '../../lib/slog';
+import {
+  assertSupportedImportSource,
+  rejectLegacyOptions,
+  rejectPublicInteractiveDeferredOption,
+} from './xlsx-document-import-validation';
 import type { DocumentHandleInternal } from './document-handle-types';
 import {
   documentImportWarningsFromDiagnostics,
   projectImportDiagnostic,
 } from './import-diagnostics';
 import { resolveUserTimezone } from './resolve-user-timezone';
-import {
-  MOG_VERSION_METADATA_PART,
-  readAndValidateMogVersionMetadataFromXlsx,
-  type MogWorkbookVersionXlsxMetadata,
-  type MogWorkbookVersionXlsxMetadataExpectedHead,
-} from '../workbook/xlsx-version-metadata';
+import { xlsxImportRootSource } from './xlsx-document-import-provenance';
+import type {
+  XlsxDocumentImportDependencies as XlsxDocumentImportDependenciesContract,
+  XlsxDocumentImportOptions as XlsxDocumentImportOptionsContract,
+} from './xlsx-document-import-types';
+import { xlsxVersionMetadataTrust } from './xlsx-document-import-version-metadata';
 
-export const INTERNAL_INTERACTIVE_DEFERRED_IMPORT: unique symbol = Symbol(
-  'mog.internalInteractiveDeferredImport',
-);
-
-export type InteractiveDeferredImportToken = typeof INTERNAL_INTERACTIVE_DEFERRED_IMPORT;
-
-export type XlsxDocumentImportOptions = DocumentImportOptions & {
-  environment?: 'browser' | 'headless';
-  napiAddon?: unknown;
-  security?: DocumentSecurityConfig;
-  userTimezone?: string;
-  versioning?: Pick<DocumentWorkbookVersioningLifecycleConfig, 'provider' | 'providerSelection'>;
-};
-
-export type XlsxDocumentHandleFactory<THandle extends DocumentHandleInternal> = (
-  documentId: string,
-  lifecycle: DocumentLifecycleSystem,
-  context: ISpreadsheetKernelContext,
-  collaborationBootstrap?: undefined,
-  importWarnings?: readonly DocumentImportWarning[],
-  xlsxImportRoot?: XlsxVersionImportRootProvenance,
-) => THandle;
-
-export interface XlsxDocumentImportDependencies<THandle extends DocumentHandleInternal> {
-  generateDocumentId(): string;
-  clock: KernelClock;
-  createDocumentHandle: XlsxDocumentHandleFactory<THandle>;
-}
-
-function rejectLegacyOptions(
-  options: DocumentImportOptions | undefined,
-  environment: 'browser' | 'headless',
-): void {
-  if (!options) return;
-
-  if (options.providers && options.providers.length > 0) {
-    throw new LegacyOptionRejectedError(
-      'CreateDocumentOptions.providers is no longer consumed. ' +
-        'Provider selection is determined by the runtime environment. ' +
-        'Remove the `providers` field from your options.',
-    );
-  }
-
-  if (environment === 'browser') {
-    if (options.yrsState) {
-      throw new LegacyOptionRejectedError(
-        'CreateDocumentOptions.yrsState is not allowed in browser environment. ' +
-          'Use the provider lifecycle (IndexedDB) for state hydration, or pass ' +
-          '`environment: "headless"` for collaboration / test paths.',
-      );
-    }
-    if (options.initialSnapshot) {
-      throw new LegacyOptionRejectedError(
-        'CreateDocumentOptions.initialSnapshot is not allowed in browser environment. ' +
-          'Use the provider lifecycle (IndexedDB) for state hydration, or pass ' +
-          '`environment: "headless"` for collaboration / test paths.',
-      );
-    }
-  }
-}
-
-function assertSupportedImportSource(
-  source: DocumentSource,
-  environment: 'browser' | 'headless',
-): void {
-  if (!source || (source.type !== 'bytes' && source.type !== 'path')) {
-    throw new LegacyOptionRejectedError(
-      `Unsupported DocumentSource kind '${String((source as { type?: unknown } | undefined)?.type)}'. ` +
-        'Import sources must be resolved through bytes or a host-backed source resolver.',
-    );
-  }
-
-  if (source.type === 'path' && environment === 'headless') {
-    throw new LegacyOptionRejectedError(
-      'DocumentSource.path is not accepted in headless/public Node imports. ' +
-        'Resolve paths through host-backed source resolvers/materializers or pass bytes.',
-    );
-  }
-}
-
-function invalidInteractiveDeferredOptionError(message: string): Error {
-  const err = new Error(message) as Error & {
-    code?: string;
-    scope?: SheetId | 'allSheets';
-  };
-  err.code = 'invalid_interactive_import_option';
-  err.scope = 'allSheets';
-  return err;
-}
-
-function rejectPublicInteractiveDeferredOption(options: DocumentImportOptions | undefined): void {
-  if (!options || !('internalInteractiveDeferred' in (options as Record<string, unknown>))) {
-    return;
-  }
-
-  throw invalidInteractiveDeferredOptionError(
-    'internalInteractiveDeferred is an internal kernel option and is not accepted by public import APIs.',
-  );
-}
+export type { InteractiveDeferredImportToken } from './xlsx-document-import-validation';
+export {
+  assertInteractiveDeferredImportToken,
+  INTERNAL_INTERACTIVE_DEFERRED_IMPORT,
+} from './xlsx-document-import-validation';
+export type {
+  XlsxDocumentHandleFactory,
+  XlsxDocumentImportDependencies,
+  XlsxDocumentImportEnvironment,
+  XlsxDocumentImportOptions,
+} from './xlsx-document-import-types';
 
 export async function createFromXlsxDocument<THandle extends DocumentHandleInternal>(
   source: DocumentSource,
-  options: XlsxDocumentImportOptions | undefined,
+  options: XlsxDocumentImportOptionsContract | undefined,
   mode: 'durable' | 'interactiveDeferred',
-  deps: XlsxDocumentImportDependencies<THandle>,
+  deps: XlsxDocumentImportDependenciesContract<THandle>,
 ): Promise<DocumentImportResult & { handle?: THandle }> {
   let lifecycle: DocumentLifecycleSystem | undefined;
 
@@ -248,207 +142,5 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
         },
       ],
     };
-  }
-}
-
-function xlsxImportRootSource(source: DocumentSource): XlsxVersionImportRootProvenance['source'] {
-  if (source.type === 'bytes') {
-    return { sourceType: 'bytes', byteLength: source.data.byteLength };
-  }
-  return { sourceType: 'path', pathRedacted: true };
-}
-
-async function xlsxVersionMetadataTrust(
-  source: DocumentSource,
-  documentId: string,
-  options: XlsxDocumentImportOptions | undefined,
-): Promise<{
-  readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
-  readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
-  readonly versionMetadataHeadCandidate?: XlsxVersionImportRootProvenance['versionMetadataHeadCandidate'];
-}> {
-  if (source.type !== 'bytes') {
-    return {
-      trust: {
-        status: 'absent',
-        sidecarPart: MOG_VERSION_METADATA_PART,
-      },
-      diagnostics: [],
-    };
-  }
-
-  const selected = selectLocalVersionMetadataAuthorityProvider(documentId, options);
-  const expectedWorkspaceId = selected.provider.documentScope.workspaceId;
-  const baseContext = {
-    expectedDocumentId: documentId,
-    ...(expectedWorkspaceId ? { expectedWorkspaceId } : {}),
-  };
-  try {
-    const preliminary = readAndValidateMogVersionMetadataFromXlsx(source.data, baseContext);
-    if (
-      preliminary.status !== 'untrusted' ||
-      preliminary.reason !== 'head-unverified' ||
-      !preliminary.metadata?.head ||
-      !metadataHeadNamesSupportedLocalRef(preliminary.metadata.head)
-    ) {
-      return versionMetadataTrustPayload(preliminary);
-    }
-
-    const authority = await readLocalVersionMetadataAuthority(
-      selected.provider,
-      preliminary.metadata.head,
-    );
-    const result = readAndValidateMogVersionMetadataFromXlsx(source.data, {
-      ...baseContext,
-      ...(authority.expectedHead ? { expectedHead: authority.expectedHead } : {}),
-      ...(authority.currentHead ? { currentHead: authority.currentHead } : {}),
-      ...(authority.expectedHeadFailureReason
-        ? { expectedHeadFailureReason: authority.expectedHeadFailureReason }
-        : {}),
-    });
-    return versionMetadataTrustPayload(result);
-  } finally {
-    if (selected.owned) {
-      await selected.provider.close('dispose').catch(() => {});
-    }
-  }
-}
-
-function versionMetadataTrustPayload(
-  result: ReturnType<typeof readAndValidateMogVersionMetadataFromXlsx>,
-): {
-  readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
-  readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
-  readonly versionMetadataHeadCandidate?: XlsxVersionImportRootProvenance['versionMetadataHeadCandidate'];
-} {
-  return {
-    trust: result.trust,
-    diagnostics: result.diagnostics,
-    ...((result.status === 'trusted' || result.status === 'trusted-stale-base') &&
-    result.metadata.head
-      ? {
-          versionMetadataHeadCandidate: {
-            documentId: result.metadata.documentId,
-            head: result.metadata.head,
-          },
-        }
-      : {}),
-  };
-}
-
-type LocalVersionMetadataAuthority = {
-  readonly expectedHeadFailureReason?: 'commit-missing';
-  readonly currentHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
-  readonly expectedHead?: {
-    readonly commitId: VersionHead['id'];
-    readonly refName?: VersionHead['refName'];
-    readonly resolvedFrom?: VersionHead['resolvedFrom'];
-    readonly refRevision?: VersionHead['refRevision'];
-    readonly semanticChangeSetDigest: ObjectDigest;
-    readonly snapshotRootDigest: ObjectDigest;
-  };
-};
-
-async function readLocalVersionMetadataAuthority(
-  provider: VersionStoreProvider,
-  metadataHead: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
-): Promise<LocalVersionMetadataAuthority> {
-  try {
-    const registry = await provider.readGraphRegistry();
-    if (registry.status !== 'ok') return {};
-
-    const graph = await provider.openGraph(
-      namespaceForDocumentScope(provider.documentScope, registry.registry.currentGraphId),
-      provider.accessContext,
-    );
-    const head = await graph.readHead();
-    if (head.status !== 'success') return {};
-
-    const commit = await graph.readCommit(head.head.id);
-    if (commit.status !== 'success') return {};
-    const currentHead = {
-      commitId: head.head.id as VersionHead['id'],
-      refName: head.head.refName as VersionHead['refName'],
-      resolvedFrom: head.head.resolvedFrom as VersionHead['resolvedFrom'],
-      refRevision: head.head.refRevision,
-      semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest as ObjectDigest,
-      snapshotRootDigest: commit.commit.payload.snapshotRootDigest as ObjectDigest,
-    };
-
-    const baseCommit = await graph.readCommit(metadataHead.commitId);
-    if (baseCommit.status !== 'success') {
-      return { currentHead, expectedHeadFailureReason: 'commit-missing' };
-    }
-
-    return {
-      currentHead,
-      expectedHead: {
-        commitId: baseCommit.commit.id as VersionHead['id'],
-        refName: metadataHead.refName as VersionHead['refName'],
-        resolvedFrom: metadataHead.resolvedFrom as VersionHead['resolvedFrom'],
-        refRevision: metadataHead.refRevision,
-        semanticChangeSetDigest: baseCommit.commit.payload.semanticChangeSetDigest as ObjectDigest,
-        snapshotRootDigest: baseCommit.commit.payload.snapshotRootDigest as ObjectDigest,
-      },
-    };
-  } catch {
-    return {};
-  }
-}
-
-function metadataHeadNamesSupportedLocalRef(
-  head: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
-): boolean {
-  return head.refName === VERSION_GRAPH_MAIN_REF && head.resolvedFrom === VERSION_GRAPH_HEAD_REF;
-}
-
-function selectLocalVersionMetadataAuthorityProvider(
-  documentId: string,
-  options: XlsxDocumentImportOptions | undefined,
-): { readonly provider: VersionStoreProvider; readonly owned: boolean } {
-  const configured = options?.versioning;
-  if (isVersionStoreProvider(configured?.provider)) {
-    return { provider: configured.provider, owned: false };
-  }
-
-  const providerSelection = configured?.providerSelection;
-  const documentScope: VersionDocumentScope = {
-    ...(providerSelection?.workspaceId ? { workspaceId: providerSelection.workspaceId } : {}),
-    documentId,
-    ...(providerSelection?.principalScope
-      ? { principalScope: providerSelection.principalScope }
-      : {}),
-  };
-
-  return {
-    provider: selectVersionStoreProvider({
-      kind: providerSelection?.kind ?? INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-      documentScope,
-      readOnly: true,
-      requireDurablePersistence: providerSelection?.requireDurablePersistence,
-    }),
-    owned: true,
-  };
-}
-
-function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
-  return (
-    isRecord(value) &&
-    isRecord(value.documentScope) &&
-    isRecord(value.accessContext) &&
-    typeof value.readGraphRegistry === 'function' &&
-    typeof value.openGraph === 'function'
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-export function assertInteractiveDeferredImportToken(token: InteractiveDeferredImportToken): void {
-  if (token !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT) {
-    throw invalidInteractiveDeferredOptionError(
-      'createInteractiveDeferredDocumentFromXlsx requires the internal interactive deferred import token.',
-    );
   }
 }

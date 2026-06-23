@@ -796,6 +796,113 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
     expect(deleteBranch).not.toHaveBeenCalled();
   });
 
+  it('rejects non-canonical public ref revisions before service calls', async () => {
+    const { branchService, version } = createWorkbookVersionWithBranchService();
+    await version.createBranch({ name: 'scenario/bad-revision' as any, targetCommitId: COMMIT_A });
+    const fastForwardBranch = jest.spyOn(branchService, 'fastForwardBranch');
+    const deleteBranch = jest.spyOn(branchService, 'deleteBranch');
+
+    for (const operation of [
+      version.fastForwardBranch({
+        name: 'scenario/bad-revision' as any,
+        nextCommitId: COMMIT_B,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: { kind: 'counter', value: '01' },
+      } as any),
+      version.deleteRef({
+        name: 'scenario/bad-revision' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: { kind: 'counter', value: '' },
+      } as any),
+    ]) {
+      await expect(operation).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_INVALID_OPTIONS',
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({ option: 'expectedRefRevision' }),
+              }),
+            }),
+          ],
+        },
+      });
+    }
+    expect(fastForwardBranch).not.toHaveBeenCalled();
+    expect(deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('preflights last live branch deletes before calling the tombstone writer', async () => {
+    const branch = {
+      name: 'scenario/last',
+      ref: {
+        name: 'scenario/last',
+        targetCommitId: COMMIT_A,
+        refVersion: refVersion('0'),
+      },
+    };
+    const branchService = {
+      readBranch: jest.fn(async () => ({ ok: true, branch, diagnostics: [] })),
+      listBranches: jest.fn(async () => ({ ok: true, branches: [branch], diagnostics: [] })),
+      deleteBranch: jest.fn(),
+    };
+    const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
+
+    await expect(
+      version.deleteRef({
+        name: 'scenario/last' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REF_WRITE_UNAVAILABLE',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({ issue: 'lastLiveRef' }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(branchService.deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('rejects provider ref records with inconsistent revision fields', async () => {
+    const branchService = {
+      readBranch: jest.fn(async () => ({
+        ok: true,
+        branch: {
+          name: 'scenario/inconsistent-revision',
+          ref: {
+            targetCommitId: COMMIT_A,
+            refVersion: refVersion('2'),
+            revision: refVersion('1'),
+          },
+        },
+        diagnostics: [],
+      })),
+    };
+    const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
+
+    await expect(version.readRef('scenario/inconsistent-revision' as any)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
+    });
+  });
+
   it('does not treat a raw ref store as a trusted public branch service', async () => {
     const refStore = createInMemoryRefStore({
       versionDocumentId: 'version-doc-1',

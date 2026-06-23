@@ -3,7 +3,6 @@ import type {
   VersionBranchRefReadResult,
   VersionCreateBranchOptions,
   VersionDeleteRefOptions,
-  VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions,
   VersionListRefsOptions,
   VersionMainRefName,
@@ -31,17 +30,17 @@ import {
 import { validateVersionOperationGate } from './version-operation-gate';
 import { deleteWorkbookVersionBranchRef } from './version-refs-delete';
 import {
-  branchDiagnosticMutationGuarantee,
-  issueCodeForBranchDiagnostic,
-  recoverabilityForBranchIssue,
-  safeBranchDiagnosticToken,
-  safeMessageForBranchIssue,
-} from './version-ref-diagnostics';
+  mapVersionRefLifecycleDiagnostic,
+  mapVersionRefProviderExceptionDiagnostics,
+  toVersionRefRecordRevision,
+} from './version-refs-diagnostics';
+import { recoverabilityForBranchIssue } from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const REF_COUNTER_REVISION_VALUE_RE = /^(0|[1-9][0-9]*)$/;
 const REF_NAMESPACE_SET = new Set<string>(REF_NAMESPACES);
 const VERSION_REF_OPERATION_AUTHOR: VersionAuthor = Object.freeze({
   authorId: 'public-version-ref-facade',
@@ -132,8 +131,8 @@ export async function createWorkbookVersionBranch(
       }),
       'createBranch',
     );
-  } catch {
-    return degradedMutation(null, [providerErrorDiagnostic('createBranch')]);
+  } catch (error) {
+    return degradedMutation(null, providerExceptionDiagnostics(error, 'createBranch'));
   }
 }
 
@@ -250,8 +249,8 @@ export async function fastForwardWorkbookVersionBranch(
       }),
       'fastForwardBranch',
     );
-  } catch {
-    return degradedMutation(null, [providerErrorDiagnostic('fastForwardBranch')]);
+  } catch (error) {
+    return degradedMutation(null, providerExceptionDiagnostics(error, 'fastForwardBranch'));
   }
 }
 
@@ -421,7 +420,7 @@ function mapSymbolicHeadRecord(value: unknown): VersionSymbolicRef | null {
           ? value.target
           : undefined;
   const parsed = parsePublicBranchName(targetName, 'readRef');
-  const revision = toRevision(value.refVersion) ?? toRevision(value.revision);
+  const revision = toVersionRefRecordRevision(value.refVersion, value.revision);
   if (!parsed.ok || !revision) return null;
   return { name: VERSION_HEAD_REF, target: parsed.refName, revision };
 }
@@ -674,7 +673,7 @@ function mapBranchRecord(value: unknown): VersionRef | null {
         ? liveRef.name
         : undefined;
   const commitId = toCommitId(liveRef.targetCommitId) ?? toCommitId(liveRef.commitId);
-  const revision = toCounterRevision(liveRef.refVersion) ?? toRevision(liveRef.revision);
+  const revision = toVersionRefRecordRevision(liveRef.refVersion, liveRef.revision);
   if (!branchName || !commitId || !revision) return mapVersionRef(value);
   const parsed = parsePublicBranchName(branchName, 'readRef');
   if (!parsed.ok) return null;
@@ -717,7 +716,9 @@ function mapBranchFailureDiagnostics(
   if (!Array.isArray(value) || value.length === 0) {
     return [providerErrorDiagnostic(operation)];
   }
-  return value.map((item) => mapBranchDiagnostic(item, operation));
+  return value.map((item) =>
+    mapVersionRefLifecycleDiagnostic(item, operation, providerErrorDiagnostic(operation)),
+  );
 }
 
 function mapOptionalBranchDiagnostics(
@@ -725,48 +726,22 @@ function mapOptionalBranchDiagnostics(
   operation: VersionRefOperation,
 ): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => mapBranchDiagnostic(item, operation));
+  return value.map((item) =>
+    mapVersionRefLifecycleDiagnostic(item, operation, providerErrorDiagnostic(operation)),
+  );
 }
 
-function mapBranchDiagnostic(
-  value: unknown,
+function providerExceptionDiagnostics(
+  error: unknown,
   operation: VersionRefOperation,
-): VersionStoreDiagnostic {
-  if (!isRecord(value)) return providerErrorDiagnostic(operation);
-  const code = typeof value.code === 'string' ? value.code : 'versionCapabilityDisabled';
-  const issueCode = issueCodeForBranchDiagnostic(code);
-  return publicDiagnostic(issueCode, operation, safeMessageForBranchIssue(issueCode, operation), {
-    severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
-    recoverability: recoverabilityForBranchIssue(issueCode),
-    payload: sanitizeBranchDiagnosticPayload(value, operation),
-    ...(isRefMutationOperation(operation)
-      ? { mutationGuarantee: branchDiagnosticMutationGuarantee(code, value.details) }
-      : {}),
-  });
-}
-
-function sanitizeBranchDiagnosticPayload(
-  value: Readonly<Record<string, unknown>>,
-  operation: VersionRefOperation,
-): VersionDiagnosticPublicPayload {
-  const payload: Record<string, string | number | boolean | null> = { operation };
-  const details = isRecord(value.details) ? value.details : null;
-  if (details && typeof details.issue === 'string')
-    payload.issue = safeBranchDiagnosticToken('issue', details.issue);
-  if (details && typeof details.missingField === 'string') {
-    payload.option = safeBranchDiagnosticToken('option', details.missingField);
-  }
-  if (details && typeof details.cause === 'string') {
-    payload.conflict = safeBranchDiagnosticToken('conflict', details.cause);
-  }
-  const actualHead = toCommitId(value.commitId);
-  const actualRevision = toCounterRevision(value.refVersion);
-  if (actualHead) payload.actualHead = actualHead;
-  if (actualRevision) payload.actualRefRevision = `rv:n:${actualRevision.value}`;
-  if (value.refName === 'main' || value.refName === VERSION_MAIN_REF) {
-    payload.refName = VERSION_MAIN_REF;
-  }
-  return payload;
+): readonly VersionStoreDiagnostic[] {
+  return (
+    mapVersionRefProviderExceptionDiagnostics(
+      error,
+      operation,
+      providerErrorDiagnostic(operation),
+    ) ?? [providerErrorDiagnostic(operation)]
+  );
 }
 
 function rejectUnknownKeys(
@@ -788,10 +763,20 @@ function toCommitId(value: unknown): WorkbookCommitId | null {
 }
 
 function toRevision(value: unknown): VersionRecordRevision | undefined {
-  if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
+  if (
+    isRecord(value) &&
+    value.kind === 'counter' &&
+    typeof value.value === 'string' &&
+    REF_COUNTER_REVISION_VALUE_RE.test(value.value)
+  ) {
     return { kind: 'counter', value: value.value };
   }
-  if (isRecord(value) && value.kind === 'opaque' && typeof value.value === 'string') {
+  if (
+    isRecord(value) &&
+    value.kind === 'opaque' &&
+    typeof value.value === 'string' &&
+    value.value.length > 0
+  ) {
     return { kind: 'opaque', value: value.value };
   }
   return undefined;
@@ -935,7 +920,7 @@ function publicDiagnostic(
   options: {
     readonly severity?: VersionStoreDiagnostic['severity'];
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];
-    readonly payload?: VersionDiagnosticPublicPayload;
+    readonly payload?: Readonly<Record<string, string | number | boolean | null>>;
     readonly mutationGuarantee?: VersionStoreDiagnostic['mutationGuarantee'];
   } = {},
 ): VersionStoreDiagnostic {

@@ -1,6 +1,5 @@
 import type {
   VersionDeleteRefOptions,
-  VersionDiagnosticPublicPayload,
   VersionRecordRevision,
   VersionRef,
   VersionRefMutationResult,
@@ -13,8 +12,11 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
 import {
-  branchDiagnosticMutationGuarantee,
-  issueCodeForBranchDiagnostic,
+  mapVersionRefLifecycleDiagnostic,
+  mapVersionRefProviderExceptionDiagnostics,
+  toVersionRefRecordRevision,
+} from './version-refs-diagnostics';
+import {
   recoverabilityForBranchIssue,
   safeBranchDiagnosticToken,
   safeMessageForBranchIssue,
@@ -24,6 +26,7 @@ const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main';
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const REF_COUNTER_REVISION_VALUE_RE = /^(0|[1-9][0-9]*)$/;
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -32,6 +35,7 @@ type DeleteRefOperation = 'deleteBranch' | 'deleteRef';
 type DeleteCapableVersionRefLifecycleService = {
   deleteBranch?: (input: Readonly<Record<string, unknown>>) => MaybePromise<unknown>;
   readBranch?: (input: Readonly<Record<string, unknown>>) => MaybePromise<unknown>;
+  listBranches?: (input?: Readonly<Record<string, unknown>>) => MaybePromise<unknown>;
   readRef?: (name: string) => MaybePromise<unknown>;
   getHead?: () => MaybePromise<unknown>;
   readHead?: () => MaybePromise<unknown>;
@@ -136,6 +140,7 @@ function toDeleteCapableVersionRefLifecycleService(
   const deleteBranch = bindMethod(value, 'deleteBranch') ?? bindMethod(value, 'deleteRef');
   if (!deleteBranch) return null;
   const readBranch = bindMethod(value, 'readBranch');
+  const listBranches = bindMethod(value, 'listBranches');
   const readRef = bindMethod(value, 'readRef');
   const getHead = bindMethod(value, 'getHead');
   const readHead = bindMethod(value, 'readHead');
@@ -143,6 +148,7 @@ function toDeleteCapableVersionRefLifecycleService(
   return {
     deleteBranch: (input) => deleteBranch(input),
     ...(readBranch ? { readBranch: (input) => readBranch(input) } : {}),
+    ...(listBranches ? { listBranches: (input) => listBranches(input) } : {}),
     ...(readRef ? { readRef: (name) => readRef(name) } : {}),
     ...(getHead ? { getHead: () => getHead() } : {}),
     ...(readHead ? { readHead: () => readHead() } : {}),
@@ -230,7 +236,35 @@ async function preflightDeleteRef(
       }),
     ];
   }
-  return [];
+  return lastLiveRefDeleteDiagnostics(service, input, operation);
+}
+
+async function lastLiveRefDeleteDiagnostics(
+  service: DeleteCapableVersionRefLifecycleService,
+  input: Extract<ParsedDeleteRefOptions, { readonly ok: true }>,
+  operation: DeleteRefOperation,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  if (!service.listBranches) return [];
+  let value: unknown;
+  try {
+    value = await service.listBranches({});
+  } catch {
+    return [preflightReadFailedDiagnostic(operation, 'liveRefList')];
+  }
+  if (!isRecord(value)) return [preflightInvalidPayloadDiagnostic(operation)];
+  if (value.ok === false) return mapPreflightBranchFailureDiagnostics(value.diagnostics, operation);
+  const rawItems = Array.isArray(value.branches)
+    ? value.branches
+    : Array.isArray(value.items)
+      ? value.items
+      : Array.isArray(value.refs)
+        ? value.refs
+        : null;
+  if (!rawItems) return [preflightInvalidPayloadDiagnostic(operation)];
+  const liveRefs = rawItems.map(mapBranchRecord).filter((ref): ref is VersionRef => Boolean(ref));
+  return liveRefs.length <= 1 && liveRefs.some((ref) => ref.name === input.refName)
+    ? [lastLiveRefDiagnostic(operation)]
+    : [];
 }
 
 async function activeRefDeleteDiagnostics(
@@ -242,7 +276,9 @@ async function activeRefDeleteDiagnostics(
   const activeSessionReader = getActiveCheckoutSessionReader(ctx, service);
   if (activeSessionReader) {
     try {
-      const activeRefName = checkedOutRefName(await activeSessionReader());
+      const activeRef = activeCheckoutSessionRefName(await activeSessionReader(), operation);
+      if (activeRef.status === 'blocked') return activeRef.diagnostics;
+      const activeRefName = activeRef.refName;
       if (activeRefName && activeRefName === input.refName) {
         return [activeRefDeleteDiagnostic(operation)];
       }
@@ -254,7 +290,9 @@ async function activeRefDeleteDiagnostics(
   const headReader = service.getHead ?? service.readHead;
   if (!headReader) return [];
   try {
-    const headRefName = currentHeadRefName(await headReader());
+    const head = currentHeadRefName(await headReader(), operation);
+    if (head.status === 'blocked') return head.diagnostics;
+    const headRefName = head.refName;
     return headRefName === input.refName ? [activeRefDeleteDiagnostic(operation)] : [];
   } catch {
     return [preflightReadFailedDiagnostic(operation, 'currentHead')];
@@ -329,7 +367,7 @@ function projectLiveRefRecord(value: unknown, operation: DeleteRefOperation): De
     toCommitId(value.targetCommitId) ??
     toCommitId(value.commitId) ??
     toCommitId(value.previousTargetCommitId);
-  const revision = toCounterRevision(value.refVersion) ?? toRevision(value.revision);
+  const revision = toVersionRefRecordRevision(value.refVersion, value.revision);
   if (!commitId || !revision) {
     return { status: 'missing', diagnostics: [preflightInvalidPayloadDiagnostic(operation)] };
   }
@@ -363,18 +401,40 @@ function getAttachedVersionServices(
   return isRecord(services) ? services : null;
 }
 
-function checkedOutRefName(value: unknown): VersionRef['name'] | null {
-  if (!isRecord(value) || value.detached === true || typeof value.branchName !== 'string') {
-    return null;
+type ActiveRefProjection =
+  | { readonly status: 'ok'; readonly refName: VersionRef['name'] | null }
+  | { readonly status: 'blocked'; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+type ProviderReadProjection =
+  | { readonly status: 'read'; readonly value: unknown }
+  | { readonly status: 'blocked'; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+function activeCheckoutSessionRefName(
+  value: unknown,
+  operation: DeleteRefOperation,
+): ActiveRefProjection {
+  const session = unwrapProviderReadValue(value, operation, 'activeCheckoutSession');
+  if (session.status === 'blocked') return session;
+  if (
+    !isRecord(session.value) ||
+    session.value.detached === true ||
+    typeof session.value.branchName !== 'string'
+  ) {
+    return { status: 'ok', refName: null };
   }
-  const parsed = parsePublicBranchName(value.branchName, 'readRef');
-  return parsed.ok ? parsed.refName : null;
+  const parsed = parsePublicBranchName(session.value.branchName, 'readRef');
+  return { status: 'ok', refName: parsed.ok ? parsed.refName : null };
 }
 
-function currentHeadRefName(value: unknown): VersionRef['name'] | null {
-  if (!isRecord(value)) return null;
-  const head = isRecord(value.head) ? value.head : isRecord(value.ref) ? value.ref : value;
-  if (head.mode === 'detached') return null;
+function currentHeadRefName(value: unknown, operation: DeleteRefOperation): ActiveRefProjection {
+  const read = unwrapProviderReadValue(value, operation, 'currentHead');
+  if (read.status === 'blocked') return read;
+  if (!isRecord(read.value)) return { status: 'ok', refName: null };
+  const head = isRecord(read.value.head)
+    ? read.value.head
+    : isRecord(read.value.ref)
+      ? read.value.ref
+      : read.value;
+  if (head.mode === 'detached') return { status: 'ok', refName: null };
   const candidate =
     typeof head.refName === 'string'
       ? head.refName
@@ -383,9 +443,42 @@ function currentHeadRefName(value: unknown): VersionRef['name'] | null {
         : typeof head.target === 'string'
           ? head.target
           : undefined;
-  if (!candidate) return null;
+  if (!candidate) return { status: 'ok', refName: null };
   const parsed = parsePublicBranchName(candidate, 'readRef');
-  return parsed.ok ? parsed.refName : null;
+  return { status: 'ok', refName: parsed.ok ? parsed.refName : null };
+}
+
+function unwrapProviderReadValue(
+  value: unknown,
+  operation: DeleteRefOperation,
+  phase: 'activeCheckoutSession' | 'currentHead',
+): ProviderReadProjection {
+  if (!isRecord(value)) return { status: 'read', value };
+  if (value.status === 'pending') {
+    return {
+      status: 'blocked',
+      diagnostics: [preflightReadFailedDiagnostic(operation, `${phase}Pending`)],
+    };
+  }
+  if (value.status === 'failed' || value.status === 'degraded') {
+    return {
+      status: 'blocked',
+      diagnostics: [preflightReadFailedDiagnostic(operation, `${phase}Failed`)],
+    };
+  }
+  if (value.status === 'success') {
+    return {
+      status: 'read',
+      value: isRecord(value.session)
+        ? value.session
+        : isRecord(value.current)
+          ? value.current
+          : isRecord(value.value)
+            ? value.value
+            : value,
+    };
+  }
+  return { status: 'read', value };
 }
 
 function parsePublicBranchName(
@@ -499,7 +592,7 @@ function mapBranchRecord(value: unknown): VersionRef | null {
     toCommitId(ref.targetCommitId) ??
     toCommitId(ref.commitId) ??
     toCommitId(ref.previousTargetCommitId);
-  const revision = toCounterRevision(ref.refVersion) ?? toRevision(ref.revision);
+  const revision = toVersionRefRecordRevision(ref.refVersion, ref.revision);
   if (!branchName || !commitId || !revision) return null;
   const parsed = parsePublicBranchName(branchName, 'readRef');
   if (!parsed.ok) return null;
@@ -529,19 +622,13 @@ function providerExceptionDiagnostics(
   error: unknown,
   operation: DeleteRefOperation,
 ): readonly VersionStoreDiagnostic[] {
-  const diagnostics = diagnosticsFromProviderException(error);
-  return diagnostics
-    ? mapBranchFailureDiagnostics(diagnostics, operation)
-    : [providerErrorDiagnostic(operation)];
-}
-
-function diagnosticsFromProviderException(error: unknown): readonly unknown[] | null {
-  if (!isRecord(error)) return null;
-  if (Array.isArray(error.diagnostics)) return error.diagnostics;
-  if (isRecord(error.error) && Array.isArray(error.error.diagnostics)) {
-    return error.error.diagnostics;
-  }
-  return typeof error.code === 'string' || typeof error.issueCode === 'string' ? [error] : null;
+  return (
+    mapVersionRefProviderExceptionDiagnostics(
+      error,
+      operation,
+      providerErrorDiagnostic(operation),
+    ) ?? [providerErrorDiagnostic(operation)]
+  );
 }
 
 function mapPreflightBranchFailureDiagnostics(
@@ -569,21 +656,7 @@ function mapBranchDiagnostic(
   value: unknown,
   operation: DeleteRefOperation,
 ): VersionStoreDiagnostic {
-  if (!isRecord(value)) return providerErrorDiagnostic(operation);
-  const code =
-    typeof value.code === 'string'
-      ? value.code
-      : typeof value.issueCode === 'string'
-        ? value.issueCode
-        : 'versionCapabilityDisabled';
-  const issueCode = issueCodeForBranchDiagnostic(code);
-  const mutationGuarantee = branchDiagnosticMutationGuarantee(code, value.details);
-  return publicDiagnostic(issueCode, operation, safeMessageForBranchIssue(issueCode, operation), {
-    severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
-    recoverability: recoverabilityForBranchIssue(issueCode),
-    payload: sanitizeBranchDiagnosticPayload(value, operation),
-    ...(mutationGuarantee ? { mutationGuarantee } : {}),
-  });
+  return mapVersionRefLifecycleDiagnostic(value, operation, providerErrorDiagnostic(operation));
 }
 
 function mapGraphDiagnostic(value: unknown, operation: DeleteRefOperation): VersionStoreDiagnostic {
@@ -612,30 +685,6 @@ function mapGraphDiagnostic(value: unknown, operation: DeleteRefOperation): Vers
   });
 }
 
-function sanitizeBranchDiagnosticPayload(
-  value: Readonly<Record<string, unknown>>,
-  operation: DeleteRefOperation,
-): VersionDiagnosticPublicPayload {
-  const payload: Record<string, string | number | boolean | null> = { operation };
-  const details = isRecord(value.details) ? value.details : null;
-  if (details && typeof details.issue === 'string')
-    payload.issue = safeBranchDiagnosticToken('issue', details.issue);
-  if (details && typeof details.missingField === 'string') {
-    payload.option = safeBranchDiagnosticToken('option', details.missingField);
-  }
-  if (details && typeof details.cause === 'string') {
-    payload.conflict = safeBranchDiagnosticToken('conflict', details.cause);
-  }
-  const actualHead = toCommitId(value.commitId);
-  const actualRevision = toCounterRevision(value.refVersion);
-  if (actualHead) payload.actualHead = actualHead;
-  if (actualRevision) payload.actualRefRevision = `rv:n:${actualRevision.value}`;
-  if (value.refName === 'main' || value.refName === VERSION_MAIN_REF) {
-    payload.refName = VERSION_MAIN_REF;
-  }
-  return payload;
-}
-
 function deleteUnsupportedDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_REF_WRITE_UNAVAILABLE',
@@ -658,6 +707,20 @@ function activeRefDeleteDiagnostic(operation: DeleteRefOperation): VersionStoreD
       severity: 'error',
       recoverability: 'unsupported',
       payload: { operation, issue: safeBranchDiagnosticToken('issue', 'activeBranchDelete') },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function lastLiveRefDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_REF_WRITE_UNAVAILABLE',
+    operation,
+    'The last live public ref cannot be deleted through this public lifecycle facade.',
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
+      payload: { operation, issue: 'lastLiveRef' },
       mutationGuarantee: 'no-write-attempted',
     },
   );
@@ -837,7 +900,7 @@ function publicDiagnostic(
   options: {
     readonly severity?: VersionStoreDiagnostic['severity'];
     readonly recoverability?: VersionStoreDiagnostic['recoverability'];
-    readonly payload?: VersionDiagnosticPublicPayload;
+    readonly payload?: Readonly<Record<string, string | number | boolean | null>>;
     readonly mutationGuarantee?: VersionStoreDiagnostic['mutationGuarantee'];
   } = {},
 ): VersionStoreDiagnostic {
@@ -860,10 +923,20 @@ function toCommitId(value: unknown): WorkbookCommitId | null {
 }
 
 function toRevision(value: unknown): VersionRecordRevision | undefined {
-  if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
+  if (
+    isRecord(value) &&
+    value.kind === 'counter' &&
+    typeof value.value === 'string' &&
+    REF_COUNTER_REVISION_VALUE_RE.test(value.value)
+  ) {
     return { kind: 'counter', value: value.value };
   }
-  if (isRecord(value) && value.kind === 'opaque' && typeof value.value === 'string') {
+  if (
+    isRecord(value) &&
+    value.kind === 'opaque' &&
+    typeof value.value === 'string' &&
+    value.value.length > 0
+  ) {
     return { kind: 'opaque', value: value.value };
   }
   return undefined;

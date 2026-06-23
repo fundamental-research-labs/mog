@@ -836,6 +836,7 @@ function safeMessageForIssue(issueCode: string): string {
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
       return 'The requested version diff is not materializable by the attached service.';
+    case 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN':
     case 'unsupportedDomain':
     case 'unsupportedFormat':
     case 'externalReferenceUnsupported':
@@ -872,6 +873,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
+    case 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN':
     case 'unsupportedDomain':
     case 'unsupportedFormat':
     case 'externalReferenceUnsupported':

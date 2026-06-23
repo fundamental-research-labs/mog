@@ -84,7 +84,15 @@ function createMockEventBus() {
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
-    computeBridge: {},
+    computeBridge: {
+      getAllSheetIds: jest.fn(async () => []),
+      getAllTablesInSheet: jest.fn(async () => []),
+      getFiltersInSheet: jest.fn(async () => []),
+      namedRangeCount: jest.fn(async () => 0),
+      getAllNamedRangesWire: jest.fn(async () => []),
+      getHyperlinks: jest.fn(async () => []),
+      getRangeSchemasForSheet: jest.fn(async () => []),
+    },
     writeGate: {
       assertWritable: jest.fn(),
     },
@@ -225,6 +233,89 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     expect(result.value.items[0]?.display).toEqual(redactedEntityLabelDisplay());
   });
 
+  it('projects table and filter review-safe changes without leaking omitted authored payloads', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const reviewChanges = tableFilterReviewSafeChanges();
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit: jest.fn(
+          createSemanticDiffCommitCapture('child', [...reviewChanges, omittedMacroChange()], [], {
+            reviewChanges,
+          }),
+        ),
+      },
+    });
+
+    const commitResult = await wb.version.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+        symbolicHeadRevision: initialized.symbolicHead.revision,
+      },
+    });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
+
+    const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: expect.objectContaining({
+              domain: 'tables',
+              propertyPath: ['definition'],
+            }),
+            after: {
+              kind: 'value',
+              value: semanticObject([
+                { key: 'kind', value: 'Set' },
+                { key: 'tableId', value: 'table-review-safe-sales' },
+                { key: 'sheetId', value: 'sheet-1' },
+              ]),
+            },
+            display: redactedEntityLabelDisplay(),
+          },
+          {
+            structural: expect.objectContaining({
+              domain: 'filters',
+              propertyPath: ['state'],
+            }),
+            after: {
+              kind: 'value',
+              value: semanticObject([
+                { key: 'kind', value: 'Set' },
+                { key: 'filterId', value: 'filter-review-safe-sales' },
+                { key: 'filterKind', value: 'autoFilter' },
+                { key: 'hasActiveFilter', value: true },
+                { key: 'hiddenRowCount', value: 7 },
+                { key: 'visibleRowCount', value: 13 },
+                {
+                  key: 'unsupportedReasons',
+                  value: { kind: 'array', values: ['criteria-values-redacted'] },
+                },
+              ]),
+            },
+            display: redactedEntityLabelDisplay(),
+          },
+        ],
+        readRevision: { kind: 'counter', value: '1' },
+        order: 'semantic-change-order',
+      },
+    });
+    if (!result.ok) throw new Error(`expected diff success: ${result.error.code}`);
+    expect(result.value.items).toHaveLength(2);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).not.toContain('macros.vba');
+    expect(serialized).not.toContain('macro-source-secret');
+  });
+
   it('fails closed through wb.version.diff for unsupported VC-06 raw payload fields', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
@@ -361,6 +452,20 @@ describe('WorkbookVersion provider-backed diff facade', () => {
 
   it.each([
     [
+      'omitted-unsupported-domain',
+      {
+        code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN',
+        severity: 'error',
+        message: 'Unsupported authored domain omitted for principal-secret.',
+        path: 'reviewChanges.omitted[0]',
+        details: {
+          omittedChangeCount: 1,
+          omittedDomains: 'macros.vba',
+          deniedPrincipalId: 'principal-secret',
+        },
+      },
+    ],
+    [
       'unsupported',
       {
         code: 'unsupportedDomain',
@@ -403,6 +508,8 @@ describe('WorkbookVersion provider-backed diff facade', () => {
   ] satisfies readonly (readonly [string, WorkbookCommitCompletenessDiagnostic])[])(
     'reports %s completeness diagnostics through wb.version.diff without claiming a clean diff',
     async (category, completenessDiagnostic) => {
+      const expectedCategory =
+        category === 'omitted-unsupported-domain' ? 'unsupported' : category;
       const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
       expectInitializeSuccess(initialized);
@@ -439,11 +546,11 @@ describe('WorkbookVersion provider-backed diff facade', () => {
               code: completenessDiagnostic.code,
               data: expect.objectContaining({
                 operation: 'diff',
-                recoverability: category === 'stale' ? 'retry' : 'unsupported',
+                recoverability: expectedCategory === 'stale' ? 'retry' : 'unsupported',
                 payload: expect.objectContaining({
                   operation: 'diff',
                   selector: 'target',
-                  category,
+                  category: expectedCategory,
                   completenessCode: completenessDiagnostic.code,
                   completenessSeverity: completenessDiagnostic.severity,
                   path: completenessDiagnostic.path,
@@ -453,6 +560,11 @@ describe('WorkbookVersion provider-backed diff facade', () => {
           ],
         },
       });
+      if (result.ok) throw new Error('expected diff completeness diagnostics');
+      expect(result.error.diagnostics).toHaveLength(1);
+      expect(JSON.stringify(result)).not.toContain('principal-secret');
+      expect(JSON.stringify(result)).not.toContain('deniedPrincipal');
+      expect(JSON.stringify(result)).not.toContain('omittedDomains');
       expect(result).not.toHaveProperty('value');
     },
   );
@@ -525,6 +637,9 @@ function createSemanticDiffCommitCapture(
   label: string,
   changes: readonly unknown[] = defaultSemanticChanges(label),
   completenessDiagnostics: readonly WorkbookCommitCompletenessDiagnostic[] = [],
+  options: {
+    readonly reviewChanges?: readonly unknown[];
+  } = {},
 ): VersionNormalCommitCapture {
   return async ({ namespace, currentMain }) => ({
     status: 'success',
@@ -538,6 +653,7 @@ function createSemanticDiffCommitCapture(
         schemaVersion: 1,
         label,
         changes,
+        ...(options.reviewChanges === undefined ? {} : { reviewChanges: options.reviewChanges }),
       }),
       mutationSegmentRecords: [
         await objectRecord(namespace, 'workbook.mutationSegment.v1', {
@@ -748,6 +864,61 @@ function vc06SemanticChanges() {
       display: entityLabelDisplay('shape-logo'),
     }),
   ];
+}
+
+function tableFilterReviewSafeChanges() {
+  return [
+    semanticRecord({
+      changeId: 'review-safe-table-definition',
+      domain: 'tables',
+      entityId: 'sheet-1!table:table-review-safe-sales',
+      propertyPath: ['definition'],
+      before: null,
+      after: semanticObject([
+        { key: 'kind', value: 'Set' },
+        { key: 'tableId', value: 'table-review-safe-sales' },
+        { key: 'sheetId', value: 'sheet-1' },
+      ]),
+      display: redactedEntityLabelDisplay(),
+    }),
+    semanticRecord({
+      changeId: 'review-safe-filter-state',
+      domain: 'filters',
+      entityId: 'sheet-1!filter:filter-review-safe-sales',
+      propertyPath: ['state'],
+      before: semanticObject([
+        { key: 'kind', value: 'Set' },
+        { key: 'filterId', value: 'filter-review-safe-sales' },
+        { key: 'hasActiveFilter', value: false },
+        { key: 'visibleRowCount', value: 20 },
+      ]),
+      after: semanticObject([
+        { key: 'kind', value: 'Set' },
+        { key: 'filterId', value: 'filter-review-safe-sales' },
+        { key: 'filterKind', value: 'autoFilter' },
+        { key: 'hasActiveFilter', value: true },
+        { key: 'hiddenRowCount', value: 7 },
+        { key: 'visibleRowCount', value: 13 },
+        {
+          key: 'unsupportedReasons',
+          value: { kind: 'array', values: ['criteria-values-redacted'] },
+        },
+      ]),
+      display: redactedEntityLabelDisplay(),
+    }),
+  ];
+}
+
+function omittedMacroChange() {
+  return semanticRecord({
+    changeId: 'omitted-unsupported-macro',
+    domain: 'macros.vba',
+    entityId: 'module:principal-secret',
+    propertyPath: ['source'],
+    before: null,
+    after: 'macro-source-secret',
+    display: entityLabelDisplay('principal-secret Macro'),
+  });
 }
 
 function semanticRecord(input: {

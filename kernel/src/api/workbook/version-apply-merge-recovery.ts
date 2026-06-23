@@ -14,6 +14,7 @@ import type { DocumentContext } from '../../context';
 import {
   computeMergeApplyRefCasProof,
   hasMergeApplyIntentStoreProvider,
+  idempotencyKeyForResolvedAttempt,
   intentIdForMergeResultId,
   intentIdForResolvedAttemptDigest,
   type MergeApplyIntentApplyKind,
@@ -63,27 +64,37 @@ type TargetHeadReadResult =
   | { readonly ok: true; readonly commitId: WorkbookCommitId }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
+type RecoveryIntentIdentityResult =
+  | { readonly ok: true; readonly intentId: MergeApplyIntentId }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+type MergeCommitIdentityResult =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly staleTargetHead: boolean;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
 export async function recoverPersistedMergeApplyPostCas(
   ctx: DocumentContext,
   input: RecoverPersistedMergeApplyPostCasInput,
 ): Promise<VersionApplyMergeResult> {
-  const intentId = intentIdFromRecoveryInput(input);
-  if (!intentId) {
-    return blockedApplyMergeResult(null, null, null, [
-      invalidRecoveryInputDiagnostic('Recovery input must identify an existing merge apply intent.'),
-    ]);
+  const identity = recoveryIntentIdentityFromInput(input);
+  if (!identity.ok) {
+    return blockedApplyMergeResult(null, null, null, identity.diagnostics);
   }
 
   const opened = await openRecoveryStore(ctx);
   if (!opened.ok) return blockedApplyMergeResult(null, null, null, opened.diagnostics);
 
-  const read = await opened.store.readByIntentId(intentId);
+  const read = await opened.store.readByIntentId(identity.intentId);
   if (read.status !== 'found') {
     return blockedApplyMergeResult(null, null, null, intentStoreDiagnostics(read.diagnostics));
   }
 
   const record = read.record;
-  const validationDiagnostics = validateRecoveryInput(record, input);
+  const validationDiagnostics = validateRecoveryInput(record, input, identity.intentId);
   if (validationDiagnostics.length > 0) {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, validationDiagnostics);
   }
@@ -114,7 +125,7 @@ async function recoverFastForwardPostCas(
       ? blockedApplyMergeResult(record.base, record.ours, record.theirs, [
           recoveryNotReadyDiagnostic('Fast-forward ref CAS is not visible yet.'),
         ])
-      : staleTargetHeadResult(record, current.commitId);
+      : staleTargetHeadBlockedResult(record);
   }
 
   const proof = await readAndValidateRefCasProof(store, record, 'fastForward', record.theirs);
@@ -156,7 +167,15 @@ async function recoverMergeCommitPostCas(
   }
 
   const identity = await validateMergeCommitIdentity(graph, record, current.commitId);
-  if (identity.length > 0) return staleTargetHeadResult(record, current.commitId);
+  if (!identity.ok) {
+    return blockedApplyMergeResult(
+      record.base,
+      record.ours,
+      record.theirs,
+      identity.diagnostics,
+      identity.staleTargetHead ? 'ref-not-mutated' : 'no-write-attempted',
+    );
+  }
 
   const proof = await readAndValidateRefCasProof(store, record, 'mergeCommit', current.commitId);
   if (!proof.ok) {
@@ -249,41 +268,59 @@ async function resultFromTerminalIntent(
   record: MergeApplyIntentRecord,
 ): Promise<VersionApplyMergeResult> {
   const commitId = record.terminal?.commitId ?? record.terminal?.headAfter;
-  if (!commitId) return staleTargetHeadResult(record, record.ours);
+  if (!commitId) {
+    return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
+      recoveryOperationIdentityMismatchDiagnostic('Recovery terminal commit identity is incomplete.'),
+    ]);
+  }
   const current = await readCurrentTargetHead(graph, record.targetRef);
   if (!current.ok) {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, current.diagnostics);
   }
   return current.commitId === commitId
     ? alreadyAppliedResult(record, commitId)
-    : staleTargetHeadResult(record, current.commitId);
+    : staleTargetHeadBlockedResult(record);
 }
 
 async function validateMergeCommitIdentity(
   graph: VersionGraphStore,
   record: MergeApplyIntentRecord,
   commitId: WorkbookCommitId,
-): Promise<readonly VersionStoreDiagnostic[]> {
+): Promise<MergeCommitIdentityResult> {
   try {
     const read = await graph.readCommit(commitId);
-    if (read.status !== 'success') return mapProviderDiagnostics(read.diagnostics);
+    if (read.status !== 'success') {
+      return {
+        ok: false,
+        staleTargetHead: false,
+        diagnostics: mapProviderDiagnostics(read.diagnostics),
+      };
+    }
     const payload = read.commit.payload;
     if (
       payload.parentCommitIds.length !== 2 ||
       payload.parentCommitIds[0] !== record.ours ||
       payload.parentCommitIds[1] !== record.theirs
     ) {
-      return [recoveryNotReadyDiagnostic('Current target head is not the recorded merge commit.')];
+      return { ok: false, staleTargetHead: true, diagnostics: [staleTargetHeadDiagnostic()] };
     }
     if (
-      payload.resolvedMergeAttemptDigest &&
+      !payload.resolvedMergeAttemptDigest ||
       !digestsEqual(payload.resolvedMergeAttemptDigest, record.resolvedAttemptDigest)
     ) {
-      return [recoveryNotReadyDiagnostic('Current target head is bound to another merge attempt.')];
+      return {
+        ok: false,
+        staleTargetHead: false,
+        diagnostics: [
+          recoveryOperationIdentityMismatchDiagnostic(
+            'Current target head is bound to another merge attempt.',
+          ),
+        ],
+      };
     }
-    return [];
+    return { ok: true };
   } catch {
-    return [providerErrorDiagnostic()];
+    return { ok: false, staleTargetHead: false, diagnostics: [providerErrorDiagnostic()] };
   }
 }
 
@@ -333,33 +370,104 @@ async function openRecoveryStore(ctx: DocumentContext): Promise<OpenRecoveryStor
   }
 }
 
-function intentIdFromRecoveryInput(
+function recoveryIntentIdentityFromInput(
   input: RecoverPersistedMergeApplyPostCasInput,
-): MergeApplyIntentId | null {
-  if (input.resolvedAttemptDigest) {
-    return isObjectDigest(input.resolvedAttemptDigest)
+): RecoveryIntentIdentityResult {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  const resolvedAttemptIntentId = input.resolvedAttemptDigest
+    ? isObjectDigest(input.resolvedAttemptDigest)
       ? intentIdForResolvedAttemptDigest(input.resolvedAttemptDigest as StoreObjectDigest)
-      : null;
+      : null
+    : null;
+  const resultIntentId = input.resultId ? intentIdForMergeResultId(input.resultId) : null;
+
+  if (input.resolvedAttemptDigest && !resolvedAttemptIntentId) {
+    diagnostics.push(invalidRecoveryInputDiagnostic('resolvedAttemptDigest is invalid.'));
   }
-  return input.resultId ? intentIdForMergeResultId(input.resultId) : null;
+  if (input.resultId && !resultIntentId) {
+    diagnostics.push(invalidRecoveryInputDiagnostic('resultId is invalid.'));
+  }
+  if (resolvedAttemptIntentId && resultIntentId && resolvedAttemptIntentId !== resultIntentId) {
+    diagnostics.push(
+      recoveryOperationIdentityMismatchDiagnostic(
+        'recovery resultId does not match resolvedAttemptDigest.',
+      ),
+    );
+  }
+  const intentId = resolvedAttemptIntentId ?? resultIntentId;
+  if (!intentId && diagnostics.length === 0) {
+    diagnostics.push(
+      invalidRecoveryInputDiagnostic('Recovery input must identify an existing merge apply intent.'),
+    );
+  }
+  if (diagnostics.length > 0) return { ok: false, diagnostics };
+  return { ok: true, intentId: intentId as MergeApplyIntentId };
+}
+
+function expectedIntentIdForRecord(record: MergeApplyIntentRecord): MergeApplyIntentId {
+  return intentIdForResolvedAttemptDigest(record.resolvedAttemptDigest);
+}
+
+function expectedIdempotencyKeyForRecoveryInput(
+  record: MergeApplyIntentRecord,
+  input: RecoverPersistedMergeApplyPostCasInput,
+) {
+  if (!input.targetRef || !input.expectedTargetHead) return null;
+  return idempotencyKeyForResolvedAttempt({
+    resolvedAttemptDigest: record.resolvedAttemptDigest,
+    targetRef: input.targetRef,
+    expectedTargetHead: input.expectedTargetHead,
+  });
+}
+
+function publicResultIdMatchesInput(
+  record: MergeApplyIntentRecord,
+  resultId: VersionMergeResultId | undefined,
+): boolean {
+  if (!resultId) return true;
+  return publicResultId(record) === resultId;
 }
 
 function validateRecoveryInput(
   record: MergeApplyIntentRecord,
   input: RecoverPersistedMergeApplyPostCasInput,
+  expectedIntentId: MergeApplyIntentId,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
+  if (
+    record.intentId !== expectedIntentId ||
+    record.intentId !== expectedIntentIdForRecord(record)
+  ) {
+    diagnostics.push(
+      recoveryOperationIdentityMismatchDiagnostic('recovery intent id does not match.'),
+    );
+  }
+  const expectedIdempotencyKey = expectedIdempotencyKeyForRecoveryInput(record, input);
+  if (expectedIdempotencyKey && record.idempotencyKey !== expectedIdempotencyKey) {
+    diagnostics.push(
+      recoveryOperationIdentityMismatchDiagnostic('recovery idempotency key does not match.'),
+    );
+  }
+  if (!publicResultIdMatchesInput(record, input.resultId)) {
+    diagnostics.push(
+      recoveryOperationIdentityMismatchDiagnostic('recovery resultId does not match the intent.'),
+    );
+  }
+  if (input.resolvedAttemptDigest) {
+    if (!digestsEqual(record.resolvedAttemptDigest, input.resolvedAttemptDigest)) {
+      diagnostics.push(
+        refCasProofMismatchDiagnostic('recovery resolvedAttemptDigest does not match.'),
+      );
+    }
+  }
   if (input.resultDigest && !digestsEqual(record.resultDigest, input.resultDigest)) {
     diagnostics.push(refCasProofMismatchDiagnostic('recovery resultDigest does not match.'));
   }
-  if (input.resolutionSetDigest && !digestsEqual(record.resolutionSetDigest, input.resolutionSetDigest)) {
-    diagnostics.push(refCasProofMismatchDiagnostic('recovery resolutionSetDigest does not match.'));
-  }
   if (
-    input.resolvedAttemptDigest &&
-    !digestsEqual(record.resolvedAttemptDigest, input.resolvedAttemptDigest)
+    input.resolutionSetDigest &&
+    !digestsEqual(record.resolutionSetDigest, input.resolutionSetDigest)
   ) {
-    diagnostics.push(refCasProofMismatchDiagnostic('recovery resolvedAttemptDigest does not match.'));
+    diagnostics.push(refCasProofMismatchDiagnostic('recovery resolutionSetDigest does not match.'));
   }
   if (input.targetRef && record.targetRef !== input.targetRef) {
     diagnostics.push(refCasProofMismatchDiagnostic('recovery targetRef does not match.'));
@@ -392,21 +500,14 @@ function alreadyAppliedResult(
   };
 }
 
-function staleTargetHeadResult(
-  record: MergeApplyIntentRecord,
-  currentHead: WorkbookCommitId,
-): VersionApplyMergeResult {
-  return {
-    ...recoveryMetadata(record, currentHead),
-    status: 'staleTargetHead',
-    base: record.base,
-    ours: record.ours,
-    theirs: record.theirs,
-    changes: [],
-    conflicts: [],
-    diagnostics: [],
-    mutationGuarantee: 'ref-not-mutated',
-  };
+function staleTargetHeadBlockedResult(record: MergeApplyIntentRecord): VersionApplyMergeResult {
+  return blockedApplyMergeResult(
+    record.base,
+    record.ours,
+    record.theirs,
+    [staleTargetHeadDiagnostic()],
+    'ref-not-mutated',
+  );
 }
 
 function blockedApplyMergeResult(
@@ -529,6 +630,21 @@ function refCasProofMismatchDiagnostic(safeMessage: string): VersionStoreDiagnos
   return publicDiagnostic('VERSION_MERGE_RESOLUTION_MISMATCH', safeMessage, {
     recoverability: 'none',
   });
+}
+
+function recoveryOperationIdentityMismatchDiagnostic(safeMessage: string): VersionStoreDiagnostic {
+  return refCasProofMismatchDiagnostic(safeMessage);
+}
+
+function staleTargetHeadDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_REF_CONFLICT',
+    'Version applyMerge recovery is blocked because the target ref no longer matches the recovered operation.',
+    {
+      recoverability: 'retry',
+      payload: { reason: 'staleTargetHead' },
+    },
+  );
 }
 
 function providerErrorDiagnostic(): VersionStoreDiagnostic {

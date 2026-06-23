@@ -1,6 +1,6 @@
 import type { VersionDiagnostic, VersionSurfaceStatus } from '@mog-sdk/contracts/api';
 
-import { displayBranchName } from './version-history-format';
+import { normalizeVersionBranchNameInput } from './version-branch-name';
 
 type CurrentStaleStatusCode =
   | 'version.surfaceStatus.currentStale.refMoved'
@@ -9,11 +9,18 @@ type CurrentStaleStatusCode =
 
 type CurrentReconciliationStatusCode =
   | 'version.surfaceStatus.pendingRemotePromotion'
-  | 'version.surfaceStatus.pendingProviderWrites';
+  | 'version.surfaceStatus.pendingProviderWrites'
+  | 'version.surfaceStatus.pendingProviderWritesUnknown';
+
+type CurrentReconciliationStatus = {
+  readonly reconciliationCode: CurrentReconciliationStatusCode;
+  readonly reconciliationMessage: string;
+};
 
 type CurrentStaleStatus = {
   readonly statusCode: CurrentStaleStatusCode;
   readonly reconciliationCode?: CurrentReconciliationStatusCode;
+  readonly reconciliationMessage?: string;
   readonly message: string;
 };
 
@@ -36,8 +43,8 @@ export function VersionCurrentStaleStatus({
       <div className="font-medium text-ss-text">Current checkout is stale</div>
       <div className="text-ss-text-secondary">{staleStatus.message}</div>
       <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-snug text-ss-text-secondary">
-        {staleStatus.reconciliationCode ? (
-          <span>Remote reconciliation is pending.</span>
+        {staleStatus.reconciliationMessage ? (
+          <span>{staleStatus.reconciliationMessage}</span>
         ) : null}
         <span>Destructive version actions remain disabled until this status is refreshed.</span>
       </div>
@@ -83,12 +90,34 @@ function currentStaleReason(statusCode: CurrentStaleStatusCode): string {
 
 function currentReconciliationStatusCode(
   surface: VersionSurfaceStatus,
-): Pick<CurrentStaleStatus, 'reconciliationCode'> {
+): Pick<CurrentStaleStatus, 'reconciliationCode' | 'reconciliationMessage'> {
   if (!surface.dirty.pendingProviderWrites) return {};
+  const reconciliation = currentReconciliationStatus(surface);
   return {
-    reconciliationCode: hasPendingRemotePromotion(surface)
-      ? 'version.surfaceStatus.pendingRemotePromotion'
-      : 'version.surfaceStatus.pendingProviderWrites',
+    reconciliationCode: reconciliation.reconciliationCode,
+    reconciliationMessage: reconciliation.reconciliationMessage,
+  };
+}
+
+function currentReconciliationStatus(surface: VersionSurfaceStatus): CurrentReconciliationStatus {
+  if (hasPendingRemotePromotion(surface)) {
+    return {
+      reconciliationCode: 'version.surfaceStatus.pendingRemotePromotion',
+      reconciliationMessage: 'Remote reconciliation is pending.',
+    };
+  }
+
+  if (hasUnknownProviderWriteState(surface)) {
+    return {
+      reconciliationCode: 'version.surfaceStatus.pendingProviderWritesUnknown',
+      reconciliationMessage:
+        'Provider write state is unknown; refresh after provider status settles.',
+    };
+  }
+
+  return {
+    reconciliationCode: 'version.surfaceStatus.pendingProviderWrites',
+    reconciliationMessage: 'Provider writes are still settling.',
   };
 }
 
@@ -103,12 +132,24 @@ function hasPendingRemotePromotion(surface: VersionSurfaceStatus): boolean {
   });
 }
 
+function hasUnknownProviderWriteState(surface: VersionSurfaceStatus): boolean {
+  const diagnostics = [...surface.dirty.unsafeReasons, ...surface.dirty.diagnostics];
+  return (
+    !diagnostics.some(
+      (diagnostic) => diagnostic.code === 'version.surfaceStatus.pendingProviderWrites',
+    ) ||
+    diagnostics.some(
+      (diagnostic) => diagnostic.code === 'version.surfaceStatus.pendingProviderWritesReadFailed',
+    )
+  );
+}
+
 function positiveDiagnosticCount(diagnostic: VersionDiagnostic, key: string): boolean {
   const value = diagnostic.data?.[key];
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
 function publicBranchLabel(branchName: string): string {
-  const label = displayBranchName(branchName);
-  return label.length > 0 && !label.startsWith('refs/') ? label : 'Current checkout';
+  const normalized = normalizeVersionBranchNameInput(branchName);
+  return normalized.ok ? normalized.branch.displayName : 'Current checkout';
 }

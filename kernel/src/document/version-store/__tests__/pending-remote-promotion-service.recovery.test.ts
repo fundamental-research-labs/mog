@@ -6,12 +6,15 @@ import {
   expectReadHeadSuccess,
   expectSingleCommit,
   initializeProvider,
-  objectRecord,
   pendingSegmentFixture,
   persistAndReservePendingSegment,
   PROMOTION_NOW,
   providerWithCompletionFailures,
 } from './pending-remote-promotion-service.test-helpers';
+import {
+  groupedPendingSegmentsFixture,
+  persistGroupedPendingSegments,
+} from './pending-remote-promotion-service.group-fixtures';
 
 describe('PendingRemotePromotionService', () => {
   it('recovers an already-created promotion commit when completion failed', async () => {
@@ -81,43 +84,12 @@ describe('PendingRemotePromotionService', () => {
     const namespace = await initializeProvider(provider);
     const graph = await provider.openGraph(namespace);
     const store = await provider.openPendingRemoteSegmentStore(namespace);
-    const snapshotRootRecord = await objectRecord(
-      'workbook.snapshotRoot.v1',
-      { sheets: [] },
-      namespace,
-    );
-    const semanticChangeSetRecord = await objectRecord(
-      'workbook.semanticChangeSet.v1',
-      { schemaVersion: 1, changes: [{ id: 'remote-change-1' }, { id: 'remote-change-2' }] },
-      namespace,
-    );
-    const first = await pendingSegmentFixture(namespace, {
-      createdAt: '2026-06-21T00:00:03.000Z',
+    const { first, second } = await groupedPendingSegmentsFixture(namespace, {
       groupId: 'remote-group-recovery',
-      mutationSegmentId: 'remote-segment-1',
-      payloadHash: '5'.repeat(64),
-      sequence: '1',
-      sharedSnapshotRootRecord: snapshotRootRecord,
-      sharedSemanticChangeSetRecord: semanticChangeSetRecord,
-      updateId: 'remote-update-1',
+      firstPayloadHash: '5'.repeat(64),
+      secondPayloadHash: '6'.repeat(64),
     });
-    const second = await pendingSegmentFixture(namespace, {
-      createdAt: '2026-06-21T00:00:02.000Z',
-      groupId: 'remote-group-recovery',
-      mutationSegmentId: 'remote-segment-2',
-      payloadHash: '6'.repeat(64),
-      sequence: '2',
-      sharedSnapshotRootRecord: snapshotRootRecord,
-      sharedSemanticChangeSetRecord: semanticChangeSetRecord,
-      updateId: 'remote-update-2',
-    });
-    await expect(
-      graph.putObjects([...first.objectRecords, ...second.objectRecords]),
-    ).resolves.toMatchObject({
-      status: 'success',
-    });
-    await expect(store.reserveSegment(first.input)).resolves.toMatchObject({ status: 'created' });
-    await expect(store.reserveSegment(second.input)).resolves.toMatchObject({ status: 'created' });
+    await persistGroupedPendingSegments(graph, store, { first, second });
 
     const firstRun = await createPendingRemotePromotionService({
       provider: providerWithCompletionFailures(provider, (attempt) => attempt === 2),

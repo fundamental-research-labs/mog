@@ -39,6 +39,26 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
       change: sheetLifecycleChange(),
       domain: 'sheet',
     },
+    {
+      label: 'table definition',
+      change: tableDefinitionChange(),
+      domain: 'tables',
+    },
+    {
+      label: 'filter state',
+      change: filterStateChange(),
+      domain: 'filters',
+    },
+    {
+      label: 'chart source range',
+      change: chartSourceRangeChange(),
+      domain: 'charts.source-range',
+    },
+    {
+      label: 'floating object anchor',
+      change: floatingObjectAnchorChange(),
+      domain: 'floating-objects.anchors',
+    },
   ])('blocks a clean merge plan containing $label before any write', async ({ change, domain }) => {
     const result: VersionMergeResult = cleanResult([change]);
     const merge = jest.fn(async () => result);
@@ -97,10 +117,13 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
       domainId: 'view-state',
       expectedMatrixRowId: 'view-state.selection-scroll',
       expectedDomain: 'view-state',
+      manifestRow: versionDomainSupportManifestRow('view-state', {
+        matrixRowId: 'view-state.selection-scroll',
+      }),
     },
   ])(
     'blocks fast-forward apply before preview or ref movement when detector rows expose $label',
-    async ({ matrixRowId, domainId, expectedMatrixRowId, expectedDomain }) => {
+    async ({ matrixRowId, domainId, expectedMatrixRowId, expectedDomain, manifestRow }) => {
       const merge = jest.fn();
       const fastForwardMerge = jest.fn();
       const mergeCommit = jest.fn();
@@ -113,9 +136,7 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
           manifest: {
             domains: [
               ...freshVersionDomainSupportManifest().domains,
-              versionDomainSupportManifestRow('view-state', {
-                matrixRowId: 'view-state.selection-scroll',
-              }),
+              ...(manifestRow ? [manifestRow] : []),
             ],
           },
           options: {
@@ -234,6 +255,30 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
         domainId: 'pivots',
       }),
     ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'tables',
+        domainId: 'tables',
+      }),
+    ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'filters.auto-filter',
+        domainId: 'filters',
+      }),
+    ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'charts.source-range',
+        domainId: 'charts',
+      }),
+    ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'floating-objects.anchors',
+        domainId: 'floating-objects',
+      }),
+    ).toBe(false);
   });
 });
 
@@ -289,6 +334,75 @@ function sheetLifecycleChange(): VersionMergeChange {
   ]);
   return {
     structural: metadata('merge-sheet-create', 'sheet-2', 'sheet', ['sheet']),
+    base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
+function tableDefinitionChange(): VersionMergeChange {
+  const value = semanticObject([
+    { key: 'kind', value: 'Added' },
+    { key: 'tableId', value: 'table-1' },
+    { key: 'name', value: 'SalesTable' },
+    { key: 'sheetId', value: 'sheet-1' },
+  ]);
+  return {
+    structural: metadata('merge-table-definition', 'sheet-1!table:table-1', 'tables', [
+      'definition',
+    ]),
+    base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
+function filterStateChange(): VersionMergeChange {
+  const value = semanticObject([
+    { key: 'kind', value: 'Added' },
+    { key: 'sheetId', value: 'sheet-1' },
+    { key: 'range', value: 'A1:D20' },
+  ]);
+  return {
+    structural: metadata('merge-filter-state', 'sheet-1!auto-filter', 'filters', ['state']),
+    base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
+function chartSourceRangeChange(): VersionMergeChange {
+  const value = semanticObject([
+    { key: 'objectType', value: 'chart' },
+    { key: 'sourceRange', value: 'A1:B12' },
+    { key: 'sheetId', value: 'sheet-1' },
+  ]);
+  return {
+    structural: metadata(
+      'merge-chart-source-range',
+      'sheet-1!chart:chart-1',
+      'charts.source-range',
+      ['sourceRange'],
+    ),
+    base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
+function floatingObjectAnchorChange(): VersionMergeChange {
+  const value = semanticObject([
+    { key: 'objectType', value: 'picture' },
+    { key: 'from', value: 'C3' },
+    { key: 'to', value: 'F12' },
+  ]);
+  return {
+    structural: metadata(
+      'merge-floating-object-anchor',
+      'sheet-1!object:picture-1',
+      'floating-objects.anchors',
+      ['anchor'],
+    ),
     base: { kind: 'value', value: null },
     theirs: { kind: 'value', value },
     merged: { kind: 'value', value },

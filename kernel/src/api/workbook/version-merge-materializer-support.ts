@@ -31,14 +31,31 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
   ['cells.formats.direct', new Set(['cells.formats', 'cells.formats.direct'])],
   ['rows-columns', new Set(['rows-columns'])],
 ]);
-const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set(['sheets']);
+const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set([
+  'sheets',
+  'tables',
+  'filters.auto-filter',
+  'charts.source-range',
+  'floating-objects.anchors',
+]);
 const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS = new Set([
+  'chart',
+  'charts',
+  'charts.source-range',
   'column',
   'columns',
+  'filter',
+  'filters',
+  'filters.auto-filter',
+  'floating-object',
+  'floating-objects',
+  'floating-objects.anchors',
   'row',
   'rows',
   'sheet',
   'sheets',
+  'table',
+  'tables',
 ]);
 
 type RowColumnAxis = 'row' | 'column';

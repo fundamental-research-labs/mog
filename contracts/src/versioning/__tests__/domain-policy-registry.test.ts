@@ -33,6 +33,7 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     for (const row of PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains) {
       expect(row.domainPolicyId).toBe(row.matrixRowId);
       expect(row.domainPolicyId).toMatch(idPattern);
+      expect(Object.values(row.capabilityStates)).not.toContain('expected-failing');
       expect(Object.keys(row.capabilityStates).sort()).toEqual(
         [...VERSION_DOMAIN_CAPABILITY_KEYS].sort(),
       );
@@ -40,6 +41,9 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
         expect(row).not.toHaveProperty(internalField);
       }
     }
+    expect(JSON.stringify(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY)).not.toContain(
+      'expected-failing',
+    );
   });
 
   it('keeps first-slice public runtime states conservative and explicit', () => {

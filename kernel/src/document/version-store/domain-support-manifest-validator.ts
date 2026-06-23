@@ -306,9 +306,10 @@ function validateCapabilityStates(
     if (!isVersionDomainCapabilityState(state)) {
       diagnostics.push({
         code: 'unknown-capability-state',
-        message: `Matrix row "${matrixRowId}" for domain "${domainId}" capability "${key}" references unknown state "${String(state)}".`,
+        message: `Matrix row "${matrixRowId}" for domain "${domainId}" capability "${key}" references an unknown state.`,
         matrixRowId,
         domainId,
+        capabilityKey: key,
       });
     }
   }
@@ -716,9 +717,10 @@ export function validateDomainSupportManifest(
       ) {
         diagnostics.push({
           code: 'unknown-capability-state',
-          message: `Matrix row "${matrixRowId}" for domain "${domainId}" references unknown legacy capabilityState "${String(typed.capabilityState)}".`,
+          message: `Matrix row "${matrixRowId}" for domain "${domainId}" references an unknown legacy capabilityState.`,
           matrixRowId,
           domainId,
+          policyField: 'capabilityState',
         });
       }
     }

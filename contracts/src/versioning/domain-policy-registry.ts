@@ -76,6 +76,7 @@ const OPAQUE_PRESERVED_EXTERNAL = capabilityStates('opaque-preserved', {
   merge: 'opaque-blocking',
   export: 'opaque-blocking',
 });
+const EVAL_ONLY_VERSION_DOMAIN_CAPABILITY_STATES = Object.freeze(['expected-failing'] as const);
 
 type PolicyInput = {
   readonly matrixRowId: string;
@@ -469,6 +470,22 @@ const DOMAINS = Object.freeze([
     capabilityStates: CONTRACTED,
   }),
 ]);
+
+function assertNoEvalOnlyCapabilityStates(
+  domains: readonly DomainCapabilityPolicyManifest[],
+): void {
+  for (const row of domains) {
+    for (const state of Object.values(row.capabilityStates)) {
+      if ((EVAL_ONLY_VERSION_DOMAIN_CAPABILITY_STATES as readonly string[]).includes(state)) {
+        throw new Error(
+          `Public version domain policy registry cannot expose eval-only capability state for "${row.domainPolicyId}".`,
+        );
+      }
+    }
+  }
+}
+
+assertNoEvalOnlyCapabilityStates(DOMAINS);
 
 export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY = Object.freeze({
   schemaVersion: VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION,

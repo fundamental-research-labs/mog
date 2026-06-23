@@ -783,6 +783,48 @@ describe('validateDomainSupportManifest (fail-closed)', () => {
       });
     }
   });
+
+  it('does not echo eval-only expected-failing capability states in diagnostics', () => {
+    const manifest = registryManifest();
+    const cells = manifest.domains.find((row) => row.domainPolicyId === 'cells.values');
+    if (!cells) throw new Error('missing cells.values registry row');
+    const drifted = {
+      ...cells,
+      capabilityStates: {
+        ...cells.capabilityStates,
+        capture: 'expected-failing',
+      },
+    } as unknown as DomainCapabilityPolicyManifest;
+
+    const result = validateDomainSupportManifest(
+      {
+        ...manifest,
+        domains: manifest.domains.map((row) =>
+          row.domainPolicyId === 'cells.values' ? drifted : row,
+        ),
+      },
+      {
+        now: NOW,
+        operation: 'commit',
+        domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('expected-failing');
+    if (!result.ok) {
+      expect(result.diagnostics.map((d) => d.code)).toEqual(
+        expect.arrayContaining(['unknown-capability-state', 'domain-policy-registry-mismatch']),
+      );
+      expect(
+        result.diagnostics.find(
+          (d) =>
+            d.code === 'domain-policy-registry-mismatch' &&
+            d.policyField === 'capabilityStates.capture',
+        ),
+      ).not.toHaveProperty('policyValue');
+    }
+  });
 });
 
 describe('assertDomainSupportManifest', () => {

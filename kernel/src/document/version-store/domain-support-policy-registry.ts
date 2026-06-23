@@ -8,6 +8,7 @@ import {
 import type { DomainSupportManifestDiagnostic } from './domain-support-manifest-validator';
 
 const DOMAIN_POLICY_ID_RE = new RegExp(VERSION_DOMAIN_POLICY_ID_PATTERN);
+const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 
 export function validateDomainPolicyId(
   matrixRowId: string | undefined,
@@ -159,8 +160,19 @@ function validateRegistryScalarField(
     matrixRowId: registryRow.matrixRowId,
     domainId: registryRow.domainId,
     policyField: field,
-    ...(typeof actual === 'string' ? { policyValue: actual } : {}),
+    ...registryMismatchPolicyValue(field, actual),
   });
+}
+
+function registryMismatchPolicyValue(
+  field: string,
+  actual: unknown,
+): Pick<DomainSupportManifestDiagnostic, 'policyValue'> {
+  if (typeof actual !== 'string') return {};
+  if (field.startsWith('capabilityStates.') && actual === EVAL_ONLY_EXPECTED_FAILING_STATE) {
+    return {};
+  }
+  return { policyValue: actual };
 }
 
 function validateRegistryHistoryAccess(

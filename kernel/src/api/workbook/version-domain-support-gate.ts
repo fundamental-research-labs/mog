@@ -2,7 +2,10 @@ import type {
   VersionDiagnosticPublicPayload,
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
-import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
+import {
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  type VersionDomainCapabilityKey,
+} from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
 import {
@@ -36,6 +39,20 @@ type AttachedDomainSupportManifestGate = {
   readonly options?: DomainSupportManifestValidationOptions;
 };
 
+const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
+  commit: ['capture', 'persistence'],
+  checkout: ['checkout'],
+  merge: ['merge'],
+  applyMerge: ['merge', 'persistence'],
+  export: ['export'],
+} satisfies Readonly<
+  Record<VersionDomainSupportManifestGateOperation, readonly VersionDomainCapabilityKey[]>
+>);
+
+const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
+const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
+const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
+
 export async function validateVersionDomainSupportManifestGate(
   ctx: DocumentContext,
   operation: VersionDomainSupportManifestGateOperation,
@@ -43,7 +60,7 @@ export async function validateVersionDomainSupportManifestGate(
   const gate = getAttachedDomainSupportManifestGate(ctx);
   if (!gate) {
     return isVersionDomainSupportManifestRequired(ctx, operation)
-      ? [domainSupportManifestMissingDiagnostic(operation)]
+      ? domainSupportManifestMissingDiagnostics(operation)
       : [];
   }
 
@@ -52,27 +69,24 @@ export async function validateVersionDomainSupportManifestGate(
     try {
       manifest = await gate.readManifest();
     } catch {
-      return [domainSupportManifestReadFailedDiagnostic(operation)];
+      return domainSupportManifestReadFailedDiagnostics(operation);
     }
   } else if (gate.hasManifestSource) {
     manifest = gate.manifest;
   }
 
   if (manifest === undefined || manifest === null) {
-    return [domainSupportManifestMissingDiagnostic(operation)];
+    return domainSupportManifestMissingDiagnostics(operation);
   }
 
   const {
-    domainPolicyRegistry: callerDomainPolicyRegistry,
+    domainPolicyRegistry: _ignoredCallerDomainPolicyRegistry,
     requiredCapabilityKeys: _ignoredCallerCapabilityKeys,
     ...callerOptions
   } = gate.options ?? {};
   const options: DomainSupportManifestValidationOptions = {
     ...callerOptions,
-    domainPolicyRegistry:
-      operation === 'export' && callerDomainPolicyRegistry
-        ? callerDomainPolicyRegistry
-        : PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+    domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
   };
@@ -170,6 +184,12 @@ function hasVersionOperationService(services: Readonly<Record<string, unknown>>)
   }
 
   return false;
+}
+
+function requiredManifestCapabilityKeys(
+  operation: VersionDomainSupportManifestGateOperation,
+): readonly VersionDomainCapabilityKey[] {
+  return REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION[operation];
 }
 
 function hasCommitService(services: Readonly<Record<string, unknown>>): boolean {
@@ -293,25 +313,43 @@ function isRawGraphStore(value: unknown): boolean {
   );
 }
 
+function domainSupportManifestMissingDiagnostics(
+  operation: VersionDomainSupportManifestGateOperation,
+): readonly VersionStoreDiagnostic[] {
+  return requiredManifestCapabilityKeys(operation).map((capabilityKey) =>
+    domainSupportManifestMissingDiagnostic(operation, capabilityKey),
+  );
+}
+
 function domainSupportManifestMissingDiagnostic(
   operation: VersionDomainSupportManifestGateOperation,
+  capabilityKey: VersionDomainCapabilityKey,
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
     operation,
     'VERSION_DOMAIN_SUPPORT_MANIFEST_MISSING',
     'A required document domain support manifest is not attached for this durable version operation.',
-    {},
+    { capabilityKey },
+  );
+}
+
+function domainSupportManifestReadFailedDiagnostics(
+  operation: VersionDomainSupportManifestGateOperation,
+): readonly VersionStoreDiagnostic[] {
+  return requiredManifestCapabilityKeys(operation).map((capabilityKey) =>
+    domainSupportManifestReadFailedDiagnostic(operation, capabilityKey),
   );
 }
 
 function domainSupportManifestReadFailedDiagnostic(
   operation: VersionDomainSupportManifestGateOperation,
+  capabilityKey: VersionDomainCapabilityKey,
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
     operation,
     'VERSION_DOMAIN_SUPPORT_MANIFEST_READ_FAILED',
     'The document domain support manifest could not be read before the durable version operation.',
-    {},
+    { capabilityKey },
     'retry',
   );
 }
@@ -320,20 +358,39 @@ function domainSupportManifestInvalidDiagnostic(
   operation: VersionDomainSupportManifestGateOperation,
   diagnostic: DomainSupportManifestDiagnostic,
 ): VersionStoreDiagnostic {
+  const payload: Record<string, string | number | boolean | null> = {
+    diagnosticCode: diagnostic.code,
+  };
+  appendPublicSafePayloadValue(payload, 'matrixRowId', diagnostic.matrixRowId);
+  appendPublicSafePayloadValue(payload, 'domainId', diagnostic.domainId);
+  appendPublicSafePayloadValue(payload, 'capabilityKey', diagnostic.capabilityKey);
+  appendPublicSafePayloadValue(payload, 'capabilityState', diagnostic.capabilityState);
+  appendPublicSafePayloadValue(payload, 'policyField', diagnostic.policyField);
+  appendPublicSafePayloadValue(payload, 'policyValue', diagnostic.policyValue);
+
   return publicDiagnostic(
     operation,
     'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
     'The document domain support manifest is invalid for durable version operations.',
-    {
-      diagnosticCode: diagnostic.code,
-      ...(diagnostic.matrixRowId ? { matrixRowId: diagnostic.matrixRowId } : {}),
-      ...(diagnostic.domainId ? { domainId: diagnostic.domainId } : {}),
-      ...(diagnostic.capabilityKey ? { capabilityKey: diagnostic.capabilityKey } : {}),
-      ...(diagnostic.capabilityState ? { capabilityState: diagnostic.capabilityState } : {}),
-      ...(diagnostic.policyField ? { policyField: diagnostic.policyField } : {}),
-      ...(diagnostic.policyValue ? { policyValue: diagnostic.policyValue } : {}),
-    },
+    payload,
   );
+}
+
+function appendPublicSafePayloadValue(
+  payload: Record<string, string | number | boolean | null>,
+  key: string,
+  value: string | undefined,
+): void {
+  const safeValue = publicSafeDiagnosticValue(value);
+  if (safeValue) payload[key] = safeValue;
+}
+
+function publicSafeDiagnosticValue(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value === EVAL_ONLY_EXPECTED_FAILING_STATE) return undefined;
+  if (value.length > MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH) return undefined;
+  if (!PUBLIC_DIAGNOSTIC_VALUE_RE.test(value)) return undefined;
+  return value;
 }
 
 function publicDiagnostic(

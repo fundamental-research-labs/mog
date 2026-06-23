@@ -1,6 +1,8 @@
 import { jest } from '@jest/globals';
 
+import { checkoutWorkbookVersion } from '../version-checkout';
 import { readVersionPendingProviderWrites } from '../version-pending-provider-writes';
+import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 
 const ROOT_COMMIT_ID = `commit:sha256:${'0'.repeat(64)}`;
 const GRAPH_REGISTRY = Object.freeze({
@@ -16,6 +18,23 @@ const GRAPH_REGISTRY = Object.freeze({
 
 function createCtx(versioning: Record<string, unknown>) {
   return { versioning } as any;
+}
+
+function cleanSurfaceDirtyStatus(overrides: Record<string, unknown> = {}) {
+  return {
+    statusRevision: 'dirty-revision-clean',
+    checkoutPreflightToken: 'checkout-preflight-token-clean',
+    hasUncommittedLocalChanges: false,
+    commitEligibleChanges: false,
+    unsupportedDirtyDomains: [],
+    pendingProviderWrites: false,
+    pendingRecalc: false,
+    checkoutSafe: true,
+    unsafeReasons: [],
+    source: 'VC-05' as const,
+    diagnostics: [],
+    ...overrides,
+  };
 }
 
 describe('version pending provider writes status', () => {
@@ -95,5 +114,62 @@ describe('version pending provider writes status', () => {
       }),
     );
     expect(pendingStore.listByState).toHaveBeenCalledWith('pending');
+  });
+
+  it('blocks checkout through the structured admission diagnostic when provider writes are pending', async () => {
+    const checkout = jest.fn();
+    const pendingStore = {
+      listByState: jest.fn(async () => ({
+        status: 'success',
+        records: [{}],
+        diagnostics: [],
+      })),
+    };
+    const provider = {
+      readGraphRegistry: jest.fn(async () => ({
+        status: 'ok',
+        registry: GRAPH_REGISTRY,
+        diagnostics: [],
+      })),
+      openGraph: jest.fn(),
+      openPendingRemoteSegmentStore: jest.fn(async () => pendingStore),
+    };
+    let ctx: any;
+    ctx = createCtx(
+      versioningWithDomainSupportManifest({
+        provider,
+        checkoutService: { checkout },
+        surfaceStatusService: {
+          readDirtyStatus: async () => {
+            const pending = await readVersionPendingProviderWrites(ctx);
+            return cleanSurfaceDirtyStatus({
+              statusRevision: `dirty:${pending.statusRevision}`,
+              checkoutPreflightToken: `token:${pending.statusRevision}`,
+              pendingProviderWrites: pending.pendingProviderWrites,
+              checkoutSafe: !pending.pendingProviderWrites,
+              unsafeReasons: pending.unsafeReasons,
+              diagnostics: pending.diagnostics,
+            });
+          },
+        },
+      }),
+    );
+
+    await expect(checkoutWorkbookVersion(ctx, { kind: 'head' })).resolves.toMatchObject({
+      status: 'degraded',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+          recoverability: 'retry',
+          payload: expect.objectContaining({
+            reason: 'pendingProviderWrites',
+            targetKind: 'head',
+            refName: 'HEAD',
+            pendingRemoteSegmentCount: 1,
+          }),
+        }),
+      ],
+    });
+    expect(checkout).not.toHaveBeenCalled();
   });
 });

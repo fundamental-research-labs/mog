@@ -735,7 +735,8 @@ function checkoutAdmissionDiagnostic(
     case 'staleWorkspaceHead':
       return checkoutStaleWorkspaceHeadDiagnostic({
         ...payload,
-        reason: block.staleReason,
+        reason: block.reason,
+        staleReason: block.staleReason,
         ...(block.branchName ? { branchName: block.branchName } : {}),
         ...(block.checkedOutCommitId ? { checkedOutCommitId: block.checkedOutCommitId } : {}),
         ...(block.refHeadAtMaterialization

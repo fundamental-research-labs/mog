@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto';
 import { jest } from '@jest/globals';
 
 import { WorkbookVersionImpl } from '../version';
+import { createWorkbookVersionSurfaceStatusService } from '../version-surface-status-service';
 import {
   freshVersionDomainSupportManifest,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW,
@@ -607,5 +608,91 @@ describe('WorkbookVersion surface status derivation hardening', () => {
     });
     expect(capabilityState(surface, 'version:remotePromote')).toEqual({ enabled: true });
     expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
+  });
+
+  it('treats malformed provider write activity status as unknown and unsafe', async () => {
+    const service = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 1,
+        contextGeneration: 1,
+      }),
+      readPendingProviderWrites: () =>
+        ({
+          pendingProviderWrites: false,
+          statusRevision: 'providerActivity:stale secret cursor',
+          unsafeReasons: [],
+          diagnostics: [],
+        }),
+    });
+
+    const dirty = await service.readDirtyStatus();
+
+    expect(dirty.pendingProviderWrites).toBe(true);
+    expect(dirty.checkoutSafe).toBe(false);
+    expect(dirty.statusRevision).toContain('providerWrites:providerActivity:unknown');
+    expect(dirty.unsafeReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          dependency: 'VC-09',
+          data: expect.objectContaining({
+            redacted: true,
+            providerPayload: 'providerWriteStatus',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('does not trust attached dirty status that reports provider failure as checkout-safe', async () => {
+    const providerReadFailed = {
+      code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+      severity: 'warning' as const,
+      message: 'Version provider write activity could not be proven settled.',
+      dependency: 'VC-09' as const,
+      data: { safeCount: 1 },
+    };
+    const readDirtyStatus = jest.fn(() => ({
+      statusRevision: 'dirty-provider-unknown',
+      checkoutPreflightToken: 'checkout-provider-unknown',
+      hasUncommittedLocalChanges: false,
+      commitEligibleChanges: false,
+      unsupportedDirtyDomains: [],
+      pendingProviderWrites: false,
+      pendingRecalc: false,
+      checkoutSafe: true,
+      unsafeReasons: [],
+      source: 'VC-05' as const,
+      diagnostics: [providerReadFailed],
+    }));
+    const { version } = createSurfaceReadyVersionWithContext(
+      {},
+      { surfaceStatusService: { readDirtyStatus } },
+    );
+
+    const surface = await version.getSurfaceStatus();
+
+    expect(surface.dirty.pendingProviderWrites).toBe(true);
+    expect(surface.dirty.checkoutSafe).toBe(false);
+    expect(surface.dirty.unsafeReasons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          data: { safeCount: 1 },
+        }),
+      ]),
+    );
+    expect(surface.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          data: { safeCount: 1 },
+        }),
+      ]),
+    );
+    expect(readDirtyStatus).toHaveBeenCalledTimes(1);
   });
 });

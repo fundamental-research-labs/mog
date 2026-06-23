@@ -11,6 +11,10 @@ import type { CheckoutSnapshotApplyInput } from '../../document/version-store/ch
 import type { HostCapabilityDecision, HostCapabilityDecisions } from './version-merge-capability';
 import type { VersionLiveCollaborationDirtyStatus } from './version-live-collaboration-status';
 import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
+import {
+  normalizeVersionSurfacePendingProviderWritesStatus,
+  readVersionSurfacePendingProviderWritesStatus,
+} from './version-surface-status-service-provider-writes';
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -19,16 +23,13 @@ const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const SYNC_BATCH_STATUS_ID_RE = /^sync-batch-status:sha256:[0-9a-f]{64}$/;
 const DIAGNOSTIC_DEPENDENCIES = new Set<VersionCapabilityDependency>([
-  'VC-04', 'VC-05', 'VC-07', 'VC-09', 'storage', 'featureGate', 'hostCapability',
-  'upstreamRevertContract',
+  'VC-04', 'VC-05', 'VC-07', 'VC-09', 'storage', 'featureGate', 'hostCapability', 'upstreamRevertContract',
 ]);
 
 export type SurfaceOnlyVersionCapability = 'version:refAdmin';
 export type SurfaceVersionCapability = VersionCapability | SurfaceOnlyVersionCapability;
 export type SurfaceCapabilityStates = Record<SurfaceVersionCapability, VersionCapabilityState>;
-export type SurfaceHostCapabilityDecisions = Partial<
-  Record<SurfaceVersionCapability, HostCapabilityDecision>
->;
+export type SurfaceHostCapabilityDecisions = Partial<Record<SurfaceVersionCapability, HostCapabilityDecision>>;
 export type RemotePromoteSurfaceCapabilityInput = {
   readonly editingEnabled: boolean;
   readonly provenanceAvailable: boolean;
@@ -38,19 +39,9 @@ export type RemotePromoteSurfaceCapabilityInput = {
 };
 
 export const SURFACE_VERSION_CAPABILITY_KEYS = [
-  'version:read',
-  'version:diff',
-  'version:commit',
-  'version:branch',
-  'version:checkout',
-  'version:reviewRead',
-  'version:reviewWrite',
-  'version:proposal',
-  'version:mergePreview',
-  'version:mergeApply',
-  'version:refAdmin',
-  'version:revert',
-  'version:provenance',
+  'version:read', 'version:diff', 'version:commit', 'version:branch', 'version:checkout',
+  'version:reviewRead', 'version:reviewWrite', 'version:proposal', 'version:mergePreview',
+  'version:mergeApply', 'version:refAdmin', 'version:revert', 'version:provenance',
   'version:remotePromote',
 ] as const satisfies readonly SurfaceVersionCapability[];
 
@@ -100,7 +91,10 @@ export function createWorkbookVersionSurfaceStatusService(input: {
       dirtyStatusFromState(
         input.readDirtyState(),
         input.readPendingProviderWrites
-          ? await input.readPendingProviderWrites()
+          ? await readVersionSurfacePendingProviderWritesStatus(
+              input.readPendingProviderWrites,
+              diagnosticArray,
+            )
           : cleanPendingProviderWrites(),
         input.readLiveCollaborationStatus
           ? await input.readLiveCollaborationStatus()
@@ -689,6 +683,12 @@ function projectDirtyStatus(value: unknown): VersionSurfaceStatus['dirty'] | nul
   if (!unsupportedDirtyDomains || !unsafeReasons || !diagnostics) return null;
   const liveCollaboration = projectLiveCollaboration(value.liveCollaboration);
   if (value.liveCollaboration !== undefined && !liveCollaboration) return null;
+  const providerWrites = normalizeVersionSurfacePendingProviderWritesStatus({
+    pendingProviderWrites: value.pendingProviderWrites,
+    statusRevision: 'attachedDirtyStatus',
+    unsafeReasons,
+    diagnostics,
+  });
 
   return {
     statusRevision: value.statusRevision,
@@ -696,13 +696,13 @@ function projectDirtyStatus(value: unknown): VersionSurfaceStatus['dirty'] | nul
     hasUncommittedLocalChanges: value.hasUncommittedLocalChanges,
     commitEligibleChanges: value.commitEligibleChanges,
     unsupportedDirtyDomains,
-    pendingProviderWrites: value.pendingProviderWrites,
+    pendingProviderWrites: providerWrites.pendingProviderWrites,
     pendingRecalc: value.pendingRecalc,
     ...(liveCollaboration ? { liveCollaboration } : {}),
-    checkoutSafe: value.checkoutSafe,
-    unsafeReasons,
+    checkoutSafe: value.checkoutSafe && !providerWrites.pendingProviderWrites,
+    unsafeReasons: providerWrites.unsafeReasons,
     source: 'VC-05',
-    diagnostics,
+    diagnostics: providerWrites.diagnostics,
   };
 }
 

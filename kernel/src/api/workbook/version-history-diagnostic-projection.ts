@@ -45,6 +45,7 @@ const COMMIT_ID_GLOBAL_RE = /\bcommit:sha256:[0-9a-f]{64}\b/g;
 const REF_NAME_RE = /\brefs\/[A-Za-z0-9._/-]+\b/;
 const REF_NAME_GLOBAL_RE = /\brefs\/[A-Za-z0-9._/-]+\b/g;
 const PUBLIC_OPERATION_RE = /^[A-Za-z][A-Za-z0-9:._/-]{0,95}$/;
+const PUBLIC_OPTION_NAME_RE = /^[A-Za-z][A-Za-z0-9._-]{0,63}$/;
 const STALE_HEAD_REASON = 'stale-head';
 const HISTORY_GAP_REASON = 'history-gap';
 
@@ -234,10 +235,17 @@ function projectPublicDiagnosticPayloadValue(
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return undefined;
+  if (key === 'option') return projectPublicDiagnosticOptionName(value);
   if (!isPublicProviderDetailKey(key) && isSensitiveProviderDiagnosticPayloadKey(key)) {
     return 'redacted';
   }
   return isUnsafeProviderDiagnosticString(value) ? 'redacted' : value;
+}
+
+function projectPublicDiagnosticOptionName(value: string): string | undefined {
+  if (!PUBLIC_OPTION_NAME_RE.test(value)) return undefined;
+  if (isUnsafeProviderDiagnosticString(value) && value !== 'pageToken') return 'redacted';
+  return value;
 }
 
 function publicOperation(value: unknown): string | undefined {

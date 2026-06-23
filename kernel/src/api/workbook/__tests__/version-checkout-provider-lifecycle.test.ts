@@ -250,7 +250,8 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
               data: expect.objectContaining({
                 recoverability: 'retry',
                 payload: expect.objectContaining({
-                  reason: 'refMoved',
+                  reason: 'staleWorkspaceHead',
+                  staleReason: 'refMoved',
                   targetKind: 'ref',
                   refName: 'refs/heads/scenario/provider-admission',
                   currentRefHeadId: moved.id,

@@ -4,7 +4,8 @@ export const VERSION_STATUS_ROOT_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 export const VERSION_STATUS_CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 export const VERSION_STATUS_REF_REVISION = { kind: 'counter', value: '2' } as const;
 export const VERSION_STATUS_CREATED_AT = '2026-06-20T00:00:00.000Z';
-export const VERSION_STATUS_DIFF_PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
+export const VERSION_STATUS_LIST_PAGE_TOKEN = 'vpt_aaaaaaaaaaaa';
+export const VERSION_STATUS_DIFF_PAGE_TOKEN = 'mog-vdiff-v1.semantic-change-order.cursor-handle';
 
 export function createFakeVersionStatusGraphStore(
   options: { readonly includeDiff?: boolean } = {},

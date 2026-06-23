@@ -20,6 +20,7 @@ import {
   VERSION_STATUS_CHILD_COMMIT_ID as CHILD_COMMIT_ID,
   VERSION_STATUS_CREATED_AT as CREATED_AT,
   VERSION_STATUS_DIFF_PAGE_TOKEN as DIFF_PAGE_TOKEN,
+  VERSION_STATUS_LIST_PAGE_TOKEN as LIST_PAGE_TOKEN,
   VERSION_STATUS_REF_REVISION as REF_REVISION,
   VERSION_STATUS_ROOT_COMMIT_ID as ROOT_COMMIT_ID,
   createFakeVersionStatusGraphStore as createFakeGraphStore,
@@ -379,13 +380,13 @@ describe('WorkbookVersion status slice', () => {
       }),
     });
 
-    await expect(wb.version.listCommits({ pageToken: DIFF_PAGE_TOKEN })).resolves.toMatchObject({
+    await expect(wb.version.listCommits({ pageToken: LIST_PAGE_TOKEN })).resolves.toMatchObject({
       ok: true,
       value: {
         limit: 50,
       },
     });
-    expect(graphStore.listCommits).toHaveBeenCalledWith({ pageToken: DIFF_PAGE_TOKEN });
+    expect(graphStore.listCommits).toHaveBeenCalledWith({ pageToken: LIST_PAGE_TOKEN });
   });
 
   it('redacts invalid private refs before any graph or branch service call', async () => {

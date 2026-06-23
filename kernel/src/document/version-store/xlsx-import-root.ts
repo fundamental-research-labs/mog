@@ -1,15 +1,10 @@
-import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
-import type { VersionAuthor, VersionHistoryRootPolicy } from '@mog-sdk/contracts/versioning';
+import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 import type { WorkbookCommit } from './commit-store';
 import type { CommitVersionGraphInput, VersionGraphBranchRefName } from './graph-store';
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-  createInMemoryVersionGraphStore,
-} from './graph-store';
-import { isObjectDigest, type ObjectDigest, type WorkbookCommitId } from './object-digest';
+import { createInMemoryVersionGraphStore } from './graph-store';
+import { isObjectDigest, type WorkbookCommitId } from './object-digest';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
 import {
   mapGraphDiagnostics,
@@ -25,35 +20,32 @@ import {
 } from './snapshot-root-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import { evaluateVersionHistoryRootPolicy } from './version-history-root-policy';
+import type {
+  XlsxVersionExistingGraphImportInput,
+  XlsxVersionExistingGraphImportResult,
+} from './xlsx-import-root-results';
+import {
+  importRootProvenanceWithoutTrustedCandidate,
+  trustedVersionMetadataHeadCandidate,
+  trustedVersionMetadataTrust,
+  untrustedImportRootProvenance,
+  type XlsxVersionImportRootProvenance,
+  type XlsxVersionMetadataHeadCandidate,
+  type XlsxVersionMetadataTrustDowngradeReason,
+} from './xlsx-import-root-provenance';
+import {
+  metadataHeadCandidateNamesSupportedRef,
+  metadataHeadCandidateTrustedBaseMismatchReason,
+} from './xlsx-import-root-validation';
 
-export type XlsxVersionImportRootSource =
-  | {
-      readonly sourceType: 'bytes';
-      readonly byteLength: number;
-    }
-  | {
-      readonly sourceType: 'path';
-      readonly pathRedacted: true;
-    };
-
-export type XlsxVersionImportRootProvenance = {
-  readonly kind: 'xlsx';
-  readonly source: XlsxVersionImportRootSource;
-  readonly diagnostics: readonly ImportDiagnosticDto[];
-  readonly versionMetadataTrust?: {
-    readonly status: 'absent' | 'trusted' | 'trusted-stale-base' | 'untrusted';
-    readonly sidecarPart: string;
-    readonly reason?: string;
-    readonly redacted?: true;
-  };
-  /**
-   * Internal-only parsed sidecar identity used to verify a same-document reimport
-   * against the selected version provider head. This must never be copied into
-   * persisted semantic payloads; those payloads only receive redacted trust
-   * summaries.
-   */
-  readonly versionMetadataHeadCandidate?: XlsxVersionMetadataHeadCandidate;
-};
+export type {
+  XlsxVersionImportRootProvenance,
+  XlsxVersionImportRootSource,
+} from './xlsx-import-root-provenance';
+export type {
+  XlsxVersionExistingGraphImportInput,
+  XlsxVersionExistingGraphImportResult,
+} from './xlsx-import-root-results';
 
 export const XLSX_IMPORT_ROOT_GRAPH_ID = 'xlsx-import-root';
 const XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX = 'import/external-change';
@@ -70,54 +62,6 @@ const XLSX_IMPORT_CHANGE_AUTHOR: VersionAuthor = {
   actorKind: 'system',
   displayName: 'Mog XLSX Import Change',
 };
-
-type XlsxVersionMetadataHeadCandidate = {
-  readonly documentId: string;
-  readonly head: {
-    readonly commitId: WorkbookCommitId | string;
-    readonly refName?: string;
-    readonly resolvedFrom?: string;
-    readonly refRevision?:
-      | VersionRecordRevision
-      | { readonly kind: 'opaque'; readonly value: string };
-    readonly semanticChangeSetDigest?: unknown;
-    readonly snapshotRootDigest?: unknown;
-  };
-};
-
-type XlsxVersionMetadataTrustDowngradeReason =
-  | 'wrong-document'
-  | 'missing-head'
-  | 'head-unverified'
-  | 'missing-object-digests'
-  | 'commit-missing'
-  | 'object-digest-mismatch'
-  | 'snapshot-root-mismatch';
-
-export type XlsxVersionExistingGraphImportInput = {
-  readonly namespace: VersionGraphNamespace;
-  readonly graph: VersionGraphStore;
-  readonly snapshotRootByteSyncPort: SnapshotRootByteSyncPort;
-  readonly semanticStateReader: VersionSemanticStateReaderPort;
-  readonly provenance: XlsxVersionImportRootProvenance;
-  readonly createdAt: string;
-  readonly historyRootPolicy?: VersionHistoryRootPolicy;
-};
-
-export type XlsxVersionExistingGraphImportResult =
-  | {
-      readonly status: 'committed';
-      readonly commitId: WorkbookCommitId;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'unchanged' | 'skipped';
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'failed';
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    };
 
 export async function buildXlsxVersionImportRootWrite(input: {
   readonly namespace: VersionGraphNamespace;
@@ -426,42 +370,6 @@ async function metadataHeadCandidateIsOnVisibleHeadHistory(input: {
   return { status: 'success', reachable: false, diagnostics: [] };
 }
 
-function metadataHeadCandidateNamesSupportedRef(
-  candidate: XlsxVersionMetadataHeadCandidate,
-): boolean {
-  return (
-    optionalStringMatches(candidate.head.refName, VERSION_GRAPH_MAIN_REF) &&
-    optionalStringMatches(candidate.head.resolvedFrom, VERSION_GRAPH_HEAD_REF)
-  );
-}
-
-function metadataHeadCandidateTrustedBaseMismatchReason(
-  candidate: XlsxVersionMetadataHeadCandidate,
-  baseCommit: WorkbookCommit,
-): XlsxVersionMetadataTrustDowngradeReason | null {
-  if (candidate.head.commitId !== baseCommit.id) return 'head-unverified';
-  if (
-    !isObjectDigest(candidate.head.semanticChangeSetDigest) ||
-    !isObjectDigest(candidate.head.snapshotRootDigest)
-  ) {
-    return 'missing-object-digests';
-  }
-  if (
-    !objectDigestMatches(
-      candidate.head.semanticChangeSetDigest,
-      baseCommit.payload.semanticChangeSetDigest,
-    )
-  ) {
-    return 'object-digest-mismatch';
-  }
-  if (
-    !objectDigestMatches(candidate.head.snapshotRootDigest, baseCommit.payload.snapshotRootDigest)
-  ) {
-    return 'snapshot-root-mismatch';
-  }
-  return null;
-}
-
 async function createOrReadExternalChangeBranch(input: {
   readonly graph: VersionGraphStore;
   readonly namespace: VersionGraphNamespace;
@@ -580,29 +488,6 @@ function importNewRootBranchName(rootCommitId: WorkbookCommitId, trustStatus: st
   return `${XLSX_IMPORT_NEW_ROOT_BRANCH_PREFIX}/${safeBranchSegment(trustStatus)}/${rootSegment}`;
 }
 
-function trustedVersionMetadataTrust(
-  provenance: XlsxVersionImportRootProvenance,
-): NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']> {
-  const status =
-    provenance.versionMetadataTrust?.status === 'trusted-stale-base'
-      ? 'trusted-stale-base'
-      : 'trusted';
-  return {
-    status,
-    sidecarPart:
-      provenance.versionMetadataTrust?.sidecarPart ?? 'customXml/mog-version-metadata.xml',
-    redacted: true,
-  };
-}
-
-function trustedVersionMetadataHeadCandidate(
-  provenance: XlsxVersionImportRootProvenance,
-): XlsxVersionMetadataHeadCandidate | undefined {
-  const trustStatus = provenance.versionMetadataTrust?.status;
-  if (trustStatus !== 'trusted' && trustStatus !== 'trusted-stale-base') return undefined;
-  return provenance.versionMetadataHeadCandidate;
-}
-
 async function readCommitSemanticState(
   graph: VersionGraphStore,
   commit: WorkbookCommit,
@@ -664,10 +549,6 @@ function semanticDigestKey(digest: unknown): string {
   return JSON.stringify(digest);
 }
 
-function objectDigestMatches(left: ObjectDigest, right: ObjectDigest): boolean {
-  return left.algorithm === right.algorithm && left.digest === right.digest;
-}
-
 function digestBranchSegment(value: unknown): string {
   if (isObjectDigest(value)) return value.digest.slice(0, 16);
   if (isRecord(value) && typeof value.value === 'string') {
@@ -679,86 +560,12 @@ function digestBranchSegment(value: unknown): string {
   return 'unknown-digest';
 }
 
-function untrustedImportRootProvenance(
-  provenance: XlsxVersionImportRootProvenance,
-  reason: XlsxVersionMetadataTrustDowngradeReason,
-): XlsxVersionImportRootProvenance {
-  const { versionMetadataHeadCandidate: _candidate, ...rest } = provenance;
-  return {
-    ...rest,
-    diagnostics: redactedMetadataTrustDiagnostics(provenance.diagnostics, reason),
-    versionMetadataTrust: {
-      status: 'untrusted',
-      sidecarPart:
-        provenance.versionMetadataTrust?.sidecarPart ?? 'customXml/mog-version-metadata.xml',
-      reason,
-      redacted: true,
-    },
-  };
-}
-
-function importRootProvenanceWithoutTrustedCandidate(
-  provenance: XlsxVersionImportRootProvenance,
-): XlsxVersionImportRootProvenance {
-  const trustStatus = provenance.versionMetadataTrust?.status;
-  if (trustStatus === 'trusted' || trustStatus === 'trusted-stale-base') {
-    return untrustedImportRootProvenance(provenance, 'missing-head');
-  }
-  const { versionMetadataHeadCandidate: _candidate, ...rest } = provenance;
-  return rest;
-}
-
-function redactedMetadataTrustDiagnostics(
-  diagnostics: readonly ImportDiagnosticDto[],
-  reason: XlsxVersionMetadataTrustDowngradeReason,
-): readonly ImportDiagnosticDto[] {
-  return [
-    mogVersionMetadataUntrustedDiagnostic(reason),
-    ...diagnostics.filter((diagnostic) => !isMogVersionMetadataTrustDiagnostic(diagnostic)),
-  ];
-}
-
-function isMogVersionMetadataTrustDiagnostic(diagnostic: ImportDiagnosticDto): boolean {
-  return (
-    diagnostic.code === 'mogVersionMetadataUntrusted' ||
-    diagnostic.code === 'mogVersionMetadataStale' ||
-    (isRecord(diagnostic.details) && diagnostic.details.kind === 'mogVersionMetadataTrust')
-  );
-}
-
-function mogVersionMetadataUntrustedDiagnostic(
-  reason: XlsxVersionMetadataTrustDowngradeReason,
-): ImportDiagnosticDto {
-  return {
-    id: `mog-version-metadata-${reason}`,
-    code: 'mogVersionMetadataUntrusted',
-    severity: 'warning',
-    feature: 'workbook-metadata',
-    recoverability: 'unsupportedDropped',
-    message: 'Mog version metadata sidecar was ignored because it could not be trusted.',
-    reason,
-    details: {
-      kind: 'mogVersionMetadataTrust',
-      reason,
-      sidecarPart: 'customXml/mog-version-metadata.xml',
-      trusted: false,
-      redacted: true,
-    },
-    importPhases: ['parser'],
-    firstImportPhase: 'parser',
-  };
-}
-
 function safeBranchSegment(value: string): string {
   const segment = value
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .slice(0, 16);
   return segment.length > 0 ? segment : 'unknown-digest';
-}
-
-function optionalStringMatches(left: string | undefined, right: string | undefined): boolean {
-  return left === right;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

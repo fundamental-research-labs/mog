@@ -263,11 +263,25 @@ describe('WorkbookVersion domain support manifest gate', () => {
     const diagnostics = await validateVersionDomainSupportManifestGate(
       {
         versioning: {
-          domainSupportManifest: freshManifest(),
+          domainSupportManifest: freshManifest({
+            domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => {
+              const row = domainRow(id);
+              return id === 'cells.values'
+                ? {
+                    ...row,
+                    capabilityStates: {
+                      ...row.capabilityStates,
+                      export: 'contracted',
+                    },
+                  }
+                : row;
+            }),
+          }),
           domainSupportManifestOptions: {
             now: NOW,
             maxAgeMs: TEN_MINUTES_MS,
             requiredCapabilityKeys: [],
+            requiredMatrixRowIds: [],
           },
         },
       } as any,
@@ -282,9 +296,18 @@ describe('WorkbookVersion domain support manifest gate', () => {
           payload: expect.objectContaining({
             operation: 'export',
             diagnosticCode: 'capability-state-blocked',
-            domainId: 'workbook-metadata',
+            domainId: 'cells.values',
             capabilityKey: 'export',
             capabilityState: 'contracted',
+          }),
+        }),
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'export',
+            diagnosticCode: 'required-matrix-row-missing',
+            matrixRowId: 'cells.formats.direct',
           }),
         }),
       ]),

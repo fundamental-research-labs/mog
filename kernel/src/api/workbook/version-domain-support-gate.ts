@@ -52,6 +52,13 @@ const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
+const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freeze(
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.matrixRowId),
+);
+const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS =
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.every(
+    (row) => row.capabilityStates.export === 'supported',
+  );
 
 export async function validateVersionDomainSupportManifestGate(
   ctx: DocumentContext,
@@ -89,9 +96,14 @@ export async function validateVersionDomainSupportManifestGate(
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
+    ...requiredValidationOptionsForOperation(operation),
   };
   const validation = validateDomainSupportManifest(manifest, options);
-  if (validation.ok) return mergeDetectedDomainDiagnostics(operation, options);
+  if (validation.ok) {
+    const exportDiagnostics = publicExportRegistryUnsupportedDiagnostics(operation);
+    if (exportDiagnostics.length > 0) return exportDiagnostics;
+    return mergeDetectedDomainDiagnostics(operation, options);
+  }
 
   return validation.diagnostics.map((diagnostic) =>
     domainSupportManifestInvalidDiagnostic(operation, diagnostic),
@@ -113,6 +125,42 @@ function mergeDetectedDomainDiagnostics(
     }
   });
   return diagnostics;
+}
+
+function requiredValidationOptionsForOperation(
+  operation: VersionDomainSupportManifestGateOperation,
+): DomainSupportManifestValidationOptions {
+  if (operation !== 'export') return {};
+  return {
+    requiredMatrixRowIds: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+  };
+}
+
+function publicExportRegistryUnsupportedDiagnostics(
+  operation: VersionDomainSupportManifestGateOperation,
+): readonly VersionStoreDiagnostic[] {
+  if (operation !== 'export' || PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS) {
+    return [];
+  }
+
+  return PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains
+    .filter((row) => row.capabilityStates.export !== 'supported')
+    .map((row) =>
+      publicDiagnostic(
+        operation,
+        'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+        'The public version domain policy registry does not yet support export for every domain row.',
+        {
+          diagnosticCode: 'public-export-registry-not-supported',
+          matrixRowId: row.matrixRowId,
+          domainId: row.domainId,
+          capabilityKey: 'export',
+          capabilityState: row.capabilityStates.export,
+          policyField: 'capabilityStates.export',
+          policyValue: row.capabilityStates.export,
+        },
+      ),
+    );
 }
 
 function getAttachedDomainSupportManifestGate(

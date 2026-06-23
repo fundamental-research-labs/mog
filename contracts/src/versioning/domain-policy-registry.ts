@@ -50,6 +50,7 @@ const WORKBOOK_METADATA = capabilityStates('contracted', {
   replay: 'supported',
   checkout: 'supported',
   persistence: 'supported',
+  export: 'supported',
 });
 const SHEETS = capabilityStates('contracted', {
   capture: 'supported',
@@ -57,6 +58,7 @@ const SHEETS = capabilityStates('contracted', {
   diff: 'supported',
   checkout: 'supported',
   persistence: 'supported',
+  export: 'supported',
 });
 const AUTHORED_GRID = capabilityStates('contracted', {
   capture: 'supported',
@@ -64,6 +66,7 @@ const AUTHORED_GRID = capabilityStates('contracted', {
   diff: 'supported',
   checkout: 'supported',
   persistence: 'supported',
+  export: 'supported',
 });
 const OPAQUE_PRESERVED_PACKAGE = capabilityStates('opaque-preserved', {
   diff: 'opaque-blocking',
@@ -501,3 +504,10 @@ export const PUBLIC_VERSION_DOMAIN_POLICY_IDS = Object.freeze(
 );
 export const PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT =
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.length;
+export const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freeze(
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.matrixRowId),
+);
+export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS =
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.every(
+    (row) => row.capabilityStates.export === 'supported',
+  );

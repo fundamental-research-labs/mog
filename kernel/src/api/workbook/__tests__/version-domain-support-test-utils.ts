@@ -117,10 +117,9 @@ export function exportSupportedVersionDomainSupportManifest(
   overrides: Partial<DomainSupportManifest> = {},
 ): DomainSupportManifest {
   return freshVersionDomainSupportManifest({
-    domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => {
-      const row = versionDomainSupportManifestRow(id);
+    domains: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => {
       return {
-        ...row,
+        ...cloneDomainPolicyManifest(row),
         capabilityStates: {
           ...row.capabilityStates,
           export: 'supported',

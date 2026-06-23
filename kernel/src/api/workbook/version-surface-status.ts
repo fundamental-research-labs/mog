@@ -9,7 +9,6 @@ import type {
   VersionRefSelector,
   VersionSurfaceStage,
   VersionSurfaceStatus,
-  VersionSurfaceStorageBackend,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
@@ -19,17 +18,26 @@ import { hasAttachedVersionWriteService } from './version-commit';
 import {
   getVersionHostCapabilityDecisions,
   getVersionControlGateStatus,
-  VERSION_CAPABILITY_KEYS,
-  type HostCapabilityDecisions,
   type VersionControlGateStatus,
 } from './version-merge-capability';
 import { hasAttachedVersionMergeService } from './version-merge';
+import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
 import { hasAttachedVersionRefLifecycleService } from './version-refs';
 import {
   getAttachedVersionSurfaceStatusService,
+  getSurfaceVersionHostCapabilityDecisions,
+  hasAttachedVersionApplyMergeService,
+  hasAttachedVersionDiffService,
+  hasAttachedVersionRefAdminService,
   readCheckoutSessionCurrentStatus,
   readVersionSurfaceCheckoutSession,
   readVersionSurfaceDirtyStatus,
+  readVersionSurfaceStorageStatus,
+  remotePromoteSurfaceCapabilityState,
+  SURFACE_VERSION_CAPABILITY_KEYS,
+  type SurfaceCapabilityStates,
+  type SurfaceHostCapabilityDecisions,
+  type SurfaceVersionCapability,
 } from './version-surface-status-service';
 import type { VersionSurfaceCheckoutSession } from './version-surface-status-service';
 import {
@@ -124,7 +132,9 @@ type CapabilityAvailability = {
   readonly proposal: boolean;
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
+  readonly refAdmin: boolean;
   readonly provenance: boolean;
+  readonly remotePromote: boolean;
 };
 
 type ProjectedHead = {
@@ -145,7 +155,10 @@ export async function getWorkbookVersionSurfaceStatus(
   const services = getAttachedVersionServices(ctx);
   const surfaceStatusService = getAttachedVersionSurfaceStatusService(services);
   const featureGate = getVersionControlGateStatus(ctx);
-  const hostCapabilityDecisions = getVersionHostCapabilityDecisions(ctx);
+  const hostCapabilityDecisions = getSurfaceVersionHostCapabilityDecisions(
+    ctx,
+    getVersionHostCapabilityDecisions(ctx),
+  );
   const diagnostics: VersionDiagnostic[] = [];
 
   if (!featureGate.discovered) {
@@ -198,7 +211,10 @@ export async function getWorkbookVersionSurfaceStatus(
   }
 
   const readService = featureGate.enabled ? getAttachedVersionReadService(services) : null;
-  const storage = getStorageStatus(services);
+  const storage = readVersionSurfaceStorageStatus({
+    services,
+    hasVersionAttachment: Boolean(services && hasAnyVersionAttachment(services)),
+  });
   const availability: CapabilityAvailability = {
     read: Boolean(readService),
     diff: hasAttachedVersionDiffService(services),
@@ -212,7 +228,12 @@ export async function getWorkbookVersionSurfaceStatus(
     mergeApply:
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
       hasAttachedVersionApplyMergeService(services),
+    refAdmin: hasAttachedVersionRefAdminService(services),
     provenance: Boolean(workbookStatus?.provenanceAdmission.available),
+    remotePromote: Boolean(
+      workbookStatus?.provenanceAdmission.available &&
+      hasAttachedPendingRemotePromotionService(ctx),
+    ),
   };
 
   diagnostics.push(...storage.diagnostics);
@@ -244,70 +265,6 @@ export async function getWorkbookVersionSurfaceStatus(
     capabilities,
     diagnostics,
   };
-}
-
-function getStorageStatus(
-  services: AttachedVersionServices | null,
-): VersionSurfaceStatus['storage'] {
-  const diagnostics: VersionDiagnostic[] = [];
-  if (!services || !hasAnyVersionAttachment(services)) {
-    diagnostics.push(
-      surfaceDiagnostic(
-        'version.surfaceStatus.storageUnavailable',
-        'warning',
-        'No document-scoped version storage provider or service is attached.',
-        'storage',
-      ),
-    );
-    return { ready: false, backend: 'unknown', diagnostics };
-  }
-
-  const provider = firstRecord([
-    services.provider,
-    services.storageProvider,
-    services.objectStore,
-    services.refStore,
-    services.graphStore,
-    services.graphService,
-    services.graph,
-    services.readService,
-    services.writeService,
-    services.publicService,
-    services,
-  ]);
-  const providerReady = readinessFromProvider(provider);
-  const ready = providerReady ?? true;
-  const backend = backendFromAttachment(provider);
-
-  diagnostics.push(
-    ready
-      ? surfaceDiagnostic(
-          'version.surfaceStatus.storageReady',
-          'info',
-          'A document-scoped version storage provider or service is attached.',
-          'storage',
-          { backend },
-        )
-      : surfaceDiagnostic(
-          'version.surfaceStatus.storageUnavailable',
-          'warning',
-          'The attached version storage provider reports unavailable read capabilities.',
-          'storage',
-          { backend },
-        ),
-  );
-  if (backend === 'unknown') {
-    diagnostics.push(
-      surfaceDiagnostic(
-        'version.surfaceStatus.storageBackendUnknown',
-        'info',
-        'The attached version storage provider does not expose a public backend identifier.',
-        'storage',
-      ),
-    );
-  }
-
-  return { ready, backend, diagnostics };
 }
 
 async function readCurrentStatus(
@@ -398,10 +355,10 @@ function buildCapabilityStates(
   featureGate: VersionControlGateStatus,
   storageReady: boolean,
   availability: CapabilityAvailability,
-  hostCapabilityDecisions: HostCapabilityDecisions,
+  hostCapabilityDecisions: SurfaceHostCapabilityDecisions,
   diagnostics: VersionDiagnostic[],
-): Record<VersionCapability, VersionCapabilityState> {
-  const disabledByGate = (capability: VersionCapability): VersionCapabilityState =>
+): SurfaceCapabilityStates {
+  const disabledByGate = (capability: SurfaceVersionCapability): VersionCapabilityState =>
     disabledCapability(
       diagnostics,
       capability,
@@ -413,11 +370,11 @@ function buildCapabilityStates(
 
   if (!featureGate.enabled) {
     return Object.fromEntries(
-      VERSION_CAPABILITY_KEYS.map((capability) => [capability, disabledByGate(capability)]),
-    ) as Record<VersionCapability, VersionCapabilityState>;
+      SURFACE_VERSION_CAPABILITY_KEYS.map((capability) => [capability, disabledByGate(capability)]),
+    ) as SurfaceCapabilityStates;
   }
 
-  const disabledByEditingGate = (capability: VersionCapability): VersionCapabilityState =>
+  const disabledByEditingGate = (capability: SurfaceVersionCapability): VersionCapabilityState =>
     disabledCapability(
       diagnostics,
       capability,
@@ -426,11 +383,11 @@ function buildCapabilityStates(
       false,
       'version.surfaceStatus.editingDisabled',
     );
-  const hostDenied = (capability: VersionCapability): boolean => {
+  const hostDenied = (capability: SurfaceVersionCapability): boolean => {
     const decision = hostCapabilityDecisions[capability];
     return decision === 'denied' || decision === 'approval-required';
   };
-  const disabledByHostCapability = (capability: VersionCapability): VersionCapabilityState =>
+  const disabledByHostCapability = (capability: SurfaceVersionCapability): VersionCapabilityState =>
     disabledCapability(
       diagnostics,
       capability,
@@ -440,7 +397,7 @@ function buildCapabilityStates(
       'version.surfaceStatus.hostCapabilityDenied',
     );
   const availableCapability = (
-    capability: VersionCapability,
+    capability: SurfaceVersionCapability,
     available: boolean,
     dependency: VersionCapabilityDependency,
     reason: string,
@@ -453,7 +410,7 @@ function buildCapabilityStates(
       : disabledCapability(diagnostics, capability, dependency, reason, retryable, code);
   };
   const mutableCapability = (
-    capability: VersionCapability,
+    capability: SurfaceVersionCapability,
     available: boolean,
     dependency: VersionCapabilityDependency,
     reason: string,
@@ -495,7 +452,7 @@ function buildCapabilityStates(
       : availableCapability(capability, available, 'VC-07', reason, true, code);
   };
 
-  const storageDisabled = (capability: VersionCapability): VersionCapabilityState =>
+  const storageDisabled = (capability: SurfaceVersionCapability): VersionCapabilityState =>
     disabledCapability(
       diagnostics,
       capability,
@@ -504,10 +461,10 @@ function buildCapabilityStates(
       true,
       'version.surfaceStatus.storageUnavailable',
     );
-  const storageOrHostDisabled = (capability: VersionCapability): VersionCapabilityState =>
+  const storageOrHostDisabled = (capability: SurfaceVersionCapability): VersionCapabilityState =>
     hostDenied(capability) ? disabledByHostCapability(capability) : storageDisabled(capability);
   const deferredOrHostDisabled = (
-    capability: VersionCapability,
+    capability: SurfaceVersionCapability,
     dependency: VersionCapabilityDependency,
     reason: string,
     code: VersionDiagnostic['code'],
@@ -515,6 +472,14 @@ function buildCapabilityStates(
     hostDenied(capability)
       ? disabledByHostCapability(capability)
       : disabledCapability(diagnostics, capability, dependency, reason, false, code);
+  const remotePromoteCapability = (): VersionCapabilityState =>
+    remotePromoteSurfaceCapabilityState({
+      diagnostics,
+      editingEnabled: featureGate.editingEnabled,
+      hostCapabilityDecisions,
+      provenanceAvailable: availability.provenance,
+      remotePromoteAvailable: availability.remotePromote,
+    });
   if (!storageReady) {
     return {
       'version:read': storageOrHostDisabled('version:read'),
@@ -532,6 +497,7 @@ function buildCapabilityStates(
       ),
       'version:mergePreview': storageOrHostDisabled('version:mergePreview'),
       'version:mergeApply': storageOrHostDisabled('version:mergeApply'),
+      'version:refAdmin': storageOrHostDisabled('version:refAdmin'),
       'version:revert': deferredOrHostDisabled(
         'version:revert',
         'upstreamRevertContract',
@@ -543,6 +509,12 @@ function buildCapabilityStates(
         'VC-09',
         'Complete VC-09 provenance truth is not attached; broad mutation admission and pending remote promotion plumbing are insufficient.',
         'version.surfaceStatus.provenanceUnavailable',
+      ),
+      'version:remotePromote': deferredOrHostDisabled(
+        'version:remotePromote',
+        'VC-09',
+        'Pending remote promotion requires explicit host permission and complete VC-09 provenance truth.',
+        'version.surfaceStatus.remotePromoteUnavailable',
       ),
     };
   }
@@ -624,6 +596,14 @@ function buildCapabilityStates(
       'Version merge apply requires merge preview and merge-commit write services.',
       'version.surfaceStatus.mergeApplyUnavailable',
     ),
+    'version:refAdmin': mutableCapability(
+      'version:refAdmin',
+      availability.refAdmin,
+      'VC-05',
+      'Version ref-admin services are not attached.',
+      true,
+      'version.surfaceStatus.refAdminUnavailable',
+    ),
     'version:revert': mutableCapability(
       'version:revert',
       false,
@@ -640,12 +620,13 @@ function buildCapabilityStates(
       true,
       'version.surfaceStatus.provenanceUnavailable',
     ),
+    'version:remotePromote': remotePromoteCapability(),
   };
 }
 
 function determineStage(
   featureGate: VersionControlGateStatus,
-  capabilities: Record<VersionCapability, VersionCapabilityState>,
+  capabilities: SurfaceCapabilityStates,
 ): VersionSurfaceStage {
   if (!featureGate.enabled) return 'off';
   if (capabilities['version:provenance'].enabled) return 'provenance';
@@ -656,7 +637,8 @@ function determineStage(
   if (
     capabilities['version:commit'].enabled ||
     capabilities['version:branch'].enabled ||
-    capabilities['version:checkout'].enabled
+    capabilities['version:checkout'].enabled ||
+    capabilities['version:refAdmin'].enabled
   ) {
     return 'authoring';
   }
@@ -710,48 +692,6 @@ function toReadService(value: unknown): AttachedVersionReadService | null {
       ? { listCommits: (options?: AttachedListCommitsOptions) => listCommits(options) }
       : {}),
   };
-}
-
-function hasAttachedVersionDiffService(services: AttachedVersionServices | null): boolean {
-  if (!services) return false;
-  return [
-    services.diffService,
-    services.versionDiffService,
-    services.publicService,
-    services.readService,
-    services.graphService,
-    services.graphStore,
-    services.graph,
-    services,
-  ].some((candidate) =>
-    Boolean(
-      bindMethod(candidate, 'diff') ??
-      bindMethod(candidate, 'diffVersions') ??
-      bindMethod(candidate, 'diffCommits'),
-    ),
-  );
-}
-
-function hasAttachedVersionApplyMergeService(services: AttachedVersionServices | null): boolean {
-  if (!services) return false;
-  const hasDirectApplyService = [
-    services.applyMergeService,
-    services.versionApplyMergeService,
-    services.publicService,
-  ].some((candidate) =>
-    Boolean(
-      bindMethod(candidate, 'applyMerge') ??
-      bindMethod(candidate, 'applyMergeVersion') ??
-      bindMethod(candidate, 'applyMergeCommit'),
-    ),
-  );
-  if (hasDirectApplyService) return true;
-  const hasMergeCommitWriter = [services.writeService, services.commitService].some((candidate) =>
-    Boolean(bindMethod(candidate, 'mergeCommit')),
-  );
-  return (
-    hasMergeCommitWriter && Boolean(services.captureMergeCommit || services.mergeCommitMaterializer)
-  );
 }
 
 function hasAnyVersionAttachment(services: AttachedVersionServices): boolean {
@@ -849,63 +789,13 @@ function projectRef(value: unknown): ProjectedRef | null {
   return name && commitId ? { name, commitId } : null;
 }
 
-function readinessFromProvider(provider: Readonly<Record<string, unknown>> | null): boolean | null {
-  if (!provider) return null;
-  const lifecycleState = provider.lifecycleState;
-  if (
-    lifecycleState === 'closed' ||
-    lifecycleState === 'closing' ||
-    lifecycleState === 'disposed' ||
-    lifecycleState === 'disposing'
-  ) {
-    return false;
-  }
-
-  const capabilities = isRecord(provider.capabilities) ? provider.capabilities : null;
-  const reads = isRecord(capabilities?.reads) ? capabilities.reads : null;
-  if (!reads) return null;
-  return Boolean(reads.graphRegistry || reads.objects || reads.refs || reads.commits);
-}
-
-function backendFromAttachment(
-  attachment: Readonly<Record<string, unknown>> | null,
-): VersionSurfaceStorageBackend {
-  if (!attachment) return 'unknown';
-  for (const key of ['backend', 'backendKind', 'storageBackend', 'providerKind', 'kind', 'type']) {
-    const backend = normalizeBackend(attachment[key]);
-    if (backend !== 'unknown') return backend;
-  }
-
-  const constructorName = isRecord(attachment.constructor)
-    ? attachment.constructor.name
-    : undefined;
-  return normalizeBackend(constructorName);
-}
-
-function normalizeBackend(value: unknown): VersionSurfaceStorageBackend {
-  if (typeof value !== 'string') return 'unknown';
-  const normalized = value.toLowerCase();
-  if (normalized.includes('indexeddb') || normalized.includes('indexed-db')) return 'indexeddb';
-  if (normalized.includes('memory') || normalized.includes('inmemory')) return 'memory';
-  if (
-    normalized.includes('remote') ||
-    normalized.includes('cloud') ||
-    normalized.includes('database') ||
-    normalized.includes('object-store') ||
-    normalized.includes('objectstore')
-  ) {
-    return 'remote';
-  }
-  return 'unknown';
-}
-
 function enabledCapability(): VersionCapabilityState {
   return { enabled: true };
 }
 
 function disabledCapability(
   diagnostics: VersionDiagnostic[],
-  capability: VersionCapability,
+  capability: SurfaceVersionCapability,
   dependency: VersionCapabilityDependency,
   reason: string,
   retryable: boolean,
@@ -973,10 +863,6 @@ function legacyBranchNameToRefName(
     return `${VERSION_BRANCH_REF_PREFIX}${value}` as VersionRefName;
   }
   return undefined;
-}
-
-function firstRecord(values: readonly unknown[]): Readonly<Record<string, unknown>> | null {
-  return values.find(isRecord) ?? null;
 }
 
 function readNestedString(value: unknown, path: readonly string[]): string | null {

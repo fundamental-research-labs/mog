@@ -25,9 +25,45 @@ const SURFACE_CAPABILITY_KEYS = [
   'version:proposal',
   'version:mergePreview',
   'version:mergeApply',
+  'version:refAdmin',
   'version:revert',
   'version:provenance',
+  'version:remotePromote',
 ] as const;
+
+type SurfaceCapabilityForAssertion = {
+  readonly enabled: boolean;
+  readonly dependency?: string;
+  readonly reason?: string;
+  readonly retryable?: boolean;
+};
+
+function capabilityState(
+  surface: { readonly capabilities: object },
+  capability: string,
+): SurfaceCapabilityForAssertion {
+  return (surface.capabilities as Record<string, SurfaceCapabilityForAssertion>)[capability];
+}
+
+function createCompleteProposalService(overrides: Record<string, unknown> = {}) {
+  return {
+    createProposal: jest.fn(),
+    startProposalWorkspace: jest.fn(),
+    getProposalWorkspace: jest.fn(),
+    disposeProposalWorkspace: jest.fn(),
+    commitProposalWorkspace: jest.fn(),
+    failProposal: jest.fn(),
+    getProposal: jest.fn(),
+    listProposals: jest.fn(),
+    markProposalVerified: jest.fn(),
+    openProposalReview: jest.fn(),
+    acceptProposal: jest.fn(),
+    rejectProposal: jest.fn(),
+    supersedeProposal: jest.fn(),
+    proposalWorkspaceLifecycleAvailable: true,
+    ...overrides,
+  };
+}
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
@@ -266,6 +302,7 @@ describe('WorkbookVersion surface status', () => {
     ] as const) {
       expect(surface.capabilities[capability]).toEqual({ enabled: true });
     }
+    expect(capabilityState(surface, 'version:refAdmin')).toEqual({ enabled: true });
     expect(surface.capabilities['version:mergeApply']).toMatchObject({
       enabled: false,
       dependency: 'VC-07',
@@ -320,6 +357,45 @@ describe('WorkbookVersion surface status', () => {
 
     expect(surface.capabilities['version:reviewRead']).toEqual({ enabled: true });
     expect(surface.capabilities['version:reviewWrite']).toEqual({ enabled: true });
+  });
+
+  it('projects review read and write capabilities independently', async () => {
+    const readOnly = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        reviewService: {
+          listReviews: jest.fn(),
+          getReview: jest.fn(),
+          getReviewDiff: jest.fn(),
+        },
+      },
+    );
+    const writeOnly = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        reviewService: {
+          createReview: jest.fn(),
+          appendReviewDecision: jest.fn(),
+          updateReviewStatus: jest.fn(),
+        },
+      },
+    );
+
+    const readSurface = await readOnly.version.getSurfaceStatus();
+    const writeSurface = await writeOnly.version.getSurfaceStatus();
+
+    expect(readSurface.capabilities['version:reviewRead']).toEqual({ enabled: true });
+    expect(readSurface.capabilities['version:reviewWrite']).toMatchObject({
+      enabled: false,
+      dependency: 'storage',
+      retryable: true,
+    });
+    expect(writeSurface.capabilities['version:reviewRead']).toMatchObject({
+      enabled: false,
+      dependency: 'storage',
+      retryable: true,
+    });
+    expect(writeSurface.capabilities['version:reviewWrite']).toEqual({ enabled: true });
   });
 
   it('disables only merge capabilities when the versionControl.merge feature gate is disabled', async () => {
@@ -536,6 +612,94 @@ describe('WorkbookVersion surface status', () => {
     });
   });
 
+  it('enables proposal status only when a complete workflow service is attached', async () => {
+    const partial = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        proposalService: {
+          createProposal: jest.fn(),
+        },
+      },
+    );
+    const completeProposalService = createCompleteProposalService();
+    const complete = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        proposalService: completeProposalService,
+      },
+    );
+    const lifecycleDisabled = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        proposalService: createCompleteProposalService({
+          proposalWorkspaceLifecycleAvailable: false,
+        }),
+      },
+    );
+
+    const partialSurface = await partial.version.getSurfaceStatus();
+    const completeSurface = await complete.version.getSurfaceStatus();
+    const lifecycleDisabledSurface = await lifecycleDisabled.version.getSurfaceStatus();
+
+    expect(partialSurface.capabilities['version:proposal']).toMatchObject({
+      enabled: false,
+      dependency: 'VC-05',
+      retryable: false,
+    });
+    expect(completeSurface.stage).toBe('proposal');
+    expect(completeSurface.capabilities['version:proposal']).toEqual({ enabled: true });
+    expect(lifecycleDisabledSurface.capabilities['version:proposal']).toMatchObject({
+      enabled: false,
+      dependency: 'VC-05',
+      retryable: false,
+    });
+    for (const method of Object.values(completeProposalService)) {
+      if (typeof method === 'function') expect(method).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps ref admin separate from branch creation and default-denied without admin services', async () => {
+    const createBranch = jest.fn();
+    const { version } = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        branchService: {
+          createBranch,
+        },
+      },
+    );
+
+    const surface = await version.getSurfaceStatus();
+
+    expect(surface.capabilities['version:branch']).toEqual({ enabled: true });
+    expect(capabilityState(surface, 'version:refAdmin')).toMatchObject({
+      enabled: false,
+      dependency: 'VC-05',
+      retryable: true,
+    });
+    expect(createBranch).not.toHaveBeenCalled();
+  });
+
+  it('reports host capability denial for ref admin independently of branch creation', async () => {
+    const { version } = createSurfaceReadyVersionWithContext({
+      policySnapshot: {
+        decisions: [{ capability: 'version:refAdmin', decision: 'denied' }],
+      },
+    });
+
+    const surface = await version.getSurfaceStatus();
+
+    expect(surface.capabilities['version:branch']).toEqual({ enabled: true });
+    expect(capabilityState(surface, 'version:refAdmin')).toMatchObject({
+      enabled: false,
+      dependency: 'hostCapability',
+      retryable: false,
+    });
+    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+      'version.surfaceStatus.hostCapabilityDenied',
+    );
+  });
+
   it('does not enable provenance when only pending remote promotion service is attached', async () => {
     const promotePendingRemoteSegments = jest.fn();
     const { version } = createSurfaceReadyVersionWithContext(
@@ -608,6 +772,16 @@ describe('WorkbookVersion surface status', () => {
         retryable: false,
       });
     }
+    expect(capabilityState(surface, 'version:refAdmin')).toMatchObject({
+      enabled: false,
+      dependency: 'featureGate',
+      retryable: false,
+    });
+    expect(capabilityState(surface, 'version:remotePromote')).toMatchObject({
+      enabled: false,
+      dependency: 'featureGate',
+      retryable: false,
+    });
     expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       'version.surfaceStatus.editingDisabled',
     );

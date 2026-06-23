@@ -4,7 +4,6 @@ import type {
   Paged,
   VersionCapability,
   VersionApplyMergeResult,
-  VersionDiagnostic,
   VersionMergeResult,
   VersionRef,
   VersionRefListResult,
@@ -25,7 +24,10 @@ import {
   VERSION_CAPABILITY_KEYS,
   type VersionMergePublicOperation,
 } from './version-merge-capability';
-import { projectVersionHistoryDiagnosticsForAccess } from './version-history-diagnostic-projection';
+import {
+  projectVersionHistoryDiagnosticsForAccess,
+  projectVersionStoreDiagnosticsForPublicResult,
+} from './version-history-diagnostic-projection';
 
 type VersionResultOperation =
   | 'getHead'
@@ -215,7 +217,7 @@ export function versionFailureFromStoreDiagnostics<T>(
           : 'Version history capability is denied for this caller.',
         retryable,
         diagnostics: projectVersionHistoryDiagnosticsForAccess(
-          diagnostics.map(toVersionDiagnostic),
+          projectVersionStoreDiagnosticsForPublicResult(diagnostics),
           {
             kind: 'capability-denied',
             capability: deniedCapability,
@@ -233,7 +235,7 @@ export function versionFailureFromStoreDiagnostics<T>(
     error: {
       code: 'target_unavailable',
       target: `workbook.version.${operation}`,
-      diagnostics: diagnostics.map(toVersionDiagnostic),
+      diagnostics: projectVersionStoreDiagnosticsForPublicResult(diagnostics),
     },
   };
 }
@@ -286,31 +288,6 @@ function capabilityForMergeOperation(operation: VersionMergePublicOperation): Ve
     case 'putMergeResolutionPayload':
       return 'version:mergeApply';
   }
-}
-
-function toVersionDiagnostic(diagnostic: VersionStoreDiagnostic): VersionDiagnostic {
-  const severity = diagnostic.severity === 'fatal' ? 'error' : diagnostic.severity;
-  const operation = payloadOperation(diagnostic);
-  return {
-    code: diagnostic.issueCode,
-    severity,
-    message: diagnostic.safeMessage,
-    owner: 'version-store',
-    data: {
-      ...(operation ? { operation } : {}),
-      recoverability: diagnostic.recoverability,
-      messageTemplateId: diagnostic.messageTemplateId,
-      redacted: diagnostic.redacted,
-      ...(diagnostic.payload ? { payload: diagnostic.payload } : {}),
-      ...(diagnostic.mutationGuarantee ? { mutationGuarantee: diagnostic.mutationGuarantee } : {}),
-    },
-  };
-}
-
-function payloadOperation(diagnostic: VersionStoreDiagnostic): string | undefined {
-  return typeof diagnostic.payload?.operation === 'string'
-    ? diagnostic.payload.operation
-    : undefined;
 }
 
 const VERSION_CAPABILITY_SET = new Set<string>(VERSION_CAPABILITY_KEYS);

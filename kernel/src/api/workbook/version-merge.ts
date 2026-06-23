@@ -935,6 +935,12 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The requested version merge preview contains redacted semantic data.';
     case 'VERSION_MERGE_SERVICE_UNAVAILABLE':
       return 'No document-scoped version merge preview service is attached.';
+    case 'VERSION_MERGE_BASE_AMBIGUOUS':
+      return 'The requested version merge has multiple possible merge bases.';
+    case 'VERSION_MERGE_BASE_MISMATCH':
+      return 'The requested version merge base does not match the graph ancestry.';
+    case 'VERSION_MERGE_UNRELATED_HISTORIES':
+      return 'The requested version merge commits do not share a common ancestor.';
     case 'VERSION_MERGE_UNSUPPORTED_ANCESTRY':
       return 'The requested version merge ancestry is not previewable by the attached service.';
     case 'VERSION_DANGLING_REF':
@@ -963,6 +969,9 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
       return 'repair';
     case 'VERSION_GRAPH_UNINITIALIZED':
     case 'VERSION_MERGE_SERVICE_UNAVAILABLE':
+    case 'VERSION_MERGE_BASE_AMBIGUOUS':
+    case 'VERSION_MERGE_BASE_MISMATCH':
+    case 'VERSION_MERGE_UNRELATED_HISTORIES':
     case 'VERSION_MERGE_UNSUPPORTED_ANCESTRY':
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_REDACTION_VIOLATION':

@@ -72,6 +72,8 @@ export function mapApplyMergeWriteResult(
   }
 
   if (value.status === 'staleTargetHead') {
+    const diagnostics =
+      value.diagnostics === undefined ? [] : mapWriteDiagnostics(value.diagnostics);
     return {
       ...metadata,
       status: 'staleTargetHead',
@@ -80,8 +82,7 @@ export function mapApplyMergeWriteResult(
       theirs: mapCommitId(value.theirs) ?? plan.theirs,
       changes: [],
       conflicts: [],
-      diagnostics:
-        value.diagnostics === undefined ? [] : mapWriteDiagnostics(value.diagnostics),
+      diagnostics: diagnostics.length > 0 ? diagnostics : [staleTargetHeadDiagnostic()],
       mutationGuarantee: 'ref-not-mutated',
     };
   }
@@ -253,6 +254,18 @@ function providerErrorDiagnostic(): VersionStoreDiagnostic {
   return publicDiagnostic('VERSION_PROVIDER_FAILED', 'Version applyMerge provider failed.', {
     recoverability: 'retry',
   });
+}
+
+function staleTargetHeadDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_REF_CONFLICT',
+    'The target ref head changed before applyMerge could mutate it.',
+    {
+      recoverability: 'retry',
+      payload: { reason: 'staleTargetHead' },
+      mutationGuarantee: 'ref-not-mutated',
+    },
+  );
 }
 
 function publicDiagnostic(

@@ -104,9 +104,9 @@ export class WorkbookVersionMergeService {
     const opened = await this.openVisibleGraph();
     if (!opened.ok) return blocked(input, opened.diagnostics);
 
-    const ours = await readPreviewCommit(opened.graph, input.base, input.ours, 'ours');
+    const ours = await readPreviewCommit(opened.graph, input.ours, 'ours');
     if (!ours.ok) return blocked(input, ours.diagnostics);
-    const theirs = await readPreviewCommit(opened.graph, input.base, input.theirs, 'theirs');
+    const theirs = await readPreviewCommit(opened.graph, input.theirs, 'theirs');
     if (!theirs.ok) return blocked(input, theirs.diagnostics);
 
     if (input.ours === input.theirs || commitClosureContains(ours.commit, input.theirs)) {
@@ -127,6 +127,9 @@ export class WorkbookVersionMergeService {
         options,
       });
     }
+
+    const mergeBaseDiagnostic = validateDivergentMergeBase(input.base, ours.commit, theirs.commit);
+    if (mergeBaseDiagnostic) return blocked(input, [mergeBaseDiagnostic]);
 
     const oursAncestry = directChildDiagnostic(input.base, ours.commit.commit, 'ours');
     if (oursAncestry) return blocked(input, [oursAncestry]);
@@ -246,7 +249,6 @@ export function createWorkbookVersionMergeService(
 
 async function readPreviewCommit(
   graph: VersionGraphStore,
-  baseCommitId: WorkbookCommitId,
   commitId: WorkbookCommitId,
   branch: 'ours' | 'theirs',
 ): Promise<
@@ -272,24 +274,94 @@ async function readPreviewCommit(
     };
   }
 
-  if (!closure.commits.some((candidate) => candidate.id === baseCommitId)) {
-    return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_MISSING_PARENT',
-          'Merge base commit is not readable from the child commit closure.',
-          { recoverability: 'repair', payload: { branch } },
-        ),
-      ],
-    };
-  }
-
   return { ok: true, commit: { commit, closure: closure.commits } };
 }
 
 function commitClosureContains(read: MergeCommitRead, commitId: WorkbookCommitId): boolean {
   return read.closure.some((candidate) => candidate.id === commitId);
+}
+
+function validateDivergentMergeBase(
+  requestedBaseCommitId: WorkbookCommitId,
+  ours: MergeCommitRead,
+  theirs: MergeCommitRead,
+): MergeDiagnostic | null {
+  const commitsById = new Map<WorkbookCommitId, WorkbookCommit>();
+  for (const commit of [...ours.closure, ...theirs.closure]) {
+    commitsById.set(commit.id, commit);
+  }
+
+  const oursClosureIds = new Set(ours.closure.map((commit) => commit.id));
+  const commonAncestorIds = theirs.closure
+    .map((commit) => commit.id)
+    .filter((commitId) => oursClosureIds.has(commitId));
+
+  if (commonAncestorIds.length === 0) {
+    return diagnostic(
+      'VERSION_MERGE_UNRELATED_HISTORIES',
+      'Merge preview requires commits with a common ancestor.',
+      { recoverability: 'unsupported', payload: { diagnosticCode: 'unrelatedHistories' } },
+    );
+  }
+
+  const lowestCommonAncestorIds = commonAncestorIds.filter(
+    (candidateId) =>
+      !commonAncestorIds.some(
+        (otherId) =>
+          otherId !== candidateId && isAncestorCommit(candidateId, otherId, commitsById),
+      ),
+  );
+
+  if (lowestCommonAncestorIds.length > 1) {
+    return diagnostic(
+      'VERSION_MERGE_BASE_AMBIGUOUS',
+      'Merge preview requires an unambiguous merge base.',
+      {
+        recoverability: 'unsupported',
+        payload: {
+          diagnosticCode: 'mergeBaseAmbiguous',
+          lowestCommonAncestorCount: lowestCommonAncestorIds.length,
+        },
+      },
+    );
+  }
+
+  if (lowestCommonAncestorIds[0] !== requestedBaseCommitId) {
+    return diagnostic(
+      'VERSION_MERGE_BASE_MISMATCH',
+      'Merge preview requires the requested base to match the lowest common ancestor.',
+      {
+        recoverability: 'unsupported',
+        payload: { diagnosticCode: 'expectedBaseMismatch' },
+      },
+    );
+  }
+
+  return null;
+}
+
+function isAncestorCommit(
+  ancestorId: WorkbookCommitId,
+  descendantId: WorkbookCommitId,
+  commitsById: ReadonlyMap<WorkbookCommitId, WorkbookCommit>,
+): boolean {
+  const pending = [descendantId];
+  const seen = new Set<WorkbookCommitId>();
+
+  while (pending.length > 0) {
+    const currentId = pending.pop();
+    if (!currentId || seen.has(currentId)) continue;
+    seen.add(currentId);
+
+    const current = commitsById.get(currentId);
+    if (!current) continue;
+    for (const parentId of current.payload.parentCommitIds) {
+      if (parentId === ancestorId) return true;
+      pending.push(parentId);
+    }
+  }
+
+  return false;
 }
 
 function directChildDiagnostic(

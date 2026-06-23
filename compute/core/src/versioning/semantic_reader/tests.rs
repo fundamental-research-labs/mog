@@ -22,6 +22,7 @@ use crate::versioning::{
 };
 
 mod named_ranges;
+mod presence_domains;
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {

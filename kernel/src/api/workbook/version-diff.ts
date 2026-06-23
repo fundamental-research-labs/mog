@@ -18,6 +18,13 @@ import type {
   WorkbookCommitId,
   WorkbookDiffPage,
 } from '@mog-sdk/contracts/api';
+import {
+  VERSION_DIFF_DEFAULT_PAGE_LIMIT,
+  VERSION_DIFF_MAX_PAGE_LIMIT,
+  VERSION_DIFF_PAGE_ORDER,
+  VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
+  isPublicVersionDiffCursor,
+} from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
 import { projectReviewAccessDiffValue } from '../../document/version-store/review-access-projection';
@@ -26,9 +33,6 @@ import { validateRefName } from '../../document/version-store/ref-name';
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
-const VERSION_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
-const VERSION_DIFF_DEFAULT_PAGE_SIZE = 50;
-const VERSION_DIFF_MAX_PAGE_SIZE = 500;
 const VERSION_DIFF_OPTION_KEYS = new Set([
   'pageSize',
   'pageToken',
@@ -222,12 +226,12 @@ function normalizeDiffOptions(
   }
 
   const pageSizeValue = (input as VersionDiffOptions).pageSize;
-  const pageSize = pageSizeValue ?? VERSION_DIFF_DEFAULT_PAGE_SIZE;
+  const pageSize = pageSizeValue ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT;
   if (
     typeof pageSize !== 'number' ||
     !Number.isInteger(pageSize) ||
     pageSize < 1 ||
-    pageSize > VERSION_DIFF_MAX_PAGE_SIZE
+    pageSize > VERSION_DIFF_MAX_PAGE_LIMIT
   ) {
     diagnostics.push(
       invalidDiffOptionDiagnostic(
@@ -235,7 +239,7 @@ function normalizeDiffOptions(
         'diff pageSize must be an integer from 1 through 500.',
         {
           min: 1,
-          max: VERSION_DIFF_MAX_PAGE_SIZE,
+          max: VERSION_DIFF_MAX_PAGE_LIMIT,
           receivedPageSize: formatPrimitiveForPayload(pageSize),
         },
       ),
@@ -246,13 +250,29 @@ function normalizeDiffOptions(
 
   const pageTokenValue = (input as VersionDiffOptions).pageToken;
   if (pageTokenValue !== undefined) {
-    const pageToken = toPageToken(pageTokenValue);
-    if (!pageToken) {
+    if (
+      typeof pageTokenValue === 'string' &&
+      pageTokenValue.length > VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH
+    ) {
       diagnostics.push(
-        invalidDiffOptionDiagnostic('pageToken', 'diff pageToken is malformed or unsupported.'),
+        invalidDiffOptionDiagnostic(
+          'pageToken',
+          'diff pageToken exceeds the public cursor size limit.',
+          {
+            max: VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
+            receivedCursorBytes: pageTokenValue.length,
+          },
+        ),
       );
     } else {
-      options.pageToken = pageToken;
+      const pageToken = toPageToken(pageTokenValue);
+      if (!pageToken) {
+        diagnostics.push(
+          invalidDiffOptionDiagnostic('pageToken', 'diff pageToken is malformed or unsupported.'),
+        );
+      } else {
+        options.pageToken = pageToken;
+      }
     }
   }
 
@@ -383,7 +403,7 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
 
   const { items, diagnostics } = mapDiffEntries(sourceItems);
   const resultDiagnostics = [...diagnostics];
-  if (value.order !== undefined && value.order !== 'semantic-change-order') {
+  if (value.order !== undefined && value.order !== VERSION_DIFF_PAGE_ORDER) {
     resultDiagnostics.push(
       publicDiagnostic(
         'VERSION_INVALID_COMMIT_PAYLOAD',
@@ -424,7 +444,7 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
     items,
     ...(nextPageToken ? { nextPageToken } : {}),
     readRevision,
-    order: 'semantic-change-order',
+    order: VERSION_DIFF_PAGE_ORDER,
     diagnostics: [],
   };
 }
@@ -877,7 +897,7 @@ function degradedDiffPage(
     status: 'degraded',
     items,
     ...(readRevision ? { readRevision } : {}),
-    order: 'semantic-change-order',
+    order: VERSION_DIFF_PAGE_ORDER,
     diagnostics,
   };
 }
@@ -899,12 +919,7 @@ function toCommitId(value: unknown): WorkbookCommitId | null {
 }
 
 function toPageToken(value: unknown): VersionPageToken | undefined {
-  return typeof value === 'string' &&
-    value.length >= 16 &&
-    value.length <= 2048 &&
-    VERSION_PAGE_TOKEN_RE.test(value)
-    ? (value as VersionPageToken)
-    : undefined;
+  return isPublicVersionDiffCursor(value) ? (value as VersionPageToken) : undefined;
 }
 
 function toRevision(value: unknown): VersionRecordRevision | undefined {

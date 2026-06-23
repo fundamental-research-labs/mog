@@ -1,4 +1,5 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import { VERSION_DIFF_PUBLIC_CURSOR_PREFIX } from '@mog-sdk/contracts/versioning';
 import type { WorkbookDiffPage } from '@mog-sdk/contracts/api';
 
 import { createWorkbookVersionDiffService } from '../diff-service';
@@ -95,7 +96,12 @@ describe('WorkbookVersionDiffService', () => {
       order: 'semantic-change-order',
       diagnostics: [],
     });
-    expect(firstPage.nextPageToken).toEqual(expect.stringContaining(childCommitId));
+    expect(firstPage.nextPageToken).toEqual(
+      expect.stringMatching(new RegExp(`^${escapeRegExp(VERSION_DIFF_PUBLIC_CURSOR_PREFIX)}`)),
+    );
+    expect(firstPage.nextPageToken).not.toContain('vc04diff');
+    expect(firstPage.nextPageToken).not.toContain(rootCommitId);
+    expect(firstPage.nextPageToken).not.toContain(childCommitId);
 
     const secondPage = await service.diff(
       { kind: 'commit', id: rootCommitId },
@@ -378,7 +384,7 @@ describe('WorkbookVersionDiffService', () => {
       service.diff(
         { kind: 'commit', id: rootCommitId },
         { kind: 'commit', id: childCommitId },
-        { pageToken: `vc04diff:${childCommitId}:${rootCommitId}:1` },
+        { pageToken: `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}stale-handle` },
       ),
     ).resolves.toMatchObject({
       status: 'degraded',
@@ -764,4 +770,8 @@ function sheetAddressDisplay(sheetName: string, address: string) {
     sheetName: { kind: 'value', value: sheetName },
     address: { kind: 'value', value: address },
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

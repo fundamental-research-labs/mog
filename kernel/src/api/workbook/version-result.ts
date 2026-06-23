@@ -172,6 +172,7 @@ export function versionResultFromDiffPage(
       limit,
       readRevision: result.readRevision,
       order: result.order,
+      ...(result.resourceLimits ? { resourceLimits: result.resourceLimits } : {}),
     },
   };
 }

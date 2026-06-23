@@ -97,7 +97,7 @@ export type {
   VersionCheckoutResolvedTarget, VersionCheckoutResult, VersionCheckoutTarget,
   VersionCommitish, VersionCommitExpectedHead, VersionCommitMode, VersionCommitOptions,
   VersionCommitPage, VersionCreateBranchOptions, VersionCounterRecordRevision, VersionDegradedHeadResult, VersionDeleteRefOptions,
-  VersionDiffDisplay, VersionDiffDisplayValue, VersionDiffEntry, VersionDiffInput, VersionDiffOptions, VersionDiffStructuralMetadata, VersionDiffValue, VersionDiagnosticCode,
+  VersionDiffDisplay, VersionDiffDisplayValue, VersionDiffCursor, VersionDiffEntry, VersionDiffInput, VersionDiffOptions, VersionDiffResourceLimit, VersionDiffResourceLimitKind, VersionDiffResourceLimitSummary, VersionDiffResourceLimitUnit, VersionDiffStructuralMetadata, VersionDiffValue, VersionDiagnosticCode,
   VersionDiagnosticMessageId, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetMergeConflictDetailRequest,
   VersionGetHeadOptions, VersionHead, VersionListCommitsOptions, VersionListRefsOptions,

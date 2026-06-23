@@ -1,6 +1,9 @@
 import { jest } from '@jest/globals';
 
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import {
+  VERSION_DIFF_PUBLIC_CURSOR_PREFIX,
+  type VersionAuthor,
+} from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import type { WorkbookCommitCompletenessDiagnostic } from '../../../document/version-store/commit-store';
@@ -274,6 +277,88 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     expect(JSON.stringify(result)).not.toContain('secretFormula');
   });
 
+  it('returns opaque public cursors and rejects stale public cursor handles through wb.version.diff', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const changes = [
+      ...defaultSemanticChanges('child'),
+      {
+        changeId: 'child-change-2',
+        domain: 'cell',
+        entityId: 'sheet-1!A2',
+        propertyPath: ['value'],
+        before: { kind: 'value', value: 3 },
+        after: { kind: 'value', value: 4 },
+        display: {
+          sheetName: { kind: 'value', value: 'Sheet1' },
+          address: { kind: 'value', value: 'A2' },
+        },
+      },
+    ];
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+        captureNormalCommit: jest.fn(createSemanticDiffCommitCapture('child', changes)),
+      },
+    });
+
+    const commitResult = await wb.version.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: initialized.initialHead.revision,
+        symbolicHeadRevision: initialized.symbolicHead.revision,
+      },
+    });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+    const committed = commitResult.value;
+
+    const firstPage = await wb.version.diff(initialized.rootCommit.id, committed.id, {
+      pageSize: 1,
+    });
+    if (!firstPage.ok) throw new Error(`expected diff success: ${firstPage.error.code}`);
+    const cursor = firstPage.value.nextCursor;
+    expect(cursor).toEqual(
+      expect.stringMatching(new RegExp(`^${escapeRegExp(VERSION_DIFF_PUBLIC_CURSOR_PREFIX)}`)),
+    );
+    expect(cursor).not.toContain('vc04diff');
+    expect(cursor).not.toContain(initialized.rootCommit.id);
+    expect(cursor).not.toContain(committed.id);
+
+    await expect(
+      wb.version.diff(initialized.rootCommit.id, committed.id, { pageSize: 1, pageToken: cursor }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        items: [expect.objectContaining({ after: { kind: 'value', value: 4 } })],
+      },
+    });
+
+    const stale = await wb.version.diff(initialized.rootCommit.id, committed.id, {
+      pageSize: 1,
+      pageToken: `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}stale-handle`,
+    });
+    expect(stale).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_STALE_PAGE_CURSOR',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                operation: 'diff',
+                category: 'staleCursor',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(stale)).not.toContain('stale-handle');
+  });
+
   it.each([
     [
       'unsupported',
@@ -326,11 +411,9 @@ describe('WorkbookVersion provider-backed diff facade', () => {
         versioning: {
           provider,
           captureNormalCommit: jest.fn(
-            createSemanticDiffCommitCapture(
-              'child',
-              defaultSemanticChanges('child'),
-              [completenessDiagnostic],
-            ),
+            createSemanticDiffCommitCapture('child', defaultSemanticChanges('child'), [
+              completenessDiagnostic,
+            ]),
           ),
         },
       });
@@ -720,6 +803,10 @@ function sheetAddressDisplay(sheetName: string, address: string) {
     sheetName: { kind: 'value', value: sheetName },
     address: { kind: 'value', value: address },
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function objectRecord(

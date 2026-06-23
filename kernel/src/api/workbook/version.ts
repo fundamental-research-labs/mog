@@ -85,6 +85,7 @@ import type {
   WorkbookVersionRolloutStage,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
+import { VERSION_DIFF_DEFAULT_PAGE_LIMIT } from '@mog-sdk/contracts/versioning';
 
 import { observeMutationAdmission } from '../../bridges/compute/mutation-admission';
 import type { DocumentContext } from '../../context';
@@ -595,7 +596,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     input: VersionGetReviewDiffInput,
   ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
     const gateDiagnostics = this.readGate('getReviewDiff', 'version:reviewRead');
-    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getReviewDiff', gateDiagnostics);
+    if (gateDiagnostics)
+      return versionFailureFromStoreDiagnostics('getReviewDiff', gateDiagnostics);
     return getWorkbookVersionReviewDiff(this.ctx, input);
   }
   async createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
@@ -664,7 +666,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     if (gateDiagnostics) return versionFailureFromStoreDiagnostics('diff', gateDiagnostics);
     return versionResultFromDiffPage(
       await diffWorkbookVersion(this.ctx, base, target, options),
-      options.pageSize ?? 50,
+      options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT,
     );
   }
   async readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;

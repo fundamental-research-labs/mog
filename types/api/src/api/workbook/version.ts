@@ -185,6 +185,9 @@ export type VersionRecordRevision =
 export type VersionPageToken = string & {
   readonly __brand?: 'VersionPageToken';
 };
+export type VersionDiffCursor = VersionPageToken & {
+  readonly __versionDiffCursorBrand?: 'VersionDiffCursor';
+};
 
 export type VersionMainRefName = 'refs/heads/main';
 export type VersionRefName = string & {
@@ -391,9 +394,33 @@ export type VersionCommitish =
 
 export interface VersionDiffOptions {
   readonly pageSize?: number;
-  readonly pageToken?: VersionPageToken | string;
+  readonly pageToken?: VersionDiffCursor | VersionPageToken | string;
   readonly includeDerivedImpact?: boolean;
   readonly includeDiagnostics?: boolean;
+}
+
+export type VersionDiffResourceLimitKind =
+  | 'pageLimit'
+  | 'publicCursorBytes'
+  | 'responseBytes'
+  | 'singleValueBytes'
+  | 'exactCountScanChanges'
+  | 'diffCacheEntriesPerDocument';
+
+export type VersionDiffResourceLimitUnit = 'changes' | 'bytes' | 'entries';
+
+export interface VersionDiffResourceLimit {
+  readonly kind: VersionDiffResourceLimitKind;
+  readonly limit: number;
+  readonly unit: VersionDiffResourceLimitUnit;
+  readonly observed?: number;
+}
+
+export interface VersionDiffResourceLimitSummary {
+  readonly status: 'within-budget' | 'truncated' | 'exceeded';
+  readonly limits: readonly VersionDiffResourceLimit[];
+  readonly omittedValueCount?: number;
+  readonly exactTotalCountUnavailable?: boolean;
 }
 
 export type VersionCheckoutTarget =
@@ -576,7 +603,9 @@ export interface VersionDiffEntry {
   readonly diagnostics?: readonly VersionStoreDiagnostic[];
 }
 
-export type WorkbookDiffPage = VersionPage<VersionDiffEntry, 'semantic-change-order'>;
+export type WorkbookDiffPage = VersionPage<VersionDiffEntry, 'semantic-change-order'> & {
+  readonly resourceLimits?: VersionDiffResourceLimitSummary;
+};
 
 export type GetVersionHeadInput = VersionGetHeadOptions;
 export type VersionHead = WorkbookCommitRef;
@@ -592,6 +621,7 @@ export interface VersionDiffInput {
 export interface VersionSemanticDiffPage extends Paged<VersionDiffEntry> {
   readonly readRevision: VersionRecordRevision;
   readonly order: 'semantic-change-order';
+  readonly resourceLimits?: VersionDiffResourceLimitSummary;
 }
 
 export interface VersionMergeInput {

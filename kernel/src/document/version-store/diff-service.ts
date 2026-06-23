@@ -14,6 +14,15 @@ import type {
   WorkbookCommitId,
   WorkbookDiffPage,
 } from '@mog-sdk/contracts/api';
+import {
+  VERSION_DIFF_DEFAULT_PAGE_LIMIT,
+  VERSION_DIFF_MAX_PAGE_LIMIT,
+  VERSION_DIFF_PAGE_ORDER,
+  VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
+  VERSION_DIFF_PUBLIC_CURSOR_PREFIX,
+  VERSION_DIFF_RESOURCE_LIMITS,
+  isPublicVersionDiffCursor,
+} from '@mog-sdk/contracts/versioning';
 
 import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
 import type { VersionDependencyRef } from './object-digest';
@@ -28,9 +37,8 @@ import type { WorkbookCommit, WorkbookCommitCompletenessDiagnostic } from './com
 import { namespaceForRegistry } from './registry';
 import { projectReviewAccessDiffValue } from './review-access-projection';
 
-const VERSION_DIFF_DEFAULT_PAGE_SIZE = 50;
-const VERSION_DIFF_MAX_PAGE_SIZE = 500;
-const VERSION_DIFF_PAGE_TOKEN_PREFIX = 'vc04diff';
+const VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX = 'vc04diff';
+const VERSION_DIFF_CURSOR_CACHE_MAX_ENTRIES = 512;
 const REDACTED_VALUE_REASONS = new Set([
   'permission-denied',
   'redaction-policy',
@@ -89,6 +97,13 @@ type ParsedPageToken =
       readonly ok: false;
       readonly diagnostics: readonly DiffServiceDiagnostic[];
     };
+
+type PublicCursorCacheEntry = {
+  readonly internalToken: string;
+};
+
+const PUBLIC_DIFF_CURSOR_CACHE = new Map<string, PublicCursorCacheEntry>();
+let publicDiffCursorSequence = 0;
 
 export type WorkbookVersionDiffServiceOptions = {
   readonly provider: VersionStoreProvider;
@@ -200,17 +215,20 @@ export class WorkbookVersionDiffService {
     const offset = pageToken.offset;
     const pageItems = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
     const nextOffset = offset + pageItems.length;
-    const nextPageToken =
+    const internalNextPageToken =
       nextOffset < entries.items.length
-        ? pageTokenFor(resolvedBase.commitId, resolvedTarget.commitId, nextOffset)
+        ? internalPageTokenFor(resolvedBase.commitId, resolvedTarget.commitId, nextOffset)
         : undefined;
+    const nextPageToken = internalNextPageToken
+      ? publicPageTokenFor(internalNextPageToken)
+      : undefined;
 
     return {
       status: 'success',
       items: pageItems,
       ...(nextPageToken ? { nextPageToken } : {}),
       readRevision: resolvedTarget.readRevision,
-      order: 'semantic-change-order',
+      order: VERSION_DIFF_PAGE_ORDER,
       diagnostics: [],
       baseCommitId: resolvedBase.commitId,
       targetCommitId: resolvedTarget.commitId,
@@ -329,10 +347,10 @@ function parseDiffOptions(options: VersionDiffOptions): {
   readonly options: ParsedDiffOptions;
   readonly diagnostics: readonly DiffServiceDiagnostic[];
 } {
-  const pageSize = options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_SIZE;
-  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > VERSION_DIFF_MAX_PAGE_SIZE) {
+  const pageSize = options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT;
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > VERSION_DIFF_MAX_PAGE_LIMIT) {
     return {
-      options: { pageSize: VERSION_DIFF_DEFAULT_PAGE_SIZE },
+      options: { pageSize: VERSION_DIFF_DEFAULT_PAGE_LIMIT },
       diagnostics: [
         diagnostic(
           'VERSION_INVALID_OPTIONS',
@@ -340,7 +358,7 @@ function parseDiffOptions(options: VersionDiffOptions): {
           {
             details: {
               min: 1,
-              max: VERSION_DIFF_MAX_PAGE_SIZE,
+              max: VERSION_DIFF_MAX_PAGE_LIMIT,
               receivedPageSize: Number.isFinite(pageSize) ? pageSize : String(pageSize),
             },
           },
@@ -364,7 +382,20 @@ function parsePageToken(
 ): ParsedPageToken {
   if (token === undefined) return { ok: true, offset: 0 };
 
-  const parts = token.split(':');
+  const publicCursor = resolvePublicPageToken(token);
+  if (!publicCursor.ok) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('VERSION_STALE_PAGE_CURSOR', publicCursor.safeMessage, {
+          recoverability: 'retry',
+          details: publicCursor.details,
+        }),
+      ],
+    };
+  }
+
+  const parts = publicCursor.internalToken.split(':');
   const offsetValue = parts.at(-1);
   const targetDigest = parts.at(-2);
   const targetPrefix = parts.at(-4);
@@ -372,7 +403,7 @@ function parsePageToken(
   const basePrefix = parts.at(-7);
   if (
     parts.length !== 8 ||
-    parts[0] !== VERSION_DIFF_PAGE_TOKEN_PREFIX ||
+    parts[0] !== VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX ||
     basePrefix !== 'commit' ||
     parts.at(-6) !== 'sha256' ||
     targetPrefix !== 'commit' ||
@@ -424,22 +455,18 @@ function completenessDiagnostic(
   source: WorkbookCommitCompletenessDiagnostic,
 ): DiffServiceDiagnostic {
   const category = completenessCategory(source);
-  return diagnostic(
-    source.code,
-    completenessSafeMessage(category),
-    {
-      severity: source.severity,
-      recoverability: completenessRecoverability(category),
-      selector,
-      details: {
-        category,
-        completenessCode: source.code,
-        completenessSeverity: source.severity,
-        ...(source.path ? { path: source.path } : {}),
-        ...sanitizeCompletenessDetails(source.details),
-      },
+  return diagnostic(source.code, completenessSafeMessage(category), {
+    severity: source.severity,
+    recoverability: completenessRecoverability(category),
+    selector,
+    details: {
+      category,
+      completenessCode: source.code,
+      completenessSeverity: source.severity,
+      ...(source.path ? { path: source.path } : {}),
+      ...sanitizeCompletenessDetails(source.details),
     },
-  );
+  });
 }
 
 function completenessCategory(
@@ -747,12 +774,94 @@ function mapSemanticValues(
     : (mapped as readonly VersionSemanticValue[]);
 }
 
-function pageTokenFor(
+function internalPageTokenFor(
   baseCommitId: WorkbookCommitId,
   targetCommitId: WorkbookCommitId,
   offset: number,
 ): VersionPageToken {
-  return `${VERSION_DIFF_PAGE_TOKEN_PREFIX}:${baseCommitId}:${targetCommitId}:${offset}` as VersionPageToken;
+  return `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}:${baseCommitId}:${targetCommitId}:${offset}` as VersionPageToken;
+}
+
+function publicPageTokenFor(internalToken: VersionPageToken): VersionPageToken {
+  evictPublicDiffCursorCache();
+  const publicToken =
+    `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}${nextPublicCursorHandle()}` as VersionPageToken;
+  PUBLIC_DIFF_CURSOR_CACHE.set(publicToken, { internalToken });
+  return publicToken;
+}
+
+function resolvePublicPageToken(token: VersionPageToken | string):
+  | {
+      readonly ok: true;
+      readonly internalToken: string;
+    }
+  | {
+      readonly ok: false;
+      readonly safeMessage: string;
+      readonly details: Readonly<Record<string, string | number | boolean | null>>;
+    } {
+  if (typeof token !== 'string') {
+    return {
+      ok: false,
+      safeMessage: 'diff pageToken is malformed or unsupported.',
+      details: { category: 'malformedCursor' },
+    };
+  }
+  if (token.length > VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH) {
+    return {
+      ok: false,
+      safeMessage: 'diff pageToken exceeds the public cursor size limit.',
+      details: {
+        category: 'oversizedCursor',
+        max: VERSION_DIFF_RESOURCE_LIMITS.maxPublicCursorBytes,
+        receivedCursorBytes: token.length,
+      },
+    };
+  }
+  if (!isPublicVersionDiffCursor(token)) {
+    return {
+      ok: false,
+      safeMessage: 'diff pageToken uses an unsupported public cursor order or version.',
+      details: { category: 'unsupportedCursor' },
+    };
+  }
+  const entry = PUBLIC_DIFF_CURSOR_CACHE.get(token);
+  if (!entry) {
+    return {
+      ok: false,
+      safeMessage: 'diff pageToken is stale or no longer available.',
+      details: { category: 'staleCursor' },
+    };
+  }
+  return { ok: true, internalToken: entry.internalToken };
+}
+
+function nextPublicCursorHandle(): string {
+  publicDiffCursorSequence = (publicDiffCursorSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `${randomCursorSegment()}.${Date.now().toString(36)}.${publicDiffCursorSequence.toString(36)}`;
+}
+
+function randomCursorSegment(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoLike = (
+    globalThis as { readonly crypto?: { getRandomValues?: <T extends Uint8Array>(array: T) => T } }
+  ).crypto;
+  if (cryptoLike?.getRandomValues) {
+    cryptoLike.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function evictPublicDiffCursorCache(): void {
+  while (PUBLIC_DIFF_CURSOR_CACHE.size >= VERSION_DIFF_CURSOR_CACHE_MAX_ENTRIES) {
+    const oldest = PUBLIC_DIFF_CURSOR_CACHE.keys().next().value;
+    if (!oldest) return;
+    PUBLIC_DIFF_CURSOR_CACHE.delete(oldest);
+  }
 }
 
 function graphDiagnostics(
@@ -838,7 +947,7 @@ function degradedDiffPage(
   return {
     status: 'degraded',
     items: [],
-    order: 'semantic-change-order',
+    order: VERSION_DIFF_PAGE_ORDER,
     diagnostics,
   };
 }

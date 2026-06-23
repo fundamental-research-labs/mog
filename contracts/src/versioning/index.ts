@@ -26,6 +26,18 @@ export type {
   VersionHistoryWriteMode,
   VersionRedactionPolicy,
 } from './access-policy';
+export {
+  VERSION_DIFF_DEFAULT_PAGE_LIMIT,
+  VERSION_DIFF_MAX_PAGE_LIMIT,
+  VERSION_DIFF_PAGE_ORDER,
+  VERSION_DIFF_PAGE_ORDER_VERSION,
+  VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
+  VERSION_DIFF_PUBLIC_CURSOR_ORDER_KEY,
+  VERSION_DIFF_PUBLIC_CURSOR_PREFIX,
+  VERSION_DIFF_PUBLIC_CURSOR_SCHEMA_VERSION,
+  VERSION_DIFF_RESOURCE_LIMITS,
+  isPublicVersionDiffCursor,
+} from './diff-pagination';
 
 export const VERSION_OPERATION_KINDS = Object.freeze([
   'mutation',

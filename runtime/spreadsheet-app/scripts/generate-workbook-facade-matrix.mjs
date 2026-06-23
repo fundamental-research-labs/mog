@@ -169,29 +169,11 @@ function propertyNameText(name) {
 }
 
 function publicWorkbookVersionMethodNames() {
-  const sourceText = readFileSync(publicWorkbookVersionContractPath, 'utf8');
-  const sourceFile = ts.createSourceFile(
+  const methodNames = collectInterfaceMethodNames(
     publicWorkbookVersionContractPath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
+    'WorkbookVersion',
+    new Set(),
   );
-  const methodNames = new Set();
-
-  function visit(node) {
-    if (ts.isInterfaceDeclaration(node) && node.name.text === 'WorkbookVersion') {
-      for (const member of node.members) {
-        if (!ts.isMethodSignature(member)) continue;
-        const name = propertyNameText(member.name);
-        if (name) methodNames.add(name);
-      }
-      return;
-    }
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
 
   if (methodNames.size === 0) {
     throw new Error(
@@ -200,6 +182,90 @@ function publicWorkbookVersionMethodNames() {
   }
 
   return methodNames;
+}
+
+function collectInterfaceMethodNames(filePath, interfaceName, seen) {
+  const key = `${filePath}:${interfaceName}`;
+  if (seen.has(key)) return new Set();
+  seen.add(key);
+
+  const sourceFile = parseSourceFile(filePath);
+  const importedInterfacePaths = importedTypePaths(sourceFile, filePath);
+  const methodNames = new Set();
+  let found = false;
+
+  function visit(node) {
+    if (ts.isInterfaceDeclaration(node) && node.name.text === interfaceName) {
+      found = true;
+      for (const member of node.members) {
+        if (!ts.isMethodSignature(member)) continue;
+        const name = propertyNameText(member.name);
+        if (name) methodNames.add(name);
+      }
+      for (const baseName of interfaceBaseNames(node)) {
+        const basePath = importedInterfacePaths.get(baseName) ?? filePath;
+        for (const name of collectInterfaceMethodNames(basePath, baseName, seen)) {
+          methodNames.add(name);
+        }
+      }
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+
+  if (!found) {
+    throw new Error(`Unable to resolve public interface ${interfaceName} in ${filePath}`);
+  }
+
+  return methodNames;
+}
+
+function parseSourceFile(filePath) {
+  return ts.createSourceFile(
+    filePath,
+    readFileSync(filePath, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+}
+
+function importedTypePaths(sourceFile, filePath) {
+  const imports = new Map();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (!ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!statement.moduleSpecifier.text.startsWith('.')) continue;
+    const namedBindings = statement.importClause?.namedBindings;
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) continue;
+    const resolvedPath = resolveRelativeTypeScriptPath(filePath, statement.moduleSpecifier.text);
+    for (const element of namedBindings.elements) {
+      imports.set(element.name.text, resolvedPath);
+    }
+  }
+  return imports;
+}
+
+function resolveRelativeTypeScriptPath(filePath, specifier) {
+  const basePath = resolve(dirname(filePath), specifier);
+  const candidates = [basePath, `${basePath}.ts`, resolve(basePath, 'index.ts')];
+  const resolvedPath = candidates.find((candidate) => existsSync(candidate));
+  if (!resolvedPath) {
+    throw new Error(`Unable to resolve TypeScript import ${specifier} from ${filePath}`);
+  }
+  return resolvedPath;
+}
+
+function interfaceBaseNames(node) {
+  const names = [];
+  for (const clause of node.heritageClauses ?? []) {
+    for (const type of clause.types) {
+      if (ts.isIdentifier(type.expression)) names.push(type.expression.text);
+    }
+  }
+  return names;
 }
 
 function classify(interfaceName, methodName) {

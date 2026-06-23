@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createSpreadsheetRuntime } from '../runtime';
+import { VERSION_SURFACE_HOST_CAPABILITY_DENIED_DIAGNOSTIC_CODE } from '../version-surface-status';
 import {
   WORKBOOK_FACADE_CAPABILITY_MATRIX,
   type SpreadsheetFacadeMatrixEntry,
@@ -16,6 +17,8 @@ import type {
 } from '../public-types';
 
 type VersionFacade = SpreadsheetWorkbookFacade['version'];
+type VersionSurfaceCapability = Extract<SpreadsheetCapability, `version:${string}`>;
+type VersionSurfaceStatus = Awaited<ReturnType<VersionFacade['getSurfaceStatus']>>;
 
 type VersionFacadeOperationKind = 'version-result' | 'throws-on-denied' | 'capability-free-status';
 
@@ -662,6 +665,50 @@ function assertVersionDeniedResult(
   }
 }
 
+function assertUiRenderableVersionDeniedResult(
+  result: unknown,
+  methodName: string,
+  expectedCapability: SpreadsheetCapability,
+): void {
+  assertVersionDeniedResult(result, methodName, expectedCapability);
+  const error = (
+    result as {
+      readonly error?: {
+        readonly reason?: unknown;
+        readonly retryable?: unknown;
+      };
+    }
+  ).error;
+  assert.equal(typeof error?.reason, 'string');
+  assert.ok(error.reason.length > 0, `${methodName} denied result must include renderable reason`);
+  assert.equal(error.retryable, false);
+}
+
+function assertProjectedHostDeniedCapability(
+  status: VersionSurfaceStatus,
+  capability: VersionSurfaceCapability,
+): void {
+  assert.deepEqual(status.capabilities[capability], {
+    enabled: false,
+    dependency: 'hostCapability',
+    reason: `Host policy denies ${capability}.`,
+    retryable: false,
+  });
+}
+
+function assertHostCapabilityProjectionDiagnostic(
+  status: VersionSurfaceStatus,
+  expectedDeniedCapabilities: readonly VersionSurfaceCapability[],
+): void {
+  const diagnostic = status.diagnostics.find(
+    (entry) => entry.code === VERSION_SURFACE_HOST_CAPABILITY_DENIED_DIAGNOSTIC_CODE,
+  );
+  assert.ok(diagnostic, 'projected status must include host capability diagnostic');
+  assert.equal(diagnostic.severity, 'warning');
+  assert.equal(diagnostic.dependency, 'hostCapability');
+  assert.deepEqual(diagnostic.data?.deniedCapabilities, expectedDeniedCapabilities);
+}
+
 function scalarVersionMatrixEntry(
   entry: SpreadsheetFacadeMatrixEntry,
   capability: SpreadsheetCapability,
@@ -805,6 +852,56 @@ test('workbook version facade denied result families return capability-unavailab
   );
 });
 
+test('workbook version surface projects actor policy denials for UI button gating', async () => {
+  const deniedCapabilities = new Set<SpreadsheetCapability>([
+    'version:checkout',
+    'version:reviewRead',
+    'version:reviewWrite',
+    'version:revert',
+  ]);
+
+  await withVersionFacade(
+    'runtime-version-surface-policy-projection',
+    deniedCapabilities,
+    async (version) => {
+      const status = await version.getSurfaceStatus();
+
+      assertProjectedHostDeniedCapability(status, 'version:checkout');
+      assertProjectedHostDeniedCapability(status, 'version:reviewRead');
+      assertProjectedHostDeniedCapability(status, 'version:reviewWrite');
+      assertProjectedHostDeniedCapability(status, 'version:revert');
+      assertHostCapabilityProjectionDiagnostic(status, [
+        'version:checkout',
+        'version:reviewRead',
+        'version:reviewWrite',
+        'version:revert',
+      ]);
+    },
+  );
+});
+
+test('workbook version facade denied review, revert, and checkout results stay UI-renderable', async () => {
+  const deniedCapabilities = new Set<SpreadsheetCapability>([
+    'version:checkout',
+    'version:reviewRead',
+    'version:revert',
+  ]);
+
+  await withVersionFacade(
+    'runtime-version-result-facade-ui-renderable-denials',
+    deniedCapabilities,
+    async (version) => {
+      for (const methodName of ['checkout', 'listReviews', 'revert'] as const) {
+        const testCase = versionCase(methodName);
+        const [expectedCapability] = testCase.capabilities;
+        assert.ok(expectedCapability, `${methodName} must declare a capability`);
+        const result = await testCase.invoke(version);
+        assertUiRenderableVersionDeniedResult(result, methodName, expectedCapability);
+      }
+    },
+  );
+});
+
 test('workbook version facade unsupported paths keep public VersionResult envelopes', async () => {
   await withVersionFacade(
     'runtime-version-result-facade-unsupported-result-envelopes',
@@ -873,6 +970,20 @@ test('workbook version facade missing matrix entries fail closed for result fami
           );
         });
       }
+    },
+  );
+});
+
+test('workbook version facade stale surface-status matrix entry fails closed before projection', async () => {
+  await withVersionFacade(
+    'runtime-version-surface-stale-matrix-entry',
+    new Set<SpreadsheetCapability>(['version:checkout']),
+    async (version) => {
+      await withTemporaryVersionMatrixEntry('getSurfaceStatus', undefined, async () => {
+        assert.throws(() => {
+          void version.getSurfaceStatus();
+        }, /WorkbookVersion\.getSurfaceStatus is missing a workbook facade capability-matrix decision/);
+      });
     },
   );
 });

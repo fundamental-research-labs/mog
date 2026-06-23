@@ -3,6 +3,7 @@ import {
   WORKBOOK_SUB_API_INTERFACES,
   type SpreadsheetFacadeMatrixEntry,
 } from './workbook-facade-capability-matrix';
+import { projectVersionSurfaceStatusForPolicy } from './version-surface-status';
 import {
   SPREADSHEET_ACTOR_SESSION_BRAND,
   type InternalSpreadsheetActorSession,
@@ -170,6 +171,23 @@ function isVersionResultFacadeMethod(
     ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
   ];
   return capabilities.length > 0 && capabilities.every(isVersionCapability);
+}
+
+function projectVersionFacadeResult(
+  value: unknown,
+  interfaceName: string,
+  methodName: string,
+  binding: FacadeBinding,
+): unknown {
+  if (interfaceName !== 'WorkbookVersion' || methodName !== 'getSurfaceStatus') return value;
+  const policy = binding?.policy;
+  if (!policy) return value;
+  if (value && typeof (value as { readonly then?: unknown }).then === 'function') {
+    return (value as Promise<unknown>).then((status) =>
+      projectVersionSurfaceStatusForPolicy(status, policy),
+    );
+  }
+  return projectVersionSurfaceStatusForPolicy(value, policy);
 }
 
 function facadeCapabilityDenial(
@@ -453,7 +471,12 @@ function createCapabilityFacade(
               throw facadeCapabilityDeniedError(record, binding, operation, denial);
             }
             const result = value.apply(currentTarget, args);
-            return wrapFacadeReturn(result, record, binding, entry.returns ?? []);
+            return wrapFacadeReturn(
+              projectVersionFacadeResult(result, interfaceName, methodName, binding),
+              record,
+              binding,
+              entry.returns ?? [],
+            );
           };
         }
 

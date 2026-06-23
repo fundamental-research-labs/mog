@@ -15,7 +15,7 @@ type VersionPanelDiagnostic = {
 type CapabilityState =
   VersionSurfaceStatus['capabilities'][keyof VersionSurfaceStatus['capabilities']];
 
-export type ReviewProposalAccessProjectionState = 'visible' | 'partial' | 'denied';
+export type ReviewProposalAccessProjectionState = 'visible' | 'partial' | 'denied' | 'stale';
 
 export type ReviewProposalAccessProjectionDiagnostic = {
   readonly state: ReviewProposalAccessProjectionState;
@@ -581,7 +581,9 @@ function AccessProjectionDiagnosticBlock({
       data-redacted-change-count={countDataAttribute(diagnostic.redactedChangeCount)}
       data-omitted-domain-count={countDataAttribute(diagnostic.omittedDomainCount)}
     >
-      <div className="font-medium text-ss-text">{accessProjectionStateLabel(diagnostic.state)}</div>
+      <div className="font-medium text-ss-text">
+        {accessProjectionStateLabel(kind, diagnostic.state)}
+      </div>
       <div>{diagnostic.message}</div>
       {factText ? <div className="mt-0.5 text-ss-text-tertiary">{factText}</div> : null}
     </div>
@@ -758,9 +760,13 @@ function proposalAcceptDisabledReason(
   return undefined;
 }
 
-function accessProjectionStateLabel(state: ReviewProposalAccessProjectionState): string {
+function accessProjectionStateLabel(
+  kind: 'review' | 'proposal',
+  state: ReviewProposalAccessProjectionState,
+): string {
   if (state === 'denied') return 'Diff denied';
   if (state === 'partial') return 'Diff partially hidden';
+  if (state === 'stale') return kind === 'review' ? 'Review stale' : 'Proposal stale';
   return 'Diff visible';
 }
 

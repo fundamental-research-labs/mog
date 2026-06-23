@@ -330,6 +330,90 @@ describe('ReviewProposalSurface', () => {
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
+  it('surfaces stale access diagnostics without blocking read-only diff activation', async () => {
+    const user = userEvent.setup();
+    const onOpenDiff = jest.fn();
+    const onAcceptProposal = jest.fn();
+
+    render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[createReview({ status: 'stale' })]}
+        proposals={[createProposal({ status: 'stale' })]}
+        onOpenDiff={onOpenDiff}
+        onAcceptProposal={onAcceptProposal}
+        accessDiagnostics={{
+          reviews: {
+            'review-1': {
+              state: 'stale',
+              code: 'VERSION_REVIEW_STALE',
+              severity: 'warning',
+              reason: 'stale',
+              message: 'Review Forecast review is stale; create a new review before applying changes.',
+            },
+          },
+          proposals: {
+            'proposal-1': {
+              state: 'stale',
+              code: 'VERSION_PROPOSAL_STALE',
+              severity: 'warning',
+              reason: 'stale',
+              message:
+                'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
+            },
+          },
+        }}
+      />,
+    );
+
+    const reviewRow = screen.getByRole('button', {
+      name: 'Open review diff for Forecast review stale',
+    });
+    expect(reviewRow).toHaveAttribute('data-access-projection', 'stale');
+    expect(reviewRow).toHaveAttribute('data-access-diagnostic-code', 'VERSION_REVIEW_STALE');
+    expect(reviewRow).toHaveAttribute('data-actionable', 'true');
+    expect(reviewRow).toHaveAccessibleDescription(
+      'Review Forecast review is stale; create a new review before applying changes.',
+    );
+
+    const proposalRow = screen.getByRole('button', {
+      name: 'Open proposal diff for Budget scenario stale',
+    });
+    expect(proposalRow).toHaveAttribute('data-access-projection', 'stale');
+    expect(proposalRow).toHaveAttribute('data-access-diagnostic-code', 'VERSION_PROPOSAL_STALE');
+    expect(proposalRow).toHaveAttribute('data-actionable', 'true');
+    expect(proposalRow).toHaveAccessibleDescription(
+      'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
+    );
+    expect(screen.getByText('Review stale')).toBeVisible();
+    expect(screen.getByText('Proposal stale')).toBeVisible();
+
+    await user.click(reviewRow);
+    await user.click(proposalRow);
+    expect(onOpenDiff).toHaveBeenNthCalledWith(1, {
+      recordKind: 'review',
+      recordId: 'review-1',
+      baseCommitId: BASE_COMMIT_ID,
+      targetCommitId: HEAD_COMMIT_ID,
+    });
+    expect(onOpenDiff).toHaveBeenNthCalledWith(2, {
+      recordKind: 'proposal',
+      recordId: 'proposal-1',
+      baseCommitId: BASE_COMMIT_ID,
+      targetCommitId: PROPOSAL_COMMIT_ID,
+    });
+
+    const acceptButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(acceptButton).toBeDisabled();
+    expect(acceptButton).toHaveAccessibleDescription(
+      'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
+    );
+    await user.click(acceptButton);
+    expect(onAcceptProposal).not.toHaveBeenCalled();
+  });
+
   it('shows disabled and unavailable reasons with stable selectors', () => {
     render(
       <ReviewProposalSurface
@@ -422,7 +506,9 @@ function createSurfaceStatus({
   };
 }
 
-function createReview(): WorkbookVersionReviewRecordSummary {
+function createReview(
+  overrides: Partial<WorkbookVersionReviewRecordSummary> = {},
+): WorkbookVersionReviewRecordSummary {
   return {
     id: 'review-1',
     documentId: 'document-1',
@@ -442,10 +528,11 @@ function createReview(): WorkbookVersionReviewRecordSummary {
       displayName: 'Reviewer',
     },
     updatedAt: '2026-06-22T10:30:00.000Z',
+    ...overrides,
   };
 }
 
-function createProposal(): AgentProposalSummary {
+function createProposal(overrides: Partial<AgentProposalSummary> = {}): AgentProposalSummary {
   return {
     id: 'proposal-1' as AgentProposalSummary['id'],
     documentId: 'document-1',
@@ -465,6 +552,7 @@ function createProposal(): AgentProposalSummary {
       agentRunId: 'agent-run-1',
     },
     updatedAt: '2026-06-22T10:35:00.000Z',
+    ...overrides,
   };
 }
 

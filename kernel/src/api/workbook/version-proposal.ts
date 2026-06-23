@@ -19,6 +19,11 @@ import {
 import { hasAttachedVersionMergeService } from './version-merge';
 import { getAttachedVersionProposalService } from './version-proposal-service-discovery';
 import {
+  hardenVersionProposalServiceResult,
+  sanitizeVersionProposalServiceValue,
+  versionProposalFailureFromDiagnostics,
+} from './version-proposal-diagnostics';
+import {
   type AcceptAgentProposalInput,
   type AgentProposal,
   type AgentProposalAcceptResult,
@@ -54,7 +59,6 @@ import {
   normalizeStartProposalWorkspaceInput,
   normalizeSupersedeProposalInput,
 } from './version-proposal-validation';
-import { versionFailureFromStoreDiagnostics } from './version-result';
 
 export type {
   AcceptAgentProposalInput,
@@ -472,8 +476,10 @@ function mapProposalServiceResult<T>(
   operation: VersionProposalPublicOperation,
   value: unknown,
 ): VersionResult<T> {
-  if (isVersionResult(value)) return value as VersionResult<T>;
-  if (isRecord(value)) return { ok: true, value: value as T };
+  if (isVersionResult(value)) {
+    return hardenVersionProposalServiceResult(value as VersionResult<T>);
+  }
+  if (isRecord(value)) return { ok: true, value: sanitizeVersionProposalServiceValue(value as T) };
   if (operation === 'disposeProposalWorkspace' && value === true) {
     return { ok: true, value: { disposed: true } as T };
   }
@@ -484,7 +490,7 @@ function proposalFailure<T>(
   operation: VersionProposalPublicOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
-  return versionFailureFromStoreDiagnostics(operation, diagnostics);
+  return versionProposalFailureFromDiagnostics(operation, diagnostics);
 }
 
 function serviceUnavailableDiagnostic(

@@ -41,7 +41,11 @@ import {
 } from './VersionActionStatus';
 import { VersionHistoryDiffPreview, type VersionDiffPreview } from './VersionHistoryDiffPreview';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
-import { ReviewProposalSurface, type ReviewProposalDiffTarget } from './ReviewProposalSurface';
+import {
+  ReviewProposalSurface,
+  type ReviewProposalDiffTarget,
+} from './ReviewProposalSurface';
+import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
 import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
 import { shortCommitId } from './version-history-format';
@@ -581,6 +585,7 @@ export function VersionHistoryPanelContent({
               diffEnabled={canDiff}
               diffDisabledReason={diffAvailability.disabledReason}
               onOpenDiff={handleReviewProposalDiff}
+              accessDiagnostics={reviewProposalAccessDiagnosticsFromSummaries(data)}
             />
             <CommitList
               commits={data.commits}

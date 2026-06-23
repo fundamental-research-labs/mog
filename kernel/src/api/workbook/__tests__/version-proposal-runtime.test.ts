@@ -123,6 +123,114 @@ describe('WorkbookVersion proposal runtime facade', () => {
     });
   });
 
+  it('redacts denied principals from proposal access diagnostics', async () => {
+    const proposalService = createCompleteProposalService({
+      getProposal: jest.fn(async () => ({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.getProposal',
+          diagnostics: [
+            {
+              code: 'VERSION_PROPOSAL_ACCESS_DENIED',
+              severity: 'error',
+              message: 'Proposal read denied for principal-secret.',
+              data: {
+                deniedPrincipalId: 'principal-secret',
+                payload: {
+                  deniedCapabilities: ['version:proposal'],
+                  deniedPrincipal: 'principal-secret',
+                  principalScope: 'principal-secret',
+                },
+              },
+            },
+          ],
+        },
+      })),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.getProposal({ proposalId: 'proposal-1' } as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PROPOSAL_ACCESS_DENIED',
+            message: 'Proposal read denied for redacted-principal.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                deniedCapabilities: ['version:proposal'],
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).not.toContain('deniedPrincipal');
+    expect(serialized).toContain('version:proposal');
+  });
+
+  it('redacts stale proposal diagnostics in successful access payloads', async () => {
+    const proposal = createProposalRecord({
+      status: 'stale',
+      diagnostics: [
+        {
+          code: 'VERSION_PROPOSAL_STALE',
+          severity: 'warning',
+          message: 'Proposal stale for principal-secret.',
+          data: {
+            principalId: 'principal-secret',
+            payload: {
+              expectedTargetHeadId: BASE_COMMIT_ID,
+              actualTargetHeadId: HEAD_COMMIT_ID,
+              principalScope: 'principal-secret',
+            },
+          },
+        },
+      ],
+    });
+    const proposalService = createCompleteProposalService({
+      getProposal: jest.fn(async () => ({ ok: true, value: proposal })),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.getProposal({ proposalId: 'proposal-1' } as any);
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        status: 'stale',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PROPOSAL_STALE',
+            message: 'Proposal stale for redacted-principal.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                expectedTargetHeadId: BASE_COMMIT_ID,
+                actualTargetHeadId: HEAD_COMMIT_ID,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).toContain('VERSION_PROPOSAL_STALE');
+  });
+
   it('keeps proposal capability disabled for incomplete attached services', async () => {
     const proposalService = {
       createProposal: jest.fn(),

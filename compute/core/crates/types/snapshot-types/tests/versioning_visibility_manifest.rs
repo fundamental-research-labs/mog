@@ -272,12 +272,6 @@ fn inventory_from_dir(versioning_dir: &Path) -> VersioningInventory {
     inventory_from_dependencies(all_dependencies)
 }
 
-fn inventory_from_source(source: &str) -> VersioningInventory {
-    let mut all_dependencies = BTreeMap::new();
-    scan_source(source, &mut all_dependencies);
-    inventory_from_dependencies(all_dependencies)
-}
-
 fn scan_source(source: &str, all_dependencies: &mut BTreeMap<String, BTreeSet<String>>) {
     let file = syn::parse_file(source).expect("versioning module parses");
     scan_items(&file.items, all_dependencies);

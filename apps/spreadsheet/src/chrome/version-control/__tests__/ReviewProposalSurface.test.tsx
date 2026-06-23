@@ -173,6 +173,9 @@ describe('ReviewProposalSurface', () => {
   it('surfaces access projection diagnostics and blocks denied diff activation', async () => {
     const user = userEvent.setup();
     const onOpenDiff = jest.fn();
+    const onAcceptProposal = jest.fn();
+    const reviewDeniedMessage = 'Review diff omitted authored semantic changes.';
+    const proposalPartialMessage = 'Proposal diff hides redacted workbook changes.';
 
     render(
       <ReviewProposalSurface
@@ -180,6 +183,7 @@ describe('ReviewProposalSurface', () => {
         reviews={[createReview()]}
         proposals={[createProposal()]}
         onOpenDiff={onOpenDiff}
+        onAcceptProposal={onAcceptProposal}
         accessDiagnostics={{
           reviews: {
             'review-1': {
@@ -187,7 +191,7 @@ describe('ReviewProposalSurface', () => {
               code: 'VERSION_REVIEW_DIFF_INCOMPLETE',
               severity: 'error',
               reason: 'access-denied',
-              message: 'Review diff omitted authored semantic changes.',
+              message: reviewDeniedMessage,
               hiddenChangeCount: 2,
               omittedDomainCount: 2,
               domains: ['charts', 'filters'],
@@ -199,8 +203,10 @@ describe('ReviewProposalSurface', () => {
               code: 'VERSION_REVIEW_DIFF_PARTIAL',
               severity: 'warning',
               reason: 'redaction-policy',
-              message: 'Proposal diff hides redacted workbook changes.',
+              message: proposalPartialMessage,
               redactedChangeCount: 1,
+              omittedDomainCount: 1,
+              domains: ['validations'],
             },
           },
         }}
@@ -211,6 +217,7 @@ describe('ReviewProposalSurface', () => {
       name: 'Open review diff for Forecast review approved',
     });
     const reviewDiagnostic = screen.getByTestId('version-review-record-access-diagnostic');
+    expect(reviewRow).toHaveAccessibleName('Open review diff for Forecast review approved');
     expect(reviewRow).toHaveAttribute('aria-disabled', 'true');
     expect(reviewRow).toHaveAttribute('data-actionable', 'false');
     expect(reviewRow).toHaveAttribute('data-access-projection', 'denied');
@@ -224,7 +231,7 @@ describe('ReviewProposalSurface', () => {
     expect(reviewDiagnostic).toHaveTextContent('Diff denied');
     expect(reviewDiagnostic).toHaveTextContent('Hidden 2');
     expect(reviewDiagnostic).toHaveTextContent('Scope charts, filters');
-    expect(reviewRow).toHaveAccessibleDescription(/Review diff omitted authored semantic changes/);
+    expect(reviewRow).toHaveAccessibleDescription(reviewDeniedMessage);
 
     await user.click(reviewRow);
     expect(onOpenDiff).not.toHaveBeenCalled();
@@ -233,15 +240,18 @@ describe('ReviewProposalSurface', () => {
       name: 'Open proposal diff for Budget scenario ready_for_review',
     });
     const proposalDiagnostic = screen.getByTestId('version-proposal-record-access-diagnostic');
+    expect(proposalRow).toHaveAccessibleName(
+      'Open proposal diff for Budget scenario ready_for_review',
+    );
     expect(proposalRow).toHaveAttribute('aria-disabled', 'false');
     expect(proposalRow).toHaveAttribute('data-actionable', 'true');
     expect(proposalRow).toHaveAttribute('data-access-projection', 'partial');
     expect(proposalRow).toHaveAttribute('data-redacted-change-count', '1');
+    expect(proposalRow).toHaveAttribute('data-omitted-domain-count', '1');
     expect(proposalDiagnostic).toHaveTextContent('Diff partially hidden');
     expect(proposalDiagnostic).toHaveTextContent('Redacted 1');
-    expect(proposalRow).toHaveAccessibleDescription(
-      /Proposal diff hides redacted workbook changes/,
-    );
+    expect(proposalDiagnostic).toHaveTextContent('Scope validations');
+    expect(proposalRow).toHaveAccessibleDescription(proposalPartialMessage);
 
     await user.click(proposalRow);
     expect(onOpenDiff).toHaveBeenCalledWith({
@@ -250,11 +260,22 @@ describe('ReviewProposalSurface', () => {
       baseCommitId: BASE_COMMIT_ID,
       targetCommitId: PROPOSAL_COMMIT_ID,
     });
+
+    const acceptButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(acceptButton).toHaveAccessibleName('Accept proposal Budget scenario');
+    expect(acceptButton).toBeDisabled();
+    expect(acceptButton).toHaveAccessibleDescription(proposalPartialMessage);
+    await user.click(acceptButton);
+    expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
   it('gates proposal accept controls with merge apply capability and projection visibility', async () => {
     const user = userEvent.setup();
     const onAcceptProposal = jest.fn();
+    const proposalPartialMessage = 'Proposal diff hides redacted workbook changes.';
+    const proposalDeniedMessage = 'Proposal diff is hidden by workbook access policy.';
     const { rerender } = render(
       <ReviewProposalSurface
         surface={createSurfaceStatus()}
@@ -267,6 +288,7 @@ describe('ReviewProposalSurface', () => {
     const acceptButton = screen.getByRole('button', {
       name: 'Accept proposal Budget scenario',
     });
+    expect(acceptButton).toHaveAccessibleName('Accept proposal Budget scenario');
     expect(acceptButton).toBeEnabled();
     expect(acceptButton).toHaveAttribute('data-capability', 'version:mergeApply');
     expect(acceptButton).toHaveAttribute('data-state', 'available');
@@ -297,6 +319,7 @@ describe('ReviewProposalSurface', () => {
     const capabilityBlockedButton = screen.getByRole('button', {
       name: 'Accept proposal Budget scenario',
     });
+    expect(capabilityBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
     expect(capabilityBlockedButton).toBeDisabled();
     expect(capabilityBlockedButton).toHaveAttribute('data-state', 'unavailable');
     expect(capabilityBlockedButton).toHaveAccessibleDescription('Merge apply is unavailable.');
@@ -312,7 +335,8 @@ describe('ReviewProposalSurface', () => {
             'proposal-1': {
               state: 'partial',
               severity: 'warning',
-              message: 'Proposal diff hides redacted workbook changes.',
+              message: proposalPartialMessage,
+              redactedChangeCount: 1,
             },
           },
         }}
@@ -322,11 +346,38 @@ describe('ReviewProposalSurface', () => {
     const redactionBlockedButton = screen.getByRole('button', {
       name: 'Accept proposal Budget scenario',
     });
+    expect(redactionBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
     expect(redactionBlockedButton).toBeDisabled();
-    expect(redactionBlockedButton).toHaveAccessibleDescription(
-      'Proposal diff hides redacted workbook changes.',
-    );
+    expect(redactionBlockedButton).toHaveAccessibleDescription(proposalPartialMessage);
     await user.click(redactionBlockedButton);
+    expect(onAcceptProposal).not.toHaveBeenCalled();
+
+    rerender(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onAcceptProposal={onAcceptProposal}
+        accessDiagnostics={{
+          proposals: {
+            'proposal-1': {
+              state: 'denied',
+              severity: 'error',
+              message: proposalDeniedMessage,
+              hiddenChangeCount: 3,
+            },
+          },
+        }}
+      />,
+    );
+
+    const accessBlockedButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(accessBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
+    expect(accessBlockedButton).toBeDisabled();
+    expect(accessBlockedButton).toHaveAccessibleDescription(proposalDeniedMessage);
+    await user.click(accessBlockedButton);
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
@@ -334,6 +385,10 @@ describe('ReviewProposalSurface', () => {
     const user = userEvent.setup();
     const onOpenDiff = jest.fn();
     const onAcceptProposal = jest.fn();
+    const reviewStaleMessage =
+      'Review Forecast review is stale; create a new review before applying changes.';
+    const proposalStaleMessage =
+      'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.';
 
     render(
       <ReviewProposalSurface
@@ -349,7 +404,7 @@ describe('ReviewProposalSurface', () => {
               code: 'VERSION_REVIEW_STALE',
               severity: 'warning',
               reason: 'stale',
-              message: 'Review Forecast review is stale; create a new review before applying changes.',
+              message: reviewStaleMessage,
             },
           },
           proposals: {
@@ -358,8 +413,7 @@ describe('ReviewProposalSurface', () => {
               code: 'VERSION_PROPOSAL_STALE',
               severity: 'warning',
               reason: 'stale',
-              message:
-                'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
+              message: proposalStaleMessage,
             },
           },
         }}
@@ -369,22 +423,20 @@ describe('ReviewProposalSurface', () => {
     const reviewRow = screen.getByRole('button', {
       name: 'Open review diff for Forecast review stale',
     });
+    expect(reviewRow).toHaveAccessibleName('Open review diff for Forecast review stale');
     expect(reviewRow).toHaveAttribute('data-access-projection', 'stale');
     expect(reviewRow).toHaveAttribute('data-access-diagnostic-code', 'VERSION_REVIEW_STALE');
     expect(reviewRow).toHaveAttribute('data-actionable', 'true');
-    expect(reviewRow).toHaveAccessibleDescription(
-      'Review Forecast review is stale; create a new review before applying changes.',
-    );
+    expect(reviewRow).toHaveAccessibleDescription(reviewStaleMessage);
 
     const proposalRow = screen.getByRole('button', {
       name: 'Open proposal diff for Budget scenario stale',
     });
+    expect(proposalRow).toHaveAccessibleName('Open proposal diff for Budget scenario stale');
     expect(proposalRow).toHaveAttribute('data-access-projection', 'stale');
     expect(proposalRow).toHaveAttribute('data-access-diagnostic-code', 'VERSION_PROPOSAL_STALE');
     expect(proposalRow).toHaveAttribute('data-actionable', 'true');
-    expect(proposalRow).toHaveAccessibleDescription(
-      'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
-    );
+    expect(proposalRow).toHaveAccessibleDescription(proposalStaleMessage);
     expect(screen.getByText('Review stale')).toBeVisible();
     expect(screen.getByText('Proposal stale')).toBeVisible();
 
@@ -406,10 +458,9 @@ describe('ReviewProposalSurface', () => {
     const acceptButton = screen.getByRole('button', {
       name: 'Accept proposal Budget scenario',
     });
+    expect(acceptButton).toHaveAccessibleName('Accept proposal Budget scenario');
     expect(acceptButton).toBeDisabled();
-    expect(acceptButton).toHaveAccessibleDescription(
-      'Proposal Budget scenario is stale because the target branch moved. Review remains read-only until a new proposal or merge is created.',
-    );
+    expect(acceptButton).toHaveAccessibleDescription(proposalStaleMessage);
     await user.click(acceptButton);
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });

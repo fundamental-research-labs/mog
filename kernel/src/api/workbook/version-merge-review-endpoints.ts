@@ -142,6 +142,7 @@ export async function saveMergeResolutionsWorkbookVersion(
     allowExecutablePayloadRefs: Boolean(target && resolutionValidation.status === 'readyToApply'),
     resultId: normalized.input.resultId,
     resultDigest: normalized.input.resultDigest,
+    redactionPolicyDigest: normalized.input.redactionPolicyDigest,
     ...(target
       ? { targetRef: target.targetRef, expectedTargetHead: target.expectedTargetHead }
       : {}),

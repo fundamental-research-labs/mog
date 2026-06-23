@@ -111,6 +111,9 @@ export type VersionCheckoutAdmissionBlock =
       readonly reason: 'checkoutAlreadyInProgress' | 'checkoutPreflightUnsafe';
     }
   | {
+      readonly reason: 'checkoutPreflightStale';
+    }
+  | {
       readonly reason: 'staleWorkspaceHead';
       readonly staleReason: 'refMoved' | 'activeSessionBehind' | 'unknown';
       readonly branchName?: string;
@@ -119,25 +122,36 @@ export type VersionCheckoutAdmissionBlock =
       readonly currentRefHeadId?: string;
     };
 
-export async function readVersionCheckoutAdmissionBlock(
+export type VersionCheckoutAdmissionLease = {
+  readonly statusRevision: string;
+  readonly checkoutPreflightToken: string;
+};
+
+export type VersionCheckoutAdmissionState = {
+  readonly block: VersionCheckoutAdmissionBlock | null;
+  readonly lease: VersionCheckoutAdmissionLease | null;
+};
+
+export async function readVersionCheckoutAdmissionState(
   ctx: DocumentContext,
-): Promise<VersionCheckoutAdmissionBlock | null> {
+): Promise<VersionCheckoutAdmissionState> {
   const services = getAttachedVersionRuntimeServices(ctx);
   const surfaceStatusService = getAttachedVersionSurfaceStatusService(services);
-  if (!surfaceStatusService) return null;
+  if (!surfaceStatusService) return { block: null, lease: null };
 
   const surfaceDiagnostics: VersionDiagnostic[] = [];
   const dirtyStatus = await readVersionSurfaceDirtyStatus(surfaceStatusService, surfaceDiagnostics);
   const syncBatchBlock = await readSyncBatchStatusAdmissionBlock(services);
   const dirtyBlock = checkoutAdmissionBlockForDirtyStatus(dirtyStatus);
-  if (syncBatchBlock) return syncBatchBlock;
-  if (dirtyBlock) return dirtyBlock;
+  if (syncBatchBlock) return { block: syncBatchBlock, lease: null };
+  if (dirtyBlock) return { block: dirtyBlock, lease: null };
 
   const activeCheckoutSession = await readVersionSurfaceCheckoutSession(
     surfaceStatusService,
     surfaceDiagnostics,
   );
-  if (!activeCheckoutSession) return null;
+  if (!activeCheckoutSession)
+    return { block: null, lease: checkoutLeaseFromDirtyStatus(dirtyStatus) };
 
   const readService = getAttachedCheckoutAdmissionReadService(services);
   const current = await readCheckoutSessionCurrentStatus({
@@ -146,21 +160,51 @@ export async function readVersionCheckoutAdmissionBlock(
     diagnostics: surfaceDiagnostics,
   });
 
-  if (!current.stale) return null;
+  return current.stale
+    ? { block: staleWorkspaceHeadBlock(current), lease: null }
+    : { block: null, lease: checkoutLeaseFromDirtyStatus(dirtyStatus) };
+}
+
+export async function readVersionCheckoutAdmissionBlock(
+  ctx: DocumentContext,
+): Promise<VersionCheckoutAdmissionBlock | null> {
+  return (await readVersionCheckoutAdmissionState(ctx)).block;
+}
+
+export async function revalidateVersionCheckoutAdmissionLease(
+  ctx: DocumentContext,
+  lease: VersionCheckoutAdmissionLease | null,
+): Promise<VersionCheckoutAdmissionBlock | null> {
+  if (!lease) return null;
+  const services = getAttachedVersionRuntimeServices(ctx);
+  const surfaceStatusService = getAttachedVersionSurfaceStatusService(services);
+  if (!surfaceStatusService) return { reason: 'checkoutPreflightStale' };
+
+  const diagnostics: VersionDiagnostic[] = [];
+  const dirtyStatus = await readVersionSurfaceDirtyStatus(surfaceStatusService, diagnostics);
+  const syncBatchBlock = await readSyncBatchStatusAdmissionBlock(services);
+  const dirtyBlock = checkoutAdmissionBlockForDirtyStatus(dirtyStatus, {
+    ignoreCheckoutInProgress: true,
+  });
+  if (syncBatchBlock) return syncBatchBlock;
+  if (dirtyBlock) return dirtyBlock;
+  return checkoutLeaseMatchesDirtyStatus(lease, dirtyStatus)
+    ? null
+    : { reason: 'checkoutPreflightStale' };
+}
+
+function checkoutLeaseFromDirtyStatus(
+  dirty: Awaited<ReturnType<typeof readVersionSurfaceDirtyStatus>>,
+): VersionCheckoutAdmissionLease {
   return {
-    reason: 'staleWorkspaceHead',
-    staleReason: current.staleReason ?? 'unknown',
-    ...(current.branchName ? { branchName: current.branchName } : {}),
-    ...(current.checkedOutCommitId ? { checkedOutCommitId: current.checkedOutCommitId } : {}),
-    ...(current.refHeadAtMaterialization
-      ? { refHeadAtMaterialization: current.refHeadAtMaterialization }
-      : {}),
-    ...(current.currentRefHeadId ? { currentRefHeadId: current.currentRefHeadId } : {}),
+    statusRevision: dirty.statusRevision,
+    checkoutPreflightToken: dirty.checkoutPreflightToken,
   };
 }
 
 function checkoutAdmissionBlockForDirtyStatus(
   dirty: Awaited<ReturnType<typeof readVersionSurfaceDirtyStatus>>,
+  options: { readonly ignoreCheckoutInProgress?: boolean } = {},
 ): VersionCheckoutAdmissionBlock | null {
   if (dirty.hasUncommittedLocalChanges) return { reason: 'dirtyWorkingState' };
   if (dirty.pendingProviderWrites) {
@@ -170,7 +214,10 @@ function checkoutAdmissionBlockForDirtyStatus(
     };
   }
   if (dirty.pendingRecalc) return { reason: 'pendingRecalc' };
-  if (unsafeReasonCode(dirty, 'version.surfaceStatus.checkoutInProgress')) {
+  if (
+    !options.ignoreCheckoutInProgress &&
+    unsafeReasonCode(dirty, 'version.surfaceStatus.checkoutInProgress')
+  ) {
     return { reason: 'checkoutAlreadyInProgress' };
   }
   if (
@@ -182,8 +229,53 @@ function checkoutAdmissionBlockForDirtyStatus(
       ...liveCollaborationPayload(dirty.unsafeReasons),
     };
   }
-  if (!dirty.checkoutSafe) return { reason: 'checkoutPreflightUnsafe' };
+  if (!dirty.checkoutSafe && !onlyIgnoredCheckoutInProgress(dirty, options)) {
+    return { reason: 'checkoutPreflightUnsafe' };
+  }
   return null;
+}
+
+function onlyIgnoredCheckoutInProgress(
+  dirty: Awaited<ReturnType<typeof readVersionSurfaceDirtyStatus>>,
+  options: { readonly ignoreCheckoutInProgress?: boolean },
+): boolean {
+  return Boolean(
+    options.ignoreCheckoutInProgress &&
+    dirty.unsafeReasons.length > 0 &&
+    dirty.unsafeReasons.every(
+      (reason) => reason.code === 'version.surfaceStatus.checkoutInProgress',
+    ),
+  );
+}
+
+function checkoutLeaseMatchesDirtyStatus(
+  lease: VersionCheckoutAdmissionLease,
+  dirty: Awaited<ReturnType<typeof readVersionSurfaceDirtyStatus>>,
+): boolean {
+  if (dirty.statusRevision === lease.statusRevision) return true;
+  return (
+    normalizeCheckoutBusyRevision(dirty.statusRevision) === lease.statusRevision &&
+    normalizeCheckoutBusyRevision(dirty.checkoutPreflightToken) === lease.checkoutPreflightToken
+  );
+}
+
+function normalizeCheckoutBusyRevision(value: string): string {
+  return value.replace('checkout:busy', 'checkout:idle');
+}
+
+function staleWorkspaceHeadBlock(
+  current: Awaited<ReturnType<typeof readCheckoutSessionCurrentStatus>>,
+): VersionCheckoutAdmissionBlock {
+  return {
+    reason: 'staleWorkspaceHead',
+    staleReason: current.staleReason ?? 'unknown',
+    ...(current.branchName ? { branchName: current.branchName } : {}),
+    ...(current.checkedOutCommitId ? { checkedOutCommitId: current.checkedOutCommitId } : {}),
+    ...(current.refHeadAtMaterialization
+      ? { refHeadAtMaterialization: current.refHeadAtMaterialization }
+      : {}),
+    ...(current.currentRefHeadId ? { currentRefHeadId: current.currentRefHeadId } : {}),
+  };
 }
 
 function getAttachedVersionRuntimeServices(ctx: DocumentContext): unknown {

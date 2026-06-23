@@ -45,6 +45,10 @@ const STALE_HISTORY_CHECKOUT_ISSUES = new Set([
   'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
   'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
   'VERSION_CHECKOUT_WRITE_FENCE_STALE',
+  'VERSION_CHECKOUT_ROLLBACK_DEGRADED',
+  'VERSION_CHECKOUT_LEASE_RELEASE_FAILED',
+  'VERSION_CHECKOUT_STALE_SAVE_TOKEN',
+  'VERSION_CHECKOUT_STALE_RUNTIME_TOKEN',
   'VERSION_REF_CONFLICT',
   'VERSION_STALE_PAGE_CURSOR',
 ]);
@@ -145,6 +149,14 @@ export function safeMessageForCheckoutIssue(issueCode: string): string {
       return 'Checkout could not acquire a local write fence before materialization.';
     case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
       return 'Workbook state changed while checkout materialization was in progress.';
+    case 'VERSION_CHECKOUT_ROLLBACK_DEGRADED':
+      return 'Checkout rollback degraded; reload before retrying workbook writes.';
+    case 'VERSION_CHECKOUT_LEASE_RELEASE_FAILED':
+      return 'Checkout lease release could not be proven complete; reload before retrying workbook writes.';
+    case 'VERSION_CHECKOUT_STALE_SAVE_TOKEN':
+      return 'Checkout is blocked because the save token is stale for this workbook lifecycle.';
+    case 'VERSION_CHECKOUT_STALE_RUNTIME_TOKEN':
+      return 'Checkout is blocked because the runtime write token is stale for this workbook lifecycle.';
     case 'VERSION_PERMISSION_DENIED':
       return 'Checkout is not authorized for the requested version target.';
     case 'VERSION_GRAPH_UNINITIALIZED':

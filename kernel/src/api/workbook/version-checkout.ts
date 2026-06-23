@@ -19,12 +19,10 @@ import type {
   CheckoutMaterializationRequest,
   CheckoutMaterializationResult,
 } from '../../document/version-store/checkout-service';
+import { REF_NAME_STORAGE_PREFIX, validateRefName } from '../../document/version-store/ref-name';
 import {
-  REF_NAME_STORAGE_PREFIX,
-  validateRefName,
-} from '../../document/version-store/ref-name';
-import {
-  readVersionCheckoutAdmissionBlock,
+  readVersionCheckoutAdmissionState,
+  revalidateVersionCheckoutAdmissionLease,
   type VersionCheckoutAdmissionBlock,
 } from './version-checkout-admission';
 import {
@@ -131,9 +129,9 @@ export async function checkoutWorkbookVersion(
     return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
   }
 
-  const admissionBlock = await readVersionCheckoutAdmissionBlock(ctx);
-  if (admissionBlock) {
-    return degradedCheckout([checkoutAdmissionDiagnostic(admissionBlock, parsed.payload)]);
+  const admission = await readVersionCheckoutAdmissionState(ctx);
+  if (admission.block) {
+    return degradedCheckout([checkoutAdmissionDiagnostic(admission.block, parsed.payload)]);
   }
 
   const transaction = transactionGuard?.beginCheckoutTransaction();
@@ -141,6 +139,11 @@ export async function checkoutWorkbookVersion(
     return degradedCheckout(transaction.diagnostics);
   }
   const token = transaction?.token ?? null;
+  const fencedBlock = await revalidateVersionCheckoutAdmissionLease(ctx, admission.lease);
+  if (fencedBlock) {
+    if (token) transactionGuard?.endCheckoutTransaction(token);
+    return degradedCheckout([checkoutAdmissionDiagnostic(fencedBlock, parsed.payload)]);
+  }
 
   try {
     const planCheckout = service.planCheckout;
@@ -211,25 +214,20 @@ function bindMethod(value: unknown, name: string): BoundMethod | null {
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
 
-function validateCheckoutOptions(
-  input: VersionCheckoutOptions,
-): readonly VersionStoreDiagnostic[] {
+function validateCheckoutOptions(input: VersionCheckoutOptions): readonly VersionStoreDiagnostic[] {
   if (input === undefined) return [];
   if (!isRecord(input) || Array.isArray(input)) {
     return [
-      invalidOptionsDiagnostic(
-        'checkout options must be an object when supplied.',
-        { option: 'options' },
-      ),
+      invalidOptionsDiagnostic('checkout options must be an object when supplied.', {
+        option: 'options',
+      }),
     ];
   }
 
   const diagnostics: VersionStoreDiagnostic[] = [];
   for (const key of Object.keys(input)) {
     if (!VERSION_CHECKOUT_OPTION_KEYS.has(key)) {
-      diagnostics.push(
-        invalidOptionsDiagnostic('Unsupported checkout option.', { option: key }),
-      );
+      diagnostics.push(invalidOptionsDiagnostic('Unsupported checkout option.', { option: key }));
     }
   }
 
@@ -353,9 +351,7 @@ function validateCheckoutTarget(input: VersionCheckoutTarget): ParsedCheckoutTar
   };
 }
 
-function parseCheckoutRefName(
-  value: unknown,
-):
+function parseCheckoutRefName(value: unknown):
   | {
       readonly ok: true;
       readonly serviceRefName: string;
@@ -533,7 +529,10 @@ function mapResolvedTarget(value: unknown): VersionCheckoutResolvedTarget | null
 function mapRequiredDependency(value: unknown): VersionCheckoutDependencySummary | null {
   if (!isRecord(value)) return null;
   const role = value.role;
-  if (typeof role !== 'string' || !VERSION_CHECKOUT_DEPENDENCY_ROLES.has(role as VersionCheckoutDependencyRole)) {
+  if (
+    typeof role !== 'string' ||
+    !VERSION_CHECKOUT_DEPENDENCY_ROLES.has(role as VersionCheckoutDependencyRole)
+  ) {
     return null;
   }
   if (typeof value.objectType !== 'string') return null;
@@ -552,9 +551,7 @@ function mapCheckoutDiagnostics(
   mutationGuarantee?: CheckoutFailureMutationGuarantee,
 ): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) return [];
-  return value.map((entry) =>
-    mapCheckoutDiagnostic(entry, fallbackPayload, mutationGuarantee),
-  );
+  return value.map((entry) => mapCheckoutDiagnostic(entry, fallbackPayload, mutationGuarantee));
 }
 
 function isMaterializerUnavailableResult(value: unknown): boolean {
@@ -743,6 +740,8 @@ function checkoutAdmissionDiagnostic(
     case 'checkoutAlreadyInProgress':
     case 'checkoutPreflightUnsafe':
       return checkoutWriteFenceUnavailableDiagnostic({ ...payload, reason: block.reason });
+    case 'checkoutPreflightStale':
+      return checkoutWriteFenceStaleDiagnostic({ ...payload, reason: block.reason });
     case 'staleWorkspaceHead':
       return checkoutStaleWorkspaceHeadDiagnostic({
         ...payload,
@@ -856,9 +855,7 @@ export function checkoutWriteFenceStaleDiagnostic(
   );
 }
 
-function invalidPayloadDiagnostic(
-  payload: VersionDiagnosticPublicPayload,
-): VersionStoreDiagnostic {
+function invalidPayloadDiagnostic(payload: VersionDiagnosticPublicPayload): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_INVALID_COMMIT_PAYLOAD',
     'The checkout materialization service returned an invalid public checkout plan.',
@@ -870,9 +867,7 @@ function invalidPayloadDiagnostic(
   );
 }
 
-function providerErrorDiagnostic(
-  payload: VersionDiagnosticPublicPayload,
-): VersionStoreDiagnostic {
+function providerErrorDiagnostic(payload: VersionDiagnosticPublicPayload): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_CHECKOUT_PROVIDER_ERROR',
     'The checkout materialization service failed before returning a usable public result.',
@@ -906,7 +901,9 @@ function publicDiagnostic(
 
 function degradedCheckout(
   diagnostics: readonly VersionStoreDiagnostic[],
-  mutationGuarantee: 'no-workbook-mutation' | 'unknown-after-partial-mutation' = 'no-workbook-mutation',
+  mutationGuarantee:
+    | 'no-workbook-mutation'
+    | 'unknown-after-partial-mutation' = 'no-workbook-mutation',
 ): VersionCheckoutResult {
   return {
     status: 'degraded',
@@ -955,7 +952,10 @@ function safePublicDiagnosticRefName(value: string): string {
   return publicRef ?? 'redacted';
 }
 
-function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: Set<string>): boolean {
+function hasExactKeys(
+  value: Readonly<Record<string, unknown>>,
+  expectedKeys: Set<string>,
+): boolean {
   const actual = Object.keys(value).sort();
   const expected = [...expectedKeys].sort();
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);

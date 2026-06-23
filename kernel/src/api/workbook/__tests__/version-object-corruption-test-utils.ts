@@ -111,7 +111,11 @@ export function conflictDetailInput(
     purpose: 'review',
     ...(options.resolutionSetDigest ? { resolutionSetDigest: options.resolutionSetDigest } : {}),
     ...(options.resolvedAttemptDigest
-      ? { resolvedAttemptDigest: options.resolvedAttemptDigest }
+      ? {
+          resolvedAttemptDigest: options.resolvedAttemptDigest,
+          targetRef: 'refs/heads/main' as any,
+          expectedTargetHead: fixture.expectedTargetHead,
+        }
       : {}),
   } as const;
 }

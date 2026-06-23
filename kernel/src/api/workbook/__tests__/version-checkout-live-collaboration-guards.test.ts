@@ -48,7 +48,7 @@ describe('WorkbookVersion checkout live collaboration guardrails', () => {
               payload: expect.objectContaining({
                 reason: 'pendingRecalc',
                 targetKind: 'commit',
-                commitId,
+                commitId: 'redacted',
               }),
             }),
           }),

@@ -170,6 +170,166 @@ describe('ReviewProposalSurface', () => {
     expect(onOpenDiff).not.toHaveBeenCalled();
   });
 
+  it('surfaces access projection diagnostics and blocks denied diff activation', async () => {
+    const user = userEvent.setup();
+    const onOpenDiff = jest.fn();
+
+    render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[createReview()]}
+        proposals={[createProposal()]}
+        onOpenDiff={onOpenDiff}
+        accessDiagnostics={{
+          reviews: {
+            'review-1': {
+              state: 'denied',
+              code: 'VERSION_REVIEW_DIFF_INCOMPLETE',
+              severity: 'error',
+              reason: 'access-denied',
+              message: 'Review diff omitted authored semantic changes.',
+              hiddenChangeCount: 2,
+              omittedDomainCount: 2,
+              domains: ['charts', 'filters'],
+            },
+          },
+          proposals: {
+            'proposal-1': {
+              state: 'partial',
+              code: 'VERSION_REVIEW_DIFF_PARTIAL',
+              severity: 'warning',
+              reason: 'redaction-policy',
+              message: 'Proposal diff hides redacted workbook changes.',
+              redactedChangeCount: 1,
+            },
+          },
+        }}
+      />,
+    );
+
+    const reviewRow = screen.getByRole('button', {
+      name: 'Open review diff for Forecast review approved',
+    });
+    const reviewDiagnostic = screen.getByTestId('version-review-record-access-diagnostic');
+    expect(reviewRow).toHaveAttribute('aria-disabled', 'true');
+    expect(reviewRow).toHaveAttribute('data-actionable', 'false');
+    expect(reviewRow).toHaveAttribute('data-access-projection', 'denied');
+    expect(reviewRow).toHaveAttribute(
+      'data-access-diagnostic-code',
+      'VERSION_REVIEW_DIFF_INCOMPLETE',
+    );
+    expect(reviewRow).toHaveAttribute('data-hidden-change-count', '2');
+    expect(reviewDiagnostic).toHaveAttribute('data-access-projection', 'denied');
+    expect(reviewDiagnostic).toHaveAttribute('data-redaction-reason', 'access-denied');
+    expect(reviewDiagnostic).toHaveTextContent('Diff denied');
+    expect(reviewDiagnostic).toHaveTextContent('Hidden 2');
+    expect(reviewDiagnostic).toHaveTextContent('Scope charts, filters');
+    expect(reviewRow).toHaveAccessibleDescription(/Review diff omitted authored semantic changes/);
+
+    await user.click(reviewRow);
+    expect(onOpenDiff).not.toHaveBeenCalled();
+
+    const proposalRow = screen.getByRole('button', {
+      name: 'Open proposal diff for Budget scenario ready_for_review',
+    });
+    const proposalDiagnostic = screen.getByTestId('version-proposal-record-access-diagnostic');
+    expect(proposalRow).toHaveAttribute('aria-disabled', 'false');
+    expect(proposalRow).toHaveAttribute('data-actionable', 'true');
+    expect(proposalRow).toHaveAttribute('data-access-projection', 'partial');
+    expect(proposalRow).toHaveAttribute('data-redacted-change-count', '1');
+    expect(proposalDiagnostic).toHaveTextContent('Diff partially hidden');
+    expect(proposalDiagnostic).toHaveTextContent('Redacted 1');
+    expect(proposalRow).toHaveAccessibleDescription(
+      /Proposal diff hides redacted workbook changes/,
+    );
+
+    await user.click(proposalRow);
+    expect(onOpenDiff).toHaveBeenCalledWith({
+      recordKind: 'proposal',
+      recordId: 'proposal-1',
+      baseCommitId: BASE_COMMIT_ID,
+      targetCommitId: PROPOSAL_COMMIT_ID,
+    });
+  });
+
+  it('gates proposal accept controls with merge apply capability and projection visibility', async () => {
+    const user = userEvent.setup();
+    const onAcceptProposal = jest.fn();
+    const { rerender } = render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onAcceptProposal={onAcceptProposal}
+      />,
+    );
+
+    const acceptButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(acceptButton).toBeEnabled();
+    expect(acceptButton).toHaveAttribute('data-capability', 'version:mergeApply');
+    expect(acceptButton).toHaveAttribute('data-state', 'available');
+
+    await user.click(acceptButton);
+    expect(onAcceptProposal).toHaveBeenCalledWith({
+      proposalId: 'proposal-1',
+      expectedRevision: 4,
+      expectedTargetHeadId: HEAD_COMMIT_ID,
+      proposalCommitId: PROPOSAL_COMMIT_ID,
+      targetRef: 'refs/heads/main',
+    });
+
+    onAcceptProposal.mockClear();
+    rerender(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus({
+          capabilityOverrides: {
+            'version:mergeApply': disabledCapability('Merge apply is unavailable.'),
+          },
+        })}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onAcceptProposal={onAcceptProposal}
+      />,
+    );
+
+    const capabilityBlockedButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(capabilityBlockedButton).toBeDisabled();
+    expect(capabilityBlockedButton).toHaveAttribute('data-state', 'unavailable');
+    expect(capabilityBlockedButton).toHaveAccessibleDescription('Merge apply is unavailable.');
+
+    rerender(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onAcceptProposal={onAcceptProposal}
+        accessDiagnostics={{
+          proposals: {
+            'proposal-1': {
+              state: 'partial',
+              severity: 'warning',
+              message: 'Proposal diff hides redacted workbook changes.',
+            },
+          },
+        }}
+      />,
+    );
+
+    const redactionBlockedButton = screen.getByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    });
+    expect(redactionBlockedButton).toBeDisabled();
+    expect(redactionBlockedButton).toHaveAccessibleDescription(
+      'Proposal diff hides redacted workbook changes.',
+    );
+    await user.click(redactionBlockedButton);
+    expect(onAcceptProposal).not.toHaveBeenCalled();
+  });
+
   it('shows disabled and unavailable reasons with stable selectors', () => {
     render(
       <ReviewProposalSurface
@@ -206,9 +366,9 @@ describe('ReviewProposalSurface', () => {
     expect(screen.getByTestId('version-proposal-unavailable-reason')).toHaveTextContent(
       'Proposal records are unavailable.',
     );
-    expect(
-      screen.getByTestId('version-review-diff-persistence-storage-reason'),
-    ).toHaveTextContent('IndexedDB version store is not ready.');
+    expect(screen.getByTestId('version-review-diff-persistence-storage-reason')).toHaveTextContent(
+      'IndexedDB version store is not ready.',
+    );
     expect(screen.getByTestId('version-diff-unavailable-reason')).toHaveTextContent(
       'Diff service is unavailable.',
     );
@@ -293,8 +453,7 @@ function createProposal(): AgentProposalSummary {
     targetRef: 'refs/heads/main' as AgentProposalSummary['targetRef'],
     baseCommitId: BASE_COMMIT_ID,
     targetHeadIdAtCreation: HEAD_COMMIT_ID,
-    proposalBranchName:
-      'refs/heads/agent/proposal-1' as AgentProposalSummary['proposalBranchName'],
+    proposalBranchName: 'refs/heads/agent/proposal-1' as AgentProposalSummary['proposalBranchName'],
     proposalCommitId: PROPOSAL_COMMIT_ID,
     status: 'ready_for_review',
     revision: 4,

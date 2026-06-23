@@ -320,6 +320,141 @@ describe('WorkbookVersion surface status derivation hardening', () => {
     expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
   });
 
+  it('does not overclaim promoted surfaces when lower-gate evidence is mixed or lower rollout', async () => {
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        captureMergeCommit: jest.fn(),
+        mergeCommitMaterializer: { kind: 'test-materializer' },
+        provenanceTruthService: {
+          vc09ProvenanceTruthComplete: true,
+        },
+        surfaceStatusLowerGateEvidence: {
+          promotionStatus: 'pass',
+          rolloutStage: 'ui-beta',
+          requiredLowerGates: [
+            'g1-shadow-only-stage-entry',
+            'gate5-corpus-shadow-threshold',
+            'g7-merge-shadow-apply-proof',
+          ],
+          lowerGateResults: [
+            {
+              gateId: 'g1-shadow-only-stage-entry',
+              status: 'pass',
+              currentForTarget: true,
+            },
+            {
+              gateId: 'gate5-corpus-shadow-threshold',
+              status: 'blocked',
+              currentForTarget: false,
+            },
+          ],
+          sourceRepos: [{ repoId: 'mog', status: 'dirtyBlocked' }],
+          capabilityGateCas: {
+            status: 'pass',
+            readbackStage: 'ui-beta',
+          },
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+
+    expect(surface.stage).toBe('readOnly');
+    expect(surface.capabilities['version:read']).toEqual({ enabled: true });
+    expect(surface.capabilities['version:diff']).toEqual({ enabled: true });
+    for (const capability of [
+      'version:commit',
+      'version:branch',
+      'version:checkout',
+      'version:mergePreview',
+      'version:mergeApply',
+      'version:refAdmin',
+      'version:provenance',
+    ] as const) {
+      expect(capabilityState(surface, capability)).toMatchObject({
+        enabled: false,
+        dependency: 'VC-09',
+        reason:
+          'Promoted version surfaces require current, clean, passing lower-gate evidence.',
+        retryable: true,
+      });
+    }
+    expect(surface.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({ rolloutStage: 'ui-beta' }),
+        }),
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({
+            gateId: 'gate5-corpus-shadow-threshold',
+            status: 'blocked',
+            currentForTarget: false,
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({
+            gateId: 'g7-merge-shadow-apply-proof',
+            status: 'missing',
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({ repoId: 'mog', status: 'dirtyBlocked' }),
+        }),
+      ]),
+    );
+    expect(surfaceReady.commit).not.toHaveBeenCalled();
+    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+    expect(surfaceReady.merge).not.toHaveBeenCalled();
+    expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('redacts lower-gate diagnostic projection payloads', async () => {
+    const rawGateId = 'gate-secret-token';
+    const rawRepoId = 'repo-secret-token';
+    const surfaceReady = createSurfaceReadyVersionWithContext(
+      {},
+      {
+        provenanceTruthService: {
+          vc09ProvenanceTruthComplete: true,
+        },
+        surfaceStatusLowerGateEvidence: {
+          status: 'blockedByLowerGateEvidence',
+          lowerGateResults: [
+            {
+              gateId: rawGateId,
+              status: 'blocked',
+              currentForTarget: false,
+            },
+          ],
+          sourceRepos: [{ repoId: rawRepoId, status: 'dirtyBlocked' }],
+        },
+      },
+    );
+
+    const surface = await surfaceReady.version.getSurfaceStatus();
+    const serialized = JSON.stringify(surface);
+
+    expect(surface.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({ gateId: 'redacted', status: 'blocked' }),
+        }),
+        expect.objectContaining({
+          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
+          data: expect.objectContaining({ repoId: 'redacted', status: 'dirtyBlocked' }),
+        }),
+      ]),
+    );
+    expect(serialized).not.toContain(rawGateId);
+    expect(serialized).not.toContain(rawRepoId);
+  });
+
   it('redacts malformed manifest and attached dirty-status diagnostic payloads', async () => {
     const readDirtyStatus = jest.fn(() => ({
       statusRevision: 'dirty-redacted',

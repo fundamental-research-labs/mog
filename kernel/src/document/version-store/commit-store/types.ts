@@ -1,7 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { ObjectDigest, VersionDependencyRef, WorkbookCommitId } from './object-digest';
-import type { VersionObjectRecord, VersionObjectStoreDiagnostic } from './object-store';
+import type { ObjectDigest, VersionDependencyRef, WorkbookCommitId } from '../object-digest';
+import type { VersionObjectRecord, VersionObjectStoreDiagnostic } from '../object-store';
 
 export type WorkbookCommitCompletenessDiagnostic = {
   readonly code: string;

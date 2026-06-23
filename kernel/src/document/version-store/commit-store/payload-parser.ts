@@ -1,15 +1,15 @@
-import { parseWorkbookCommitParentIds } from './commit-store-parents';
-import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store-types';
-import { parseVersionAuthor } from './commit-store-payload-author';
-import { parseCompletenessDiagnostics } from './commit-store-payload-completeness';
-import { diagnostic, invalidPayloadDiagnostic } from './commit-store-payload-diagnostics';
+import { parseWorkbookCommitParentIds } from './parents';
+import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './types';
+import { parseVersionAuthor } from './payload-author';
+import { parseCompletenessDiagnostics } from './payload-completeness';
+import { diagnostic, invalidPayloadDiagnostic } from './payload-diagnostics';
 import {
   parseOptionalDigest,
   parseOptionalDigestArray,
   parsePayloadDigest,
-} from './commit-store-payload-digests';
-import { isPlainRecord } from './commit-store-payload-guards';
-import { parseString } from './commit-store-payload-scalars';
+} from './payload-digests';
+import { isPlainRecord } from './payload-guards';
+import { parseString } from './payload-scalars';
 
 export function parseCommitPayload(
   payload: unknown,

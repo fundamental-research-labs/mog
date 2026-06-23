@@ -1,9 +1,9 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { WorkbookCommitStoreDiagnostic } from './commit-store-types';
-import { invalidPayloadDiagnostic } from './commit-store-payload-diagnostics';
-import { isPlainRecord } from './commit-store-payload-guards';
-import { parseOptionalString, parseString } from './commit-store-payload-scalars';
+import type { WorkbookCommitStoreDiagnostic } from './types';
+import { invalidPayloadDiagnostic } from './payload-diagnostics';
+import { isPlainRecord } from './payload-guards';
+import { parseOptionalString, parseString } from './payload-scalars';
 
 export function parseVersionAuthor(
   value: unknown,

@@ -7,8 +7,8 @@ export type {
   WorkbookCommitPayload,
   WorkbookCommitStoreDiagnostic,
   WorkbookCommitStoreDiagnosticCode,
-} from './commit-store-types';
+} from './commit-store/types';
 export {
   InMemoryWorkbookCommitStore,
   createInMemoryWorkbookCommitStore,
-} from './commit-store-memory';
+} from './commit-store/memory';

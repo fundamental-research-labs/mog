@@ -1,4 +1,4 @@
-import { parseVc04ParentCommitIds, parseWorkbookMergeParentCommitId } from './commit-store-parents';
+import { parseVc04ParentCommitIds, parseWorkbookMergeParentCommitId } from './commit-store/parents';
 import type { WorkbookCommitStoreDiagnostic } from './commit-store';
 import type { WorkbookCommitId } from './object-digest';
 import type { LiveRefRecord } from './ref-store';

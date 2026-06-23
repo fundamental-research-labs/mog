@@ -1,4 +1,4 @@
-import type { VersionObjectRecord } from './object-store';
+import type { VersionObjectRecord } from '../object-store';
 
 export function isVersionObjectRecord(value: unknown): value is VersionObjectRecord<unknown> {
   return (

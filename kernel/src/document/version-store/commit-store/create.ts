@@ -1,5 +1,5 @@
-import { workbookCommitIdFromObjectDigest } from './object-digest';
-import { cloneDigest } from './commit-store-utils';
+import { workbookCommitIdFromObjectDigest } from '../object-digest';
+import { cloneDigest } from './utils';
 import {
   collectDependencyRecords,
   dependenciesForPayload,
@@ -7,20 +7,20 @@ import {
   parseCompletenessDiagnostics,
   parseString,
   parseVersionAuthor,
-} from './commit-store-payload';
-import { validateWorkbookParentCommitClosureForCreate } from './commit-store-parents';
-import { commitFromRecord, validateCommitRecord } from './commit-store-records';
+} from './payload';
+import { validateWorkbookParentCommitClosureForCreate } from './parents';
+import { commitFromRecord, validateCommitRecord } from './records';
 import {
   createVersionObjectRecord,
   type InMemoryVersionObjectStore,
   type VersionObjectRecord,
-} from './object-store';
+} from '../object-store';
 import type {
   CreateWorkbookCommitInput,
   CreateWorkbookCommitResult,
   WorkbookCommitPayload,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store-types';
+} from './types';
 
 export async function createWorkbookCommitInObjectStore(
   objectStore: InMemoryVersionObjectStore,

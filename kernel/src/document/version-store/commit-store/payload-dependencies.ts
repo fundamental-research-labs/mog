@@ -2,16 +2,16 @@ import {
   objectDigestFromWorkbookCommitId,
   type VersionDependencyRef,
   type VersionObjectType,
-} from './object-digest';
-import { cloneDigest } from './commit-store-utils';
+} from '../object-digest';
+import { cloneDigest } from './utils';
 import type {
   CreateWorkbookCommitInput,
   WorkbookCommitPayload,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store-types';
-import type { VersionObjectRecord } from './object-store';
-import { diagnostic } from './commit-store-payload-diagnostics';
-import { isVersionObjectRecord } from './commit-store-payload-guards';
+} from './types';
+import type { VersionObjectRecord } from '../object-store';
+import { diagnostic } from './payload-diagnostics';
+import { isVersionObjectRecord } from './payload-guards';
 
 export type CommitDependencyRecords = {
   readonly snapshotRootRecord: VersionObjectRecord<unknown>;

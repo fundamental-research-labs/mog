@@ -1,4 +1,4 @@
-import type { ObjectDigest, VersionDependencyRef } from './object-digest';
+import type { ObjectDigest, VersionDependencyRef } from '../object-digest';
 
 export function dependencyKey(dependency: VersionDependencyRef): string {
   if (dependency.kind === 'object') {

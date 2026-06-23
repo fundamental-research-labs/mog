@@ -2,21 +2,21 @@ import {
   objectDigestFromWorkbookCommitId,
   parseWorkbookCommitId,
   type WorkbookCommitId,
-} from './object-digest';
-import { createWorkbookCommitInObjectStore } from './commit-store-create';
-import { diagnostic } from './commit-store-payload';
+} from '../object-digest';
+import { createWorkbookCommitInObjectStore } from './create';
+import { diagnostic } from './payload';
 import {
   commitFromRecord,
   validateCommitDependenciesPresent,
   validateCommitRecord,
-} from './commit-store-records';
-import { VersionObjectStoreError, type InMemoryVersionObjectStore } from './object-store';
+} from './records';
+import { VersionObjectStoreError, type InMemoryVersionObjectStore } from '../object-store';
 import type {
   CreateWorkbookCommitInput,
   CreateWorkbookCommitResult,
   ReadWorkbookCommitResult,
   WorkbookCommitPayload,
-} from './commit-store-types';
+} from './types';
 
 export class InMemoryWorkbookCommitStore {
   private readonly objectStore: InMemoryVersionObjectStore;

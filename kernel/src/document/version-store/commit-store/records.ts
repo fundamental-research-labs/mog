@@ -2,19 +2,19 @@ import {
   objectDigestFromWorkbookCommitId,
   type VersionDependencyRef,
   type WorkbookCommitId,
-} from './object-digest';
-import { dependencyKey } from './commit-store-utils';
-import { dependenciesForPayload, diagnostic, parseCommitPayload } from './commit-store-payload';
+} from '../object-digest';
+import { dependencyKey } from './utils';
+import { dependenciesForPayload, diagnostic, parseCommitPayload } from './payload';
 import {
   VersionObjectStoreError,
   type InMemoryVersionObjectStore,
   type VersionObjectRecord,
-} from './object-store';
+} from '../object-store';
 import type {
   WorkbookCommit,
   WorkbookCommitPayload,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store-types';
+} from './types';
 
 export function validateCommitRecord(
   commitId: WorkbookCommitId,

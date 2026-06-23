@@ -3,9 +3,9 @@ import {
   parseWorkbookCommitId,
   type VersionDependencyRef,
   type WorkbookCommitId,
-} from './object-digest';
-import { VersionObjectStoreError, type InMemoryVersionObjectStore } from './object-store';
-import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store-types';
+} from '../object-digest';
+import { VersionObjectStoreError, type InMemoryVersionObjectStore } from '../object-store';
+import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './types';
 
 type ParentCommitIdsResult =
   | { readonly ok: true; readonly parentCommitIds: readonly WorkbookCommitId[] }

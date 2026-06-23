@@ -17,6 +17,10 @@ function captureVersionStoreConfigError(
 }
 
 describe('SDK version-store config', () => {
+  it('preserves absent config as the SDK default lifecycle path', () => {
+    expect(createSdkVersionStoreLifecycleConfig(undefined, { runtime: 'node' })).toBeUndefined();
+  });
+
   it('maps in-memory config to the memory provider selection', () => {
     expect(
       createSdkVersionStoreLifecycleConfig(
@@ -39,6 +43,26 @@ describe('SDK version-store config', () => {
         requireDurablePersistence: true,
       },
     });
+  });
+
+  it('rejects non-canonical provider ids before selecting a provider', () => {
+    for (const [config, field, canonicalField] of [
+      ['IndexedDB', 'kind', 'canonicalKind'],
+      [{ kind: 'indexedDB' }, 'kind', 'canonicalKind'],
+      [{ kind: 'browser', provider: 'IndexedDB' }, 'provider', 'canonicalProvider'],
+    ] as const) {
+      const error = captureVersionStoreConfigError(config);
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          details: {
+            field,
+            category: 'provider-identity',
+            [canonicalField]: 'indexeddb',
+          },
+        },
+      });
+    }
   });
 
   it('serializes public lifecycle config with stable field order', () => {
@@ -145,6 +169,70 @@ describe('SDK version-store config', () => {
         runtime: 'node',
       }),
     ).toThrow("versionStore.provider is only valid with kind='browser'");
+  });
+
+  it('rejects missing workspace authority for remote mode claims', () => {
+    const error = captureVersionStoreConfigError({
+      kind: 'indexeddb',
+      mode: 'remoteBacked',
+    });
+
+    expect(error).toMatchObject({
+      diagnostic: {
+        code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+        requestedKind: 'indexeddb',
+        details: {
+          field: 'workspaceId',
+          category: 'workspace-authority',
+          claimedField: 'mode',
+        },
+      },
+    });
+  });
+
+  it('rejects mixed local and remote mode overclaims even with workspace scope', () => {
+    for (const [field, value] of [
+      ['mode', 'localFirst'],
+      ['remote', true],
+      ['localFirst', true],
+      ['remotePromote', true],
+    ] as const) {
+      const error = captureVersionStoreConfigError({
+        kind: 'indexeddb',
+        workspaceId: 'workspace-1',
+        [field]: value,
+      });
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'mode-overclaim',
+          },
+        },
+      });
+    }
+  });
+
+  it('rejects provider authority fields from remote provenance', () => {
+    for (const field of ['authorityRef', 'stableOriginId', 'remoteSessionId'] as const) {
+      const error = captureVersionStoreConfigError({
+        kind: 'indexeddb',
+        workspaceId: 'workspace-1',
+        [field]: `${field}-1`,
+      });
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'provider-identity',
+          },
+        },
+      });
+    }
   });
 
   it('rejects malformed browser provider config', () => {
@@ -256,6 +344,30 @@ describe('SDK version-store config', () => {
         },
       },
     });
+  });
+
+  it('rejects stale default-on rollout flags', () => {
+    for (const [field, value] of [
+      ['defaultOn', true],
+      ['enableDefaultVersioning', true],
+      ['rolloutStage', 'default-on'],
+    ] as const) {
+      const error = captureVersionStoreConfigError({
+        kind: 'indexeddb',
+        workspaceId: 'workspace-1',
+        [field]: value,
+      });
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'stale-default-flag',
+          },
+        },
+      });
+    }
   });
 
   it('rejects unsafe storage key material in scope strings', () => {

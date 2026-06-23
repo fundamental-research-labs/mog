@@ -99,9 +99,22 @@ type DisallowedVersionStoreConfigField = {
     | 'provider-internal'
     | 'storage-key'
     | 'scope'
-    | 'internal-source';
+    | 'internal-source'
+    | 'workspace-authority'
+    | 'mode-overclaim'
+    | 'stale-default-flag';
   readonly message: string;
 };
+
+function disallowedConfigFields(
+  category: DisallowedVersionStoreConfigField['category'],
+  fields: readonly string[],
+  messageForField: (field: string) => string,
+): Record<string, DisallowedVersionStoreConfigField> {
+  return Object.fromEntries(
+    fields.map((field) => [field, { category, message: messageForField(field) }]),
+  );
+}
 
 const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
   Record<string, DisallowedVersionStoreConfigField>
@@ -156,6 +169,25 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     message:
       'versionStore.providerKey is ambiguous; SDK version-store config selects a provider kind, not a persisted provider key.',
   },
+  ...disallowedConfigFields(
+    'provider-identity',
+    [
+      'authorityRef',
+      'providerAuthority',
+      'stableOriginId',
+      'originKind',
+      'roomId',
+      'remoteSessionId',
+      'epoch',
+      'updateId',
+      'sequence',
+      'payloadHash',
+      'trustStatus',
+      'authorState',
+    ],
+    (field) =>
+      `versionStore.${field} is host or remote provider provenance; SDK version-store config cannot assert it.`,
+  ),
   storageKey: {
     category: 'storage-key',
     message:
@@ -206,6 +238,30 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     message:
       'versionStore.objectStoreName is unsafe storage key material; IndexedDB object store naming is SDK-owned.',
   },
+  ...disallowedConfigFields(
+    'mode-overclaim',
+    [
+      'mode',
+      'durability',
+      'durabilityMode',
+      'persistenceMode',
+      'localFirst',
+      'remoteBacked',
+      'local',
+      'remote',
+      'sync',
+      'syncMode',
+      'collaboration',
+      'collaborationMode',
+      'liveCollaboration',
+      'remoteProviderAttached',
+      'pendingRemotePromotion',
+      'remotePromote',
+      'enableRemotePromote',
+    ],
+    (field) =>
+      `versionStore.${field} cannot claim local, local-first, remote-backed, or sync provider mode; select a supported kind instead.`,
+  ),
   documentId: {
     category: 'scope',
     message:
@@ -226,6 +282,20 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     message:
       'versionStore.scope is inconsistent with SDK document scope; pass workspaceId/principalScope on versionStore and documentId to createWorkbook options.',
   },
+  ...disallowedConfigFields(
+    'workspace-authority',
+    [
+      'workspaceAuthority',
+      'workspaceAuthorityRef',
+      'tenantId',
+      'tenantScope',
+      'tenant',
+      'organizationId',
+      'orgId',
+    ],
+    (field) =>
+      `versionStore.${field} is workspace authority material; SDK version-store config accepts only workspaceId as public scope.`,
+  ),
   source: {
     category: 'internal-source',
     message:
@@ -301,6 +371,27 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     message:
       'versionStore.replayRegistry is an internal host replay registry; SDK callers cannot provide it.',
   },
+  ...disallowedConfigFields(
+    'stale-default-flag',
+    [
+      'enabled',
+      'defaultOn',
+      'defaultEnabled',
+      'enabledByDefault',
+      'enableVersioning',
+      'enableVersionHistory',
+      'enableVersionStore',
+      'defaultVersioning',
+      'enableDefaultVersioning',
+      'rolloutStage',
+      'featureStage',
+      'gateStage',
+      'gateId',
+      'capabilityGate',
+    ],
+    (field) =>
+      `versionStore.${field} is stale default-on/control-plane state; omit versionStore or pass an explicit supported kind.`,
+  ),
 });
 
 const BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS = Object.freeze([
@@ -320,6 +411,56 @@ const SUPPORTED_VERSION_STORE_CONFIG_FIELDS: Readonly<
   indexeddb: new Set(BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS),
   browser: new Set([...BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS, 'provider']),
 });
+
+const CANONICAL_SUPPORTED_VERSION_STORE_KIND_BY_ID: Readonly<
+  Record<string, MogSdkSupportedVersionStoreKind>
+> = Object.freeze({
+  memory: 'memory',
+  'in-memory': 'in-memory',
+  inmemory: 'in-memory',
+  'memory-durable-snapshot': 'memory-durable-snapshot',
+  memorydurablesnapshot: 'memory-durable-snapshot',
+  indexeddb: 'indexeddb',
+  'indexed-db': 'indexeddb',
+  browser: 'browser',
+});
+
+const WORKSPACE_AUTHORITY_REQUIRED_CONFIG_FIELDS: ReadonlySet<string> = new Set([
+  'workspaceAuthority',
+  'workspaceAuthorityRef',
+  'tenantId',
+  'tenantScope',
+  'tenant',
+  'organizationId',
+  'orgId',
+  'remote',
+  'remoteBacked',
+  'localFirst',
+  'sync',
+  'syncMode',
+  'collaboration',
+  'collaborationMode',
+  'liveCollaboration',
+  'remoteProviderAttached',
+  'pendingRemotePromotion',
+  'remotePromote',
+  'enableRemotePromote',
+]);
+
+const WORKSPACE_AUTHORITY_REQUIRED_MODE_VALUES: ReadonlySet<string> = new Set([
+  'remote',
+  'remote-backed',
+  'remoteBacked',
+  'local-first',
+  'localFirst',
+  'provider-backed',
+  'providerBacked',
+  'workspace',
+  'workspace-remote',
+  'sync',
+  'collaboration',
+  'collab',
+]);
 
 export class MogSdkVersionStoreConfigError extends Error {
   readonly diagnostic: MogSdkVersionStoreDiagnostic;
@@ -416,6 +557,7 @@ function parseVersionStoreConfig(
   options: { readonly runtime: MogSdkVersionStoreRuntime },
 ): ParsedVersionStoreConfig {
   if (typeof versionStore === 'string') {
+    assertCanonicalVersionStoreKind(versionStore, options);
     return { kind: versionStore, config: null };
   }
 
@@ -439,6 +581,7 @@ function parseVersionStoreConfig(
     );
   }
 
+  assertCanonicalVersionStoreKind(versionStore.kind, options);
   return { kind: versionStore.kind, config: versionStore };
 }
 
@@ -448,6 +591,8 @@ function validateSupportedVersionStoreConfig(
   options: { readonly runtime: MogSdkVersionStoreRuntime },
 ): void {
   if (config === null) return;
+
+  validateWorkspaceAuthorityClaims(kind, config, options);
 
   for (const [field, fieldConfig] of Object.entries(DISALLOWED_VERSION_STORE_CONFIG_FIELDS)) {
     if (!hasOwnField(config, field)) continue;
@@ -482,6 +627,48 @@ function validateSupportedVersionStoreConfig(
       ),
     );
   }
+}
+
+function validateWorkspaceAuthorityClaims(
+  kind: MogSdkSupportedVersionStoreKind,
+  config: Readonly<Record<string, unknown>>,
+  options: { readonly runtime: MogSdkVersionStoreRuntime },
+): void {
+  if (hasUsableWorkspaceId(config)) return;
+
+  const claimedField = firstWorkspaceAuthorityClaimField(config);
+  if (claimedField === null) return;
+
+  throw new MogSdkVersionStoreConfigError(
+    invalidVersionStoreDiagnostic(
+      options,
+      kind,
+      `versionStore.${claimedField} claims workspace or remote authority, but versionStore.workspaceId is missing.`,
+      { field: 'workspaceId', category: 'workspace-authority', claimedField },
+    ),
+  );
+}
+
+function firstWorkspaceAuthorityClaimField(
+  config: Readonly<Record<string, unknown>>,
+): string | null {
+  for (const field of WORKSPACE_AUTHORITY_REQUIRED_CONFIG_FIELDS) {
+    if (hasOwnField(config, field) && isAuthorityClaimValue(config[field])) {
+      return field;
+    }
+  }
+
+  for (const field of ['mode', 'durability', 'durabilityMode', 'persistenceMode'] as const) {
+    const value = config[field];
+    if (typeof value !== 'string') continue;
+    if (WORKSPACE_AUTHORITY_REQUIRED_MODE_VALUES.has(value.normalize('NFC'))) return field;
+  }
+
+  return null;
+}
+
+function isAuthorityClaimValue(value: unknown): boolean {
+  return value !== false && value !== null && value !== undefined;
 }
 
 function lifecycleConfig(
@@ -574,8 +761,8 @@ function optionalBrowserProviderField(
       invalidVersionStoreDiagnostic(
         options,
         kindFromConfig(config),
-        `Browser version stores only support provider='indexeddb'; received '${provider}'.`,
-        { field: 'provider', category: 'provider-identity' },
+        `versionStore.provider must use canonical provider id 'indexeddb'; received '${provider}'.`,
+        { field: 'provider', category: 'provider-identity', canonicalProvider: 'indexeddb' },
       ),
     );
   }
@@ -648,6 +835,33 @@ function kindFromConfig(config: Readonly<Record<string, unknown>> | null): strin
   return typeof config?.kind === 'string' ? config.kind : undefined;
 }
 
+function assertCanonicalVersionStoreKind(
+  kind: string,
+  options: { readonly runtime: MogSdkVersionStoreRuntime },
+): void {
+  const canonicalKind = canonicalSupportedVersionStoreKindFor(kind);
+  if (canonicalKind === undefined || kind === canonicalKind) return;
+
+  throw new MogSdkVersionStoreConfigError(
+    invalidVersionStoreDiagnostic(
+      options,
+      kind,
+      `versionStore.kind must use canonical provider id '${canonicalKind}'; received '${kind}'.`,
+      { field: 'kind', category: 'provider-identity', canonicalKind },
+    ),
+  );
+}
+
+function canonicalSupportedVersionStoreKindFor(
+  kind: string,
+): MogSdkSupportedVersionStoreKind | undefined {
+  return CANONICAL_SUPPORTED_VERSION_STORE_KIND_BY_ID[canonicalKindLookupId(kind)];
+}
+
+function canonicalKindLookupId(kind: string): string {
+  return kind.normalize('NFC').trim().replace(/[\s_]+/gu, '-').toLowerCase();
+}
+
 function isUnsupportedVersionStoreKind(kind: string): kind is MogSdkUnsupportedVersionStoreKind {
   return (MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS as readonly string[]).includes(kind);
 }
@@ -662,6 +876,17 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function hasOwnField(config: Readonly<Record<string, unknown>>, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(config, field);
+}
+
+function hasUsableWorkspaceId(config: Readonly<Record<string, unknown>>): boolean {
+  const value = config.workspaceId;
+  if (typeof value !== 'string' || value.length === 0) return false;
+  const normalized = value.normalize('NFC');
+  return (
+    normalized.trim().length > 0 &&
+    utf8ByteLength(normalized) <= 256 &&
+    !/[\u0000-\u001f\u007f]/u.test(normalized)
+  );
 }
 
 function utf8ByteLength(value: string): number {

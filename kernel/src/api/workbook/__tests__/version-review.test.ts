@@ -347,4 +347,103 @@ describe('WorkbookVersion review records facade', () => {
       },
     });
   });
+
+  it('redacts denied principals from review read diagnostics', async () => {
+    const version = createVersion({
+      getReview: jest.fn(async () => ({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.getReview',
+          diagnostics: [
+            {
+              code: 'VERSION_REVIEW_ACCESS_DENIED',
+              severity: 'error',
+              message: 'Review read denied for principal-secret.',
+              data: {
+                deniedPrincipalId: 'principal-secret',
+                payload: {
+                  deniedCapabilities: ['version:reviewRead'],
+                  deniedPrincipal: 'principal-secret',
+                  principalScope: 'principal-secret',
+                },
+              },
+            },
+          ],
+        },
+      })),
+    });
+
+    const result = await version.getReview({ reviewId: REVIEW_ID });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REVIEW_ACCESS_DENIED',
+            message: 'Review read denied for redacted-principal.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                deniedCapabilities: ['version:reviewRead'],
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).not.toContain('deniedPrincipal');
+    expect(serialized).toContain('version:reviewRead');
+  });
+
+  it('fails closed when a review diff omits authored upstream changes', async () => {
+    const version = createVersion({
+      getReviewDiff: jest.fn(async () => ({
+        ok: true,
+        value: {
+          ...createReviewDiffPage(),
+          changes: [],
+          upstreamDiff: {
+            items: [
+              {
+                structural: {
+                  kind: 'metadata',
+                  changeId: 'change-hidden-vba',
+                  domain: 'macros.vba',
+                  entityId: 'module-1',
+                  propertyPath: ['source'],
+                },
+                before: { kind: 'value', value: null },
+                after: { kind: 'value', value: 'private macro source' },
+              },
+            ],
+            limit: 50,
+            readRevision: { kind: 'counter', value: '1' },
+            order: 'semantic-change-order',
+          },
+        },
+      })),
+    });
+
+    await expect(version.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.getReviewDiff',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_REVIEW_DIFF_INCOMPLETE',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                omittedChangeCount: 1,
+                domain: 'macros.vba',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+  });
 });

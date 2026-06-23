@@ -202,11 +202,11 @@ describe('WorkbookVersion provider-backed review service', () => {
           derivedChanges: 0,
           redactedChanges: 0,
         },
-        nextCursor: expect.stringContaining(graph.childCommitId),
+        nextCursor: expect.stringMatching(/^mog-vdiff-v1\.semantic-change-order\./),
         limit: 1,
         upstreamDiff: {
           items: [{ structural: { changeId: 'change-cell-a1' } }],
-          nextCursor: expect.stringContaining(graph.childCommitId),
+          nextCursor: expect.stringMatching(/^mog-vdiff-v1\.semantic-change-order\./),
           limit: 1,
           order: 'semantic-change-order',
         },
@@ -216,11 +216,13 @@ describe('WorkbookVersion provider-backed review service', () => {
       throw new Error('expected review diff page cursor');
     }
 
-    await expect(version.getReviewDiff({
-      baseCommitId: graph.rootCommitId,
-      headCommitId: graph.childCommitId,
-      limit: 1,
-    })).resolves.toMatchObject({
+    await expect(
+      version.getReviewDiff({
+        baseCommitId: graph.rootCommitId,
+        headCommitId: graph.childCommitId,
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { changes: [{ target: { changeId: 'change-cell-a1' } }], limit: 1 },
     });
@@ -257,6 +259,73 @@ describe('WorkbookVersion provider-backed review service', () => {
         diagnostics: [expect.objectContaining({ code: 'VERSION_STALE_PAGE_CURSOR' })],
       },
     });
+  });
+
+  it('blocks review diffs when completeness diagnostics would hide unsupported authored domains', async () => {
+    const visibleChange = {
+      changeId: 'change-cell-a1',
+      domain: 'cell',
+      entityId: 'sheet-1!A1',
+      propertyPath: ['value'],
+      before: { kind: 'value', value: null },
+      after: { kind: 'value', value: 42 },
+      display: { address: { kind: 'value', value: 'A1' } },
+    };
+    const hiddenUnsupportedChange = {
+      changeId: 'change-vba-module',
+      domain: 'macros.vba',
+      entityId: 'module-1',
+      propertyPath: ['source'],
+      before: { kind: 'value', value: null },
+      after: { kind: 'value', value: 'private macro source' },
+    };
+    const graph = await graphWithRootAndChild([visibleChange, hiddenUnsupportedChange], {
+      reviewChanges: [visibleChange],
+      completenessDiagnostics: [
+        {
+          code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN',
+          severity: 'error',
+          message: 'Unsupported authored domain omitted for principal-secret.',
+          path: 'changes[1]',
+          details: {
+            domain: 'macros.vba',
+            deniedPrincipalId: 'principal-secret',
+            principalScope: 'principal-secret',
+            hiddenAuthoredChanges: 1,
+          },
+        },
+      ],
+    });
+    const version = versionForProvider(graph.provider);
+    const review = await version.createReview({
+      ...createReviewInput('hidden-unsupported-domain-review'),
+      subject: {
+        kind: 'commitRange',
+        baseCommitId: graph.rootCommitId,
+        headCommitId: graph.childCommitId,
+      },
+    });
+    if (!review.ok) throw new Error(`expected review create success: ${review.error.code}`);
+
+    const diff = await version.getReviewDiff({ reviewId: review.value.id });
+
+    expect(diff).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.getReviewDiff',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN',
+            message: 'The requested version diff includes unsupported semantic state.',
+            severity: 'error',
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(diff);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).not.toContain('deniedPrincipal');
   });
 
   it('approves commit-range reviews with diff-backed evidence and idempotent retry', async () => {
@@ -546,7 +615,9 @@ function createReviewInput(clientRequestId: string): VersionCreateReviewInput {
   };
 }
 
-function versionForProvider(provider: ReturnType<typeof createInMemoryVersionStoreProvider>): WorkbookVersionImpl {
+function versionForProvider(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+): WorkbookVersionImpl {
   const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
   attachWorkbookVersioning(ctx, { provider });
   return new WorkbookVersionImpl(ctx);
@@ -570,7 +641,17 @@ function expectInitializeSuccess(
   }
 }
 
-async function graphWithRootAndChild(changes: readonly unknown[]) {
+type GraphWithRootAndChildOptions = {
+  readonly reviewChanges?: readonly unknown[];
+  readonly completenessDiagnostics?: NonNullable<
+    CommitVersionGraphInput['completenessDiagnostics']
+  >;
+};
+
+async function graphWithRootAndChild(
+  changes: readonly unknown[],
+  options: GraphWithRootAndChildOptions = {},
+) {
   const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
   const initialized = await provider.initializeGraph(await initializeInput('graph-1'));
   expectInitializeSuccess(initialized);
@@ -579,7 +660,13 @@ async function graphWithRootAndChild(changes: readonly unknown[]) {
   const head = await opened.readHead();
   if (head.status !== 'success') throw new Error('expected graph head before append');
   const committed = await opened.commit(
-    await commitInput(namespace, head.head.id, head.head.refRevision as RefVersion, changes),
+    await commitInput(
+      namespace,
+      head.head.id,
+      head.head.refRevision as RefVersion,
+      changes,
+      options,
+    ),
   );
   if (committed.status !== 'success') {
     throw new Error(`expected commit success: ${committed.diagnostics[0]?.code}`);
@@ -617,6 +704,7 @@ async function commitInput(
   expectedHeadCommitId: WorkbookCommitId,
   expectedMainRefVersion: RefVersion,
   changes: readonly unknown[],
+  options: GraphWithRootAndChildOptions = {},
 ): Promise<CommitVersionGraphInput> {
   return {
     snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
@@ -626,6 +714,7 @@ async function commitInput(
     semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
       schemaVersion: 1,
       changes,
+      ...(options.reviewChanges === undefined ? {} : { reviewChanges: options.reviewChanges }),
     }),
     mutationSegmentRecords: [
       await objectRecord(namespace, 'workbook.mutationSegment.v1', {
@@ -634,7 +723,7 @@ async function commitInput(
     ],
     author: GRAPH_AUTHOR,
     createdAt: '2026-06-22T00:00:01.000Z',
-    completenessDiagnostics: [],
+    completenessDiagnostics: options.completenessDiagnostics ?? [],
     expectedHeadCommitId,
     expectedMainRefVersion,
   };

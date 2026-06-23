@@ -19,7 +19,10 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import { validateVersionOperationGate } from './version-operation-gate';
-import { versionFailureFromStoreDiagnostics } from './version-result';
+import {
+  hardenVersionReviewServiceResult,
+  versionReviewFailureFromDiagnostics,
+} from './version-review-diagnostics';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const LIST_REVIEWS_KEYS = new Set([
@@ -605,8 +608,12 @@ function mapReviewServiceResult<T>(
   operation: VersionReviewPublicOperation,
   value: unknown,
 ): VersionResult<T> {
-  if (isVersionResult(value)) return value as VersionResult<T>;
-  if (isRecord(value)) return { ok: true, value: value as T };
+  if (isVersionResult(value)) {
+    return hardenVersionReviewServiceResult(operation, value as VersionResult<T>);
+  }
+  if (isRecord(value)) {
+    return hardenVersionReviewServiceResult(operation, { ok: true, value: value as T });
+  }
   return reviewFailure(operation, [providerInvalidPayloadDiagnostic(operation)]);
 }
 
@@ -636,7 +643,7 @@ function reviewFailure<T>(
   operation: VersionReviewPublicOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
-  return versionFailureFromStoreDiagnostics(operation, diagnostics);
+  return versionReviewFailureFromDiagnostics(operation, diagnostics);
 }
 
 function serviceUnavailableDiagnostic(

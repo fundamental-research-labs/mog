@@ -171,6 +171,86 @@ describe('applyMergeWorkbookVersion target-ref CAS proof validation', () => {
 });
 
 describe('applyPersistedMergeResult ref CAS proof recovery', () => {
+  it('returns terminal fast-forward idempotency before stale-target rejection', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'terminal-before-stale');
+    const registry = await createVersionGraphRegistry({
+      documentScope: DOCUMENT_SCOPE,
+      graphId: namespace.graphId,
+      rootCommitId: BASE,
+      createdAt: CREATED_AT,
+    });
+    const record: MergeApplyIntentRecord = {
+      ...fastForwardIntentRecord(namespace),
+      state: 'finalized',
+      terminal: {
+        status: 'fastForwarded',
+        headBefore: OURS,
+        headAfter: THEIRS,
+        commitId: THEIRS,
+      },
+    };
+    const fastForwardMerge = jest.fn();
+    const store: MergeApplyIntentStore = {
+      namespace,
+      beginIntent: jest.fn(),
+      readByIntentId: jest.fn(async () => ({ status: 'found', record, diagnostics: [] })),
+      readByIdempotencyKey: jest.fn(),
+      readRefCasProof: jest.fn(),
+      completeIntent: jest.fn(),
+    };
+    const readRef = jest.fn(async () => ({
+      status: 'success' as const,
+      ref: {
+        name: TARGET_REF,
+        commitId: THEIRS,
+        revision: { kind: 'counter' as const, value: '2' },
+        updatedAt: CREATED_AT,
+      },
+      diagnostics: [],
+    }));
+    const provider = {
+      accessContext: {},
+      readGraphRegistry: jest.fn(async () => ({
+        status: 'ok',
+        registry,
+        diagnostics: [],
+      })),
+      openGraph: jest.fn(async () => ({ readRef })),
+      openMergeApplyIntentStore: jest.fn(async () => store),
+    };
+
+    const result = await applyPersistedMergeResult(
+      {
+        versioning: {
+          provider,
+          writeService: { fastForwardMerge },
+        },
+      } as Parameters<typeof applyPersistedMergeResult>[0],
+      { resultId: RESULT_ID, resultDigest: RESULT_DIGEST },
+      { targetRef: TARGET_REF, expectedTargetHead: EXPECTED_TARGET_HEAD },
+    );
+
+    expect(result).toMatchObject({
+      status: 'alreadyApplied',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      commitRef: { id: THEIRS, refName: TARGET_REF },
+      resultId: RESULT_ID,
+      resultDigest: RESULT_DIGEST,
+      resolutionSetDigest: RESOLUTION_SET_DIGEST,
+      resolvedAttemptDigest: RESOLVED_ATTEMPT_DIGEST,
+      targetRef: TARGET_REF,
+      headBefore: OURS,
+      headAfter: THEIRS,
+      mutationGuarantee: 'ref-not-mutated',
+    });
+    expect(readRef).toHaveBeenCalledWith(TARGET_REF);
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+    expect(store.readRefCasProof).not.toHaveBeenCalled();
+    expect(store.completeIntent).not.toHaveBeenCalled();
+  });
+
   it('does not finalize an already-moved fast-forward intent without a durable proof row', async () => {
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'missing-ref-cas-proof');
     const registry = await createVersionGraphRegistry({

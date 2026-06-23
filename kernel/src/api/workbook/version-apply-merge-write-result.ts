@@ -1,8 +1,12 @@
 import type {
+  ObjectDigest,
+  VersionApplyMergeAttemptMetadata,
   VersionApplyMergeResult,
   VersionMergeChange,
+  VersionMergeResultId,
   VersionRecordRevision,
   VersionStoreDiagnostic,
+  VersionCommitExpectedHead,
   VersionMainRefName,
   VersionRefName,
   WorkbookCommitId,
@@ -26,6 +30,13 @@ type VersionApplyMergeWritePlan = {
   readonly theirs: WorkbookCommitId;
   readonly changes: readonly VersionMergeChange[];
   readonly resolutionCount: number;
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead?: VersionCommitExpectedHead;
+  readonly resultId?: VersionMergeResultId;
+  readonly previewArtifactDigest?: ObjectDigest;
+  readonly resultDigest?: ObjectDigest;
+  readonly resolutionSetDigest?: ObjectDigest;
+  readonly resolvedAttemptDigest?: ObjectDigest;
 };
 
 export function mapApplyMergeWriteResult(
@@ -47,14 +58,27 @@ export function mapApplyMergeWriteResult(
   if (TERMINAL_WRITE_STATUSES.has(String(value.status))) {
     const commit = mapWorkbookCommitRef(value.commitRef ?? value.commit);
     const diagnostics = Array.isArray(value.diagnostics) ? mapWriteDiagnostics(value.diagnostics) : [];
+    const identityDiagnostics = terminalWriteIdentityDiagnostics(
+      value.status,
+      metadata,
+      plan,
+      commit,
+    );
     const mutationGuarantee =
       toTerminalMutationGuarantee(value.mutationGuarantee) ??
       (value.status === 'fastForwarded' ? 'ref-fast-forwarded' : 'ref-not-mutated');
-    if (!commit || diagnostics.length > 0) {
-      return blockedApplyMergeResult(plan.base, plan.ours, plan.theirs, [
-        ...diagnostics,
-        invalidProviderPayloadDiagnostic(),
-      ]);
+    if (!commit || diagnostics.length > 0 || identityDiagnostics.length > 0) {
+      return blockedApplyMergeResult(
+        plan.base,
+        plan.ours,
+        plan.theirs,
+        [
+          ...diagnostics,
+          ...identityDiagnostics,
+          ...(!commit || diagnostics.length > 0 ? [invalidProviderPayloadDiagnostic()] : []),
+        ],
+        'ref-not-mutated',
+      );
     }
     return {
       ...metadata,
@@ -240,6 +264,132 @@ function blockedApplyMergeResult(
     diagnostics,
     mutationGuarantee,
   };
+}
+
+function terminalWriteIdentityDiagnostics(
+  status: unknown,
+  metadata: VersionApplyMergeAttemptMetadata,
+  plan: VersionApplyMergeWritePlan,
+  commit: WorkbookCommitRef | null,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  if (status === 'alreadyMerged' && commit?.id !== plan.ours) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('alreadyMerged terminal commit must equal ours.'),
+    );
+  }
+  if (status === 'fastForwarded' && commit?.id !== plan.theirs) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('fastForwarded terminal commit must equal theirs.'),
+    );
+  }
+  if (metadata.headBefore && metadata.headBefore !== plan.ours) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('terminal replay headBefore does not match ours.'),
+    );
+  }
+  if (metadata.headAfter && commit && metadata.headAfter !== commit.id) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('terminal replay headAfter does not match commitRef.'),
+    );
+  }
+  if (metadata.targetRef && commit?.refName && commit.refName !== metadata.targetRef) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('terminal replay commitRef does not match targetRef.'),
+    );
+  }
+  if (plan.targetRef && commit?.refName && commit.refName !== plan.targetRef) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('terminal replay commitRef does not match the apply plan.'),
+    );
+  }
+  if (plan.targetRef && metadata.targetRef && metadata.targetRef !== plan.targetRef) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic('terminal replay targetRef does not match the apply plan.'),
+    );
+  }
+  if (
+    plan.expectedTargetHead &&
+    metadata.headBefore &&
+    metadata.headBefore !== plan.expectedTargetHead.commitId
+  ) {
+    diagnostics.push(
+      invalidTerminalReplayDiagnostic(
+        'terminal replay headBefore does not match expectedTargetHead.',
+      ),
+    );
+  }
+  diagnostics.push(...terminalSealedPayloadDiagnostics(metadata, plan));
+  return diagnostics;
+}
+
+function terminalSealedPayloadDiagnostics(
+  metadata: VersionApplyMergeAttemptMetadata,
+  plan: VersionApplyMergeWritePlan,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  compareMetadataValue(diagnostics, metadata.resultId, plan.resultId, 'resultId');
+  compareDigestValue(
+    diagnostics,
+    metadata.previewArtifactDigest,
+    plan.previewArtifactDigest,
+    'previewArtifactDigest',
+  );
+  compareDigestValue(diagnostics, metadata.resultDigest, plan.resultDigest, 'resultDigest');
+  compareDigestValue(
+    diagnostics,
+    metadata.resolutionSetDigest,
+    plan.resolutionSetDigest,
+    'resolutionSetDigest',
+  );
+  compareDigestValue(
+    diagnostics,
+    metadata.resolvedAttemptDigest,
+    plan.resolvedAttemptDigest,
+    'resolvedAttemptDigest',
+  );
+  return diagnostics;
+}
+
+function compareMetadataValue(
+  diagnostics: VersionStoreDiagnostic[],
+  actual: string | undefined,
+  expected: string | undefined,
+  field: string,
+): void {
+  if (expected === undefined) return;
+  if (actual !== undefined && expected !== undefined && actual === expected) return;
+  diagnostics.push(
+    invalidTerminalReplayDiagnostic(`terminal replay ${field} does not match the apply plan.`),
+  );
+}
+
+function compareDigestValue(
+  diagnostics: VersionStoreDiagnostic[],
+  actual: ObjectDigest | undefined,
+  expected: ObjectDigest | undefined,
+  field: string,
+): void {
+  if (expected === undefined) return;
+  if (actual !== undefined && expected !== undefined && digestsEqual(actual, expected)) return;
+  diagnostics.push(
+    invalidTerminalReplayDiagnostic(`terminal replay ${field} does not match the apply plan.`),
+  );
+}
+
+function digestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
+  return (
+    left.algorithm === right.algorithm &&
+    left.digest === right.digest &&
+    left.byteLength === right.byteLength
+  );
+}
+
+function invalidTerminalReplayDiagnostic(safeMessage: string): VersionStoreDiagnostic {
+  return publicDiagnostic('VERSION_INVALID_COMMIT_PAYLOAD', safeMessage, {
+    recoverability: 'repair',
+    mutationGuarantee: 'ref-not-mutated',
+  });
 }
 
 function invalidProviderPayloadDiagnostic(): VersionStoreDiagnostic {

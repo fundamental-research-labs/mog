@@ -8,6 +8,7 @@ import type {
   VersionMergeChange,
   VersionMergeResultId,
   VersionRecordRevision,
+  VersionRefName,
   VersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -46,6 +47,8 @@ import {
 } from '../../../document/version-store/provider';
 import type { VersionGraphStore } from '../../../document/version-store/provider-graph-store';
 import { WorkbookVersionImpl } from '../version';
+import { alreadyMergedApplyMergeResult } from '../version-apply-merge-ancestry';
+import { mapApplyMergeWriteResult } from '../version-apply-merge-write-result';
 import { withVersionManifest } from './version-domain-support-test-utils';
 
 const DOCUMENT_ID = 'vc07-public-apply-merge-idempotency-stale-ordering';
@@ -63,6 +66,16 @@ type ApplyMergeServiceFactory = (input: {
   readonly graph: VersionGraphStore;
   readonly namespace: VersionGraphNamespace;
 }) => Record<string, unknown>;
+type MergeCommitServiceInput = {
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly changes: readonly VersionMergeChange[];
+  readonly resolutionCount: number;
+  readonly resolvedMergeAttemptDigest?: ObjectDigest;
+};
 
 type CleanPreviewMetadata = {
   readonly resultId: VersionMergeResultId;
@@ -83,6 +96,94 @@ type CleanReviewFixture = {
 };
 
 describe('WorkbookVersion public applyMerge idempotency and stale ordering', () => {
+  it('blocks alreadyMerged ancestry when expectedTargetHead does not match ours', async () => {
+    const fixture = await createCleanReviewFixture('already-merged-ancestry-mismatch', () => ({}));
+
+    const result = alreadyMergedApplyMergeResult({
+      base: fixture.baseCommitId,
+      ours: fixture.oursCommitId,
+      theirs: fixture.theirsCommitId,
+      targetRef: TARGET_REF,
+      expectedTargetHead: {
+        ...fixture.expectedTargetHead,
+        commitId: fixture.theirsCommitId,
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: fixture.baseCommitId,
+      ours: fixture.oursCommitId,
+      theirs: fixture.theirsCommitId,
+      changes: [],
+      conflicts: [],
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          payload: expect.objectContaining({
+            operation: 'applyMerge',
+            reason: 'expectedTargetHeadMismatch',
+          }),
+          mutationGuarantee: 'no-write-attempted',
+        }),
+      ],
+    });
+  });
+
+  it('blocks terminal write replay when sealed payload metadata differs from plan', async () => {
+    const fixture = await createCleanReviewFixture('terminal-replay-payload-mismatch', () => ({}));
+    const alternatePreview = await createAlternatePreview(fixture, 'mapper-payload-mismatch');
+
+    const result = mapApplyMergeWriteResult(
+      {
+        status: 'alreadyApplied',
+        resultId: alternatePreview.resultId,
+        resultDigest: alternatePreview.resultDigest,
+        previewArtifactDigest: alternatePreview.previewArtifactDigest,
+        targetRef: TARGET_REF,
+        headBefore: fixture.oursCommitId,
+        headAfter: fixture.theirsCommitId,
+        commitRef: {
+          id: fixture.theirsCommitId,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: fixture.expectedTargetHead.revision,
+        },
+        diagnostics: [],
+      },
+      {
+        base: fixture.baseCommitId,
+        ours: fixture.oursCommitId,
+        theirs: fixture.theirsCommitId,
+        changes: [],
+        resolutionCount: 0,
+        targetRef: TARGET_REF,
+        expectedTargetHead: fixture.expectedTargetHead,
+        resultId: fixture.preview.resultId,
+        resultDigest: fixture.preview.resultDigest,
+        previewArtifactDigest: fixture.preview.previewArtifactDigest,
+      },
+      'merge-commit-created',
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: fixture.baseCommitId,
+      ours: fixture.oursCommitId,
+      theirs: fixture.theirsCommitId,
+      changes: [],
+      conflicts: [],
+      mutationGuarantee: 'ref-not-mutated',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
+          mutationGuarantee: 'ref-not-mutated',
+        }),
+      ]),
+    });
+  });
+
   it('replays a successful apply with the same intent before stale-target rejection', async () => {
     const fixture = await createCleanReviewFixture(
       'terminal-replay-before-stale',
@@ -149,6 +250,94 @@ describe('WorkbookVersion public applyMerge idempotency and stale ordering', () 
       resolutionCount: 0,
       mutationGuarantee: 'ref-not-mutated',
     });
+  });
+
+  it('blocks terminal replay for a different sealed payload without finalizing target refs', async () => {
+    let alternatePreview: CleanPreviewMetadata | null = null;
+    const mergeCommit = jest.fn<(input: MergeCommitServiceInput) => Promise<unknown>>();
+    const fixture = await createCleanReviewFixture(
+      'terminal-replay-different-payload',
+      ({ graph, namespace }) => ({
+        mergeCommit: mergeCommit.mockImplementation(async (input: MergeCommitServiceInput) => {
+          if (!alternatePreview) throw new Error('alternate preview was not prepared');
+          const branchName = 'scenario/terminal-replay-different-payload-provider';
+          const branchRef = `refs/heads/${branchName}` as VersionRefName;
+          const branch = await graph.createBranch({
+            name: branchName,
+            targetCommitId: input.ours,
+            expectedAbsent: true,
+            createdBy: AUTHOR,
+          });
+          if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+          const merge = await graph.mergeCommit({
+            ...(await graphCommitContent(namespace, 'provider-terminal-replay')),
+            targetRef: branchRef,
+            expectedHeadCommitId: input.ours,
+            expectedTargetRefVersion: branch.branch.ref.refVersion,
+            mergeParentCommitId: input.theirs,
+            ...(input.resolvedMergeAttemptDigest
+              ? { resolvedMergeAttemptDigest: input.resolvedMergeAttemptDigest }
+              : {}),
+          } satisfies MergeVersionGraphInput);
+          expectGraphWriteSuccess(merge);
+          return {
+            status: 'alreadyApplied',
+            resultId: alternatePreview.resultId,
+            resultDigest: alternatePreview.resultDigest,
+            previewArtifactDigest: alternatePreview.previewArtifactDigest,
+            targetRef: input.targetRef,
+            headBefore: input.ours,
+            headAfter: merge.commit.id,
+            commitRef: {
+              id: merge.commit.id,
+              refName: branchRef,
+              resolvedFrom: branchRef,
+              refRevision: merge.ref.revision,
+            },
+            diagnostics: [],
+          };
+        }),
+      }),
+    );
+    alternatePreview = await createAlternatePreview(fixture, 'different-sealed-payload');
+
+    const replay = await fixture.version.applyMerge(
+      {
+        resultId: fixture.preview.resultId,
+        resultDigest: fixture.preview.resultDigest,
+        previewArtifactDigest: fixture.preview.previewArtifactDigest,
+      },
+      {
+        targetRef: TARGET_REF,
+        expectedTargetHead: fixture.expectedTargetHead,
+      },
+    );
+
+    expect(replay.ok).toBe(false);
+    if (replay.ok) throw new Error('expected mismatched replay to be blocked');
+    expect(replay.error).toMatchObject({
+      target: 'workbook.version.applyMerge',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+          data: expect.objectContaining({ mutationGuarantee: 'ref-not-mutated' }),
+        }),
+      ]),
+    });
+    expect(mergeCommit).toHaveBeenCalledTimes(1);
+    await expect(readTargetHeadCommitId(fixture)).resolves.toBe(fixture.oursCommitId);
+
+    const attempt = await expectedResolvedAttempt(fixture, []);
+    const store = await fixture.provider.openMergeApplyIntentStore(fixture.namespace);
+    const read = await store.readByIntentId(
+      intentIdForResolvedAttemptDigest(attempt.resolvedAttemptDigest),
+    );
+    expect(read).toMatchObject({
+      status: 'found',
+      record: { state: 'staging' },
+    });
+    if (read.status !== 'found') throw new Error('expected staged intent to remain readable');
+    expect(read.record).not.toHaveProperty('terminal');
   });
 
   it('rejects a stale target ref before staging a new apply intent', async () => {
@@ -359,6 +548,34 @@ async function createCleanReviewFixture(
       previewArtifactDigest: previewRecord.digest as PublicObjectDigest,
     },
   };
+}
+
+async function createAlternatePreview(
+  fixture: CleanReviewFixture,
+  changeId: string,
+): Promise<CleanPreviewMetadata> {
+  const previewRecord = await createMergePreviewArtifactRecord(fixture.namespace, {
+    status: 'clean',
+    base: fixture.baseCommitId,
+    ours: fixture.oursCommitId,
+    theirs: fixture.theirsCommitId,
+    changes: [mergeChange(changeId)],
+  });
+  expectObjectPutSuccess(await fixture.graph.putObjects([previewRecord]));
+  return {
+    resultId: mergeResultIdForPreviewDigest(previewRecord.digest),
+    resultDigest: previewRecord.digest as PublicObjectDigest,
+    previewArtifactDigest: previewRecord.digest as PublicObjectDigest,
+  };
+}
+
+async function readTargetHeadCommitId(fixture: CleanReviewFixture): Promise<WorkbookCommitId> {
+  const read = await fixture.graph.readRef(TARGET_REF);
+  expect(read.status).toBe('success');
+  if (read.status !== 'success' || !('commitId' in read.ref)) {
+    throw new Error(`expected target ref read success: ${read.diagnostics[0]?.code}`);
+  }
+  return read.ref.commitId;
 }
 
 function graphBackedApplyMergeService({

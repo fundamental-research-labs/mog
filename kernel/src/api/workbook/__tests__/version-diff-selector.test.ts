@@ -445,12 +445,168 @@ describe('WorkbookVersion diff ref selectors', () => {
     expect(JSON.stringify(result)).not.toContain('domain');
   });
 
-  it('rejects diff service pages that use a non-semantic order key', async () => {
+  it('redacts cell coordinates when provider redacts cell values', async () => {
+    const hiddenSheet = 'Payroll FY27';
+    const hiddenAddress = 'Payroll FY27!B9';
+    const hiddenEntity = 'sheet-payroll-secret!B9';
+    const diff = jest.fn(async () => ({
+      status: 'success',
+      items: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'payroll-secret-cell',
+            domain: 'cell',
+            entityId: hiddenEntity,
+            propertyPath: ['value'],
+          },
+          before: { kind: 'redacted', reason: 'permission-denied' },
+          after: { kind: 'redacted', reason: 'redaction-policy' },
+          display: {
+            sheetName: { kind: 'value', value: hiddenSheet },
+            address: { kind: 'value', value: hiddenAddress },
+          },
+        },
+      ],
+      readRevision: READ_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: { kind: 'redacted', reason: 'permission-denied' },
+            before: { kind: 'redacted', reason: 'permission-denied' },
+            after: { kind: 'redacted', reason: 'redaction-policy' },
+            display: {
+              sheetName: { kind: 'redacted', reason: 'permission-denied' },
+              address: { kind: 'redacted', reason: 'permission-denied' },
+            },
+          },
+        ],
+        limit: 50,
+        readRevision: READ_REVISION,
+        order: 'semantic-change-order',
+      } satisfies VersionSemanticDiffPage,
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(hiddenSheet);
+    expect(serialized).not.toContain(hiddenAddress);
+    expect(serialized).not.toContain(hiddenEntity);
+    expect(serialized).not.toContain('payroll-secret-cell');
+  });
+
+  it('orders explicit semantic diff keys before returning a public page', async () => {
+    const diff = jest.fn(async () => ({
+      status: 'success',
+      items: [
+        orderedCellChange('third', 30),
+        orderedCellChange('first', 10),
+        orderedCellChange('second', 20),
+      ],
+      readRevision: READ_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    if (!result.ok) throw new Error(`expected diff success: ${result.error.code}`);
+    expect(result.value.items.map((item) => item.structural.kind === 'metadata' ? item.structural.changeId : item.structural.kind)).toEqual([
+      'first',
+      'second',
+      'third',
+    ]);
+  });
+
+  it.each([
+    [
+      'missing object',
+      {
+        code: 'VERSION_OBJECT_NOT_FOUND',
+        severity: 'error',
+        selector: 'target',
+        message: `missing object commit:sha256:${'a'.repeat(64)}`,
+      },
+      'VERSION_MISSING_OBJECT',
+      'repair',
+      { selector: 'target' },
+      [`commit:sha256:${'a'.repeat(64)}`],
+    ],
+    [
+      'provider unavailable',
+      {
+        code: 'VERSION_STORE_UNAVAILABLE',
+        severity: 'warning',
+        message: 'IndexedDB unavailable for secret-provider-token.',
+        payload: { reason: 'provider-unavailable', source: 'secret-provider-token' },
+      },
+      'VERSION_STORE_UNAVAILABLE',
+      'unsupported',
+      { reason: 'provider-unavailable', source: 'redacted' },
+      ['secret-provider-token'],
+    ],
+    [
+      'stale selector handle',
+      {
+        code: 'VERSION_STALE_SELECTOR',
+        severity: 'warning',
+        selector: 'base',
+        message: 'selector handle stale-public-branch is no longer valid.',
+        details: {
+          category: 'staleSelector',
+          refName: 'refs/heads/scenario/secret-branch',
+          reason: 'stale-selector',
+          source: 'selector-secret-token',
+        },
+      },
+      'VERSION_STALE_SELECTOR',
+      'retry',
+      { selector: 'base', category: 'staleSelector', reason: 'stale-selector', source: 'redacted' },
+      ['stale-public-branch', 'refs/heads/scenario/secret-branch', 'selector-secret-token'],
+    ],
+  ] as const)('sanitizes %s diagnostics from arbitrary providers', async (_label, diagnostic, code, recoverability, payload, forbiddenTerms) => {
+    const diff = jest.fn(async () => ({ status: 'degraded', diagnostics: [diagnostic] }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code,
+            data: expect.objectContaining({
+              recoverability,
+              redacted: true,
+              payload: expect.objectContaining({ operation: 'diff', ...payload }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    for (const term of forbiddenTerms) expect(serialized).not.toContain(term);
+  });
+
+  it.each([
+    ['non-semantic order key', { order: 'topological-newest' }],
+    ['missing order key', {}],
+  ])('rejects diff service pages with %s', async (_label, orderPatch) => {
     const diff = jest.fn(async () => ({
       status: 'success',
       items: [],
       readRevision: READ_REVISION,
-      order: 'topological-newest',
+      ...orderPatch,
       diagnostics: [],
     }));
     const version = createVersion(diff);
@@ -482,4 +638,25 @@ function createVersion(diff: jest.Mock) {
       diffService: { diff },
     },
   } as any);
+}
+
+function orderedCellChange(changeId: string, domainOrder: number) {
+  return {
+    pageCursorOrderKey: {
+      domainOrder,
+      hashPropertyPath: `/cells/${changeId}/value`,
+      hashIdentity: `sheet-1!${changeId}`,
+      valueClass: 'authored',
+    },
+    structural: {
+      kind: 'metadata',
+      changeId,
+      domain: 'cell',
+      entityId: `sheet-1!${changeId}`,
+      propertyPath: ['value'],
+    },
+    before: { kind: 'value', value: null },
+    after: { kind: 'value', value: changeId },
+    display: { address: { kind: 'value', value: changeId } },
+  };
 }

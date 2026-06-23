@@ -25,12 +25,13 @@ import {
   VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
   isPublicVersionDiffCursor,
 } from '@mog-sdk/contracts/versioning';
-
 import type { DocumentContext } from '../../context';
 import { projectReviewAccessDiffValue } from '../../document/version-store/review-access-projection';
 import { validateRefName } from '../../document/version-store/ref-name';
-import { recoverabilityForVersionObjectRead } from './version-object-read-diagnostics';
-
+import {
+  normalizeVersionObjectReadDiagnosticCode,
+  recoverabilityForVersionObjectRead,
+} from './version-object-read-diagnostics';
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -39,10 +40,8 @@ const VERSION_COMMIT_SELECTOR_KEYS = new Set(['kind', 'id']);
 const VERSION_REF_SELECTOR_KEYS = new Set(['kind', 'name']);
 const RAW_PUBLIC_DIFF_DOMAINS = new Set(['cell', 'sheet', 'cells.formats.direct', 'rows-columns']);
 const REDACTED_VALUE_REASONS = new Set(['permission-denied', 'redaction-policy', 'historical-acl-unavailable']);
-
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
-
 type NormalizedDiffCommitish =
   | {
       readonly kind: 'commit';
@@ -52,14 +51,12 @@ type NormalizedDiffCommitish =
       readonly kind: 'ref';
       readonly name: VersionRefSelector;
     };
-
 type NormalizedDiffOptions = {
   readonly pageSize?: number;
   readonly pageToken?: VersionPageToken;
   readonly includeDerivedImpact?: boolean;
   readonly includeDiagnostics?: boolean;
 };
-
 type DiffValidationResult =
   | {
       readonly ok: true;
@@ -71,7 +68,6 @@ type DiffValidationResult =
       readonly ok: false;
       readonly diagnostics: readonly VersionStoreDiagnostic[];
     };
-
 type AttachedVersionDiffService = {
   diff: (
     base: NormalizedDiffCommitish,
@@ -79,7 +75,6 @@ type AttachedVersionDiffService = {
     options?: NormalizedDiffOptions,
   ) => MaybePromise<unknown>;
 };
-
 type AttachedVersionServices = {
   readonly diffService?: unknown;
   readonly versionDiffService?: unknown;
@@ -89,13 +84,16 @@ type AttachedVersionServices = {
   readonly graphStore?: unknown;
   readonly graph?: unknown;
 };
-
+type ProjectedDiffEntry = {
+  readonly entry: VersionDiffEntry;
+  readonly explicitOrderKey: string | null;
+  readonly sourceIndex: number;
+};
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
   readonly versionStore?: unknown;
   readonly version?: unknown;
 };
-
 export async function diffWorkbookVersion(
   ctx: DocumentContext,
   base: VersionCommitish,
@@ -104,17 +102,14 @@ export async function diffWorkbookVersion(
 ): Promise<WorkbookDiffPage> {
   const validated = validateDiffRequest(base, target, options);
   if (!validated.ok) return degradedDiffPage(validated.diagnostics);
-
   const services = getAttachedVersionServices(ctx);
   if (!services) {
     return degradedDiffPage([serviceUnavailableDiagnostic()]);
   }
-
   const diffService = getAttachedVersionDiffService(services);
   if (!diffService) {
     return degradedDiffPage([semanticDiffUnavailableDiagnostic()]);
   }
-
   try {
     const result = await diffService.diff(validated.base, validated.target, validated.options);
     return mapDiffPageResult(result);
@@ -122,7 +117,6 @@ export async function diffWorkbookVersion(
     return degradedDiffPage([providerErrorDiagnostic()]);
   }
 }
-
 function validateDiffRequest(
   base: VersionCommitish,
   target: VersionCommitish,
@@ -132,11 +126,9 @@ function validateDiffRequest(
   const normalizedBase = normalizeCommitish(base, 'base', diagnostics);
   const normalizedTarget = normalizeCommitish(target, 'target', diagnostics);
   const normalizedOptions = normalizeDiffOptions(options, diagnostics);
-
   if (!normalizedBase || !normalizedTarget || !normalizedOptions || diagnostics.length > 0) {
     return { ok: false, diagnostics };
   }
-
   return {
     ok: true,
     base: normalizedBase,
@@ -144,7 +136,6 @@ function validateDiffRequest(
     options: normalizedOptions,
   };
 }
-
 function normalizeCommitish(
   value: unknown,
   selector: 'base' | 'target',
@@ -152,7 +143,6 @@ function normalizeCommitish(
 ): NormalizedDiffCommitish | undefined {
   const directCommitId = toCommitId(value);
   if (directCommitId) return { kind: 'commit', id: directCommitId };
-
   if (!isRecord(value) || Array.isArray(value)) {
     diagnostics.push(
       invalidDiffOptionDiagnostic(
@@ -162,7 +152,6 @@ function normalizeCommitish(
     );
     return undefined;
   }
-
   if (value.kind === 'commit') {
     rejectUnknownNestedKeys(value, VERSION_COMMIT_SELECTOR_KEYS, selector, diagnostics);
     const id = toCommitId(value.id);
@@ -174,7 +163,6 @@ function normalizeCommitish(
     }
     return { kind: 'commit', id };
   }
-
   if (value.kind === 'ref') {
     rejectUnknownNestedKeys(value, VERSION_REF_SELECTOR_KEYS, selector, diagnostics);
     const name = normalizePublicRefSelector(value.name);
@@ -184,7 +172,6 @@ function normalizeCommitish(
     }
     return { kind: 'ref', name };
   }
-
   diagnostics.push(
     invalidDiffOptionDiagnostic(
       `${selector}.kind`,
@@ -193,7 +180,6 @@ function normalizeCommitish(
   );
   return undefined;
 }
-
 function normalizeDiffOptions(
   input: VersionDiffOptions,
   diagnostics: VersionStoreDiagnostic[],
@@ -205,19 +191,16 @@ function normalizeDiffOptions(
     );
     return undefined;
   }
-
   const options: {
     pageSize?: number;
     pageToken?: VersionPageToken;
     includeDerivedImpact?: boolean;
     includeDiagnostics?: boolean;
   } = {};
-
   for (const key of Object.keys(input)) {
     if (VERSION_DIFF_OPTION_KEYS.has(key)) continue;
     diagnostics.push(invalidDiffOptionDiagnostic(key, `Unknown diff option "${key}".`));
   }
-
   const pageSizeValue = (input as VersionDiffOptions).pageSize;
   const pageSize = pageSizeValue ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT;
   if (
@@ -240,7 +223,6 @@ function normalizeDiffOptions(
   } else if (pageSizeValue !== undefined) {
     options.pageSize = pageSize;
   }
-
   const pageTokenValue = (input as VersionDiffOptions).pageToken;
   if (pageTokenValue !== undefined) {
     if (
@@ -268,7 +250,6 @@ function normalizeDiffOptions(
       }
     }
   }
-
   const includeDerivedImpact = (input as VersionDiffOptions).includeDerivedImpact;
   if (includeDerivedImpact !== undefined) {
     if (typeof includeDerivedImpact !== 'boolean') {
@@ -282,7 +263,6 @@ function normalizeDiffOptions(
       options.includeDerivedImpact = includeDerivedImpact;
     }
   }
-
   const includeDiagnostics = (input as VersionDiffOptions).includeDiagnostics;
   if (includeDiagnostics !== undefined) {
     if (typeof includeDiagnostics !== 'boolean') {
@@ -293,10 +273,8 @@ function normalizeDiffOptions(
       options.includeDiagnostics = includeDiagnostics;
     }
   }
-
   return options;
 }
-
 function rejectUnknownNestedKeys(
   value: Readonly<Record<string, unknown>>,
   allowedKeys: ReadonlySet<string>,
@@ -313,13 +291,11 @@ function rejectUnknownNestedKeys(
     );
   }
 }
-
 function getAttachedVersionServices(ctx: DocumentContext): AttachedVersionServices | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
   return isRecord(services) ? (services as AttachedVersionServices) : null;
 }
-
 function getAttachedVersionDiffService(
   services: AttachedVersionServices,
 ): AttachedVersionDiffService | null {
@@ -336,42 +312,34 @@ function getAttachedVersionDiffService(
     const diffService = toDiffService(candidate);
     if (diffService) return diffService;
   }
-
   return null;
 }
-
 function toDiffService(value: unknown): AttachedVersionDiffService | null {
   const diff =
     bindMethod(value, 'diff') ??
     bindMethod(value, 'diffVersions') ??
     bindMethod(value, 'diffCommits');
   if (!diff) return null;
-
   return {
     diff: (base, target, options) => diff(base, target, options),
   };
 }
-
 function bindMethod(value: unknown, name: string): BoundMethod | null {
   if (!isRecord(value)) return null;
   const method = value[name];
   if (typeof method !== 'function') return null;
   return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
 }
-
 function mapDiffPageResult(value: unknown): WorkbookDiffPage {
   if (!isRecord(value)) {
     return degradedDiffPage([providerErrorDiagnostic()]);
   }
-
   if (value.status === 'failed' || value.status === 'degraded') {
     return degradedDiffPage(mapGraphDiagnostics(value.diagnostics));
   }
-
   if (value.status !== 'success') {
     return degradedDiffPage([providerErrorDiagnostic()]);
   }
-
   const readRevision = toRevision(value.readRevision);
   const sourceItems = Array.isArray(value.items)
     ? value.items
@@ -380,7 +348,6 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
       : Array.isArray(value.changes)
         ? value.changes
         : null;
-
   if (!readRevision || !sourceItems) {
     return degradedDiffPage([
       publicDiagnostic(
@@ -393,10 +360,9 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
       ),
     ]);
   }
-
   const { items, diagnostics } = mapDiffEntries(sourceItems);
   const resultDiagnostics = [...diagnostics];
-  if (value.order !== undefined && value.order !== VERSION_DIFF_PAGE_ORDER) {
+  if (value.order !== VERSION_DIFF_PAGE_ORDER) {
     resultDiagnostics.push(
       publicDiagnostic(
         'VERSION_INVALID_COMMIT_PAYLOAD',
@@ -408,7 +374,6 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
       ),
     );
   }
-
   const nextPageToken =
     value.nextPageToken === undefined ? undefined : toPageToken(value.nextPageToken);
   if (value.nextPageToken !== undefined && !nextPageToken) {
@@ -423,15 +388,12 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
       ),
     );
   }
-
   if (Array.isArray(value.diagnostics) && value.diagnostics.length > 0) {
     resultDiagnostics.push(...mapGraphDiagnostics(value.diagnostics));
   }
-
   if (resultDiagnostics.length > 0) {
     return degradedDiffPage(resultDiagnostics, items, readRevision);
   }
-
   return {
     status: 'success',
     items,
@@ -441,21 +403,18 @@ function mapDiffPageResult(value: unknown): WorkbookDiffPage {
     diagnostics: [],
   };
 }
-
 function mapDiffEntries(values: readonly unknown[]): {
   readonly items: readonly VersionDiffEntry[];
   readonly diagnostics: readonly VersionStoreDiagnostic[];
 } {
-  const items: VersionDiffEntry[] = [];
+  const items: ProjectedDiffEntry[] = [];
   const diagnostics: VersionStoreDiagnostic[] = [];
-
   values.forEach((value, index) => {
     const entry = mapDiffEntry(value);
     if (entry) {
-      items.push(entry);
+      items.push({ entry, explicitOrderKey: explicitDiffOrderKey(value, entry), sourceIndex: index });
       return;
     }
-
     const unsupportedDomain = unsupportedDiffDomain(value);
     diagnostics.push(
       unsupportedDomain
@@ -471,34 +430,27 @@ function mapDiffEntries(values: readonly unknown[]): {
           ),
     );
   });
-
-  return { items, diagnostics };
+  return { items: orderDiffEntries(items), diagnostics };
 }
-
 function mapDiffEntry(value: unknown): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
-
   const structural = mapStructuralMetadata(value.structural ?? value);
   const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
   const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
   if (!structural || !before || !after) return null;
-
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
   if (value.display !== undefined && !display) return null;
-
   const diagnostics = Array.isArray(value.diagnostics)
     ? mapGraphDiagnostics(value.diagnostics)
     : undefined;
-
-  return {
+  return redactCellEntry({
     structural,
     before,
     after,
     ...(display ? { display } : {}),
     ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
-  };
+  });
 }
-
 function mapReviewAccessDiffValue(
   structural: VersionDiffStructuralMetadata,
   value: unknown,
@@ -510,48 +462,83 @@ function mapReviewAccessDiffValue(
     ? mapDiffValue(value)
     : null;
 }
-
+function orderDiffEntries(items: readonly ProjectedDiffEntry[]): readonly VersionDiffEntry[] {
+  if (!items.some((item) => item.explicitOrderKey)) return items.map((item) => item.entry);
+  return [...items].sort((a, b) => diffOrderKey(a).localeCompare(diffOrderKey(b))).map((item) => item.entry);
+}
+function diffOrderKey(item: ProjectedDiffEntry): string {
+  return item.explicitOrderKey ?? fallbackDiffOrderKey(item.entry, item.sourceIndex);
+}
+function explicitDiffOrderKey(source: unknown, entry: VersionDiffEntry): string | null {
+  const key = isRecord(source) && isRecord(source.pageCursorOrderKey) ? source.pageCursorOrderKey : null;
+  const domainOrder = key ? Number(key.domainOrder) : NaN;
+  if (entry.structural.kind !== 'metadata' || !Number.isSafeInteger(domainOrder) || typeof key?.hashPropertyPath !== 'string') return null;
+  return semanticDiffOrderKey(domainOrder, key.hashPropertyPath, typeof key.canonicalEventKey === 'string' ? key.canonicalEventKey : undefined, typeof key.hashIdentity === 'string' ? key.hashIdentity : undefined, typeof key.valueClass === 'string' ? key.valueClass : 'authored', entry.structural.changeId);
+}
+function fallbackDiffOrderKey(entry: VersionDiffEntry, sourceIndex: number): string {
+  const structural = entry.structural;
+  return structural.kind === 'metadata'
+    ? semanticDiffOrderKey(90, structural.propertyPath.join('/'), undefined, structural.entityId, 'authored', structural.changeId)
+    : semanticDiffOrderKey(100, '', undefined, undefined, 'diagnosticOnly', sourceIndex.toString());
+}
+function semanticDiffOrderKey(domainOrder: number, path: string, eventKey: string | undefined, identity: string | undefined, valueClass: string, changeId: string): string {
+  return JSON.stringify([domainOrder.toString().padStart(5, '0'), path, eventKey ?? null, identity ?? null, valueClass, changeId]);
+}
+function redactCellEntry(entry: VersionDiffEntry): VersionDiffEntry {
+  if (entry.structural.kind !== 'metadata' || entry.structural.domain !== 'cell') return entry;
+  const reason = redactedReason(entry.before) ?? redactedReason(entry.after);
+  if (!reason) return entry;
+  const structural = redactedValue(reason);
+  return { ...entry, structural, ...(entry.display ? { display: redactDisplay(entry.display, reason) } : {}) };
+}
+function redactDisplay(display: VersionDiffDisplay, reason: VersionRedactedValue['reason']): VersionDiffDisplay {
+  const redacted = redactedValue(reason);
+  return {
+    ...(display.sheetName ? { sheetName: redacted } : {}),
+    ...(display.address ? { address: redacted } : {}),
+    ...(display.entityLabel ? { entityLabel: redacted } : {}),
+  };
+}
+function redactedReason(value: VersionDiffValue): VersionRedactedValue['reason'] | null {
+  return value.kind === 'redacted' ? value.reason : null;
+}
+function redactedValue(reason: VersionRedactedValue['reason']): VersionRedactedValue {
+  return { kind: 'redacted', reason };
+}
 function mapStructuralMetadata(value: unknown): VersionDiffStructuralMetadata | null {
   const redacted = mapRedactedValue(value);
   if (redacted) return redacted;
   if (!isRecord(value)) return null;
-
-  const source = value.kind === 'metadata' ? value : value;
   if (
-    typeof source.changeId !== 'string' ||
-    typeof source.domain !== 'string' ||
-    typeof source.entityId !== 'string' ||
-    !Array.isArray(source.propertyPath) ||
-    !source.propertyPath.every((segment) => typeof segment === 'string')
+    typeof value.changeId !== 'string' ||
+    typeof value.domain !== 'string' ||
+    typeof value.entityId !== 'string' ||
+    !Array.isArray(value.propertyPath) ||
+    !value.propertyPath.every((segment) => typeof segment === 'string')
   ) {
     return null;
   }
-
   return {
     kind: 'metadata',
-    changeId: source.changeId,
-    domain: source.domain,
-    entityId: source.entityId,
-    propertyPath: [...source.propertyPath],
+    changeId: value.changeId,
+    domain: value.domain,
+    entityId: value.entityId,
+    propertyPath: [...value.propertyPath],
   };
 }
-
 function mapDiffValue(value: unknown): VersionDiffValue | null {
   const redacted = mapRedactedValue(value);
   if (redacted) return redacted;
   if (!isRecord(value) || value.kind !== 'value') return null;
-
   const semanticValue = mapSemanticValue(value.value);
   if (semanticValue === undefined) return null;
   return { kind: 'value', value: semanticValue };
 }
-
 function mapSemanticValue(value: unknown, depth = 0): VersionSemanticValue | undefined {
   if (depth > 16) return undefined;
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (!isRecord(value)) return undefined;
-
   switch (value.kind) {
     case 'blank':
       return { kind: 'blank' };
@@ -609,7 +596,6 @@ function mapSemanticValue(value: unknown, depth = 0): VersionSemanticValue | und
       return undefined;
   }
 }
-
 function mapSemanticValues(
   values: readonly unknown[],
   depth: number,
@@ -619,33 +605,27 @@ function mapSemanticValues(
     ? undefined
     : (mapped as readonly VersionSemanticValue[]);
 }
-
 function mapDiffDisplay(value: unknown): VersionDiffDisplay | null {
   if (!isRecord(value)) return null;
-
   const display: {
     sheetName?: VersionDiffDisplayValue;
     address?: VersionDiffDisplayValue;
     entityLabel?: VersionDiffDisplayValue;
   } = {};
-
   for (const key of ['sheetName', 'address', 'entityLabel'] as const) {
     if (value[key] === undefined) continue;
     const displayValue = mapDiffDisplayValue(value[key]);
     if (!displayValue) return null;
     display[key] = displayValue;
   }
-
   return display;
 }
-
 function mapDiffDisplayValue(value: unknown): VersionDiffDisplayValue | null {
   const redacted = mapRedactedValue(value);
   if (redacted) return redacted;
   if (!isRecord(value) || value.kind !== 'value' || typeof value.value !== 'string') return null;
   return { kind: 'value', value: value.value };
 }
-
 function mapRedactedValue(value: unknown): VersionRedactedValue | null {
   if (!isRecord(value) || value.kind !== 'redacted' || typeof value.reason !== 'string') {
     return null;
@@ -656,26 +636,20 @@ function mapRedactedValue(value: unknown): VersionRedactedValue | null {
     reason: value.reason as 'permission-denied' | 'redaction-policy' | 'historical-acl-unavailable',
   };
 }
-
 function mapGraphDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    return [graphUninitializedDiagnostic()];
-  }
-
+  if (!Array.isArray(value) || value.length === 0) return [providerErrorDiagnostic()];
   return value.map(mapGraphDiagnostic);
 }
-
 function mapGraphDiagnostic(value: unknown): VersionStoreDiagnostic {
   if (!isRecord(value)) return providerErrorDiagnostic();
-
-  const issueCode =
+  const rawIssueCode =
     typeof value.issueCode === 'string'
       ? value.issueCode
       : typeof value.code === 'string'
         ? value.code
         : 'VERSION_PROVIDER_ERROR';
+  const issueCode = publicDiffIssueCode(rawIssueCode);
   const severity = value.severity === 'corruption' ? 'error' : value.severity;
-
   return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
     severity:
       severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
@@ -690,29 +664,34 @@ function mapGraphDiagnostic(value: unknown): VersionStoreDiagnostic {
     payload: sanitizeDiagnosticPayload(value),
   });
 }
-
+function publicDiffIssueCode(issueCode: string): string {
+  const objectReadCode = normalizeVersionObjectReadDiagnosticCode(issueCode);
+  return objectReadCode === 'VERSION_OBJECT_NOT_FOUND'
+    ? 'VERSION_MISSING_OBJECT'
+    : (objectReadCode ?? issueCode);
+}
 function sanitizeDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = {
     operation: 'diff',
   };
-
-  if (typeof value.operation === 'string') payload.operation = value.operation;
   if (typeof value.option === 'string') payload.option = value.option;
   if (typeof value.selector === 'string') payload.selector = value.selector;
   const refName = value.refName;
   if (refName === VERSION_HEAD_REF || refName === VERSION_MAIN_REF) {
     payload.refName = refName;
   }
-
   const details = isRecord(value.details) ? value.details : null;
+  const providerPayload = isRecord(value.payload) ? value.payload : null;
   const detailRefName = details?.refName;
   if (payload.refName === undefined && (detailRefName === VERSION_HEAD_REF || detailRefName === VERSION_MAIN_REF)) {
     payload.refName = detailRefName;
   }
-  if (details) {
+  for (const source of [providerPayload, details]) {
+    if (!source) continue;
     for (const key of [
+      'reason',
       'min',
       'max',
       'pageSize',
@@ -726,15 +705,13 @@ function sanitizeDiagnosticPayload(
       'domain',
       'source',
     ] as const) {
-      const detailValue = details[key];
+      const detailValue = source[key];
       const sanitized = sanitizePayloadPrimitive(detailValue);
       if (sanitized !== undefined) payload[key] = sanitized;
     }
   }
-
   return payload;
 }
-
 function serviceUnavailableDiagnostic(): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_GRAPH_UNINITIALIZED',
@@ -745,7 +722,6 @@ function serviceUnavailableDiagnostic(): VersionStoreDiagnostic {
     },
   );
 }
-
 function semanticDiffUnavailableDiagnostic(): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_UNMATERIALIZABLE_COMMIT',
@@ -756,18 +732,6 @@ function semanticDiffUnavailableDiagnostic(): VersionStoreDiagnostic {
     },
   );
 }
-
-function graphUninitializedDiagnostic(): VersionStoreDiagnostic {
-  return publicDiagnostic(
-    'VERSION_GRAPH_UNINITIALIZED',
-    'The workbook version graph is not initialized for this document.',
-    {
-      severity: 'warning',
-      recoverability: 'unsupported',
-    },
-  );
-}
-
 function providerErrorDiagnostic(
   payload: VersionDiagnosticPublicPayload = { source: 'provider' },
 ): VersionStoreDiagnostic {
@@ -781,18 +745,15 @@ function providerErrorDiagnostic(
     },
   );
 }
-
 function unsupportedDiffDomain(value: unknown): string | null {
   const structural = mapStructuralMetadata(isRecord(value) ? (value.structural ?? value) : value);
   if (structural?.kind !== 'metadata' || RAW_PUBLIC_DIFF_DOMAINS.has(structural.domain)) return null;
   const redacted = { kind: 'redacted', reason: 'permission-denied' };
   return projectReviewAccessDiffValue(structural, redacted) === undefined ? structural.domain : null;
 }
-
 function unsupportedDiffDomainDiagnostic(domain: string, itemIndex: number): VersionStoreDiagnostic {
   return publicDiagnostic('unsupportedDomain', 'The requested version diff includes unsupported semantic state.', { severity: 'error', recoverability: 'unsupported', payload: { category: 'unsupported', domain, itemIndex } });
 }
-
 function unsupportedRefDiagnostic(selector: string): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_PERMISSION_DENIED',
@@ -804,7 +765,6 @@ function unsupportedRefDiagnostic(selector: string): VersionStoreDiagnostic {
     },
   );
 }
-
 function invalidDiffOptionDiagnostic(
   option: string,
   safeMessage: string,
@@ -819,7 +779,6 @@ function invalidDiffOptionDiagnostic(
     },
   });
 }
-
 function publicDiagnostic(
   issueCode: string,
   safeMessage: string,
@@ -839,7 +798,6 @@ function publicDiagnostic(
     redacted: true,
   };
 }
-
 function safeMessageForIssue(issueCode: string): string {
   switch (issueCode) {
     case 'VERSION_GRAPH_UNINITIALIZED':
@@ -850,6 +808,8 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The requested version diff ref is not exposed by this public slice.';
     case 'VERSION_STALE_PAGE_CURSOR':
       return 'The version diff page token is stale or unsupported by this read slice.';
+    case 'VERSION_STALE_SELECTOR':
+      return 'The requested version diff selector is stale or unsupported by this read slice.';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
     case 'VERSION_BYTE_LENGTH_MISMATCH':
@@ -859,12 +819,17 @@ function safeMessageForIssue(issueCode: string): string {
     case 'VERSION_OBJECT_CORRUPTION':
     case 'VERSION_OBJECT_TYPE_MISMATCH':
     case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_OBJECT_NOT_FOUND':
     case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
     case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
       return 'The version graph could not validate the requested diff commit closure.';
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
       return 'The requested version diff is not materializable by the attached service.';
+    case 'VERSION_PROVIDER_FAILED':
+      return 'The version diff provider is temporarily unavailable.';
+    case 'VERSION_STORE_UNAVAILABLE':
+      return 'The version store is unavailable for this document.';
     case 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN':
     case 'unsupportedDomain':
     case 'unsupportedFormat':
@@ -886,10 +851,10 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The version graph could not complete diff.';
   }
 }
-
 function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
   switch (issueCode) {
     case 'VERSION_STALE_PAGE_CURSOR':
+    case 'VERSION_STALE_SELECTOR':
     case 'derivedImpactStale':
     case 'staleDiffCursor':
     case 'VERSION_REF_CONFLICT':
@@ -907,6 +872,7 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
       return 'repair';
     case 'VERSION_GRAPH_UNINITIALIZED':
+    case 'VERSION_STORE_UNAVAILABLE':
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
@@ -922,11 +888,12 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'indexKeyedColumnVisibility':
     case 'inconsistentVisibilityCache':
       return 'unsupported';
+    case 'VERSION_PROVIDER_FAILED':
+      return 'retry';
     default:
       return 'none';
   }
 }
-
 function degradedDiffPage(
   diagnostics: readonly VersionStoreDiagnostic[],
   items: readonly VersionDiffEntry[] = [],
@@ -940,7 +907,6 @@ function degradedDiffPage(
     diagnostics,
   };
 }
-
 function normalizePublicRefSelector(value: unknown): VersionRefSelector | null {
   if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
   if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
@@ -950,17 +916,14 @@ function normalizePublicRefSelector(value: unknown): VersionRefSelector | null {
   }
   return null;
 }
-
 function toCommitId(value: unknown): WorkbookCommitId | null {
   return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value)
     ? (value as WorkbookCommitId)
     : null;
 }
-
 function toPageToken(value: unknown): VersionPageToken | undefined {
   return isPublicVersionDiffCursor(value) ? (value as VersionPageToken) : undefined;
 }
-
 function toRevision(value: unknown): VersionRecordRevision | undefined {
   if (isRecord(value) && value.kind === 'counter' && typeof value.value === 'string') {
     return { kind: 'counter', value: value.value };
@@ -971,23 +934,18 @@ function toRevision(value: unknown): VersionRecordRevision | undefined {
   if (typeof value === 'string') return { kind: 'opaque', value };
   return undefined;
 }
-
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
-
 function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
-
 function formatPrimitiveForPayload(value: unknown): string | number | boolean | null {
   return isPayloadPrimitive(value) ? value : String(value);
 }
-
 function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
   return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
 }
-
 function sanitizePayloadPrimitive(value: unknown): string | number | boolean | null | undefined {
   if (!isPayloadPrimitive(value)) return undefined;
   if (typeof value !== 'string') return value;

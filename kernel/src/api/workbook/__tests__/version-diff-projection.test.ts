@@ -244,6 +244,60 @@ describe('WorkbookVersion public semantic diff projection', () => {
     expect(serialized).not.toContain('salary-secret');
   });
 
+  it('redacts cell coordinates from provider-backed redacted cell values', async () => {
+    const hiddenSheetName = 'Payroll FY27';
+    const hiddenAddress = 'Payroll FY27!B9';
+    const hiddenEntity = 'sheet-payroll-secret!B9';
+    const changes = [
+      {
+        structural: {
+          kind: 'metadata',
+          changeId: 'payroll-secret-cell',
+          domain: 'cell',
+          entityId: hiddenEntity,
+          propertyPath: ['value'],
+        },
+        before: { kind: 'redacted', reason: 'permission-denied' },
+        after: { kind: 'redacted', reason: 'redaction-policy' },
+        display: {
+          sheetName: { kind: 'value', value: hiddenSheetName },
+          address: { kind: 'value', value: hiddenAddress },
+        },
+      },
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: validSemanticPayload('child', changes),
+    });
+    const version = createVersion(provider);
+
+    const result = await version.diff(rootCommitId, childCommitId);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: { kind: 'redacted', reason: 'permission-denied' },
+            before: { kind: 'redacted', reason: 'permission-denied' },
+            after: { kind: 'redacted', reason: 'redaction-policy' },
+            display: {
+              sheetName: { kind: 'redacted', reason: 'permission-denied' },
+              address: { kind: 'redacted', reason: 'permission-denied' },
+            },
+          },
+        ],
+        limit: 50,
+        readRevision: { kind: 'counter', value: '1' },
+        order: 'semantic-change-order',
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(hiddenSheetName);
+    expect(serialized).not.toContain(hiddenAddress);
+    expect(serialized).not.toContain(hiddenEntity);
+    expect(serialized).not.toContain('payroll-secret-cell');
+  });
+
   it('rejects unsupported row-domain entries without leaking raw row selectors', async () => {
     const hiddenSheet = 'sheet-payroll-secret';
     const hiddenRow = 'secret-row-17';

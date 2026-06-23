@@ -8,7 +8,11 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -42,6 +46,14 @@ const AUTHOR: VersionAuthor = {
   displayName: 'User One',
 };
 
+function createHeadlessDocumentHandle(documentScope: VersionDocumentScope) {
+  return DocumentFactory.create({
+    documentId: documentScope.documentId,
+    environment: 'headless',
+    userTimezone: 'UTC',
+  });
+}
+
 describe('WorkbookVersion persisted merge preview artifact apply', () => {
   it('applies a review-only clean preview artifact through the production merge materializer', async () => {
     const graphId = 'graph-clean-artifact';
@@ -52,27 +64,17 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     );
     expectInitializeSuccess(initialized);
 
-    const sourceHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const branchHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const mergedHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
+    const sourceHandle = await createHeadlessDocumentHandle(documentScope);
+    const branchHandle = await createHeadlessDocumentHandle(documentScope);
+    const mergedHandle = await createHeadlessDocumentHandle(documentScope);
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, mergedHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let mergedWb: Workbook | undefined;
 
     try {
       sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -104,10 +106,12 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.setCell('C1', 'theirs');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
@@ -233,6 +237,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       });
 
       mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(mergedWb);
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -262,27 +267,17 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     );
     expectInitializeSuccess(initialized);
 
-    const sourceHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const branchHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const mergedHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
+    const sourceHandle = await createHeadlessDocumentHandle(documentScope);
+    const branchHandle = await createHeadlessDocumentHandle(documentScope);
+    const mergedHandle = await createHeadlessDocumentHandle(documentScope);
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, mergedHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let mergedWb: Workbook | undefined;
 
     try {
       sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -314,10 +309,12 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.setCell('A1', 'theirs');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
@@ -484,6 +481,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       });
 
       mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(mergedWb);
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -554,16 +552,9 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       mergeCommitCallCount += 1;
     };
 
-    const sourceHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const branchHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
+    const sourceHandle = await createHeadlessDocumentHandle(documentScope);
+    const branchHandle = await createHeadlessDocumentHandle(documentScope);
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
 
@@ -574,6 +565,7 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
           applyMergeService: { mergeCommit },
         }),
       });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -605,10 +597,12 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.setCell('A1', 'theirs');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
@@ -704,21 +698,15 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
     expectInitializeSuccess(initialized);
     const namespace = namespaceForDocumentScope(documentScope, graphId);
 
-    const sourceHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const branchHandle = await DocumentFactory.create({
-      documentId: documentScope.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
+    const sourceHandle = await createHeadlessDocumentHandle(documentScope);
+    const branchHandle = await createHeadlessDocumentHandle(documentScope);
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
 
     try {
       sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setCell('A1', 'base');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -750,10 +738,12 @@ describe('WorkbookVersion persisted merge preview artifact apply', () => {
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.setCell('A1', 'theirs');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({

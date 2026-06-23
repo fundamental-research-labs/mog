@@ -1,5 +1,5 @@
 import { parseWorkbookCommitParentIds } from './commit-store-parents';
-import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store';
+import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store-types';
 import { parseVersionAuthor } from './commit-store-payload-author';
 import { parseCompletenessDiagnostics } from './commit-store-payload-completeness';
 import { diagnostic, invalidPayloadDiagnostic } from './commit-store-payload-diagnostics';

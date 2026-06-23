@@ -1,5 +1,5 @@
 import { parseObjectDigest, type ObjectDigest } from './object-digest';
-import type { WorkbookCommitStoreDiagnostic } from './commit-store';
+import type { WorkbookCommitStoreDiagnostic } from './commit-store-types';
 import { diagnostic } from './commit-store-payload-diagnostics';
 
 export function parsePayloadDigest(

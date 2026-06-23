@@ -8,7 +8,7 @@ import type {
   CreateWorkbookCommitInput,
   WorkbookCommitPayload,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store';
+} from './commit-store-types';
 import type { VersionObjectRecord } from './object-store';
 import { diagnostic } from './commit-store-payload-diagnostics';
 import { isVersionObjectRecord } from './commit-store-payload-guards';

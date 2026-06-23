@@ -1,7 +1,7 @@
 import type {
   WorkbookCommitStoreDiagnostic,
   WorkbookCommitStoreDiagnosticCode,
-} from './commit-store';
+} from './commit-store-types';
 
 export function diagnostic(
   code: WorkbookCommitStoreDiagnosticCode,

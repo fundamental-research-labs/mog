@@ -5,7 +5,7 @@ import {
   type WorkbookCommitId,
 } from './object-digest';
 import { VersionObjectStoreError, type InMemoryVersionObjectStore } from './object-store';
-import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store';
+import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './commit-store-types';
 
 type ParentCommitIdsResult =
   | { readonly ok: true; readonly parentCommitIds: readonly WorkbookCommitId[] }

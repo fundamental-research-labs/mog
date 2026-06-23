@@ -1,7 +1,7 @@
 import type {
   WorkbookCommitCompletenessDiagnostic,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store';
+} from './commit-store-types';
 import { invalidPayloadDiagnostic } from './commit-store-payload-diagnostics';
 import { isPlainRecord } from './commit-store-payload-guards';
 import { parseOptionalString, parseString } from './commit-store-payload-scalars';

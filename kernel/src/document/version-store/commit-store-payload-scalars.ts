@@ -1,4 +1,4 @@
-import type { WorkbookCommitStoreDiagnostic } from './commit-store';
+import type { WorkbookCommitStoreDiagnostic } from './commit-store-types';
 import { invalidPayloadDiagnostic } from './commit-store-payload-diagnostics';
 
 export function parseString(

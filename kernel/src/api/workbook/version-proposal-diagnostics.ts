@@ -133,7 +133,6 @@ function isSensitiveDiagnosticKey(key: string): boolean {
   const normalized = key.toLowerCase();
   return (
     normalized.includes('principal') ||
-    normalized === 'proposalid' ||
     normalized === 'actorid' ||
     normalized === 'reviewerid' ||
     normalized === 'agentrunid' ||

@@ -16,12 +16,17 @@ import {
   validateDomainSupportManifest,
   type DomainSupportDetectorRow,
   type DomainSupportManifestDiagnostic,
+  type DomainSupportManifestValidationOperation,
   type DomainSupportManifestValidationOptions,
 } from '../../document/version-store/domain-support-manifest-validator';
 import {
   isMaterializableMergeDomainReference,
   unsupportedDetectedMergeDomainDiagnostic,
 } from './version-merge-materializer-support';
+import {
+  hasAttachedVersionReviewReadService,
+  hasAttachedVersionReviewWriteService,
+} from './version-review-service-discovery';
 
 type MaybePromise<T> = T | Promise<T>;
 type VersionDomainSupportManifestGateOperation =
@@ -29,6 +34,8 @@ type VersionDomainSupportManifestGateOperation =
   | 'checkout'
   | 'merge'
   | 'applyMerge'
+  | 'review'
+  | 'import'
   | 'export';
 
 type MaybeDomainSupportManifestContext = DocumentContext & {
@@ -61,6 +68,8 @@ const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
   checkout: ['checkout'],
   merge: ['merge'],
   applyMerge: ['merge', 'persistence'],
+  review: ['reviewAccess'],
+  import: ['import'],
   export: ['export'],
 } satisfies Readonly<
   Record<VersionDomainSupportManifestGateOperation, readonly VersionDomainCapabilityKey[]>
@@ -71,8 +80,18 @@ const REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION = Object.freeze({
   checkout: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   merge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   applyMerge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  review: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  import: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   export: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
 } satisfies Readonly<Record<VersionDomainSupportManifestGateOperation, readonly string[]>>);
+
+const VALIDATOR_BACKED_OPERATIONS = new Set<VersionDomainSupportManifestGateOperation>([
+  'commit',
+  'checkout',
+  'merge',
+  'applyMerge',
+  'export',
+]);
 
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
@@ -139,6 +158,7 @@ export async function validateVersionDomainSupportManifestGate(
 
   const {
     domainPolicyRegistry: _ignoredCallerDomainPolicyRegistry,
+    operation: _ignoredCallerOperation,
     requiredCapabilityKeys: callerRequiredCapabilityKeys,
     requiredMatrixRowIds: callerRequiredMatrixRowIds,
     requiredDomainIds: callerRequiredDomainIds,
@@ -151,11 +171,12 @@ export async function validateVersionDomainSupportManifestGate(
     callerOptions.detectorRows,
     detected.detectorRows,
   );
+  const validatorOperation = domainSupportManifestValidationOperation(operation);
   const options: DomainSupportManifestValidationOptions = {
     ...callerOptions,
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
-    operation,
+    ...(validatorOperation ? { operation: validatorOperation } : {}),
     requiredCapabilityKeys: requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys),
     requiredMatrixRowIds: requiredManifestMatrixRowIds(
       operation,
@@ -352,6 +373,14 @@ function mergeDetectedDomainDiagnostics(
   return diagnostics;
 }
 
+function domainSupportManifestValidationOperation(
+  operation: VersionDomainSupportManifestGateOperation,
+): DomainSupportManifestValidationOperation | undefined {
+  return VALIDATOR_BACKED_OPERATIONS.has(operation)
+    ? (operation as DomainSupportManifestValidationOperation)
+    : undefined;
+}
+
 function requiredManifestMatrixRowIds(
   operation: VersionDomainSupportManifestGateOperation,
   callerRequiredMatrixRowIds: readonly string[] | undefined,
@@ -443,6 +472,13 @@ function isVersionDomainSupportManifestRequired(
       return hasMergeService(services);
     case 'applyMerge':
       return hasApplyMergeService(services) || hasMergeService(services);
+    case 'review':
+      return (
+        hasAttachedVersionReviewReadService(services) ||
+        hasAttachedVersionReviewWriteService(services)
+      );
+    case 'import':
+      return hasImportService(services);
     case 'export':
       return hasVersionOperationService(services);
   }
@@ -582,6 +618,28 @@ function hasApplyMergeService(services: Readonly<Record<string, unknown>>): bool
       hasMethod(candidate, 'fastForwardApplyMerge') ||
       hasMethod(candidate, 'applyMergeFastForward') ||
       hasMethod(candidate, 'applyFastForwardMerge')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasImportService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.importService,
+    services.versionImportService,
+    services.syncImportService,
+    services.publicService,
+    services,
+  ]) {
+    if (
+      hasMethod(candidate, 'import') ||
+      hasMethod(candidate, 'importWorkbook') ||
+      hasMethod(candidate, 'importXlsx') ||
+      hasMethod(candidate, 'importVersion') ||
+      hasMethod(candidate, 'syncImport') ||
+      hasMethod(candidate, 'recordImport')
     ) {
       return true;
     }

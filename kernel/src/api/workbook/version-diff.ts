@@ -690,6 +690,12 @@ function sanitizeDiagnosticPayload(
       'receivedPageSize',
       'includeDerivedImpact',
       'includeDiagnostics',
+      'category',
+      'completenessCode',
+      'completenessSeverity',
+      'path',
+      'domain',
+      'source',
     ] as const) {
       const detailValue = details[key];
       if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
@@ -810,6 +816,22 @@ function safeMessageForIssue(issueCode: string): string {
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
       return 'The requested version diff is not materializable by the attached service.';
+    case 'unsupportedDomain':
+    case 'unsupportedFormat':
+    case 'externalReferenceUnsupported':
+      return 'The requested version diff includes unsupported semantic state.';
+    case 'opaqueDomain':
+    case 'opaqueDomainDigestUnavailable':
+    case 'opaqueFormatPointer':
+      return 'The requested version diff includes opaque semantic state.';
+    case 'derivedImpactStale':
+    case 'staleDiffCursor':
+      return 'The requested version diff includes stale semantic state evidence.';
+    case 'indexKeyedVisibility':
+    case 'indexKeyedRowVisibility':
+    case 'indexKeyedColumnVisibility':
+    case 'inconsistentVisibilityCache':
+      return 'The requested version diff includes subset-hidden semantic state.';
     default:
       return 'The version graph could not complete diff.';
   }
@@ -818,6 +840,8 @@ function safeMessageForIssue(issueCode: string): string {
 function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
   switch (issueCode) {
     case 'VERSION_STALE_PAGE_CURSOR':
+    case 'derivedImpactStale':
+    case 'staleDiffCursor':
     case 'VERSION_REF_CONFLICT':
       return 'retry';
     case 'VERSION_DANGLING_REF':
@@ -828,6 +852,16 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
+    case 'unsupportedDomain':
+    case 'unsupportedFormat':
+    case 'externalReferenceUnsupported':
+    case 'opaqueDomain':
+    case 'opaqueDomainDigestUnavailable':
+    case 'opaqueFormatPointer':
+    case 'indexKeyedVisibility':
+    case 'indexKeyedRowVisibility':
+    case 'indexKeyedColumnVisibility':
+    case 'inconsistentVisibilityCache':
       return 'unsupported';
     default:
       return 'none';

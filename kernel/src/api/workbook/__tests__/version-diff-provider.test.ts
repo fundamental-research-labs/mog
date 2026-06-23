@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
+import type { WorkbookCommitCompletenessDiagnostic } from '../../../document/version-store/commit-store';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
@@ -273,6 +274,106 @@ describe('WorkbookVersion provider-backed diff facade', () => {
     expect(JSON.stringify(result)).not.toContain('secretFormula');
   });
 
+  it.each([
+    [
+      'unsupported',
+      {
+        code: 'unsupportedDomain',
+        severity: 'error',
+        message: 'Pivot cache state is not supported by this semantic diff slice.',
+        path: 'domains.pivots',
+        details: { domain: 'pivots' },
+      },
+    ],
+    [
+      'opaque',
+      {
+        code: 'opaqueDomain',
+        severity: 'warning',
+        message: 'Embedded package state is opaque to this semantic diff slice.',
+        path: 'domains.embeddedPackages',
+        details: { domain: 'embeddedPackages' },
+      },
+    ],
+    [
+      'stale',
+      {
+        code: 'derivedImpactStale',
+        severity: 'warning',
+        message: 'Derived impact evidence is stale for this semantic diff slice.',
+        path: 'derivedImpact.recalc',
+        details: { domain: 'derivedImpact' },
+      },
+    ],
+    [
+      'subset-hidden',
+      {
+        code: 'indexKeyedRowVisibility',
+        severity: 'error',
+        message: 'Row hidden state is index-keyed outside the supported semantic subset.',
+        path: 'sheets.sheet-1.rows.hidden',
+        details: { domain: 'rows' },
+      },
+    ],
+  ] satisfies readonly (readonly [string, WorkbookCommitCompletenessDiagnostic])[])(
+    'reports %s completeness diagnostics through wb.version.diff without claiming a clean diff',
+    async (category, completenessDiagnostic) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+      expectInitializeSuccess(initialized);
+
+      const wb = createWorkbook({
+        versioning: {
+          provider,
+          captureNormalCommit: jest.fn(
+            createSemanticDiffCommitCapture(
+              'child',
+              defaultSemanticChanges('child'),
+              [completenessDiagnostic],
+            ),
+          ),
+        },
+      });
+
+      const commitResult = await wb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      const committed = commitResult.value;
+
+      const result = await wb.version.diff(initialized.rootCommit.id, committed.id);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          diagnostics: [
+            expect.objectContaining({
+              code: completenessDiagnostic.code,
+              data: expect.objectContaining({
+                operation: 'diff',
+                recoverability: category === 'stale' ? 'retry' : 'unsupported',
+                payload: expect.objectContaining({
+                  operation: 'diff',
+                  selector: 'target',
+                  category,
+                  completenessCode: completenessDiagnostic.code,
+                  completenessSeverity: completenessDiagnostic.severity,
+                  path: completenessDiagnostic.path,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(result).not.toHaveProperty('value');
+    },
+  );
+
   it('continues to degrade cleanly when a provider registry is unavailable', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const wb = createWorkbook({
@@ -340,6 +441,7 @@ async function initializeInput(
 function createSemanticDiffCommitCapture(
   label: string,
   changes: readonly unknown[] = defaultSemanticChanges(label),
+  completenessDiagnostics: readonly WorkbookCommitCompletenessDiagnostic[] = [],
 ): VersionNormalCommitCapture {
   return async ({ namespace, currentMain }) => ({
     status: 'success',
@@ -362,7 +464,7 @@ function createSemanticDiffCommitCapture(
       ],
       author: VERSION_AUTHOR,
       createdAt: CREATED_AT,
-      completenessDiagnostics: [],
+      completenessDiagnostics,
     },
   });
 }

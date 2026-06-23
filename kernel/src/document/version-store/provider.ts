@@ -1,22 +1,13 @@
 import {
-  VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
-  type InitializeVersionGraphInput,
   type InMemoryVersionGraphStore,
-  type VersionGraphCommitRef,
-  type VersionGraphRef,
-  type VersionGraphStoreDiagnostic,
-  type VersionGraphStoreDiagnosticCode,
-  type VersionGraphSymbolicRef,
 } from './graph-store';
-import type { WorkbookCommitId } from './object-digest';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
 } from './object-store';
-import type { VersionGraphStore } from './provider-graph-store';
 import {
   InMemoryVersionDocumentProviderBackend,
   type InMemoryVersionProviderDurability,
@@ -28,16 +19,36 @@ import { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
 import { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
 import { InMemoryAgentProposalMetadataStore } from './proposal-store';
 import {
-  cloneVersionGraphRegistry,
   createVersionGraphRegistry,
   namespaceForDocumentScope,
   namespaceForRegistry,
   normalizeVersionDocumentScope,
   normalizeVersionStoreString,
   type VersionDocumentScope,
-  type VersionGraphRegistry,
-  type VersionRecordRevision,
 } from './registry';
+import type {
+  VersionAccessContext,
+  VersionDocumentIntegrityScanOptions,
+  VersionGraphInitializeInput,
+  VersionGraphInitializeResult,
+  VersionGraphRegistryReadResult,
+  VersionIntegrityReport,
+  VersionStoreCapabilities,
+  VersionStoreCloseReason,
+  VersionStoreDiagnostic,
+  VersionStoreFailure,
+  VersionStoreLifecycleState,
+  VersionStoreOperation,
+  VersionStoreProvider,
+} from './provider-types';
+import {
+  cloneVersionStoreCapabilities,
+  freezeCapabilities,
+  readOnlyCapabilities,
+  unavailableCapabilities,
+} from './provider-capabilities';
+import { mapGraphDiagnostics, versionStoreDiagnostic } from './provider-diagnostics';
+import { failedStoreResult, initializeSuccess, registryRecordResult } from './provider-results';
 
 export {
   VERSION_GRAPH_REGISTRY_CHECKSUM_DOMAIN,
@@ -53,196 +64,27 @@ export {
   type InMemoryVersionDocumentProviderBackendSnapshot,
 } from './provider-memory-backend';
 export type { VersionGraphStore } from './provider-graph-store';
-
-export type VersionAccessContext = {
-  readonly principalScope?: string;
-  readonly capabilityIds?: readonly string[];
-  readonly diagnosticsAllowed?: boolean;
-};
-
-export type VersionStoreCapabilities = {
-  readonly durableGraphRegistry: boolean;
-  readonly durableObjects: boolean;
-  readonly atomicObjectBatch: boolean;
-  readonly casRefs: boolean;
-  readonly casGraphRegistry: boolean;
-  readonly multiProcessCasGraphRegistry: boolean;
-  readonly multiProcessCasRefs: boolean;
-  readonly readOnlyHistory: boolean;
-  readonly integrityScan: boolean;
-  readonly corruptionQuarantine: boolean;
-  readonly reads: {
-    readonly graphRegistry: boolean;
-    readonly objects: boolean;
-    readonly refs: boolean;
-    readonly commits: boolean;
-    readonly snapshots: boolean;
-    readonly integrityReports: boolean;
-  };
-  readonly writes: {
-    readonly initializeGraph: boolean;
-    readonly putObjects: boolean;
-    readonly updateRefs: boolean;
-    readonly updateSymbolicRefs: boolean;
-    readonly commitGraphWrite: boolean;
-    readonly repairIndexes: boolean;
-    readonly quarantineCorruptRecords: boolean;
-  };
-};
-
-export type VersionStoreCloseReason = 'workbook-close' | 'dispose' | 'error' | 'test-teardown';
-export type VersionStoreLifecycleState =
-  | 'open'
-  | 'closing'
-  | 'close-failed'
-  | 'closed'
-  | 'disposing'
-  | 'dispose-failed'
-  | 'disposed';
-
-export type VersionStoreOperation =
-  | 'readGraphRegistry'
-  | 'initializeGraph'
-  | 'openGraph'
-  | 'commitGraphWrite'
-  | 'scanDocumentIntegrity'
-  | 'close'
-  | 'dispose';
-
-export type VersionStoreMutationGuarantee =
-  | 'ref-not-mutated'
-  | 'registry-not-visible'
-  | 'no-write-attempted'
-  | 'unknown-after-crash';
-
-export type VersionStoreDiagnosticCode =
-  | VersionGraphStoreDiagnosticCode
-  | 'VERSION_STORE_READ_ONLY'
-  | 'VERSION_STORE_UNAVAILABLE'
-  | 'VERSION_UNSUPPORTED_DURABLE_PERSISTENCE'
-  | 'VERSION_UNSUPPORTED_REGISTRY'
-  | 'VERSION_CORRUPT_REGISTRY'
-  | 'VERSION_MISSING_CHANGE_SET'
-  | 'VERSION_PROVIDER_FAILED';
-
-export type VersionDiagnosticMessageId =
-  | 'version.store.unavailable'
-  | 'version.provider.failed'
-  | 'version.store.read-only'
-  | 'version.graph.uninitialized'
-  | 'version.graph.conflict'
-  | 'version.registry.unsupported'
-  | 'version.registry.corrupt'
-  | 'version.integrity.wrong-namespace'
-  | 'version.integrity.missing-object'
-  | 'version.integrity.missing-parent'
-  | 'version.integrity.missing-change-set'
-  | 'version.ref.conflict'
-  | 'version.ref.dangling'
-  | 'version.options.invalid'
-  | 'version.page-cursor.stale'
-  | 'version.unsupported';
-
-export type VersionStoreDiagnostic = {
-  readonly code: VersionStoreDiagnosticCode;
-  readonly issueCode: VersionStoreDiagnosticCode;
-  readonly severity: 'info' | 'warning' | 'error' | 'fatal';
-  readonly recoverability: 'retry' | 'repair' | 'unsupported' | 'none';
-  readonly messageTemplateId: VersionDiagnosticMessageId;
-  readonly safeMessage: string;
-  readonly message: string;
-  readonly operation: VersionStoreOperation;
-  readonly redacted: true;
-  readonly documentScope?: VersionDocumentScope;
-  readonly namespace?: VersionGraphNamespace;
-  readonly refName?: string;
-  readonly commitId?: WorkbookCommitId;
-  readonly mutationGuarantee?: VersionStoreMutationGuarantee;
-  readonly lifecycleState?: VersionStoreLifecycleState;
-  readonly details?: Readonly<Record<string, string | number | boolean | null>>;
-  readonly sourceDiagnostics?: readonly VersionGraphStoreDiagnostic[];
-};
-
-export type VersionStoreFailure = {
-  readonly status: 'failed';
-  readonly diagnostics: readonly VersionStoreDiagnostic[];
-  readonly mutationGuarantee: Extract<
-    VersionStoreMutationGuarantee,
-    'ref-not-mutated' | 'registry-not-visible' | 'no-write-attempted'
-  >;
-  readonly retryable: boolean;
-};
-
-export type VersionGraphRegistryReadResult =
-  | {
-      readonly status: 'ok';
-      readonly registry: VersionGraphRegistry;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'absent';
-      readonly registry: null;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    }
-  | {
-      readonly status: 'unsupported';
-      readonly registry: null;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: 'no-write-attempted';
-    }
-  | {
-      readonly status: 'corrupt';
-      readonly registry: null;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-      readonly mutationGuarantee: 'no-write-attempted';
-    };
-
-export type VersionGraphInitializeInput = {
-  readonly expectedRegistryRevision: VersionRecordRevision | null;
-  readonly graphId: string;
-  readonly rootWrite: InitializeVersionGraphInput;
-  readonly requireDurablePersistence?: boolean;
-};
-
-export type VersionGraphInitializeResult =
-  | {
-      readonly status: 'success';
-      readonly registry: VersionGraphRegistry;
-      readonly rootCommit: VersionGraphCommitRef;
-      readonly initialHead: VersionGraphRef;
-      readonly symbolicHead: VersionGraphSymbolicRef;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    }
-  | VersionStoreFailure;
-
-export type VersionDocumentIntegrityScanOptions = {
-  readonly includeOrphanGraphs?: boolean;
-  readonly quarantineCorruptRecords?: boolean;
-};
-
-export type VersionIntegrityReport = {
-  readonly status: 'ok' | 'degraded' | 'corrupt';
-  readonly checkedAt: string;
-  readonly scanScope: 'document';
-  readonly diagnostics: readonly VersionStoreDiagnostic[];
-};
-
-export interface VersionStoreProvider {
-  readonly documentScope: VersionDocumentScope;
-  readonly accessContext: VersionAccessContext;
-  readonly capabilities: VersionStoreCapabilities;
-  readGraphRegistry(): Promise<VersionGraphRegistryReadResult>;
-  initializeGraph(input: VersionGraphInitializeInput): Promise<VersionGraphInitializeResult>;
-  openGraph(
-    namespace: VersionGraphNamespace,
-    accessContext?: VersionAccessContext,
-  ): Promise<VersionGraphStore>;
-  scanDocumentIntegrity(
-    options?: VersionDocumentIntegrityScanOptions,
-  ): Promise<VersionIntegrityReport>;
-  close(reason?: VersionStoreCloseReason): Promise<void>;
-  dispose(reason?: VersionStoreCloseReason): Promise<void>;
-}
+export type {
+  VersionAccessContext,
+  VersionDiagnosticMessageId,
+  VersionDocumentIntegrityScanOptions,
+  VersionGraphInitializeInput,
+  VersionGraphInitializeResult,
+  VersionGraphRegistryReadResult,
+  VersionIntegrityReport,
+  VersionStoreCapabilities,
+  VersionStoreCloseReason,
+  VersionStoreDiagnostic,
+  VersionStoreDiagnosticCode,
+  VersionStoreFailure,
+  VersionStoreLifecycleState,
+  VersionStoreMutationGuarantee,
+  VersionStoreOperation,
+  VersionStoreProvider,
+} from './provider-types';
+export { cloneVersionStoreCapabilities } from './provider-capabilities';
+export { mapGraphDiagnostics, versionStoreDiagnostic } from './provider-diagnostics';
+export { failedStoreResult } from './provider-results';
 
 export class VersionStoreProviderError extends Error {
   readonly diagnostic: VersionStoreDiagnostic;
@@ -742,271 +584,6 @@ export function createInMemoryVersionStoreProvider(
   options: InMemoryVersionStoreProviderOptions,
 ): InMemoryVersionStoreProvider {
   return new InMemoryVersionStoreProvider(options);
-}
-
-export function cloneVersionStoreCapabilities(
-  capabilities: VersionStoreCapabilities,
-): VersionStoreCapabilities {
-  return freezeCapabilities({
-    ...capabilities,
-    reads: { ...capabilities.reads },
-    writes: { ...capabilities.writes },
-  });
-}
-
-function readOnlyCapabilities(capabilities: VersionStoreCapabilities): VersionStoreCapabilities {
-  return freezeCapabilities({
-    ...capabilities,
-    readOnlyHistory: true,
-    writes: {
-      initializeGraph: false,
-      putObjects: false,
-      updateRefs: false,
-      updateSymbolicRefs: false,
-      commitGraphWrite: false,
-      repairIndexes: false,
-      quarantineCorruptRecords: false,
-    },
-    corruptionQuarantine: false,
-  });
-}
-
-function unavailableCapabilities(capabilities: VersionStoreCapabilities): VersionStoreCapabilities {
-  return freezeCapabilities({
-    ...capabilities,
-    durableGraphRegistry: false,
-    durableObjects: false,
-    atomicObjectBatch: false,
-    casRefs: false,
-    casGraphRegistry: false,
-    multiProcessCasGraphRegistry: false,
-    multiProcessCasRefs: false,
-    readOnlyHistory: true,
-    integrityScan: false,
-    corruptionQuarantine: false,
-    reads: {
-      graphRegistry: false,
-      objects: false,
-      refs: false,
-      commits: false,
-      snapshots: false,
-      integrityReports: false,
-    },
-    writes: {
-      initializeGraph: false,
-      putObjects: false,
-      updateRefs: false,
-      updateSymbolicRefs: false,
-      commitGraphWrite: false,
-      repairIndexes: false,
-      quarantineCorruptRecords: false,
-    },
-  });
-}
-
-function freezeCapabilities(capabilities: VersionStoreCapabilities): VersionStoreCapabilities {
-  return Object.freeze({
-    ...capabilities,
-    reads: Object.freeze({ ...capabilities.reads }),
-    writes: Object.freeze({ ...capabilities.writes }),
-  });
-}
-
-function initializeSuccess(
-  registry: VersionGraphRegistry,
-  main: VersionGraphRef,
-): Extract<VersionGraphInitializeResult, { status: 'success' }> {
-  return {
-    status: 'success',
-    registry: cloneVersionGraphRegistry(registry),
-    rootCommit: {
-      id: registry.rootCommitId,
-      refName: VERSION_GRAPH_MAIN_REF,
-      resolvedFrom: VERSION_GRAPH_HEAD_REF,
-      refRevision: main.revision,
-    },
-    initialHead: { ...main },
-    symbolicHead: {
-      name: VERSION_GRAPH_HEAD_REF,
-      target: VERSION_GRAPH_MAIN_REF,
-      revision: main.revision,
-    },
-    diagnostics: [],
-  };
-}
-
-export function failedStoreResult(
-  diagnostics: readonly VersionStoreDiagnostic[],
-  mutationGuarantee: VersionStoreFailure['mutationGuarantee'],
-  retryable = false,
-): VersionStoreFailure {
-  return {
-    status: 'failed',
-    diagnostics: Object.freeze([...diagnostics]),
-    mutationGuarantee,
-    retryable,
-  };
-}
-
-export function mapGraphDiagnostics(
-  diagnostics: readonly VersionGraphStoreDiagnostic[],
-  operation: VersionStoreOperation,
-): readonly VersionStoreDiagnostic[] {
-  return diagnostics.map((item) =>
-    versionStoreDiagnostic(item.code, {
-      operation,
-      namespace: item.namespace,
-      refName: item.refName,
-      commitId: item.commitId,
-      safeMessage: item.message,
-      sourceDiagnostics: [item],
-      details: item.details,
-    }),
-  );
-}
-
-function registryRecordResult(
-  kind: 'corrupt' | 'unsupported',
-  operation: VersionStoreOperation,
-  documentScope: VersionDocumentScope,
-): Extract<VersionGraphRegistryReadResult, { status: 'corrupt' | 'unsupported' }> {
-  const code = kind === 'corrupt' ? 'VERSION_CORRUPT_REGISTRY' : 'VERSION_UNSUPPORTED_REGISTRY';
-  return {
-    status: kind,
-    registry: null,
-    diagnostics: [
-      versionStoreDiagnostic(code, {
-        operation,
-        documentScope,
-        recoverability: kind === 'corrupt' ? 'repair' : 'unsupported',
-        safeMessage:
-          kind === 'corrupt'
-            ? 'Version graph registry is corrupt and cannot be opened normally.'
-            : 'Version graph registry schema is not supported by this provider.',
-      }),
-    ],
-    mutationGuarantee: 'no-write-attempted',
-  };
-}
-
-export function versionStoreDiagnostic(
-  code: VersionStoreDiagnosticCode,
-  options: {
-    readonly operation: VersionStoreOperation;
-    readonly documentScope?: VersionDocumentScope;
-    readonly namespace?: VersionGraphNamespace;
-    readonly refName?: string;
-    readonly commitId?: WorkbookCommitId;
-    readonly safeMessage: string;
-    readonly recoverability?: VersionStoreDiagnostic['recoverability'];
-    readonly mutationGuarantee?: VersionStoreMutationGuarantee;
-    readonly lifecycleState?: VersionStoreLifecycleState;
-    readonly details?: Readonly<Record<string, string | number | boolean | null>>;
-    readonly sourceDiagnostics?: readonly VersionGraphStoreDiagnostic[];
-  },
-): VersionStoreDiagnostic {
-  const messageTemplateId = messageTemplateIdForCode(code);
-  const recoverability = options.recoverability ?? recoverabilityForCode(code);
-  return Object.freeze({
-    code,
-    issueCode: code,
-    severity: severityForCode(code),
-    recoverability,
-    messageTemplateId,
-    safeMessage: options.safeMessage,
-    message: options.safeMessage,
-    operation: options.operation,
-    redacted: true,
-    ...(options.documentScope
-      ? { documentScope: normalizeVersionDocumentScope(options.documentScope) }
-      : {}),
-    ...(options.namespace ? { namespace: normalizeVersionGraphNamespace(options.namespace) } : {}),
-    ...(options.refName ? { refName: options.refName } : {}),
-    ...(options.commitId ? { commitId: options.commitId } : {}),
-    ...(options.mutationGuarantee ? { mutationGuarantee: options.mutationGuarantee } : {}),
-    ...(options.lifecycleState ? { lifecycleState: options.lifecycleState } : {}),
-    ...(options.details ? { details: options.details } : {}),
-    ...(options.sourceDiagnostics ? { sourceDiagnostics: options.sourceDiagnostics } : {}),
-  });
-}
-
-function messageTemplateIdForCode(code: VersionStoreDiagnosticCode): VersionDiagnosticMessageId {
-  switch (code) {
-    case 'VERSION_STORE_UNAVAILABLE':
-      return 'version.store.unavailable';
-    case 'VERSION_PROVIDER_FAILED':
-      return 'version.provider.failed';
-    case 'VERSION_STORE_READ_ONLY':
-      return 'version.store.read-only';
-    case 'VERSION_GRAPH_UNINITIALIZED':
-      return 'version.graph.uninitialized';
-    case 'VERSION_GRAPH_CONFLICT':
-      return 'version.graph.conflict';
-    case 'VERSION_UNSUPPORTED_REGISTRY':
-      return 'version.registry.unsupported';
-    case 'VERSION_CORRUPT_REGISTRY':
-      return 'version.registry.corrupt';
-    case 'VERSION_WRONG_NAMESPACE':
-      return 'version.integrity.wrong-namespace';
-    case 'VERSION_MISSING_OBJECT':
-      return 'version.integrity.missing-object';
-    case 'VERSION_MISSING_PARENT':
-      return 'version.integrity.missing-parent';
-    case 'VERSION_MISSING_CHANGE_SET':
-    case 'VERSION_MISSING_DEPENDENCY':
-      return 'version.integrity.missing-change-set';
-    case 'VERSION_REF_CONFLICT':
-      return 'version.ref.conflict';
-    case 'VERSION_DANGLING_REF':
-      return 'version.ref.dangling';
-    case 'VERSION_INVALID_OPTIONS':
-    case 'VERSION_INVALID_COMMIT_ID':
-    case 'VERSION_INVALID_COMMIT_PAYLOAD':
-    case 'VERSION_WRONG_DOCUMENT':
-      return 'version.options.invalid';
-    case 'VERSION_STALE_PAGE_CURSOR':
-    case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
-      return 'version.page-cursor.stale';
-    case 'VERSION_UNSUPPORTED_DURABLE_PERSISTENCE':
-    case 'VERSION_UNSUPPORTED_PARENT_COMMIT':
-      return 'version.unsupported';
-    case 'VERSION_OBJECT_STORE_FAILURE':
-      return 'version.provider.failed';
-  }
-}
-
-function severityForCode(code: VersionStoreDiagnosticCode): VersionStoreDiagnostic['severity'] {
-  if (code === 'VERSION_PROVIDER_FAILED' || code === 'VERSION_OBJECT_STORE_FAILURE') {
-    return 'fatal';
-  }
-  return 'error';
-}
-
-function recoverabilityForCode(
-  code: VersionStoreDiagnosticCode,
-): VersionStoreDiagnostic['recoverability'] {
-  switch (code) {
-    case 'VERSION_STORE_UNAVAILABLE':
-    case 'VERSION_GRAPH_CONFLICT':
-    case 'VERSION_REF_CONFLICT':
-    case 'VERSION_STALE_PAGE_CURSOR':
-      return 'retry';
-    case 'VERSION_UNSUPPORTED_DURABLE_PERSISTENCE':
-    case 'VERSION_UNSUPPORTED_REGISTRY':
-    case 'VERSION_UNSUPPORTED_PARENT_COMMIT':
-    case 'VERSION_UNSUPPORTED_PAGE_TOKEN':
-      return 'unsupported';
-    case 'VERSION_CORRUPT_REGISTRY':
-      return 'repair';
-    case 'VERSION_DANGLING_REF':
-    case 'VERSION_MISSING_OBJECT':
-    case 'VERSION_MISSING_PARENT':
-    case 'VERSION_MISSING_CHANGE_SET':
-    case 'VERSION_OBJECT_STORE_FAILURE':
-      return 'repair';
-    default:
-      return 'none';
-  }
 }
 
 function normalizeVersionAccessContext(

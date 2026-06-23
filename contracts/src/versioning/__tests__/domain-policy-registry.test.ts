@@ -5,6 +5,7 @@ import {
   VERSION_DOMAIN_CAPABILITY_KEYS,
   VERSION_DOMAIN_POLICY_ID_PATTERN,
   VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION,
+  VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
 } from '../index';
 import {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
@@ -50,13 +51,14 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       expect(Object.keys(row.capabilityStates).sort()).toEqual(
         [...VERSION_DOMAIN_CAPABILITY_KEYS].sort(),
       );
+      expect(row.historyAccess.diagnosticProjection).toEqual(
+        VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+      );
       for (const internalField of INTERNAL_ONLY_FIELDS) {
         expect(row).not.toHaveProperty(internalField);
       }
     }
-    expect(JSON.stringify(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY)).not.toContain(
-      'expected-failing',
-    );
+    expect(JSON.stringify(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY)).not.toContain('expected-failing');
   });
 
   it('keeps first-slice public runtime states conservative and explicit', () => {

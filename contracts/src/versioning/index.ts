@@ -5,6 +5,27 @@ import type {
   ControlPlaneRuntimeKind,
   GateEvidencePreflightDigest,
 } from '../control-plane';
+import type { VersionHistoryAccessPolicy, VersionRedactionPolicy } from './access-policy';
+
+export {
+  VERSION_HISTORY_DENIED_SUMMARY_KINDS,
+  VERSION_HISTORY_DIAGNOSTIC_PROJECTION_MODES,
+  VERSION_HISTORY_READ_MODES,
+  VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+  VERSION_HISTORY_WRITE_MODES,
+  VERSION_REDACTION_POLICIES,
+} from './access-policy';
+export type {
+  VersionHistoryAccessDeniedSummary,
+  VersionHistoryAccessPolicy,
+  VersionHistoryDeniedDiagnosticSummaryPolicy,
+  VersionHistoryDeniedSummaryKind,
+  VersionHistoryDiagnosticProjectionMode,
+  VersionHistoryDiagnosticProjectionPolicy,
+  VersionHistoryReadMode,
+  VersionHistoryWriteMode,
+  VersionRedactionPolicy,
+} from './access-policy';
 
 export const VERSION_OPERATION_KINDS = Object.freeze([
   'mutation',
@@ -93,15 +114,6 @@ export const VERSION_HISTORY_GAP_STATUSES = Object.freeze([
   'externalized',
 ] as const);
 export type VersionHistoryGapStatus = (typeof VERSION_HISTORY_GAP_STATUSES)[number];
-
-export const VERSION_REDACTION_POLICIES = Object.freeze([
-  'none',
-  'metadata-only',
-  'content-redacted',
-  'opaque-digest-only',
-  'drop',
-] as const);
-export type VersionRedactionPolicy = (typeof VERSION_REDACTION_POLICIES)[number];
 
 export type VersionActorKind = 'user' | 'service' | 'system' | 'migration' | 'automation';
 export type VersionObjectDigestAlgorithm = 'sha256' | 'sha512' | 'blake3' | 'opaque';
@@ -409,24 +421,6 @@ export interface VersionHistoryRootPolicy {
   readonly rootCommitId?: string;
   readonly allowDetachedRoots: boolean;
   readonly gapPolicy: VersionHistoryRootGapPolicy;
-}
-
-export const VERSION_HISTORY_READ_MODES = Object.freeze(['none', 'metadata-only', 'full'] as const);
-export type VersionHistoryReadMode = (typeof VERSION_HISTORY_READ_MODES)[number];
-
-export const VERSION_HISTORY_WRITE_MODES = Object.freeze([
-  'none',
-  'shadow-only',
-  'gated',
-  'full',
-] as const);
-export type VersionHistoryWriteMode = (typeof VERSION_HISTORY_WRITE_MODES)[number];
-
-export interface VersionHistoryAccessPolicy {
-  readonly readMode: VersionHistoryReadMode;
-  readonly writeMode: VersionHistoryWriteMode;
-  readonly redactionPolicy: VersionRedactionPolicy;
-  readonly allowedDomainIds?: readonly string[];
 }
 
 export interface ReplayEnvironment {

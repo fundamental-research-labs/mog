@@ -21,7 +21,11 @@ import type {
   VersionDegradedHeadResult,
   VersionHead,
 } from '@mog-sdk/contracts/api';
-import type { VersionMergePublicOperation } from './version-merge-capability';
+import {
+  VERSION_CAPABILITY_KEYS,
+  type VersionMergePublicOperation,
+} from './version-merge-capability';
+import { projectVersionHistoryDiagnosticsForAccess } from './version-history-diagnostic-projection';
 
 type VersionResultOperation =
   | 'getHead'
@@ -195,6 +199,34 @@ export function versionFailureFromStoreDiagnostics<T>(
   operation: VersionResultOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
+  const hostDenied = diagnostics.find(isHostCapabilityDeniedDiagnostic);
+  const deniedCapability = hostDenied ? payloadVersionCapability(hostDenied) : undefined;
+  if (hostDenied && deniedCapability) {
+    const retryable = hostDenied.payload?.reason === 'hostCapabilityApprovalRequired';
+    return {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: deniedCapability,
+        dependency: 'hostCapability',
+        reason: retryable
+          ? 'Version history capability requires approval for this caller.'
+          : 'Version history capability is denied for this caller.',
+        retryable,
+        diagnostics: projectVersionHistoryDiagnosticsForAccess(
+          diagnostics.map(toVersionDiagnostic),
+          {
+            kind: 'capability-denied',
+            capability: deniedCapability,
+            deniedCapabilities: [deniedCapability],
+            dependency: 'hostCapability',
+            retryable,
+          },
+        ),
+      },
+    };
+  }
+
   return {
     ok: false,
     error: {
@@ -277,6 +309,26 @@ function toVersionDiagnostic(diagnostic: VersionStoreDiagnostic): VersionDiagnos
 function payloadOperation(diagnostic: VersionStoreDiagnostic): string | undefined {
   return typeof diagnostic.payload?.operation === 'string'
     ? diagnostic.payload.operation
+    : undefined;
+}
+
+const VERSION_CAPABILITY_SET = new Set<string>(VERSION_CAPABILITY_KEYS);
+
+function isHostCapabilityDeniedDiagnostic(diagnostic: VersionStoreDiagnostic): boolean {
+  const reason = diagnostic.payload?.reason;
+  return (
+    diagnostic.issueCode === 'VERSION_CAPABILITY_DISABLED' &&
+    (reason === 'hostCapabilityDenied' || reason === 'hostCapabilityApprovalRequired') &&
+    Boolean(payloadVersionCapability(diagnostic))
+  );
+}
+
+function payloadVersionCapability(
+  diagnostic: VersionStoreDiagnostic,
+): VersionCapability | undefined {
+  const capability = diagnostic.payload?.capability;
+  return typeof capability === 'string' && VERSION_CAPABILITY_SET.has(capability)
+    ? (capability as VersionCapability)
     : undefined;
 }
 

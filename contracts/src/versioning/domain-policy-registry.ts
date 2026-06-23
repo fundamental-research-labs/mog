@@ -10,6 +10,7 @@ import type {
   VersionRolloutStage,
   VersionWriteAdmissionMode,
 } from './domain-policy';
+import { VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY } from './domain-policy';
 
 export const VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION = 'version-domain-policy-registry.v1';
 export const VERSION_DOMAIN_POLICY_ID_PATTERN = '^[a-z0-9]+(?:[.-][a-z0-9]+)*$';
@@ -133,18 +134,34 @@ function historyAccessFor(
   switch (capturePolicy) {
     case 'commitEligible':
     case 'rootCreation':
-      return Object.freeze({ readMode: 'full', writeMode: 'full', redactionPolicy });
+      return Object.freeze({
+        readMode: 'full',
+        writeMode: 'full',
+        redactionPolicy,
+        diagnosticProjection: VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+      });
     case 'derivedOnly':
     case 'shadowOnly':
       return Object.freeze({
         readMode: 'metadata-only',
         writeMode: 'shadow-only',
         redactionPolicy,
+        diagnosticProjection: VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
       });
     case 'historyGap':
-      return Object.freeze({ readMode: 'metadata-only', writeMode: 'gated', redactionPolicy });
+      return Object.freeze({
+        readMode: 'metadata-only',
+        writeMode: 'gated',
+        redactionPolicy,
+        diagnosticProjection: VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+      });
     case 'excluded':
-      return Object.freeze({ readMode: 'none', writeMode: 'none', redactionPolicy });
+      return Object.freeze({
+        readMode: 'none',
+        writeMode: 'none',
+        redactionPolicy,
+        diagnosticProjection: VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+      });
   }
 }
 

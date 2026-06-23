@@ -6,6 +6,10 @@ import {
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
 } from '../object-store';
+import {
+  VERSION_OBJECT_CURRENT_COMPATIBILITY_VERSION,
+  VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+} from '../object-header';
 import type {
   ObjectDigest,
   VersionDependencyRef,
@@ -75,6 +79,24 @@ function expectSuccess(result: VersionObjectPutBatchResult): void {
 }
 
 describe('version object store canonical digests', () => {
+  it('writes N-1 reader and writer compatibility bounds into new object headers', async () => {
+    const semanticChangeSet = await record({ changes: [{ id: 'header-bounds' }] });
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+
+    expect(semanticChangeSet.preimage).toMatchObject({
+      minReaderVersion: VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+      minWriterVersion: VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+    });
+
+    expectSuccess(await store.putObjects([semanticChangeSet]));
+    await expect(store.getObjectRecord(objectRef(semanticChangeSet))).resolves.toMatchObject({
+      preimage: {
+        minReaderVersion: VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+        minWriterVersion: VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+      },
+    });
+  });
+
   it('keeps digests stable when canonical JSON payload keys are reordered', async () => {
     const first = await record({ z: { beta: 2, alpha: 1 }, a: ['x', { d: 4, c: 3 }] });
     const second = await record({ a: ['x', { c: 3, d: 4 }], z: { alpha: 1, beta: 2 } });
@@ -330,6 +352,39 @@ describe('InMemoryVersionObjectStore putObjects', () => {
 
     expectFailedCode(result, 'VERSION_INVALID_DIGEST');
   });
+
+  it.each([
+    ['minReaderVersion', 'VC-09'],
+    ['minReaderVersion', 'VC-12'],
+    ['minWriterVersion', 'VC-09'],
+    ['minWriterVersion', 'VC-12'],
+  ] as const)('rejects %s outside the N-1 compatibility window', async (field, value) => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const semanticChangeSet = await record({ changes: [{ id: `${field}-${value}` }] });
+    const incompatibleRecord: VersionObjectRecord<unknown> = {
+      ...semanticChangeSet,
+      preimage: {
+        ...semanticChangeSet.preimage,
+        [field]: value,
+      },
+    };
+
+    const result = await store.putObjects([incompatibleRecord]);
+
+    expectFailedCode(result, 'VERSION_UNSUPPORTED_SCHEMA');
+    if (result.status !== 'failed') throw new Error('expected failed result');
+    expect(result.diagnostics[0]).toMatchObject({
+      code: 'VERSION_UNSUPPORTED_SCHEMA',
+      path: `preimage.${field}`,
+      details: {
+        field,
+        minSupportedVersion: VERSION_OBJECT_MIN_COMPATIBILITY_VERSION,
+        currentVersion: VERSION_OBJECT_CURRENT_COMPATIBILITY_VERSION,
+        received: value,
+      },
+    });
+    await expect(store.hasObject(objectRef(semanticChangeSet))).resolves.toBe(false);
+  });
 });
 
 describe('InMemoryVersionObjectStore namespace binding', () => {
@@ -408,5 +463,31 @@ describe('InMemoryVersionObjectStore namespace binding', () => {
 
     expectFailedCode(result, 'VERSION_MISSING_DEPENDENCY');
     await expect(store.hasObject(objectRef(dependent))).resolves.toBe(false);
+  });
+
+  it('surfaces persisted object compatibility diagnostics without classifying them as corruption', async () => {
+    const store = createInMemoryVersionObjectStore(NAMESPACE);
+    const semanticChangeSet = await record({ changes: [] });
+    expectSuccess(await store.putObjects([semanticChangeSet]));
+    store.putCorruptRecordForTesting(semanticChangeSet.digest, {
+      ...semanticChangeSet,
+      preimage: {
+        ...semanticChangeSet.preimage,
+        minReaderVersion: 'VC-12',
+      },
+    });
+
+    await expect(store.getObjectRecord(objectRef(semanticChangeSet))).rejects.toMatchObject({
+      diagnostic: {
+        code: 'VERSION_UNSUPPORTED_SCHEMA',
+        severity: 'error',
+        details: expect.objectContaining({
+          cause: 'VERSION_UNSUPPORTED_SCHEMA',
+          field: 'minReaderVersion',
+          currentVersion: VERSION_OBJECT_CURRENT_COMPATIBILITY_VERSION,
+          received: 'VC-12',
+        }),
+      },
+    });
   });
 });

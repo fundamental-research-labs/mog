@@ -11,6 +11,7 @@ import {
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
+import { VERSION_OBJECT_CURRENT_COMPATIBILITY_VERSION } from '../object-header';
 import type { VersionObjectType } from '../object-digest';
 import {
   createInMemoryVersionStoreProvider,
@@ -276,6 +277,58 @@ describe('VersionPersistence', () => {
     expect(result.error.code).toBe('VERSION_PERSISTENCE_BOUNDARY_INVALID_REQUEST');
     expect(result.mutationGuarantee).toBe('no-write-attempted');
     expect(readGraphRegistry).not.toHaveBeenCalled();
+  });
+
+  it('preserves persisted snapshot-root header compatibility diagnostics on reload', async () => {
+    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-compat-diagnostics');
+    const snapshotRootRecord = await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+      schemaVersion: 1,
+      kind: 'compat-diagnostic-test',
+    });
+    const semanticChangeSetRecord = await objectRecord(
+      namespace,
+      'workbook.semanticChangeSet.v1',
+      {
+        schemaVersion: 1,
+        changes: [],
+      },
+    );
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph({
+      expectedRegistryRevision: null,
+      graphId: namespace.graphId,
+      rootWrite: {
+        snapshotRootRecord,
+        semanticChangeSetRecord,
+        author: AUTHOR,
+        createdAt: CREATED_AT,
+        completenessDiagnostics: [],
+      },
+    });
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespace);
+    graph.objectStore.putCorruptRecordForTesting(snapshotRootRecord.digest, {
+      ...snapshotRootRecord,
+      preimage: {
+        ...snapshotRootRecord.preimage,
+        minReaderVersion: 'VC-12',
+      },
+    });
+    const persistence = createVersionPersistence({ provider });
+
+    const result = await persistence.reload({
+      target: 'commit',
+      commitId: initialized.rootCommit.id,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected reload failure');
+    expect(result.error.code).toBe('VERSION_PERSISTENCE_RELOAD_MATERIALIZATION_FAILED');
+    expect(JSON.stringify(result.diagnostics)).toContain('VERSION_UNSUPPORTED_SCHEMA');
+    expect(JSON.stringify(result.diagnostics)).toContain('minReaderVersion');
+    expect(JSON.stringify(result.diagnostics)).toContain(
+      VERSION_OBJECT_CURRENT_COMPATIBILITY_VERSION,
+    );
   });
 });
 

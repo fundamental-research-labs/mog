@@ -8,6 +8,14 @@ import {
   type VersionObjectDigestIssue,
   type VersionObjectType,
 } from './object-digest';
+import {
+  VersionObjectHeaderError,
+  assertVersionObjectPreimageHeaderKeys,
+  cloneVersionObjectCompatibilityHeader,
+  normalizeVersionObjectCompatibilityHeader,
+  type VersionObjectPreimage,
+} from './object-header';
+export type { VersionObjectCompatibilityVersion, VersionObjectPayloadEncoding, VersionObjectPreimage } from './object-header';
 
 export const VERSION_OBJECT_PREIMAGE_DOMAIN = 'mog.version-object.v1\n';
 export const VERSION_OBJECT_SCHEMA_VERSION = 1;
@@ -17,16 +25,6 @@ export type VersionGraphNamespace = {
   readonly documentId: string;
   readonly graphId: string;
   readonly principalScope?: string;
-};
-
-export type VersionObjectPayloadEncoding = 'mog-canonical-json-v1' | 'bytes';
-
-export type VersionObjectPreimage<TPayload> = {
-  readonly objectType: VersionObjectType;
-  readonly schemaVersion: typeof VERSION_OBJECT_SCHEMA_VERSION;
-  readonly payloadEncoding: VersionObjectPayloadEncoding;
-  readonly dependencies: readonly VersionDependencyRef[];
-  readonly payload: TPayload;
 };
 
 export type VersionObjectRecord<TPayload> = {
@@ -320,14 +318,14 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
       const validated = await validateVersionObjectRecord(record, 'storedRecord');
       return cloneVersionObjectRecord(validated.record) as VersionObjectRecord<TPayload>;
     } catch (error) {
+      const source = diagnosticFromError(error);
+      const unsupported = source.code === 'VERSION_UNSUPPORTED_SCHEMA';
       throw new VersionObjectStoreError(
-        diagnostic('VERSION_OBJECT_CORRUPTION', 'Stored version object record failed validation.', {
-          namespace: this.namespace,
-          digest: record.digest,
-          objectType: record.preimage.objectType,
-          severity: 'corruption',
-          details: { cause: diagnosticFromError(error).code },
-        }),
+        diagnostic(
+          unsupported ? source.code : 'VERSION_OBJECT_CORRUPTION',
+          unsupported ? source.message : 'Stored version object record failed validation.',
+          { namespace: this.namespace, digest: record.digest, objectType: record.preimage.objectType, ...(unsupported ? {} : { severity: 'corruption' }), details: { cause: source.code, ...(source.details ?? {}) } },
+        ),
       );
     }
   }
@@ -372,6 +370,7 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
   if (!isPlainRecord(preimage)) {
     throwValidation('VERSION_INVALID_PREIMAGE', 'Version object preimage must be an object.');
   }
+  assertVersionObjectPreimageHeaderKeys(preimage, 'preimage');
 
   if (!isVersionObjectType(preimage.objectType)) {
     throwValidation('VERSION_UNSUPPORTED_OBJECT_TYPE', 'Version object type is not supported.', {
@@ -397,6 +396,8 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
       },
     );
   }
+
+  const compatibilityHeader = normalizeVersionObjectCompatibilityHeader(preimage, 'preimage');
 
   if (preimage.payloadEncoding !== 'mog-canonical-json-v1' && preimage.payloadEncoding !== 'bytes') {
     throwValidation(
@@ -424,6 +425,8 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
     utf8Encode(VERSION_OBJECT_PREIMAGE_DOMAIN),
     utf8Encode(`${preimage.objectType}\n`),
     utf8Encode(`${preimage.schemaVersion}\n`),
+    utf8Encode(`${compatibilityHeader.minReaderVersion}\n`),
+    utf8Encode(`${compatibilityHeader.minWriterVersion}\n`),
     utf8Encode(`${preimage.payloadEncoding}\n`),
     dependencyBytes,
     utf8Encode('\n'),
@@ -434,6 +437,8 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
     preimage: Object.freeze({
       objectType: preimage.objectType,
       schemaVersion: preimage.schemaVersion,
+      minReaderVersion: compatibilityHeader.minReaderVersion,
+      minWriterVersion: compatibilityHeader.minWriterVersion,
       payloadEncoding: preimage.payloadEncoding,
       dependencies,
       payload: canonicalPayload,
@@ -627,6 +632,8 @@ function versionObjectRecordIdentity(record: VersionObjectRecord<unknown>): stri
     digest: record.digest,
     objectType: encoded.preimage.objectType,
     schemaVersion: encoded.preimage.schemaVersion,
+    minReaderVersion: encoded.preimage.minReaderVersion,
+    minWriterVersion: encoded.preimage.minWriterVersion,
     payloadEncoding: encoded.preimage.payloadEncoding,
     dependencies: encoded.dependencies,
     payloadByteLength: record.payloadByteLength,
@@ -649,6 +656,12 @@ function diagnosticFromError(error: unknown, path?: string): VersionObjectStoreD
   }
   if (error instanceof VersionObjectDigestError) {
     return diagnostic(error.issue, error.message, { path });
+  }
+  if (error instanceof VersionObjectHeaderError) {
+    return diagnostic(error.issue, error.message, {
+      path: error.path,
+      ...(Object.keys(error.details).length === 0 ? {} : { details: error.details }),
+    });
   }
   if (error instanceof Error) {
     return diagnostic('VERSION_INVALID_PREIMAGE', error.message, { path });
@@ -910,14 +923,15 @@ function clonePayload<TPayload>(payload: TPayload): TPayload {
   return payload;
 }
 
-function cloneVersionObjectRecord<TPayload>(
-  record: VersionObjectRecord<TPayload>,
-): VersionObjectRecord<TPayload> {
+function cloneVersionObjectRecord<TPayload>(record: VersionObjectRecord<TPayload>): VersionObjectRecord<TPayload> {
+  const compatibilityHeader = cloneVersionObjectCompatibilityHeader(record.preimage);
   return Object.freeze({
     namespace: normalizeVersionGraphNamespace(record.namespace),
     preimage: Object.freeze({
       objectType: record.preimage.objectType,
       schemaVersion: record.preimage.schemaVersion,
+      minReaderVersion: compatibilityHeader.minReaderVersion,
+      minWriterVersion: compatibilityHeader.minWriterVersion,
       payloadEncoding: record.preimage.payloadEncoding,
       dependencies: Object.freeze(record.preimage.dependencies.map(cloneDependencyRef)),
       payload: clonePayload(record.preimage.payload),

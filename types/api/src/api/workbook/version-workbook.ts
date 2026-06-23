@@ -31,15 +31,6 @@ import type {
   VersionSemanticDiffPage,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
-  VersionAppendReviewDecisionInput,
-  VersionCreateReviewInput,
-  VersionGetReviewDiffInput,
-  VersionGetReviewInput,
-  VersionListReviewsInput,
-  WorkbookVersionReviewDiffPage,
-  WorkbookVersionReviewRecord,
-  WorkbookVersionReviewRecordSummary,
-  VersionUpdateReviewStatusInput,
   WorkbookCommitSummary,
   WorkbookVersionStatus,
   VersionSurfaceStatus,
@@ -58,27 +49,10 @@ import type {
   VersionSaveMergeResolutionsRequest,
   VersionSaveMergeResolutionsResult,
 } from './version-merge-review';
-import type {
-  AcceptAgentProposalInput,
-  AgentProposal,
-  AgentProposalAcceptResult,
-  AgentProposalSummary,
-  AgentProposalWorkspaceHandle,
-  CommitProposalWorkspaceInput,
-  CreateAgentProposalInput,
-  DisposeProposalWorkspaceInput,
-  FailAgentProposalInput,
-  GetAgentProposalInput,
-  GetProposalWorkspaceInput,
-  ListAgentProposalsInput,
-  MarkAgentProposalVerifiedInput,
-  OpenProposalReviewInput,
-  RejectAgentProposalInput,
-  StartProposalWorkspaceInput,
-  SupersedeAgentProposalInput,
-} from './version-proposal';
+import type { VersionProposalApi } from './version-proposal';
+import type { WorkbookVersionReviewApi } from './version-review';
 
-export interface WorkbookVersion {
+export interface WorkbookVersion extends WorkbookVersionReviewApi, VersionProposalApi {
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getHead(): Promise<VersionResult<VersionHead>>;
@@ -115,51 +89,6 @@ export interface WorkbookVersion {
   putMergeResolutionPayload(
     input: VersionPutMergeResolutionPayloadRequest,
   ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
-  listReviews(
-    input?: VersionListReviewsInput,
-  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
-  getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  createReview(
-    input: VersionCreateReviewInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  appendReviewDecision(
-    input: VersionAppendReviewDecisionInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  updateReviewStatus(
-    input: VersionUpdateReviewStatusInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  getReviewDiff(
-    input: VersionGetReviewDiffInput,
-  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
-  createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>>;
-  startProposalWorkspace(
-    input: StartProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;
-  getProposalWorkspace(
-    input: GetProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposalWorkspaceHandle>>;
-  disposeProposalWorkspace(
-    input: DisposeProposalWorkspaceInput,
-  ): Promise<VersionResult<{ readonly disposed: true }>>;
-  commitProposalWorkspace(
-    input: CommitProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposal>>;
-  failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>>;
-  getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>>;
-  listProposals(
-    input: ListAgentProposalsInput,
-  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;
-  markProposalVerified(
-    input: MarkAgentProposalVerifiedInput,
-  ): Promise<VersionResult<AgentProposal>>;
-  openProposalReview(
-    input: OpenProposalReviewInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  acceptProposal(
-    input: AcceptAgentProposalInput,
-  ): Promise<VersionResult<AgentProposalAcceptResult>>;
-  rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;
-  supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,

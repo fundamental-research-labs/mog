@@ -5,53 +5,27 @@
  * kernel. Covers authority proofs, update envelopes, and asset deps.
  */
 
+import {
+  PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_CANONICALIZATION,
+  PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_SCHEMA_VERSION,
+  isProviderAuthorityProofV2,
+  providerAuthorityProofAudienceKinds,
+  providerAuthorityProofCanonicalPayloadHash,
+  providerAuthorityProofCanonicalPayloadHashAlgorithm,
+  providerAuthorityProofCoveredFields,
+  providerAuthorityProofSchemaVersion,
+} from './inbound-proof';
+import type {
+  ProviderAuthorityCanonicalPayloadHashAlgorithm,
+  ProviderAuthorityProof,
+  ProviderAuthorityProofAudienceKind,
+  ProviderAuthorityProofSchemaVersion,
+  ProviderAuthorityProofV2,
+  ProviderInboundProofField,
+} from './inbound-proof';
 import type { StorageScopeBinding } from './provider-identity';
 
-// =============================================================================
-// Authority Proof
-// =============================================================================
-
-export interface ProviderAuthorityProof {
-  readonly kind: 'handoff-bound-token' | 'signed-provider-message' | 'trusted-sidecar-session';
-  readonly issuer: string;
-  readonly algorithm: 'hmac-sha256' | 'ed25519' | 'trusted-session-mac';
-  readonly issuedAt: number;
-  readonly expiresAt?: number;
-  readonly coveredFields: readonly ProviderInboundProofField[];
-  readonly canonicalPayloadHash: string;
-  readonly proofBytesOrRef: string;
-}
-
-// =============================================================================
-// Inbound Proof Field
-// =============================================================================
-
-export type ProviderInboundProofField =
-  | 'sourceKind'
-  | 'originKind'
-  | 'stableOriginId'
-  | 'providerId'
-  | 'providerKind'
-  | 'providerRefId'
-  | 'decisionId'
-  | 'sessionId'
-  | 'remoteSessionId'
-  | 'remoteAuthorRef'
-  | 'authorState'
-  | 'correlationId'
-  | 'causationIds'
-  | 'provenanceRedactionPolicy'
-  | 'provenancePayloadHash'
-  | 'authorityRef'
-  | 'storageScope'
-  | 'roomId'
-  | 'epoch'
-  | 'providerEpoch'
-  | 'updateId'
-  | 'sequence'
-  | 'payloadKind'
-  | 'payloadHash'
-  | 'rawBytesPolicy';
+export * from './inbound-proof';
 
 // =============================================================================
 // Sync Update Provenance
@@ -153,6 +127,9 @@ export interface SyncUpdateTrust {
   readonly status: SyncUpdateTrustStatus;
   readonly authorityRef?: string;
   readonly proofKind?: ProviderAuthorityProof['kind'];
+  readonly proofSchemaVersion?: ProviderAuthorityProofSchemaVersion;
+  readonly proofAudienceKinds?: readonly ProviderAuthorityProofAudienceKind[];
+  readonly canonicalPayloadHashAlgorithm?: ProviderAuthorityCanonicalPayloadHashAlgorithm;
   readonly proofCoverage?: readonly ProviderInboundProofField[];
   readonly issuer?: string;
   readonly verifiedAt?: number;
@@ -320,6 +297,13 @@ export const PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS = Object.freeze([
   'causationIds',
 ] as const satisfies readonly ProviderInboundProofField[]);
 
+export const PROVIDER_INBOUND_V2_OPTIONAL_IDENTITY_PROOF_FIELDS = Object.freeze([
+  'providerId',
+  'providerKind',
+  'roomId',
+  'sequence',
+] as const satisfies readonly ProviderInboundProofField[]);
+
 export const DEFAULT_PROVENANCE_REDACTION_POLICY: ProvenanceRedactionPolicy = Object.freeze({
   schemaVersion: 'provenance-redaction-policy-v1',
   mode: 'diagnostic-only',
@@ -332,6 +316,7 @@ export type SyncUpdateValidationReason =
   | 'payloadHashMismatch'
   | 'missingProof'
   | 'partialCoverage'
+  | 'invalidProofContract'
   | 'provenancePayloadHashMismatch'
   | 'missingStableOrigin'
   | 'unverifiedProvenance'
@@ -344,6 +329,10 @@ export type SyncUpdateValidationSubreason =
   | 'payloadHashMismatch'
   | 'missingProof'
   | 'partialCoverage'
+  | 'missingProofAudience'
+  | 'canonicalPayloadHashMismatch'
+  | 'canonicalPayloadCoverageMismatch'
+  | 'unsupportedCanonicalPayload'
   | 'provenancePayloadHashMismatch'
   | 'stableOriginMismatch'
   | 'unverifiedTrust'
@@ -412,6 +401,9 @@ export interface SyncUpdateDiagnosticEvidenceTrust {
   readonly status: SyncUpdateTrustStatus;
   readonly hasAuthorityRef: boolean;
   readonly proofKind?: ProviderAuthorityProof['kind'];
+  readonly proofSchemaVersion?: ProviderAuthorityProofSchemaVersion;
+  readonly proofAudienceKinds: readonly ProviderAuthorityProofAudienceKind[];
+  readonly canonicalPayloadHashAlgorithm?: ProviderAuthorityCanonicalPayloadHashAlgorithm;
   readonly proofCoverage: readonly ProviderInboundProofField[];
   readonly hasIssuer: boolean;
   readonly hasVerifiedAt: boolean;
@@ -494,6 +486,22 @@ export function isProviderInboundUpdateEnvelopeV2(
     (envelope as { readonly schemaVersion?: unknown }).schemaVersion ===
     'provider-inbound-update-v2'
   );
+}
+
+export function requiredProviderInboundV2ProofFields(
+  provenance: SyncUpdateProvenance,
+): readonly ProviderInboundProofField[] {
+  const required: ProviderInboundProofField[] = [...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS];
+  const identity = provenance.updateIdentity;
+  if (identity.providerId) required.push('providerId');
+  if (identity.providerKind) required.push('providerKind');
+  if (identity.roomId) required.push('roomId');
+  if (identity.sequence !== undefined) required.push('sequence');
+  if (provenance.trust.status === 'verified' && provenance.author.kind === 'singleRemote') {
+    required.push(...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS);
+  }
+
+  return [...new Set(required)];
 }
 
 export function classifyLegacyProviderInboundUpdate(
@@ -682,13 +690,19 @@ export function exportProviderInboundUpdateAdmissionEvidence(
     const validation = validateSyncUpdateProvenance(provenance, {
       expectedPayloadHash: options.expectedPayloadHash,
     });
-    return buildSyncUpdateDiagnosticEvidence('provider-inbound-update-v1', provenance, validation);
+    return buildSyncUpdateDiagnosticEvidence(
+      'provider-inbound-update-v1',
+      provenance,
+      validation,
+      envelope.authorityProof,
+    );
   }
 
   return buildSyncUpdateDiagnosticEvidence(
     'provider-inbound-update-v2',
     envelope.provenance,
     validateProviderInboundUpdateEnvelope(envelope, options),
+    envelope.authorityProof,
   );
 }
 
@@ -696,8 +710,17 @@ function buildSyncUpdateDiagnosticEvidence(
   envelopeVersion: SyncUpdateDiagnosticEvidenceEnvelopeVersion,
   provenance: SyncUpdateProvenance,
   validation: SyncUpdateValidationResult,
+  authorityProof?: ProviderAuthorityProof,
 ): SyncUpdateDiagnosticEvidence {
   const identity = provenance.updateIdentity;
+  const proofAudienceKinds =
+    authorityProof === undefined
+      ? provenance.trust.proofAudienceKinds
+      : providerAuthorityProofAudienceKinds(authorityProof);
+  const canonicalPayloadHashAlgorithm =
+    authorityProof === undefined
+      ? provenance.trust.canonicalPayloadHashAlgorithm
+      : providerAuthorityProofCanonicalPayloadHashAlgorithm(authorityProof);
   return {
     schemaVersion: 'sync-update-diagnostic-evidence-v1',
     envelopeVersion,
@@ -741,7 +764,19 @@ function buildSyncUpdateDiagnosticEvidence(
       ...(provenance.trust.proofKind === undefined
         ? {}
         : { proofKind: provenance.trust.proofKind }),
-      proofCoverage: sortedProofCoverage(provenance.trust.proofCoverage),
+      proofSchemaVersion:
+        authorityProof === undefined
+          ? provenance.trust.proofSchemaVersion
+          : providerAuthorityProofSchemaVersion(authorityProof),
+      proofAudienceKinds: sortedProofAudienceKinds(proofAudienceKinds),
+      ...(canonicalPayloadHashAlgorithm === undefined
+        ? {}
+        : { canonicalPayloadHashAlgorithm }),
+      proofCoverage: sortedProofCoverage(
+        authorityProof === undefined
+          ? provenance.trust.proofCoverage
+          : providerAuthorityProofCoveredFields(authorityProof),
+      ),
       hasIssuer: provenance.trust.issuer !== undefined,
       hasVerifiedAt: provenance.trust.verifiedAt !== undefined,
     },
@@ -799,6 +834,12 @@ function sortedProofCoverage(
   return [...new Set(proofCoverage ?? [])].sort(compareStrings);
 }
 
+function sortedProofAudienceKinds(
+  audienceKinds: readonly ProviderAuthorityProofAudienceKind[] | undefined,
+): readonly ProviderAuthorityProofAudienceKind[] {
+  return [...new Set(audienceKinds ?? [])].sort(compareStrings);
+}
+
 function sortedEvidenceDiagnostics(
   diagnostics: readonly SyncUpdateValidationDiagnostic[],
 ): readonly SyncUpdateDiagnosticEvidenceDiagnostic[] {
@@ -818,6 +859,11 @@ function sortedEvidenceDiagnostics(
 
 function compareStrings(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function sameStringSet(left: readonly string[], right: readonly string[]): boolean {
+  const rightSet = new Set(right);
+  return left.length === rightSet.size && left.every((value) => rightSet.has(value));
 }
 
 function validatePayloadHash(
@@ -860,19 +906,10 @@ function validateProviderProofCoverage(
     ];
   }
 
-  const required = new Set<ProviderInboundProofField>(PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS);
   const provenance = envelope.provenance;
-  const identity = provenance.updateIdentity;
-  if (identity.providerId) required.add('providerId');
-  if (identity.providerKind) required.add('providerKind');
-  if (identity.roomId) required.add('roomId');
-  if (identity.sequence !== undefined) required.add('sequence');
-  if (provenance.trust.status === 'verified' && provenance.author.kind === 'singleRemote') {
-    for (const field of PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS) required.add(field);
-  }
-
-  const covered = new Set(envelope.authorityProof.coveredFields);
-  const diagnostics: SyncUpdateValidationDiagnostic[] = [];
+  const required = requiredProviderInboundV2ProofFields(provenance);
+  const covered = new Set(providerAuthorityProofCoveredFields(envelope.authorityProof));
+  const diagnostics = validateProviderAuthorityProofV2Contract(envelope.authorityProof);
   for (const field of required) {
     if (!covered.has(field)) {
       diagnostics.push({
@@ -887,7 +924,7 @@ function validateProviderProofCoverage(
   const provenancePayloadHash = provenance.updateIdentity.provenancePayloadHash;
   if (
     !provenancePayloadHash ||
-    envelope.authorityProof.canonicalPayloadHash !== provenancePayloadHash
+    providerAuthorityProofCanonicalPayloadHash(envelope.authorityProof) !== provenancePayloadHash
   ) {
     diagnostics.push({
       reason: 'provenancePayloadHashMismatch',
@@ -897,6 +934,48 @@ function validateProviderProofCoverage(
     });
   }
 
+  return diagnostics;
+}
+
+function validateProviderAuthorityProofV2Contract(
+  proof: ProviderAuthorityProof,
+): SyncUpdateValidationDiagnostic[] {
+  if (!isProviderAuthorityProofV2(proof)) return [];
+  const diagnostics: SyncUpdateValidationDiagnostic[] = [];
+  if (!proof.audience.some((audience) => audience.kind === 'provider-inbound-update')) {
+    diagnostics.push({
+      reason: 'invalidProofContract',
+      subreason: 'missingProofAudience',
+      message: 'Provider authority proof V2 must include a provider-inbound-update audience.',
+    });
+  }
+  if (
+    proof.canonicalPayload.schemaVersion !== PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_SCHEMA_VERSION ||
+    proof.canonicalPayload.canonicalization !==
+      PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_CANONICALIZATION ||
+    proof.canonicalPayload.algorithm !== 'sha256'
+  ) {
+    diagnostics.push({
+      reason: 'invalidProofContract',
+      subreason: 'unsupportedCanonicalPayload',
+      message: 'Provider authority proof V2 canonical payload metadata is unsupported.',
+    });
+  }
+  if (proof.canonicalPayloadHash !== proof.canonicalPayload.value) {
+    diagnostics.push({
+      reason: 'invalidProofContract',
+      subreason: 'canonicalPayloadHashMismatch',
+      field: 'provenancePayloadHash',
+      message: 'Provider authority proof V2 canonical payload hash aliases disagree.',
+    });
+  }
+  if (!sameStringSet(proof.coveredFields, proof.canonicalPayload.coveredFields)) {
+    diagnostics.push({
+      reason: 'invalidProofContract',
+      subreason: 'canonicalPayloadCoverageMismatch',
+      message: 'Provider authority proof V2 advertised fields must match canonical covered fields.',
+    });
+  }
   return diagnostics;
 }
 

@@ -923,6 +923,7 @@ export interface VersionReviewRecord {
 
 export * from './emergency-disable-policy';
 export * from './release-artifact-manifest';
+export * from './sync-provenance-fixtures';
 export * from './xlsx-interop';
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
 export {

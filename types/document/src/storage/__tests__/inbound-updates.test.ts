@@ -3,15 +3,22 @@ import { describe, it } from 'node:test';
 
 import {
   DEFAULT_PROVENANCE_REDACTION_POLICY,
+  PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_CANONICALIZATION,
+  PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_SCHEMA_VERSION,
+  PROVIDER_AUTHORITY_PROOF_V2_SCHEMA_VERSION,
+  PROVIDER_INBOUND_PROOF_FIELDS,
   PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+  PROVIDER_INBOUND_V2_OPTIONAL_IDENTITY_PROOF_FIELDS,
   PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
   classifyLegacyProviderInboundUpdate,
   classifyLegacyRawUpdate,
   exportProviderInboundUpdateAdmissionEvidence,
   exportSyncUpdateProvenanceEvidence,
+  requiredProviderInboundV2ProofFields,
   validateProviderInboundUpdateEnvelope,
   validateSyncUpdateProvenance,
   type ProviderAuthorityProof,
+  type ProviderAuthorityProofV2,
   type ProviderInboundProofField,
   type ProviderInboundUpdateEnvelope,
   type ProviderInboundUpdateEnvelopeV2,
@@ -41,6 +48,28 @@ function proof(coveredFields: readonly ProviderInboundProofField[]): ProviderAut
     coveredFields,
     canonicalPayloadHash: PROVENANCE_HASH,
     proofBytesOrRef: 'proof-ref-1',
+  };
+}
+
+function proofV2(coveredFields: readonly ProviderInboundProofField[]): ProviderAuthorityProofV2 {
+  return {
+    ...proof(coveredFields),
+    schemaVersion: PROVIDER_AUTHORITY_PROOF_V2_SCHEMA_VERSION,
+    audience: [
+      {
+        kind: 'provider-inbound-update',
+        authorityRef: 'authority-1',
+        providerRefId: 'provider-session-1',
+        storageScope,
+      },
+    ],
+    canonicalPayload: {
+      schemaVersion: PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_SCHEMA_VERSION,
+      algorithm: 'sha256',
+      canonicalization: PROVIDER_AUTHORITY_CANONICAL_PAYLOAD_CANONICALIZATION,
+      value: PROVENANCE_HASH,
+      coveredFields,
+    },
   };
 }
 
@@ -84,6 +113,9 @@ function makeLiveProvenance(overrides: Partial<SyncUpdateProvenance> = {}): Sync
       status: 'verified',
       authorityRef: 'authority-1',
       proofKind: 'signed-provider-message',
+      proofSchemaVersion: PROVIDER_AUTHORITY_PROOF_V2_SCHEMA_VERSION,
+      proofAudienceKinds: ['provider-inbound-update'],
+      canonicalPayloadHashAlgorithm: 'sha256',
       proofCoverage: [
         ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
         ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
@@ -123,7 +155,7 @@ function makeV2(
     ...makeV1(),
     schemaVersion: 'provider-inbound-update-v2',
     provenance,
-    authorityProof: proof([
+    authorityProof: proofV2([
       ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
       ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
       'providerId',
@@ -204,7 +236,7 @@ describe('VC-09 inbound update provenance helpers', () => {
     ] satisfies ProviderInboundProofField[];
     const result = validateProviderInboundUpdateEnvelope(
       makeV2({
-        authorityProof: proof(coveredFields),
+        authorityProof: proofV2(coveredFields),
       }),
       { expectedPayloadHash: OTHER_PAYLOAD_HASH },
     );
@@ -217,6 +249,95 @@ describe('VC-09 inbound update provenance helpers', () => {
       ),
     );
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.reason === 'payloadHashMismatch'));
+  });
+
+  it('computes the complete required V2 proof field set from provenance', () => {
+    const provenance = makeLiveProvenance({
+      updateIdentity: {
+        ...makeLiveProvenance().updateIdentity,
+        roomId: 'room-1',
+        sequence: BigInt(7),
+      },
+    });
+    const requiredFields = requiredProviderInboundV2ProofFields(provenance);
+
+    assert.deepEqual(requiredFields, [
+      ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+      ...PROVIDER_INBOUND_V2_OPTIONAL_IDENTITY_PROOF_FIELDS,
+      ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+    ]);
+    assert.equal(new Set(requiredFields).size, requiredFields.length);
+    for (const field of requiredFields) assert.ok(PROVIDER_INBOUND_PROOF_FIELDS.includes(field));
+  });
+
+  it('rejects V2 proofs without the provider inbound audience', () => {
+    const authorityProof = {
+      ...proofV2(requiredProviderInboundV2ProofFields(makeLiveProvenance())),
+      audience: [],
+    } satisfies ProviderAuthorityProofV2;
+    const result = validateProviderInboundUpdateEnvelope(makeV2({ authorityProof }));
+
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.reason === 'invalidProofContract' &&
+          diagnostic.subreason === 'missingProofAudience',
+      ),
+    );
+  });
+
+  it('uses V2 canonical covered fields for completeness', () => {
+    const completeFields = requiredProviderInboundV2ProofFields(makeLiveProvenance());
+    const canonicalFields = completeFields.filter((field) => field !== 'remoteAuthorRef');
+    const proof = proofV2(completeFields);
+    const result = validateProviderInboundUpdateEnvelope(
+      makeV2({
+        authorityProof: {
+          ...proof,
+          canonicalPayload: {
+            ...proof.canonicalPayload,
+            coveredFields: canonicalFields,
+          },
+        },
+      }),
+    );
+
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.reason === 'partialCoverage' && diagnostic.field === 'remoteAuthorRef',
+      ),
+    );
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.reason === 'invalidProofContract' &&
+          diagnostic.subreason === 'canonicalPayloadCoverageMismatch',
+      ),
+    );
+  });
+
+  it('rejects V2 proofs when canonical payload hash aliases disagree', () => {
+    const proof = proofV2(requiredProviderInboundV2ProofFields(makeLiveProvenance()));
+    const result = validateProviderInboundUpdateEnvelope(
+      makeV2({
+        authorityProof: {
+          ...proof,
+          canonicalPayloadHash: OTHER_PAYLOAD_HASH,
+        },
+      }),
+    );
+
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.reason === 'invalidProofContract' &&
+          diagnostic.subreason === 'canonicalPayloadHashMismatch',
+      ),
+    );
   });
 
   it('rejects commit eligibility when local authorship would have to be inferred', () => {
@@ -266,6 +387,9 @@ describe('VC-09 inbound update export-safe diagnostic evidence', () => {
       remoteRefKeyIdPresent: false,
     });
     assert.equal(evidence.redaction.proofMaterialExported, false);
+    assert.equal(evidence.trust.proofSchemaVersion, PROVIDER_AUTHORITY_PROOF_V2_SCHEMA_VERSION);
+    assert.deepEqual(evidence.trust.proofAudienceKinds, ['provider-inbound-update']);
+    assert.equal(evidence.trust.canonicalPayloadHashAlgorithm, 'sha256');
     assert.deepEqual(evidence.trust.proofCoverage, [...new Set(unsortedCoverage)].sort());
     assertExportSafeEvidence(evidence);
   });

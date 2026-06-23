@@ -8,7 +8,7 @@ import {
 import type {
   VersionGraphRef,
   VersionGraphStoreDiagnostic,
-} from './graph-store';
+} from './graph-store-types';
 import type { ParsedListCommitsTarget } from './graph-store-list-options';
 
 type GraphRefReadResult =

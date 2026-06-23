@@ -25,7 +25,7 @@ import type {
   VersionGraphStoreDiagnostic,
   VersionGraphWriteFailure,
   VersionGraphWriteResult,
-} from './graph-store';
+} from './graph-store-types';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 
 const MAIN_REF_NAME = 'main' as RefName;

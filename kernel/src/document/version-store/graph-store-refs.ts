@@ -10,7 +10,7 @@ import type {
   VersionGraphRefSelector,
   VersionGraphStoreDiagnostic,
   VersionGraphSymbolicRef,
-} from './graph-store';
+} from './graph-store-types';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 
 export const VERSION_GRAPH_MAIN_REF = 'refs/heads/main';

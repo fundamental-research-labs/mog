@@ -1,4 +1,7 @@
-import type { VersionGraphCommitContentInput, VersionGraphStoreDiagnostic } from './graph-store';
+import type {
+  VersionGraphCommitContentInput,
+  VersionGraphStoreDiagnostic,
+} from './graph-store-types';
 import { diagnostic } from './graph-store-diagnostics';
 import { versionGraphNamespaceKey, type VersionObjectRecord } from './object-store';
 

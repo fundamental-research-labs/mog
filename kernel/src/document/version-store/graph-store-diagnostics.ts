@@ -3,7 +3,7 @@ import type {
   VersionGraphRef,
   VersionGraphStoreDiagnostic,
   VersionGraphStoreDiagnosticCode,
-} from './graph-store';
+} from './graph-store-types';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import { VERSION_GRAPH_MAIN_REF, graphRefNameFromRefName } from './graph-store-refs';
 import { objectDigestFromWorkbookCommitId, type WorkbookCommitId } from './object-digest';

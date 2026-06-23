@@ -1,4 +1,4 @@
-import type { VersionGraphStoreDiagnostic, VersionGraphWriteFailure } from './graph-store';
+import type { VersionGraphStoreDiagnostic, VersionGraphWriteFailure } from './graph-store-types';
 
 export function failedGraphWrite(
   diagnostics: readonly VersionGraphStoreDiagnostic[],

@@ -9,7 +9,7 @@ import type {
   VersionGraphListCommitsOptions,
   VersionGraphRefSelector,
   VersionGraphStoreDiagnostic,
-} from './graph-store';
+} from './graph-store-types';
 
 export const VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE = 50;
 export const VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE = 500;

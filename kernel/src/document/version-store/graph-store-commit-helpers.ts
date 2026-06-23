@@ -4,7 +4,7 @@ import type {
   VersionGraphCommitSummary,
   VersionGraphStoreDiagnostic,
   VersionGraphWriteSuccess,
-} from './graph-store';
+} from './graph-store-types';
 import { graphRefFromLiveRef } from './graph-store-refs';
 import type { LiveRefRecord } from './ref-store';
 

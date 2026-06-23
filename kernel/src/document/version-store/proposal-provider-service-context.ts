@@ -82,21 +82,33 @@ export type ProviderBackedAgentProposalServiceContext =
 export function createProviderBackedAgentProposalServiceContext(
   options: ProviderBackedAgentProposalServiceOptions,
 ): ProviderBackedAgentProposalServiceContext {
+  const {
+    openStore,
+    branchService,
+    graphProvider,
+    reviewService,
+    workspaceService,
+  } = options;
+
   return {
-    ...options,
+    openStore,
+    branchService,
+    graphProvider,
+    reviewService,
+    workspaceService,
     openProposalStore(operation) {
-      return openProviderBackedProposalStore({ openStore: options.openStore, operation });
+      return openProviderBackedProposalStore({ openStore, operation });
     },
     resolveTargetHead(targetRef, operation) {
       return resolveProviderBackedProposalTargetHead({
-        branchService: options.branchService,
+        branchService,
         targetRef,
         operation,
       });
     },
     readOptionalProposalBranch(proposalBranchName, baseCommitId, operation) {
       return readOptionalProviderBackedProposalBranch({
-        branchService: options.branchService,
+        branchService,
         proposalBranchName,
         baseCommitId,
         operation,
@@ -104,7 +116,7 @@ export function createProviderBackedAgentProposalServiceContext(
     },
     createProposalBranch(proposalBranchName, baseCommitId, operation) {
       return createProviderBackedProposalBranch({
-        branchService: options.branchService,
+        branchService,
         proposalBranchName,
         baseCommitId,
         operation,
@@ -112,14 +124,14 @@ export function createProviderBackedAgentProposalServiceContext(
     },
     ensureProposalBranch(proposal, operation) {
       return ensureProviderBackedProposalBranch({
-        branchService: options.branchService,
+        branchService,
         proposal,
         operation,
       });
     },
     ensureCommitExists(commitId, operation) {
       return ensureProviderBackedProposalCommitExists({
-        graphProvider: options.graphProvider,
+        graphProvider,
         commitId,
         operation,
       });

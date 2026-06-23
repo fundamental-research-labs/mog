@@ -19,7 +19,7 @@ import { uniqueSortedCommitIds } from './graph-store-traversal';
 import type { WorkbookCommitId } from './object-digest';
 import type { RefName } from './ref-name';
 import type { InMemoryRefStore, LiveRefRecord } from './ref-store';
-import type { VersionGraphStoreDiagnostic } from './graph-store';
+import type { VersionGraphStoreDiagnostic } from './graph-store-types';
 
 export type GraphLiveRefReadResult =
   | { readonly ok: true; readonly ref: LiveRefRecord }

@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { WorkbookConfig } from '../types';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
@@ -16,7 +16,10 @@ import {
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
 import { createSemanticMutationCapture } from '../../../document/version-store/semantic-mutation-capture';
-import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnBridgeMock,
+  versioningWithDomainSupportManifest,
+} from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -89,7 +92,7 @@ function createMockEventBus() {
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   const versioning = overrides.versioning as Record<string, unknown> | undefined;
-  return {
+  const ctx = {
     computeBridge: {},
     writeGate: {
       assertWritable: jest.fn(),
@@ -103,6 +106,8 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
     ...overrides,
     ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   } as any;
+  installVersionDomainDetectorNoopsOnBridgeMock(ctx.computeBridge);
+  return ctx;
 }
 
 function createWorkbook(overrides?: Partial<WorkbookConfig>) {
@@ -149,6 +154,11 @@ describe('WorkbookVersion dirty tracking around commit', () => {
     eventBus.emit({ type: 'test:dirty' });
     semanticMutationCapture.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',
+      operationContext: operationContext({
+        operationId: 'dirty-clean-cell-write',
+        sheetIds: ['sheet-1'],
+        domainIds: ['cells.values'],
+      }),
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
       result: cellWriteResult(42),
     });
@@ -211,10 +221,19 @@ describe('WorkbookVersion dirty tracking around commit', () => {
     eventBus.emit({ type: 'test:dirty' });
     semanticMutationCapture.mutationCapture.recordMutationResult({
       operation: 'compute_unsupported_normal_local_write',
+      operationContext: operationContext({
+        operationId: 'dirty-gap-unsupported',
+        domainIds: ['unsupported'],
+      }),
       result: emptyMutationResult(),
     });
     semanticMutationCapture.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',
+      operationContext: operationContext({
+        operationId: 'dirty-gap-cell-write',
+        sheetIds: ['sheet-1'],
+        domainIds: ['cells.values'],
+      }),
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
       result: cellWriteResult(42),
     });
@@ -313,6 +332,21 @@ function commitRef(label: string, revision: string) {
 function commitId(label: string) {
   const byte = label === 'child' ? 'b' : label === 'moved' ? 'c' : 'a';
   return `commit:sha256:${byte.repeat(64)}`;
+}
+
+function operationContext(
+  overrides: Partial<VersionOperationContext> = {},
+): VersionOperationContext {
+  return {
+    operationId: 'operation-1',
+    kind: 'mutation',
+    author: VERSION_AUTHOR,
+    createdAt: CREATED_AT,
+    domainIds: ['test'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+    ...overrides,
+  };
 }
 
 function expectInitializeSuccess(

@@ -61,7 +61,10 @@ export function attachWorkbookVersioning(
     config.semanticMutationCapture ??
     existingSemanticCapture ??
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
-      ? createSemanticMutationCapture({ semanticStateReader: config.semanticStateReader })
+      ? createSemanticMutationCapture({
+          semanticStateReader: config.semanticStateReader,
+          requireOperationContext: true,
+        })
       : undefined);
   const captureNormalCommit = config.captureNormalCommit ?? semanticCapture?.captureNormalCommit;
   const captureMergeCommit =

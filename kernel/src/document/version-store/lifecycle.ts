@@ -260,7 +260,10 @@ function resolveSemanticMutationCapture(
   const semanticMutationCapture =
     config.semanticMutationCapture ??
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
-      ? createSemanticMutationCapture({ semanticStateReader: config.semanticStateReader })
+      ? createSemanticMutationCapture({
+          semanticStateReader: config.semanticStateReader,
+          requireOperationContext: true,
+        })
       : undefined);
   return semanticMutationCapture === config.semanticMutationCapture
     ? config

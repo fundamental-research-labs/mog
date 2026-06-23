@@ -27,6 +27,11 @@ import type {
 } from './commit-service';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
 import {
+  failedStoreResult,
+  versionStoreDiagnostic,
+  type VersionStoreFailure,
+} from './provider';
+import {
   capturePendingRemoteSemanticMutations,
   type VersionPendingRemoteCapture,
 } from './pending-remote-capture-service';
@@ -76,6 +81,7 @@ export interface SemanticMutationCaptureOptions {
   readonly author?: VersionAuthor;
   readonly now?: () => Date;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly requireOperationContext?: boolean;
 }
 
 export interface SemanticMutationCaptureNormalState {
@@ -125,7 +131,7 @@ type PendingUncapturedNormalMutation = {
   readonly sequence: number;
   readonly operation: string;
   readonly capturedAt: string;
-  readonly reason: 'captureLaneSkipped' | 'emptySemanticChangeSet';
+  readonly reason: 'captureLaneSkipped' | 'emptySemanticChangeSet' | 'missingOperationContext';
   readonly operationContext?: VersionOperationContext;
 };
 
@@ -184,6 +190,7 @@ export function createSemanticMutationCapture(
 class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private readonly author: VersionAuthor;
   private readonly now: () => Date;
+  private readonly requireOperationContext: boolean;
   private semanticStateReader?: VersionSemanticStateReaderPort;
   private nextNormalSequence = 1;
   private nextPendingRemoteSequence = 1;
@@ -197,11 +204,13 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   constructor(options: SemanticMutationCaptureOptions) {
     this.author = options.author ?? DEFAULT_CAPTURE_AUTHOR;
     this.now = options.now ?? (() => new Date());
+    this.requireOperationContext = options.requireOperationContext ?? false;
     this.semanticStateReader = options.semanticStateReader;
   }
 
   async recordPreMutation(input: VersionMutationCapturePreMutationInput): Promise<void> {
     if (
+      (this.requireOperationContext && !input.operationContext) ||
       !this.semanticStateReader ||
       classifySemanticMutationCaptureLane(input.operationContext) !== 'normalLocal' ||
       this.beforeNormalSemanticState ||
@@ -221,6 +230,11 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   }
 
   recordMutationResult(input: VersionMutationCaptureRecordInput): void {
+    if (this.requireOperationContext && !input.operationContext) {
+      this.recordUncapturedNormalMutation(input, 'missingOperationContext');
+      return;
+    }
+
     const lane = classifySemanticMutationCaptureLane(input.operationContext);
     if (lane === 'skip') {
       if (isUncapturedNormalDirtyMutation(input.operationContext)) {
@@ -278,6 +292,9 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   }
 
   async captureNormalCommit(input: Parameters<VersionNormalCommitCapture>[0]) {
+    const admissionFailure = this.normalAdmissionFailure(input);
+    if (admissionFailure) return admissionFailure;
+
     const records = [...this.pendingNormal];
     const changes = records.flatMap((record) => [...record.changes]);
     const semanticChangeSetPayload = await buildRustBackedSemanticChangeSetPayload({
@@ -389,6 +406,32 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
 
   private bumpNormalCaptureRevision(): void {
     this.normalCaptureRevision += 1;
+  }
+
+  private normalAdmissionFailure(
+    input: Parameters<VersionNormalCommitCapture>[0],
+  ): VersionStoreFailure | null {
+    const missingContext = this.pendingUncapturedNormal.find(
+      (record) => record.reason === 'missingOperationContext',
+    );
+    if (!missingContext) return null;
+
+    return failedStoreResult(
+      [
+        versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
+          operation: 'commitGraphWrite',
+          documentScope: input.provider.documentScope,
+          namespace: input.namespace,
+          refName: input.currentRef.name,
+          commitId: input.currentRef.commitId,
+          safeMessage:
+            'Normal version commits require admitted operation context before mutation capture.',
+          mutationGuarantee: 'no-write-attempted',
+          details: { reason: 'missingOperationContext' },
+        }),
+      ],
+      'no-write-attempted',
+    );
   }
 }
 

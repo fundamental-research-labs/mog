@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
@@ -141,6 +141,11 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
     );
     ctx.versioning.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',
+      operationContext: operationContext({
+        operationId: 'local-cell-write-1',
+        sheetIds: ['sheet-1'],
+        domainIds: ['cells.values'],
+      }),
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
       result: {
         recalc: {
@@ -169,7 +174,7 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
       value: {
         parents: [initialized.rootCommit.id],
         createdAt: expect.any(String),
-        author: { actorKind: 'system', displayName: 'Mog Version Capture', redacted: true },
+        author: { actorKind: 'user', displayName: 'User One', redacted: true },
       },
     });
     if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
@@ -214,6 +219,192 @@ describe('WorkbookVersion commit snapshot-root capture', () => {
     });
     expect(encodeDiff).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects semantic no-op writes without creating empty commits', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-noop', 'root'));
+    expectInitializeSuccess(initialized);
+    const encodeDiff = jest.fn(async () => new Uint8Array([0x07]));
+    const version = createProviderBackedVersion(provider, encodeDiff);
+
+    versionContext(version).versioning.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext: operationContext({
+        operationId: 'semantic-noop-write',
+        sheetIds: ['sheet-1'],
+        domainIds: ['cells.values'],
+      }),
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      result: emptyMutationResult(),
+    });
+
+    const commitResult = await version.commit();
+
+    expect(commitResult).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MISSING_CHANGE_SET',
+            data: expect.objectContaining({
+              redacted: true,
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(commitResult)).not.toContain('semantic-noop-write');
+    expect(encodeDiff).not.toHaveBeenCalled();
+    await expectOnlyRootCommit(provider, 'graph-noop', initialized);
+  });
+
+  it('rejects contextless semantic mutations before snapshot capture with redacted diagnostics', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-missing-context', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const encodeDiff = jest.fn(async () => new Uint8Array([0x08]));
+    const version = createProviderBackedVersion(provider, encodeDiff);
+    const forbiddenPayload = 'raw-contextless-secret';
+
+    versionContext(version).versioning.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      result: {
+        recalc: {
+          changedCells: [
+            {
+              cellId: 'cell-a1',
+              sheetId: 'sheet-1',
+              position: { row: 0, col: 0 },
+              oldValue: null,
+              value: forbiddenPayload,
+              extraFlags: 0,
+            },
+          ],
+          projectionChanges: [],
+          errors: [],
+          validationAnnotations: [],
+          metrics: {},
+        },
+      },
+    });
+
+    const commitResult = await version.commit();
+
+    expect(commitResult).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MISSING_CHANGE_SET',
+            message: 'The version commit has no eligible captured change set.',
+            data: expect.objectContaining({
+              redacted: true,
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(commitResult)).not.toContain(forbiddenPayload);
+    expect(encodeDiff).not.toHaveBeenCalled();
+    await expectOnlyRootCommit(provider, 'graph-missing-context', initialized);
+  });
+
+  it('preserves grouped operation receipts in committed mutation segments', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-grouped-receipts', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const encodeDiff = jest.fn(async () => new Uint8Array([0x09]));
+    const version = createProviderBackedVersion(provider, encodeDiff);
+    const groupId = 'sheet-add-group-1';
+
+    const ctx = versionContext(version);
+    ctx.versioning.mutationCapture.recordMutationResult({
+      operation: 'compute_create_sheet_with_default_col_width',
+      operationContext: operationContext({
+        operationId: 'sheet-add-create',
+        groupId,
+        sheetIds: ['sheet-created'],
+        domainIds: ['sheets'],
+      }),
+      result: {
+        sheetChanges: [
+          {
+            sheetId: 'sheet-created',
+            kind: 'Set',
+            field: 'sheet',
+            name: 'Forecast',
+            index: 1,
+          },
+        ],
+      },
+    });
+    ctx.versioning.mutationCapture.recordMutationResult({
+      operation: 'compute_move_sheet',
+      operationContext: operationContext({
+        operationId: 'sheet-add-move',
+        groupId,
+        sheetIds: ['sheet-created'],
+        domainIds: ['sheets'],
+      }),
+      result: {
+        sheetChanges: [
+          {
+            sheetId: 'sheet-created',
+            kind: 'Set',
+            field: 'order',
+            oldIndex: 1,
+            index: 0,
+          },
+        ],
+      },
+    });
+
+    const commitResult = await version.commit();
+    expect(commitResult).toMatchObject({ ok: true });
+    if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+
+    const graph = await provider.openGraph(
+      namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-grouped-receipts'),
+    );
+    const read = await graph.readCommit(commitResult.value.id);
+    expect(read.status).toBe('success');
+    if (read.status !== 'success') throw new Error('expected committed record to be readable');
+    const segmentDigests = read.commit.payload.mutationSegmentDigests;
+    expect(segmentDigests).toHaveLength(2);
+
+    const segmentPayloads = await Promise.all(
+      segmentDigests.map(async (digest) => {
+        const record = await graph.getObjectRecord({
+          kind: 'object',
+          objectType: 'workbook.mutationSegment.v1',
+          digest,
+        });
+        return record.preimage.payload as any;
+      }),
+    );
+
+    expect(segmentPayloads.map((payload) => payload.operation)).toEqual([
+      'compute_create_sheet_with_default_col_width',
+      'compute_move_sheet',
+    ]);
+    expect(segmentPayloads.map((payload) => payload.operationContext.operationId)).toEqual([
+      'sheet-add-create',
+      'sheet-add-move',
+    ]);
+    expect(segmentPayloads.map((payload) => payload.operationContext.groupId)).toEqual([
+      groupId,
+      groupId,
+    ]);
+  });
 });
 
 function createWorkbookVersion(
@@ -222,6 +413,25 @@ function createWorkbookVersion(
   const ctx = {} as any;
   attachWorkbookVersioning(ctx, versioningWithDomainSupportManifest(versioning as any));
   return new WorkbookVersionImpl(ctx);
+}
+
+function createProviderBackedVersion(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  encodeDiff: (stateVector: Uint8Array) => Promise<Uint8Array>,
+): WorkbookVersionImpl {
+  const ctx = {} as any;
+  attachWorkbookVersioning(
+    ctx,
+    versioningWithDomainSupportManifest({
+      provider,
+      snapshotRootByteSyncPort: { encodeDiff },
+    }),
+  );
+  return new WorkbookVersionImpl(ctx);
+}
+
+function versionContext(version: WorkbookVersionImpl): any {
+  return (version as any).ctx;
 }
 
 function expectInitializeSuccess(
@@ -267,6 +477,57 @@ async function initializeInput(
       author: VERSION_AUTHOR,
       createdAt: CREATED_AT,
       completenessDiagnostics: [],
+    },
+  };
+}
+
+async function expectOnlyRootCommit(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  graphId: string,
+  initialized: Extract<VersionGraphInitializeResult, { status: 'success' }>,
+): Promise<void> {
+  const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, graphId));
+  await expect(graph.readHead()).resolves.toMatchObject({
+    status: 'success',
+    head: {
+      id: initialized.rootCommit.id,
+      refRevision: initialized.initialHead.revision,
+    },
+  });
+  const listed = await graph.listCommits();
+  expect(listed).toMatchObject({
+    status: 'success',
+    commits: [{ id: initialized.rootCommit.id }],
+  });
+  if (listed.status !== 'success') {
+    throw new Error(`expected commit list success: ${listed.diagnostics[0]?.code}`);
+  }
+  expect(listed.commits).toHaveLength(1);
+}
+
+function operationContext(
+  overrides: Partial<VersionOperationContext> = {},
+): VersionOperationContext {
+  return {
+    operationId: 'operation-1',
+    kind: 'mutation',
+    author: VERSION_AUTHOR,
+    createdAt: CREATED_AT,
+    domainIds: ['test'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+    ...overrides,
+  };
+}
+
+function emptyMutationResult() {
+  return {
+    recalc: {
+      changedCells: [],
+      projectionChanges: [],
+      errors: [],
+      validationAnnotations: [],
+      metrics: {},
     },
   };
 }

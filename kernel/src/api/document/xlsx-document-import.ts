@@ -14,6 +14,10 @@ import {
   type VersionDocumentScope,
   type VersionStoreProvider,
 } from '../../document/version-store/provider';
+import {
+  VERSION_GRAPH_HEAD_REF,
+  VERSION_GRAPH_MAIN_REF,
+} from '../../document/version-store/graph-store';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import { selectVersionStoreProvider } from '../../document/version-store/provider-registry';
 import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb-backend';
@@ -30,6 +34,8 @@ import { resolveUserTimezone } from './resolve-user-timezone';
 import {
   MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
+  type MogWorkbookVersionXlsxMetadata,
+  type MogWorkbookVersionXlsxMetadataExpectedHead,
 } from '../workbook/xlsx-version-metadata';
 
 export const INTERNAL_INTERACTIVE_DEFERRED_IMPORT: unique symbol = Symbol(
@@ -265,16 +271,55 @@ async function xlsxVersionMetadataTrust(
     };
   }
 
-  const authority = await readLocalVersionMetadataAuthority(documentId, options);
-  const result = readAndValidateMogVersionMetadataFromXlsx(source.data, {
+  const selected = selectLocalVersionMetadataAuthorityProvider(documentId, options);
+  const expectedWorkspaceId = selected.provider.documentScope.workspaceId;
+  const baseContext = {
     expectedDocumentId: documentId,
-    ...(authority.expectedWorkspaceId ? { expectedWorkspaceId: authority.expectedWorkspaceId } : {}),
-    ...(authority.expectedHead ? { expectedHead: authority.expectedHead } : {}),
-  });
+    ...(expectedWorkspaceId ? { expectedWorkspaceId } : {}),
+  };
+  try {
+    const preliminary = readAndValidateMogVersionMetadataFromXlsx(source.data, baseContext);
+    if (
+      preliminary.status !== 'untrusted' ||
+      preliminary.reason !== 'head-unverified' ||
+      !preliminary.metadata?.head ||
+      !metadataHeadNamesSupportedLocalRef(preliminary.metadata.head)
+    ) {
+      return versionMetadataTrustPayload(preliminary);
+    }
+
+    const authority = await readLocalVersionMetadataAuthority(
+      selected.provider,
+      preliminary.metadata.head,
+    );
+    const result = readAndValidateMogVersionMetadataFromXlsx(source.data, {
+      ...baseContext,
+      ...(authority.expectedHead ? { expectedHead: authority.expectedHead } : {}),
+      ...(authority.currentHead ? { currentHead: authority.currentHead } : {}),
+      ...(authority.expectedHeadFailureReason
+        ? { expectedHeadFailureReason: authority.expectedHeadFailureReason }
+        : {}),
+    });
+    return versionMetadataTrustPayload(result);
+  } finally {
+    if (selected.owned) {
+      await selected.provider.close('dispose').catch(() => {});
+    }
+  }
+}
+
+function versionMetadataTrustPayload(
+  result: ReturnType<typeof readAndValidateMogVersionMetadataFromXlsx>,
+): {
+  readonly trust: NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']>;
+  readonly diagnostics: XlsxVersionImportRootProvenance['diagnostics'];
+  readonly versionMetadataHeadCandidate?: XlsxVersionImportRootProvenance['versionMetadataHeadCandidate'];
+} {
   return {
     trust: result.trust,
     diagnostics: result.diagnostics,
-    ...(result.status === 'trusted' && result.metadata.head
+    ...((result.status === 'trusted' || result.status === 'trusted-stale-base') &&
+    result.metadata.head
       ? {
           versionMetadataHeadCandidate: {
             documentId: result.metadata.documentId,
@@ -286,7 +331,8 @@ async function xlsxVersionMetadataTrust(
 }
 
 type LocalVersionMetadataAuthority = {
-  readonly expectedWorkspaceId?: string;
+  readonly expectedHeadFailureReason?: 'commit-missing';
+  readonly currentHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
   readonly expectedHead?: {
     readonly commitId: VersionHead['id'];
     readonly refName?: VersionHead['refName'];
@@ -298,45 +344,56 @@ type LocalVersionMetadataAuthority = {
 };
 
 async function readLocalVersionMetadataAuthority(
-  documentId: string,
-  options: XlsxDocumentImportOptions | undefined,
+  provider: VersionStoreProvider,
+  metadataHead: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
 ): Promise<LocalVersionMetadataAuthority> {
-  const selected = selectLocalVersionMetadataAuthorityProvider(documentId, options);
-  const expectedWorkspaceId = selected.provider.documentScope.workspaceId;
-  const baseAuthority = expectedWorkspaceId ? { expectedWorkspaceId } : {};
-
   try {
-    const registry = await selected.provider.readGraphRegistry();
-    if (registry.status !== 'ok') return baseAuthority;
+    const registry = await provider.readGraphRegistry();
+    if (registry.status !== 'ok') return {};
 
-    const graph = await selected.provider.openGraph(
-      namespaceForDocumentScope(selected.provider.documentScope, registry.registry.currentGraphId),
-      selected.provider.accessContext,
+    const graph = await provider.openGraph(
+      namespaceForDocumentScope(provider.documentScope, registry.registry.currentGraphId),
+      provider.accessContext,
     );
     const head = await graph.readHead();
-    if (head.status !== 'success') return baseAuthority;
+    if (head.status !== 'success') return {};
 
     const commit = await graph.readCommit(head.head.id);
-    if (commit.status !== 'success') return baseAuthority;
+    if (commit.status !== 'success') return {};
+    const currentHead = {
+      commitId: head.head.id as VersionHead['id'],
+      refName: head.head.refName as VersionHead['refName'],
+      resolvedFrom: head.head.resolvedFrom as VersionHead['resolvedFrom'],
+      refRevision: head.head.refRevision,
+      semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest as ObjectDigest,
+      snapshotRootDigest: commit.commit.payload.snapshotRootDigest as ObjectDigest,
+    };
+
+    const baseCommit = await graph.readCommit(metadataHead.commitId);
+    if (baseCommit.status !== 'success') {
+      return { currentHead, expectedHeadFailureReason: 'commit-missing' };
+    }
 
     return {
-      ...baseAuthority,
+      currentHead,
       expectedHead: {
-        commitId: head.head.id as VersionHead['id'],
-        refName: head.head.refName as VersionHead['refName'],
-        resolvedFrom: head.head.resolvedFrom as VersionHead['resolvedFrom'],
-        refRevision: head.head.refRevision,
-        semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest as ObjectDigest,
-        snapshotRootDigest: commit.commit.payload.snapshotRootDigest as ObjectDigest,
+        commitId: baseCommit.commit.id as VersionHead['id'],
+        refName: metadataHead.refName as VersionHead['refName'],
+        resolvedFrom: metadataHead.resolvedFrom as VersionHead['resolvedFrom'],
+        refRevision: metadataHead.refRevision,
+        semanticChangeSetDigest: baseCommit.commit.payload.semanticChangeSetDigest as ObjectDigest,
+        snapshotRootDigest: baseCommit.commit.payload.snapshotRootDigest as ObjectDigest,
       },
     };
   } catch {
-    return baseAuthority;
-  } finally {
-    if (selected.owned) {
-      await selected.provider.close('dispose').catch(() => {});
-    }
+    return {};
   }
+}
+
+function metadataHeadNamesSupportedLocalRef(
+  head: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
+): boolean {
+  return head.refName === VERSION_GRAPH_MAIN_REF && head.resolvedFrom === VERSION_GRAPH_HEAD_REF;
 }
 
 function selectLocalVersionMetadataAuthorityProvider(

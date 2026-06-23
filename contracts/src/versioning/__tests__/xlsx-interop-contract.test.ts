@@ -25,7 +25,7 @@ type IsEqual<A, B> =
 type ExpectedRedactionPolicy =
   | 'commit-and-document-only'
   | 'commit-document-and-object-digests-only';
-type ExpectedTrustStatus = 'absent' | 'trusted' | 'untrusted';
+type ExpectedTrustStatus = 'absent' | 'trusted' | 'trusted-stale-base' | 'untrusted';
 type ExpectedTrustReason =
   | 'duplicate-sidecar'
   | 'sidecar-too-large'
@@ -33,6 +33,7 @@ type ExpectedTrustReason =
   | 'malformed-sidecar'
   | 'invalid-schema'
   | 'wrong-document'
+  | 'wrong-workspace'
   | 'missing-head'
   | 'head-unverified'
   | 'head-mismatch'
@@ -73,6 +74,7 @@ describe('Mog workbook version XLSX interop contracts', () => {
     expect(MOG_WORKBOOK_VERSION_XLSX_METADATA_TRUST_STATUSES).toEqual([
       'absent',
       'trusted',
+      'trusted-stale-base',
       'untrusted',
     ]);
     expect(MOG_WORKBOOK_VERSION_XLSX_METADATA_TRUST_REASONS).toEqual([
@@ -82,6 +84,7 @@ describe('Mog workbook version XLSX interop contracts', () => {
       'malformed-sidecar',
       'invalid-schema',
       'wrong-document',
+      'wrong-workspace',
       'missing-head',
       'head-unverified',
       'head-mismatch',

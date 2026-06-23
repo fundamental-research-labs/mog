@@ -18,6 +18,7 @@ export type MogWorkbookVersionXlsxMetadataRedactionPolicy =
 export const MOG_WORKBOOK_VERSION_XLSX_METADATA_TRUST_STATUSES = Object.freeze([
   'absent',
   'trusted',
+  'trusted-stale-base',
   'untrusted',
 ] as const);
 export type MogWorkbookVersionXlsxMetadataTrustStatus =
@@ -30,6 +31,7 @@ export const MOG_WORKBOOK_VERSION_XLSX_METADATA_TRUST_REASONS = Object.freeze([
   'malformed-sidecar',
   'invalid-schema',
   'wrong-document',
+  'wrong-workspace',
   'missing-head',
   'head-unverified',
   'head-mismatch',
@@ -105,6 +107,7 @@ export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: MogWorkbookVersionXlsxMetadataSchemaVersion;
   readonly exportedAt: string;
   readonly documentId: string;
+  readonly workspaceId?: string;
   readonly head: MogWorkbookVersionXlsxMetadataHead | null;
   readonly diagnostics: readonly MogWorkbookVersionXlsxDiagnosticPublicPayload[];
   readonly redaction: {
@@ -124,6 +127,11 @@ export type MogWorkbookVersionXlsxMetadataTrustSummary =
       readonly redacted: true;
     }
   | {
+      readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'trusted-stale-base'>;
+      readonly sidecarPart: MogWorkbookVersionXlsxMetadataPart;
+      readonly redacted: true;
+    }
+  | {
       readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'untrusted'>;
       readonly sidecarPart: MogWorkbookVersionXlsxMetadataPart;
       readonly reason: MogWorkbookVersionXlsxMetadataTrustReason;
@@ -134,6 +142,7 @@ export type MogWorkbookVersionXlsxMetadataExpectedHead = MogWorkbookVersionXlsxM
 
 export interface MogWorkbookVersionXlsxMetadataTrustContext {
   readonly expectedDocumentId: string;
+  readonly expectedWorkspaceId?: string;
   readonly expectedHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
 }
 
@@ -147,6 +156,15 @@ export type MogWorkbookVersionXlsxMetadataTrustResult =
       readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'trusted'>;
       readonly metadata: MogWorkbookVersionXlsxMetadata;
       readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'trusted' }>;
+      readonly diagnostics: readonly ImportDiagnosticDto[];
+    }
+  | {
+      readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'trusted-stale-base'>;
+      readonly metadata: MogWorkbookVersionXlsxMetadata;
+      readonly trust: Extract<
+        MogWorkbookVersionXlsxMetadataTrustSummary,
+        { status: 'trusted-stale-base' }
+      >;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     }
   | {

@@ -74,6 +74,11 @@ export type MogWorkbookVersionXlsxMetadataTrustSummary =
       readonly redacted: true;
     }
   | {
+      readonly status: 'trusted-stale-base';
+      readonly sidecarPart: typeof MOG_VERSION_METADATA_PART;
+      readonly redacted: true;
+    }
+  | {
       readonly status: 'untrusted';
       readonly sidecarPart: typeof MOG_VERSION_METADATA_PART;
       readonly reason: MogWorkbookVersionXlsxMetadataTrustReason;
@@ -93,6 +98,11 @@ export interface MogWorkbookVersionXlsxMetadataTrustContext {
   readonly expectedDocumentId: string;
   readonly expectedWorkspaceId?: string;
   readonly expectedHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
+  readonly currentHead?: MogWorkbookVersionXlsxMetadataExpectedHead;
+  readonly expectedHeadFailureReason?: Extract<
+    MogWorkbookVersionXlsxMetadataTrustReason,
+    'head-unverified' | 'commit-missing'
+  >;
 }
 
 export type MogWorkbookVersionXlsxMetadataTrustResult =
@@ -105,6 +115,15 @@ export type MogWorkbookVersionXlsxMetadataTrustResult =
       readonly status: 'trusted';
       readonly metadata: MogWorkbookVersionXlsxMetadata;
       readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'trusted' }>;
+      readonly diagnostics: readonly ImportDiagnosticDto[];
+    }
+  | {
+      readonly status: 'trusted-stale-base';
+      readonly metadata: MogWorkbookVersionXlsxMetadata;
+      readonly trust: Extract<
+        MogWorkbookVersionXlsxMetadataTrustSummary,
+        { status: 'trusted-stale-base' }
+      >;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     }
   | {
@@ -213,6 +232,18 @@ export function readAndValidateMogVersionMetadataFromXlsx(
         diagnostics: [],
       };
     }
+    if (validation.status === 'trusted-stale-base') {
+      return {
+        status: 'trusted-stale-base',
+        metadata,
+        trust: {
+          status: 'trusted-stale-base',
+          sidecarPart: MOG_VERSION_METADATA_PART,
+          redacted: true,
+        },
+        diagnostics: [mogVersionMetadataStaleDiagnostic()],
+      };
+    }
 
     return untrustedMetadataResult(validation.reason, metadata);
   } catch {
@@ -225,6 +256,7 @@ export function validateMogWorkbookVersionXlsxMetadata(
   context: MogWorkbookVersionXlsxMetadataTrustContext,
 ):
   | { readonly status: 'trusted' }
+  | { readonly status: 'trusted-stale-base' }
   | { readonly status: 'untrusted'; readonly reason: MogWorkbookVersionXlsxMetadataTrustReason } {
   if (metadata.documentId !== context.expectedDocumentId) {
     return { status: 'untrusted', reason: 'wrong-document' };
@@ -239,7 +271,10 @@ export function validateMogWorkbookVersionXlsxMetadata(
     return { status: 'untrusted', reason: 'head-unverified' };
   }
   if (!context.expectedHead) {
-    return { status: 'untrusted', reason: 'head-unverified' };
+    return {
+      status: 'untrusted',
+      reason: context.expectedHeadFailureReason ?? 'head-unverified',
+    };
   }
   if (!hasExpectedHeadAuthority(context.expectedHead)) {
     return { status: 'untrusted', reason: 'head-unverified' };
@@ -265,6 +300,12 @@ export function validateMogWorkbookVersionXlsxMetadata(
     !objectDigestMatches(metadata.head.snapshotRootDigest, context.expectedHead.snapshotRootDigest)
   ) {
     return { status: 'untrusted', reason: 'snapshot-root-mismatch' };
+  }
+  if (
+    context.currentHead &&
+    !metadataHeadIdentityMatchesExpected(metadata.head, context.currentHead)
+  ) {
+    return { status: 'trusted-stale-base' };
   }
   return { status: 'trusted' };
 }
@@ -618,6 +659,30 @@ function mogVersionMetadataUntrustedDiagnostic(
       reason,
       sidecarPart: MOG_VERSION_METADATA_PART,
       trusted: false,
+      redacted: true,
+    },
+    importPhases: ['parser'],
+    firstImportPhase: 'parser',
+  };
+}
+
+function mogVersionMetadataStaleDiagnostic(): ImportDiagnosticDto {
+  return {
+    id: 'mog-version-metadata-trusted-stale-base',
+    code: 'mogVersionMetadataStale',
+    severity: 'warning',
+    feature: 'workbook-metadata',
+    recoverability: 'mergeRequired',
+    message:
+      'Mog version metadata sidecar was trusted, but the current head advanced; external edits were routed to an external-change branch.',
+    reason: 'trusted-stale-base',
+    details: {
+      kind: 'mogVersionMetadataTrust',
+      reason: 'trusted-stale-base',
+      sidecarPart: MOG_VERSION_METADATA_PART,
+      trusted: true,
+      staleBase: true,
+      branchRouting: 'external-change',
       redacted: true,
     },
     importPhases: ['parser'],

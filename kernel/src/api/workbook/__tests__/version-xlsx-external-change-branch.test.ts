@@ -147,6 +147,83 @@ describe('VC-10 XLSX external-change branch routing', () => {
     const branches = await graph.listBranches({ prefix: 'import' });
     expect(branches).toMatchObject({ ok: true, branches: [] });
   });
+
+  it('records stale trusted-base diagnostics when routing to an external-change branch', async () => {
+    const namespace = testNamespace('vc10-xlsx-stale-trusted-base-branch');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base', '7');
+    const localState = semanticState('local-main', '8');
+    const externalState = semanticState('external-edit', '9');
+
+    const { baseCommit, baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    const localCommit = await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-main',
+    });
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x51),
+      semanticStateReader: semanticStateReader(externalState, baseState),
+      provenance: trustedProvenance(namespace.documentId, baseCommit, baseHead.head, {
+        trustStatus: 'trusted-stale-base',
+        diagnostics: [staleTrustedBaseDiagnostic()],
+      }),
+      createdAt: CREATED_AT,
+    });
+
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected stale external-change commit, got ${result.status}`);
+    }
+
+    const headAfter = await graph.readHead();
+    expect(headAfter).toMatchObject({
+      status: 'success',
+      head: { id: localCommit.id, refName: VERSION_GRAPH_MAIN_REF },
+    });
+
+    const branch = await findOnlyImportExternalChangeBranch(graph);
+    const externalCommit = await graph.readCommit(result.commitId);
+    expect(externalCommit.status).toBe('success');
+    if (externalCommit.status !== 'success') {
+      throw new Error(`expected external commit readable: ${externalCommit.diagnostics[0]?.code}`);
+    }
+    expect(branch.ref.targetCommitId).toBe(result.commitId);
+    expect(externalCommit.commit.payload.parentCommitIds).toEqual([baseCommit.id]);
+
+    const semanticRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: externalCommit.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticRecord.preimage.payload).toMatchObject({
+      source: {
+        kind: 'xlsxImportChange',
+        versionMetadataTrust: {
+          status: 'trusted-stale-base',
+          redacted: true,
+        },
+      },
+      importDiagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataStale',
+          reason: 'trusted-stale-base',
+          details: expect.objectContaining({ redacted: true }),
+        }),
+      ],
+    });
+    const diagnosticsJson = JSON.stringify(
+      (semanticRecord.preimage.payload as { importDiagnostics?: unknown }).importDiagnostics,
+    );
+    expect(diagnosticsJson).not.toContain(baseCommit.id);
+    expect(diagnosticsJson).not.toContain(localCommit.id);
+    expect(diagnosticsJson).not.toContain(namespace.documentId);
+  });
 });
 
 function testNamespace(documentId: string): VersionGraphNamespace {
@@ -288,13 +365,17 @@ function trustedProvenance(
   documentId: string,
   baseCommit: WorkbookCommit,
   exportedHead?: VersionGraphCommitRef,
+  options?: {
+    readonly trustStatus?: 'trusted' | 'trusted-stale-base';
+    readonly diagnostics?: XlsxVersionImportRootProvenance['diagnostics'];
+  },
 ): XlsxVersionImportRootProvenance {
   return {
     kind: 'xlsx',
     source: { sourceType: 'bytes', byteLength: 256 },
-    diagnostics: [],
+    diagnostics: options?.diagnostics ?? [],
     versionMetadataTrust: {
-      status: 'trusted',
+      status: options?.trustStatus ?? 'trusted',
       sidecarPart: SIDE_CAR_PART,
       redacted: true,
     },
@@ -309,6 +390,29 @@ function trustedProvenance(
         snapshotRootDigest: baseCommit.payload.snapshotRootDigest,
       },
     },
+  };
+}
+
+function staleTrustedBaseDiagnostic(): XlsxVersionImportRootProvenance['diagnostics'][number] {
+  return {
+    id: 'mog-version-metadata-trusted-stale-base',
+    code: 'mogVersionMetadataStale',
+    severity: 'warning',
+    feature: 'workbook-metadata',
+    recoverability: 'mergeRequired',
+    message:
+      'Mog version metadata sidecar was trusted, but the current head advanced; external edits were routed to an external-change branch.',
+    reason: 'trusted-stale-base',
+    details: {
+      kind: 'mogVersionMetadataTrust',
+      reason: 'trusted-stale-base',
+      trusted: true,
+      staleBase: true,
+      branchRouting: 'external-change',
+      redacted: true,
+    },
+    importPhases: ['parser'],
+    firstImportPhase: 'parser',
   };
 }
 

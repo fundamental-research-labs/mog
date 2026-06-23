@@ -36,7 +36,7 @@ export type XlsxVersionImportRootProvenance = {
   readonly source: XlsxVersionImportRootSource;
   readonly diagnostics: readonly ImportDiagnosticDto[];
   readonly versionMetadataTrust?: {
-    readonly status: 'absent' | 'trusted' | 'untrusted';
+    readonly status: 'absent' | 'trusted' | 'trusted-stale-base' | 'untrusted';
     readonly sidecarPart: string;
     readonly reason?: string;
     readonly redacted?: true;
@@ -372,8 +372,12 @@ function externalChangeBranchName(baseCommitId: WorkbookCommitId, afterDigest: u
 function trustedVersionMetadataTrust(
   provenance: XlsxVersionImportRootProvenance,
 ): NonNullable<XlsxVersionImportRootProvenance['versionMetadataTrust']> {
+  const status =
+    provenance.versionMetadataTrust?.status === 'trusted-stale-base'
+      ? 'trusted-stale-base'
+      : 'trusted';
   return {
-    status: 'trusted',
+    status,
     sidecarPart:
       provenance.versionMetadataTrust?.sidecarPart ?? 'customXml/mog-version-metadata.xml',
     redacted: true,

@@ -21,6 +21,7 @@ import {
   namespaceForDocumentScope,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
+import type { WorkbookCommit } from '../../../document/version-store/commit-store';
 import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 
@@ -207,7 +208,7 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
     }
   });
 
-  it('fails closed for stale metadata after the local head advances', async () => {
+  it('routes stale trusted-base external edits to an external-change branch with redacted diagnostics', async () => {
     const seed = await seedTrustedExport({
       documentId: DOCUMENT_ID,
       workspaceId: WORKSPACE_ID,
@@ -228,11 +229,14 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
     if (!imported.success || !imported.handle) {
       throw new Error(`expected stale reimport success: ${imported.error?.message}`);
     }
-    expectMetadataWarning(imported.warnings, 'head-mismatch');
+    expectStaleMetadataWarning(imported.warnings);
 
     let wb: Workbook | undefined;
     try {
       wb = await imported.handle.workbook({ versioning: versioning(WORKSPACE_ID) });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'Stale external edit',
+      });
       await expect(wb.version.getHead()).resolves.toMatchObject({
         ok: true,
         value: { id: advancedHeadId },
@@ -246,6 +250,40 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
           ]),
         },
       });
+
+      const branchCommit = await readOnlyImportBranchCommit(DOCUMENT_ID, WORKSPACE_ID);
+      expect(branchCommit.id).not.toBe(seed.rootCommitId);
+      expect(branchCommit.id).not.toBe(advancedHeadId);
+      expect(branchCommit.payload.parentCommitIds).toEqual([seed.rootCommitId]);
+
+      const changePayload = await readSemanticChangeSetPayload(
+        branchCommit.id,
+        DOCUMENT_ID,
+        WORKSPACE_ID,
+      );
+      expect(changePayload).toMatchObject({
+        source: {
+          kind: 'xlsxImportChange',
+          versionMetadataTrust: {
+            status: 'trusted-stale-base',
+            redacted: true,
+          },
+        },
+        importDiagnostics: [
+          expect.objectContaining({
+            code: 'mogVersionMetadataStale',
+            reason: 'trusted-stale-base',
+            details: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      });
+      const diagnosticsJson = JSON.stringify(
+        (changePayload as { importDiagnostics?: unknown }).importDiagnostics,
+      );
+      expect(diagnosticsJson).not.toContain(seed.rootCommitId);
+      expect(diagnosticsJson).not.toContain(advancedHeadId);
+      expect(diagnosticsJson).not.toContain(DOCUMENT_ID);
+      expect(diagnosticsJson).not.toContain(WORKSPACE_ID);
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
@@ -329,20 +367,17 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
       a1Value: 'Original',
     });
 
-    const imported = await DocumentFactory.createFromXlsx(
-      { type: 'bytes', data: seed.exported },
-      {
-        documentId: DOCUMENT_ID,
-        environment: 'headless',
-        userTimezone: 'UTC',
-        versioning: {
-          providerSelection: {
-            kind: 'unavailable',
-            workspaceId: WORKSPACE_ID,
-          },
+    const imported = await DocumentFactory.createFromXlsx({ type: 'bytes', data: seed.exported }, {
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+      versioning: {
+        providerSelection: {
+          kind: 'unavailable',
+          workspaceId: WORKSPACE_ID,
         },
-      } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown },
-    );
+      },
+    } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown });
     expect(imported.success).toBe(true);
     try {
       expectMetadataWarning(imported.warnings, 'head-unverified');
@@ -405,7 +440,7 @@ async function advanceLocalHead(seed: TrustedExportSeed): Promise<WorkbookCommit
   const imported = await importXlsxWithVersioning({
     documentId: DOCUMENT_ID,
     workspaceId: WORKSPACE_ID,
-    xlsxBytes: seed.exported,
+    xlsxBytes: removeMogVersionMetadataFromXlsx(seed.exported),
   });
   expect(imported.success).toBe(true);
   if (!imported.success || !imported.handle) {
@@ -441,15 +476,12 @@ async function importXlsxWithVersioning(input: {
   readonly workspaceId?: string;
   readonly xlsxBytes: Uint8Array;
 }) {
-  return DocumentFactory.createFromXlsx(
-    { type: 'bytes', data: input.xlsxBytes },
-    {
-      documentId: input.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-      versioning: versioning(input.workspaceId),
-    } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown },
-  );
+  return DocumentFactory.createFromXlsx({ type: 'bytes', data: input.xlsxBytes }, {
+    documentId: input.documentId,
+    environment: 'headless',
+    userTimezone: 'UTC',
+    versioning: versioning(input.workspaceId),
+  } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown });
 }
 
 function versioning(workspaceId?: string) {
@@ -539,6 +571,13 @@ async function readOnlyImportBranchCommitId(
   documentId: string,
   workspaceId?: string,
 ): Promise<WorkbookCommitId> {
+  return (await readOnlyImportBranchCommit(documentId, workspaceId)).id;
+}
+
+async function readOnlyImportBranchCommit(
+  documentId: string,
+  workspaceId?: string,
+): Promise<WorkbookCommit> {
   const { provider, graph } = await openIndexedDbGraph(documentId, workspaceId);
   try {
     const branches = await graph.listBranches({ prefix: 'import' });
@@ -548,7 +587,12 @@ async function readOnlyImportBranchCommitId(
     const branch = branches.branches[0];
     if (!branch) throw new Error('expected one import branch');
     expect(branch.name).toMatch(/^import\/external-change\//);
-    return branch.ref.targetCommitId;
+    const commit = await graph.readCommit(branch.ref.targetCommitId);
+    expect(commit.status).toBe('success');
+    if (commit.status !== 'success') {
+      throw new Error(`expected branch commit: ${commit.diagnostics[0]?.code}`);
+    }
+    return commit.commit;
   } finally {
     await provider.close('test-teardown').catch(() => {});
   }
@@ -607,6 +651,30 @@ function expectNoMetadataWarning(warnings: readonly unknown[]): void {
       }),
     ]),
   );
+}
+
+function expectStaleMetadataWarning(warnings: readonly unknown[]): void {
+  expect(warnings).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        type: 'import_error',
+        reason: 'trusted-stale-base',
+        diagnostic: expect.objectContaining({
+          code: 'mogVersionMetadataStale',
+          reason: 'trusted-stale-base',
+          details: expect.objectContaining({
+            trusted: true,
+            staleBase: true,
+            redacted: true,
+          }),
+        }),
+      }),
+    ]),
+  );
+  const serialized = JSON.stringify(warnings);
+  expect(serialized).not.toContain(DOCUMENT_ID);
+  expect(serialized).not.toContain(WORKSPACE_ID);
+  expect(serialized).not.toContain('commit:sha256:');
 }
 
 function testVersionMetadata(

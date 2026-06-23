@@ -8,6 +8,12 @@ import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
 import { withVersionManifest } from './version-domain-support-test-utils';
 import {
+  removeMogVersionMetadataPackageInventoryFromXlsx,
+  scanXlsxCleanExportPackageDiagnostics,
+  XlsxCleanExportPackageError,
+  type XlsxCleanExportPackageDiagnostic,
+} from '../xlsx-clean-export-package';
+import {
   addMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
@@ -25,6 +31,7 @@ const LEAK_REDACTION_SENTINEL = 'vc10-clean-export-redaction-sentinel';
 const LEAK_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
 const SEMANTIC_CHANGE_SET_DIGEST = objectDigest('d');
 const SNAPSHOT_ROOT_DIGEST = objectDigest('e');
+const ACTIVE_CONTENT_SECRET = 'vc10-active-content-secret-sentinel';
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -73,30 +80,58 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
           expectedDocumentId: TARGET_DOCUMENT_ID,
         }),
       ).toMatchObject({ status: 'absent' });
-      expect(
-        scanCleanExportPackage(exported, [
-          LEAK_DOCUMENT_ID,
-          LEAK_COMMIT_ID,
-          LEAK_REF_REVISION,
-          SEMANTIC_CHANGE_SET_DIGEST.digest,
-          SNAPSHOT_ROOT_DIGEST.digest,
-          LEAK_DIAGNOSTIC_SENTINEL,
-          LEAK_REDACTION_SENTINEL,
-          'mog.workbookVersion.xlsxMetadata.v1',
-          'https://schemas.mog.dev/workbook/version-metadata/1',
-        ]),
-      ).toEqual({
+      const cleanExportScan = await scanCleanExportPackage(exported, [
+        LEAK_DOCUMENT_ID,
+        LEAK_COMMIT_ID,
+        LEAK_REF_REVISION,
+        SEMANTIC_CHANGE_SET_DIGEST.digest,
+        SNAPSHOT_ROOT_DIGEST.digest,
+        LEAK_DIAGNOSTIC_SENTINEL,
+        LEAK_REDACTION_SENTINEL,
+        'mog.workbookVersion.xlsxMetadata.v1',
+        'https://schemas.mog.dev/workbook/version-metadata/1',
+      ]);
+      expect(cleanExportScan).toEqual({
         duplicateZipEntries: [],
         mogCustomXmlMetadataParts: [],
         mogContentTypeEntries: [],
         mogRelationshipEntries: [],
         danglingCustomXmlInventory: [],
+        unsafePackageDiagnostics: [],
         redactionLeaks: [],
       });
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
     }
+  });
+
+  it('blocks active and unsafe package content with redaction-safe diagnostics', async () => {
+    const unsafePackage = activeUnsafePackageFixture();
+    const diagnostics = await scanXlsxCleanExportPackageDiagnostics(unsafePackage);
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
+      'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
+      'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
+      'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER',
+      'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
+      'XLSX_CLEAN_EXPORT_DANGLING_PACKAGE_REFERENCE',
+    ]);
+    expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
+
+    let error: unknown;
+    try {
+      await removeMogVersionMetadataPackageInventoryFromXlsx(unsafePackage);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
+    expect(error).toMatchObject({
+      code: 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE',
+      diagnostics,
+    });
+    expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
   });
 });
 
@@ -203,13 +238,14 @@ interface CleanExportPackageScanReport {
   readonly mogContentTypeEntries: readonly string[];
   readonly mogRelationshipEntries: readonly string[];
   readonly danglingCustomXmlInventory: readonly string[];
-  readonly redactionLeaks: readonly string[];
+  readonly unsafePackageDiagnostics: readonly XlsxCleanExportPackageDiagnostic[];
+  readonly redactionLeaks: readonly RedactionLeakDiagnostic[];
 }
 
-function scanCleanExportPackage(
+async function scanCleanExportPackage(
   xlsxBytes: Uint8Array,
   leakTokens: readonly string[],
-): CleanExportPackageScanReport {
+): Promise<CleanExportPackageScanReport> {
   const entries = readZipArchive(xlsxBytes);
   const normalizedNames = entries.map((entry) => normalizePackagePath(entry.name));
   const textByPath = new Map(
@@ -240,8 +276,59 @@ function scanCleanExportPackage(
     mogContentTypeEntries: contentTypeEntries,
     mogRelationshipEntries: relationshipEntries,
     danglingCustomXmlInventory: customXmlInventory,
+    unsafePackageDiagnostics: await scanXlsxCleanExportPackageDiagnostics(xlsxBytes),
     redactionLeaks: redactionLeaks(entries, leakTokens),
   };
+}
+
+function activeUnsafePackageFixture(): Uint8Array {
+  const contentTypes = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+    '<Override PartName="/xl/vbaProject.bin" ContentType="application/vnd.ms-office.vbaProject"/>',
+    '<Override PartName="/xl/activeX/activeX1.xml" ContentType="application/vnd.ms-office.activeX+xml"/>',
+    '<Override PartName="/xl/embeddings/oleObject1.bin" ContentType="application/vnd.openxmlformats-officedocument.oleObject"/>',
+    `<Override PartName="/xl/embeddings/${ACTIVE_CONTENT_SECRET}.exe" ContentType="application/octet-stream"/>`,
+    '<Override PartName="/EncryptionInfo" ContentType="application/vnd.ms-office.encryptionInfo"/>',
+    '<Override PartName="/EncryptedPackage" ContentType="application/vnd.ms-office.encryptedPackage"/>',
+    '<Override PartName="/_xmlsignatures/origin.sigs" ContentType="application/vnd.openxmlformats-package.digital-signature-origin"/>',
+    `<Override PartName="/xl/${ACTIVE_CONTENT_SECRET}.xml" ContentType="application/xml"/>`,
+    '</Types>',
+  ].join('');
+  const rootRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    '<Relationship Id="rIdSignature" Type="http://schemas.openxmlformats.org/package/2006/relationships/digital-signature/origin" Target="_xmlsignatures/origin.sigs"/>',
+    `<Relationship Id="rIdDangling" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/${ACTIVE_CONTENT_SECRET}.xml"/>`,
+    '</Relationships>',
+  ].join('');
+  const workbookRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdVba" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProject" Target="vbaProject.bin"/>',
+    '<Relationship Id="rIdActiveX" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/control" Target="activeX/activeX1.xml"/>',
+    '<Relationship Id="rIdOle" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="embeddings/oleObject1.bin"/>',
+    `<Relationship Id="rIdPackage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="embeddings/${ACTIVE_CONTENT_SECRET}.exe"/>`,
+    '</Relationships>',
+  ].join('');
+
+  return writeStoredZip([
+    { name: '[Content_Types].xml', data: encodeUtf8(contentTypes) },
+    { name: '_rels/.rels', data: encodeUtf8(rootRels) },
+    { name: 'xl/workbook.xml', data: encodeUtf8('<workbook/>') },
+    { name: 'xl/_rels/workbook.xml.rels', data: encodeUtf8(workbookRels) },
+    { name: 'xl/vbaProject.bin', data: encodeUtf8('vba') },
+    { name: 'xl/activeX/activeX1.xml', data: encodeUtf8('<ax:ocx/>') },
+    { name: 'xl/embeddings/oleObject1.bin', data: encodeUtf8('ole') },
+    { name: `xl/embeddings/${ACTIVE_CONTENT_SECRET}.exe`, data: encodeUtf8('exe') },
+    { name: 'EncryptionInfo', data: encodeUtf8('encryption info') },
+    { name: 'EncryptedPackage', data: encodeUtf8('encrypted package') },
+    { name: '_xmlsignatures/origin.sigs', data: encodeUtf8('<Signature/>') },
+  ]);
 }
 
 function requiredEntry(entries: ReadonlyMap<string, Uint8Array>, name: string): Uint8Array {
@@ -288,17 +375,57 @@ function isMogVersionMetadataPath(path: string): boolean {
   return normalizePackagePath(path) === MOG_VERSION_METADATA_PART;
 }
 
-function redactionLeaks(entries: readonly ZipEntry[], leakTokens: readonly string[]): string[] {
-  const leaks: string[] = [];
-  for (const token of leakTokens) {
+interface RedactionLeakDiagnostic {
+  readonly code: 'VC10_CLEAN_EXPORT_REDACTION_TOKEN_LEAK';
+  readonly tokenIndex: number;
+  readonly location: 'entryName' | 'entryData';
+  readonly count: number;
+}
+
+function redactionLeaks(
+  entries: readonly ZipEntry[],
+  leakTokens: readonly string[],
+): RedactionLeakDiagnostic[] {
+  const leakCounts = new Map<string, RedactionLeakDiagnostic>();
+  leakTokens.forEach((token, tokenIndex) => {
     for (const entry of entries) {
       const name = normalizePackagePath(entry.name);
-      if (name.includes(token) || decodeUtf8(entry.data).includes(token)) {
-        leaks.push(`${token} in ${name}`);
-      }
+      if (name.includes(token)) recordRedactionLeak(leakCounts, tokenIndex, 'entryName');
+      if (decodeUtf8(entry.data).includes(token))
+        recordRedactionLeak(leakCounts, tokenIndex, 'entryData');
     }
-  }
-  return leaks;
+  });
+  return [...leakCounts.values()].sort(
+    (left, right) =>
+      left.tokenIndex - right.tokenIndex || left.location.localeCompare(right.location),
+  );
+}
+
+function recordRedactionLeak(
+  leakCounts: Map<string, RedactionLeakDiagnostic>,
+  tokenIndex: number,
+  location: RedactionLeakDiagnostic['location'],
+): void {
+  const key = `${tokenIndex}:${location}`;
+  const existing = leakCounts.get(key);
+  leakCounts.set(key, {
+    code: 'VC10_CLEAN_EXPORT_REDACTION_TOKEN_LEAK',
+    tokenIndex,
+    location,
+    count: (existing?.count ?? 0) + 1,
+  });
+}
+
+function redactionCheckPayload(error: unknown): string {
+  return JSON.stringify({
+    name: error instanceof Error ? error.name : undefined,
+    message: error instanceof Error ? error.message : String(error),
+    diagnostics: isRecord(error) ? error.diagnostics : undefined,
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 interface ZipEntry {
@@ -372,7 +499,9 @@ function readZipEntryData(
     }
     return inflated;
   }
-  throw new Error(`unsupported ZIP compression method ${entry.compressionMethod} for ${entry.name}`);
+  throw new Error(
+    `unsupported ZIP compression method ${entry.compressionMethod} for ${entry.name}`,
+  );
 }
 
 function writeStoredZip(entries: readonly ZipEntry[]): Uint8Array {

@@ -8,12 +8,8 @@ import {
   type PendingRemoteSegmentRecord,
   type PendingRemoteSegmentReserveResult,
   type PendingRemoteSegmentState,
-  type PendingRemoteSegmentStoreDiagnostic,
   type PendingRemoteSegmentStore,
   type ReservePendingRemoteSegmentInput,
-  clonePendingRemoteSegmentRecord,
-  comparePendingRemoteSegmentRecords,
-  isPendingRemoteSegmentRecord,
   pendingRemoteSegmentReservationRecord,
   pendingRemoteSegmentStorageKey,
   pendingRemoteSegmentTerminalsEqual,
@@ -32,14 +28,20 @@ import {
 } from './registry';
 import { INTENTS_STORE } from './provider-indexeddb-schema';
 import { cloneJson, idbRequest, idbTransactionDone } from './provider-indexeddb-internal';
-
-type StoredPendingRemoteSegment = {
-  readonly schemaVersion: 1;
-  readonly namespaceKey: string;
-  readonly documentScopeKey: string;
-  readonly operation: 'pending-remote-segment';
-  readonly record: PendingRemoteSegmentRecord;
-};
+import {
+  decodeStoredPendingRemoteSegment,
+  storedPendingRemoteSegment,
+} from './provider-indexeddb-pending-remote-segments-codec';
+import {
+  findBySegmentIdInStore,
+  findByStateInStore,
+} from './provider-indexeddb-pending-remote-segments-queries';
+import {
+  conflictComplete,
+  conflictReserve,
+  failedRead,
+  missingRead,
+} from './provider-indexeddb-pending-remote-segments-results';
 
 export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentStore {
   readonly namespace: VersionGraphNamespace;
@@ -289,140 +291,4 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
       input,
     });
   }
-}
-
-function storedPendingRemoteSegment(
-  record: PendingRemoteSegmentRecord,
-): StoredPendingRemoteSegment {
-  return {
-    schemaVersion: 1,
-    namespaceKey: record.namespaceKey,
-    documentScopeKey: record.documentScopeKey,
-    operation: 'pending-remote-segment',
-    record: cloneJson(record),
-  };
-}
-
-function decodeStoredPendingRemoteSegment(
-  value: unknown,
-  namespaceKey: string,
-  documentScopeKey: string,
-): PendingRemoteSegmentRecord | null {
-  if (
-    !isRecord(value) ||
-    value.schemaVersion !== 1 ||
-    value.operation !== 'pending-remote-segment'
-  ) {
-    return null;
-  }
-  if (value.namespaceKey !== namespaceKey || value.documentScopeKey !== documentScopeKey) {
-    return null;
-  }
-  return isPendingRemoteSegmentRecord(value.record) ? cloneJson(value.record) : null;
-}
-
-function findBySegmentIdInStore(
-  store: IDBObjectStore,
-  namespaceKey: string,
-  documentScopeKey: string,
-  segmentId: PendingRemoteSegmentId,
-): Promise<PendingRemoteSegmentRecord | null> {
-  return new Promise<PendingRemoteSegmentRecord | null>((resolve, reject) => {
-    const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(namespaceKey));
-    request.onerror = () =>
-      reject(request.error ?? new Error('pending remote segment cursor failed'));
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) {
-        resolve(null);
-        return;
-      }
-      const candidate = decodeStoredPendingRemoteSegment(
-        cursor.value,
-        namespaceKey,
-        documentScopeKey,
-      );
-      if (candidate?.pendingRemoteSegmentId === segmentId) {
-        resolve(candidate);
-        return;
-      }
-      cursor.continue();
-    };
-  });
-}
-
-function findByStateInStore(
-  store: IDBObjectStore,
-  namespaceKey: string,
-  documentScopeKey: string,
-  state: PendingRemoteSegmentState,
-): Promise<readonly PendingRemoteSegmentRecord[]> {
-  return new Promise<readonly PendingRemoteSegmentRecord[]>((resolve, reject) => {
-    const records: PendingRemoteSegmentRecord[] = [];
-    const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(namespaceKey));
-    request.onerror = () =>
-      reject(request.error ?? new Error('pending remote segment state cursor failed'));
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) {
-        resolve(records);
-        return;
-      }
-      const candidate = decodeStoredPendingRemoteSegment(
-        cursor.value,
-        namespaceKey,
-        documentScopeKey,
-      );
-      if (candidate?.state === state) {
-        records.push(candidate);
-      }
-      cursor.continue();
-    };
-  }).then((records) => [...records].sort(comparePendingRemoteSegmentRecords));
-}
-
-function conflictReserve(
-  record: PendingRemoteSegmentRecord,
-  message: string,
-): Extract<PendingRemoteSegmentReserveResult, { status: 'conflict' }> {
-  return {
-    status: 'conflict',
-    record,
-    diagnostics: [{ code: 'VERSION_PENDING_REMOTE_CONFLICT', message, recoverability: 'none' }],
-  };
-}
-
-function conflictComplete(
-  record: PendingRemoteSegmentRecord,
-  message: string,
-): {
-  readonly status: 'conflict';
-  readonly record: PendingRemoteSegmentRecord;
-  readonly diagnostics: readonly PendingRemoteSegmentStoreDiagnostic[];
-} {
-  return {
-    status: 'conflict',
-    record,
-    diagnostics: [{ code: 'VERSION_PENDING_REMOTE_CONFLICT', message, recoverability: 'none' }],
-  };
-}
-
-function missingRead(message: string): PendingRemoteSegmentReadResult {
-  return {
-    status: 'missing',
-    record: null,
-    diagnostics: [{ code: 'VERSION_PENDING_REMOTE_NOT_FOUND', message, recoverability: 'repair' }],
-  };
-}
-
-function failedRead(message: string): PendingRemoteSegmentReadResult {
-  return {
-    status: 'failed',
-    record: null,
-    diagnostics: [{ code: 'VERSION_PROVIDER_FAILED', message, recoverability: 'retry' }],
-  };
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null;
 }

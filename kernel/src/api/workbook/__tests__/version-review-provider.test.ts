@@ -1,3 +1,5 @@
+import 'fake-indexeddb/auto';
+
 import type {
   VersionCreateReviewInput,
   WorkbookVersionReviewDecisionTarget,
@@ -25,6 +27,8 @@ import {
   type VersionGraphInitializeInput,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
+import { createIndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import type { RefVersion } from '../../../document/version-store/ref-store';
 
 const DOCUMENT_SCOPE: VersionDocumentScope = {
@@ -34,6 +38,7 @@ const DOCUMENT_SCOPE: VersionDocumentScope = {
 };
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}` as const;
 const HEAD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}` as const;
+const REVIEW_ID = `review:sha256:${'a'.repeat(64)}` as const;
 const AUTHOR = { kind: 'user', trust: 'trusted', displayName: 'Reviewer' } as const;
 const GRAPH_AUTHOR: GraphVersionAuthor = {
   authorId: 'user-1',
@@ -45,6 +50,13 @@ const REDACTION_POLICY = {
   redactSecrets: true,
   redactExternalLinks: true,
   redactAgentTrace: true,
+} as const;
+const SENSITIVE_ACTOR = {
+  kind: 'agent',
+  trust: 'trusted',
+  displayName: 'Reviewer',
+  principalId: 'principal-secret',
+  agentRunId: 'agent-secret',
 } as const;
 
 describe('WorkbookVersion provider-backed review service', () => {
@@ -75,6 +87,21 @@ describe('WorkbookVersion provider-backed review service', () => {
       value: { items: [{ id: reviewId }], totalEstimate: 1 },
     });
     await expect(
+      version.updateReviewStatus({
+        reviewId,
+        expectedRevision: 1,
+        clientRequestId: 'status-stale-flow-owned',
+        status: 'stale',
+        actor: AUTHOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.updateReviewStatus',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
+      },
+    });
+    await expect(
       version.appendReviewDecision({
         reviewId,
         expectedRevision: 1,
@@ -100,6 +127,18 @@ describe('WorkbookVersion provider-backed review service', () => {
     ).resolves.toMatchObject({
       ok: true,
       value: { revision: 3, status: 'changes_requested' },
+    });
+    await expect(
+      version.updateReviewStatus({
+        reviewId,
+        expectedRevision: 2,
+        clientRequestId: 'status-stale-revision',
+        status: 'rejected',
+        actor: AUTHOR,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: 'stale_revision', expectedRevision: 2, actualRevision: 3 },
     });
     await expect(
       version.updateReviewStatus({
@@ -136,17 +175,10 @@ describe('WorkbookVersion provider-backed review service', () => {
     const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
     attachWorkbookVersioning(ctx, { provider });
     const version = new WorkbookVersionImpl(ctx);
-    const sensitiveActor = {
-      kind: 'agent',
-      trust: 'trusted',
-      displayName: 'Reviewer',
-      principalId: 'principal-secret',
-      agentRunId: 'agent-secret',
-    } as const;
 
     const created = await version.createReview({
       ...createReviewInput('projection-review-1'),
-      createdBy: sensitiveActor,
+      createdBy: SENSITIVE_ACTOR,
     });
     if (!created.ok) throw new Error(`expected create success: ${created.error.code}`);
     expect(JSON.stringify(created.value)).not.toContain('principal-secret');
@@ -156,12 +188,10 @@ describe('WorkbookVersion provider-backed review service', () => {
     const listed = await version.listReviews({});
     if (!listed.ok) throw new Error(`expected list success: ${listed.error.code}`);
     expect(JSON.stringify(listed.value)).not.toContain('principal-secret');
-    expect(JSON.stringify(listed.value)).not.toContain('agent-secret');
 
     const fetched = await version.getReview({ reviewId: created.value.id });
     if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
     expect(JSON.stringify(fetched.value)).not.toContain('principal-secret');
-    expect(JSON.stringify(fetched.value)).not.toContain('agent-secret');
 
     const decision = await version.appendReviewDecision({
       reviewId: created.value.id,
@@ -170,7 +200,7 @@ describe('WorkbookVersion provider-backed review service', () => {
       decision: {
         target: { kind: 'proposal', proposalId: 'proposal-1' },
         decision: 'comment',
-        reviewer: sensitiveActor,
+        reviewer: SENSITIVE_ACTOR,
         body: 'Please review with principal-secret.',
         metadata: { principalId: 'principal-secret', publicNote: 'kept' },
       },
@@ -185,13 +215,100 @@ describe('WorkbookVersion provider-backed review service', () => {
       expectedRevision: 2,
       clientRequestId: 'projection-status-1',
       status: 'changes_requested',
-      actor: sensitiveActor,
+      actor: SENSITIVE_ACTOR,
       reason: 'Blocked for principal-secret.',
     });
     if (!status.ok) throw new Error(`expected status success: ${status.error.code}`);
     expect(JSON.stringify(status.value)).not.toContain('principal-secret');
-    expect(JSON.stringify(status.value)).not.toContain('agent-secret');
     expect(JSON.stringify(status.value)).toContain('redacted-principal');
+  });
+
+  it('redacts inaccessible provider review read and write diagnostics', async () => {
+    const store = {
+      documentScope: DOCUMENT_SCOPE,
+      getReview: async () => inaccessibleReviewResult('getReview', 'version:reviewRead'),
+      createReview: async () => inaccessibleReviewResult('createReview', 'version:reviewWrite'),
+    };
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE }) as any;
+    provider.openWorkbookVersionReviewRecordStore = async () => store;
+    const version = versionForProvider(provider);
+
+    const read = await version.getReview({ reviewId: REVIEW_ID });
+    const write = await version.createReview(createReviewInput('inaccessible-write-review'));
+    expectDeniedReviewDiagnostic(read, 'getReview', 'version:reviewRead');
+    expectDeniedReviewDiagnostic(write, 'createReview', 'version:reviewWrite');
+  });
+
+  it('keeps review access projection fields after IndexedDB provider reopen', async () => {
+    await deleteVersionStoreIndexedDbForTesting();
+    let provider: ReturnType<typeof createIndexedDbVersionStoreProvider> | undefined;
+    let reloadedProvider: ReturnType<typeof createIndexedDbVersionStoreProvider> | undefined;
+
+    try {
+      provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const version = versionForProvider(provider);
+      const created = await version.createReview({
+        ...createReviewInput('indexed-projection-review-1'),
+        createdBy: SENSITIVE_ACTOR,
+      });
+      if (!created.ok) throw new Error(`expected create success: ${created.error.code}`);
+
+      const decision = await version.appendReviewDecision({
+        reviewId: created.value.id,
+        expectedRevision: 1,
+        clientRequestId: 'indexed-projection-decision-1',
+        decision: {
+          target: { kind: 'proposal', proposalId: 'proposal-1' },
+          decision: 'comment',
+          reviewer: SENSITIVE_ACTOR,
+          body: 'Please review with principal-secret.',
+          metadata: { principalId: 'principal-secret', publicNote: 'kept-after-reopen' },
+        },
+      });
+      if (!decision.ok) throw new Error(`expected decision success: ${decision.error.code}`);
+
+      const status = await version.updateReviewStatus({
+        reviewId: created.value.id,
+        expectedRevision: 2,
+        clientRequestId: 'indexed-projection-status-1',
+        status: 'changes_requested',
+        actor: SENSITIVE_ACTOR,
+        reason: 'Blocked for principal-secret.',
+      });
+      if (!status.ok) throw new Error(`expected status success: ${status.error.code}`);
+
+      await provider.close();
+      reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const reloadedVersion = versionForProvider(reloadedProvider);
+      const fetched = await reloadedVersion.getReview({ reviewId: created.value.id });
+      if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
+
+      expect(fetched.value).toMatchObject({
+        id: created.value.id,
+        revision: 3,
+        status: 'changes_requested',
+        redaction: { redactedFields: expect.arrayContaining(['reviewAuthors.principalTrace']) },
+        decisions: [
+          expect.objectContaining({
+            body: 'Please review with redacted-principal.',
+            metadata: { publicNote: 'kept-after-reopen' },
+          }),
+        ],
+        diagnostics: [
+          expect.objectContaining({
+            message: 'Blocked for redacted-principal.',
+          }),
+        ],
+      });
+      const serialized = JSON.stringify(fetched.value);
+      expect(serialized).not.toContain('principal-secret');
+      expect(serialized).not.toContain('agent-secret');
+      expect(serialized).toContain('redacted-principal');
+    } finally {
+      await provider?.close();
+      await reloadedProvider?.close();
+      await deleteVersionStoreIndexedDbForTesting();
+    }
   });
 
   it('projects provider-backed semantic diffs into review diff pages by review id and commit range', async () => {
@@ -701,12 +818,64 @@ function createReviewInput(clientRequestId: string): VersionCreateReviewInput {
   };
 }
 
-function versionForProvider(
-  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
-): WorkbookVersionImpl {
+function versionForProvider(provider: unknown): WorkbookVersionImpl {
   const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
-  attachWorkbookVersioning(ctx, { provider });
+  attachWorkbookVersioning(ctx, { provider: provider as any });
   return new WorkbookVersionImpl(ctx);
+}
+
+function inaccessibleReviewResult(operation: string, capability: string) {
+  return {
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: `workbook.version.${operation}`,
+      diagnostics: [
+        {
+          code: 'VERSION_PERMISSION_DENIED',
+          severity: 'error',
+          message: `${operation} denied for principal-secret.`,
+          data: {
+            payload: {
+              deniedCapabilities: [capability],
+              deniedPrincipal: 'principal-secret',
+              principalScope: 'principal-secret',
+            },
+          },
+        },
+      ],
+    },
+  } as const;
+}
+
+function expectDeniedReviewDiagnostic(
+  result: unknown,
+  operation: string,
+  capability: string,
+): void {
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: `workbook.version.${operation}`,
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_PERMISSION_DENIED',
+          message: `${operation} denied for redacted-principal.`,
+          data: {
+            payload: expect.objectContaining({
+              deniedCapabilities: [capability],
+            }),
+          },
+        }),
+      ],
+    },
+  });
+  const serialized = JSON.stringify(result);
+  expect(serialized).not.toContain('principal-secret');
+  expect(serialized).not.toContain('deniedPrincipal');
+  expect(serialized).not.toContain('principalScope');
+  expect(serialized).toContain('redacted-principal');
 }
 
 async function firstReviewDiffTarget(

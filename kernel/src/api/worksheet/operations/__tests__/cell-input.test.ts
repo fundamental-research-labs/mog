@@ -27,6 +27,21 @@ describe('toCellInput', () => {
     expect(toCellInput('hello')).toEqual({ kind: 'parse', text: 'hello' });
   });
 
+  it('significant leading-zero numeric strings → literal text', () => {
+    expect(toCellInput('000184')).toEqual({ kind: 'literal', text: '000184' });
+    expect(toCellInput('00')).toEqual({ kind: 'literal', text: '00' });
+    expect(toCellInput('-007')).toEqual({ kind: 'literal', text: '-007' });
+    expect(toCellInput('0123.45')).toEqual({ kind: 'literal', text: '0123.45' });
+    expect(toCellInput('  000184  ')).toEqual({ kind: 'literal', text: '  000184  ' });
+  });
+
+  it('ordinary numeric-looking strings still use parse', () => {
+    expect(toCellInput('42')).toEqual({ kind: 'parse', text: '42' });
+    expect(toCellInput('0')).toEqual({ kind: 'parse', text: '0' });
+    expect(toCellInput('0.5')).toEqual({ kind: 'parse', text: '0.5' });
+    expect(toCellInput('01/02/2026')).toEqual({ kind: 'parse', text: '01/02/2026' });
+  });
+
   it('finite number → value', () => {
     expect(toCellInput(42)).toEqual({ kind: 'value', value: 42 });
     expect(toCellInput(0)).toEqual({ kind: 'value', value: 0 });

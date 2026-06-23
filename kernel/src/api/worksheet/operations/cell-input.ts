@@ -20,6 +20,9 @@
  * - `''` (empty string)        → `{ kind: 'clear' }` — Excel convention: an
  *   empty textbox clears the cell. Callers who want the rare "store empty
  *   text" intent must pass `{ kind: 'literal', text: '' }` explicitly.
+ * - string with significant leading zero numeric shape
+ *                              → `{ kind: 'literal', text: value }` — account
+ *   IDs such as `"000184"` must not be coerced to `184`.
  * - any other string           → `{ kind: 'parse', text: value }`
  * - finite number / boolean    → `{ kind: 'value', value }`
  * - non-finite number          → `{ kind: 'parse', text: String(value) }`
@@ -47,6 +50,12 @@ export type { CellInput } from '../../../bridges/compute/compute-types.gen';
  */
 export type ToCellInputValue = CellValue | CellValuePrimitive | undefined;
 
+function hasSignificantLeadingZeroNumericShape(value: string): boolean {
+  const trimmed = value.trim();
+  const unsigned = trimmed.startsWith('-') ? trimmed.slice(1) : trimmed;
+  return /^0\d+(?:\.\d+)?$/.test(unsigned);
+}
+
 /**
  * Normalise a user-supplied cell value into a `CellInput`. See module
  * docstring for semantics.
@@ -69,6 +78,9 @@ export function toCellInput(value: ToCellInputValue): CellInput {
   }
   if (typeof value === 'boolean') {
     return { kind: 'value', value };
+  }
+  if (hasSignificantLeadingZeroNumericShape(value)) {
+    return { kind: 'literal', text: value };
   }
   return { kind: 'parse', text: value };
 }

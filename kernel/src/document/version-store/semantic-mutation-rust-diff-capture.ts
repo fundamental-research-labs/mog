@@ -1,5 +1,6 @@
 import type { VersionNormalCommitCaptureInput } from './commit-service';
-import { failedStoreResult, versionStoreDiagnostic, type VersionStoreFailure } from './provider';
+import type { VersionStoreFailure } from './provider';
+import { missingNormalSemanticChangeSetFailure } from './semantic-mutation-capture-diagnostics';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 
@@ -93,19 +94,9 @@ function failedSemanticCapture(
   reason: string,
   details: Readonly<Record<string, string | number | boolean | null>> = {},
 ): VersionStoreFailure {
-  return failedStoreResult(
-    [
-      versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
-        operation: 'commitGraphWrite',
-        documentScope: input.commit.provider.documentScope,
-        namespace: input.commit.namespace,
-        refName: input.commit.currentRef.name,
-        commitId: input.commit.currentRef.commitId,
-        safeMessage: reason,
-        mutationGuarantee: 'no-write-attempted',
-        details,
-      }),
-    ],
-    'no-write-attempted',
-  );
+  return missingNormalSemanticChangeSetFailure({
+    commit: input.commit,
+    safeMessage: reason,
+    details,
+  });
 }

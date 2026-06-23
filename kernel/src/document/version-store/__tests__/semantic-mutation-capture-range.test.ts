@@ -198,8 +198,7 @@ describe('semantic mutation capture range cell operations', () => {
     });
 
     captured.finalize?.({ status: 'success', commitId: COMMIT_ID });
-    const afterSuccess = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(afterSuccess.input.mutationSegmentRecords).toEqual([]);
+    expectCaptureMissingChangeSet(await capture.captureNormalCommit(captureInput()));
   });
 });
 
@@ -228,4 +227,11 @@ function expectCaptureSuccess(
     throw new Error(`expected capture success: ${result.diagnostics[0]?.code}`);
   }
   return result;
+}
+
+function expectCaptureMissingChangeSet(result: VersionNormalCommitCaptureResult): void {
+  expect(result).toMatchObject({
+    status: 'failed',
+    diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_CHANGE_SET' })],
+  });
 }

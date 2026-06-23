@@ -6,14 +6,15 @@ export function missingNormalSemanticChangeSetFailure(input: {
   readonly safeMessage: string;
   readonly details?: Readonly<Record<string, string | number | boolean | null>>;
 }): VersionStoreFailure {
+  const { commit } = input;
   return failedStoreResult(
     [
       versionStoreDiagnostic('VERSION_MISSING_CHANGE_SET', {
         operation: 'commitGraphWrite',
-        documentScope: input.commit.provider.documentScope,
-        namespace: input.commit.namespace,
-        refName: input.commit.currentRef.name,
-        commitId: input.commit.currentRef.commitId,
+        documentScope: commit.provider?.documentScope,
+        namespace: commit.namespace,
+        refName: commit.currentRef?.name,
+        commitId: commit.currentRef?.commitId,
         safeMessage: input.safeMessage,
         mutationGuarantee: 'no-write-attempted',
         details: input.details ?? {},

@@ -109,7 +109,7 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
     expect(staleStatus).toHaveTextContent(
       'Current checkout is stale because the branch head moved.',
     );
-    expect(staleStatus).toHaveTextContent('version.surfaceStatus.currentStale.refMoved');
+    expect(staleStatus).not.toHaveTextContent('version.surfaceStatus.currentStale.refMoved');
     expect(staleStatus).not.toHaveTextContent(rawProviderRef);
     expect(staleStatus).not.toHaveTextContent(HEAD_COMMIT_ID);
     expect(staleStatus).not.toHaveTextContent(LATEST_COMMIT_ID);
@@ -155,10 +155,11 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
       'data-reconciliation-code',
       'version.surfaceStatus.pendingRemotePromotion',
     );
-    expect(staleStatus).toHaveTextContent(
+    expect(staleStatus).toHaveTextContent('Remote reconciliation is pending.');
+    expect(staleStatus).not.toHaveTextContent(
       'version.surfaceStatus.currentStale.activeSessionBehind',
     );
-    expect(staleStatus).toHaveTextContent('version.surfaceStatus.pendingRemotePromotion');
+    expect(staleStatus).not.toHaveTextContent('version.surfaceStatus.pendingRemotePromotion');
     expect(staleStatus).not.toHaveTextContent(rawProviderRef);
     expect(staleStatus).not.toHaveTextContent('provider-yjs');
   });

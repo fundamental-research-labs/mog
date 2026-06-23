@@ -36,11 +36,8 @@ export function VersionCurrentStaleStatus({
       <div className="font-medium text-ss-text">Current checkout is stale</div>
       <div className="text-ss-text-secondary">{staleStatus.message}</div>
       <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-snug text-ss-text-secondary">
-        <span className="break-all font-mono text-ss-text">{staleStatus.statusCode}</span>
         {staleStatus.reconciliationCode ? (
-          <span className="break-all font-mono text-ss-text">
-            {staleStatus.reconciliationCode}
-          </span>
+          <span>Remote reconciliation is pending.</span>
         ) : null}
         <span>Destructive version actions remain disabled until this status is refreshed.</span>
       </div>

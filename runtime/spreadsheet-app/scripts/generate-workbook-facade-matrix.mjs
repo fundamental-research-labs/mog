@@ -53,6 +53,7 @@ const VERSION_METHOD_REQUIREMENTS = {
   checkout: ['version:checkout'],
   merge: ['version:mergePreview'],
   applyMerge: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
+  revert: ['version:revert'],
   saveMergeResolutions: ['version:mergePreview', 'version:mergeApply'],
   getMergeConflictDetail: ['version:mergePreview'],
   putMergeResolutionPayload: ['version:mergePreview', 'version:mergeApply'],
@@ -89,7 +90,15 @@ const VERSION_METHOD_REQUIREMENTS = {
   deleteBranch: ['version:branch'],
   deleteRef: ['version:branch'],
 };
-const PROPOSAL_METHOD_NAMES = new Set([
+const VERSION_REVIEW_METHOD_NAMES = new Set([
+  'listReviews',
+  'getReview',
+  'createReview',
+  'appendReviewDecision',
+  'updateReviewStatus',
+  'getReviewDiff',
+]);
+const VERSION_PROPOSAL_METHOD_NAMES = new Set([
   'createProposal',
   'startProposalWorkspace',
   'getProposalWorkspace',
@@ -104,6 +113,15 @@ const PROPOSAL_METHOD_NAMES = new Set([
   'rejectProposal',
   'supersedeProposal',
 ]);
+const VERSION_REVERT_METHOD_NAMES = new Set(['revert']);
+const VERSION_PROVENANCE_METHOD_NAMES = new Set(['promotePendingRemote']);
+const VERSION_METHOD_MATRIX_ENTRY_NAMES = new Set(Object.keys(VERSION_METHOD_REQUIREMENTS));
+const VERSION_METHOD_GROUPS = [
+  ['review', VERSION_REVIEW_METHOD_NAMES],
+  ['proposal', VERSION_PROPOSAL_METHOD_NAMES],
+  ['revert', VERSION_REVERT_METHOD_NAMES],
+  ['provenance', VERSION_PROVENANCE_METHOD_NAMES],
+];
 const WRITE_PREFIXES = [
   'add',
   'apply',
@@ -244,7 +262,7 @@ for (const [interfaceName, interfaceSpec] of Object.entries(spec.interfaces)) {
   }
   matrix[interfaceName] = entries;
 }
-for (const methodName of PROPOSAL_METHOD_NAMES) {
+for (const methodName of VERSION_METHOD_MATRIX_ENTRY_NAMES) {
   matrix.WorkbookVersion[methodName] ??= {
     decision: 'allow',
     ...versionMethodEntry(methodName),
@@ -300,6 +318,32 @@ function assertVersionCapabilityMatrix() {
       throw new Error(
         `WorkbookVersion.${methodName} must not map to generic workbook capabilities`,
       );
+    }
+  }
+
+  for (const [groupName, methodNames] of VERSION_METHOD_GROUPS) {
+    for (const methodName of methodNames) {
+      if (!Object.hasOwn(VERSION_METHOD_REQUIREMENTS, methodName)) {
+        throw new Error(
+          `WorkbookVersion.${methodName} ${groupName} method is missing explicit version capability requirements`,
+        );
+      }
+      const entry = versionMatrix[methodName];
+      if (!entry) {
+        throw new Error(
+          `workbook facade capability matrix is missing WorkbookVersion.${methodName} ${groupName} method`,
+        );
+      }
+      if (entry.capability !== undefined) {
+        throw new Error(
+          `WorkbookVersion.${methodName} ${groupName} method must use capabilities or conditionalCapabilities, got scalar ${entry.capability}`,
+        );
+      }
+      if (!Array.isArray(entry.capabilities)) {
+        throw new Error(
+          `WorkbookVersion.${methodName} ${groupName} method must declare ordered capabilities`,
+        );
+      }
     }
   }
 }

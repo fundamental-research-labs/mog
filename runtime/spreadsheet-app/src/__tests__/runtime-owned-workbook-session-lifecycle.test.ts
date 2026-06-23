@@ -459,9 +459,41 @@ test('version surface status remains available without version read grant', asyn
   let runtime: SpreadsheetRuntime | undefined;
   try {
     const versionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
+    const assertVersionCapabilityEntry = (
+      methodName: keyof typeof versionMatrix,
+      expected: readonly SpreadsheetCapability[],
+    ) => {
+      const entry = versionMatrix[methodName] as {
+        readonly capability?: SpreadsheetCapability;
+        readonly capabilities?: readonly SpreadsheetCapability[];
+      };
+      assert.equal(entry.capability, undefined);
+      assert.deepEqual(entry.capabilities, expected);
+    };
+
     assert.deepEqual(versionMatrix.getSurfaceStatus.capabilities, []);
     assert.equal(versionMatrix.getSurfaceStatus.capability, undefined);
-    assert.deepEqual(versionMatrix.getStatus.capabilities, ['version:read']);
+    assertVersionCapabilityEntry('getStatus', ['version:read']);
+    assertVersionCapabilityEntry('getReview', ['version:reviewRead']);
+    assertVersionCapabilityEntry('createReview', ['version:reviewWrite']);
+    assertVersionCapabilityEntry('getReviewDiff', ['version:diff']);
+    assert.deepEqual(versionMatrix.getReviewDiff.conditionalCapabilities, [
+      {
+        when: {
+          argumentIndex: 0,
+          path: ['reviewId'],
+          presence: 'present',
+        },
+        capabilities: ['version:reviewRead'],
+      },
+    ]);
+    assertVersionCapabilityEntry('createProposal', ['version:proposal']);
+    assertVersionCapabilityEntry('acceptProposal', ['version:proposal', 'version:branch']);
+    assertVersionCapabilityEntry('revert', ['version:revert']);
+    assertVersionCapabilityEntry('promotePendingRemote', [
+      'version:remotePromote',
+      'version:provenance',
+    ]);
 
     const deniedVersionCapabilities = new Set<SpreadsheetCapability>([
       'version:read',
@@ -524,6 +556,31 @@ test('version surface status remains available without version read grant', asyn
           'version:mergePreview',
           'version:mergeApply',
           'version:branch',
+        ]);
+      }
+    }
+    const revertDenied = await facade.version.revert(
+      {} as Parameters<typeof facade.version.revert>[0],
+    );
+    assert.deepEqual(revertDenied, {
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:revert',
+        dependency: 'hostCapability',
+        reason: 'Capability "version:revert" is denied for WorkbookVersion.revert',
+        retryable: false,
+      },
+    });
+    const promoteRemoteDenied = await facade.version.promotePendingRemote();
+    assert.equal(promoteRemoteDenied.ok, false);
+    if (!promoteRemoteDenied.ok) {
+      assert.equal(promoteRemoteDenied.error.code, 'version_capability_unavailable');
+      if (promoteRemoteDenied.error.code === 'version_capability_unavailable') {
+        assert.equal(promoteRemoteDenied.error.capability, 'version:remotePromote');
+        assert.deepEqual(promoteRemoteDenied.error.diagnostics?.[0]?.data?.deniedCapabilities, [
+          'version:remotePromote',
+          'version:provenance',
         ]);
       }
     }

@@ -3817,6 +3817,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:proposal'],
     },
+    revert: {
+      decision: 'allow',
+      capabilities: ['version:revert'],
+    },
     saveMergeResolutions: {
       decision: 'allow',
       capabilities: ['version:mergePreview', 'version:mergeApply'],

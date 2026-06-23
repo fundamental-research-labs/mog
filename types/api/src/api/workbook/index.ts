@@ -191,6 +191,7 @@ export type {
   WorkbookVersionRolloutStage,
   WorkbookVersionStatus,
 } from './version';
+export type * from './version-revert';
 export type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,

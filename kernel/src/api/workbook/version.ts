@@ -41,6 +41,9 @@ import type {
   VersionPromotePendingRemoteResult,
   VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult,
+  VersionRevertInput,
+  VersionRevertOptions,
+  VersionRevertResult,
   VersionRecordRevision,
   VersionRef,
   VersionRefListResult,
@@ -106,6 +109,7 @@ import {
   hasAttachedPendingRemotePromotionService,
   promotePendingRemoteWorkbookVersion,
 } from './version-pending-remote';
+import { revertWorkbookVersion } from './version-revert';
 import {
   acceptWorkbookVersionProposal,
   commitWorkbookVersionProposalWorkspace,
@@ -531,6 +535,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     options: VersionApplyMergeOptions = {},
   ): Promise<VersionResult<VersionApplyMergeResult>> {
     return versionResultFromApplyMerge(await applyMergeWorkbookVersion(this.ctx, input, options));
+  }
+  async revert(
+    input: VersionRevertInput,
+    options: VersionRevertOptions = {},
+  ): Promise<VersionResult<VersionRevertResult>> {
+    return revertWorkbookVersion(this.ctx, input, options);
   }
   async promotePendingRemote(
     options: VersionPromotePendingRemoteOptions = {},

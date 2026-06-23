@@ -159,6 +159,7 @@ export type {
   WorkbookDiffPage,
 } from './workbook';
 export type * from './workbook/version-proposal';
+export type * from './workbook/version-revert';
 export type {
   FormulaReferenceDiagnostic,
   FormulaReferenceDiagnosticsOptions,

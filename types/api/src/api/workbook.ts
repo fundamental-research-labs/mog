@@ -1,6 +1,5 @@
 /**
  * Unified Spreadsheet API -- Workbook Interface
- *
  * THE definitive API for all workbook-level operations.
  * Every consumer -- headless agents, LLM code, OS apps, browser app -- uses this.
  * No exceptions, no bypasses.
@@ -136,6 +135,7 @@ export type {
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
 export type * from './workbook/version-proposal';
+export type * from './workbook/version-revert';
 export type * from './workbook/version-review';
 export type { WorkbookXlsxExportOptions } from './workbook/xlsx-export';
 

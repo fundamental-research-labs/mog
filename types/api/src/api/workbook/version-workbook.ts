@@ -44,6 +44,11 @@ import type {
   WorkbookVersionStatus,
   VersionSurfaceStatus,
 } from './version';
+import type {
+  VersionRevertInput,
+  VersionRevertOptions,
+  VersionRevertResult,
+} from './version-revert';
 import type { VersionResult } from './version-shared';
 import type {
   VersionGetMergeConflictDetailRequest,
@@ -97,6 +102,10 @@ export interface WorkbookVersion {
     input: VersionApplyMergeInput,
     options?: VersionApplyMergeOptions,
   ): Promise<VersionResult<VersionApplyMergeResult>>;
+  revert(
+    input: VersionRevertInput,
+    options?: VersionRevertOptions,
+  ): Promise<VersionResult<VersionRevertResult>>;
   saveMergeResolutions(
     input: VersionSaveMergeResolutionsRequest,
   ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;

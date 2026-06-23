@@ -3,7 +3,20 @@ import type { VersionDiagnostic, VersionStoreDiagnostic } from '@mog-sdk/contrac
 import { projectVersionHistoryDiagnosticsForAccess } from '../version-history-diagnostic-projection';
 import { versionFailureFromStoreDiagnostics } from '../version-result';
 
-const FORBIDDEN_DETAIL_TERMS = ['hidden', 'deleted', 'protected', 'agent', 'opaque'];
+const FORBIDDEN_DETAIL_TERMS = [
+  'hidden',
+  'deleted',
+  'protected',
+  'agent',
+  'opaque',
+  'principal-secret',
+  'user-secret',
+  'refs/heads',
+  'sheet1!a1',
+  'salary-secret',
+  'raw-value-secret',
+  'commit-secret',
+];
 
 describe('version history diagnostic projection', () => {
   it('projects capability denials to public summaries without sensitive diagnostic details', () => {
@@ -65,6 +78,110 @@ describe('version history diagnostic projection', () => {
           diagnosticCount: 1,
           capability: 'version:reviewRead',
           deniedCapabilities: ['version:reviewRead'],
+        },
+      },
+    ]);
+    expectNoForbiddenDetails(projected);
+  });
+
+  it('extracts nested public capabilities without leaking raw principal, ref, path, or value payloads', () => {
+    const projected = projectVersionHistoryDiagnosticsForAccess(
+      [
+        sensitiveDiagnostic({
+          payload: {
+            events: [
+              {
+                principalId: 'principal-secret',
+                ref: { capability: 'version:proposal' },
+                path: { deniedCapabilities: ['version:mergeApply'] },
+                value: {
+                  capability: 'version:commit',
+                  deniedCapabilities: ['version:branch'],
+                },
+              },
+              {
+                capability: 'version:diff',
+                deniedCapabilities: ['version:read', 'principal:secret', 'refs/heads/secret'],
+              },
+              {
+                nested: [
+                  {
+                    deniedCapabilities: [
+                      'version:checkout',
+                      {
+                        capability: 'version:branch',
+                        value: 'raw-value-secret',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            rawValue: 'version:reviewWrite',
+          },
+        }),
+      ],
+      {
+        kind: 'access-denied',
+      },
+    );
+
+    expect(projected).toEqual([
+      {
+        code: 'version_access_denied',
+        severity: 'error',
+        message: 'Version history access is denied for this caller.',
+        data: {
+          kind: 'access-denied',
+          diagnosticCount: 1,
+          capability: 'version:diff',
+          deniedCapabilities: [
+            'version:read',
+            'version:checkout',
+            'version:branch',
+            'version:diff',
+          ],
+        },
+      },
+    ]);
+    expectNoForbiddenDetails(projected);
+    expect(JSON.stringify(projected)).not.toContain('version:proposal');
+    expect(JSON.stringify(projected)).not.toContain('version:mergeApply');
+    expect(JSON.stringify(projected)).not.toContain('version:commit');
+    expect(JSON.stringify(projected)).not.toContain('version:reviewWrite');
+  });
+
+  it('replaces source access-denied messages with a fixed public message', () => {
+    const projected = projectVersionHistoryDiagnosticsForAccess(
+      [
+        {
+          code: 'VERSION_PERMISSION_DENIED',
+          severity: 'error',
+          message: 'Denied principal-secret on refs/heads/secret at Sheet1!A1 with salary-secret.',
+          data: {
+            capability: 'version:read',
+            principalId: 'principal-secret',
+            ref: 'refs/heads/secret',
+            path: 'Sheet1!A1',
+            value: 'salary-secret',
+          },
+        },
+      ],
+      {
+        kind: 'access-denied',
+      },
+    );
+
+    expect(projected).toEqual([
+      {
+        code: 'version_access_denied',
+        severity: 'error',
+        message: 'Version history access is denied for this caller.',
+        data: {
+          kind: 'access-denied',
+          diagnosticCount: 1,
+          capability: 'version:read',
+          deniedCapabilities: ['version:read'],
         },
       },
     ]);
@@ -138,6 +255,10 @@ function hostDeniedStoreDiagnostic(): VersionStoreDiagnostic {
       protectedRangeId: 'range-secret',
       agentTraceId: 'run-secret',
       opaqueObjectDigest: 'digest-secret',
+      principalId: 'principal-secret',
+      ref: 'refs/heads/secret',
+      path: 'Sheet1!A1',
+      value: 'salary-secret',
     },
     redacted: true,
   };

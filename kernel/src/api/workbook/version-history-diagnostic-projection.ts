@@ -38,6 +38,7 @@ const VERSION_CAPABILITY_DEPENDENCIES = new Set<string>([
   'hostCapability',
   'upstreamRevertContract',
 ]);
+const MAX_DIAGNOSTIC_PAYLOAD_SCAN_DEPTH = 12;
 
 export function projectVersionHistoryDiagnosticsForAccess(
   diagnostics: readonly VersionDiagnostic[],
@@ -108,23 +109,18 @@ function firstDiagnosticCapability(
   diagnostics: readonly VersionDiagnostic[],
 ): VersionCapability | undefined {
   for (const diagnostic of diagnostics) {
-    const capability = publicVersionCapability(diagnostic.data?.capability);
+    const capability = firstPublicCapabilityFromDiagnosticData(diagnostic.data);
     if (capability) return capability;
-    for (const candidate of deniedCapabilitiesFromDiagnostic(diagnostic)) {
-      const denied = publicVersionCapability(candidate);
-      if (denied) return denied;
-    }
+    const denied = deniedCapabilitiesFromDiagnostic(diagnostic)[0];
+    if (denied) return denied;
   }
   return undefined;
 }
 
 function deniedCapabilitiesFromDiagnostic(
   diagnostic: VersionDiagnostic,
-): readonly (VersionCapability | string)[] {
-  const denied = diagnostic.data?.deniedCapabilities;
-  return Array.isArray(denied)
-    ? denied.filter((value): value is string => typeof value === 'string')
-    : [];
+): readonly VersionCapability[] {
+  return publicDeniedCapabilitiesFromDiagnosticData(diagnostic.data);
 }
 
 function publicDeniedCapabilities(
@@ -144,6 +140,127 @@ function publicVersionCapability(value: unknown): VersionCapability | undefined 
   return typeof value === 'string' && VERSION_CAPABILITIES.has(value)
     ? (value as VersionCapability)
     : undefined;
+}
+
+function firstPublicCapabilityFromDiagnosticData(
+  data: VersionDiagnostic['data'] | undefined,
+): VersionCapability | undefined {
+  return collectPublicCapabilitiesFromDiagnosticData(data, 'capability')[0];
+}
+
+function publicDeniedCapabilitiesFromDiagnosticData(
+  data: VersionDiagnostic['data'] | undefined,
+): readonly VersionCapability[] {
+  return collectPublicCapabilitiesFromDiagnosticData(data, 'deniedCapabilities');
+}
+
+function collectPublicCapabilitiesFromDiagnosticData(
+  value: unknown,
+  field: 'capability' | 'deniedCapabilities',
+): readonly VersionCapability[] {
+  const capabilities: VersionCapability[] = [];
+  collectPublicCapabilities(value, field, capabilities, new WeakSet(), 0);
+  return [...new Set(capabilities)];
+}
+
+function collectPublicCapabilities(
+  value: unknown,
+  field: 'capability' | 'deniedCapabilities',
+  output: VersionCapability[],
+  seen: WeakSet<object>,
+  depth: number,
+): void {
+  if (depth > MAX_DIAGNOSTIC_PAYLOAD_SCAN_DEPTH) return;
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return;
+    seen.add(value);
+    for (const item of value) {
+      collectPublicCapabilities(item, field, output, seen, depth + 1);
+    }
+    return;
+  }
+  if (!isRecord(value)) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  for (const [key, child] of Object.entries(value)) {
+    if (isSensitiveDiagnosticPayloadKey(key)) continue;
+    if (field === 'capability' && key === 'capability') {
+      addPublicCapability(child, output);
+      continue;
+    }
+    if (field === 'deniedCapabilities' && key === 'deniedCapabilities') {
+      collectDeniedCapabilityField(child, output, seen, depth + 1);
+      continue;
+    }
+    collectPublicCapabilities(child, field, output, seen, depth + 1);
+  }
+}
+
+function collectDeniedCapabilityField(
+  value: unknown,
+  output: VersionCapability[],
+  seen: WeakSet<object>,
+  depth: number,
+): void {
+  if (depth > MAX_DIAGNOSTIC_PAYLOAD_SCAN_DEPTH) return;
+  if (addPublicCapability(value, output)) return;
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return;
+    seen.add(value);
+    for (const item of value) {
+      collectDeniedCapabilityField(item, output, seen, depth + 1);
+    }
+    return;
+  }
+  if (!isRecord(value)) return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  for (const [key, child] of Object.entries(value)) {
+    if (isSensitiveDiagnosticPayloadKey(key)) continue;
+    if (key === 'capability') {
+      addPublicCapability(child, output);
+      continue;
+    }
+    collectDeniedCapabilityField(child, output, seen, depth + 1);
+  }
+}
+
+function addPublicCapability(value: unknown, output: VersionCapability[]): boolean {
+  const capability = publicVersionCapability(value);
+  if (!capability) return false;
+  output.push(capability);
+  return true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSensitiveDiagnosticPayloadKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.includes('principal') ||
+    normalized === 'actorid' ||
+    normalized === 'userid' ||
+    normalized === 'useremail' ||
+    normalized === 'agentrunid' ||
+    normalized.includes('path') ||
+    normalized.includes('ref') ||
+    normalized.includes('branch') ||
+    normalized.includes('commit') ||
+    normalized === 'head' ||
+    normalized.includes('revision') ||
+    normalized === 'value' ||
+    normalized === 'values' ||
+    normalized.endsWith('value') ||
+    normalized.endsWith('values') ||
+    normalized === 'before' ||
+    normalized === 'after' ||
+    normalized === 'formula' ||
+    normalized === 'result'
+  );
 }
 
 function publicVersionCapabilityDependency(

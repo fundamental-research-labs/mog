@@ -3,11 +3,13 @@ import { jest } from '@jest/globals';
 import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../../context';
+import { versionDocumentScopeKey } from '../../../document/version-store/provider';
 import {
   checkoutRebindIdentityDiagnosticDetails,
   rebindVersioningAfterCheckout,
 } from '../version-checkout-rebind';
 
+const PROVIDER_DOCUMENT_ID = 'provider-rebind-doc';
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const MOVED_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
 const SECRET_BRANCH = 'scenario/rebind-secret';
@@ -114,22 +116,84 @@ describe('version checkout rebind hardening', () => {
     });
     expectDiagnosticDetailsNotToLeak(error, [BASE_COMMIT_ID, MOVED_COMMIT_ID, SECRET_BRANCH]);
   });
+
+  it('rejects provider identity envelopes whose scope key and fields disagree', () => {
+    const expectedScope = { documentId: PROVIDER_DOCUMENT_ID };
+    const error = captureError(() =>
+      rebindVersioningAfterCheckout({
+        versioning: {
+          provider: { documentScope: expectedScope },
+          __mogCheckoutRebindIdentity: {
+            schemaVersion: 1,
+            providerDocumentScopeKey: versionDocumentScopeKey(expectedScope),
+            providerDocumentId: 'provider-rebind-other-doc',
+          },
+        },
+        nextContext: createDocumentContext(),
+      }),
+    );
+
+    expect(checkoutRebindIdentityDiagnosticDetails(error)).toEqual({
+      cause: 'VersionCheckoutRebindProviderIdentityError',
+      identityFenceReason: 'providerIdentityEnvelopeMismatch',
+      providerIdentityClass: 'scope',
+    });
+    expectDiagnosticDetailsNotToLeak(error, [
+      PROVIDER_DOCUMENT_ID,
+      'provider-rebind-other-doc',
+      'providerDocumentScopeKey',
+    ]);
+  });
+
+  it('rejects stale current ref evidence carried by the attached checkout session fallback', () => {
+    const error = captureError(() =>
+      rebindVersioningAfterCheckout({
+        versioning: {
+          versionSurfaceStatusService: {
+            readActiveCheckoutSession: () => ({
+              checkedOutCommitId: BASE_COMMIT_ID,
+              detached: false,
+              branchName: SECRET_BRANCH,
+              refHeadAtMaterialization: BASE_COMMIT_ID,
+              currentRefHeadId: MOVED_COMMIT_ID,
+            }),
+          },
+        },
+        nextContext: createDocumentContext(),
+      }),
+    );
+
+    expect(checkoutRebindIdentityDiagnosticDetails(error)).toEqual({
+      cause: 'VersionCheckoutRebindPriorCheckoutRefError',
+      identityFenceReason: 'priorCheckoutRefStale',
+      providerIdentityClass: 'ref',
+    });
+    expectDiagnosticDetailsNotToLeak(error, [BASE_COMMIT_ID, MOVED_COMMIT_ID, SECRET_BRANCH]);
+  });
 });
 
 function createDocumentContext(
   overrides: Record<string, unknown> = {},
 ): DocumentContext & { versioning?: unknown } {
   return {
-    computeBridge: {
-      encodeDiff: jest.fn(async () => new Uint8Array([0x01])),
-      semanticWorkbookStateEnvelope: jest.fn(async () => ({
-        schemaVersion: 1,
-        state: { sheets: {} },
-      })),
-      diffSemanticWorkbookStates: jest.fn(async () => ({ changes: [] })),
-    },
+    computeBridge: createComputeBridgeMock(),
     ...overrides,
   } as unknown as DocumentContext & { versioning?: unknown };
+}
+
+function createComputeBridgeMock(docId?: string, semanticWorkbookId = docId) {
+  return {
+    ...(docId ? { core: { docId } } : {}),
+    encodeDiff: jest.fn(async () => new Uint8Array([0x01])),
+    semanticWorkbookStateEnvelope: jest.fn(async () => ({
+      state: {
+        ...(semanticWorkbookId ? { workbookId: semanticWorkbookId } : {}),
+        sheets: {},
+      },
+      stateDigest: { algorithm: 'sha256', digest: '0'.repeat(64) },
+    })),
+    diffSemanticWorkbookStates: jest.fn(async () => ({ changes: [] })),
+  };
 }
 
 function captureError(run: () => void): unknown {

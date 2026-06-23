@@ -305,6 +305,8 @@ describe('WorkbookVersion checkout live collaboration admission', () => {
     ['provider-disconnected', false, 'disconnected'],
     ['provider-quarantine', true, 'quarantined'],
     ['provider-authority-stale', true, 'stale'],
+    ['provider-active', true, 'active'],
+    ['provider-status-unknown', true, 'unknown'],
   ] as const)(
     'blocks checkout when idle live collaboration reports %s lifecycle',
     async (sidecarStatus, remoteProviderAttached, providerLifecycleState) => {

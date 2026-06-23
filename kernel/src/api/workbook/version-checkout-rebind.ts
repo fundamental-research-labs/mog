@@ -6,15 +6,19 @@ import {
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from '../../document/version-store/provider';
-import {
-  REF_NAME_STORAGE_PREFIX,
-  validateRefName,
-} from '../../document/version-store/ref-name';
+import { REF_NAME_STORAGE_PREFIX, validateRefName } from '../../document/version-store/ref-name';
 import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
 import type { WorkbookVersioningConfig } from './types';
 
 const CHECKOUT_REBIND_IDENTITY_FIELD = '__mogCheckoutRebindIdentity';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const CHECKOUT_REBIND_IDENTITY_KEYS = new Set([
+  'schemaVersion',
+  'providerDocumentScopeKey',
+  'providerWorkspaceId',
+  'providerDocumentId',
+  'providerPrincipalScope',
+]);
 const MATERIALIZED_CONTEXT_ALLOWED_VERSIONING_KEYS = new Set([
   'surfaceStatusService',
   'versionSurfaceStatusService',
@@ -34,6 +38,7 @@ type RebindIdentityErrorReason =
   | 'priorCheckoutRefInvalid'
   | 'priorCheckoutRefStale'
   | 'providerDocumentMismatch'
+  | 'providerIdentityEnvelopeMismatch'
   | 'providerScopeInvalid'
   | 'providerScopeMismatch';
 
@@ -56,6 +61,7 @@ type PriorCheckoutSession =
       readonly detached: false;
       readonly branchName: string;
       readonly refHeadAtMaterialization: string;
+      readonly currentRefHeadId?: string;
     };
 
 type BoundMethod = (...args: readonly unknown[]) => unknown;
@@ -250,6 +256,7 @@ function readStoredRebindIdentity(
   if (value === undefined) return null;
   if (
     !isVersioningRecord(value) ||
+    !Object.keys(value).every((key) => CHECKOUT_REBIND_IDENTITY_KEYS.has(key)) ||
     value.schemaVersion !== 1 ||
     typeof value.providerDocumentScopeKey !== 'string' ||
     typeof value.providerDocumentId !== 'string' ||
@@ -261,7 +268,7 @@ function readStoredRebindIdentity(
       source === 'current' ? 'scope' : 'materialization',
     );
   }
-  return Object.freeze({
+  const identity = Object.freeze({
     schemaVersion: 1 as const,
     providerDocumentScopeKey: value.providerDocumentScopeKey,
     ...(value.providerWorkspaceId === undefined
@@ -272,6 +279,8 @@ function readStoredRebindIdentity(
       ? {}
       : { providerPrincipalScope: value.providerPrincipalScope }),
   });
+  validateStoredRebindIdentityEnvelope(identity, source);
+  return identity;
 }
 
 function readStoredRebindIdentityIfPresent(
@@ -296,10 +305,39 @@ function snapshotRootPortDocumentId(value: unknown): string | null {
   }
 }
 
+function validateStoredRebindIdentityEnvelope(
+  identity: CheckoutRebindIdentity,
+  source: 'current' | 'materialized',
+): void {
+  let scopeKey: string;
+  try {
+    scopeKey = versionDocumentScopeKey({
+      ...(identity.providerWorkspaceId === undefined
+        ? {}
+        : { workspaceId: identity.providerWorkspaceId }),
+      documentId: identity.providerDocumentId,
+      ...(identity.providerPrincipalScope === undefined
+        ? {}
+        : { principalScope: identity.providerPrincipalScope }),
+    });
+  } catch {
+    throw new VersionCheckoutRebindIdentityError(
+      source === 'current' ? 'currentIdentityInvalid' : 'materializationIdentityStale',
+      source === 'current' ? 'scope' : 'materialization',
+    );
+  }
+  if (scopeKey === identity.providerDocumentScopeKey) return;
+  throw new VersionCheckoutRebindIdentityError(
+    source === 'current' ? 'providerIdentityEnvelopeMismatch' : 'materializationIdentityStale',
+    source === 'current' ? 'scope' : 'materialization',
+  );
+}
+
 function errorNameForReason(reason: RebindIdentityErrorReason): string {
   switch (reason) {
     case 'currentIdentityInvalid':
     case 'providerDocumentMismatch':
+    case 'providerIdentityEnvelopeMismatch':
     case 'providerScopeInvalid':
     case 'providerScopeMismatch':
       return 'VersionCheckoutRebindProviderIdentityError';
@@ -331,6 +369,7 @@ function providerIdentityClassForReason(reason: RebindIdentityErrorReason): Prov
       return 'document';
     case 'providerScopeInvalid':
       return 'provider';
+    case 'providerIdentityEnvelopeMismatch':
     case 'currentIdentityInvalid':
     case 'providerScopeMismatch':
       return 'scope';
@@ -366,12 +405,18 @@ function validatePriorCheckoutRefs(versioning: Record<string, unknown>): void {
   if (session.checkedOutCommitId !== session.refHeadAtMaterialization) {
     throw priorCheckoutRefError('priorCheckoutRefStale');
   }
+  if (
+    session.currentRefHeadId !== undefined &&
+    session.currentRefHeadId !== session.refHeadAtMaterialization
+  ) {
+    throw priorCheckoutRefError('priorCheckoutRefStale');
+  }
 
   const readRef = checkoutRefReader(versioning);
   if (!readRef) return;
 
-  const refValue = callPriorCheckoutRefReader(
-    () => readRef(publicRefNameFromBranchName(session.branchName)),
+  const refValue = callPriorCheckoutRefReader(() =>
+    readRef(publicRefNameFromBranchName(session.branchName)),
   );
   if (isThenable(refValue)) return;
 
@@ -398,9 +443,7 @@ function priorCheckoutRefError(
   return new VersionCheckoutRebindIdentityError(reason, 'ref');
 }
 
-function activeCheckoutSessionReader(
-  versioning: Record<string, unknown>,
-): (() => unknown) | null {
+function activeCheckoutSessionReader(versioning: Record<string, unknown>): (() => unknown) | null {
   for (const candidate of versioningServiceCandidates(versioning)) {
     const read =
       bindMethod(candidate, 'readActiveCheckoutSession') ??
@@ -410,7 +453,9 @@ function activeCheckoutSessionReader(
   return null;
 }
 
-function checkoutRefReader(versioning: Record<string, unknown>): ((name: string) => unknown) | null {
+function checkoutRefReader(
+  versioning: Record<string, unknown>,
+): ((name: string) => unknown) | null {
   for (const candidate of [
     versioning.readService,
     versioning.writeService,
@@ -425,9 +470,7 @@ function checkoutRefReader(versioning: Record<string, unknown>): ((name: string)
   return null;
 }
 
-function versioningServiceCandidates(
-  versioning: Record<string, unknown>,
-): readonly unknown[] {
+function versioningServiceCandidates(versioning: Record<string, unknown>): readonly unknown[] {
   return [
     versioning.surfaceStatusService,
     versioning.versionSurfaceStatusService,
@@ -458,11 +501,20 @@ function parsePriorCheckoutSession(value: unknown): PriorCheckoutSession | null 
     throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
   }
 
+  let currentRefHeadId: string | undefined;
+  if (value.currentRefHeadId !== undefined) {
+    currentRefHeadId = toCommitId(value.currentRefHeadId) ?? undefined;
+    if (!currentRefHeadId) {
+      throw new VersionCheckoutRebindIdentityError('priorCheckoutRefInvalid', 'ref');
+    }
+  }
+
   return Object.freeze({
     checkedOutCommitId,
     detached: false,
     branchName,
     refHeadAtMaterialization,
+    ...(currentRefHeadId === undefined ? {} : { currentRefHeadId }),
   });
 }
 

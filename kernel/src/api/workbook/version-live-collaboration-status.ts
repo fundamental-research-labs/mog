@@ -54,7 +54,9 @@ export type VersionLiveCollaborationDirtyStatus = {
 };
 
 type UnsafeProviderLifecycleState =
+  | 'active'
   | 'disconnected'
+  | 'unknown'
   | 'quarantined'
   | 'stale'
   | 'inFlightRemoteUpdates'
@@ -369,9 +371,14 @@ function unsafeProviderLifecycleState(
   status: VersionLiveCollaborationStatus,
 ): UnsafeProviderLifecycleState | null {
   const sidecarTokens = normalizedSidecarStatusTokens(status.sidecarStatus);
+  if (sidecarTokens.has('active') || sidecarTokens.has('joining') || sidecarTokens.has('syncing')) {
+    return 'active';
+  }
+  if (sidecarTokens.has('unknown') || sidecarTokens.has('indeterminate')) return 'unknown';
   if (sidecarTokens.has('quarantine') || sidecarTokens.has('quarantined')) return 'quarantined';
   if (sidecarTokens.has('disconnect') || sidecarTokens.has('disconnected')) return 'disconnected';
   if (sidecarTokens.has('stale')) return 'stale';
+  if (status.state !== 'active' && (status.activeParticipantCount ?? 0) > 1) return 'active';
   if (status.remoteProviderAttached === false && status.state === 'idle') return 'disconnected';
   if ((status.inFlightRemoteUpdateCount ?? 0) > 0) return 'inFlightRemoteUpdates';
   if ((status.syncApplyRemoteQueueDepth ?? 0) > 0) return 'syncApplyQueue';
@@ -380,8 +387,12 @@ function unsafeProviderLifecycleState(
 
 function unsafeProviderLifecycleMessage(state: UnsafeProviderLifecycleState): string {
   switch (state) {
+    case 'active':
+      return 'Live collaboration provider reports active participants; checkout is disabled conservatively until the provider can be proven idle.';
     case 'disconnected':
       return 'Live collaboration provider is disconnected; checkout is disabled conservatively until the provider can be proven idle.';
+    case 'unknown':
+      return 'Live collaboration provider state is unknown; checkout is disabled conservatively until the provider can be proven idle.';
     case 'quarantined':
       return 'Live collaboration provider is quarantined; checkout is disabled conservatively until the provider can be proven idle.';
     case 'stale':

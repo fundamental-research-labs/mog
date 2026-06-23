@@ -11,9 +11,11 @@ export {
   mapStructuralMetadata,
 } from './merge-service-semantic-record-validation-mapping';
 export {
-  allowsEmptySemanticPropertyPath,
-  inspectSupportedSemanticValueChange,
   isCellContentMergeDomain,
+  allowsEmptySemanticPropertyPath,
+} from './merge-service-semantic-record-validation-cell';
+export {
+  inspectSupportedSemanticValueChange,
   semanticMergePropertyKey,
   stableMergePairStructural,
 } from './merge-service-semantic-record-validation-support';

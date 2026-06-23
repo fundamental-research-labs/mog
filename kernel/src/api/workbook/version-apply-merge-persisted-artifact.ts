@@ -57,6 +57,7 @@ import type {
 } from './version-apply-merge-persisted';
 import {
   recoverStagedMergeCommitIfAlreadyApplied,
+  validatePreparedMergeApplyArtifactIntentRecord,
   validateAppliedMergeCommitIdentity,
 } from './version-apply-merge-persisted-artifact-recovery';
 import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
@@ -597,6 +598,25 @@ async function prepareResolvedAttempt(
   });
   const existing = await opened.intentStore.readByIdempotencyKey(idempotencyKey);
   if (existing.status === 'found') {
+    const existingDiagnostics = validatePreparedMergeApplyArtifactIntentRecord(
+      existing.record,
+      {
+        intentId,
+        idempotencyKey,
+        base: payload.base,
+        ours: payload.ours,
+        theirs: payload.theirs,
+        targetRef: options.targetRef,
+        expectedTargetHead: options.expectedTargetHead,
+        resultDigest,
+        resolutionSetDigest: resolutionSet.digest,
+        resolvedAttemptDigest: resolvedAttempt.digest,
+      },
+      resolutionMismatchDiagnostic,
+    );
+    if (existingDiagnostics.length > 0) {
+      return { ok: false, diagnostics: existingDiagnostics };
+    }
     return { ok: true, store: opened.intentStore, intent: existing.record };
   }
   if (existing.status === 'failed') {

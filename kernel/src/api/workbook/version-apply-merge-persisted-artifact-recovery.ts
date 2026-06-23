@@ -1,4 +1,5 @@
 import type {
+  VersionCommitExpectedHead,
   VersionApplyMergeResult,
   VersionMainRefName,
   VersionRefName,
@@ -16,6 +17,19 @@ import { computeMergeApplyRefCasProof } from '../../document/version-store/merge
 import type { ObjectDigest } from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import type { NormalizedPersistedApplyMergeInput } from './version-apply-merge-persisted';
+
+type PreparedMergeApplyArtifactIntentIdentity = {
+  readonly intentId: string;
+  readonly idempotencyKey: string;
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly resultDigest: ObjectDigest;
+  readonly resolutionSetDigest: ObjectDigest;
+  readonly resolvedAttemptDigest: ObjectDigest;
+};
 
 type TargetHeadReadResult =
   | { readonly ok: true; readonly commitId: WorkbookCommitId }
@@ -163,6 +177,62 @@ export async function recoverStagedMergeCommitIfAlreadyApplied({
   return resultFromTerminalArtifactIntent(graph, input, completed.record);
 }
 
+export function validatePreparedMergeApplyArtifactIntentRecord(
+  record: MergeApplyIntentRecord,
+  expected: PreparedMergeApplyArtifactIntentIdentity,
+  resolutionMismatchDiagnostic: (safeMessage: string) => VersionStoreDiagnostic,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  if (record.intentId !== expected.intentId) {
+    diagnostics.push(resolutionMismatchDiagnostic('persisted merge intent id does not match.'));
+  }
+  if (record.idempotencyKey !== expected.idempotencyKey) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge idempotency key does not match.'),
+    );
+  }
+  if (record.applyKind !== 'mergeCommit') {
+    diagnostics.push(resolutionMismatchDiagnostic('persisted merge apply kind does not match.'));
+  }
+  if (
+    record.base !== expected.base ||
+    record.ours !== expected.ours ||
+    record.theirs !== expected.theirs
+  ) {
+    diagnostics.push(resolutionMismatchDiagnostic('persisted merge commits do not match.'));
+  }
+  if (record.targetRef !== expected.targetRef) {
+    diagnostics.push(resolutionMismatchDiagnostic('persisted merge targetRef does not match.'));
+  }
+  if (!expectedHeadsEqual(record.expectedTargetHead, expected.expectedTargetHead)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic('persisted merge expectedTargetHead does not match.'),
+    );
+  }
+  if (!digestsEqual(record.resultDigest, expected.resultDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic(
+        'persisted merge resultDigest does not match the resolved artifact.',
+      ),
+    );
+  }
+  if (!digestsEqual(record.resolutionSetDigest, expected.resolutionSetDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic(
+        'persisted merge resolutionSetDigest does not match the resolved artifact.',
+      ),
+    );
+  }
+  if (!digestsEqual(record.resolvedAttemptDigest, expected.resolvedAttemptDigest)) {
+    diagnostics.push(
+      resolutionMismatchDiagnostic(
+        'persisted merge resolvedAttemptDigest does not match the resolved artifact.',
+      ),
+    );
+  }
+  return diagnostics;
+}
+
 async function validateMergeCommitRefCasProof(
   record: MergeApplyIntentRecord,
   commitId: WorkbookCommitId,
@@ -269,4 +339,11 @@ async function readCommitParentIds(
 
 function digestsEqual(left: ObjectDigest | undefined, right: ObjectDigest): boolean {
   return left?.algorithm === right.algorithm && left.digest === right.digest;
+}
+
+function expectedHeadsEqual(
+  left: VersionCommitExpectedHead,
+  right: VersionCommitExpectedHead,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

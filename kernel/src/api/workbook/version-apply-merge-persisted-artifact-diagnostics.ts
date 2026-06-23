@@ -12,17 +12,18 @@ export function mapProviderDiagnostics(
   if (!Array.isArray(diagnostics) || diagnostics.length === 0) return [providerErrorDiagnostic()];
   return diagnostics.map((diagnostic) => {
     if (!isRecord(diagnostic)) return providerErrorDiagnostic();
-    return publicDiagnostic(
+    const issueCode =
       typeof diagnostic.issueCode === 'string'
         ? diagnostic.issueCode
         : typeof diagnostic.code === 'string'
           ? diagnostic.code
-          : 'VERSION_PROVIDER_FAILED',
-      typeof diagnostic.safeMessage === 'string'
+          : 'VERSION_PROVIDER_FAILED';
+    return publicDiagnostic(
+      issueCode,
+      typeof diagnostic.safeMessage === 'string' &&
+        isPublicSafeProviderMessage(diagnostic.safeMessage)
         ? diagnostic.safeMessage
-        : typeof diagnostic.message === 'string'
-          ? diagnostic.message
-          : 'Version applyMerge provider failed.',
+        : safeProviderMessage(issueCode),
       {
         recoverability: isRecoverability(diagnostic.recoverability)
           ? diagnostic.recoverability
@@ -88,6 +89,22 @@ export function providerErrorDiagnostic(): VersionStoreDiagnostic {
   return publicDiagnostic('VERSION_PROVIDER_FAILED', 'Version applyMerge provider failed.', {
     recoverability: 'retry',
   });
+}
+
+function safeProviderMessage(issueCode: string): string {
+  switch (issueCode) {
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_NOT_FOUND':
+      return 'Version applyMerge provider could not read a required object.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'Version applyMerge provider denied access to required version data.';
+    default:
+      return 'Version applyMerge provider failed.';
+  }
+}
+
+function isPublicSafeProviderMessage(value: string): boolean {
+  return !/\b(?:commit:sha256:|merge-result:|sha256:)[0-9a-f]{64}\b/i.test(value);
 }
 
 export function publicDiagnostic(

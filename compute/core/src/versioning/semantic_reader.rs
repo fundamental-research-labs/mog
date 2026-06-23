@@ -5,10 +5,9 @@ use compute_document::schema::{KEY_CONDITIONAL_FORMAT, KEY_PROPERTIES, KEY_VALID
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, SemanticCellState,
-    SemanticColumnState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
-    SemanticRowState, SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState,
-    VersionDomainClass,
+    CanonicalDirectFormat, SemanticCellState, SemanticColumnState, SemanticDomainState,
+    SemanticObjectDigest, SemanticObjectKind, SemanticRowState, SemanticSheetState,
+    SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
 };
 use value_types::CellValue;
 use yrs::{Map, Transact};
@@ -22,17 +21,23 @@ use crate::storage::{
 };
 
 use super::formula_reader::{
-    canonical_formula, canonical_formula_ref, canonical_formula_ref_object_ids,
-    record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
+    UNSUPPORTED_CELL_FORMULAS_DOMAIN, canonical_formula, canonical_formula_ref,
+    canonical_formula_ref_object_ids, record_unrepresented_persisted_formula,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
 use super::{
-    SemanticStateReadError, SemanticWorkbookStateReader, CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN,
-    CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN,
-    SHEETS_DOMAIN,
+    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
+    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticStateReadError,
+    SemanticWorkbookStateReader,
 };
+use value_provenance::{
+    ambiguous_cell_value, canonical_cell_value, cell_value_provenance,
+    opaque_cell_value_provenance_digest,
+};
+
+mod value_provenance;
 
 const DATA_VALIDATION_DOMAIN: &str = "data-validation";
 const CONDITIONAL_FORMATTING_DOMAIN: &str = "conditional-formatting";
@@ -125,16 +130,25 @@ pub fn read_engine_semantic_workbook_state(
                 .is_some_and(|(_, legacy_formula, identity_formula)| {
                     legacy_formula.is_some() || identity_formula.is_some()
                 });
-            let direct_format = properties::get_cell_format(
+            let cell_properties = properties::get_properties(
                 engine.storage().doc(),
                 engine.storage().workbook_map(),
                 engine.storage().sheets(),
                 &sheet_id,
                 &cell_hex,
-            )
-            .map(canonical_direct_format)
-            .transpose()?;
-            if entry.is_ghost() && direct_format.is_none() && !has_persisted_formula {
+            );
+            let value_provenance =
+                cell_value_provenance(engine, &sheet_id, &cell_hex, cell_properties.as_ref());
+            let direct_format = cell_properties
+                .as_ref()
+                .and_then(|props| props.format.clone())
+                .map(canonical_direct_format)
+                .transpose()?;
+            if entry.is_ghost()
+                && direct_format.is_none()
+                && !has_persisted_formula
+                && value_provenance.is_empty()
+            {
                 continue;
             }
             let Some(pos) = sheet.position_for_diagnostics(cell_id) else {
@@ -146,7 +160,6 @@ pub fn read_engine_semantic_workbook_state(
             };
 
             let cell_key = canonical_cell_key(&sheet_key, pos.row(), pos.col());
-            let value = canonical_cell_value(&entry.value, &cell_key, &mut unsupported_values)?;
             let formula = entry
                 .formula
                 .as_deref()
@@ -162,6 +175,17 @@ pub fn read_engine_semantic_workbook_state(
                     )
                 })
                 .transpose()?;
+            let value_provenance = if formula.is_some() {
+                value_provenance.without_formula_metadata()
+            } else {
+                value_provenance
+            };
+            let value = canonical_cell_value(
+                &entry.value,
+                &cell_key,
+                &value_provenance,
+                &mut unsupported_values,
+            )?;
             if formula.is_none() && has_persisted_formula {
                 record_unrepresented_persisted_formula(
                     engine,
@@ -193,7 +217,52 @@ pub fn read_engine_semantic_workbook_state(
             engine.storage().sheets(),
             &sheet_id,
         ) {
-            let Some(format) = props.format else {
+            let value_provenance =
+                cell_value_provenance(engine, &sheet_id, &cell_hex, Some(&props));
+            let Some(format) = props.format.clone() else {
+                if value_provenance.is_empty() {
+                    continue;
+                }
+                let Some(cell_id) = parse_cell_id(&cell_hex) else {
+                    continue;
+                };
+                let Some((row, col)) = engine
+                    .grid_index(&sheet_id)
+                    .and_then(|grid| grid.cell_position(&cell_id))
+                else {
+                    unsupported_values.insert(
+                        format!("cell:{sheet_key}:{cell_hex}:value-provenance:missing-position"),
+                        opaque_cell_value_provenance_digest(
+                            &format!("cell:{sheet_key}:{cell_hex}"),
+                            &CellValue::Null,
+                            &value_provenance,
+                        )?,
+                    );
+                    continue;
+                };
+                let cell_key = canonical_cell_key(&sheet_key, row, col);
+                if sheet_state.cells.contains_key(&cell_key) {
+                    continue;
+                }
+                let value = ambiguous_cell_value(
+                    &CellValue::Null,
+                    &cell_key,
+                    &value_provenance,
+                    &mut unsupported_values,
+                )?;
+                sheet_state.cells.insert(
+                    cell_key.clone(),
+                    SemanticCellState {
+                        object_id: cell_key,
+                        sheet_id: sheet_key.clone(),
+                        row,
+                        column: col,
+                        value,
+                        formula: None,
+                        direct_format: None,
+                        digest: None,
+                    },
+                );
                 continue;
             };
             let Some(cell_id) = parse_cell_id(&cell_hex) else {
@@ -223,6 +292,12 @@ pub fn read_engine_semantic_workbook_state(
                 continue;
             }
 
+            let value = ambiguous_cell_value(
+                &CellValue::Null,
+                &cell_key,
+                &value_provenance,
+                &mut unsupported_values,
+            )?;
             sheet_state.cells.insert(
                 cell_key.clone(),
                 SemanticCellState {
@@ -230,7 +305,7 @@ pub fn read_engine_semantic_workbook_state(
                     sheet_id: sheet_key.clone(),
                     row,
                     column: col,
-                    value: None,
+                    value,
                     formula: None,
                     direct_format: Some(canonical_direct_format(format)?),
                     digest: None,
@@ -884,63 +959,6 @@ fn canonicalize_json_value(value: Value) -> Value {
         }
         scalar => scalar,
     }
-}
-
-fn canonical_cell_value(
-    value: &CellValue,
-    cell_key: &str,
-    unsupported_values: &mut BTreeMap<String, SemanticObjectDigest>,
-) -> Result<Option<CanonicalCellValue>, SemanticStateReadError> {
-    let (value_kind, canonical_value) = match value {
-        CellValue::Null => return Ok(None),
-        CellValue::Number(number) => (
-            "number".to_string(),
-            Some(Value::Number(
-                Number::from_f64(number.get()).expect("FiniteF64 produces JSON-safe number"),
-            )),
-        ),
-        CellValue::Text(text) => ("text".to_string(), Some(Value::String(text.to_string()))),
-        CellValue::Boolean(value) => ("boolean".to_string(), Some(Value::Bool(*value))),
-        CellValue::Error(error, _) => ("error".to_string(), Some(Value::String(error.to_string()))),
-        CellValue::Array(_) => {
-            return opaque_cell_value(cell_key, "array", value, unsupported_values);
-        }
-        CellValue::Control(_) => {
-            return opaque_cell_value(cell_key, "control", value, unsupported_values);
-        }
-        CellValue::Image(_) => {
-            return opaque_cell_value(cell_key, "image", value, unsupported_values);
-        }
-    };
-
-    Ok(Some(CanonicalCellValue {
-        value_kind,
-        canonical_value,
-        digest: None,
-    }))
-}
-
-fn opaque_cell_value(
-    cell_key: &str,
-    value_kind: &str,
-    value: &CellValue,
-    unsupported_values: &mut BTreeMap<String, SemanticObjectDigest>,
-) -> Result<Option<CanonicalCellValue>, SemanticStateReadError> {
-    let digest = canonical_digest(value)?;
-    unsupported_values.insert(
-        format!("{cell_key}:unsupported:{value_kind}"),
-        SemanticObjectDigest {
-            object_id: format!("{cell_key}:unsupported:{value_kind}"),
-            object_kind: SemanticObjectKind::CellValue,
-            domain_id: UNSUPPORTED_CELL_VALUES_DOMAIN.to_string(),
-            digest: digest.clone(),
-        },
-    );
-    Ok(Some(CanonicalCellValue {
-        value_kind: format!("unsupported:{value_kind}"),
-        canonical_value: None,
-        digest: Some(digest),
-    }))
 }
 
 fn opaque_cell_digest(

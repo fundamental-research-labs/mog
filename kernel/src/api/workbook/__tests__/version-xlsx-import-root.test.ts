@@ -36,6 +36,8 @@ const SEMANTIC_CHANGE_SET_DIGEST = objectDigest('1');
 const SNAPSHOT_ROOT_DIGEST = objectDigest('2');
 const OTHER_SEMANTIC_CHANGE_SET_DIGEST = objectDigest('3');
 const OTHER_SNAPSHOT_ROOT_DIGEST = objectDigest('4');
+const REF_REVISION = { kind: 'counter', value: '1' } as const;
+const OTHER_REF_REVISION = { kind: 'counter', value: '2' } as const;
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -356,6 +358,7 @@ describe('WorkbookVersion XLSX import root', () => {
       testVersionMetadata({
         documentId: METADATA_TRUST_DOCUMENT_ID,
         commitId: OLD_METADATA_COMMIT_ID,
+        refRevision: REF_REVISION,
       }),
     );
 
@@ -382,6 +385,7 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OLD_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
         },
       }),
     ).toMatchObject({
@@ -396,6 +400,7 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OTHER_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
         },
       }),
     ).toMatchObject({
@@ -410,6 +415,7 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OLD_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
         },
       }),
     ).toMatchObject({
@@ -422,10 +428,38 @@ describe('WorkbookVersion XLSX import root', () => {
       testVersionMetadata({
         documentId: METADATA_TRUST_DOCUMENT_ID,
         commitId: OLD_METADATA_COMMIT_ID,
+        refRevision: REF_REVISION,
         semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
         snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
       }),
     );
+
+    const digestBoundWithoutRevisionXlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+        semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+        snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+      }),
+    );
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundWithoutRevisionXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'head-unverified',
+    });
 
     expect(
       readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
@@ -434,6 +468,23 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OLD_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'head-unverified',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
           semanticChangeSetDigest: OTHER_SEMANTIC_CHANGE_SET_DIGEST,
           snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
         },
@@ -450,6 +501,7 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OLD_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
           semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
           snapshotRootDigest: OTHER_SNAPSHOT_ROOT_DIGEST,
         },
@@ -466,6 +518,24 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: OLD_METADATA_COMMIT_ID,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          refRevision: OTHER_REF_REVISION,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'head-mismatch',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          refRevision: REF_REVISION,
           semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
           snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
         },
@@ -476,6 +546,7 @@ describe('WorkbookVersion XLSX import root', () => {
         documentId: METADATA_TRUST_DOCUMENT_ID,
         head: {
           commitId: OLD_METADATA_COMMIT_ID,
+          refRevision: REF_REVISION,
           semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
           snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
         },
@@ -600,6 +671,7 @@ describe('WorkbookVersion XLSX import root', () => {
       originalMetadata = testVersionMetadata({
         documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
         commitId: originalRootId,
+        ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
         semanticChangeSetDigest: commitPayload.semanticChangeSetDigest as ObjectDigest,
         snapshotRootDigest: commitPayload.snapshotRootDigest as ObjectDigest,
       });
@@ -770,6 +842,7 @@ async function expectContractedXlsxExportBlocked(
 function testVersionMetadata(input: {
   readonly documentId: string;
   readonly commitId: WorkbookCommitId;
+  readonly refRevision?: NonNullable<MogWorkbookVersionXlsxMetadata['head']>['refRevision'];
   readonly semanticChangeSetDigest?: ObjectDigest;
   readonly snapshotRootDigest?: ObjectDigest;
 }): MogWorkbookVersionXlsxMetadata {
@@ -781,6 +854,7 @@ function testVersionMetadata(input: {
       commitId: input.commitId,
       refName: 'refs/heads/main',
       resolvedFrom: 'HEAD',
+      ...(input.refRevision ? { refRevision: input.refRevision } : {}),
       ...(input.semanticChangeSetDigest
         ? { semanticChangeSetDigest: input.semanticChangeSetDigest }
         : {}),

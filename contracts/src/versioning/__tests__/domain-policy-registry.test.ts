@@ -64,7 +64,7 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       checkout: 'supported',
       persistence: 'supported',
       merge: 'contracted',
-      export: 'contracted',
+      export: 'supported',
     });
     expect(rows.get('cells.values')?.capabilityStates).toMatchObject({
       capture: 'supported',
@@ -73,6 +73,7 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       checkout: 'supported',
       persistence: 'supported',
       merge: 'contracted',
+      export: 'supported',
     });
     expect(rows.get('recalc-caches')?.capabilityStates).toMatchObject({
       capture: 'derived',

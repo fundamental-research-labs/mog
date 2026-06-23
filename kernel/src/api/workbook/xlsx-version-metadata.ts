@@ -229,7 +229,13 @@ export function validateMogWorkbookVersionXlsxMetadata(
   if (!metadata.head) {
     return { status: 'untrusted', reason: 'missing-head' };
   }
+  if (!hasVersionMetadataHeadAuthority(metadata.head)) {
+    return { status: 'untrusted', reason: 'head-unverified' };
+  }
   if (!context.expectedHead) {
+    return { status: 'untrusted', reason: 'head-unverified' };
+  }
+  if (!hasExpectedHeadAuthority(context.expectedHead)) {
     return { status: 'untrusted', reason: 'head-unverified' };
   }
   if (!metadataHeadIdentityMatchesExpected(metadata.head, context.expectedHead)) {
@@ -588,6 +594,16 @@ function hasVersionMetadataHeadObjectDigests(
   return isObjectDigest(head.semanticChangeSetDigest) && isObjectDigest(head.snapshotRootDigest);
 }
 
+function hasVersionMetadataHeadAuthority(
+  head: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
+): boolean {
+  return (
+    isNonEmptyString(head.refName) &&
+    isNonEmptyString(head.resolvedFrom) &&
+    isVersionRecordRevision(head.refRevision)
+  );
+}
+
 function hasExpectedHeadObjectDigests(
   head: MogWorkbookVersionXlsxMetadataExpectedHead,
 ): head is MogWorkbookVersionXlsxMetadataExpectedHead & {
@@ -595,6 +611,18 @@ function hasExpectedHeadObjectDigests(
   readonly snapshotRootDigest: ObjectDigest;
 } {
   return isObjectDigest(head.semanticChangeSetDigest) && isObjectDigest(head.snapshotRootDigest);
+}
+
+function hasExpectedHeadAuthority(head: MogWorkbookVersionXlsxMetadataExpectedHead): boolean {
+  return (
+    isNonEmptyString(head.refName) &&
+    isNonEmptyString(head.resolvedFrom) &&
+    isVersionRecordRevision(head.refRevision)
+  );
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function objectDigestMatches(left: ObjectDigest, right: ObjectDigest): boolean {

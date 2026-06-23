@@ -51,6 +51,7 @@ mod test_undo_redo_merges;
 mod test_undo_redo_non_undoable_state;
 mod test_undo_redo_result_payloads;
 mod test_undo_redo_sort;
+mod test_versioning_admission;
 mod test_viewport;
 mod test_workbook_settings;
 mod test_xlsx_col_style_ranges;

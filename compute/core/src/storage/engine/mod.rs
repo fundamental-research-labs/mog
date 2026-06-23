@@ -33,6 +33,7 @@ mod cell_semantics;
 mod sync_bridge;
 mod table_result_merge;
 mod undo_bridge;
+mod versioning;
 mod workbook_theme;
 pub use cell_semantics::CellInfo;
 mod cf_cache;
@@ -136,6 +137,13 @@ pub struct YrsComputeEngine {
     /// This is engine-local state: it is retained only in memory, not persisted
     /// in Yrs, and not exported back to XLSX.
     pub(crate) runtime_diagnostics: runtime_diagnostics::RuntimeDiagnosticsStore,
+
+    /// Document-local version operation admission state.
+    ///
+    /// This is runtime-only state. Future bridge plumbing can attach a one-shot
+    /// [`crate::snapshot::VersionOperationContextWire`] before a mutation
+    /// crosses into Rust; guarded mutation boundaries consume it.
+    version_runtime_operation_context: versioning::VersionRuntimeOperationContext,
 
     /// Yrs `update_v1` buffer.
     ///

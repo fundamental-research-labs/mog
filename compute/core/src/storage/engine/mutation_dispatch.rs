@@ -144,6 +144,15 @@ impl YrsComputeEngine {
                 edits,
                 skip_cycle_check,
             } => {
+                self.admit_version_runtime_operation(
+                    "compute_batch_set_cells_by_position",
+                    super::versioning::VersionRuntimeAdmissionLocation::from_position_edits(
+                        edits
+                            .iter()
+                            .map(|(sheet_id, row, col, _)| (*sheet_id, *row, *col)),
+                    ),
+                )?;
+
                 // Snapshot Parse-text edits so we can run locale-aware date format
                 // inference after the value writes land in the mirror. Doing this
                 // here (rather than in TS) keeps the value write and the format

@@ -249,6 +249,7 @@ fn assemble_engine_inner(
         security_events,
         import_report: domain_types::ImportReport::default(),
         runtime_diagnostics: Default::default(),
+        version_runtime_operation_context: Default::default(),
         update_buffer,
         active_sync_context: None,
         _update_subscription: update_subscription,

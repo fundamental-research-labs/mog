@@ -109,6 +109,105 @@ pub enum VersionWriteAdmissionModeWire {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionRedactionPolicyWire {
+    None,
+    MetadataOnly,
+    ContentRedacted,
+    OpaqueDigestOnly,
+    Drop,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VersionRedactionKeySubjectWire {
+    Author,
+    Session,
+    Provider,
+    Debug,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionRedactionKeyWire {
+    pub key_id: String,
+    pub subject: VersionRedactionKeySubjectWire,
+    pub source_field: String,
+    pub digest: ObjectDigest,
+    pub policy: VersionRedactionPolicyWire,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionCaptureFailureStageWire {
+    Admission,
+    Capture,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VersionCaptureFailureCodeWire {
+    MissingRedactionKey,
+    WriteAdmissionBlocked,
+    CaptureSerializationFailed,
+    DiagnosticsSinkUnavailable,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VersionDiagnosticSeverityWire {
+    #[serde(rename = "info")]
+    Info,
+    #[serde(rename = "warning")]
+    Warning,
+    #[serde(rename = "error")]
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionMetadataDiagnosticWire {
+    pub severity: VersionDiagnosticSeverityWire,
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub domain_id: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub data: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VersionCaptureDiagnosticsSinkRecordKindWire {
+    VersionCaptureFailure,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionCaptureFailureSinkRecordWire {
+    pub schema_version: u32,
+    pub record_kind: VersionCaptureDiagnosticsSinkRecordKindWire,
+    pub diagnostic_id: String,
+    pub observed_at: String,
+    pub stage: VersionCaptureFailureStageWire,
+    pub code: VersionCaptureFailureCodeWire,
+    pub severity: VersionDiagnosticSeverityWire,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub domain_ids: Vec<String>,
+    pub capture_policy: CapturePolicyWire,
+    pub write_admission_mode: VersionWriteAdmissionModeWire,
+    pub redaction_policy: VersionRedactionPolicyWire,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub redaction_keys: Vec<VersionRedactionKeyWire>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing_redaction_fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub debug: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum VersionActorKindWire {
     User,
@@ -129,6 +228,14 @@ pub struct VersionAuthorWire {
     pub client_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionRuntimeOperationActorSummaryWire {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actor_kind: Option<VersionActorKindWire>,
+    pub redacted_author_class: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -248,6 +355,54 @@ pub struct VersionOperationContextWire {
     pub client_request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration: Option<VersionSyncOperationContextWire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionRuntimeOperationContextWire {
+    pub runtime_context_id: String,
+    pub operation_context: VersionOperationContextWire,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entrypoint_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_kind: Option<String>,
+    pub redaction_policy: VersionRedactionPolicyWire,
+    pub actor: VersionRuntimeOperationActorSummaryWire,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<VersionMetadataDiagnosticWire>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpaqueDomainAttachmentWire {
+    pub attachment_id: String,
+    pub domain_id: String,
+    pub media_type: String,
+    pub digest: ObjectDigest,
+    pub redaction_policy: VersionRedactionPolicyWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_ref: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionMutationSegmentWire {
+    pub segment_id: String,
+    pub domain_id: String,
+    pub domain_class: VersionDomainClass,
+    pub capability_state: VersionDomainCapabilityState,
+    pub operation_kind: VersionOperationKindWire,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub object_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_digest: Option<ObjectDigest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_digest: Option<ObjectDigest>,
+    pub redaction_policy: VersionRedactionPolicyWire,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachment: Option<OpaqueDomainAttachmentWire>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

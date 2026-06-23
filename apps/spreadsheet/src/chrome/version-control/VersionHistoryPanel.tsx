@@ -5,10 +5,11 @@ import type {
   Paged,
   VersionAnnotationText,
   VersionCapability,
-  VersionDiagnostic,
   VersionError,
   VersionHead,
   VersionRef,
+  VersionRevertInput,
+  VersionRevertResult,
   VersionResult,
   VersionSurfaceStatus,
   WorkbookCommitId,
@@ -25,10 +26,15 @@ import {
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
+  getRollbackAvailability,
   isCapabilityEnabled,
   safeDomId,
 } from './version-action-availability';
-import { ActionStatus } from './VersionActionStatus';
+import {
+  VersionActions,
+  type VersionActionState,
+  type VersionPanelDiagnostic,
+} from './VersionActionStatus';
 import { VersionHistoryDiffPreview, type VersionDiffPreview } from './VersionHistoryDiffPreview';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
 import { ReviewProposalSurface, type ReviewProposalDiffTarget } from './ReviewProposalSurface';
@@ -46,6 +52,7 @@ const CAPABILITY_ROWS: readonly VersionCapability[] = [
   'version:commit',
   'version:branch',
   'version:checkout',
+  'version:revert',
   'version:reviewRead',
   'version:reviewWrite',
 ];
@@ -86,6 +93,7 @@ export type VersionHistoryWorkbook = {
     | 'listRefs'
     | 'createBranch'
     | 'checkout'
+    | 'revert'
     | 'diff'
     | 'listReviews'
     | 'listProposals'
@@ -110,18 +118,6 @@ type VersionHistoryData = {
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
 
-type VersionPanelDiagnostic = {
-  readonly code: string;
-  readonly severity: VersionDiagnostic['severity'];
-  readonly message: string;
-};
-
-type VersionActionState =
-  | { readonly status: 'idle' }
-  | { readonly status: 'running'; readonly label: string }
-  | { readonly status: 'success'; readonly message: string }
-  | { readonly status: 'error'; readonly diagnostic: VersionPanelDiagnostic };
-
 export function VersionHistoryPanel({ onClose }: VersionHistoryPanelProps): React.JSX.Element {
   const workbook = useWorkbook();
   return <VersionHistoryPanelContent workbook={workbook} onClose={onClose} />;
@@ -134,6 +130,7 @@ export function VersionHistoryPanelContent({
   const [loadState, setLoadState] = useState<VersionHistoryLoadState>({ status: 'loading' });
   const [commitMessage, setCommitMessage] = useState('');
   const [branchName, setBranchName] = useState('');
+  const [rollbackReason, setRollbackReason] = useState('');
   const [selectedCommitId, setSelectedCommitId] = useState<WorkbookCommitId | undefined>();
   const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
   const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
@@ -248,10 +245,18 @@ export function VersionHistoryPanelContent({
   );
   const checkoutAvailability = getCheckoutAvailability(data, actionBusy, loading);
   const diffAvailability = getDiffAvailability(data, actionBusy, loading);
+  const rollbackAvailability = getRollbackAvailability(
+    data,
+    actionBusy,
+    loading,
+    rollbackReason,
+    selectedOrHeadCommitId,
+  );
   const canCommit = commitAvailability.enabled;
   const canCreateBranch = branchAvailability.enabled;
   const canCheckout = checkoutAvailability.enabled;
   const canDiff = diffAvailability.enabled;
+  const canStageRollback = rollbackAvailability.enabled;
 
   const handleCommit = useCallback(async () => {
     if (!data || !canCommit) return;
@@ -313,6 +318,50 @@ export function VersionHistoryPanelContent({
     });
     await load();
   }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
+
+  const handleStageRollback = useCallback(async () => {
+    if (!data || !canStageRollback || !selectedOrHeadCommitId) return;
+
+    const targetRef = data.surface?.current.branchName as
+      | VersionRevertInput['targetRef']
+      | undefined;
+    const expectedTargetHead =
+      data.head?.id && data.head.refRevision
+        ? {
+            commitId: data.head.id,
+            revision: data.head.refRevision,
+          }
+        : undefined;
+    const input: VersionRevertInput = {
+      target: { kind: 'commit', commitId: selectedOrHeadCommitId },
+      ...(targetRef ? { targetRef } : {}),
+      ...(expectedTargetHead ? { expectedTargetHead } : {}),
+      reason: rollbackReason.trim(),
+    };
+
+    setActionState({ status: 'running', label: 'Staging rollback' });
+    const result = await readVersionResult('VERSION_UI_REVERT_FAILED', () =>
+      workbook.version.revert(input, { dryRun: true, includeDiagnostics: true }),
+    );
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      return;
+    }
+
+    if (result.value.status === 'rejected') {
+      setActionState({
+        status: 'error',
+        diagnostic: diagnosticFromRevertResult('VERSION_UI_REVERT_REJECTED', result.value),
+      });
+      return;
+    }
+
+    setRollbackReason('');
+    setActionState({
+      status: 'success',
+      message: rollbackActionMessage(result.value, selectedOrHeadCommitId),
+    });
+  }, [canStageRollback, data, rollbackReason, selectedOrHeadCommitId, workbook]);
 
   const handleCheckoutRef = useCallback(
     async (ref: VersionRef) => {
@@ -458,16 +507,21 @@ export function VersionHistoryPanelContent({
             <VersionActions
               commitMessage={commitMessage}
               branchName={branchName}
+              rollbackReason={rollbackReason}
               targetCommitId={selectedOrHeadCommitId}
               actionState={actionState}
               commitEnabled={canCommit}
               branchEnabled={canCreateBranch}
+              rollbackEnabled={canStageRollback}
               commitDisabledReason={commitAvailability.disabledReason}
               branchDisabledReason={branchAvailability.disabledReason}
+              rollbackDisabledReason={rollbackAvailability.disabledReason}
               onCommitMessageChange={setCommitMessage}
               onBranchNameChange={setBranchName}
+              onRollbackReasonChange={setRollbackReason}
               onCommit={handleCommit}
               onCreateBranch={handleCreateBranch}
+              onStageRollback={handleStageRollback}
             />
             <RefList
               refs={data.refs}
@@ -499,116 +553,6 @@ export function VersionHistoryPanelContent({
         ) : null}
       </div>
     </aside>
-  );
-}
-
-function VersionActions({
-  commitMessage,
-  branchName,
-  targetCommitId,
-  actionState,
-  commitEnabled,
-  branchEnabled,
-  commitDisabledReason,
-  branchDisabledReason,
-  onCommitMessageChange,
-  onBranchNameChange,
-  onCommit,
-  onCreateBranch,
-}: {
-  readonly commitMessage: string;
-  readonly branchName: string;
-  readonly targetCommitId?: WorkbookCommitId;
-  readonly actionState: VersionActionState;
-  readonly commitEnabled: boolean;
-  readonly branchEnabled: boolean;
-  readonly commitDisabledReason?: string;
-  readonly branchDisabledReason?: string;
-  readonly onCommitMessageChange: (value: string) => void;
-  readonly onBranchNameChange: (value: string) => void;
-  readonly onCommit: () => void;
-  readonly onCreateBranch: () => void;
-}): React.JSX.Element {
-  const commitReasonId = 'version-commit-disabled-reason';
-  const branchReasonId = 'version-branch-disabled-reason';
-
-  return (
-    <section className="flex flex-col gap-3" aria-label="Version actions">
-      <div className="flex flex-col gap-2">
-        <label htmlFor="version-commit-message" className="text-body-sm font-medium text-ss-text">
-          Commit message
-        </label>
-        <textarea
-          id="version-commit-message"
-          data-testid="version-history-commit-message-input"
-          value={commitMessage}
-          onChange={(event) => onCommitMessageChange(event.currentTarget.value)}
-          rows={2}
-          className="w-full resize-none rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
-        />
-        <button
-          type="button"
-          data-testid="version-history-commit-button"
-          onClick={onCommit}
-          disabled={!commitEnabled}
-          aria-describedby={!commitEnabled && commitDisabledReason ? commitReasonId : undefined}
-          title={!commitEnabled ? commitDisabledReason : undefined}
-          className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-        >
-          <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span>Commit</span>
-        </button>
-        <DisabledReason
-          id={commitReasonId}
-          reason={!commitEnabled ? commitDisabledReason : undefined}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <label htmlFor="version-branch-name" className="text-body-sm font-medium text-ss-text">
-          Branch name
-        </label>
-        <input
-          id="version-branch-name"
-          data-testid="version-history-branch-name-input"
-          type="text"
-          value={branchName}
-          onChange={(event) => onBranchNameChange(event.currentTarget.value)}
-          className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
-        />
-        <div className="flex items-center justify-between gap-2">
-          <span
-            className="min-w-0 font-mono text-[11px] text-ss-text-secondary truncate"
-            data-testid="version-history-branch-target-summary"
-            data-version-commit-id={targetCommitId}
-          >
-            Target {targetCommitId ? shortCommitId(targetCommitId) : 'unavailable'}
-          </span>
-          <button
-            type="button"
-            data-testid="version-history-create-branch-button"
-            onClick={onCreateBranch}
-            disabled={!branchEnabled}
-            aria-describedby={!branchEnabled && branchDisabledReason ? branchReasonId : undefined}
-            title={!branchEnabled ? branchDisabledReason : undefined}
-            className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-          >
-            <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
-            <span>Create branch</span>
-          </button>
-        </div>
-        <DisabledReason
-          id={branchReasonId}
-          reason={!branchEnabled ? branchDisabledReason : undefined}
-        />
-      </div>
-
-      {actionState.status !== 'idle' ? (
-        <div data-testid="version-history-action-result" data-status={actionState.status}>
-          <ActionStatus actionState={actionState} />
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -944,6 +888,32 @@ function resolveSelectedOrHeadCommitId(
   return data.surface?.current.headCommitId as WorkbookCommitId | undefined;
 }
 
+function rollbackActionMessage(
+  result: VersionRevertResult,
+  targetCommitId: WorkbookCommitId,
+): string {
+  const target = shortCommitId(targetCommitId);
+  if (result.status === 'planned') return `Rollback staged for ${target}`;
+  if (result.status === 'requires-review') return `Rollback for ${target} requires review`;
+  if (result.status === 'applied') return `Rollback applied for ${target}`;
+  return `Rollback rejected for ${target}`;
+}
+
+function diagnosticFromRevertResult(
+  code: string,
+  result: VersionRevertResult,
+): VersionPanelDiagnostic {
+  const diagnostic = result.diagnostics.find((entry) => entry.safeMessage.trim().length > 0);
+  if (!diagnostic) {
+    return { code, severity: 'warning', message: 'Rollback preflight was rejected.' };
+  }
+  return {
+    code: diagnostic.issueCode,
+    severity: diagnostic.severity === 'fatal' ? 'error' : diagnostic.severity,
+    message: diagnostic.safeMessage,
+  };
+}
+
 function diagnosticFromError(code: string, error: VersionError): VersionPanelDiagnostic {
   if (error.code === 'target_unavailable') {
     return {
@@ -965,7 +935,9 @@ function diagnosticFromError(code: string, error: VersionError): VersionPanelDia
     return {
       code,
       severity: 'warning',
-      message: `Expected ${shortCommitId(error.expectedHeadId)}`,
+      message: `Version head changed before the request completed. Expected ${shortCommitId(
+        error.expectedHeadId,
+      )}, now ${shortCommitId(error.actualHeadId)}. Refresh version history before retrying.`,
     };
   }
   if (error.code === 'stale_revision') {

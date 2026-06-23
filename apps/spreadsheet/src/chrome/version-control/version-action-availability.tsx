@@ -14,6 +14,7 @@ const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
   'version:branch': 'Branch',
   'version:checkout': 'Checkout',
   'version:diff': 'Diff',
+  'version:revert': 'Rollback',
 };
 
 const VERSIONING_DISABLED_REASON = 'Versioning is disabled for this workbook.';
@@ -113,6 +114,31 @@ export function getDiffAvailability(
   return enabledAction();
 }
 
+export function getRollbackAvailability(
+  data: VersionActionSurfaceData | undefined,
+  actionBusy: boolean,
+  loading: boolean,
+  rollbackReason: string,
+  targetCommitId: WorkbookCommitId | undefined,
+): VersionActionAvailability {
+  if (!data) return disabledAction('Version status is unavailable.');
+
+  const commonReason = commonActionDisabledReason(actionBusy, loading);
+  if (commonReason) return disabledAction(commonReason);
+
+  const surface = data.surface;
+  if (!surface) return disabledAction('Version surface status is unavailable.');
+  const surfaceReason = actionSurfaceDisabledReason(surface, 'version:revert');
+  if (surfaceReason) return disabledAction(surfaceReason);
+
+  const staleReason = currentStaleDisabledReason(surface, 'rollback');
+  if (staleReason) return disabledAction(staleReason);
+
+  if (!targetCommitId) return disabledAction('Select a commit target first.');
+  if (rollbackReason.trim().length === 0) return disabledAction('Enter a rollback reason.');
+  return enabledAction();
+}
+
 export function isCapabilityEnabled(
   surface: VersionSurfaceStatus,
   capability: VersionCapability,
@@ -187,7 +213,7 @@ function commitDirtyDisabledReason(surface: VersionSurfaceStatus): string | unde
 
 function currentStaleDisabledReason(
   surface: VersionSurfaceStatus,
-  action: 'commit' | 'checkout',
+  action: 'commit' | 'checkout' | 'rollback',
 ): string | undefined {
   const current = surface.current;
   if (!current.stale) return undefined;
@@ -204,7 +230,9 @@ function currentStaleDisabledReason(
   const suffix =
     action === 'commit'
       ? 'Refresh before committing.'
-      : 'Checkout is blocked until the active checkout session is refreshed.';
+      : action === 'checkout'
+        ? 'Checkout is blocked until the active checkout session is refreshed.'
+        : 'Refresh before staging rollback.';
   return `${branchLabel} is stale because ${reason}. ${suffix}`;
 }
 

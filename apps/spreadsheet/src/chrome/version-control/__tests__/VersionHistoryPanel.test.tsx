@@ -525,9 +525,8 @@ describe('VersionHistoryPanelContent', () => {
   });
 
   it('announces running and successful action states through a status live region', async () => {
-    const commitResult = createDeferred<
-      Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>
-    >();
+    const commitResult =
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>>();
     const workbook = createWorkbook({
       commit: jest.fn(async () => commitResult.promise),
     });
@@ -539,9 +538,9 @@ describe('VersionHistoryPanelContent', () => {
     await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
     await user.click(screen.getByTestId('version-history-commit-button'));
 
-    const runningStatus = within(await screen.findByTestId('version-history-action-result')).getByRole(
-      'status',
-    );
+    const runningStatus = within(
+      await screen.findByTestId('version-history-action-result'),
+    ).getByRole('status');
     expect(runningStatus).toHaveAttribute('aria-live', 'polite');
     expect(runningStatus).toHaveAttribute('aria-atomic', 'true');
     expect(runningStatus).toHaveAttribute('aria-busy', 'true');

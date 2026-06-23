@@ -13,6 +13,7 @@ import {
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
+  getRollbackAvailability,
   type VersionActionAvailability,
 } from '../version-action-availability';
 
@@ -41,7 +42,7 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
 
 type VersionActionCapability = Extract<
   VersionCapability,
-  'version:commit' | 'version:branch' | 'version:checkout' | 'version:diff'
+  'version:commit' | 'version:branch' | 'version:checkout' | 'version:diff' | 'version:revert'
 >;
 
 type ActionAvailabilityOptions = {
@@ -49,6 +50,7 @@ type ActionAvailabilityOptions = {
   readonly loading?: boolean;
   readonly commitMessage?: string;
   readonly branchName?: string;
+  readonly rollbackReason?: string;
   readonly refs?: readonly Pick<VersionRef, 'name'>[];
   readonly targetCommitId?: WorkbookCommitId;
 };
@@ -95,6 +97,17 @@ const ACTION_CASES: readonly ActionCase[] = [
     availability: (surface, options = {}) =>
       getDiffAvailability({ surface }, options.actionBusy ?? false, options.loading ?? false),
   },
+  {
+    capability: 'version:revert',
+    availability: (surface, options = {}) =>
+      getRollbackAvailability(
+        { surface },
+        options.actionBusy ?? false,
+        options.loading ?? false,
+        options.rollbackReason ?? 'Rollback selected commit',
+        options.targetCommitId ?? TARGET_COMMIT_ID,
+      ),
+  },
 ];
 
 describe('version action availability', () => {
@@ -112,6 +125,16 @@ describe('version action availability', () => {
       'Version status is unavailable.',
     );
     expectDisabled(getDiffAvailability(undefined, false, false), 'Version status is unavailable.');
+    expectDisabled(
+      getRollbackAvailability(
+        undefined,
+        false,
+        false,
+        'Rollback selected commit',
+        TARGET_COMMIT_ID,
+      ),
+      'Version status is unavailable.',
+    );
 
     for (const action of ACTION_CASES) {
       const surface = createSurfaceStatus();
@@ -140,6 +163,10 @@ describe('version action availability', () => {
       'Version surface status is unavailable.',
     );
     expectDisabled(getDiffAvailability({}, false, false), 'Version surface status is unavailable.');
+    expectDisabled(
+      getRollbackAvailability({}, false, false, 'Rollback selected commit', TARGET_COMMIT_ID),
+      'Version surface status is unavailable.',
+    );
   });
 
   it('uses the feature-gate disabled reason for every action', () => {
@@ -203,6 +230,15 @@ describe('version action availability', () => {
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expect(
+      getRollbackAvailability(
+        { surface },
+        false,
+        false,
+        'Rollback selected commit',
+        TARGET_COMMIT_ID,
+      ),
+    ).toEqual({ enabled: true });
   });
 
   it('disables commit and checkout for unsupported dirty domains', () => {
@@ -279,6 +315,14 @@ describe('version action availability', () => {
       getBranchAvailability({ surface }, false, false, '   ', TARGET_COMMIT_ID),
       'Enter a branch name.',
     );
+    expectDisabled(
+      getRollbackAvailability({ surface }, false, false, 'Rollback selected commit', undefined),
+      'Select a commit target first.',
+    );
+    expectDisabled(
+      getRollbackAvailability({ surface }, false, false, '   ', TARGET_COMMIT_ID),
+      'Enter a rollback reason.',
+    );
   });
 
   it('validates branch creation names against public refs, protected main, and loaded refs', () => {
@@ -337,6 +381,7 @@ describe('version action availability', () => {
       'version:branch': 'Branch is disabled by the surface contract.',
       'version:checkout': 'Checkout is disabled by the surface contract.',
       'version:diff': 'Diff is disabled by the surface contract.',
+      'version:revert': 'Rollback is disabled by the surface contract.',
     };
     const dirty = {
       hasUncommittedLocalChanges: true,
@@ -407,9 +452,25 @@ describe('version action availability', () => {
       ),
       actionCapabilityReasons['version:diff'],
     );
+    expectDisabled(
+      getRollbackAvailability(
+        {
+          surface: createSurfaceStatus({
+            capabilityOverrides: {
+              'version:revert': disabledCapability(actionCapabilityReasons['version:revert']),
+            },
+          }),
+        },
+        false,
+        false,
+        '',
+        undefined,
+      ),
+      actionCapabilityReasons['version:revert'],
+    );
   });
 
-  it('disables commit and checkout when the current checkout session is stale', () => {
+  it('disables commit, checkout, and rollback when the current checkout session is stale', () => {
     const surface = createSurfaceStatus({
       current: {
         checkedOutCommitId: HEAD_COMMIT_ID,
@@ -432,6 +493,16 @@ describe('version action availability', () => {
     expectDisabled(
       getCheckoutAvailability({ surface }, false, false),
       'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
+    );
+    expectDisabled(
+      getRollbackAvailability(
+        { surface },
+        false,
+        false,
+        'Rollback selected commit',
+        TARGET_COMMIT_ID,
+      ),
+      'main is stale because the branch head moved. Refresh before staging rollback.',
     );
     expect(
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),

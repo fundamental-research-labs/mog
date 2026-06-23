@@ -1,4 +1,5 @@
 import type {
+  ObjectDigest,
   VersionDiagnosticPublicPayload,
   VersionHead,
   VersionResult,
@@ -7,10 +8,15 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
 import type { DocumentContext } from '../../context';
+import {
+  namespaceForDocumentScope,
+  type VersionStoreProvider,
+} from '../../document/version-store/provider';
 
 export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 const MOG_VERSION_METADATA_MAX_BYTES = 64 * 1024;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const OBJECT_DIGEST_RE = /^[0-9a-f]{64}$/;
 
 export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1';
@@ -21,10 +27,12 @@ export interface MogWorkbookVersionXlsxMetadata {
     readonly refName?: VersionHead['refName'];
     readonly resolvedFrom?: VersionHead['resolvedFrom'];
     readonly refRevision?: VersionHead['refRevision'];
+    readonly semanticChangeSetDigest?: ObjectDigest;
+    readonly snapshotRootDigest?: ObjectDigest;
   } | null;
   readonly diagnostics: readonly VersionDiagnosticPublicPayload[];
   readonly redaction: {
-    readonly policy: 'commit-and-document-only';
+    readonly policy: 'commit-and-document-only' | 'commit-document-and-object-digests-only';
     readonly omitted: readonly string[];
   };
 }
@@ -48,7 +56,11 @@ export type MogWorkbookVersionXlsxMetadataTrustReason =
   | 'wrong-document'
   | 'missing-head'
   | 'head-unverified'
-  | 'head-mismatch';
+  | 'head-mismatch'
+  | 'missing-object-digests'
+  | 'commit-missing'
+  | 'object-digest-mismatch'
+  | 'snapshot-root-mismatch';
 
 export type MogWorkbookVersionXlsxMetadataTrustSummary =
   | {
@@ -72,6 +84,8 @@ export interface MogWorkbookVersionXlsxMetadataExpectedHead {
   readonly refName?: VersionHead['refName'];
   readonly resolvedFrom?: VersionHead['resolvedFrom'];
   readonly refRevision?: VersionHead['refRevision'];
+  readonly semanticChangeSetDigest?: ObjectDigest;
+  readonly snapshotRootDigest?: ObjectDigest;
 }
 
 export interface MogWorkbookVersionXlsxMetadataTrustContext {
@@ -102,6 +116,10 @@ export type MogWorkbookVersionXlsxMetadataTrustResult =
 export function createMogWorkbookVersionXlsxMetadata(
   ctx: DocumentContext,
   head: VersionResult<VersionHead>,
+  authority?: {
+    readonly semanticChangeSetDigest: ObjectDigest;
+    readonly snapshotRootDigest: ObjectDigest;
+  },
 ): MogWorkbookVersionXlsxMetadata {
   return {
     schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
@@ -113,12 +131,27 @@ export function createMogWorkbookVersionXlsxMetadata(
           ...(head.value.refName ? { refName: head.value.refName } : {}),
           ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
           ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
+          ...(authority
+            ? {
+                semanticChangeSetDigest: authority.semanticChangeSetDigest,
+                snapshotRootDigest: authority.snapshotRootDigest,
+              }
+            : {}),
         }
       : null,
     diagnostics: head.ok ? [] : diagnosticsFromVersionError(head.error),
     redaction: {
-      policy: 'commit-and-document-only',
-      omitted: ['authors', 'agentTraces', 'rawWorkbookBytes', 'credentials', 'externalDataSecrets'],
+      policy: 'commit-document-and-object-digests-only',
+      omitted: [
+        'authors',
+        'agentTraces',
+        'rawWorkbookBytes',
+        'credentials',
+        'externalDataSecrets',
+        'objectStoreNamespace',
+        'workspaceId',
+        'principalScope',
+      ],
     },
   };
 }
@@ -199,8 +232,27 @@ export function validateMogWorkbookVersionXlsxMetadata(
   if (!context.expectedHead) {
     return { status: 'untrusted', reason: 'head-unverified' };
   }
-  if (!metadataHeadMatchesExpected(metadata.head, context.expectedHead)) {
+  if (!metadataHeadIdentityMatchesExpected(metadata.head, context.expectedHead)) {
     return { status: 'untrusted', reason: 'head-mismatch' };
+  }
+  if (!hasVersionMetadataHeadObjectDigests(metadata.head)) {
+    return { status: 'untrusted', reason: 'missing-object-digests' };
+  }
+  if (!hasExpectedHeadObjectDigests(context.expectedHead)) {
+    return { status: 'untrusted', reason: 'head-unverified' };
+  }
+  if (
+    !objectDigestMatches(
+      metadata.head.semanticChangeSetDigest,
+      context.expectedHead.semanticChangeSetDigest,
+    )
+  ) {
+    return { status: 'untrusted', reason: 'object-digest-mismatch' };
+  }
+  if (
+    !objectDigestMatches(metadata.head.snapshotRootDigest, context.expectedHead.snapshotRootDigest)
+  ) {
+    return { status: 'untrusted', reason: 'snapshot-root-mismatch' };
   }
   return { status: 'trusted' };
 }
@@ -284,10 +336,75 @@ export async function maybeAddMogVersionMetadataToXlsx(
   options: WorkbookXlsxExportOptions | undefined,
 ): Promise<Uint8Array> {
   if (options?.versionMetadata !== 'include') return removeMogVersionMetadataFromXlsx(xlsxBytes);
+  const head = await version.getHead();
   return addMogVersionMetadataToXlsx(
     xlsxBytes,
-    createMogWorkbookVersionXlsxMetadata(ctx, await version.getHead()),
+    createMogWorkbookVersionXlsxMetadata(
+      ctx,
+      head,
+      await readCurrentHeadLocalObjectStoreAuthority(ctx, head),
+    ),
   );
+}
+
+async function readCurrentHeadLocalObjectStoreAuthority(
+  ctx: DocumentContext,
+  head: VersionResult<VersionHead>,
+): Promise<
+  | {
+      readonly semanticChangeSetDigest: ObjectDigest;
+      readonly snapshotRootDigest: ObjectDigest;
+    }
+  | undefined
+> {
+  if (!head.ok) return undefined;
+  const provider = versionStoreProviderFromContext(ctx);
+  if (!provider) return undefined;
+
+  try {
+    const registry = await provider.readGraphRegistry();
+    if (registry.status !== 'ok') return undefined;
+
+    const graph = await provider.openGraph(
+      namespaceForDocumentScope(provider.documentScope, registry.registry.currentGraphId),
+      provider.accessContext,
+    );
+    const currentHead = await graph.readHead();
+    if (currentHead.status !== 'success') return undefined;
+    if (
+      !metadataHeadIdentityMatchesExpected(
+        {
+          commitId: currentHead.head.id as VersionHead['id'],
+          ...(currentHead.head.refName
+            ? { refName: currentHead.head.refName as VersionHead['refName'] }
+            : {}),
+          ...(currentHead.head.resolvedFrom
+            ? { resolvedFrom: currentHead.head.resolvedFrom as VersionHead['resolvedFrom'] }
+            : {}),
+          ...(currentHead.head.refRevision
+            ? { refRevision: currentHead.head.refRevision }
+            : {}),
+        },
+        {
+          commitId: head.value.id,
+          ...(head.value.refName ? { refName: head.value.refName } : {}),
+          ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
+          ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
+        },
+      )
+    ) {
+      return undefined;
+    }
+
+    const commit = await graph.readCommit(head.value.id);
+    if (commit.status !== 'success') return undefined;
+    return {
+      semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest,
+      snapshotRootDigest: commit.commit.payload.snapshotRootDigest,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 function readMogVersionMetadataXmlFromXlsx(
@@ -397,7 +514,20 @@ function isVersionMetadataHead(value: unknown): value is MogWorkbookVersionXlsxM
   if ('refName' in value && typeof value.refName !== 'string') return false;
   if ('resolvedFrom' in value && typeof value.resolvedFrom !== 'string') return false;
   if ('refRevision' in value && !isVersionRecordRevision(value.refRevision)) return false;
+  if ('semanticChangeSetDigest' in value && !isObjectDigest(value.semanticChangeSetDigest)) {
+    return false;
+  }
+  if ('snapshotRootDigest' in value && !isObjectDigest(value.snapshotRootDigest)) return false;
   return true;
+}
+
+function isObjectDigest(value: unknown): value is ObjectDigest {
+  return (
+    isRecord(value) &&
+    value.algorithm === 'sha256' &&
+    typeof value.digest === 'string' &&
+    OBJECT_DIGEST_RE.test(value.digest)
+  );
 }
 
 function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHead['refRevision']> {
@@ -418,13 +548,14 @@ function isVersionMetadataRedaction(
 ): value is MogWorkbookVersionXlsxMetadata['redaction'] {
   return (
     isRecord(value) &&
-    value.policy === 'commit-and-document-only' &&
+    (value.policy === 'commit-and-document-only' ||
+      value.policy === 'commit-document-and-object-digests-only') &&
     Array.isArray(value.omitted) &&
     value.omitted.every((item) => typeof item === 'string')
   );
 }
 
-function metadataHeadMatchesExpected(
+function metadataHeadIdentityMatchesExpected(
   actual: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
   expected: MogWorkbookVersionXlsxMetadataExpectedHead,
 ): boolean {
@@ -446,6 +577,28 @@ function versionRecordRevisionMatches(
 ): boolean {
   if (left === undefined || right === undefined) return left === right;
   return left.kind === right.kind && left.value === right.value;
+}
+
+function hasVersionMetadataHeadObjectDigests(
+  head: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
+): head is NonNullable<MogWorkbookVersionXlsxMetadata['head']> & {
+  readonly semanticChangeSetDigest: ObjectDigest;
+  readonly snapshotRootDigest: ObjectDigest;
+} {
+  return isObjectDigest(head.semanticChangeSetDigest) && isObjectDigest(head.snapshotRootDigest);
+}
+
+function hasExpectedHeadObjectDigests(
+  head: MogWorkbookVersionXlsxMetadataExpectedHead,
+): head is MogWorkbookVersionXlsxMetadataExpectedHead & {
+  readonly semanticChangeSetDigest: ObjectDigest;
+  readonly snapshotRootDigest: ObjectDigest;
+} {
+  return isObjectDigest(head.semanticChangeSetDigest) && isObjectDigest(head.snapshotRootDigest);
+}
+
+function objectDigestMatches(left: ObjectDigest, right: ObjectDigest): boolean {
+  return left.algorithm === right.algorithm && left.digest === right.digest;
 }
 
 function untrustedMetadataResult(
@@ -504,6 +657,29 @@ function resolveVersionDocumentId(ctx: DocumentContext): string {
     }
   }
   return ctx.workbookLinkScope().requestingDocumentId;
+}
+
+function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProvider | undefined {
+  const runtime = ctx as {
+    readonly versioning?: unknown;
+    readonly versionStore?: unknown;
+    readonly version?: unknown;
+  };
+  for (const services of [runtime.versioning, runtime.versionStore, runtime.version]) {
+    if (!isRecord(services)) continue;
+    if (isVersionStoreProvider(services.provider)) return services.provider;
+  }
+  return undefined;
+}
+
+function isVersionStoreProvider(value: unknown): value is VersionStoreProvider {
+  return (
+    isRecord(value) &&
+    isRecord(value.documentScope) &&
+    isRecord(value.accessContext) &&
+    typeof value.readGraphRegistry === 'function' &&
+    typeof value.openGraph === 'function'
+  );
 }
 
 function diagnosticsFromVersionError(

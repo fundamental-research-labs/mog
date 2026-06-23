@@ -259,11 +259,8 @@ function xlsxVersionMetadataTrust(
   });
   return {
     trust: result.trust,
-    diagnostics:
-      result.status === 'untrusted' && result.reason === 'head-unverified'
-        ? []
-        : result.diagnostics,
-    ...('metadata' in result && result.metadata?.head
+    diagnostics: result.diagnostics,
+    ...(result.status === 'trusted' && result.metadata.head
       ? {
           versionMetadataHeadCandidate: {
             documentId: result.metadata.documentId,

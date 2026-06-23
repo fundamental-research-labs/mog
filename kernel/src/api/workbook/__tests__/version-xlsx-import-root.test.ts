@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import type { Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import type { ObjectDigest, Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
@@ -33,6 +33,10 @@ const METADATA_TRUST_DOCUMENT_ID = 'vc10-xlsx-metadata-trust';
 const METADATA_TRUST_REIMPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-trust-reimport';
 const OLD_METADATA_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const OTHER_METADATA_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
+const SEMANTIC_CHANGE_SET_DIGEST = objectDigest('1');
+const SNAPSHOT_ROOT_DIGEST = objectDigest('2');
+const OTHER_SEMANTIC_CHANGE_SET_DIGEST = objectDigest('3');
+const OTHER_SNAPSHOT_ROOT_DIGEST = objectDigest('4');
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -298,6 +302,7 @@ describe('WorkbookVersion XLSX import root', () => {
       const head = await wb.version.getHead();
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+      const commitPayload = await readRootCommitPayload(head.value.id, METADATA_EXPORT_DOCUMENT_ID);
 
       const metadataExport = await wb.toXlsx({ versionMetadata: 'include' });
       const metadataEntries = zipEntriesNamed(metadataExport, MOG_VERSION_METADATA_PART);
@@ -312,16 +317,21 @@ describe('WorkbookVersion XLSX import root', () => {
           commitId: head.value.id,
           refName: 'refs/heads/main',
           resolvedFrom: 'HEAD',
+          semanticChangeSetDigest: commitPayload.semanticChangeSetDigest,
+          snapshotRootDigest: commitPayload.snapshotRootDigest,
         },
         diagnostics: [],
         redaction: {
-          policy: 'commit-and-document-only',
+          policy: 'commit-document-and-object-digests-only',
           omitted: [
             'authors',
             'agentTraces',
             'rawWorkbookBytes',
             'credentials',
             'externalDataSecrets',
+            'objectStoreNamespace',
+            'workspaceId',
+            'principalScope',
           ],
         },
       });
@@ -452,10 +462,72 @@ describe('WorkbookVersion XLSX import root', () => {
         },
       }),
     ).toMatchObject({
+      status: 'untrusted',
+      reason: 'missing-object-digests',
+    });
+
+    const digestBoundXlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: METADATA_TRUST_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+        semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+        snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+      }),
+    );
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          semanticChangeSetDigest: OTHER_SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'object-digest-mismatch',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: OTHER_SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
+      status: 'untrusted',
+      reason: 'snapshot-root-mismatch',
+    });
+
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(digestBoundXlsxBytes, {
+        expectedDocumentId: METADATA_TRUST_DOCUMENT_ID,
+        expectedHead: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          refName: 'refs/heads/main',
+          resolvedFrom: 'HEAD',
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      }),
+    ).toMatchObject({
       status: 'trusted',
       metadata: {
         documentId: METADATA_TRUST_DOCUMENT_ID,
-        head: { commitId: OLD_METADATA_COMMIT_ID },
+        head: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
       },
       diagnostics: [],
     });
@@ -539,7 +611,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('advances same-document trusted XLSX reimport as an import-change commit', async () => {
+  it('fails closed on same-document XLSX metadata without import-time authority', async () => {
     const originalXlsxBytes = await createSourceXlsx('Original import root');
     const originalImport = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: originalXlsxBytes },
@@ -598,10 +670,14 @@ describe('WorkbookVersion XLSX import root', () => {
       throw new Error(`expected reimport XLSX import success: ${reimported.error?.message}`);
     }
     expect(reimported.warnings).toEqual(
-      expect.not.arrayContaining([
+      expect.arrayContaining([
         expect.objectContaining({
+          type: 'import_error',
           reason: 'head-unverified',
-          diagnostic: expect.objectContaining({ code: 'mogVersionMetadataUntrusted' }),
+          diagnostic: expect.objectContaining({
+            code: 'mogVersionMetadataUntrusted',
+            details: expect.objectContaining({ redacted: true }),
+          }),
         }),
       ]),
     );
@@ -625,20 +701,12 @@ describe('WorkbookVersion XLSX import root', () => {
       if (!reimportedHead.ok) {
         throw new Error(`expected reimport version head: ${reimportedHead.error.code}`);
       }
-      expect(reimportedHead.value.id).not.toBe(originalRootId);
+      expect(reimportedHead.value.id).toBe(originalRootId);
 
       await expect(reimportedWb.version.listCommits()).resolves.toMatchObject({
         ok: true,
         value: {
           items: [
-            expect.objectContaining({
-              id: reimportedHead.value.id,
-              parents: [originalRootId],
-              author: expect.objectContaining({
-                actorKind: 'system',
-                displayName: 'Mog XLSX Import Change',
-              }),
-            }),
             expect.objectContaining({
               id: originalRootId,
               parents: [],
@@ -646,30 +714,6 @@ describe('WorkbookVersion XLSX import root', () => {
           ],
         },
       });
-
-      const semanticPayload = await readRootSemanticChangeSetPayload(
-        reimportedHead.value.id,
-        METADATA_TRUST_REIMPORT_DOCUMENT_ID,
-      );
-      expect(semanticPayload).toMatchObject({
-        source: {
-          kind: 'xlsxImportChange',
-          versionMetadataTrust: {
-            status: 'trusted',
-            redacted: true,
-          },
-        },
-        changes: expect.arrayContaining([
-          expect.objectContaining({
-            kind: 'updated',
-          }),
-        ]),
-      });
-      expect(semanticPayload).toHaveProperty('semanticState.stateDigest');
-      expect(semanticPayload).toHaveProperty('semanticDiff.changes');
-      expect(JSON.stringify(semanticPayload)).not.toContain(originalRootId);
-      expect(JSON.stringify(semanticPayload)).not.toContain('rawBytes');
-      expect(JSON.stringify(semanticPayload)).not.toContain('rawWorkbookBytes');
     } finally {
       await reimportedWb?.close('skipSave').catch(() => {});
       await reimported.handle.dispose().catch(() => {});
@@ -694,6 +738,27 @@ async function readRootSemanticChangeSetPayload(
   rootCommitId: WorkbookCommitId,
   documentId = DOCUMENT_ID,
 ): Promise<Record<string, unknown>> {
+  const { graph, root } = await readRootCommit(rootCommitId, documentId);
+  const semanticRecord = await graph.getObjectRecord({
+    kind: 'object',
+    objectType: 'workbook.semanticChangeSet.v1',
+    digest: root.commit.payload.semanticChangeSetDigest,
+  });
+  return semanticRecord.preimage.payload as Record<string, unknown>;
+}
+
+async function readRootCommitPayload(
+  rootCommitId: WorkbookCommitId,
+  documentId = DOCUMENT_ID,
+): Promise<Record<string, unknown>> {
+  const { root } = await readRootCommit(rootCommitId, documentId);
+  return root.commit.payload as unknown as Record<string, unknown>;
+}
+
+async function readRootCommit(
+  rootCommitId: WorkbookCommitId,
+  documentId: string,
+) {
   const documentScope: VersionDocumentScope = { documentId };
   const provider = selectVersionStoreProvider(
     {
@@ -716,12 +781,7 @@ async function readRootSemanticChangeSetPayload(
   if (root.status !== 'success') {
     throw new Error(`expected root commit: ${root.diagnostics[0]?.code}`);
   }
-  const semanticRecord = await graph.getObjectRecord({
-    kind: 'object',
-    objectType: 'workbook.semanticChangeSet.v1',
-    digest: root.commit.payload.semanticChangeSetDigest,
-  });
-  return semanticRecord.preimage.payload as Record<string, unknown>;
+  return { graph, root };
 }
 
 async function expectContractedXlsxExportBlocked(
@@ -760,6 +820,8 @@ async function expectContractedXlsxExportBlocked(
 function testVersionMetadata(input: {
   readonly documentId: string;
   readonly commitId: WorkbookCommitId;
+  readonly semanticChangeSetDigest?: ObjectDigest;
+  readonly snapshotRootDigest?: ObjectDigest;
 }): MogWorkbookVersionXlsxMetadata {
   return {
     schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
@@ -769,13 +831,30 @@ function testVersionMetadata(input: {
       commitId: input.commitId,
       refName: 'refs/heads/main',
       resolvedFrom: 'HEAD',
+      ...(input.semanticChangeSetDigest
+        ? { semanticChangeSetDigest: input.semanticChangeSetDigest }
+        : {}),
+      ...(input.snapshotRootDigest ? { snapshotRootDigest: input.snapshotRootDigest } : {}),
     },
     diagnostics: [],
     redaction: {
-      policy: 'commit-and-document-only',
-      omitted: ['authors', 'agentTraces', 'rawWorkbookBytes', 'credentials', 'externalDataSecrets'],
+      policy: 'commit-document-and-object-digests-only',
+      omitted: [
+        'authors',
+        'agentTraces',
+        'rawWorkbookBytes',
+        'credentials',
+        'externalDataSecrets',
+        'objectStoreNamespace',
+        'workspaceId',
+        'principalScope',
+      ],
     },
   };
+}
+
+function objectDigest(seed: string): ObjectDigest {
+  return { algorithm: 'sha256', digest: seed.repeat(64) };
 }
 
 function zipEntriesNamed(

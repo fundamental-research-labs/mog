@@ -136,7 +136,7 @@ export function safeMessageForCheckoutIssue(issueCode: string): string {
     case 'VERSION_CHECKOUT_PENDING_RECALC':
       return 'Checkout is blocked while workbook recalculation is not settled.';
     case 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE':
-      return 'Checkout is blocked while live collaboration is active or cannot be proven idle.';
+      return 'Checkout is blocked while live collaboration or its provider lifecycle cannot be proven idle.';
     case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
       return 'Checkout is blocked because the active checkout session is stale relative to its ref head.';
     case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':

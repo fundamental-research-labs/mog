@@ -53,22 +53,24 @@ export type VersionLiveCollaborationDirtyStatus = {
   readonly diagnostics: readonly VersionDiagnostic[];
 };
 
+type UnsafeProviderLifecycleState =
+  | 'disconnected'
+  | 'quarantined'
+  | 'stale'
+  | 'inFlightRemoteUpdates'
+  | 'syncApplyQueue';
+
 export type VersionLiveCollaborationStatusReaderInput = {
-  readonly readState: () =>
-    | {
-        readonly state: Exclude<VersionLiveCollaborationState, 'active' | 'unknown'>;
-        readonly statusRevision?: string;
-      }
-    | {
-        readonly state: 'active' | 'unknown';
-        readonly roomId?: string;
-        readonly sidecarStatus?: string;
-        readonly activeParticipantCount?: number;
-        readonly remoteProviderAttached?: boolean;
-        readonly inFlightRemoteUpdateCount?: number;
-        readonly syncApplyRemoteQueueDepth?: number;
-        readonly statusRevision?: string;
-      };
+  readonly readState: () => {
+    readonly state: VersionLiveCollaborationState;
+    readonly roomId?: string;
+    readonly sidecarStatus?: string;
+    readonly activeParticipantCount?: number;
+    readonly remoteProviderAttached?: boolean;
+    readonly inFlightRemoteUpdateCount?: number;
+    readonly syncApplyRemoteQueueDepth?: number;
+    readonly statusRevision?: string;
+  };
 };
 
 export function createVersionLiveCollaborationStatusReader(
@@ -173,6 +175,17 @@ function liveCollaborationUnsafeReasons(
         'version.surfaceStatus.liveCollaborationUnknown',
         'warning',
         'Live collaboration state could not be proven idle; checkout is disabled conservatively.',
+        status,
+      ),
+    ];
+  }
+  const unsafeProviderState = unsafeProviderLifecycleState(status);
+  if (unsafeProviderState) {
+    return [
+      diagnostic(
+        'version.surfaceStatus.liveCollaborationUnknown',
+        'warning',
+        unsafeProviderLifecycleMessage(unsafeProviderState),
         status,
       ),
     ];
@@ -330,9 +343,11 @@ function diagnostic(
 function diagnosticData(
   status: VersionLiveCollaborationStatus,
 ): NonNullable<VersionDiagnostic['data']> {
+  const providerLifecycleState = unsafeProviderLifecycleState(status);
   return {
     collaborationState: status.state,
     statusRevision: status.statusRevision,
+    ...(providerLifecycleState ? { providerLifecycleState } : {}),
     ...(status.roomId ? { roomId: REDACTED_LIVE_COLLABORATION_ID, redacted: true } : {}),
     ...(status.sidecarStatus ? { sidecarStatus: status.sidecarStatus } : {}),
     ...(typeof status.activeParticipantCount === 'number'
@@ -348,6 +363,44 @@ function diagnosticData(
       ? { syncApplyRemoteQueueDepth: status.syncApplyRemoteQueueDepth }
       : {}),
   };
+}
+
+function unsafeProviderLifecycleState(
+  status: VersionLiveCollaborationStatus,
+): UnsafeProviderLifecycleState | null {
+  const sidecarTokens = normalizedSidecarStatusTokens(status.sidecarStatus);
+  if (sidecarTokens.has('quarantine') || sidecarTokens.has('quarantined')) return 'quarantined';
+  if (sidecarTokens.has('disconnect') || sidecarTokens.has('disconnected')) return 'disconnected';
+  if (sidecarTokens.has('stale')) return 'stale';
+  if (status.remoteProviderAttached === false && status.state === 'idle') return 'disconnected';
+  if ((status.inFlightRemoteUpdateCount ?? 0) > 0) return 'inFlightRemoteUpdates';
+  if ((status.syncApplyRemoteQueueDepth ?? 0) > 0) return 'syncApplyQueue';
+  return null;
+}
+
+function unsafeProviderLifecycleMessage(state: UnsafeProviderLifecycleState): string {
+  switch (state) {
+    case 'disconnected':
+      return 'Live collaboration provider is disconnected; checkout is disabled conservatively until the provider can be proven idle.';
+    case 'quarantined':
+      return 'Live collaboration provider is quarantined; checkout is disabled conservatively until the provider can be proven idle.';
+    case 'stale':
+      return 'Live collaboration provider state is stale; checkout is disabled conservatively until the provider can be proven idle.';
+    case 'inFlightRemoteUpdates':
+      return 'Live collaboration provider has in-flight remote updates; checkout is disabled conservatively until they settle.';
+    case 'syncApplyQueue':
+      return 'Live collaboration provider has queued remote sync application work; checkout is disabled conservatively until it settles.';
+  }
+}
+
+function normalizedSidecarStatusTokens(value: string | undefined): ReadonlySet<string> {
+  if (!value) return new Set();
+  return new Set(
+    value
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((token) => token.length > 0),
+  );
 }
 
 function dedupeDiagnostics(

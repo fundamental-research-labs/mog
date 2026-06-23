@@ -139,22 +139,23 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
     }
   });
 
-  it('fails closed when provider checkout admission cannot prove writes are settled', async () => {
+  it.each([
+    ['registry reads fail', async (provider: ReturnType<typeof createInMemoryVersionStoreProvider>) => providerWithFailingRegistryRead(provider)],
+    ['provider lifecycle is closed', async (provider: ReturnType<typeof createInMemoryVersionStoreProvider>) => { await provider.close(); return { provider, openGraphCalls: () => 0 }; }],
+  ] as const)('fails closed when %s cannot prove writes are settled', async (_name, attach) => {
     const { provider, initialized } = await initializeVersionGraph();
-    const failing = providerWithFailingRegistryRead(provider);
+    const failing = await attach(provider);
     const handle = await DocumentFactory.create({
       documentId: DOCUMENT_SCOPE.documentId,
       environment: 'headless',
       userTimezone: 'UTC',
     });
     let wb: Workbook | undefined;
-
     try {
       wb = await handle.workbook({
         versioning: withVersionManifest({ provider: failing.provider }),
       });
       wb.markClean();
-
       await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
         dirty: {
           pendingProviderWrites: true,
@@ -166,7 +167,6 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
           ],
         },
       });
-
       await expect(
         wb.version.checkout({ kind: 'commit', id: initialized.rootCommit.id }),
       ).resolves.toMatchObject({

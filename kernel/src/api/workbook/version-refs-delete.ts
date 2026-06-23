@@ -12,7 +12,10 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
-import { branchDiagnosticMutationGuarantee } from './version-ref-diagnostics';
+import {
+  branchDiagnosticMutationGuarantee,
+  safeBranchDiagnosticToken,
+} from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main';
@@ -304,9 +307,14 @@ function sanitizeBranchDiagnosticPayload(
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = { operation };
   const details = isRecord(value.details) ? value.details : null;
-  if (details && typeof details.issue === 'string') payload.issue = details.issue;
-  if (details && typeof details.missingField === 'string') payload.option = details.missingField;
-  if (details && typeof details.cause === 'string') payload.conflict = details.cause;
+  if (details && typeof details.issue === 'string')
+    payload.issue = safeBranchDiagnosticToken('issue', details.issue);
+  if (details && typeof details.missingField === 'string') {
+    payload.option = safeBranchDiagnosticToken('option', details.missingField);
+  }
+  if (details && typeof details.cause === 'string') {
+    payload.conflict = safeBranchDiagnosticToken('conflict', details.cause);
+  }
   const actualHead = toCommitId(value.commitId);
   const actualRevision = toCounterRevision(value.refVersion);
   if (actualHead) payload.actualHead = actualHead;

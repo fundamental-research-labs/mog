@@ -34,6 +34,7 @@ import {
   branchDiagnosticMutationGuarantee,
   issueCodeForBranchDiagnostic,
   recoverabilityForBranchIssue,
+  safeBranchDiagnosticToken,
   safeMessageForBranchIssue,
 } from './version-ref-diagnostics';
 
@@ -644,7 +645,8 @@ function mapBranchListResult(
   const items = rawItems
     .map(mapBranchRecord)
     .filter((ref): ref is VersionRef => Boolean(ref))
-    .filter((ref) => refMatchesPrefix(ref, prefix));
+    .filter((ref) => refMatchesPrefix(ref, prefix))
+    .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
   if (diagnostics.length > 0) return degradedList(items, diagnostics);
   return { status: 'success', items, diagnostics: [] };
 }
@@ -749,9 +751,14 @@ function sanitizeBranchDiagnosticPayload(
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = { operation };
   const details = isRecord(value.details) ? value.details : null;
-  if (details && typeof details.issue === 'string') payload.issue = details.issue;
-  if (details && typeof details.missingField === 'string') payload.option = details.missingField;
-  if (details && typeof details.cause === 'string') payload.conflict = details.cause;
+  if (details && typeof details.issue === 'string')
+    payload.issue = safeBranchDiagnosticToken('issue', details.issue);
+  if (details && typeof details.missingField === 'string') {
+    payload.option = safeBranchDiagnosticToken('option', details.missingField);
+  }
+  if (details && typeof details.cause === 'string') {
+    payload.conflict = safeBranchDiagnosticToken('conflict', details.cause);
+  }
   const actualHead = toCommitId(value.commitId);
   const actualRevision = toCounterRevision(value.refVersion);
   if (actualHead) payload.actualHead = actualHead;

@@ -19,6 +19,37 @@ const NO_WRITE_ATTEMPTED_BRANCH_DIAGNOSTIC_CODES = new Set([
   'unsupportedRefMetadataMutation',
   'unsupportedRefOption',
 ]);
+const SAFE_BRANCH_DIAGNOSTIC_ISSUES = new Set([
+  'activeBranchDelete',
+  'containsControl',
+  'containsDotDot',
+  'containsPercent',
+  'containsUppercase',
+  'containsWhitespace',
+  'empty',
+  'emptySegment',
+  'invalidFormat',
+  'leadingSlash',
+  'lockSegment',
+  'nonAscii',
+  'notString',
+  'reservedDetached',
+  'reservedSystemRef',
+  'segmentEndsWithLock',
+  'tooLong',
+  'trailingSlash',
+  'unknownNamespace',
+]);
+const SAFE_BRANCH_DIAGNOSTIC_OPTIONS = new Set(['expectedOldCommitId', 'expectedRefVersion']);
+const SAFE_BRANCH_DIAGNOSTIC_CONFLICTS = new Set([
+  'expectedHeadMismatch',
+  'expectedPreviousRefIncarnationIdMismatch',
+  'expectedRefVersionMismatch',
+  'refAlreadyExists',
+  'refTombstoned',
+]);
+
+export type BranchDiagnosticTokenKind = 'conflict' | 'issue' | 'option';
 
 export function branchDiagnosticMutationGuarantee(
   code: string,
@@ -91,6 +122,16 @@ export function recoverabilityForBranchIssue(
     default:
       return 'none';
   }
+}
+
+export function safeBranchDiagnosticToken(kind: BranchDiagnosticTokenKind, value: string): string {
+  const allowed =
+    kind === 'conflict'
+      ? SAFE_BRANCH_DIAGNOSTIC_CONFLICTS
+      : kind === 'issue'
+        ? SAFE_BRANCH_DIAGNOSTIC_ISSUES
+        : SAFE_BRANCH_DIAGNOSTIC_OPTIONS;
+  return allowed.has(value) ? value : 'redacted';
 }
 
 function toPublicMutationGuarantee(

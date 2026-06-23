@@ -19,7 +19,7 @@ import {
 } from '../../../document/version-store/object-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
-  installVersionDomainDetectorNoopsOnWorkbook,
+  installVersionDomainDetectorNoopsOnBridgeMock,
   withVersionManifest,
 } from './version-domain-support-test-utils';
 
@@ -670,7 +670,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
           captureNormalCommit,
         },
       });
-      installVersionDomainDetectorNoopsOnWorkbook(wb);
+      installVersionDomainDetectorNoopsOnBridgeMock((wb.version as any).ctx?.computeBridge);
 
       await expect(
         wb.version.createBranch({

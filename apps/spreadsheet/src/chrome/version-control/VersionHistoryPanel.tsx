@@ -494,6 +494,7 @@ function VersionActions({
         </label>
         <textarea
           id="version-commit-message"
+          data-testid="version-history-commit-message-input"
           value={commitMessage}
           onChange={(event) => onCommitMessageChange(event.currentTarget.value)}
           rows={2}
@@ -501,6 +502,7 @@ function VersionActions({
         />
         <button
           type="button"
+          data-testid="version-history-commit-button"
           onClick={onCommit}
           disabled={!commitEnabled}
           aria-describedby={!commitEnabled && commitDisabledReason ? commitReasonId : undefined}
@@ -522,17 +524,23 @@ function VersionActions({
         </label>
         <input
           id="version-branch-name"
+          data-testid="version-history-branch-name-input"
           type="text"
           value={branchName}
           onChange={(event) => onBranchNameChange(event.currentTarget.value)}
           className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
         />
         <div className="flex items-center justify-between gap-2">
-          <span className="min-w-0 font-mono text-[11px] text-ss-text-secondary truncate">
+          <span
+            className="min-w-0 font-mono text-[11px] text-ss-text-secondary truncate"
+            data-testid="version-history-branch-target-summary"
+            data-version-commit-id={targetCommitId}
+          >
             Target {targetCommitId ? shortCommitId(targetCommitId) : 'unavailable'}
           </span>
           <button
             type="button"
+            data-testid="version-history-create-branch-button"
             onClick={onCreateBranch}
             disabled={!branchEnabled}
             aria-describedby={!branchEnabled && branchDisabledReason ? branchReasonId : undefined}
@@ -549,7 +557,11 @@ function VersionActions({
         />
       </div>
 
-      <ActionStatus actionState={actionState} />
+      {actionState.status !== 'idle' ? (
+        <div data-testid="version-history-action-result" data-status={actionState.status}>
+          <ActionStatus actionState={actionState} />
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -668,6 +680,7 @@ function RefList({
                   </div>
                   <button
                     type="button"
+                    data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
                     onClick={() => onCheckoutRef(ref)}
                     disabled={!checkoutEnabled}
                     aria-label={`Checkout ${branchLabel}`}
@@ -728,6 +741,7 @@ function CommitList({
                 ? commitDiffReasonId
                 : undefined;
             const buttonTitle = !diffEnabled ? diffDisabledReason : rootDiffReason;
+            const commitTestId = safeDomId(commit.id);
 
             return (
               <li
@@ -754,9 +768,11 @@ function CommitList({
                     >
                       {formatCommitTime(commit.createdAt)}
                     </time>
+                    <span className="text-[11px] font-medium text-ss-text-secondary">Target</span>
                     <input
                       type="radio"
                       name="version-history-branch-target"
+                      data-testid={`version-history-branch-target-${commitTestId}`}
                       checked={selectedCommitId === commit.id}
                       onChange={() => onSelectCommit(commit.id)}
                       aria-label={`Use ${shortCommitId(commit.id)} as branch target`}
@@ -770,6 +786,7 @@ function CommitList({
                   </div>
                   <button
                     type="button"
+                    data-testid={`version-history-parent-diff-button-${commitTestId}`}
                     onClick={() => onDiffCommit(commit)}
                     disabled={!commitDiffEnabled}
                     aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
@@ -905,10 +922,7 @@ async function readVersionResult<T>(
 }
 
 function emptyPagedRead<T>(limit: number): { readonly ok: true; readonly value: Paged<T> } {
-  return {
-    ok: true,
-    value: { items: [], limit },
-  };
+  return { ok: true, value: { items: [], limit } };
 }
 
 function resolveSelectedOrHeadCommitId(
@@ -928,16 +942,13 @@ function diagnosticFromError(code: string, error: VersionError): VersionPanelDia
       message: error.diagnostics[0]?.message ?? error.target,
     };
   }
-  if (error.code === 'version_capability_unavailable') {
-    return { code, severity: 'warning', message: error.reason };
-  }
-  if (error.code === 'invalid_state') {
-    return { code, severity: 'warning', message: error.reason };
-  }
-  if (error.code === 'not_found') {
-    return { code, severity: 'warning', message: error.reason };
-  }
-  if (error.code === 'invalid_branch_name') {
+  if (
+    error.code === 'version_capability_unavailable' ||
+    error.code === 'invalid_state' ||
+    error.code === 'not_found' ||
+    error.code === 'invalid_branch_name' ||
+    error.code === 'redaction_blocked'
+  ) {
     return { code, severity: 'warning', message: error.reason };
   }
   if (error.code === 'stale_head') {
@@ -950,27 +961,19 @@ function diagnosticFromError(code: string, error: VersionError): VersionPanelDia
   if (error.code === 'stale_revision') {
     return { code, severity: 'warning', message: 'Version revision is stale.' };
   }
-  if (error.code === 'redaction_blocked') {
-    return { code, severity: 'warning', message: error.reason };
-  }
   return { code, severity: 'warning', message: 'Version request failed.' };
 }
 
 function annotationText(value: VersionAnnotationText | undefined): string | undefined {
-  if (!value) return undefined;
-  return value.kind === 'text' ? value.value : 'Redacted';
+  return value ? (value.kind === 'text' ? value.value : 'Redacted') : undefined;
 }
 
 function shortCommitId(id: string): string {
-  return id.startsWith('commit:sha256:')
-    ? id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12)
-    : id;
+  return id.startsWith('commit:sha256:') ? id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12) : id;
 }
 
 function displayBranchName(name: string): string {
-  return name.startsWith(VERSION_BRANCH_REF_PREFIX)
-    ? name.slice(VERSION_BRANCH_REF_PREFIX.length)
-    : name;
+  return name.startsWith(VERSION_BRANCH_REF_PREFIX) ? name.slice(VERSION_BRANCH_REF_PREFIX.length) : name;
 }
 
 function diffEntryLabel(entry: VersionSemanticDiffPage['items'][number]): string {

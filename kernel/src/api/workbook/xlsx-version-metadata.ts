@@ -8,10 +8,9 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
 import type { DocumentContext } from '../../context';
-import {
-  namespaceForDocumentScope,
-  type VersionStoreProvider,
-} from '../../document/version-store/provider';
+import type { VersionStoreProvider } from '../../document/version-store/provider';
+import { readCurrentHeadLocalObjectStoreAuthority } from './version-xlsx-metadata-export-authority';
+import { createMogVersionMetadataExportBlockedError } from './version-xlsx-metadata-export-gate';
 
 export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 const MOG_VERSION_METADATA_MAX_BYTES = 64 * 1024;
@@ -350,74 +349,19 @@ export async function maybeAddMogVersionMetadataToXlsx(
 ): Promise<Uint8Array> {
   if (options?.versionMetadata !== 'include') return removeMogVersionMetadataFromXlsx(xlsxBytes);
   const head = await version.getHead();
+  if (!head.ok) {
+    const reason =
+      diagnosticsFromVersionError(head.error).length > 0 ? 'redaction-failed' : 'head-read-failed';
+    throw createMogVersionMetadataExportBlockedError(reason);
+  }
+  const authority = await readCurrentHeadLocalObjectStoreAuthority(ctx, head);
+  if (!authority.ok) {
+    throw createMogVersionMetadataExportBlockedError(authority.reason);
+  }
   return addMogVersionMetadataToXlsx(
     xlsxBytes,
-    createMogWorkbookVersionXlsxMetadata(
-      ctx,
-      head,
-      await readCurrentHeadLocalObjectStoreAuthority(ctx, head),
-    ),
+    createMogWorkbookVersionXlsxMetadata(ctx, head, authority.value),
   );
-}
-
-async function readCurrentHeadLocalObjectStoreAuthority(
-  ctx: DocumentContext,
-  head: VersionResult<VersionHead>,
-): Promise<
-  | {
-      readonly semanticChangeSetDigest: ObjectDigest;
-      readonly snapshotRootDigest: ObjectDigest;
-    }
-  | undefined
-> {
-  if (!head.ok) return undefined;
-  const provider = versionStoreProviderFromContext(ctx);
-  if (!provider) return undefined;
-
-  try {
-    const registry = await provider.readGraphRegistry();
-    if (registry.status !== 'ok') return undefined;
-
-    const graph = await provider.openGraph(
-      namespaceForDocumentScope(provider.documentScope, registry.registry.currentGraphId),
-      provider.accessContext,
-    );
-    const currentHead = await graph.readHead();
-    if (currentHead.status !== 'success') return undefined;
-    if (
-      !metadataHeadIdentityMatchesExpected(
-        {
-          commitId: currentHead.head.id as VersionHead['id'],
-          ...(currentHead.head.refName
-            ? { refName: currentHead.head.refName as VersionHead['refName'] }
-            : {}),
-          ...(currentHead.head.resolvedFrom
-            ? { resolvedFrom: currentHead.head.resolvedFrom as VersionHead['resolvedFrom'] }
-            : {}),
-          ...(currentHead.head.refRevision
-            ? { refRevision: currentHead.head.refRevision }
-            : {}),
-        },
-        {
-          commitId: head.value.id,
-          ...(head.value.refName ? { refName: head.value.refName } : {}),
-          ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
-          ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
-        },
-      )
-    ) {
-      return undefined;
-    }
-
-    const commit = await graph.readCommit(head.value.id);
-    if (commit.status !== 'success') return undefined;
-    return {
-      semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest,
-      snapshotRootDigest: commit.commit.payload.snapshotRootDigest,
-    };
-  } catch {
-    return undefined;
-  }
 }
 
 function readMogVersionMetadataXmlFromXlsx(

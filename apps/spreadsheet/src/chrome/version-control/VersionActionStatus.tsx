@@ -1,5 +1,11 @@
-import { GitBranch, GitCommit, Undo2 } from 'lucide-react';
-import type { VersionDiagnostic, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import { CloudUpload, GitBranch, GitCommit, Undo2 } from 'lucide-react';
+import type {
+  JsonValue,
+  VersionDiagnostic,
+  VersionPromotePendingRemoteResult,
+  VersionSurfaceStatus,
+  WorkbookCommitId,
+} from '@mog-sdk/contracts/api';
 
 import { DisabledReason } from './version-action-availability';
 import { shortCommitId } from './version-history-format';
@@ -15,6 +21,12 @@ export type VersionActionState =
   | { readonly status: 'running'; readonly label: string }
   | { readonly status: 'success'; readonly message: string }
   | { readonly status: 'error'; readonly diagnostic: VersionPanelDiagnostic };
+
+export type VersionRemotePromotionStatus = {
+  readonly state: 'ready' | 'pending' | 'running' | 'unavailable';
+  readonly label: string;
+  readonly detail?: string;
+};
 
 export function ActionStatus({
   actionState,
@@ -55,15 +67,19 @@ export function VersionActions({
   commitEnabled,
   branchEnabled,
   rollbackEnabled,
+  remotePromoteEnabled,
   commitDisabledReason,
   branchDisabledReason,
   rollbackDisabledReason,
+  remotePromoteDisabledReason,
+  remotePromotionStatus,
   onCommitMessageChange,
   onBranchNameChange,
   onRollbackReasonChange,
   onCommit,
   onCreateBranch,
   onStageRollback,
+  onPromotePendingRemote,
 }: {
   readonly commitMessage: string;
   readonly branchName: string;
@@ -73,19 +89,24 @@ export function VersionActions({
   readonly commitEnabled: boolean;
   readonly branchEnabled: boolean;
   readonly rollbackEnabled: boolean;
+  readonly remotePromoteEnabled: boolean;
   readonly commitDisabledReason?: string;
   readonly branchDisabledReason?: string;
   readonly rollbackDisabledReason?: string;
+  readonly remotePromoteDisabledReason?: string;
+  readonly remotePromotionStatus: VersionRemotePromotionStatus;
   readonly onCommitMessageChange: (value: string) => void;
   readonly onBranchNameChange: (value: string) => void;
   readonly onRollbackReasonChange: (value: string) => void;
   readonly onCommit: () => void;
   readonly onCreateBranch: () => void;
   readonly onStageRollback: () => void;
+  readonly onPromotePendingRemote: () => void;
 }): React.JSX.Element {
   const commitReasonId = 'version-commit-disabled-reason';
   const branchReasonId = 'version-branch-disabled-reason';
   const rollbackReasonId = 'version-rollback-disabled-reason';
+  const remotePromoteReasonId = 'version-remote-promote-disabled-reason';
 
   return (
     <section className="flex flex-col gap-3" aria-label="Version actions">
@@ -199,6 +220,44 @@ export function VersionActions({
         />
       </div>
 
+      <div
+        className="rounded-sm border border-ss-border bg-ss-surface px-2.5 py-2"
+        data-testid="version-history-remote-promote-status"
+        data-state={remotePromotionStatus.state}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-body-sm font-medium text-ss-text">Remote backlog</span>
+          <span className="text-[11px] uppercase text-ss-text-tertiary">
+            {remotePromotionStatus.label}
+          </span>
+        </div>
+        {remotePromotionStatus.detail ? (
+          <div className="mt-1 text-[11px] leading-snug text-ss-text-secondary">
+            {remotePromotionStatus.detail}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          data-testid="version-history-promote-remote-button"
+          onClick={onPromotePendingRemote}
+          disabled={!remotePromoteEnabled}
+          aria-describedby={
+            !remotePromoteEnabled && remotePromoteDisabledReason
+              ? remotePromoteReasonId
+              : undefined
+          }
+          title={!remotePromoteEnabled ? remotePromoteDisabledReason : undefined}
+          className="mt-2 inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+        >
+          <CloudUpload size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span>Promote remote</span>
+        </button>
+        <DisabledReason
+          id={remotePromoteReasonId}
+          reason={!remotePromoteEnabled ? remotePromoteDisabledReason : undefined}
+        />
+      </div>
+
       {actionState.status !== 'idle' ? (
         <div data-testid="version-history-action-result" data-status={actionState.status}>
           <ActionStatus actionState={actionState} />
@@ -206,4 +265,162 @@ export function VersionActions({
       ) : null}
     </section>
   );
+}
+
+export function getRemotePromotionStatus(
+  surface: VersionSurfaceStatus | undefined,
+): VersionRemotePromotionStatus {
+  if (!surface) {
+    return {
+      state: 'unavailable',
+      label: 'Unavailable',
+      detail: 'Version surface status is unavailable.',
+    };
+  }
+
+  const remotePromoteState = surface.capabilities['version:remotePromote'];
+  if (remotePromoteState?.enabled === false) {
+    return {
+      state: 'unavailable',
+      label: 'Unavailable',
+      detail: remotePromoteState.reason,
+    };
+  }
+
+  const providerWriteDiagnostic = firstPendingProviderWritesDiagnostic(surface);
+  const counts = providerWriteDiagnostic ? pendingRemoteCounts(providerWriteDiagnostic.data) : {};
+  const detail = providerWriteDiagnostic?.message;
+
+  if ((counts.pendingRemotePromotionActiveCount ?? 0) > 0) {
+    return {
+      state: 'running',
+      label: 'Running',
+      detail: detail ?? 'Pending remote promotion is already running.',
+    };
+  }
+
+  if (
+    (counts.pendingRemoteSegmentCount ?? 0) > 0 ||
+    (counts.pendingRemotePromotionQueuedCount ?? 0) > 0
+  ) {
+    const pendingSegmentCount = counts.pendingRemoteSegmentCount ?? 0;
+    const queuedCount = counts.pendingRemotePromotionQueuedCount ?? 0;
+    return {
+      state: 'pending',
+      label: 'Pending',
+      detail:
+        detail ??
+        formatPendingRemoteDetail({
+          pendingRemoteSegmentCount: pendingSegmentCount,
+          pendingRemotePromotionQueuedCount: queuedCount,
+        }),
+    };
+  }
+
+  if (surface.dirty.pendingProviderWrites) {
+    return {
+      state: 'pending',
+      label: 'Pending',
+      detail: detail ?? 'Provider writes are pending.',
+    };
+  }
+
+  return {
+    state: 'ready',
+    label: 'Ready',
+  };
+}
+
+export function remotePromotionActionMessage(
+  result: VersionPromotePendingRemoteResult,
+): string {
+  const promoted = result.promotedSegmentIds.length;
+  const skipped = result.skipped.length;
+  if (result.status === 'partial') {
+    return `Promoted ${formatCount(promoted, 'pending remote segment')}; skipped ${skipped}`;
+  }
+  if (promoted === 0) return 'No pending remote changes to promote';
+  return `Promoted ${formatCount(promoted, 'pending remote segment')} into ${formatCount(
+    result.commitIds.length,
+    'commit',
+  )}`;
+}
+
+export function diagnosticFromRemotePromotionResult(
+  code: string,
+  result: VersionPromotePendingRemoteResult,
+): VersionPanelDiagnostic {
+  const diagnostic = result.diagnostics.find((entry) => entry.message.trim().length > 0);
+  if (diagnostic) {
+    return {
+      code: diagnostic.code,
+      severity: diagnostic.severity,
+      message: diagnostic.message,
+    };
+  }
+  const skipped = result.skipped.find((entry) => entry.message.trim().length > 0);
+  if (skipped) {
+    return {
+      code,
+      severity: 'warning',
+      message: skipped.message,
+    };
+  }
+  return {
+    code,
+    severity: 'warning',
+    message: 'Pending remote promotion did not promote any backlog entries.',
+  };
+}
+
+function firstPendingProviderWritesDiagnostic(
+  surface: VersionSurfaceStatus,
+): VersionDiagnostic | undefined {
+  return [...surface.dirty.unsafeReasons, ...surface.dirty.diagnostics].find(
+    (diagnostic) => diagnostic.code === 'version.surfaceStatus.pendingProviderWrites',
+  );
+}
+
+function pendingRemoteCounts(
+  data: Readonly<Record<string, JsonValue>> | undefined,
+): {
+  readonly pendingRemoteSegmentCount?: number;
+  readonly pendingRemotePromotionActiveCount?: number;
+  readonly pendingRemotePromotionQueuedCount?: number;
+} {
+  if (!data) return {};
+  return {
+    pendingRemoteSegmentCount: numberValue(data['pendingRemoteSegmentCount']),
+    pendingRemotePromotionActiveCount: numberValue(data['pendingRemotePromotionActiveCount']),
+    pendingRemotePromotionQueuedCount: numberValue(data['pendingRemotePromotionQueuedCount']),
+  };
+}
+
+function numberValue(value: JsonValue | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function formatPendingRemoteDetail({
+  pendingRemoteSegmentCount,
+  pendingRemotePromotionQueuedCount,
+}: {
+  readonly pendingRemoteSegmentCount: number;
+  readonly pendingRemotePromotionQueuedCount: number;
+}): string {
+  const parts: string[] = [];
+  if (pendingRemoteSegmentCount > 0) {
+    parts.push(
+      `${pendingRemoteSegmentCount} pending remote ${pendingRemoteSegmentCount === 1 ? 'segment' : 'segments'}`,
+    );
+  }
+  if (pendingRemotePromotionQueuedCount > 0) {
+    parts.push(
+      `${pendingRemotePromotionQueuedCount} queued ${pendingRemotePromotionQueuedCount === 1 ? 'promotion' : 'promotions'}`,
+    );
+  }
+  return parts.length > 0 ? parts.join(', ') : 'Pending remote promotion is queued.';
+}
+
+function formatCount(count: number, label: string): string {
+  return `${count} ${label}${count === 1 ? '' : 's'}`;
 }

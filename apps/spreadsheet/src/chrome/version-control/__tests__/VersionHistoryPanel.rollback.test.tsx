@@ -10,6 +10,7 @@ import type {
   VersionRecordRevision,
   VersionResult,
   VersionSurfaceStatus,
+  VersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
@@ -158,6 +159,42 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     );
   });
 
+  it('surfaces rejected rollback dry-run diagnostics from the result payload', async () => {
+    const workbook = createWorkbook({
+      surface: createSurfaceStatus({ revertEnabled: true }),
+      revert: jest.fn(async () => ({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          status: 'rejected',
+          target: { kind: 'commit', commitId: HEAD_COMMIT_ID },
+          diagnostics: [
+            {
+              issueCode: 'VERSION_REVERT_BLOCKED' as VersionStoreDiagnostic['issueCode'],
+              severity: 'warning',
+              recoverability: 'retry',
+              messageTemplateId:
+                'version.revert.blocked' as VersionStoreDiagnostic['messageTemplateId'],
+              safeMessage: 'Rollback is blocked while the target ref is stale.',
+              redacted: true,
+              mutationGuarantee: 'ref-not-mutated',
+            },
+          ],
+          mutationGuarantee: 'ref-not-mutated',
+        },
+      })),
+    });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
+    await user.click(screen.getByRole('button', { name: 'Stage rollback' }));
+
+    await expectActionResult('Rollback is blocked while the target ref is stale.', 'error');
+  });
+
   it('disables rollback staging when the current checkout session is stale', async () => {
     const workbook = createWorkbook({
       surface: createSurfaceStatus({
@@ -233,6 +270,16 @@ function createWorkbook({
     commit: jest.fn(),
     createBranch: jest.fn(),
     checkout: jest.fn(),
+    promotePendingRemote: jest.fn(async () => ({
+      ok: true,
+      value: {
+        status: 'success',
+        promotedSegmentIds: [],
+        commitIds: [],
+        skipped: [],
+        diagnostics: [],
+      },
+    })),
     diff: jest.fn(),
     revert:
       revert ??

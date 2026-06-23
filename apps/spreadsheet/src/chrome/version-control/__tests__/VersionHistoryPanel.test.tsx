@@ -185,6 +185,14 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-capability-version-read')).toHaveAccessibleName(
       'Read enabled',
     );
+    expect(
+      screen.getByTestId('version-history-capability-version-remotePromote'),
+    ).toHaveAccessibleName('Remote promote enabled');
+    expect(screen.getByTestId('version-history-remote-promote-status')).toHaveAttribute(
+      'data-state',
+      'ready',
+    );
+    expect(screen.getByTestId('version-history-promote-remote-button')).toBeEnabled();
   });
 
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {
@@ -345,7 +353,7 @@ describe('VersionHistoryPanelContent', () => {
     );
     expectDisabledButtonReason(
       screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      'Wait for provider writes to settle before checking out.',
+      providerWriteReason.message,
     );
   });
 
@@ -765,6 +773,16 @@ function createWorkbook(
         },
       }),
     ),
+    promotePendingRemote: jest.fn(async () => ({
+      ok: true,
+      value: {
+        status: 'success',
+        promotedSegmentIds: [],
+        commitIds: [],
+        skipped: [],
+        diagnostics: [],
+      },
+    })),
     checkout: jest.fn(async () => ({
       ok: true,
       value: {

@@ -15,6 +15,7 @@ const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
   'version:checkout': 'Checkout',
   'version:diff': 'Diff',
   'version:revert': 'Rollback',
+  'version:remotePromote': 'Remote promote',
 };
 
 const VERSIONING_DISABLED_REASON = 'Versioning is disabled for this workbook.';
@@ -139,6 +140,21 @@ export function getRollbackAvailability(
   return enabledAction();
 }
 
+export function getRemotePromoteAvailability(
+  data: VersionActionSurfaceData | undefined,
+  actionBusy: boolean,
+  loading: boolean,
+): VersionActionAvailability {
+  if (!data) return disabledAction('Version status is unavailable.');
+
+  const commonReason = commonActionDisabledReason(actionBusy, loading);
+  if (commonReason) return disabledAction(commonReason);
+
+  const surfaceReason = actionSurfaceDisabledReason(data.surface, 'version:remotePromote');
+  if (surfaceReason) return disabledAction(surfaceReason);
+  return enabledAction();
+}
+
 export function isCapabilityEnabled(
   surface: VersionSurfaceStatus,
   capability: VersionCapability,
@@ -240,7 +256,8 @@ function checkoutUnsafeDisabledReason(surface: VersionSurfaceStatus): string | u
   const dirty = surface.dirty;
   if (dirty.checkoutSafe) return undefined;
 
-  const providerWriteReason = providerWritesDisabledReason(surface, 'checking out');
+  const providerWriteReason =
+    providerWritesDiagnosticMessage(surface) ?? providerWritesDisabledReason(surface, 'checking out');
   if (providerWriteReason) return providerWriteReason;
 
   const dirtyDomainReason = unsupportedDirtyDomainsDisabledReason(surface, 'checkout');
@@ -264,6 +281,15 @@ function providerWritesDisabledReason(
   return surface.dirty.pendingProviderWrites
     ? `Wait for provider writes to settle before ${action}.`
     : undefined;
+}
+
+function providerWritesDiagnosticMessage(surface: VersionSurfaceStatus): string | undefined {
+  if (!surface.dirty.pendingProviderWrites) return undefined;
+  const pendingProviderDiagnostics = [
+    ...surface.dirty.unsafeReasons,
+    ...surface.dirty.diagnostics,
+  ].filter((diagnostic) => diagnostic.code === 'version.surfaceStatus.pendingProviderWrites');
+  return firstDiagnosticMessage(pendingProviderDiagnostics);
 }
 
 function unsupportedDirtyDomainsDisabledReason(

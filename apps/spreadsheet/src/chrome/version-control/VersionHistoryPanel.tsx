@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { GitBranch, GitCommit, GitCompare, History, RefreshCw, X } from 'lucide-react';
 import type {
   AgentProposalSummary,
@@ -26,11 +26,15 @@ import {
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
+  getRemotePromoteAvailability,
   getRollbackAvailability,
   isCapabilityEnabled,
   safeDomId,
 } from './version-action-availability';
 import {
+  diagnosticFromRemotePromotionResult,
+  getRemotePromotionStatus,
+  remotePromotionActionMessage,
   VersionActions,
   type VersionActionState,
   type VersionPanelDiagnostic,
@@ -53,6 +57,7 @@ const CAPABILITY_ROWS: readonly VersionCapability[] = [
   'version:branch',
   'version:checkout',
   'version:revert',
+  'version:remotePromote',
   'version:reviewRead',
   'version:reviewWrite',
 ];
@@ -93,6 +98,7 @@ export type VersionHistoryWorkbook = {
     | 'listRefs'
     | 'createBranch'
     | 'checkout'
+    | 'promotePendingRemote'
     | 'revert'
     | 'diff'
     | 'listReviews'
@@ -252,11 +258,14 @@ export function VersionHistoryPanelContent({
     rollbackReason,
     selectedOrHeadCommitId,
   );
+  const remotePromoteAvailability = getRemotePromoteAvailability(data, actionBusy, loading);
+  const remotePromotionStatus = getRemotePromotionStatus(data?.surface);
   const canCommit = commitAvailability.enabled;
   const canCreateBranch = branchAvailability.enabled;
   const canCheckout = checkoutAvailability.enabled;
   const canDiff = diffAvailability.enabled;
   const canStageRollback = rollbackAvailability.enabled;
+  const canPromoteRemote = remotePromoteAvailability.enabled;
 
   const handleCommit = useCallback(async () => {
     if (!data || !canCommit) return;
@@ -362,6 +371,36 @@ export function VersionHistoryPanelContent({
       message: rollbackActionMessage(result.value, selectedOrHeadCommitId),
     });
   }, [canStageRollback, data, rollbackReason, selectedOrHeadCommitId, workbook]);
+
+  const handlePromotePendingRemote = useCallback(async () => {
+    if (!data || !canPromoteRemote) return;
+
+    setActionState({ status: 'running', label: 'Promoting pending remote changes' });
+    const result = await readVersionResult('VERSION_UI_REMOTE_PROMOTE_FAILED', () =>
+      workbook.version.promotePendingRemote({ includeDiagnostics: true }),
+    );
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      return;
+    }
+
+    if (result.value.status === 'failed') {
+      setActionState({
+        status: 'error',
+        diagnostic: diagnosticFromRemotePromotionResult(
+          'VERSION_UI_REMOTE_PROMOTE_REJECTED',
+          result.value,
+        ),
+      });
+      return;
+    }
+
+    setActionState({
+      status: 'success',
+      message: remotePromotionActionMessage(result.value),
+    });
+    await load();
+  }, [canPromoteRemote, data, load, workbook]);
 
   const handleCheckoutRef = useCallback(
     async (ref: VersionRef) => {
@@ -513,15 +552,19 @@ export function VersionHistoryPanelContent({
               commitEnabled={canCommit}
               branchEnabled={canCreateBranch}
               rollbackEnabled={canStageRollback}
+              remotePromoteEnabled={canPromoteRemote}
               commitDisabledReason={commitAvailability.disabledReason}
               branchDisabledReason={branchAvailability.disabledReason}
               rollbackDisabledReason={rollbackAvailability.disabledReason}
+              remotePromoteDisabledReason={remotePromoteAvailability.disabledReason}
+              remotePromotionStatus={remotePromotionStatus}
               onCommitMessageChange={setCommitMessage}
               onBranchNameChange={setBranchName}
               onRollbackReasonChange={setRollbackReason}
               onCommit={handleCommit}
               onCreateBranch={handleCreateBranch}
               onStageRollback={handleStageRollback}
+              onPromotePendingRemote={handlePromotePendingRemote}
             />
             <RefList
               refs={data.refs}
@@ -589,19 +632,11 @@ function VersionStatusSummary({ data }: { readonly data: VersionHistoryData }): 
   );
 }
 
-function CapabilitySummary({
-  surface,
-}: {
-  readonly surface?: VersionSurfaceStatus;
-}): React.JSX.Element {
-  const rows = useMemo(
-    () =>
-      CAPABILITY_ROWS.map((capability) => ({
-        capability,
-        state: surface?.capabilities[capability],
-      })),
-    [surface],
-  );
+function CapabilitySummary({ surface }: { readonly surface?: VersionSurfaceStatus }): React.JSX.Element {
+  const rows = CAPABILITY_ROWS.map((capability) => ({
+    capability,
+    state: surface?.capabilities[capability],
+  }));
 
   return (
     <section className="flex flex-wrap gap-1.5" aria-label="Version capabilities">

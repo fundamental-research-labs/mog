@@ -13,6 +13,7 @@ import {
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
+  getRemotePromoteAvailability,
   getRollbackAvailability,
   type VersionActionAvailability,
 } from '../version-action-availability';
@@ -42,7 +43,12 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
 
 type VersionActionCapability = Extract<
   VersionCapability,
-  'version:commit' | 'version:branch' | 'version:checkout' | 'version:diff' | 'version:revert'
+  | 'version:commit'
+  | 'version:branch'
+  | 'version:checkout'
+  | 'version:diff'
+  | 'version:revert'
+  | 'version:remotePromote'
 >;
 
 type ActionAvailabilityOptions = {
@@ -108,6 +114,15 @@ const ACTION_CASES: readonly ActionCase[] = [
         options.targetCommitId ?? TARGET_COMMIT_ID,
       ),
   },
+  {
+    capability: 'version:remotePromote',
+    availability: (surface, options = {}) =>
+      getRemotePromoteAvailability(
+        { surface },
+        options.actionBusy ?? false,
+        options.loading ?? false,
+      ),
+  },
 ];
 
 describe('version action availability', () => {
@@ -133,6 +148,10 @@ describe('version action availability', () => {
         'Rollback selected commit',
         TARGET_COMMIT_ID,
       ),
+      'Version status is unavailable.',
+    );
+    expectDisabled(
+      getRemotePromoteAvailability(undefined, false, false),
       'Version status is unavailable.',
     );
 
@@ -165,6 +184,10 @@ describe('version action availability', () => {
     expectDisabled(getDiffAvailability({}, false, false), 'Version surface status is unavailable.');
     expectDisabled(
       getRollbackAvailability({}, false, false, 'Rollback selected commit', TARGET_COMMIT_ID),
+      'Version surface status is unavailable.',
+    );
+    expectDisabled(
+      getRemotePromoteAvailability({}, false, false),
       'Version surface status is unavailable.',
     );
   });
@@ -239,6 +262,25 @@ describe('version action availability', () => {
         TARGET_COMMIT_ID,
       ),
     ).toEqual({ enabled: true });
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+  });
+
+  it('uses pending-provider-write diagnostics for blocked checkout when available', () => {
+    const pendingProviderWrites = diagnostic(
+      'Remote sync changes are waiting to be promoted into version history; checkout is unsafe.',
+      'version.surfaceStatus.pendingProviderWrites',
+    );
+    const surface = createSurfaceStatus({
+      dirty: {
+        pendingProviderWrites: true,
+        checkoutSafe: false,
+        unsafeReasons: [pendingProviderWrites],
+        diagnostics: [pendingProviderWrites],
+      },
+    });
+
+    expectDisabled(getCheckoutAvailability({ surface }, false, false), pendingProviderWrites.message);
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
 
   it('disables commit and checkout for unsupported dirty domains', () => {
@@ -382,6 +424,7 @@ describe('version action availability', () => {
       'version:checkout': 'Checkout is disabled by the surface contract.',
       'version:diff': 'Diff is disabled by the surface contract.',
       'version:revert': 'Rollback is disabled by the surface contract.',
+      'version:remotePromote': 'Remote promote is disabled by the surface contract.',
     };
     const dirty = {
       hasUncommittedLocalChanges: true,
@@ -468,6 +511,22 @@ describe('version action availability', () => {
       ),
       actionCapabilityReasons['version:revert'],
     );
+    expectDisabled(
+      getRemotePromoteAvailability(
+        {
+          surface: createSurfaceStatus({
+            capabilityOverrides: {
+              'version:remotePromote': disabledCapability(
+                actionCapabilityReasons['version:remotePromote'],
+              ),
+            },
+          }),
+        },
+        false,
+        false,
+      ),
+      actionCapabilityReasons['version:remotePromote'],
+    );
   });
 
   it('disables commit, checkout, and rollback when the current checkout session is stale', () => {
@@ -508,6 +567,7 @@ describe('version action availability', () => {
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
 
   it('enables actions when surface capabilities and local prerequisites pass', () => {

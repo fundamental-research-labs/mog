@@ -30,7 +30,7 @@ pub fn parse_types(source: &str, config: &TypeGenConfig) -> Result<Vec<TsTypeDef
     Ok(defs)
 }
 /// Check whether an item has `#[derive(Serialize)]` among its attributes.
-fn has_derive_serialize(attrs: &[syn::Attribute]) -> bool {
+pub(super) fn has_derive_serialize(attrs: &[syn::Attribute]) -> bool {
     attrs.iter().any(|attr| {
         if !attr.path().is_ident("derive") {
             return false;

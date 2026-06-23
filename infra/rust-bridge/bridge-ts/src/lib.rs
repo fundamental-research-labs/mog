@@ -37,7 +37,11 @@ pub use emit::{
     is_binary_mutation_return, method_access_to_kind,
 };
 pub use parse::{merge_blocks, parse_source};
-pub use parse_types::{TypeGenConfig, parse_types};
+pub use parse_types::{
+    PublicKernelIntegerPolicyViolation, TypeGenConfig,
+    collect_public_kernel_integer_policy_violations, parse_types,
+    validate_public_kernel_integer_policy,
+};
 pub use types::{ImportConfig, ImportGroup, TsApi, TsTypeDef, TypeImport};
 
 /// Parse Rust source code and generate TypeScript client code.

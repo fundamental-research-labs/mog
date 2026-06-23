@@ -1,31 +1,41 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use compute_document::hex::{id_to_hex, parse_cell_id};
+use compute_document::schema::{KEY_CONDITIONAL_FORMAT, KEY_VALIDATION_RULES};
+use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalCellValue, CanonicalDirectFormat, SemanticCellState,
-    SemanticColumnState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
-    SemanticRowState, SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState,
-    VersionDomainClass,
+    CanonicalCellValue, CanonicalDirectFormat, SemanticCellState, SemanticColumnState,
+    SemanticDomainState, SemanticObjectDigest, SemanticObjectKind, SemanticRowState,
+    SemanticSheetState, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
+    canonical_digest,
 };
 use value_types::CellValue;
+use yrs::{Map, Transact};
 
 use crate::storage::{
-    engine::YrsComputeEngine, properties, sheet::dimensions, workbook::named_ranges,
+    engine::YrsComputeEngine,
+    infra::grid_helpers::{get_sheet_submap, sheet_id_to_hex},
+    properties,
+    sheet::{dimensions, floating_objects},
+    workbook::named_ranges,
 };
 
 use super::formula_reader::{
-    canonical_formula, canonical_formula_ref, canonical_formula_ref_object_ids,
-    record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
+    UNSUPPORTED_CELL_FORMULAS_DOMAIN, canonical_formula, canonical_formula_ref,
+    canonical_formula_ref_object_ids, record_unrepresented_persisted_formula,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
 use super::{
-    SemanticStateReadError, SemanticWorkbookStateReader, CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN,
-    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN,
+    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
+    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticStateReadError,
+    SemanticWorkbookStateReader,
 };
 
+const DATA_VALIDATION_DOMAIN: &str = "data-validation";
+const CONDITIONAL_FORMATTING_DOMAIN: &str = "conditional-formatting";
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
 
 impl SemanticWorkbookStateReader for YrsComputeEngine {
@@ -60,6 +70,8 @@ pub fn read_engine_semantic_workbook_state(
 
     let mut unsupported_values = BTreeMap::new();
     let mut unsupported_formulas = BTreeMap::new();
+    let mut data_validation_presence = BTreeMap::new();
+    let mut conditional_formatting_presence = BTreeMap::new();
     let sheet_order = engine.storage().sheet_order();
     let sheet_keys: Vec<_> = sheet_order
         .iter()
@@ -217,12 +229,26 @@ pub fn read_engine_semantic_workbook_state(
             );
         }
 
+        record_data_validation_presence(
+            engine,
+            &sheet_id,
+            &sheet_key,
+            &mut data_validation_presence,
+        )?;
+        record_conditional_formatting_presence(
+            engine,
+            &sheet_id,
+            &sheet_key,
+            &mut conditional_formatting_presence,
+        )?;
+
         state.sheets.insert(sheet_key, sheet_state);
     }
 
     if let Some(domain) = state.domains.get_mut(NAMED_RANGES_DOMAIN) {
         domain.objects = canonical_named_ranges(engine, &sheet_keys)?;
     }
+    let unsupported_floating_objects = canonical_floating_objects(engine, &sheet_keys)?;
 
     if !unsupported_values.is_empty() {
         state.domains.insert(
@@ -246,8 +272,252 @@ pub fn read_engine_semantic_workbook_state(
             },
         );
     }
+    insert_authored_opaque_blocking_domain(
+        &mut state,
+        DATA_VALIDATION_DOMAIN,
+        data_validation_presence,
+    );
+    insert_authored_opaque_blocking_domain(
+        &mut state,
+        CONDITIONAL_FORMATTING_DOMAIN,
+        conditional_formatting_presence,
+    );
+    if let Some((domain_id, domain_class, objects)) = unsupported_floating_objects.charts_domain() {
+        state.domains.insert(
+            domain_id.to_string(),
+            SemanticDomainState {
+                domain_id: domain_id.to_string(),
+                domain_class,
+                capability_state: VersionDomainCapabilityState::OpaqueBlocking,
+                objects,
+            },
+        );
+    }
+    if let Some((domain_id, domain_class, objects)) =
+        unsupported_floating_objects.floating_objects_domain()
+    {
+        state.domains.insert(
+            domain_id.to_string(),
+            SemanticDomainState {
+                domain_id: domain_id.to_string(),
+                domain_class,
+                capability_state: VersionDomainCapabilityState::OpaqueBlocking,
+                objects,
+            },
+        );
+    }
 
     Ok(state)
+}
+
+fn record_data_validation_presence(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+    sheet_key: &str,
+    objects: &mut BTreeMap<String, SemanticObjectDigest>,
+) -> Result<(), SemanticStateReadError> {
+    let raw_entry_count = raw_sheet_submap_entry_count(engine, sheet_id, KEY_VALIDATION_RULES);
+    if raw_entry_count == 0 {
+        return Ok(());
+    }
+
+    let range_schemas = engine.get_range_schemas_for_sheet(sheet_id);
+    record_presence_detector_row(
+        objects,
+        DATA_VALIDATION_DOMAIN,
+        sheet_key,
+        "yrs-validation-rules-presence",
+        raw_entry_count,
+        range_schemas.len(),
+        &range_schemas,
+    )
+}
+
+fn record_conditional_formatting_presence(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+    sheet_key: &str,
+    objects: &mut BTreeMap<String, SemanticObjectDigest>,
+) -> Result<(), SemanticStateReadError> {
+    let raw_entry_count = raw_sheet_submap_entry_count(engine, sheet_id, KEY_CONDITIONAL_FORMAT);
+    if raw_entry_count == 0 {
+        return Ok(());
+    }
+
+    let conditional_formats = engine.get_all_cf_rules(sheet_id);
+    record_presence_detector_row(
+        objects,
+        CONDITIONAL_FORMATTING_DOMAIN,
+        sheet_key,
+        "yrs-conditional-format-presence",
+        raw_entry_count,
+        conditional_formats.len(),
+        &conditional_formats,
+    )
+}
+
+fn raw_sheet_submap_entry_count(
+    engine: &YrsComputeEngine,
+    sheet_id: &cell_types::SheetId,
+    submap_key: &str,
+) -> usize {
+    let sheets = engine.storage().sheets_ref();
+    let txn = engine.storage().doc().transact();
+    let sheet_hex = sheet_id_to_hex(sheet_id);
+    get_sheet_submap(&txn, &sheets, &sheet_hex, submap_key)
+        .map(|map| map.len(&txn) as usize)
+        .unwrap_or(0)
+}
+
+fn record_presence_detector_row<T: Serialize>(
+    objects: &mut BTreeMap<String, SemanticObjectDigest>,
+    domain_id: &str,
+    sheet_key: &str,
+    detector_id: &str,
+    raw_entry_count: usize,
+    typed_entry_count: usize,
+    typed_entries: T,
+) -> Result<(), SemanticStateReadError> {
+    let object_id = format!("domain-presence:{domain_id}:{sheet_key}");
+    let mut payload = serde_json::Map::new();
+    payload.insert("detectorId".to_string(), Value::String(detector_id.to_string()));
+    payload.insert("domainId".to_string(), Value::String(domain_id.to_string()));
+    payload.insert("sheetId".to_string(), Value::String(sheet_key.to_string()));
+    payload.insert("present".to_string(), Value::Bool(true));
+    payload.insert(
+        "rawEntryCount".to_string(),
+        Value::Number(Number::from(raw_entry_count as u64)),
+    );
+    payload.insert(
+        "typedEntryCount".to_string(),
+        Value::Number(Number::from(typed_entry_count as u64)),
+    );
+    payload.insert(
+        "typedEntries".to_string(),
+        canonicalize_json_value(serde_json::to_value(typed_entries)?),
+    );
+    let payload = canonicalize_json_value(Value::Object(payload));
+
+    objects.insert(
+        object_id.clone(),
+        SemanticObjectDigest {
+            object_id,
+            object_kind: SemanticObjectKind::DomainAttachment,
+            domain_id: domain_id.to_string(),
+            digest: canonical_digest(&payload)?,
+        },
+    );
+    Ok(())
+}
+
+fn insert_authored_opaque_blocking_domain(
+    state: &mut SemanticWorkbookState,
+    domain_id: &str,
+    objects: BTreeMap<String, SemanticObjectDigest>,
+) {
+    if objects.is_empty() {
+        return;
+    }
+
+    state.domains.insert(
+        domain_id.to_string(),
+        SemanticDomainState {
+            domain_id: domain_id.to_string(),
+            domain_class: VersionDomainClass::Authored,
+            capability_state: VersionDomainCapabilityState::OpaqueBlocking,
+            objects,
+        },
+    );
+}
+
+struct UnsupportedFloatingObjects {
+    charts: BTreeMap<String, SemanticObjectDigest>,
+    floating_objects: BTreeMap<String, SemanticObjectDigest>,
+}
+
+impl UnsupportedFloatingObjects {
+    fn charts_domain(
+        &self,
+    ) -> Option<(
+        &'static str,
+        VersionDomainClass,
+        BTreeMap<String, SemanticObjectDigest>,
+    )> {
+        if self.charts.is_empty() {
+            return None;
+        }
+        Some((
+            CHARTS_DOMAIN,
+            VersionDomainClass::Authored,
+            self.charts.clone(),
+        ))
+    }
+
+    fn floating_objects_domain(
+        &self,
+    ) -> Option<(
+        &'static str,
+        VersionDomainClass,
+        BTreeMap<String, SemanticObjectDigest>,
+    )> {
+        if self.floating_objects.is_empty() {
+            return None;
+        }
+        Some((
+            FLOATING_OBJECTS_DOMAIN,
+            VersionDomainClass::Authored,
+            self.floating_objects.clone(),
+        ))
+    }
+}
+
+fn canonical_floating_objects(
+    engine: &YrsComputeEngine,
+    sheet_keys: &[(cell_types::SheetId, String)],
+) -> Result<UnsupportedFloatingObjects, SemanticStateReadError> {
+    let mut unsupported = UnsupportedFloatingObjects {
+        charts: BTreeMap::new(),
+        floating_objects: BTreeMap::new(),
+    };
+
+    for (sheet_id, sheet_key) in sheet_keys {
+        for (raw_object_id, object) in floating_objects::get_all_floating_objects(
+            engine.storage().doc(),
+            engine.storage().sheets(),
+            sheet_id,
+        ) {
+            let object_type = object.get("type").and_then(Value::as_str);
+            let (domain_id, object_id, objects) = if object_type == Some("chart") {
+                (
+                    CHARTS_DOMAIN,
+                    format!("chart:{sheet_key}:{raw_object_id}"),
+                    &mut unsupported.charts,
+                )
+            } else {
+                (
+                    FLOATING_OBJECTS_DOMAIN,
+                    format!("floating-object:{sheet_key}:{raw_object_id}"),
+                    &mut unsupported.floating_objects,
+                )
+            };
+            let payload = canonicalize_json_value(serde_json::json!({
+                "sheetId": sheet_key,
+                "objectId": raw_object_id,
+                "object": object,
+            }));
+            objects.insert(
+                object_id.clone(),
+                SemanticObjectDigest {
+                    object_id,
+                    object_kind: SemanticObjectKind::DomainAttachment,
+                    domain_id: domain_id.to_string(),
+                    digest: canonical_digest(&payload)?,
+                },
+            );
+        }
+    }
+
+    Ok(unsupported)
 }
 
 fn canonical_named_ranges(

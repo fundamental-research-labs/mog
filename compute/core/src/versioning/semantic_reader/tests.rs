@@ -6,18 +6,19 @@ use formula_types::{
     StructureChange,
 };
 use snapshot_types::versioning::{
-    semantic_workbook_state_digest, CanonicalFormulaRef, SemanticChangeKind,
+    CanonicalFormulaRef, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticChangeKind,
     SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, SemanticObjectKind,
-    VersionDomainCapabilityState, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION,
+    VersionDomainCapabilityState, VersionDomainClass, semantic_workbook_state_digest,
 };
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 use crate::storage::engine::YrsComputeEngine;
+use crate::storage::sheet::floating_objects::set_floating_object;
 use crate::versioning::{
-    coverage_for_states, diff_semantic_workbook_states, SemanticWorkbookStateReader,
-    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN,
-    SHEETS_DOMAIN,
+    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
+    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticWorkbookStateReader,
+    coverage_for_states, diff_semantic_workbook_states,
 };
 
 mod named_ranges;
@@ -409,10 +410,12 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(unsupported
-        .objects
-        .keys()
-        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
+    assert!(
+        unsupported
+            .objects
+            .keys()
+            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
+    );
     assert_eq!(
         coverage_for_states(&state, &state)
             .iter()
@@ -521,10 +524,12 @@ fn engine_semantic_reader_marks_unrepresented_persisted_formula_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(unsupported
-        .objects
-        .keys()
-        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
+    assert!(
+        unsupported
+            .objects
+            .keys()
+            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
+    );
 }
 
 #[test]
@@ -708,9 +713,11 @@ fn engine_semantic_reader_reads_direct_cell_format() {
     let before_state = before.read_semantic_workbook_state().expect("before state");
     let after_state = after.read_semantic_workbook_state().expect("after state");
     let cell_key = "cell:sheet#0:r0:c0";
-    assert!(before_state.sheets["sheet#0"].cells[cell_key]
-        .direct_format
-        .is_none());
+    assert!(
+        before_state.sheets["sheet#0"].cells[cell_key]
+            .direct_format
+            .is_none()
+    );
     let direct_format = after_state.sheets["sheet#0"].cells[cell_key]
         .direct_format
         .as_ref()
@@ -875,5 +882,111 @@ fn engine_semantic_reader_marks_unsupported_arrays_opaque_blocking() {
     assert_eq!(
         unsupported_coverage.diagnostics[0].severity,
         SemanticDiagnosticSeverity::Error
+    );
+}
+
+#[test]
+fn engine_semantic_reader_marks_present_charts_opaque_blocking() {
+    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let sheet_id = engine.storage().sheet_order()[0];
+    set_floating_object(
+        engine.storage().doc(),
+        engine.storage().sheets(),
+        &sheet_id,
+        "chart-sales",
+        &serde_json::json!({
+            "type": "chart",
+            "chartType": "bar",
+            "dataRange": "A1:B4"
+        }),
+    )
+    .expect("set chart");
+
+    let state = engine.read_semantic_workbook_state().expect("state");
+    let domain = state.domains.get(CHARTS_DOMAIN).expect("charts domain");
+
+    assert_eq!(domain.domain_class, VersionDomainClass::Authored);
+    assert_eq!(
+        domain.capability_state,
+        VersionDomainCapabilityState::OpaqueBlocking
+    );
+    let object = domain
+        .objects
+        .get("chart:sheet#0:chart-sales")
+        .expect("opaque chart object");
+    assert_eq!(object.object_kind, SemanticObjectKind::DomainAttachment);
+    assert_eq!(object.domain_id, CHARTS_DOMAIN);
+
+    let coverage = coverage_for_states(&state, &state);
+    let charts_coverage = coverage
+        .iter()
+        .find(|entry| entry.domain_id == CHARTS_DOMAIN)
+        .expect("charts coverage");
+    assert_eq!(
+        charts_coverage.status,
+        SemanticDomainCoverageStatus::OpaqueBlocking
+    );
+    assert_eq!(
+        charts_coverage.diagnostics[0].severity,
+        SemanticDiagnosticSeverity::Error
+    );
+    assert_eq!(
+        charts_coverage.diagnostics[0].object_ids,
+        vec!["chart:sheet#0:chart-sales".to_string()]
+    );
+}
+
+#[test]
+fn engine_semantic_reader_marks_present_floating_objects_opaque_blocking() {
+    let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![])).expect("engine");
+    let sheet_id = engine.storage().sheet_order()[0];
+    set_floating_object(
+        engine.storage().doc(),
+        engine.storage().sheets(),
+        &sheet_id,
+        "shape-logo",
+        &serde_json::json!({
+            "type": "shape",
+            "shapeType": "rect",
+            "anchorRow": 1,
+            "anchorCol": 2
+        }),
+    )
+    .expect("set floating object");
+
+    let state = engine.read_semantic_workbook_state().expect("state");
+    let domain = state
+        .domains
+        .get(FLOATING_OBJECTS_DOMAIN)
+        .expect("floating objects domain");
+
+    assert_eq!(domain.domain_class, VersionDomainClass::Authored);
+    assert_eq!(
+        domain.capability_state,
+        VersionDomainCapabilityState::OpaqueBlocking
+    );
+    let object = domain
+        .objects
+        .get("floating-object:sheet#0:shape-logo")
+        .expect("opaque floating object");
+    assert_eq!(object.object_kind, SemanticObjectKind::DomainAttachment);
+    assert_eq!(object.domain_id, FLOATING_OBJECTS_DOMAIN);
+
+    let coverage = coverage_for_states(&state, &state);
+    let object_coverage = coverage
+        .iter()
+        .find(|entry| entry.domain_id == FLOATING_OBJECTS_DOMAIN)
+        .expect("floating objects coverage");
+    assert_eq!(
+        object_coverage.status,
+        SemanticDomainCoverageStatus::OpaqueBlocking
+    );
+    assert_eq!(
+        object_coverage.diagnostics[0].severity,
+        SemanticDiagnosticSeverity::Error
+    );
+    assert_eq!(
+        object_coverage.diagnostics[0].object_ids,
+        vec!["floating-object:sheet#0:shape-logo".to_string()]
     );
 }

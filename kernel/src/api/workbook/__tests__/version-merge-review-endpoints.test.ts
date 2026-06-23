@@ -19,6 +19,7 @@ import {
   installVersionDomainDetectorNoopsOnWorkbook,
   withVersionManifest,
 } from './version-domain-support-test-utils';
+import { WorkbookVersionImpl } from '../version';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -144,6 +145,23 @@ describe('WorkbookVersion merge review endpoints', () => {
         expectNoDiagnosticLeaks(invalid, [unsafePackagePath, unsafeCellPath, unsafeValue]);
       },
     );
+  });
+
+  // prettier-ignore
+  it('redacts stale target and access-denied artifact diagnostics', async () => {
+    await withPersistedConflictPreview('public-diagnostic-redaction', async ({ sourceWb, preview, expectedTargetHead }) => {
+      const conflict = preview.conflicts[0];
+      const staleHead = { ...expectedTargetHead, commitId: `commit:sha256:${'9'.repeat(64)}` as any };
+      const target = { targetRef: 'refs/heads/main' as any, expectedTargetHead: staleHead };
+      const detail = await sourceWb.version.getMergeConflictDetail({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, conflictId: conflict.conflictId, expectedConflictDigest: conflictDigestObject(conflict.conflictDigest), valueRole: 'theirs', purpose: 'review', ...target });
+      const saved = await sourceWb.version.saveMergeResolutions({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, resolutions: [], ...target });
+      expectPublicDiagnostic(detail, 'getMergeConflictDetail', 'VERSION_MERGE_RESOLUTION_MISMATCH');
+      expectPublicDiagnostic(saved, 'saveMergeResolutions', 'VERSION_MERGE_RESOLUTION_MISMATCH');
+      for (const result of [detail, saved]) expectNoDiagnosticLeaks(result, [preview.base, preview.ours, preview.theirs, staleHead.commitId, preview.resultDigest.digest]);
+    });
+    const accessDenied = await accessDeniedPreviewArtifactResult();
+    expectPublicDiagnostic(accessDenied.result, 'getMergeConflictDetail', 'VERSION_PERMISSION_DENIED', 'Version merge review is not authorized for this caller.');
+    expectNoDiagnosticLeaks(accessDenied.result, accessDenied.canaries);
   });
 
   it('keeps formula and row/column conflict option identities stable', async () => {
@@ -489,29 +507,33 @@ describe('WorkbookVersion merge review endpoints', () => {
     ] as const;
 
     for (const item of cases) {
-      await withSyntheticConflictPreview(item.graphId, item.conflict, async ({ sourceWb, preview }) => {
-        const result = await sourceWb.version.getMergeConflictDetail({
-          resultId: preview.resultId,
-          resultDigest: preview.resultDigest,
-          redactionPolicyDigest: preview.resultDigest,
-          conflictId: preview.conflicts[0].conflictId,
-          expectedConflictDigest: conflictDigestObject(preview.conflicts[0].conflictDigest),
-          valueRole: 'base',
-          purpose: 'review',
-        });
-        expect(result).toMatchObject({
-          ok: false,
-          error: {
-            code: 'target_unavailable',
-            diagnostics: [
-              expect.objectContaining({
-                code: item.code,
-                data: expect.objectContaining({ recoverability: item.recoverability }),
-              }),
-            ],
-          },
-        });
-      });
+      await withSyntheticConflictPreview(
+        item.graphId,
+        item.conflict,
+        async ({ sourceWb, preview }) => {
+          const result = await sourceWb.version.getMergeConflictDetail({
+            resultId: preview.resultId,
+            resultDigest: preview.resultDigest,
+            redactionPolicyDigest: preview.resultDigest,
+            conflictId: preview.conflicts[0].conflictId,
+            expectedConflictDigest: conflictDigestObject(preview.conflicts[0].conflictDigest),
+            valueRole: 'base',
+            purpose: 'review',
+          });
+          expect(result).toMatchObject({
+            ok: false,
+            error: {
+              code: 'target_unavailable',
+              diagnostics: [
+                expect.objectContaining({
+                  code: item.code,
+                  data: expect.objectContaining({ recoverability: item.recoverability }),
+                }),
+              ],
+            },
+          });
+        },
+      );
     }
   });
 
@@ -622,7 +644,8 @@ async function withPersistedConflictPreview(
     branchWb = await branchHandle.workbook({ versioning });
     installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
-    if (!checkoutBase.ok) throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
+    if (!checkoutBase.ok)
+      throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
     installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
     await branchWb.activeSheet.setCell('A1', 'theirs');
@@ -766,11 +789,10 @@ async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
   const result = await resultPromise;
-  if (!result.ok) {
+  if (!result.ok)
     throw new Error(
       `expected commit success: ${result.error.code} ${JSON.stringify(result.error)}`,
     );
-  }
   return result.value;
 }
 
@@ -800,17 +822,34 @@ function resolutionFor(
 }
 
 function conflictDigestObject(conflictDigest: string): ObjectDigest {
-  if (!conflictDigest.startsWith('sha256:')) {
+  if (!conflictDigest.startsWith('sha256:'))
     throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
-  }
   return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
 }
 
 function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): void {
   const serialized = JSON.stringify(value);
-  for (const canary of canaries) {
-    expect(serialized).not.toContain(canary);
-  }
+  for (const canary of canaries) expect(serialized).not.toContain(canary);
+}
+
+// prettier-ignore
+function expectPublicDiagnostic(value: unknown, operation: string, code: string, message?: string): void {
+  const diagnostic = { code, ...(message ? { message } : {}), data: expect.objectContaining({ redacted: true, payload: expect.objectContaining({ operation }) }) };
+  expect(value).toMatchObject({ ok: false, error: { diagnostics: [expect.objectContaining(diagnostic)] } });
+}
+
+// prettier-ignore
+async function accessDeniedPreviewArtifactResult() {
+  const graphId = 'access-denied-preview-artifact', documentScope = documentScopeForGraph(graphId);
+  const baseProvider = createInMemoryVersionStoreProvider({ documentScope });
+  expectInitializeSuccess(await baseProvider.initializeGraph(await initializeInput(graphId, 'root', documentScope)));
+  const digest = { algorithm: 'sha256', digest: '8'.repeat(64) } as const, rawCommitId = `commit:sha256:${'7'.repeat(64)}`;
+  const provider = { readGraphRegistry: () => baseProvider.readGraphRegistry(), openGraph: async () => ({ getObjectRecord: async () => {
+    throw Object.assign(new Error(rawCommitId), { diagnostics: [{ issueCode: 'VERSION_PERMISSION_DENIED', safeMessage: `Cannot read ${rawCommitId} or sha256:${digest.digest}.` }] });
+  } }) };
+  const version = new WorkbookVersionImpl({ versioning: { provider } } as any);
+  const result = await version.getMergeConflictDetail({ resultId: mergeResultIdForPreviewDigest(digest), resultDigest: digest, redactionPolicyDigest: digest, conflictId: 'conflict:legacy:access-denied', expectedConflictDigest: { algorithm: 'sha256', digest: '9'.repeat(64) }, valueRole: 'base', purpose: 'review' });
+  return { result, canaries: [rawCommitId, digest.digest, `sha256:${digest.digest}`, `merge-result:${digest.digest}`] };
 }
 
 function stableOptionIds(
@@ -844,23 +883,10 @@ function formulaConflict(input: {
   return conflictRecord(input.conflictIdDigit, structural, base, ours, theirs);
 }
 
-function rowColumnConflict(input: {
-  readonly conflictIdDigit: string;
-  readonly fields: readonly { readonly key: string; readonly value: VersionSemanticValue }[];
-}): VersionMergeConflict {
-  const structural = metadata(
-    'legacy-row-column-conflict',
-    'sheet-1!row:4',
-    'rows-columns',
-    ['order'],
-  );
-  return conflictRecord(
-    input.conflictIdDigit,
-    structural,
-    diffValue(null),
-    diffValue({ kind: 'object', fields: input.fields }),
-    diffValue('manual-order'),
-  );
+// prettier-ignore
+function rowColumnConflict(input: { readonly conflictIdDigit: string; readonly fields: readonly { readonly key: string; readonly value: VersionSemanticValue }[] }): VersionMergeConflict {
+  const structural = metadata('legacy-row-column-conflict', 'sheet-1!row:4', 'rows-columns', ['order']);
+  return conflictRecord(input.conflictIdDigit, structural, diffValue(null), diffValue({ kind: 'object', fields: input.fields }), diffValue('manual-order'));
 }
 
 function redactedStructuralConflict(): VersionMergeConflict {
@@ -870,23 +896,12 @@ function redactedStructuralConflict(): VersionMergeConflict {
   };
 }
 
-function conflictRecord(
-  digit: string,
-  structural: VersionDiffStructuralMetadata,
-  base: VersionDiffValue,
-  ours: VersionDiffValue,
-  theirs: VersionDiffValue,
-): VersionMergeConflict {
+// prettier-ignore
+function conflictRecord(digit: string, structural: VersionDiffStructuralMetadata, base: VersionDiffValue, ours: VersionDiffValue, theirs: VersionDiffValue): VersionMergeConflict {
   const conflictId = `conflict:legacy:${digit}`;
   const conflictDigest = `sha256:${digit.repeat(64)}`;
   return {
-    conflictId,
-    conflictDigest,
-    conflictKind: 'same-property',
-    structural,
-    base,
-    ours,
-    theirs,
+    conflictId, conflictDigest, conflictKind: 'same-property', structural, base, ours, theirs,
     resolutionOptions: [
       resolutionOption(conflictId, 'acceptOurs', ours, digit),
       resolutionOption(conflictId, 'acceptTheirs', theirs, digit),
@@ -895,44 +910,22 @@ function conflictRecord(
   };
 }
 
-function resolutionOption(
-  conflictId: string,
-  kind: VersionMergeConflict['resolutionOptions'][number]['kind'],
-  value: VersionDiffValue,
-  digit: string,
-): VersionMergeConflict['resolutionOptions'][number] {
-  return {
-    optionId: `option:legacy:${kind}:${digit}`,
-    conflictId,
-    kind,
-    value,
-    recalcRequired: true,
-  };
+// prettier-ignore
+function resolutionOption(conflictId: string, kind: VersionMergeConflict['resolutionOptions'][number]['kind'], value: VersionDiffValue, digit: string): VersionMergeConflict['resolutionOptions'][number] {
+  return { optionId: `option:legacy:${kind}:${digit}`, conflictId, kind, value, recalcRequired: true };
 }
 
-function metadata(
-  changeId: string,
-  entityId: string,
-  domain: string,
-  propertyPath: readonly string[],
-): VersionDiffStructuralMetadata {
-  return {
-    kind: 'metadata',
-    changeId,
-    domain,
-    entityId,
-    propertyPath,
-  };
+// prettier-ignore
+function metadata(changeId: string, entityId: string, domain: string, propertyPath: readonly string[]): VersionDiffStructuralMetadata {
+  return { kind: 'metadata', changeId, domain, entityId, propertyPath };
 }
 
 function diffValue(value: VersionSemanticValue): VersionDiffValue {
   return { kind: 'value', value };
 }
 
-function rowColumnFields(
-  axis: 'row' | 'column',
-  index: number,
-): readonly { readonly key: string; readonly value: VersionSemanticValue }[] {
+// prettier-ignore
+function rowColumnFields(axis: 'row' | 'column', index: number): readonly { readonly key: string; readonly value: VersionSemanticValue }[] {
   return [
     { key: 'axis', value: axis },
     { key: 'displayRef', value: axis === 'row' ? '5:5' : 'E:E' },
@@ -941,24 +934,15 @@ function rowColumnFields(
   ];
 }
 
-async function initializeInput(
-  graphId: string,
-  label: string,
-  documentScope: VersionDocumentScope,
-): Promise<VersionGraphInitializeInput> {
+// prettier-ignore
+async function initializeInput(graphId: string, label: string, documentScope: VersionDocumentScope): Promise<VersionGraphInitializeInput> {
   const namespace = namespaceForDocumentScope(documentScope, graphId);
   return {
     expectedRegistryRevision: null,
     graphId,
     rootWrite: {
-      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
-        label,
-        sheets: [],
-      }),
-      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
-        label,
-        changes: [],
-      }),
+      snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', { label, sheets: [] }),
+      semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', { label, changes: [] }),
       author: AUTHOR,
       createdAt: CREATED_AT,
       completenessDiagnostics: [],

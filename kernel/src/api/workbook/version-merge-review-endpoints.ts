@@ -1,5 +1,6 @@
 import type {
   JsonValue,
+  ObjectDigest,
   VersionGetMergeConflictDetailRequest,
   VersionMergeConflictDetailResult,
   VersionPutMergeResolutionPayloadRequest,
@@ -12,9 +13,14 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import {
+  MERGE_PREVIEW_OBJECT_TYPE,
+  mergePreviewArtifactRef,
   createMergeResolutionSetArtifactRecord,
   createResolvedMergeAttemptArtifactRecord,
+  type MergePreviewArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
+import { VersionObjectStoreError } from '../../document/version-store/object-store';
+import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 import {
   findExpectedConflict,
   findResolutionOptionForConflictSet,
@@ -31,7 +37,6 @@ import {
   mergeReviewDiagnostic,
   mergeReviewProviderErrorDiagnostic,
   openMergeReviewGraph,
-  readMergePreviewArtifact,
   toInternalSha256Digest,
   validateMergePreviewIdentity,
 } from './version-merge-review-artifacts';
@@ -239,6 +244,16 @@ export async function getMergeConflictDetailWorkbookVersion(
   );
   if (!artifact.ok) return mergeEndpointFailure('getMergeConflictDetail', artifact.diagnostics);
 
+  const targetDiagnostics = validateOptionalTarget(
+    'getMergeConflictDetail',
+    artifact.payload.ours,
+    normalized.input.targetRef,
+    normalized.input.expectedTargetHead,
+  );
+  if (targetDiagnostics.length > 0) {
+    return mergeEndpointFailure('getMergeConflictDetail', targetDiagnostics);
+  }
+
   const conflictSet = await normalizeMergeReviewConflicts(
     'getMergeConflictDetail',
     artifact.payload.conflicts,
@@ -435,6 +450,146 @@ export async function putMergeResolutionPayloadWorkbookVersion(
   }
 }
 
+type MergeReviewPreviewReadResult =
+  | { readonly ok: true; readonly payload: MergePreviewArtifactPayload }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+async function readMergePreviewArtifact(
+  graph: VersionGraphStore,
+  operation: VersionMergePublicOperation,
+  digest: ObjectDigest,
+): Promise<MergeReviewPreviewReadResult> {
+  const internalDigest = toInternalSha256Digest(digest);
+  if (!internalDigest) {
+    return {
+      ok: false,
+      diagnostics: [
+        mergeReviewDiagnostic(
+          operation,
+          'VERSION_INVALID_OPTIONS',
+          'resultDigest must be a sha256 merge preview digest.',
+          { payload: { option: 'resultDigest' } },
+        ),
+      ],
+    };
+  }
+
+  try {
+    const record = await graph.getObjectRecord<unknown>(mergePreviewArtifactRef(internalDigest));
+    if (record.preimage.objectType !== MERGE_PREVIEW_OBJECT_TYPE) {
+      return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+    }
+    const payload = toMergePreviewArtifactPayload(record.preimage.payload);
+    return payload
+      ? { ok: true, payload }
+      : { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+  } catch (error) {
+    return { ok: false, diagnostics: previewArtifactReadDiagnostics(operation, error) };
+  }
+}
+
+function previewArtifactReadDiagnostics(
+  operation: VersionMergePublicOperation,
+  error: unknown,
+): readonly VersionStoreDiagnostic[] {
+  if (
+    error instanceof VersionObjectStoreError &&
+    error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
+  ) {
+    return [missingPreviewArtifactDiagnostic(operation)];
+  }
+  const diagnostic = providerDiagnosticFromError(error);
+  if (!diagnostic) return [mergeReviewProviderErrorDiagnostic(operation)];
+  const issueCode = publicPreviewArtifactIssueCode(diagnostic);
+  return [mergeReviewDiagnostic(operation, issueCode, previewArtifactSafeMessage(issueCode))];
+}
+
+function providerDiagnosticFromError(error: unknown): Readonly<Record<string, unknown>> | null {
+  if (!isRecord(error)) return null;
+  const first = Array.isArray(error.diagnostics) ? error.diagnostics[0] : error.diagnostic;
+  return isRecord(first) ? first : null;
+}
+
+function publicPreviewArtifactIssueCode(diagnostic: Readonly<Record<string, unknown>>): string {
+  const raw =
+    typeof diagnostic.issueCode === 'string'
+      ? diagnostic.issueCode
+      : typeof diagnostic.code === 'string'
+        ? diagnostic.code
+        : 'VERSION_PROVIDER_FAILED';
+  switch (raw) {
+    case 'VERSION_OBJECT_NOT_FOUND':
+      return 'VERSION_MISSING_OBJECT';
+    case 'VERSION_INVALID_COMMIT_PAYLOAD':
+    case 'VERSION_MISSING_DEPENDENCY':
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_PERMISSION_DENIED':
+    case 'VERSION_PROVIDER_FAILED':
+    case 'VERSION_REF_CONFLICT':
+    case 'VERSION_STALE_PAGE_CURSOR':
+    case 'VERSION_STORE_UNAVAILABLE':
+    case 'VERSION_UNSUPPORTED_SCHEMA':
+      return raw;
+    default:
+      return 'VERSION_PROVIDER_FAILED';
+  }
+}
+
+function previewArtifactSafeMessage(issueCode: string): string {
+  switch (issueCode) {
+    case 'VERSION_MISSING_OBJECT':
+      return 'Persisted merge preview artifact could not be found.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'Version merge review is not authorized for this caller.';
+    case 'VERSION_REF_CONFLICT':
+      return 'Version merge review target is stale.';
+    case 'VERSION_STALE_PAGE_CURSOR':
+      return 'Version merge review cursor is stale.';
+    default:
+      return 'Version merge review provider failed.';
+  }
+}
+
+function missingPreviewArtifactDiagnostic(
+  operation: VersionMergePublicOperation,
+): VersionStoreDiagnostic {
+  return mergeReviewDiagnostic(
+    operation,
+    'VERSION_MISSING_OBJECT',
+    'Persisted merge preview artifact could not be found.',
+    { recoverability: 'repair' },
+  );
+}
+
+function invalidPreviewArtifactDiagnostic(
+  operation: VersionMergePublicOperation,
+): VersionStoreDiagnostic {
+  return mergeReviewDiagnostic(
+    operation,
+    'VERSION_INVALID_COMMIT_PAYLOAD',
+    'Persisted merge preview artifact payload is invalid or unsupported.',
+    { recoverability: 'repair' },
+  );
+}
+
+function toMergePreviewArtifactPayload(value: unknown): MergePreviewArtifactPayload | null {
+  if (!isRecord(value) || value.schemaVersion !== 1 || value.recordKind !== 'mergePreview') {
+    return null;
+  }
+  if (value.status !== 'clean' && value.status !== 'conflicted') return null;
+  if (
+    !isWorkbookCommitId(value.base) ||
+    !isWorkbookCommitId(value.ours) ||
+    !isWorkbookCommitId(value.theirs) ||
+    !Array.isArray(value.changes) ||
+    !Array.isArray(value.conflicts)
+  ) {
+    return null;
+  }
+  return value as unknown as MergePreviewArtifactPayload;
+}
+
 function mergeEndpointPreflight<T>(
   ctx: DocumentContext,
   operation: VersionMergePublicOperation,
@@ -465,4 +620,12 @@ function mergeEndpointFailure<T>(
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
   return versionFailureFromStoreDiagnostics(operation, diagnostics);
+}
+
+function isWorkbookCommitId(value: unknown): boolean {
+  return typeof value === 'string' && /^commit:sha256:[0-9a-f]{64}$/.test(value);
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }

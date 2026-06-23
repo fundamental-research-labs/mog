@@ -813,6 +813,9 @@ function providerWritesDisabledReasonForCapability(
 ): DisabledActionReason | undefined {
   const action = providerWriteActionForCapability(capability);
   if (!action) return undefined;
+  if (capability === 'version:commit') {
+    return providerWritesDisabledReason(surface, action);
+  }
   return providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, action);
 }
 

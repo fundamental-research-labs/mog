@@ -17,6 +17,7 @@ import {
   type InMemoryWorkbookCommitStore,
   type ReadWorkbookCommitResult,
   type WorkbookCommit,
+  type WorkbookCommitStoreDiagnostic,
 } from './commit-store';
 import {
   createInMemoryRefStore,

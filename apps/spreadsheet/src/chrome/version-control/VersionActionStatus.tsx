@@ -35,12 +35,13 @@ export function ActionStatus({
 }): React.JSX.Element | null {
   if (actionState.status === 'idle') return null;
   if (actionState.status === 'error') {
+    const diagnostic = sanitizeVersionPanelDiagnostic(actionState.diagnostic);
     return (
       <div
         role="alert"
         className="rounded-sm border border-ss-danger/40 bg-ss-danger/10 px-3 py-2 text-body-sm text-ss-text"
       >
-        {actionState.diagnostic.message}
+        {diagnostic.message}
       </div>
     );
   }
@@ -107,6 +108,20 @@ export function VersionActions({
   const branchReasonId = 'version-branch-disabled-reason';
   const rollbackReasonId = 'version-rollback-disabled-reason';
   const remotePromoteReasonId = 'version-remote-promote-disabled-reason';
+  const commitReason = sanitizeVersionStatusText(commitDisabledReason, VERSION_ACTION_UNAVAILABLE);
+  const branchReason = sanitizeVersionStatusText(branchDisabledReason, VERSION_ACTION_UNAVAILABLE);
+  const rollbackDisabledStatusReason = sanitizeVersionStatusText(
+    rollbackDisabledReason,
+    VERSION_ACTION_UNAVAILABLE,
+  );
+  const remotePromoteReason = sanitizeVersionStatusText(
+    remotePromoteDisabledReason,
+    VERSION_ACTION_UNAVAILABLE,
+  );
+  const remotePromotionDetail = sanitizeVersionStatusText(
+    remotePromotionStatus.detail,
+    remotePromotionStatusFallbackDetail(remotePromotionStatus.state),
+  );
 
   return (
     <section className="flex flex-col gap-3" aria-label="Version actions">
@@ -127,17 +142,14 @@ export function VersionActions({
           data-testid="version-history-commit-button"
           onClick={onCommit}
           disabled={!commitEnabled}
-          aria-describedby={!commitEnabled && commitDisabledReason ? commitReasonId : undefined}
-          title={!commitEnabled ? commitDisabledReason : undefined}
+          aria-describedby={!commitEnabled && commitReason ? commitReasonId : undefined}
+          title={!commitEnabled ? commitReason : undefined}
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
         >
           <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
           <span>Commit</span>
         </button>
-        <DisabledReason
-          id={commitReasonId}
-          reason={!commitEnabled ? commitDisabledReason : undefined}
-        />
+        <DisabledReason id={commitReasonId} reason={!commitEnabled ? commitReason : undefined} />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -165,18 +177,15 @@ export function VersionActions({
             data-testid="version-history-create-branch-button"
             onClick={onCreateBranch}
             disabled={!branchEnabled}
-            aria-describedby={!branchEnabled && branchDisabledReason ? branchReasonId : undefined}
-            title={!branchEnabled ? branchDisabledReason : undefined}
+            aria-describedby={!branchEnabled && branchReason ? branchReasonId : undefined}
+            title={!branchEnabled ? branchReason : undefined}
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
           >
             <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
             <span>Create branch</span>
           </button>
         </div>
-        <DisabledReason
-          id={branchReasonId}
-          reason={!branchEnabled ? branchDisabledReason : undefined}
-        />
+        <DisabledReason id={branchReasonId} reason={!branchEnabled ? branchReason : undefined} />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -205,9 +214,9 @@ export function VersionActions({
             onClick={onStageRollback}
             disabled={!rollbackEnabled}
             aria-describedby={
-              !rollbackEnabled && rollbackDisabledReason ? rollbackReasonId : undefined
+              !rollbackEnabled && rollbackDisabledStatusReason ? rollbackReasonId : undefined
             }
-            title={!rollbackEnabled ? rollbackDisabledReason : undefined}
+            title={!rollbackEnabled ? rollbackDisabledStatusReason : undefined}
             className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
           >
             <Undo2 size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -216,7 +225,7 @@ export function VersionActions({
         </div>
         <DisabledReason
           id={rollbackReasonId}
-          reason={!rollbackEnabled ? rollbackDisabledReason : undefined}
+          reason={!rollbackEnabled ? rollbackDisabledStatusReason : undefined}
         />
       </div>
 
@@ -231,9 +240,9 @@ export function VersionActions({
             {remotePromotionStatus.label}
           </span>
         </div>
-        {remotePromotionStatus.detail ? (
+        {remotePromotionDetail ? (
           <div className="mt-1 text-[11px] leading-snug text-ss-text-secondary">
-            {remotePromotionStatus.detail}
+            {remotePromotionDetail}
           </div>
         ) : null}
         <button
@@ -242,11 +251,9 @@ export function VersionActions({
           onClick={onPromotePendingRemote}
           disabled={!remotePromoteEnabled}
           aria-describedby={
-            !remotePromoteEnabled && remotePromoteDisabledReason
-              ? remotePromoteReasonId
-              : undefined
+            !remotePromoteEnabled && remotePromoteReason ? remotePromoteReasonId : undefined
           }
-          title={!remotePromoteEnabled ? remotePromoteDisabledReason : undefined}
+          title={!remotePromoteEnabled ? remotePromoteReason : undefined}
           className="mt-2 inline-flex h-8 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
         >
           <CloudUpload size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -254,7 +261,7 @@ export function VersionActions({
         </button>
         <DisabledReason
           id={remotePromoteReasonId}
-          reason={!remotePromoteEnabled ? remotePromoteDisabledReason : undefined}
+          reason={!remotePromoteEnabled ? remotePromoteReason : undefined}
         />
       </div>
 
@@ -283,13 +290,19 @@ export function getRemotePromotionStatus(
     return {
       state: 'unavailable',
       label: 'Unavailable',
-      detail: remotePromoteState.reason,
+      detail: sanitizeVersionStatusText(
+        remotePromoteState.reason,
+        'Remote promotion is unavailable.',
+      ),
     };
   }
 
   const providerWriteDiagnostic = firstPendingProviderWritesDiagnostic(surface);
   const counts = providerWriteDiagnostic ? pendingRemoteCounts(providerWriteDiagnostic.data) : {};
-  const detail = providerWriteDiagnostic?.message;
+  const detail = sanitizeVersionStatusText(
+    providerWriteDiagnostic?.message,
+    'Provider writes are pending.',
+  );
 
   if ((counts.pendingRemotePromotionActiveCount ?? 0) > 0) {
     return {
@@ -331,9 +344,7 @@ export function getRemotePromotionStatus(
   };
 }
 
-export function remotePromotionActionMessage(
-  result: VersionPromotePendingRemoteResult,
-): string {
+export function remotePromotionActionMessage(result: VersionPromotePendingRemoteResult): string {
   const promoted = result.promotedSegmentIds.length;
   const skipped = result.skipped.length;
   if (result.status === 'partial') {
@@ -350,27 +361,179 @@ export function diagnosticFromRemotePromotionResult(
   code: string,
   result: VersionPromotePendingRemoteResult,
 ): VersionPanelDiagnostic {
-  const diagnostic = result.diagnostics.find((entry) => entry.message.trim().length > 0);
-  if (diagnostic) {
-    return {
-      code: diagnostic.code,
-      severity: diagnostic.severity,
-      message: diagnostic.message,
-    };
-  }
-  const skipped = result.skipped.find((entry) => entry.message.trim().length > 0);
-  if (skipped) {
-    return {
-      code,
-      severity: 'warning',
-      message: skipped.message,
-    };
-  }
-  return {
+  const candidate = firstRemotePromotionDiagnosticCandidate(code, result);
+  if (candidate) return sanitizeVersionPanelDiagnostic(candidate.diagnostic);
+  return sanitizeVersionPanelDiagnostic({
     code,
     severity: 'warning',
-    message: 'Pending remote promotion did not promote any backlog entries.',
+    message: remotePromotionFallbackMessage(result.status),
+  });
+}
+
+const VERSION_ACTION_UNAVAILABLE = 'Version action is unavailable.';
+const REDACTED_VERSION_REF = '[version ref]';
+const REDACTED_PRINCIPAL = '[principal]';
+const REDACTED_COMMIT = '[commit]';
+const REDACTED_PENDING_REMOTE_SEGMENT = '[pending remote segment]';
+const REDACTED_SYNC_BATCH = '[sync batch]';
+
+type RemotePromotionDiagnosticCandidate = {
+  readonly diagnostic: VersionPanelDiagnostic;
+  readonly categoryRank: number;
+  readonly severityRank: number;
+  readonly codeRank: string;
+  readonly index: number;
+};
+
+function firstRemotePromotionDiagnosticCandidate(
+  code: string,
+  result: VersionPromotePendingRemoteResult,
+): RemotePromotionDiagnosticCandidate | undefined {
+  const candidates: RemotePromotionDiagnosticCandidate[] = [];
+  result.diagnostics.forEach((diagnostic, index) => {
+    if (diagnostic.message.trim().length === 0) return;
+    candidates.push(
+      remotePromotionDiagnosticCandidate(
+        {
+          code: diagnostic.code,
+          severity: diagnostic.severity,
+          message: diagnostic.message,
+        },
+        diagnostic.reason,
+        index,
+      ),
+    );
+  });
+  const skippedOffset = result.diagnostics.length;
+  result.skipped.forEach((skipped, index) => {
+    if (skipped.message.trim().length === 0) return;
+    candidates.push(
+      remotePromotionDiagnosticCandidate(
+        {
+          code,
+          severity: 'warning',
+          message: skipped.message,
+        },
+        skipped.reason,
+        skippedOffset + index,
+      ),
+    );
+  });
+  return candidates.sort(compareRemotePromotionDiagnosticCandidates)[0];
+}
+
+function remotePromotionDiagnosticCandidate(
+  diagnostic: VersionPanelDiagnostic,
+  reason: string | undefined,
+  index: number,
+): RemotePromotionDiagnosticCandidate {
+  return {
+    diagnostic,
+    categoryRank: diagnosticCategoryRank(diagnostic, reason),
+    severityRank: severityRank(diagnostic.severity),
+    codeRank: diagnostic.code,
+    index,
   };
+}
+
+function compareRemotePromotionDiagnosticCandidates(
+  left: RemotePromotionDiagnosticCandidate,
+  right: RemotePromotionDiagnosticCandidate,
+): number {
+  return (
+    left.categoryRank - right.categoryRank ||
+    left.severityRank - right.severityRank ||
+    left.codeRank.localeCompare(right.codeRank) ||
+    left.index - right.index
+  );
+}
+
+function diagnosticCategoryRank(
+  diagnostic: VersionPanelDiagnostic,
+  reason: string | undefined,
+): number {
+  const normalized = `${diagnostic.code} ${reason ?? ''} ${diagnostic.message}`.toLowerCase();
+  if (normalized.includes('blocked') || normalized.includes('terminal')) return 0;
+  if (
+    normalized.includes('failed') ||
+    normalized.includes('failure') ||
+    normalized.includes('error')
+  ) {
+    return 1;
+  }
+  if (normalized.includes('degraded')) return 2;
+  return 3;
+}
+
+function severityRank(severity: VersionPanelDiagnostic['severity']): number {
+  if (severity === 'error') return 0;
+  if (severity === 'warning') return 1;
+  return 2;
+}
+
+function sanitizeVersionPanelDiagnostic(
+  diagnostic: VersionPanelDiagnostic,
+): VersionPanelDiagnostic {
+  return {
+    ...diagnostic,
+    message:
+      sanitizeVersionStatusText(diagnostic.message, fallbackDiagnosticMessage(diagnostic)) ??
+      fallbackDiagnosticMessage(diagnostic),
+  };
+}
+
+function sanitizeVersionStatusText(
+  value: string | undefined,
+  fallback: string,
+): string | undefined {
+  const message = value?.trim() ?? '';
+  if (message.length === 0) return undefined;
+  const redacted = redactSensitiveVersionDiagnosticText(message).replace(/\s+/g, ' ').trim();
+  return redacted.length > 0 ? redacted : fallback;
+}
+
+function redactSensitiveVersionDiagnosticText(message: string): string {
+  return message
+    .replace(
+      /["']?\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b["']?\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(/\brefs\/[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
+    .replace(/\bcommit:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_COMMIT)
+    .replace(/\bpending-remote-segment:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_PENDING_REMOTE_SEGMENT)
+    .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH);
+}
+
+function fallbackDiagnosticMessage(diagnostic: VersionPanelDiagnostic): string {
+  if (diagnosticCategoryRank(diagnostic, undefined) === 0) {
+    return 'Version action is blocked.';
+  }
+  if (diagnostic.severity === 'error') return 'Version action failed.';
+  return VERSION_ACTION_UNAVAILABLE;
+}
+
+function remotePromotionFallbackMessage(
+  status: VersionPromotePendingRemoteResult['status'],
+): string {
+  if (status === 'failed') return 'Pending remote promotion failed.';
+  if (status === 'partial')
+    return 'Pending remote promotion completed with skipped backlog entries.';
+  return 'Pending remote promotion did not promote any backlog entries.';
+}
+
+function remotePromotionStatusFallbackDetail(state: VersionRemotePromotionStatus['state']): string {
+  if (state === 'running') return 'Pending remote promotion is already running.';
+  if (state === 'pending') return 'Provider writes are pending.';
+  if (state === 'unavailable') return 'Remote promotion is unavailable.';
+  return '';
 }
 
 function firstPendingProviderWritesDiagnostic(
@@ -381,9 +544,7 @@ function firstPendingProviderWritesDiagnostic(
   );
 }
 
-function pendingRemoteCounts(
-  data: Readonly<Record<string, JsonValue>> | undefined,
-): {
+function pendingRemoteCounts(data: Readonly<Record<string, JsonValue>> | undefined): {
   readonly pendingRemoteSegmentCount?: number;
   readonly pendingRemotePromotionActiveCount?: number;
   readonly pendingRemotePromotionQueuedCount?: number;

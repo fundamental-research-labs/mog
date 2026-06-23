@@ -3208,7 +3208,12 @@ export class WorksheetImpl implements Worksheet {
   private _validation?: WorksheetValidationImpl;
 
   get validations(): WorksheetValidation {
-    return (this._validation ??= new WorksheetValidationImpl(this.ctx, this.sheetId));
+    this._assertLive('worksheet.validations');
+    return (this._validation ??= new WorksheetValidationImpl(
+      this.ctx,
+      this.sheetId,
+      this._liveness,
+    ));
   }
 
   private _tables?: WorksheetTablesImpl;

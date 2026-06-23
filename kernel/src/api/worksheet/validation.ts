@@ -26,6 +26,7 @@ import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
 import * as Properties from '../../domain/cells/cell-properties';
 import { KernelError } from '../../errors';
+import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
@@ -265,9 +266,15 @@ export class WorksheetValidationImpl implements WorksheetValidation {
   constructor(
     private readonly ctx: DocumentContext,
     private readonly sheetId: SheetId,
+    private readonly liveness?: HandleLiveness,
   ) {}
 
+  private _assertLive(op: string): void {
+    this.liveness?.assertLive(op);
+  }
+
   private _ensureWritable(op: string): void {
+    this._assertLive(op);
     this.ctx.writeGate.assertWritable(op);
   }
 
@@ -296,6 +303,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     c?: ListValidationOptions | ListValidationSource,
     d?: ListValidationOptions,
   ): Promise<ValidationSetReceipt> {
+    this._assertLive('validation.setList');
     if (typeof a === 'number') {
       return this.set(a, b as number, this.createListRule(c as ListValidationSource, d));
     }
@@ -554,6 +562,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
   }
 
   async get(a: string | number | CellRange, b?: number): Promise<ValidationRule | null> {
+    this._assertLive('validation.get');
     if (typeof a === 'object') {
       // CellRange form: find first schema overlapping the range
       const schemas = await getWorksheetValidationCache(this.ctx).getSchemasOverlappingRange(
@@ -582,6 +591,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
   }
 
   peek(a: string | number, b?: number): ValidationRule | null | undefined {
+    this._assertLive('validation.peek');
     let row: number, col: number;
     if (typeof a === 'string') {
       const pos = resolveCell(a);
@@ -597,15 +607,18 @@ export class WorksheetValidationImpl implements WorksheetValidation {
   }
 
   async has(a: string | number, b?: number): Promise<boolean> {
+    this._assertLive('validation.has');
     const result = await this.get(a, b);
     return result !== null;
   }
 
   async getCount(): Promise<number> {
+    this._assertLive('validation.getCount');
     return (await this.list()).length;
   }
 
   async getDropdownItems(a: string | number, b?: number): Promise<string[]> {
+    this._assertLive('validation.getDropdownItems');
     let row: number, col: number;
     if (typeof a === 'string') {
       const pos = resolveCell(a);
@@ -622,6 +635,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     a: string | number,
     b?: number,
   ): Promise<DropdownItemsWithRevision> {
+    this._assertLive('validation.getDropdownItemsWithRevision');
     const items =
       typeof a === 'string' ? await this.getDropdownItems(a) : await this.getDropdownItems(a, b!);
     return {
@@ -631,6 +645,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
   }
 
   async list(): Promise<ValidationRule[]> {
+    this._assertLive('validation.list');
     const schemas = await getWorksheetValidationCache(this.ctx).getSchemasForSheet(this.sheetId);
     return schemas.map(rangeSchemaToValidationRule);
   }
@@ -700,6 +715,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     b: string | number,
     c?: string,
   ): Promise<ValidationCheckResult> {
+    this._assertLive('validation.validate');
     let row: number;
     let col: number;
     let value: string;
@@ -768,6 +784,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     endRow: number,
     endCol: number,
   ): Promise<Array<{ row: number; col: number }>> {
+    this._assertLive('validation.getErrorsInRange');
     return Properties.queryByMetadata(
       this.ctx,
       this.sheetId,

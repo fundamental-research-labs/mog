@@ -5,6 +5,7 @@ import { sheetId } from '@mog-sdk/contracts/core';
 import type { RangeSchema } from '../../../bridges/compute/compute-bridge';
 import { createEventBus } from '../../../context/event-bus';
 import type { DocumentContext } from '../../../context/types';
+import { createHandleLiveness } from '../../lifecycle/handle-liveness';
 import { WorksheetValidationImpl } from '../validation';
 import { disposeWorksheetValidationCache, getWorksheetValidationCache } from '../validation-cache';
 
@@ -117,6 +118,35 @@ function expectValidationAdmissionOptions(
 }
 
 describe('WorksheetValidationImpl sheet cache', () => {
+  it('rejects stale validation reads and writes after the worksheet liveness is invalidated', async () => {
+    const ctx = createCtx([makeSchema()]);
+    const liveness = createHandleLiveness({
+      label: 'Worksheet',
+      metadata: { label: 'Worksheet', sheetId: String(SHEET_ID) },
+    });
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID, liveness);
+
+    expect(await validations.list()).toHaveLength(1);
+    expect(validations.peek(0, 0)?.type).toBe('list');
+
+    liveness.invalidate({
+      operation: 'workbook.dispose',
+      message: 'Workbook is closed or disposed. Create a new workbook to continue.',
+    });
+
+    await expect(validations.list()).rejects.toThrow(/disposed|closed/i);
+    await expect(validations.get(0, 0)).rejects.toThrow(/disposed|closed/i);
+    expect(() => validations.peek(0, 0)).toThrow(/disposed|closed/i);
+    await expect(
+      validations.set('A1', {
+        type: 'textLength',
+        operator: 'greaterThan',
+        formula1: '0',
+        errorStyle: 'stop',
+      }),
+    ).rejects.toThrow(/disposed|closed/i);
+  });
+
   it('hydrates a sheet-scoped cache once and supports warm synchronous peek', async () => {
     const ctx = createCtx([makeSchema()]);
     const validations = new WorksheetValidationImpl(ctx, SHEET_ID);

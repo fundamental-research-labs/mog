@@ -4,7 +4,10 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
 import type { DocumentHandleInternal } from '../../document/document-handle-types';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { DocumentContext } from '../../../context';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
@@ -52,7 +55,7 @@ beforeEach(() => {
   const spy = jest.spyOn(DocumentFactory, 'create');
   spy.mockImplementation(async (options?: any) => {
     const handle = await createDocument(options);
-    installVersionDomainDetectorNoops(handle);
+    installVersionDomainDetectorNoopsOnHandles(handle);
     if (options?.internal === true) {
       internalMaterializationCreateCount += 1;
       if (injectStaleMaterializationVersioning) {
@@ -641,18 +644,6 @@ function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFa
 
 function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function installVersionDomainDetectorNoops(
-  handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
-): void {
-  const bridge = ((handle as DocumentHandleInternal).context as DocumentContext)
-    .computeBridge as unknown;
-  if (!isMutableRecord(bridge)) return;
-  bridge.namedRangeCount = jest.fn(async () => 0);
-  bridge.getAllNamedRangesWire = jest.fn(async () => []);
-  bridge.getHyperlinks = jest.fn(async () => []);
-  bridge.getRangeSchemasForSheet = jest.fn(async () => []);
 }
 
 function attachStaleMaterializationVersioning(

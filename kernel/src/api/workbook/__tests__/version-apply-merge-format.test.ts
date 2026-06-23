@@ -10,7 +10,11 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -56,12 +60,14 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, mergedHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let mergedWb: Workbook | undefined;
 
     try {
       sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setCell('B1', 'base-seed');
       const baseCommit = await expectCommit(
         sourceWb.version.commit({
@@ -93,10 +99,12 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.formats.set('A1', { bold: true, fontColor: '#FF0000' });
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
@@ -173,6 +181,7 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       });
 
       mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(mergedWb);
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: mergeCommitId,
@@ -223,6 +232,7 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, mergedHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let mergedWb: Workbook | undefined;
@@ -239,6 +249,7 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
           },
         }),
       });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       const sheetId = String(sourceWb.activeSheet.sheetId);
       await sourceWb.activeSheet.setCell('A1', 1);
       await sourceWb.activeSheet.setCell('A2', 'shifted');
@@ -276,10 +287,12 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       const oursHead = await expectHead(sourceWb);
 
       branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
       if (!checkoutBase.ok) {
         throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       await branchWb.activeSheet.setCell('E1', 'theirs-anchor');
       const theirsCommit = await expectCommit(
         branchWb.version.commit({
@@ -323,6 +336,7 @@ describe('WorkbookVersion applyMerge direct formats and expanded domains', () =>
       });
 
       mergedWb = await mergedHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(mergedWb);
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',
         id: applied.value.commitRef.id,
@@ -362,7 +376,11 @@ async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
   const result = await resultPromise;
-  if (!result.ok) throw new Error(`expected commit success: ${result.error.code}`);
+  if (!result.ok) {
+    throw new Error(
+      `expected commit success: ${result.error.code} ${JSON.stringify(result.error.diagnostics)}`,
+    );
+  }
   return result.value;
 }
 

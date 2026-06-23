@@ -5,12 +5,15 @@ import type {
   VersionDomainCapabilityStateMap,
   VersionDomainPolicyRegistry,
 } from '@mog-sdk/contracts/versioning';
+import type { Workbook } from '@mog-sdk/contracts/api';
 import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
 import {
   REQUIRED_FIRST_SLICE_DOMAIN_IDS,
   type DomainSupportManifestValidationOptions,
 } from '../../../document/version-store/domain-support-manifest-validator';
+import type { DocumentContext } from '../../../context';
+import type { DocumentHandleInternal } from '../../document/document-handle-types';
 
 export const VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_CREATED_AT = '2026-06-21T00:00:00.000Z';
 export const VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW = new Date('2026-06-21T00:05:00.000Z');
@@ -199,3 +202,36 @@ export function versioningWithExportSupportedDomainSupportManifest<
 export const withVersionManifest = versioningWithDomainSupportManifest;
 export const withExportSupportedVersionManifest =
   versioningWithExportSupportedDomainSupportManifest;
+
+export function installVersionDomainDetectorNoopsOnHandles(
+  ...handles: readonly unknown[]
+): void {
+  for (const handle of handles) {
+    installVersionDomainDetectorNoopsOnBridge(
+      ((handle as Partial<DocumentHandleInternal>).context as DocumentContext | undefined)
+        ?.computeBridge,
+    );
+  }
+}
+
+export function installVersionDomainDetectorNoopsOnWorkbook(wb: Pick<Workbook, 'version'>): void {
+  const version = wb.version as unknown as {
+    ctx?: DocumentContext;
+    versionContext?: DocumentContext;
+  };
+  installVersionDomainDetectorNoopsOnBridge(
+    (version.ctx ?? version.versionContext)?.computeBridge,
+  );
+}
+
+function installVersionDomainDetectorNoopsOnBridge(bridge: unknown): void {
+  if (!isMutableRecord(bridge)) return;
+  bridge.namedRangeCount = async () => 0;
+  bridge.getAllNamedRangesWire = async () => [];
+  bridge.getHyperlinks = async () => [];
+  bridge.getRangeSchemasForSheet = async () => [];
+}
+
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}

@@ -15,7 +15,10 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -585,7 +588,7 @@ async function withPersistedConflictPreview(
   try {
     const versioning = withVersionManifest({ provider });
     sourceWb = await sourceHandle.workbook({ versioning });
-    installVersionDomainDetectorNoops(sourceWb);
+    installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
     await sourceWb.activeSheet.setCell('A1', 'base');
     const baseCommit = await expectCommit(
       sourceWb.version.commit({
@@ -617,10 +620,10 @@ async function withPersistedConflictPreview(
     const oursHead = await expectHead(sourceWb);
 
     branchWb = await branchHandle.workbook({ versioning });
-    installVersionDomainDetectorNoops(branchWb);
+    installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
     if (!checkoutBase.ok) throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
-    installVersionDomainDetectorNoops(branchWb);
+    installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
     await branchWb.activeSheet.setCell('A1', 'theirs');
     await expect(branchWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'theirs' });
@@ -936,15 +939,6 @@ function rowColumnFields(
     { key: 'index', value: index },
     { key: 'sheetId', value: 'sheet-1' },
   ];
-}
-
-function installVersionDomainDetectorNoops(wb: Workbook): void {
-  const version = wb.version as any;
-  const bridge = (version.ctx ?? version.versionContext).computeBridge;
-  bridge.namedRangeCount = async () => 0;
-  bridge.getAllNamedRangesWire = async () => [];
-  bridge.getHyperlinks = async () => [];
-  bridge.getRangeSchemasForSheet = async () => [];
 }
 
 async function initializeInput(

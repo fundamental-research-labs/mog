@@ -6,7 +6,11 @@ import type { ObjectDigest, Workbook, WorkbookCommitId } from '@mog-sdk/contract
 
 import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import {
   removeMogVersionMetadataPackageInventoryFromXlsx,
   scanXlsxCleanExportPackageDiagnostics,
@@ -58,6 +62,7 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     if (!imported.success || !imported.handle) {
       throw new Error(`expected XLSX import success: ${imported.error?.message}`);
     }
+    installVersionDomainDetectorNoopsOnHandles(imported.handle);
 
     let wb: Workbook | undefined;
     try {
@@ -72,6 +77,7 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'Clean export package scan',
       });
+      installVersionDomainDetectorNoopsOnWorkbook(wb);
 
       const exported = await wb.toXlsx();
 

@@ -33,6 +33,27 @@ const REQUIRED_RESOLUTION_OPTION_KINDS = [
   'acceptTheirs',
   'acceptBase',
 ] as const satisfies readonly VersionMergeConflictResolutionOptionKind[];
+const UNSUPPORTED_GROUP_OR_APPROVAL_FIELDS = new Set([
+  'approval',
+  'approvals',
+  'conflictGroup',
+  'conflictGroupDigest',
+  'conflictGroupId',
+  'conflictOwner',
+  'expectedGroupDigest',
+  'groupCoreDigest',
+  'groupDigest',
+  'groupId',
+  'groupResolutionValidation',
+  'owner',
+  'ownerApproval',
+  'ownerApprovals',
+  'owners',
+  'policyVersions',
+  'requiredOwnerVoteDigest',
+  'requiredOwnerVotes',
+  'requiredVoteOwners',
+]);
 
 type VersionMergeConflictDetailResolutionOption = {
   readonly optionId: string;
@@ -153,7 +174,11 @@ export async function normalizeMergeReviewConflicts(
 
   return {
     ok: true,
-    conflictSet: { conflicts: normalized, conflictsByRequestKey, optionsByRequestKey },
+    conflictSet: {
+      conflicts: [...normalized].sort(compareNormalizedMergeReviewConflicts),
+      conflictsByRequestKey,
+      optionsByRequestKey,
+    },
   };
 }
 
@@ -287,17 +312,17 @@ export function selectConflictDetailValue(
   operation: VersionMergePublicOperation,
   conflictSet: NormalizedMergeReviewConflictSet,
   conflict: VersionMergeConflict,
-  input: Pick<NormalizedGetMergeConflictDetailInput, 'valueRole' | 'optionId' | 'kind'>,
+  input: Pick<NormalizedGetMergeConflictDetailInput, 'valueRole' | 'purpose' | 'optionId' | 'kind'>,
 ):
   | { readonly ok: true; readonly value: VersionDiffValue }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] } {
   switch (input.valueRole) {
     case 'base':
-      return { ok: true, value: conflict.base };
+      return authorizeConflictDetailValue(operation, input, conflict.base);
     case 'ours':
-      return { ok: true, value: conflict.ours };
+      return authorizeConflictDetailValue(operation, input, conflict.ours);
     case 'theirs':
-      return { ok: true, value: conflict.theirs };
+      return authorizeConflictDetailValue(operation, input, conflict.theirs);
     case 'resolved': {
       if (!input.optionId || !input.kind) {
         return {
@@ -318,7 +343,7 @@ export function selectConflictDetailValue(
         input.kind,
       );
       return option
-        ? { ok: true, value: option.value }
+        ? authorizeConflictDetailValue(operation, input, option.value)
         : {
             ok: false,
             diagnostics: [
@@ -415,6 +440,39 @@ export function findResolutionOption(
 ): VersionMergeConflictResolutionOption | undefined {
   return conflict.resolutionOptions.find(
     (candidate) => candidate.optionId === optionId && candidate.kind === kind,
+  );
+}
+
+function authorizeConflictDetailValue(
+  operation: VersionMergePublicOperation,
+  input: Pick<NormalizedGetMergeConflictDetailInput, 'purpose'>,
+  value: VersionDiffValue,
+):
+  | { readonly ok: true; readonly value: VersionDiffValue }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] } {
+  if (input.purpose !== 'resolution' || value.kind !== 'redacted') {
+    return { ok: true, value };
+  }
+  return {
+    ok: false,
+    diagnostics: [
+      mergeReviewDiagnostic(
+        operation,
+        'VERSION_PERMISSION_DENIED',
+        'Redacted conflict values are not authorized as resolution payloads.',
+        { recoverability: 'unsupported' },
+      ),
+    ],
+  };
+}
+
+function compareNormalizedMergeReviewConflicts(
+  left: VersionMergeConflict,
+  right: VersionMergeConflict,
+): number {
+  return compareStrings(
+    [left.conflictId, left.conflictDigest].join('\u0000'),
+    [right.conflictId, right.conflictDigest].join('\u0000'),
   );
 }
 
@@ -629,6 +687,9 @@ async function normalizeMergeReviewConflict(
   if (!isRecord(value) || value.conflictKind !== 'same-property') {
     return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
   }
+  if (hasUnsupportedGroupOrApprovalFields(value)) {
+    return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+  }
   if (typeof value.conflictId !== 'string' || typeof value.conflictDigest !== 'string') {
     return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
   }
@@ -651,6 +712,7 @@ async function normalizeMergeReviewConflict(
   const options = await normalizeMergeReviewResolutionOptions(
     operation,
     value.resolutionOptions,
+    value.conflictId,
     structural.structural,
     identity,
     { acceptBase: base.value, acceptOurs: ours.value, acceptTheirs: theirs.value },
@@ -723,6 +785,7 @@ function mapStructuralMetadataForReview(
 async function normalizeMergeReviewResolutionOptions(
   operation: VersionMergePublicOperation,
   value: unknown,
+  sourceConflictId: string,
   structural: Exclude<VersionDiffStructuralMetadata, VersionRedactedValue>,
   identity: { readonly conflictId: string; readonly conflictDigest: string },
   expectedValues: Record<VersionMergeConflictResolutionOptionKind, VersionDiffValue>,
@@ -742,14 +805,18 @@ async function normalizeMergeReviewResolutionOptions(
   const recalcRequired = new Map<VersionMergeConflictResolutionOptionKind, boolean>();
   const originalOptionIds = new Map<VersionMergeConflictResolutionOptionKind, string>();
   for (const option of value) {
-    if (!isRecord(option)) {
+    if (!isRecord(option) || hasUnsupportedGroupOrApprovalFields(option)) {
       return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
     }
     const kind = mapResolutionOptionKind(option.kind);
     if (!kind || byKind.has(kind) || typeof option.recalcRequired !== 'boolean') {
       return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
     }
-    if (typeof option.conflictId !== 'string' || typeof option.optionId !== 'string') {
+    if (
+      typeof option.conflictId !== 'string' ||
+      option.conflictId !== sourceConflictId ||
+      typeof option.optionId !== 'string'
+    ) {
       return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
     }
     const projected = projectReviewValue(operation, structural, option.value);
@@ -900,6 +967,16 @@ function compareJsonValues(left: unknown, right: unknown): number {
   if (leftJson < rightJson) return -1;
   if (leftJson > rightJson) return 1;
   return 0;
+}
+
+function compareStrings(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
+function hasUnsupportedGroupOrApprovalFields(value: Readonly<Record<string, unknown>>): boolean {
+  return Object.keys(value).some((key) => UNSUPPORTED_GROUP_OR_APPROVAL_FIELDS.has(key));
 }
 
 async function sha256Hex(input: string): Promise<string> {

@@ -82,6 +82,39 @@ describe('WorkbookVersion saved merge resolution validation', () => {
     });
   });
 
+  it('rejects resolved-attempt detail reads without target proof', async () => {
+    await withReviewFixture(
+      'resolved-attempt-missing-target',
+      async ({ version, preview, target }) => {
+        const conflict = preview.conflicts[0];
+        const saved = await version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: TARGET_REF,
+          expectedTargetHead: target,
+          resolutions: [resolutionFor(conflict, 'acceptTheirs')],
+        });
+        if (!saved.ok || !saved.value.resolutionSetDigest || !saved.value.resolvedAttemptDigest) {
+          throw new Error('expected saved resolution artifact digests');
+        }
+
+        const result = await version.getMergeConflictDetail(
+          resolvedDetailInput(preview, conflict, saved.value),
+        );
+
+        expectMergeReviewFailure(result, 'VERSION_MERGE_RESOLUTION_MISMATCH');
+        expectNoDiagnosticLeaks(result, [
+          conflict.conflictId,
+          conflict.conflictDigest,
+          saved.value.resolutionSetDigest.digest,
+          saved.value.resolvedAttemptDigest.digest,
+          preview.resultDigest.digest,
+        ]);
+      },
+    );
+  });
+
   it('rejects stale saved-resolution sealed payload refs without leaking payload bindings', async () => {
     await withReviewFixture('stale-sealed-payload-ref', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
@@ -144,62 +177,65 @@ describe('WorkbookVersion saved merge resolution validation', () => {
   });
 
   it('rejects saved sealed payload refs without a replay target binding', async () => {
-    await withReviewFixture('sealed-payload-ref-missing-target', async ({ version, preview, target }) => {
-      const conflict = preview.conflicts[0];
-      const option = requireResolutionOption(conflict, 'acceptTheirs');
-      const payload = await version.putMergeResolutionPayload({
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        redactionPolicyDigest: preview.resultDigest,
-        conflictId: conflict.conflictId,
-        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
-        optionId: option.optionId,
-        kind: option.kind,
-        targetRef: TARGET_REF,
-        expectedTargetHead: target,
-        value: option.value as any,
-        purpose: 'chooseValue',
-      });
-      if (!payload.ok) throw new Error(`expected sealed payload: ${payload.error.code}`);
+    await withReviewFixture(
+      'sealed-payload-ref-missing-target',
+      async ({ version, preview, target }) => {
+        const conflict = preview.conflicts[0];
+        const option = requireResolutionOption(conflict, 'acceptTheirs');
+        const payload = await version.putMergeResolutionPayload({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          optionId: option.optionId,
+          kind: option.kind,
+          targetRef: TARGET_REF,
+          expectedTargetHead: target,
+          value: option.value as any,
+          purpose: 'chooseValue',
+        });
+        if (!payload.ok) throw new Error(`expected sealed payload: ${payload.error.code}`);
 
-      const saved = await version.saveMergeResolutions({
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        redactionPolicyDigest: preview.resultDigest,
-        targetRef: TARGET_REF,
-        expectedTargetHead: target,
-        resolutions: [
-          {
-            ...resolutionFor(conflict, 'acceptTheirs'),
-            sealedPayloadRef: payload.value,
-          },
-        ],
-      });
-      if (!saved.ok || !saved.value.resolutionSetDigest) {
-        throw new Error('expected saved sealed payload resolution set');
-      }
+        const saved = await version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          targetRef: TARGET_REF,
+          expectedTargetHead: target,
+          resolutions: [
+            {
+              ...resolutionFor(conflict, 'acceptTheirs'),
+              sealedPayloadRef: payload.value,
+            },
+          ],
+        });
+        if (!saved.ok || !saved.value.resolutionSetDigest) {
+          throw new Error('expected saved sealed payload resolution set');
+        }
 
-      const result = await version.getMergeConflictDetail({
-        resultId: preview.resultId,
-        resultDigest: preview.resultDigest,
-        redactionPolicyDigest: preview.resultDigest,
-        conflictId: conflict.conflictId,
-        expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
-        valueRole: 'resolved',
-        purpose: 'resolution',
-        resolutionSetDigest: saved.value.resolutionSetDigest,
-      });
+        const result = await version.getMergeConflictDetail({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          valueRole: 'resolved',
+          purpose: 'resolution',
+          resolutionSetDigest: saved.value.resolutionSetDigest,
+        });
 
-      expectMergeReviewFailure(result, 'VERSION_MERGE_RESOLUTION_MISMATCH');
-      expectNoDiagnosticLeaks(result, [
-        conflict.conflictId,
-        conflict.conflictDigest,
-        option.optionId,
-        payload.value.payloadDigest.digest,
-        saved.value.resolutionSetDigest.digest,
-        preview.resultDigest.digest,
-      ]);
-    });
+        expectMergeReviewFailure(result, 'VERSION_MERGE_RESOLUTION_MISMATCH');
+        expectNoDiagnosticLeaks(result, [
+          conflict.conflictId,
+          conflict.conflictDigest,
+          option.optionId,
+          payload.value.payloadDigest.digest,
+          saved.value.resolutionSetDigest.digest,
+          preview.resultDigest.digest,
+        ]);
+      },
+    );
   });
 
   it('rejects malformed persisted sealed refs with redacted invalid-artifact diagnostics', async () => {
@@ -255,6 +291,45 @@ describe('WorkbookVersion saved merge resolution validation', () => {
           preview.resultDigest.digest,
           UNSAFE_FIELD,
           UNSAFE_VALUE,
+        ]);
+      },
+    );
+  });
+
+  it('rejects saved resolution sets with unsupported stale target bindings', async () => {
+    await withReviewFixture(
+      'stale-resolution-set-binding',
+      async ({ graph, namespace, version, preview, target }) => {
+        const conflict = preview.conflicts[0];
+        const resolutionSet = await objectRecord(namespace, 'workbook.mergeResolutionSet.v1', {
+          schemaVersion: 1,
+          recordKind: 'mergeResolutionSet',
+          targetRef: DRIFTED_TARGET_REF,
+          expectedTargetHead: driftExpectedHead(target),
+          resolutions: [resolutionFor(conflict, 'acceptTheirs')],
+        });
+        expect(await graph.putObjects([resolutionSet])).toMatchObject({ status: 'success' });
+
+        const result = await version.getMergeConflictDetail({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          valueRole: 'resolved',
+          purpose: 'resolution',
+          resolutionSetDigest: resolutionSet.digest,
+          targetRef: TARGET_REF,
+          expectedTargetHead: target,
+        });
+
+        expectMergeReviewFailure(result, 'VERSION_INVALID_COMMIT_PAYLOAD');
+        expectNoDiagnosticLeaks(result, [
+          conflict.conflictId,
+          conflict.conflictDigest,
+          resolutionSet.digest.digest,
+          DRIFTED_TARGET_REF,
+          preview.resultDigest.digest,
         ]);
       },
     );
@@ -319,7 +394,10 @@ async function withReviewFixture(
 function resolvedDetailInput(
   preview: ReviewFixture['preview'],
   conflict: VersionMergeConflict,
-  saved: { readonly resolutionSetDigest: ObjectDigest; readonly resolvedAttemptDigest: ObjectDigest },
+  saved: {
+    readonly resolutionSetDigest: ObjectDigest;
+    readonly resolvedAttemptDigest: ObjectDigest;
+  },
 ) {
   return {
     resultId: preview.resultId,

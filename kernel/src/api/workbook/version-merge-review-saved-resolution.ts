@@ -17,10 +17,7 @@ import {
   type ObjectDigest as VersionObjectDigest,
 } from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
-import {
-  mapPublicExpectedTargetHead,
-  mapPublicTargetRef,
-} from './version-attempt-metadata';
+import { mapPublicExpectedTargetHead, mapPublicTargetRef } from './version-attempt-metadata';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import {
   type NormalizedMergeReviewConflictSet,
@@ -37,7 +34,7 @@ import { normalizeVersionApplyMergeResolutions } from './version-merge-resolutio
 
 type ConflictDetailSelectionInput = Pick<
   NormalizedGetMergeConflictDetailInput,
-  'valueRole' | 'optionId' | 'kind'
+  'valueRole' | 'purpose' | 'optionId' | 'kind'
 >;
 
 type SavedConflictDetailSelectionResult =
@@ -57,6 +54,16 @@ type SavedResolutionPayloadTarget = Pick<
   'targetRef' | 'expectedTargetHead'
 >;
 
+const MERGE_RESOLUTION_SET_ARTIFACT_KEYS = new Set(['schemaVersion', 'recordKind', 'resolutions']);
+const RESOLVED_MERGE_ATTEMPT_ARTIFACT_KEYS = new Set([
+  'schemaVersion',
+  'recordKind',
+  'resultDigest',
+  'resolutionSetDigest',
+  'targetRef',
+  'expectedTargetHead',
+]);
+
 export async function resolveSavedConflictDetailSelection(
   graph: VersionGraphStore,
   operation: 'getMergeConflictDetail',
@@ -67,6 +74,18 @@ export async function resolveSavedConflictDetailSelection(
   let resolutionSetDigest = input.resolutionSetDigest;
   let attemptTarget: SavedResolutionPayloadTarget | undefined;
   if (input.resolvedAttemptDigest) {
+    if (!input.targetRef || !input.expectedTargetHead) {
+      return {
+        ok: false,
+        diagnostics: [
+          mergeReviewDiagnostic(
+            operation,
+            'VERSION_MERGE_RESOLUTION_MISMATCH',
+            'resolved merge attempt detail requires targetRef and expectedTargetHead.',
+          ),
+        ],
+      };
+    }
     const attempt = await readResolvedMergeAttemptArtifact(
       graph,
       operation,
@@ -104,6 +123,7 @@ export async function resolveSavedConflictDetailSelection(
       ok: true,
       selection: {
         valueRole: input.valueRole,
+        purpose: input.purpose,
         ...(input.optionId ? { optionId: input.optionId } : {}),
         ...(input.kind ? { kind: input.kind } : {}),
       },
@@ -168,6 +188,7 @@ export async function resolveSavedConflictDetailSelection(
     ok: true,
     selection: {
       valueRole: input.valueRole,
+      purpose: input.purpose,
       optionId: resolution.optionId,
       kind: resolution.kind,
     },
@@ -355,7 +376,8 @@ function toMergeResolutionSetArtifactPayload(
     !isRecord(value) ||
     value.schemaVersion !== 1 ||
     value.recordKind !== 'mergeResolutionSet' ||
-    !Array.isArray(value.resolutions)
+    !Array.isArray(value.resolutions) ||
+    hasUnknownKeys(value, MERGE_RESOLUTION_SET_ARTIFACT_KEYS)
   ) {
     return null;
   }
@@ -381,6 +403,7 @@ function toResolvedMergeAttemptArtifactPayload(
   value: unknown,
 ): ResolvedMergeAttemptArtifactPayload | null {
   if (!isRecord(value)) return null;
+  if (hasUnknownKeys(value, RESOLVED_MERGE_ATTEMPT_ARTIFACT_KEYS)) return null;
   const targetRef = mapPublicTargetRef(value.targetRef);
   const expectedTargetHead = mapPublicExpectedTargetHead(value.expectedTargetHead);
   const resultDigest = isVersionObjectDigest(value.resultDigest) ? value.resultDigest : null;
@@ -430,4 +453,11 @@ function canonicalize(value: unknown): unknown {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function hasUnknownKeys(
+  value: Readonly<Record<string, unknown>>,
+  allowed: ReadonlySet<string>,
+): boolean {
+  return Object.keys(value).some((key) => !allowed.has(key));
 }

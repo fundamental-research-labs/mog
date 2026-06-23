@@ -1,8 +1,13 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import { VERSION_DIFF_PUBLIC_CURSOR_PREFIX } from '@mog-sdk/contracts/versioning';
-import type { WorkbookDiffPage } from '@mog-sdk/contracts/api';
+import type { VersionPageToken, WorkbookDiffPage } from '@mog-sdk/contracts/api';
 
 import { createWorkbookVersionDiffService } from '../diff-service';
+import {
+  internalPageTokenForOffset,
+  internalPageTokenForOrderKey,
+  publicPageTokenFor,
+} from '../diff-service-pagination';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
@@ -462,7 +467,7 @@ describe('WorkbookVersionDiffService', () => {
     });
   });
 
-  it('rejects stale page tokens before returning entries', async () => {
+  it('rejects stale and malformed page tokens before returning entries', async () => {
     const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
       semanticPayload: validSemanticPayload('child', [
         {
@@ -476,18 +481,44 @@ describe('WorkbookVersionDiffService', () => {
       ]),
     });
     const service = createWorkbookVersionDiffService({ provider });
+    const offsetToken = internalPageTokenForOffset(rootCommitId, childCommitId, 0);
+    const malformedOffsetToken = `${offsetToken.slice(0, -1)}1e2` as VersionPageToken;
+    const cases = [
+      {
+        pageToken: `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}stale-handle`,
+        diagnostic: { issueCode: 'VERSION_STALE_PAGE_CURSOR' },
+      },
+      {
+        pageToken: publicPageTokenFor(malformedOffsetToken),
+        diagnostic: {
+          issueCode: 'VERSION_STALE_PAGE_CURSOR',
+          safeMessage: 'diff pageToken carries an invalid page offset.',
+        },
+      },
+      {
+        pageToken: publicPageTokenFor(
+          internalPageTokenForOrderKey(rootCommitId, childCommitId, 'not-json-array'),
+        ),
+        diagnostic: {
+          issueCode: 'VERSION_STALE_PAGE_CURSOR',
+          safeMessage: 'diff pageToken carries an invalid order key.',
+        },
+      },
+    ];
 
-    await expect(
-      service.diff(
-        { kind: 'commit', id: rootCommitId },
-        { kind: 'commit', id: childCommitId },
-        { pageToken: `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}stale-handle` },
-      ),
-    ).resolves.toMatchObject({
-      status: 'degraded',
-      items: [],
-      diagnostics: [expect.objectContaining({ issueCode: 'VERSION_STALE_PAGE_CURSOR' })],
-    });
+    for (const { pageToken, diagnostic: expectedDiagnostic } of cases) {
+      await expect(
+        service.diff(
+          { kind: 'commit', id: rootCommitId },
+          { kind: 'commit', id: childCommitId },
+          { pageToken },
+        ),
+      ).resolves.toMatchObject({
+        status: 'degraded',
+        items: [],
+        diagnostics: [expect.objectContaining(expectedDiagnostic)],
+      });
+    }
   });
 });
 
@@ -544,7 +575,7 @@ function providerWithPermutedSemanticReads(
       return new Proxy(graph, {
         get(target, property, receiver) {
           if (property === 'getObjectRecord') {
-            return async <TPayload,>(ref: Parameters<typeof graph.getObjectRecord<TPayload>>[0]) => {
+            return async <TPayload>(ref: Parameters<typeof graph.getObjectRecord<TPayload>>[0]) => {
               const record = await graph.getObjectRecord<TPayload>(ref);
               if (record.preimage.objectType !== 'workbook.semanticChangeSet.v1') return record;
               const payload = record.preimage.payload;

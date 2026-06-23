@@ -397,6 +397,42 @@ describe('CheckoutMaterializationService planning', () => {
     expect(readCommit).not.toHaveBeenCalled();
   });
 
+  it('redacts malformed ref target diagnostics before reading commits', async () => {
+    const stores = createStores();
+    const readCommit = jest.fn(stores.commitStore.readCommit.bind(stores.commitStore));
+    const rawRefName = 'scenario/Secret Branch';
+    const service = createCheckoutMaterializationService({
+      commitReader: { readCommit },
+      dependencyReader: {
+        hasDependency: (dependency) => stores.objectStore.hasObject(dependency),
+      },
+    });
+
+    const result = await service.planCheckout({
+      target: 'ref',
+      refName: rawRefName,
+    });
+
+    expectPlanFailed(result);
+    expect(result.error.code).toBe('invalidCheckoutTarget');
+    expect(result.diagnostics[0]).toMatchObject({
+      code: 'VERSION_CHECKOUT_INVALID_TARGET',
+      details: {
+        received: 'redacted',
+        receivedKind: 'string',
+        redacted: true,
+      },
+      sourceDiagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          value: 'redacted',
+        }),
+      ]),
+    });
+    expect(JSON.stringify(result.diagnostics)).not.toContain(rawRefName);
+    expect(JSON.stringify(result.diagnostics)).not.toContain('Secret');
+    expect(readCommit).not.toHaveBeenCalled();
+  });
+
   it('returns missing-ref diagnostics before commit reads', async () => {
     const stores = createStores();
     const readCommit = jest.fn(stores.commitStore.readCommit.bind(stores.commitStore));

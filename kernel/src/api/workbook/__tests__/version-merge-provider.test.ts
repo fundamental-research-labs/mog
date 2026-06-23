@@ -77,7 +77,7 @@ describe('WorkbookVersion merge facade', () => {
       resolvedAttemptDigest: DIGEST_A,
       attemptPersistence: 'persisted',
       attemptKind: 'applyable',
-      resultId: 'merge-result:review-main',
+      resultId: `merge-result:${DIGEST_A.digest}`,
       targetRef: TARGET_REF,
       expectedTargetHead: EXPECTED_TARGET_HEAD,
       applicationPlanDigest: DIGEST_B,

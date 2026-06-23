@@ -20,12 +20,95 @@ const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const VERSION_EXPECTED_HEAD_KEYS = new Set(['commitId', 'revision', 'symbolicHeadRevision']);
 const OBJECT_DIGEST_KEYS = new Set(['algorithm', 'digest', 'byteLength']);
+const MERGE_RESULT_ID_RE = /^merge-result:[0-9a-f]{64}$/;
+const VERSION_MERGE_ATTEMPT_METADATA_KEYS = new Set([
+  'previewArtifactDigest',
+  'resultDigest',
+  'resolutionSetDigest',
+  'resolvedAttemptDigest',
+  'attemptPersistence',
+  'attemptKind',
+  'resultId',
+  'expiresAt',
+  'targetRef',
+  'expectedTargetHead',
+  'applicationPlanDigest',
+  'applyEligibilityDigest',
+]);
+const VERSION_APPLY_MERGE_ATTEMPT_METADATA_KEYS = new Set([
+  'resultId',
+  'previewArtifactDigest',
+  'resultDigest',
+  'resolutionSetDigest',
+  'resolvedAttemptDigest',
+  'targetRef',
+  'headBefore',
+  'headAfter',
+  'applicationPlanDigest',
+]);
+const VERSION_MERGE_RESULT_ENVELOPE_KEYS = new Set([
+  'status',
+  'base',
+  'ours',
+  'theirs',
+  'changes',
+  'conflicts',
+  'diagnostics',
+  'mutationGuarantee',
+]);
+const VERSION_APPLY_MERGE_RESULT_ENVELOPE_KEYS = new Set([
+  'status',
+  'base',
+  'ours',
+  'theirs',
+  'commitRef',
+  'commit',
+  'changes',
+  'conflicts',
+  'diagnostics',
+  'resolutionCount',
+  'mutationGuarantee',
+]);
+const REDACTED_PROVIDER_PAYLOAD_KEYS = new Set([
+  'operation',
+  'operationContext',
+  'operationPayload',
+  'source',
+  'sourceContext',
+  'sourcePayload',
+]);
+const METADATA_LIKE_KEY_TOKENS = [
+  'artifact',
+  'attempt',
+  'digest',
+  'eligibility',
+  'expectedhead',
+  'expectedtargethead',
+  'expires',
+  'headafter',
+  'headbefore',
+  'metadata',
+  'persistence',
+  'plan',
+  'resultid',
+  'targethead',
+  'targetref',
+];
 
 type Mutable<T> = { -readonly [K in keyof T]?: T[K] };
 
 export function mapVersionMergeAttemptMetadata(
   value: Readonly<Record<string, unknown>>,
 ): VersionMergeAttemptMetadata | null {
+  if (
+    !hasCanonicalMetadataKeys(
+      value,
+      VERSION_MERGE_ATTEMPT_METADATA_KEYS,
+      VERSION_MERGE_RESULT_ENVELOPE_KEYS,
+    )
+  ) {
+    return null;
+  }
   const metadata: Mutable<VersionMergeAttemptMetadata> = {};
   if (!copyDigest(value, metadata, 'previewArtifactDigest')) return null;
   if (!copyDigest(value, metadata, 'resultDigest')) return null;
@@ -39,12 +122,22 @@ export function mapVersionMergeAttemptMetadata(
   if (!copyExpectedTargetHead(value, metadata, 'expectedTargetHead')) return null;
   if (!copyDigest(value, metadata, 'applicationPlanDigest')) return null;
   if (!copyDigest(value, metadata, 'applyEligibilityDigest')) return null;
+  if (!hasDeterministicDigestClosure(metadata)) return null;
   return metadata;
 }
 
 export function mapVersionApplyMergeAttemptMetadata(
   value: Readonly<Record<string, unknown>>,
 ): VersionApplyMergeAttemptMetadata | null {
+  if (
+    !hasCanonicalMetadataKeys(
+      value,
+      VERSION_APPLY_MERGE_ATTEMPT_METADATA_KEYS,
+      VERSION_APPLY_MERGE_RESULT_ENVELOPE_KEYS,
+    )
+  ) {
+    return null;
+  }
   const metadata: Mutable<VersionApplyMergeAttemptMetadata> = {};
   if (!copyMergeResultId(value, metadata)) return null;
   if (!copyDigest(value, metadata, 'previewArtifactDigest')) return null;
@@ -55,6 +148,7 @@ export function mapVersionApplyMergeAttemptMetadata(
   if (!copyCommitId(value, metadata, 'headBefore')) return null;
   if (!copyCommitId(value, metadata, 'headAfter')) return null;
   if (!copyDigest(value, metadata, 'applicationPlanDigest')) return null;
+  if (!hasDeterministicDigestClosure(metadata)) return null;
   return metadata;
 }
 
@@ -79,7 +173,9 @@ export function mapPublicExpectedTargetHead(value: unknown): VersionCommitExpect
   };
 }
 
-export function mapPublicTargetRef(value: unknown): VersionMainRefName | VersionRefName | undefined {
+export function mapPublicTargetRef(
+  value: unknown,
+): VersionMainRefName | VersionRefName | undefined {
   if (typeof value !== 'string') return undefined;
   const branchName = value.startsWith(VERSION_BRANCH_REF_PREFIX)
     ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
@@ -165,13 +261,8 @@ function copyMergeResultId(
   target: Mutable<{ readonly resultId: VersionMergeResultId }>,
 ): boolean {
   if (source.resultId === undefined) return true;
-  if (
-    typeof source.resultId !== 'string' ||
-    !source.resultId.startsWith('merge-result:') ||
-    source.resultId.length === 'merge-result:'.length
-  ) {
+  if (typeof source.resultId !== 'string' || !MERGE_RESULT_ID_RE.test(source.resultId))
     return false;
-  }
   target.resultId = source.resultId as VersionMergeResultId;
   return true;
 }
@@ -235,6 +326,50 @@ export function mapPublicRevision(value: unknown): VersionRecordRevision | undef
   }
   if (typeof value === 'string' && value.length > 0) return { kind: 'opaque', value };
   return undefined;
+}
+
+function hasCanonicalMetadataKeys(
+  source: Readonly<Record<string, unknown>>,
+  metadataKeys: ReadonlySet<string>,
+  envelopeKeys: ReadonlySet<string>,
+): boolean {
+  for (const key of Object.keys(source)) {
+    if (metadataKeys.has(key) || envelopeKeys.has(key) || REDACTED_PROVIDER_PAYLOAD_KEYS.has(key)) {
+      continue;
+    }
+    if (looksLikeVersionAttemptMetadataKey(key)) return false;
+  }
+  return true;
+}
+
+function looksLikeVersionAttemptMetadataKey(key: string): boolean {
+  const normalized = key.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  return METADATA_LIKE_KEY_TOKENS.some((token) => normalized.includes(token));
+}
+
+function hasDeterministicDigestClosure(
+  metadata: Readonly<{
+    readonly resultId?: VersionMergeResultId;
+    readonly previewArtifactDigest?: ObjectDigest;
+    readonly resultDigest?: ObjectDigest;
+    readonly resolvedAttemptDigest?: ObjectDigest;
+  }>,
+): boolean {
+  if (!metadata.resultId) return true;
+  const closingDigest =
+    metadata.resolvedAttemptDigest ??
+    (metadata.previewArtifactDigest &&
+    metadata.resultDigest &&
+    digestsEqual(metadata.previewArtifactDigest, metadata.resultDigest)
+      ? metadata.resultDigest
+      : undefined);
+  return (
+    closingDigest === undefined || metadata.resultId === `merge-result:${closingDigest.digest}`
+  );
+}
+
+function digestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
+  return left.algorithm === right.algorithm && left.digest === right.digest;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

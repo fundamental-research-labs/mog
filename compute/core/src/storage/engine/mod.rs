@@ -33,7 +33,8 @@ mod cell_semantics;
 mod sync_bridge;
 mod table_result_merge;
 mod undo_bridge;
-mod versioning;
+#[doc(hidden)]
+pub mod versioning;
 mod workbook_theme;
 pub use cell_semantics::CellInfo;
 mod cf_cache;

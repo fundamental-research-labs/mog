@@ -315,6 +315,57 @@ export interface VersionShadowObservationSink {
   recordObservation(record: VersionShadowObservationRecord): void | Promise<void>;
 }
 
+export const VERSION_REDACTION_KEY_SUBJECTS = Object.freeze([
+  'author',
+  'session',
+  'provider',
+  'debug',
+] as const);
+export type VersionRedactionKeySubject = (typeof VERSION_REDACTION_KEY_SUBJECTS)[number];
+
+export interface VersionRedactionKey {
+  readonly keyId: string;
+  readonly subject: VersionRedactionKeySubject;
+  readonly sourceField: string;
+  readonly digest: ObjectDigest;
+  readonly policy: VersionRedactionPolicy;
+}
+
+export const VERSION_CAPTURE_FAILURE_STAGES = Object.freeze(['admission', 'capture'] as const);
+export type VersionCaptureFailureStage = (typeof VERSION_CAPTURE_FAILURE_STAGES)[number];
+
+export const VERSION_CAPTURE_FAILURE_DIAGNOSTIC_CODES = Object.freeze([
+  'missing_redaction_key',
+  'write_admission_blocked',
+  'capture_serialization_failed',
+  'diagnostics_sink_unavailable',
+] as const);
+export type VersionCaptureFailureDiagnosticCode =
+  (typeof VERSION_CAPTURE_FAILURE_DIAGNOSTIC_CODES)[number];
+
+export interface VersionCaptureFailureSinkRecord {
+  readonly schemaVersion: 1;
+  readonly recordKind: 'version-capture-failure';
+  readonly diagnosticId: string;
+  readonly observedAt: string;
+  readonly stage: VersionCaptureFailureStage;
+  readonly code: VersionCaptureFailureDiagnosticCode | (string & {});
+  readonly severity: VersionVerificationSeverity;
+  readonly message: string;
+  readonly operationId?: string;
+  readonly domainIds?: readonly string[];
+  readonly capturePolicy: CapturePolicy;
+  readonly writeAdmissionMode: VersionWriteAdmissionMode;
+  readonly redactionPolicy: VersionRedactionPolicy;
+  readonly redactionKeys?: readonly VersionRedactionKey[];
+  readonly missingRedactionFields?: readonly string[];
+  readonly debug?: Readonly<Record<string, VersionJsonValue>>;
+}
+
+export interface VersionCaptureDiagnosticsSink {
+  recordCaptureFailure(record: VersionCaptureFailureSinkRecord): void | Promise<void>;
+}
+
 export interface SemanticOperationIntent {
   readonly intentId: string;
   readonly operationKind: VersionOperationKind;

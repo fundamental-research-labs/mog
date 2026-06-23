@@ -24,6 +24,10 @@ import type {
   VersionAgentProposalStatus,
   VersionAppendAgentProposalEventInput,
   VersionAuthor,
+  VersionCaptureDiagnosticsSink,
+  VersionCaptureFailureDiagnosticCode,
+  VersionCaptureFailureSinkRecord,
+  VersionCaptureFailureStage,
   VersionWriteAdmissionMode,
   VersionCapabilityGate,
   VersionDomainCapabilityKey,
@@ -40,6 +44,8 @@ import type {
   VersionPendingRemotePromotionStatus,
   VersionPendingRemoteSegmentId,
   VersionProposalVerificationSummary,
+  VersionRedactionKey,
+  VersionRedactionKeySubject,
   VersionRedactionSummary,
 } from './index';
 import type {
@@ -99,6 +105,13 @@ type ExpectedWriteAdmissionMode =
   | 'block';
 type ExpectedHistoryReadMode = 'none' | 'metadata-only' | 'full';
 type ExpectedHistoryWriteMode = 'none' | 'shadow-only' | 'gated' | 'full';
+type ExpectedRedactionKeySubject = 'author' | 'session' | 'provider' | 'debug';
+type ExpectedCaptureFailureStage = 'admission' | 'capture';
+type ExpectedCaptureFailureDiagnosticCode =
+  | 'missing_redaction_key'
+  | 'write_admission_blocked'
+  | 'capture_serialization_failed'
+  | 'diagnostics_sink_unavailable';
 type ExpectedPendingRemotePromotionStatus = 'success' | 'partial' | 'failed';
 type ExpectedPendingRemotePromotionSkipReason =
   | 'batch-status-read-failed'
@@ -144,6 +157,15 @@ type _ExactWriteAdmissionModeSet = Assert<
 >;
 type _ExactHistoryReadModeSet = Assert<IsEqual<VersionHistoryReadMode, ExpectedHistoryReadMode>>;
 type _ExactHistoryWriteModeSet = Assert<IsEqual<VersionHistoryWriteMode, ExpectedHistoryWriteMode>>;
+type _ExactRedactionKeySubjectSet = Assert<
+  IsEqual<VersionRedactionKeySubject, ExpectedRedactionKeySubject>
+>;
+type _ExactCaptureFailureStageSet = Assert<
+  IsEqual<VersionCaptureFailureStage, ExpectedCaptureFailureStage>
+>;
+type _ExactCaptureFailureDiagnosticCodeSet = Assert<
+  IsEqual<VersionCaptureFailureDiagnosticCode, ExpectedCaptureFailureDiagnosticCode>
+>;
 type _ExactPendingRemotePromotionStatusSet = Assert<
   IsEqual<VersionPendingRemotePromotionStatus, ExpectedPendingRemotePromotionStatus>
 >;
@@ -342,6 +364,48 @@ const proposalRedaction: VersionRedactionSummary = Object.freeze({
   redactedObjectCount: 0,
   redactedFieldCount: 0,
   preservedDigests: Object.freeze([digest]),
+});
+
+const authorRedactionKey: VersionRedactionKey = Object.freeze({
+  keyId: 'redaction-key:author:sha256:vc02-author-redaction-key',
+  subject: 'author',
+  sourceField: 'operation.author.authorId',
+  digest,
+  policy: 'metadata-only',
+});
+
+const providerRedactionKey: VersionRedactionKey = Object.freeze({
+  keyId: 'redaction-key:provider:sha256:vc02-provider-redaction-key',
+  subject: 'provider',
+  sourceField: 'operation.collaboration.providerId',
+  digest,
+  policy: 'metadata-only',
+});
+
+const captureFailureSinkRecord: VersionCaptureFailureSinkRecord = Object.freeze({
+  schemaVersion: 1,
+  recordKind: 'version-capture-failure',
+  diagnosticId: 'diagnostic:vc02-capture-redaction-key',
+  observedAt: pendingRemotePromotionResult.promotedAt,
+  stage: 'admission',
+  code: 'missing_redaction_key',
+  severity: 'warning',
+  message: 'Capture admission requires redaction keys for sensitive provenance.',
+  operationId: 'operation:vc02-capture-redaction-key',
+  domainIds: Object.freeze(['runtime-diagnostics.sync-provider-admission']),
+  capturePolicy: 'shadowOnly',
+  writeAdmissionMode: 'shadowOnly',
+  redactionPolicy: 'metadata-only',
+  redactionKeys: Object.freeze([authorRedactionKey, providerRedactionKey]),
+  missingRedactionFields: Object.freeze(['operation.author.sessionId']),
+  debug: Object.freeze({
+    boundary: 'sync-admission',
+    redacted: true,
+  }),
+});
+
+const captureDiagnosticsSink: VersionCaptureDiagnosticsSink = Object.freeze({
+  recordCaptureFailure: (_record: VersionCaptureFailureSinkRecord) => undefined,
 });
 
 const agentProposalAcceptResult: VersionAgentProposalAcceptResult = Object.freeze({
@@ -717,6 +781,10 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   controlPlaneCompareAndSwap,
   metadataDiagnostic,
   pendingRemotePromotionResult,
+  authorRedactionKey,
+  providerRedactionKey,
+  captureFailureSinkRecord,
+  captureDiagnosticsSink,
   agentProposalRecord,
   agentProposalAcceptedEvent,
   appendAgentProposalEventInput,

@@ -1,7 +1,4 @@
-import type {
-  VersionCapability,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionCapability, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 
@@ -15,6 +12,29 @@ export type VersionMergePublicCapability = Extract<
   VersionCapability,
   'version:mergePreview' | 'version:mergeApply'
 >;
+
+const VERSION_MERGE_OPERATION_CAPABILITIES = {
+  merge: 'version:mergePreview',
+  applyMerge: 'version:mergeApply',
+  saveMergeResolutions: 'version:mergeApply',
+  getMergeConflictDetail: 'version:mergePreview',
+  putMergeResolutionPayload: 'version:mergeApply',
+} as const satisfies Record<VersionMergePublicOperation, VersionMergePublicCapability>;
+
+const VERSION_MERGE_BROAD_CAPABILITY_ALIASES = new Set([
+  'version:merge',
+  'versionControl.merge',
+  'versionControlMerge',
+  'mergeCapability',
+]);
+const VERSION_MERGE_NARROW_CAPABILITY_ALIASES: Readonly<
+  Record<string, VersionMergePublicCapability>
+> = {
+  mergePreview: 'version:mergePreview',
+  'versionControl.mergePreview': 'version:mergePreview',
+  mergeApply: 'version:mergeApply',
+  'versionControl.mergeApply': 'version:mergeApply',
+};
 
 export const VERSION_CAPABILITY_KEYS = [
   'version:read',
@@ -143,9 +163,7 @@ export function getVersionMergeCapabilityDecision(
   return { enabled: true, status };
 }
 
-export function getVersionHostCapabilityDecisions(
-  ctx: DocumentContext,
-): HostCapabilityDecisions {
+export function getVersionHostCapabilityDecisions(ctx: DocumentContext): HostCapabilityDecisions {
   const runtime = ctx as MaybeVersionRuntimeContext;
   for (const candidate of [
     runtime.policy,
@@ -164,6 +182,7 @@ export function versionMergeCapabilityDisabledDiagnostic(
   operation: VersionMergePublicOperation,
   decision: Extract<VersionMergeCapabilityDecision, { readonly enabled: false }>,
 ): VersionStoreDiagnostic {
+  const operationCapability = versionMergeCapabilityForOperation(operation);
   return {
     issueCode: 'VERSION_MERGE_CAPABILITY_DISABLED',
     severity: 'error',
@@ -173,13 +192,21 @@ export function versionMergeCapabilityDisabledDiagnostic(
     payload: {
       operation,
       endpointStatus: 'capabilityDisabled',
-      capability: 'versionControl.merge',
+      capability: decision.capability,
+      featureGateCapability: 'versionControl.merge',
       publicCapability: decision.capability,
+      operationCapability,
       reason: decision.reason,
     },
     redacted: true,
     mutationGuarantee: 'no-write-attempted',
   };
+}
+
+export function versionMergeCapabilityForOperation(
+  operation: VersionMergePublicOperation,
+): VersionMergePublicCapability {
+  return VERSION_MERGE_OPERATION_CAPABILITIES[operation];
 }
 
 function safeMessageForDisabledReason(reason: VersionMergeCapabilityDisabledReason): string {
@@ -209,10 +236,7 @@ function readVersionControlGate(value: unknown): boolean | undefined {
 function readVersionControlMergeGate(value: unknown): boolean | undefined {
   if (!isRecord(value)) return undefined;
   const capabilities = isRecord(value.capabilities) ? value.capabilities : null;
-  const capabilityGate = readBoolean(capabilities, [
-    'versionControlMerge',
-    'versionControl.merge',
-  ]);
+  const capabilityGate = readBoolean(capabilities, ['versionControlMerge', 'versionControl.merge']);
   if (capabilityGate !== undefined) return capabilityGate;
 
   const directGate = readBoolean(value, ['versionControlMerge', 'versionControl.merge']);
@@ -273,24 +297,125 @@ function readEditingGate(value: unknown): boolean | undefined {
 }
 
 function readHostCapabilityDecisions(value: unknown): HostCapabilityDecisions | null {
-  const source =
-    Array.isArray(value) ? value : isRecord(value) && Array.isArray(value.decisions) ? value.decisions : null;
-  if (!source) return null;
-
   const decisions: HostCapabilityDecisions = {};
-  for (const entry of source) {
+  let discovered = false;
+
+  const source = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.decisions)
+      ? value.decisions
+      : null;
+  for (const entry of source ?? []) {
     if (!isRecord(entry)) continue;
-    const capability = toVersionCapability(entry.capability);
-    const decision = toHostCapabilityDecision(entry.decision);
-    if (capability && decision) decisions[capability] = decision;
+    const decision = toHostCapabilityStateDecision(entry);
+    if (!decision) continue;
+
+    const capabilities = hostCapabilityEntryCapabilities(entry);
+    if (capabilities.length === 0) continue;
+    discovered = true;
+    for (const capability of capabilities) {
+      decisions[capability] = decision;
+    }
   }
-  return Object.keys(decisions).length > 0 ? decisions : null;
+
+  if (isRecord(value)) {
+    const capabilities = isRecord(value.capabilities) ? value.capabilities : null;
+    for (const [capabilityAlias, state] of Object.entries(capabilities ?? {})) {
+      const decision = toHostCapabilityStateDecision(state);
+      if (!decision) continue;
+
+      const stateCapabilities = capabilitiesForHostAlias(capabilityAlias);
+      if (stateCapabilities.length === 0) continue;
+      discovered = true;
+      for (const capability of stateCapabilities) {
+        decisions[capability] = decision;
+      }
+    }
+  }
+
+  return discovered ? decisions : null;
 }
 
 function toVersionCapability(value: unknown): VersionCapability | null {
   return typeof value === 'string' && (VERSION_CAPABILITY_KEYS as readonly string[]).includes(value)
     ? (value as VersionCapability)
     : null;
+}
+
+function hostCapabilityEntryCapabilities(
+  entry: Readonly<Record<string, unknown>>,
+): readonly VersionCapability[] {
+  const capabilities = new Set<VersionCapability>();
+  for (const key of ['capability', 'publicCapability', 'requiredCapability', 'hostCapability']) {
+    addHostCapabilityAliases(entry[key], capabilities);
+  }
+  addHostCapabilityAliases(entry.deniedCapabilities, capabilities);
+  for (const key of ['operation', 'method', 'endpoint', 'operationId']) {
+    addOperationCapabilityAlias(entry[key], capabilities);
+  }
+  return [...capabilities];
+}
+
+function addHostCapabilityAliases(value: unknown, output: Set<VersionCapability>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) addHostCapabilityAliases(item, output);
+    return;
+  }
+  if (isRecord(value)) {
+    addHostCapabilityAliases(value.capability, output);
+    return;
+  }
+  for (const capability of capabilitiesForHostAlias(value)) {
+    output.add(capability);
+  }
+}
+
+function addOperationCapabilityAlias(value: unknown, output: Set<VersionCapability>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) addOperationCapabilityAlias(item, output);
+    return;
+  }
+  if (typeof value !== 'string') return;
+
+  const capability = operationAliasCapability(value);
+  if (capability) output.add(capability);
+}
+
+function capabilitiesForHostAlias(value: unknown): readonly VersionCapability[] {
+  const exact = toVersionCapability(value);
+  if (exact) return [exact];
+  if (typeof value !== 'string') return [];
+
+  if (VERSION_MERGE_BROAD_CAPABILITY_ALIASES.has(value)) {
+    return ['version:mergePreview', 'version:mergeApply'];
+  }
+  const narrowCapability = VERSION_MERGE_NARROW_CAPABILITY_ALIASES[value];
+  if (narrowCapability) return [narrowCapability];
+  const operationCapability = operationAliasCapability(value);
+  if (operationCapability) return [operationCapability];
+  return [];
+}
+
+function operationAliasCapability(value: string): VersionMergePublicCapability | null {
+  return isVersionMergePublicOperation(value) ? VERSION_MERGE_OPERATION_CAPABILITIES[value] : null;
+}
+
+function isVersionMergePublicOperation(value: string): value is VersionMergePublicOperation {
+  return Object.prototype.hasOwnProperty.call(VERSION_MERGE_OPERATION_CAPABILITIES, value);
+}
+
+function toHostCapabilityStateDecision(value: unknown): HostCapabilityDecision | null {
+  const direct = toHostCapabilityDecision(value);
+  if (direct) return direct;
+  if (typeof value === 'boolean') return value ? 'allowed' : 'denied';
+  if (!isRecord(value)) return null;
+
+  const decision =
+    toHostCapabilityDecision(value.decision) ?? toHostCapabilityDecision(value.status);
+  if (decision) return decision;
+  if (typeof value.enabled !== 'boolean') return null;
+  if (value.enabled) return 'allowed';
+  return value.retryable === true ? 'approval-required' : 'denied';
 }
 
 function toHostCapabilityDecision(value: unknown): HostCapabilityDecision | null {

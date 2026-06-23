@@ -1,9 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type {
-  VersionApplyMergeInput,
-  VersionMergeInput,
-} from '@mog-sdk/contracts/api';
+import type { VersionApplyMergeInput, VersionMergeInput } from '@mog-sdk/contracts/api';
 
 import { WorkbookVersionImpl } from '../version';
 import { applyMergeWorkbookVersion } from '../version-apply-merge';
@@ -16,11 +13,17 @@ const RESULT_DIGEST = { algorithm: 'sha256', digest: 'a'.repeat(64) } as const;
 const CONFLICT_DIGEST = { algorithm: 'sha256', digest: 'b'.repeat(64) } as const;
 const TARGET_REF = 'refs/heads/main';
 const EXPECTED_TARGET_HEAD = { commitId: OURS, revision: { kind: 'counter', value: '1' } };
+const HOST_POLICY_SECRET = 'host-principal-secret@example.test';
 const REVIEW_ENDPOINTS = [
   {
     method: 'saveMergeResolutions',
     capability: 'version:mergeApply',
-    input: { resultId: 'merge-result:hidden', resultDigest: RESULT_DIGEST, redactionPolicyDigest: RESULT_DIGEST, resolutions: [] },
+    input: {
+      resultId: 'merge-result:hidden',
+      resultDigest: RESULT_DIGEST,
+      redactionPolicyDigest: RESULT_DIGEST,
+      resolutions: [],
+    },
   },
   {
     method: 'getMergeConflictDetail',
@@ -82,7 +85,8 @@ describe('WorkbookVersion merge capability gate', () => {
       payload: {
         operation: 'merge',
         endpointStatus: 'capabilityDisabled',
-        capability: 'versionControl.merge',
+        capability: 'version:mergePreview',
+        featureGateCapability: 'versionControl.merge',
         publicCapability: 'version:mergePreview',
         reason: 'mergeCapabilityDisabled',
       },
@@ -134,7 +138,8 @@ describe('WorkbookVersion merge capability gate', () => {
       payload: {
         operation: 'applyMerge',
         endpointStatus: 'capabilityDisabled',
-        capability: 'versionControl.merge',
+        capability: 'version:mergeApply',
+        featureGateCapability: 'versionControl.merge',
         publicCapability: 'version:mergeApply',
         reason: 'mergeKillSwitchActive',
       },
@@ -201,50 +206,165 @@ describe('WorkbookVersion merge capability gate', () => {
     expect(merge).not.toHaveBeenCalled();
   });
 
-  it.each(REVIEW_ENDPOINTS)('blocks $method under merge kill switch before provider lookup or payload writes', async ({ method, capability, input }) => {
-    const { ctx, providerLookup, providerTouch } = providerProbeContext({
-      versionControlMergeKillSwitch: true,
-    });
-    const version = new WorkbookVersionImpl(ctx as any);
-
-    const result = await (version as any)[method](input);
-
-    expect(result).toEqual({
-      ok: false,
-      error: {
-        code: 'version_capability_unavailable',
-        capability,
-        dependency: 'featureGate',
-        reason: 'Version-control merge endpoints are disabled by the runtime kill switch.',
-        retryable: false,
-      },
-    });
-    expect(providerLookup).not.toHaveBeenCalled();
-    expect(providerTouch).not.toHaveBeenCalled();
-  });
-
-  it.each(REVIEW_ENDPOINTS)('blocks $method when host policy denies its merge capability before provider lookup or payload writes', async ({ method, capability, input }) => {
-    const { ctx, providerLookup, providerTouch } = providerProbeContext();
+  it('blocks applyMerge when host policy operation and capability aliases disagree', async () => {
+    const merge = jest.fn();
+    const applyMerge = jest.fn();
     const version = new WorkbookVersionImpl({
-      ...ctx,
-      policySnapshot: { decisions: [{ capability, decision: 'denied' }] },
+      policySnapshot: {
+        decisions: [
+          {
+            capability: 'version:mergePreview',
+            operation: 'applyMerge',
+            decision: 'denied',
+            principal: HOST_POLICY_SECRET,
+          },
+        ],
+      },
+      versioning: {
+        mergeService: { merge },
+        applyMergeService: { applyMerge },
+      },
     } as any);
 
-    const result = await (version as any)[method](input);
+    const result = await version.applyMerge(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { mode: 'preview' },
+    );
 
     expect(result).toEqual({
       ok: false,
       error: {
         code: 'version_capability_unavailable',
-        capability,
+        capability: 'version:mergeApply',
         dependency: 'hostCapability',
         reason: 'Host policy denies version-control merge capability for this workbook.',
         retryable: false,
       },
     });
-    expect(providerLookup).not.toHaveBeenCalled();
-    expect(providerTouch).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain(HOST_POLICY_SECRET);
+    expect(merge).not.toHaveBeenCalled();
+    expect(applyMerge).not.toHaveBeenCalled();
   });
+
+  it('blocks applyMerge from redacted host capability state payloads without a decisions array', async () => {
+    const merge = jest.fn();
+    const applyMerge = jest.fn();
+    const version = new WorkbookVersionImpl({
+      policySnapshot: {
+        capabilities: {
+          applyMerge: {
+            enabled: false,
+            dependency: 'hostCapability',
+            reason: `Denied for ${HOST_POLICY_SECRET}`,
+            retryable: false,
+          },
+        },
+      },
+      versioning: {
+        mergeService: { merge },
+        applyMergeService: { applyMerge },
+      },
+    } as any);
+
+    const result = await version.applyMerge(
+      { base: BASE, ours: OURS, theirs: THEIRS },
+      { mode: 'preview' },
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:mergeApply',
+        dependency: 'hostCapability',
+        reason: 'Host policy denies version-control merge capability for this workbook.',
+        retryable: false,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(HOST_POLICY_SECRET);
+    expect(merge).not.toHaveBeenCalled();
+    expect(applyMerge).not.toHaveBeenCalled();
+  });
+
+  it.each(REVIEW_ENDPOINTS)(
+    'blocks $method under merge kill switch before provider lookup or payload writes',
+    async ({ method, capability, input }) => {
+      const { ctx, providerLookup, providerTouch } = providerProbeContext({
+        versionControlMergeKillSwitch: true,
+      });
+      const version = new WorkbookVersionImpl(ctx as any);
+
+      const result = await (version as any)[method](input);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'version_capability_unavailable',
+          capability,
+          dependency: 'featureGate',
+          reason: 'Version-control merge endpoints are disabled by the runtime kill switch.',
+          retryable: false,
+        },
+      });
+      expect(providerLookup).not.toHaveBeenCalled();
+      expect(providerTouch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(REVIEW_ENDPOINTS)(
+    'blocks $method when host policy denies its merge capability before provider lookup or payload writes',
+    async ({ method, capability, input }) => {
+      const { ctx, providerLookup, providerTouch } = providerProbeContext();
+      const version = new WorkbookVersionImpl({
+        ...ctx,
+        policySnapshot: { decisions: [{ capability, decision: 'denied' }] },
+      } as any);
+
+      const result = await (version as any)[method](input);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'version_capability_unavailable',
+          capability,
+          dependency: 'hostCapability',
+          reason: 'Host policy denies version-control merge capability for this workbook.',
+          retryable: false,
+        },
+      });
+      expect(providerLookup).not.toHaveBeenCalled();
+      expect(providerTouch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(REVIEW_ENDPOINTS)(
+    'blocks $method when host policy omits capability but names its operation alias',
+    async ({ method, capability, input }) => {
+      const { ctx, providerLookup, providerTouch } = providerProbeContext();
+      const version = new WorkbookVersionImpl({
+        ...ctx,
+        policySnapshot: {
+          decisions: [{ operation: method, decision: 'denied', reviewer: HOST_POLICY_SECRET }],
+        },
+      } as any);
+
+      const result = await (version as any)[method](input);
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: 'version_capability_unavailable',
+          capability,
+          dependency: 'hostCapability',
+          reason: 'Host policy denies version-control merge capability for this workbook.',
+          retryable: false,
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(HOST_POLICY_SECRET);
+      expect(providerLookup).not.toHaveBeenCalled();
+      expect(providerTouch).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function providerProbeContext(versioningExtra: Record<string, unknown> = {}) {
@@ -260,7 +380,14 @@ function providerProbeContext(versioningExtra: Record<string, unknown> = {}) {
   };
   const versioning: Record<string, unknown> = { ...versioningExtra };
 
-  for (const key of ['mergeResolutionService', 'mergeReviewService', 'mergePayloadService', 'payloadService', 'provider', 'publicService']) {
+  for (const key of [
+    'mergeResolutionService',
+    'mergeReviewService',
+    'mergePayloadService',
+    'payloadService',
+    'provider',
+    'publicService',
+  ]) {
     Object.defineProperty(versioning, key, { get: () => (providerLookup(key), service) });
   }
   for (const key of Object.keys(service)) {

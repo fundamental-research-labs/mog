@@ -5,8 +5,7 @@ export const MOG_WORKBOOK_VERSION_XLSX_METADATA_SCHEMA_VERSION =
 export type MogWorkbookVersionXlsxMetadataSchemaVersion =
   typeof MOG_WORKBOOK_VERSION_XLSX_METADATA_SCHEMA_VERSION;
 
-export const MOG_WORKBOOK_VERSION_XLSX_METADATA_PART =
-  'customXml/mog-version-metadata.xml';
+export const MOG_WORKBOOK_VERSION_XLSX_METADATA_PART = 'customXml/mog-version-metadata.xml';
 export type MogWorkbookVersionXlsxMetadataPart = typeof MOG_WORKBOOK_VERSION_XLSX_METADATA_PART;
 
 export const MOG_WORKBOOK_VERSION_XLSX_METADATA_REDACTION_POLICIES = Object.freeze([
@@ -66,6 +65,33 @@ export type MogWorkbookVersionXlsxDiagnosticPublicPayload = Readonly<
   Record<string, string | number | boolean | null>
 >;
 
+export const VC10_XLSX_INTEROP_DIAGNOSTIC_CODES = Object.freeze([
+  'VC10_XLSX_METADATA_TRUST_ABSENT',
+  'VC10_XLSX_METADATA_TRUSTED',
+  'VC10_XLSX_METADATA_UNTRUSTED',
+  'VC10_XLSX_EXTERNAL_CHANGE_BRANCH_RECORDED',
+  'VC10_XLSX_EXTERNAL_CHANGE_BRANCH_BLOCKED',
+] as const);
+export type Vc10XlsxInteropDiagnosticCode = (typeof VC10_XLSX_INTEROP_DIAGNOSTIC_CODES)[number];
+
+export type Vc10XlsxInteropDiagnosticPhase =
+  | 'export-sidecar'
+  | 'import-root'
+  | 'metadata-trust'
+  | 'external-change-branch';
+
+export type Vc10XlsxInteropDiagnosticSeverity = 'info' | 'warning' | 'error';
+
+export interface Vc10XlsxInteropDiagnostic {
+  readonly diagnosticId: string;
+  readonly code: Vc10XlsxInteropDiagnosticCode | (string & {});
+  readonly severity: Vc10XlsxInteropDiagnosticSeverity;
+  readonly phase: Vc10XlsxInteropDiagnosticPhase;
+  readonly message: string;
+  readonly redacted: true;
+  readonly payload?: MogWorkbookVersionXlsxDiagnosticPublicPayload;
+}
+
 export interface MogWorkbookVersionXlsxMetadataHead {
   readonly commitId: MogWorkbookVersionXlsxCommitId;
   readonly refName?: string;
@@ -114,29 +140,20 @@ export interface MogWorkbookVersionXlsxMetadataTrustContext {
 export type MogWorkbookVersionXlsxMetadataTrustResult =
   | {
       readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'absent'>;
-      readonly trust: Extract<
-        MogWorkbookVersionXlsxMetadataTrustSummary,
-        { status: 'absent' }
-      >;
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'absent' }>;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     }
   | {
       readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'trusted'>;
       readonly metadata: MogWorkbookVersionXlsxMetadata;
-      readonly trust: Extract<
-        MogWorkbookVersionXlsxMetadataTrustSummary,
-        { status: 'trusted' }
-      >;
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'trusted' }>;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     }
   | {
       readonly status: Extract<MogWorkbookVersionXlsxMetadataTrustStatus, 'untrusted'>;
       readonly reason: MogWorkbookVersionXlsxMetadataTrustReason;
       readonly metadata?: MogWorkbookVersionXlsxMetadata;
-      readonly trust: Extract<
-        MogWorkbookVersionXlsxMetadataTrustSummary,
-        { status: 'untrusted' }
-      >;
+      readonly trust: Extract<MogWorkbookVersionXlsxMetadataTrustSummary, { status: 'untrusted' }>;
       readonly diagnostics: readonly ImportDiagnosticDto[];
     };
 
@@ -155,4 +172,42 @@ export interface MogWorkbookVersionXlsxImportRootProvenance {
   readonly source: MogWorkbookVersionXlsxImportRootSource;
   readonly diagnostics: readonly ImportDiagnosticDto[];
   readonly versionMetadataTrust?: MogWorkbookVersionXlsxMetadataTrustSummary;
+}
+
+export type XlsxVersionImportRootProvenance = MogWorkbookVersionXlsxImportRootProvenance;
+
+export const XLSX_EXTERNAL_CHANGE_BRANCH_RECORD_SCHEMA_VERSION = 1;
+export type XlsxExternalChangeBranchRecordSchemaVersion =
+  typeof XLSX_EXTERNAL_CHANGE_BRANCH_RECORD_SCHEMA_VERSION;
+
+export type XlsxExternalChangeBranchStatus = 'created' | 'not-needed' | 'blocked' | 'failed';
+
+export type XlsxExternalChangeBranchReason =
+  | 'external-workbook-changed'
+  | 'metadata-absent'
+  | 'metadata-untrusted'
+  | 'import-root-unverified'
+  | 'branch-write-failed';
+
+export interface XlsxExternalChangeBranchRecord {
+  readonly schemaVersion: XlsxExternalChangeBranchRecordSchemaVersion;
+  readonly recordKind: 'xlsx-external-change-branch';
+  readonly branchRecordId: string;
+  readonly documentId: string;
+  readonly status: XlsxExternalChangeBranchStatus;
+  readonly reason: XlsxExternalChangeBranchReason;
+  readonly importRoot: XlsxVersionImportRootProvenance;
+  readonly baseCommitId?: MogWorkbookVersionXlsxCommitId;
+  readonly branchName?: string;
+  readonly branchCommitId?: MogWorkbookVersionXlsxCommitId;
+  readonly recordedAt: string;
+  readonly sourcePackageDigest?: MogWorkbookVersionXlsxObjectDigest;
+  readonly externalChangeDigest?: MogWorkbookVersionXlsxObjectDigest;
+  readonly versionMetadataTrust: MogWorkbookVersionXlsxMetadataTrustSummary;
+  readonly diagnostics: readonly Vc10XlsxInteropDiagnostic[];
+  readonly redaction: {
+    readonly policy: MogWorkbookVersionXlsxMetadataRedactionPolicy;
+    readonly omitted: readonly string[];
+    readonly sourcePathRedacted: true;
+  };
 }

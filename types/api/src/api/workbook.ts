@@ -137,7 +137,7 @@ export type {
 export type * from './workbook/version-proposal';
 export type * from './workbook/version-revert';
 export type * from './workbook/version-review';
-export type { WorkbookXlsxExportOptions } from './workbook/xlsx-export';
+export type * from './workbook/xlsx-export';
 
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {

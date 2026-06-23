@@ -54,6 +54,10 @@ import type {
   WorkbookDiffPage as ContractsApiDiffPage,
   WorkbookVersion as ContractsApiWorkbookVersion,
   WorkbookVersionStatus as ContractsApiWorkbookVersionStatus,
+  MogWorkbookVersionXlsxMetadataTrustResult as ContractsApiMogWorkbookVersionXlsxMetadataTrustResult,
+  Vc10XlsxInteropDiagnostic as ContractsApiVc10XlsxInteropDiagnostic,
+  XlsxExternalChangeBranchRecord as ContractsApiXlsxExternalChangeBranchRecord,
+  XlsxVersionImportRootProvenance as ContractsApiXlsxVersionImportRootProvenance,
 } from '@mog-sdk/contracts/api';
 import type {
   AcceptAgentProposalInput as ContractsWorkbookAcceptAgentProposalInput,
@@ -110,6 +114,10 @@ import type {
   WorkbookDiffPage as ContractsWorkbookDiffPage,
   WorkbookVersion as ContractsWorkbookVersion,
   WorkbookVersionStatus as ContractsWorkbookVersionStatus,
+  MogWorkbookVersionXlsxMetadataTrustResult as ContractsWorkbookMogWorkbookVersionXlsxMetadataTrustResult,
+  Vc10XlsxInteropDiagnostic as ContractsWorkbookVc10XlsxInteropDiagnostic,
+  XlsxExternalChangeBranchRecord as ContractsWorkbookXlsxExternalChangeBranchRecord,
+  XlsxVersionImportRootProvenance as ContractsWorkbookXlsxVersionImportRootProvenance,
 } from '@mog-sdk/contracts/api/workbook';
 import type {
   CapturePolicy,
@@ -158,6 +166,7 @@ import type {
   MogWorkbookVersionXlsxMetadataTrustSummary,
   MogWorkbookVersionXlsxObjectDigest,
   MogWorkbookVersionXlsxRefRevision,
+  Vc10XlsxInteropDiagnostic,
   VersionMutationSegment,
   VersionObjectHeader,
   VersionObjectKind,
@@ -176,6 +185,8 @@ import type {
   VersionSyncProvenanceEnvelope,
   VersionWriteAdmissionMode,
   WorkbookCommitPersistedShape,
+  XlsxExternalChangeBranchRecord,
+  XlsxVersionImportRootProvenance,
 } from '@mog-sdk/contracts/versioning';
 import {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
@@ -185,6 +196,7 @@ import {
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
   PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
 } from './domain-policy-registry';
+import { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
@@ -370,6 +382,42 @@ type _ContractsApiWorkbookEntryExportsPromotePendingRemoteDiagnosticCode = Asser
     ContractsWorkbookPromotePendingRemoteDiagnosticCode
   >
 >;
+type _ContractsApiWorkbookEntryExportsXlsxTrustResult = Assert<
+  IsEqual<
+    ContractsApiMogWorkbookVersionXlsxMetadataTrustResult,
+    ContractsWorkbookMogWorkbookVersionXlsxMetadataTrustResult
+  >
+>;
+type _ContractsApiWorkbookEntryExportsXlsxVersionImportRootProvenance = Assert<
+  IsEqual<
+    ContractsApiXlsxVersionImportRootProvenance,
+    ContractsWorkbookXlsxVersionImportRootProvenance
+  >
+>;
+type _ContractsApiWorkbookEntryExportsVc10XlsxInteropDiagnostic = Assert<
+  IsEqual<ContractsApiVc10XlsxInteropDiagnostic, ContractsWorkbookVc10XlsxInteropDiagnostic>
+>;
+type _ContractsApiWorkbookEntryExportsXlsxExternalChangeBranchRecord = Assert<
+  IsEqual<
+    ContractsApiXlsxExternalChangeBranchRecord,
+    ContractsWorkbookXlsxExternalChangeBranchRecord
+  >
+>;
+type _ContractsApiXlsxTrustResultMatchesVersioning = Assert<
+  IsEqual<
+    ContractsApiMogWorkbookVersionXlsxMetadataTrustResult,
+    MogWorkbookVersionXlsxMetadataTrustResult
+  >
+>;
+type _ContractsApiXlsxVersionImportRootProvenanceMatchesVersioning = Assert<
+  IsEqual<ContractsApiXlsxVersionImportRootProvenance, XlsxVersionImportRootProvenance>
+>;
+type _ContractsApiVc10XlsxInteropDiagnosticMatchesVersioning = Assert<
+  IsEqual<ContractsApiVc10XlsxInteropDiagnostic, Vc10XlsxInteropDiagnostic>
+>;
+type _ContractsApiXlsxExternalChangeBranchRecordMatchesVersioning = Assert<
+  IsEqual<ContractsApiXlsxExternalChangeBranchRecord, XlsxExternalChangeBranchRecord>
+>;
 type _ContractsVersioningExportsDomainPolicyRegistryValue = Assert<
   IsEqual<
     typeof ContractsVersioningDomainPolicyRegistry,
@@ -531,6 +579,9 @@ type PublicVersioningMetadataSurface = {
   readonly xlsxTrustResult: MogWorkbookVersionXlsxMetadataTrustResult;
   readonly xlsxImportRootSource: MogWorkbookVersionXlsxImportRootSource;
   readonly xlsxImportRootProvenance: MogWorkbookVersionXlsxImportRootProvenance;
+  readonly xlsxVersionImportRootProvenance: XlsxVersionImportRootProvenance;
+  readonly xlsxInteropDiagnostic: Vc10XlsxInteropDiagnostic;
+  readonly xlsxExternalChangeBranchRecord: XlsxExternalChangeBranchRecord;
 };
 
 const vc03ExportSurfaceDomainIds = Object.freeze([
@@ -894,6 +945,9 @@ export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   shadowObservationSink,
   releaseArtifactManifest,
   emergencyDisablePolicy,
+  xlsxVersionImportRootProvenance: VERSIONING_CONTRACT_FIXTURES.xlsxImportRootProvenance,
+  xlsxInteropDiagnostic: VERSIONING_CONTRACT_FIXTURES.xlsxInteropDiagnostic,
+  xlsxExternalChangeBranchRecord: VERSIONING_CONTRACT_FIXTURES.xlsxExternalChangeBranchRecord,
 });
 
 export type {

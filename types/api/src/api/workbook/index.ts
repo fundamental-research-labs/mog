@@ -5,6 +5,7 @@
  */
 
 export type { WorkbookHistory } from './history';
+export type * from './xlsx-export';
 export type {
   AcceptAgentProposalInput,
   AgentProposal,

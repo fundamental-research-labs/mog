@@ -44,12 +44,14 @@ import type {
 } from './index';
 import type {
   MogWorkbookVersionXlsxCommitId,
-  MogWorkbookVersionXlsxImportRootProvenance,
   MogWorkbookVersionXlsxMetadata,
   MogWorkbookVersionXlsxMetadataExpectedHead,
   MogWorkbookVersionXlsxMetadataTrustResult,
   MogWorkbookVersionXlsxMetadataTrustSummary,
   MogWorkbookVersionXlsxObjectDigest,
+  Vc10XlsxInteropDiagnostic,
+  XlsxExternalChangeBranchRecord,
+  XlsxVersionImportRootProvenance,
 } from './xlsx-interop';
 
 type Assert<T extends true> = T;
@@ -645,7 +647,7 @@ const xlsxTrustResult: MogWorkbookVersionXlsxMetadataTrustResult = Object.freeze
   trust: xlsxTrustedMetadataTrust,
   diagnostics: Object.freeze([]),
 });
-const xlsxImportRootProvenance: MogWorkbookVersionXlsxImportRootProvenance = Object.freeze({
+const xlsxImportRootProvenance: XlsxVersionImportRootProvenance = Object.freeze({
   kind: 'xlsx',
   source: Object.freeze({
     sourceType: 'bytes',
@@ -653,6 +655,55 @@ const xlsxImportRootProvenance: MogWorkbookVersionXlsxImportRootProvenance = Obj
   }),
   diagnostics: Object.freeze([]),
   versionMetadataTrust: xlsxTrustedMetadataTrust,
+});
+const xlsxInteropDiagnostic: Vc10XlsxInteropDiagnostic = Object.freeze({
+  diagnosticId: 'vc10-xlsx-interop:external-change-branch-recorded',
+  code: 'VC10_XLSX_EXTERNAL_CHANGE_BRANCH_RECORDED',
+  severity: 'info',
+  phase: 'external-change-branch',
+  message: 'A redacted branch record was captured for XLSX external changes.',
+  redacted: true,
+  payload: Object.freeze({
+    branchCreated: true,
+    sourcePathRedacted: true,
+    diagnosticCount: 0,
+  }),
+});
+const xlsxExternalChangeBranchRecord: XlsxExternalChangeBranchRecord = Object.freeze({
+  schemaVersion: 1,
+  recordKind: 'xlsx-external-change-branch',
+  branchRecordId: 'xlsx-external-change-branch:vc10-public-contract-fixture',
+  documentId: xlsxMetadata.documentId,
+  status: 'created',
+  reason: 'external-workbook-changed',
+  importRoot: xlsxImportRootProvenance,
+  baseCommitId: xlsxExpectedHead.commitId,
+  branchName: 'refs/heads/import/xlsx-external-change',
+  branchCommitId: `commit:sha256:${'b'.repeat(64)}` as MogWorkbookVersionXlsxCommitId,
+  recordedAt: xlsxMetadata.exportedAt,
+  sourcePackageDigest: Object.freeze({
+    algorithm: 'sha256',
+    digest: '3'.repeat(64),
+    byteLength: 4096,
+  }),
+  externalChangeDigest: Object.freeze({
+    algorithm: 'sha256',
+    digest: '4'.repeat(64),
+  }),
+  versionMetadataTrust: xlsxTrustedMetadataTrust,
+  diagnostics: Object.freeze([xlsxInteropDiagnostic]),
+  redaction: Object.freeze({
+    policy: 'commit-document-and-object-digests-only',
+    omitted: Object.freeze([
+      'sourcePath',
+      'sourceFileName',
+      'rawWorkbookBytes',
+      'authorIdentity',
+      'externalDataSecrets',
+      'credentials',
+    ]),
+    sourcePathRedacted: true,
+  }),
 });
 
 export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
@@ -675,4 +726,6 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   xlsxMetadata,
   xlsxTrustResult,
   xlsxImportRootProvenance,
+  xlsxInteropDiagnostic,
+  xlsxExternalChangeBranchRecord,
 });

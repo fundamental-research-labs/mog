@@ -1,36 +1,36 @@
 import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
-import { render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, waitFor } from '@testing-library/react';
 import type {
   VersionCapability,
   VersionCapabilityState,
-  VersionRecordRevision,
-  VersionResult,
-  VersionSemanticDiffPage,
   VersionSurfaceStatus,
-  WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../VersionHistoryPanel';
-
-const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
-const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
-const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
-const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
-const ALL_CAPABILITIES: readonly VersionCapability[] = [
-  'version:read', 'version:diff', 'version:commit', 'version:branch', 'version:checkout',
-  'version:reviewRead', 'version:reviewWrite', 'version:proposal', 'version:mergePreview',
-  'version:mergeApply', 'version:revert', 'version:provenance', 'version:remotePromote',
-];
+import {
+  HEAD_COMMIT_ID,
+  LATEST_COMMIT_ID,
+  PARENT_COMMIT_ID,
+  branchTargetTestId,
+  checkoutBranchTestId,
+  createDeferred,
+  createSurfaceStatus,
+  createWorkbook,
+  expectDisabledButtonReason,
+  expectReasonById,
+  hostDeniedCapabilityState,
+  parentDiffButtonTestId,
+  renderVersionHistoryPanel,
+  safeDomId,
+  shortCommitId,
+} from './VersionHistoryPanel.test-utils';
 
 describe('VersionHistoryPanelContent', () => {
   it('loads version status, head, and recent commits, then refreshes through wb.version', async () => {
     const workbook = createWorkbook();
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     const loadingStatus = screen.getByTestId('version-history-loading');
     expect(loadingStatus).toHaveAttribute('role', 'status');
@@ -65,9 +65,8 @@ describe('VersionHistoryPanelContent', () => {
         return surfaceReadCount === 1 ? createSurfaceStatus() : refreshSurface.promise;
       }),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     expect(await screen.findByText('Calculated forecast')).toBeInTheDocument();
     await user.click(screen.getByTestId('panel-version-history-refresh'));
@@ -103,7 +102,7 @@ describe('VersionHistoryPanelContent', () => {
       })),
     });
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    renderVersionHistoryPanel({ workbook });
 
     expect(await screen.findByText('Initial import')).toBeInTheDocument();
     expect(screen.getByText('Graph not initialized.')).toBeInTheDocument();
@@ -111,9 +110,8 @@ describe('VersionHistoryPanelContent', () => {
 
   it('calls the close handler from the panel close affordance', async () => {
     const onClose = jest.fn();
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={createWorkbook()} onClose={onClose} />);
+    const { user } = renderVersionHistoryPanel({ onClose });
 
     await screen.findByText('Initial import');
     await user.click(screen.getByTestId('panel-version-history-close'));
@@ -122,9 +120,7 @@ describe('VersionHistoryPanelContent', () => {
   });
 
   it('moves keyboard focus into the panel on mount', async () => {
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={createWorkbook()} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel();
 
     const closeButton = screen.getByTestId('panel-version-history-close');
     await waitFor(() => expect(closeButton).toHaveFocus());
@@ -136,7 +132,7 @@ describe('VersionHistoryPanelContent', () => {
   });
 
   it('exposes stable G4 selectors for real-input controls and visible disabled reasons', async () => {
-    render(<VersionHistoryPanelContent workbook={createWorkbook()} onClose={jest.fn()} />);
+    renderVersionHistoryPanel();
 
     await screen.findByText('Calculated forecast');
 
@@ -199,9 +195,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -241,10 +236,9 @@ describe('VersionHistoryPanelContent', () => {
     const workbook = createWorkbook({
       getSurfaceStatus: jest.fn(async () => createSurfaceStatus({ featureGateEnabled: false })),
     });
-    const user = userEvent.setup();
     const reason = 'Versioning is disabled for this workbook.';
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -283,9 +277,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -331,9 +324,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -368,9 +360,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -404,9 +395,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
@@ -452,9 +442,8 @@ describe('VersionHistoryPanelContent', () => {
         }),
       ),
     });
-    const user = userEvent.setup();
 
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
 
@@ -476,516 +465,4 @@ describe('VersionHistoryPanelContent', () => {
       'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
     );
   });
-
-  it('validates branch names client-side against public refs and existing branches', async () => {
-    const workbook = createWorkbook();
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-
-    const branchInput = screen.getByTestId('version-history-branch-name-input');
-    const createBranchButton = screen.getByTestId('version-history-create-branch-button');
-
-    await user.type(branchInput, 'main');
-    expectDisabledButtonReason(
-      createBranchButton,
-      'main is protected and cannot be created from the version panel.',
-    );
-    await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
-
-    await user.clear(branchInput);
-    await user.type(branchInput, 'refs/tags/review');
-    expectDisabledButtonReason(createBranchButton, 'Branch refs must use refs/heads/<branch>.');
-    await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
-
-    await user.clear(branchInput);
-    await user.type(branchInput, 'scenario/budget');
-    expectDisabledButtonReason(createBranchButton, 'Branch scenario/budget already exists.');
-    await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
-
-    await user.clear(branchInput);
-    await user.type(branchInput, 'refs/heads/review/version-panel');
-    expect(createBranchButton).toBeEnabled();
-    await user.click(createBranchButton);
-    await waitFor(() =>
-      expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
-        targetCommitId: HEAD_COMMIT_ID,
-        expectedAbsent: true,
-      }),
-    );
-    await expectActionResult('Created review/version-panel', 'success');
-  });
-
-  it('announces running and successful action states through a status live region', async () => {
-    const commitResult =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>>();
-    const workbook = createWorkbook({
-      commit: jest.fn(async () => commitResult.promise),
-    });
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
-    await user.click(screen.getByTestId('version-history-commit-button'));
-
-    const runningStatus = within(
-      await screen.findByTestId('version-history-action-result'),
-    ).getByRole('status');
-    expect(runningStatus).toHaveAttribute('aria-live', 'polite');
-    expect(runningStatus).toHaveAttribute('aria-atomic', 'true');
-    expect(runningStatus).toHaveAttribute('aria-busy', 'true');
-    expect(runningStatus).toHaveTextContent('Committing changes');
-
-    commitResult.resolve({
-      ok: true,
-      value: {
-        id: HEAD_COMMIT_ID,
-        parents: [PARENT_COMMIT_ID],
-        createdAt: '2026-06-22T10:15:00.000Z',
-        author: { redacted: false, displayName: 'Reviewer' },
-        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
-      },
-    });
-    await expectActionResult('Committed changes', 'success');
-    expect(
-      within(screen.getByTestId('version-history-action-result')).getByRole('status'),
-    ).toHaveTextContent('Committed changes');
-  });
-
-  it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {
-    const workbook = createWorkbook();
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-
-    await user.type(
-      screen.getByTestId('version-history-commit-message-input'),
-      'Snapshot before review',
-    );
-    await user.click(screen.getByTestId('version-history-commit-button'));
-    await waitFor(() =>
-      expect(workbook.version.commit).toHaveBeenCalledWith({
-        message: 'Snapshot before review',
-        expectedHead: {
-          commitId: HEAD_COMMIT_ID,
-          revision: REF_REVISION,
-        },
-      }),
-    );
-    await expectActionResult('Committed changes', 'success');
-    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
-
-    await user.click(screen.getByTestId(branchTargetTestId(PARENT_COMMIT_ID)));
-    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
-      'data-version-commit-id',
-      PARENT_COMMIT_ID,
-    );
-    await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/version-panel',
-    );
-    await user.click(screen.getByTestId('version-history-create-branch-button'));
-    await waitFor(() =>
-      expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
-        targetCommitId: PARENT_COMMIT_ID,
-        expectedAbsent: true,
-      }),
-    );
-    await expectActionResult('Created review/version-panel', 'success');
-    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
-
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
-    await waitFor(() =>
-      expect(workbook.version.checkout).toHaveBeenCalledWith(
-        {
-          kind: 'ref',
-          name: 'refs/heads/scenario/budget',
-        },
-        { includeDiagnostics: true },
-      ),
-    );
-    await expectActionResult('Checked out scenario/budget', 'success');
-    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(4));
-
-    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-    await waitFor(() =>
-      expect(workbook.version.diff).toHaveBeenCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-        pageSize: 50,
-        includeDiagnostics: true,
-      }),
-    );
-    await expectActionResult('Loaded parent diff', 'success');
-    const parentDiff = await screen.findByTestId('version-history-parent-diff');
-    expect(parentDiff).toHaveTextContent('cells value');
-    const diffStatus = within(parentDiff).getByRole('status');
-    expect(diffStatus).toHaveAttribute('aria-live', 'polite');
-    expect(diffStatus).toHaveAttribute('aria-atomic', 'true');
-    expect(diffStatus).toHaveTextContent(
-      `Parent Diff Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
-        HEAD_COMMIT_ID,
-      )} State Changes. Change count 1`,
-    );
-  });
-
-  it.each([
-    ['empty', semanticDiffPage([]), 'empty', 'Diff returned no entries', 'Empty preview'],
-    ['unsupported', semanticDiffPage([diffEntry({ diagnostics: [diffDiagnostic('unsupportedDomain', 'unsupported')] })]), 'unsupported', 'Unsupported semantic state', 'Unsupported state'],
-    ['stale', semanticDiffPage([diffEntry({ diagnostics: [diffDiagnostic('VERSION_REF_CONFLICT', 'retry')] })]), 'stale', 'Stale diff reference', 'Stale reference'],
-    ['conflict-only', semanticDiffPage([diffEntry({ changeId: 'merge-conflict:sha256:1' })]), 'conflict-only', 'Conflicts only', 'Conflicts only'],
-  ])('renders a distinct %s parent diff preview state', async (_, page, state, title, label) => {
-    const workbook = createWorkbook({ diff: jest.fn(async () => ({ ok: true, value: page })) });
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-    await screen.findByText('Calculated forecast');
-    await userEvent.setup().click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-    const parentDiff = await screen.findByTestId('version-history-parent-diff');
-    expect(parentDiff).toHaveAttribute('data-state', state);
-    expect(parentDiff).toHaveTextContent(title);
-    expect(within(parentDiff).getByRole('status')).toHaveTextContent(`State ${label}`);
-    expect(parentDiff).not.toHaveTextContent('No semantic changes');
-  });
-
-  it('surfaces commit, branch, checkout, and parent diff errors in the action result region', async () => {
-    const workbook = createWorkbook({
-      commit: jest.fn(async () => failedInvalidState('Commit rejected by version provider.')),
-      createBranch: jest.fn(async () =>
-        failedInvalidBranchName(
-          'refs/heads/review/provider-rejected',
-          'Branch rejected by version provider.',
-        ),
-      ),
-      checkout: jest.fn(async () => failedInvalidState('Checkout rejected by version provider.')),
-      diff: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
-    });
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-
-    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Rejected commit');
-    await user.click(screen.getByTestId('version-history-commit-button'));
-    await expectActionResult('Commit rejected by version provider.', 'error');
-
-    await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/provider-rejected',
-    );
-    await user.click(screen.getByTestId('version-history-create-branch-button'));
-    await expectActionResult('Branch rejected by version provider.', 'error');
-
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
-    await expectActionResult('Checkout rejected by version provider.', 'error');
-
-    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-    await expectActionResult('Diff target is unavailable.', 'error');
-  });
 });
-
-function createWorkbook(
-  overrides: Partial<VersionHistoryWorkbook['version']> = {},
-): VersionHistoryWorkbook {
-  const version = {
-    getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
-    getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
-    getHead: jest.fn(async () => ({
-      ok: true,
-      value: {
-        id: HEAD_COMMIT_ID,
-        refName: 'refs/heads/main',
-        refRevision: REF_REVISION,
-      },
-    })),
-    listCommits: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [
-          {
-            id: HEAD_COMMIT_ID,
-            parents: [PARENT_COMMIT_ID],
-            createdAt: '2026-06-22T10:10:00.000Z',
-            author: { redacted: false, displayName: 'Reviewer' },
-            annotation: { title: { kind: 'text', value: 'Calculated forecast' } },
-          },
-          {
-            id: PARENT_COMMIT_ID,
-            parents: [],
-            createdAt: '2026-06-22T10:00:00.000Z',
-            author: { redacted: false, displayName: 'Reviewer' },
-            annotation: { title: { kind: 'text', value: 'Initial import' } },
-          },
-        ],
-        limit: 20,
-      },
-    })),
-    listRefs: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [
-          {
-            name: 'refs/heads/main',
-            commitId: HEAD_COMMIT_ID,
-            revision: REF_REVISION,
-          },
-          {
-            name: 'refs/heads/scenario/budget',
-            commitId: PARENT_COMMIT_ID,
-            revision: { kind: 'counter', value: '2' },
-          },
-        ],
-        limit: 2,
-      },
-    })),
-    listReviews: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    listProposals: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    commit: jest.fn(async () => ({
-      ok: true,
-      value: {
-        id: HEAD_COMMIT_ID,
-        parents: [PARENT_COMMIT_ID],
-        createdAt: '2026-06-22T10:15:00.000Z',
-        author: { redacted: false, displayName: 'Reviewer' },
-        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
-      },
-    })),
-    createBranch: jest.fn(
-      async (options: Parameters<VersionHistoryWorkbook['version']['createBranch']>[0]) => ({
-        ok: true,
-        value: {
-          name: options.name,
-          commitId: options.targetCommitId,
-          revision: { kind: 'counter', value: '3' },
-        },
-      }),
-    ),
-    promotePendingRemote: jest.fn(async () => ({
-      ok: true,
-      value: {
-        status: 'success',
-        promotedSegmentIds: [],
-        commitIds: [],
-        skipped: [],
-        diagnostics: [],
-      },
-    })),
-    checkout: jest.fn(async () => ({
-      ok: true,
-      value: {
-        status: 'success',
-        materialization: 'planned',
-        plan: {
-          strategy: 'fullSnapshot',
-          target: {
-            kind: 'ref',
-            refName: 'refs/heads/scenario/budget',
-            commitId: PARENT_COMMIT_ID,
-            refRevision: { kind: 'counter', value: '2' },
-          },
-          commitId: PARENT_COMMIT_ID,
-          parentCommitIds: [],
-          requiredDependencies: [],
-          requiredDependencyCount: 0,
-        },
-        diagnostics: [],
-        mutationGuarantee: 'no-workbook-mutation',
-      },
-    })),
-    diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
-    ...overrides,
-  };
-  return { version } as unknown as VersionHistoryWorkbook;
-}
-
-function semanticDiffPage(items: VersionSemanticDiffPage['items']): VersionSemanticDiffPage {
-  return { items, limit: 50, readRevision: { kind: 'counter', value: '4' }, order: 'semantic-change-order' };
-}
-
-function diffEntry({
-  changeId = 'change-1',
-  diagnostics,
-}: {
-  readonly changeId?: string;
-  readonly diagnostics?: VersionSemanticDiffPage['items'][number]['diagnostics'];
-} = {}): VersionSemanticDiffPage['items'][number] {
-  return {
-    structural: { kind: 'metadata', changeId, domain: 'cells', entityId: 'sheet-1!A1', propertyPath: ['value'] },
-    before: { kind: 'value', value: { kind: 'blank' } },
-    after: { kind: 'value', value: '42' },
-    ...(diagnostics ? { diagnostics } : {}),
-  };
-}
-
-function diffDiagnostic(issueCode: string, recoverability: 'retry' | 'unsupported') {
-  return { issueCode, severity: 'warning' as const, recoverability, messageTemplateId: `version.diff.${issueCode}`, safeMessage: issueCode, redacted: true };
-}
-
-function createSurfaceStatus({
-  disabledCapabilities = [],
-  featureGateEnabled = true,
-  current = {},
-  dirty = {},
-  capabilityOverrides = {},
-}: {
-  readonly disabledCapabilities?: readonly VersionCapability[];
-  readonly featureGateEnabled?: boolean;
-  readonly current?: Partial<VersionSurfaceStatus['current']>;
-  readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
-  readonly capabilityOverrides?: Partial<Record<VersionCapability, VersionCapabilityState>>;
-} = {}): VersionSurfaceStatus {
-  const disabled = new Set<VersionCapability>([
-    'version:revert',
-    ...(!featureGateEnabled ? ALL_CAPABILITIES : []),
-    ...disabledCapabilities,
-  ]);
-
-  return {
-    schemaVersion: 1,
-    documentId: 'document-1',
-    stage: 'authoring',
-    featureGateEnabled,
-    storage: {
-      ready: true,
-      backend: 'memory',
-      diagnostics: [],
-    },
-    current: {
-      headCommitId: HEAD_COMMIT_ID,
-      branchName: 'refs/heads/main',
-      detached: false,
-      stale: false,
-      ...current,
-    },
-    dirty: {
-      statusRevision: '1',
-      checkoutPreflightToken: 'token-1',
-      hasUncommittedLocalChanges: false,
-      commitEligibleChanges: true,
-      unsupportedDirtyDomains: [],
-      pendingProviderWrites: false,
-      pendingRecalc: false,
-      checkoutSafe: true,
-      unsafeReasons: [],
-      source: 'VC-05',
-      diagnostics: [],
-      ...dirty,
-    },
-    capabilities: Object.fromEntries(
-      ALL_CAPABILITIES.map((capability) => {
-        const defaultState: VersionCapabilityState = disabled.has(capability)
-          ? {
-              enabled: false,
-              dependency: featureGateEnabled
-                ? capability === 'version:revert'
-                  ? 'upstreamRevertContract'
-                  : 'VC-05'
-                : 'featureGate',
-              reason: featureGateEnabled
-                ? `${capability} is not available.`
-                : 'The versionControl feature gate is disabled.',
-              retryable: false,
-            }
-          : { enabled: true };
-        return [capability, capabilityOverrides[capability] ?? defaultState];
-      }),
-    ) as VersionSurfaceStatus['capabilities'],
-    diagnostics: [],
-  };
-}
-
-function hostDeniedCapabilityState(capability: VersionCapability): VersionCapabilityState {
-  return {
-    enabled: false,
-    dependency: 'hostCapability',
-    reason: `Host policy denies ${capability}.`,
-    retryable: false,
-  };
-}
-
-function createDeferred<T>(): {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T) => void;
-} {
-  let resolve: (value: T) => void = () => {};
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
-}
-
-async function expectActionResult(message: string, status: 'success' | 'error'): Promise<void> {
-  await waitFor(() => {
-    const result = screen.getByTestId('version-history-action-result');
-    expect(result).toHaveAttribute('data-status', status);
-    expect(result).toHaveTextContent(message);
-  });
-}
-
-function expectReasonById(id: string, reason: string): void {
-  const element = document.getElementById(id);
-  if (!element) throw new Error(`Missing disabled reason ${id}`);
-  expect(element).toHaveTextContent(reason);
-  expect(element).toBeVisible();
-}
-
-function expectDisabledButtonReason(button: HTMLElement, reason: string): void {
-  expect(button).toBeDisabled();
-  expect(button).toHaveAccessibleDescription(reason);
-  expect(screen.getAllByText(reason)[0]).toBeVisible();
-}
-
-function failedInvalidState<T = never>(reason: string): VersionResult<T> {
-  return {
-    ok: false,
-    error: { code: 'invalid_state', state: 'blocked', allowed: [], reason },
-  };
-}
-
-function failedInvalidBranchName<T = never>(branchName: string, reason: string): VersionResult<T> {
-  return { ok: false, error: { code: 'invalid_branch_name', branchName, reason } };
-}
-
-function failedNotFound<T = never>(target: string, reason: string): VersionResult<T> {
-  return { ok: false, error: { code: 'not_found', target, reason } };
-}
-
-function branchTargetTestId(commitId: string): string {
-  return `version-history-branch-target-${safeDomId(commitId)}`;
-}
-
-function checkoutBranchTestId(refName: string): string {
-  return `version-history-checkout-branch-${safeDomId(refName)}`;
-}
-
-function parentDiffButtonTestId(commitId: string): string {
-  return `version-history-parent-diff-button-${safeDomId(commitId)}`;
-}
-
-function safeDomId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
-}
-
-function shortCommitId(id: string): string {
-  return id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12);
-}

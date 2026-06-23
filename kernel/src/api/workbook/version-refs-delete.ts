@@ -454,6 +454,7 @@ function issueCodeForBranchDiagnostic(code: string): string {
     case 'unsupportedRefOption':
     case 'unsupportedRefMetadataMutation':
     case 'versionCapabilityDisabled':
+    case 'activeRef':
     case 'lastLiveRef':
       return 'VERSION_REF_WRITE_UNAVAILABLE';
     default:

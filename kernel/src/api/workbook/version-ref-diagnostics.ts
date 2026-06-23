@@ -11,6 +11,7 @@ const NO_WRITE_ATTEMPTED_BRANCH_DIAGNOSTIC_CODES = new Set([
   'invalidRefName',
   'invalidRefPrefix',
   'invalidRefVersion',
+  'activeRef',
   'lastLiveRef',
   'protectedRef',
   'reservedNamespace',
@@ -49,6 +50,7 @@ export function issueCodeForBranchDiagnostic(code: string): string {
     case 'unsupportedRefOption':
     case 'unsupportedRefMetadataMutation':
     case 'versionCapabilityDisabled':
+    case 'activeRef':
     case 'lastLiveRef':
       return 'VERSION_REF_WRITE_UNAVAILABLE';
     default:

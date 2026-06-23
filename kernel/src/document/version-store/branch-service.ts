@@ -31,6 +31,7 @@ export type BranchServiceErrorCode =
   | 'invalidCommitId'
   | 'invalidRefVersion'
   | 'invalidRefPrefix'
+  | 'activeRef'
   | 'reservedNamespace'
   | 'unsupportedDetachedHead'
   | 'unsupportedRefOption'
@@ -399,6 +400,10 @@ export class InMemoryBranchService {
     const parsedName = parseBranchNameForResult(input.name);
     if (!parsedName.ok) return parsedName.result;
 
+    if (this.headRefName === parsedName.name) {
+      return activeRefDeleteRejected(parsedName.name);
+    }
+
     if (input.expectedRefVersion === undefined) {
       return failure('missingExpectedRefVersion', 'Branch delete requires expectedRefVersion.', [
         diagnostic(
@@ -727,6 +732,20 @@ function unsupportedDetachedHead(
     diagnostic('unsupportedDetachedHead', message, refName, commitId, undefined, undefined, {
       target: 'HEAD',
     }),
+  ]);
+}
+
+function activeRefDeleteRejected(name: RefName): BranchFailureResult {
+  return failure('activeRef', 'The active branch cannot be deleted before switching heads.', [
+    diagnostic(
+      'activeRef',
+      'The active branch cannot be deleted before switching heads.',
+      name,
+      undefined,
+      undefined,
+      undefined,
+      { issue: 'activeBranchDelete' },
+    ),
   ]);
 }
 

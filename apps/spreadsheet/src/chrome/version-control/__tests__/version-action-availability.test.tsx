@@ -10,6 +10,7 @@ import type {
 
 import {
   getBranchAvailability,
+  getCapabilityAvailability,
   getCheckoutAvailability,
   getCommitAvailability,
   getDiffAvailability,
@@ -49,6 +50,11 @@ type VersionActionCapability = Extract<
   | 'version:diff'
   | 'version:revert'
   | 'version:remotePromote'
+>;
+
+type SplitVersionActionCapability = Extract<
+  VersionCapability,
+  'version:reviewRead' | 'version:reviewWrite' | 'version:proposal' | 'version:mergeApply'
 >;
 
 type ActionAvailabilityOptions = {
@@ -125,6 +131,16 @@ const ACTION_CASES: readonly ActionCase[] = [
   },
 ];
 
+const SPLIT_CAPABILITY_CASES: readonly {
+  readonly capability: SplitVersionActionCapability;
+  readonly fallbackReason: string;
+}[] = [
+  { capability: 'version:reviewRead', fallbackReason: 'Review read is unavailable.' },
+  { capability: 'version:reviewWrite', fallbackReason: 'Review write is unavailable.' },
+  { capability: 'version:proposal', fallbackReason: 'Proposal is unavailable.' },
+  { capability: 'version:mergeApply', fallbackReason: 'Merge apply is unavailable.' },
+];
+
 describe('version action availability', () => {
   it('disables actions while status data is missing, loading, or another action is running', () => {
     expectDisabled(
@@ -163,6 +179,18 @@ describe('version action availability', () => {
       );
       expectDisabled(
         action.availability(surface, { loading: true }),
+        'Version status is refreshing.',
+      );
+    }
+
+    for (const action of SPLIT_CAPABILITY_CASES) {
+      const surface = createSurfaceStatus();
+      expectDisabled(
+        getCapabilityAvailability({ surface }, true, false, action.capability),
+        'Wait for the current version action to finish.',
+      );
+      expectDisabled(
+        getCapabilityAvailability({ surface }, false, true, action.capability),
         'Version status is refreshing.',
       );
     }
@@ -210,6 +238,60 @@ describe('version action availability', () => {
       });
 
       expectDisabled(action.availability(surface), reason);
+    }
+  });
+
+  it('keeps review, proposal, and merge-apply capability denials split independently', () => {
+    for (const blockedAction of SPLIT_CAPABILITY_CASES) {
+      const reason = `Host policy denies ${blockedAction.capability}.`;
+      const surface = createSurfaceStatus({
+        capabilityOverrides: {
+          [blockedAction.capability]: disabledCapability(reason, 'hostCapability', false),
+        },
+      });
+
+      for (const action of SPLIT_CAPABILITY_CASES) {
+        const availability = getCapabilityAvailability(
+          { surface },
+          false,
+          false,
+          action.capability,
+        );
+        if (action.capability === blockedAction.capability) {
+          expectDisabled(availability, reason);
+        } else {
+          expect(availability).toEqual({ enabled: true });
+        }
+      }
+    }
+  });
+
+  it('does not let review, proposal, or merge-apply denials disable legacy actions', () => {
+    const surface = createSurfaceStatus({
+      capabilityOverrides: Object.fromEntries(
+        SPLIT_CAPABILITY_CASES.map((action) => [
+          action.capability,
+          disabledCapability(`Host policy denies ${action.capability}.`, 'hostCapability', false),
+        ]),
+      ) as Partial<Record<VersionCapability, VersionCapabilityState>>,
+    });
+
+    for (const action of ACTION_CASES) {
+      expect(action.availability(surface)).toEqual({ enabled: true });
+    }
+  });
+
+  it('uses public fallback reasons when split capability denial reasons are redacted', () => {
+    for (const action of SPLIT_CAPABILITY_CASES) {
+      const surface = createSurfaceStatus({
+        capabilityOverrides: {
+          [action.capability]: redactedDisabledCapability('hostCapability', false),
+        },
+      });
+      const availability = getCapabilityAvailability({ surface }, false, false, action.capability);
+
+      expectDisabled(availability, action.fallbackReason);
+      expect(availability.disabledReason).not.toContain('version:');
     }
   });
 
@@ -279,7 +361,10 @@ describe('version action availability', () => {
       },
     });
 
-    expectDisabled(getCheckoutAvailability({ surface }, false, false), pendingProviderWrites.message);
+    expectDisabled(
+      getCheckoutAvailability({ surface }, false, false),
+      pendingProviderWrites.message,
+    );
     expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
 
@@ -661,6 +746,13 @@ function disabledCapability(
   retryable = true,
 ): VersionCapabilityState {
   return { enabled: false, dependency, reason, retryable };
+}
+
+function redactedDisabledCapability(
+  dependency: VersionCapabilityDependency = 'VC-04',
+  retryable = true,
+): VersionCapabilityState {
+  return { enabled: false, dependency, retryable };
 }
 
 function ref(name: string): Pick<VersionRef, 'name'> {

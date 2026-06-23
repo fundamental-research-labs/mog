@@ -14,7 +14,13 @@ const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
   'version:branch': 'Branch',
   'version:checkout': 'Checkout',
   'version:diff': 'Diff',
+  'version:reviewRead': 'Review read',
+  'version:reviewWrite': 'Review write',
+  'version:proposal': 'Proposal',
+  'version:mergePreview': 'Merge preview',
+  'version:mergeApply': 'Merge apply',
   'version:revert': 'Rollback',
+  'version:provenance': 'Provenance',
   'version:remotePromote': 'Remote promote',
 };
 
@@ -155,6 +161,22 @@ export function getRemotePromoteAvailability(
   return enabledAction();
 }
 
+export function getCapabilityAvailability(
+  data: VersionActionSurfaceData | undefined,
+  actionBusy: boolean,
+  loading: boolean,
+  capability: VersionCapability,
+): VersionActionAvailability {
+  if (!data) return disabledAction('Version status is unavailable.');
+
+  const commonReason = commonActionDisabledReason(actionBusy, loading);
+  if (commonReason) return disabledAction(commonReason);
+
+  const surfaceReason = actionSurfaceDisabledReason(data.surface, capability);
+  if (surfaceReason) return disabledAction(surfaceReason);
+  return enabledAction();
+}
+
 export function isCapabilityEnabled(
   surface: VersionSurfaceStatus,
   capability: VersionCapability,
@@ -257,7 +279,8 @@ function checkoutUnsafeDisabledReason(surface: VersionSurfaceStatus): string | u
   if (dirty.checkoutSafe) return undefined;
 
   const providerWriteReason =
-    providerWritesDiagnosticMessage(surface) ?? providerWritesDisabledReason(surface, 'checking out');
+    providerWritesDiagnosticMessage(surface) ??
+    providerWritesDisabledReason(surface, 'checking out');
   if (providerWriteReason) return providerWriteReason;
 
   const dirtyDomainReason = unsupportedDirtyDomainsDisabledReason(surface, 'checkout');

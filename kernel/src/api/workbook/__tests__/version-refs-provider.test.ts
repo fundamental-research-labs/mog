@@ -9,6 +9,7 @@ import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionGraphStore,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
 import {
@@ -68,6 +69,14 @@ const VERSION_AUTHOR: VersionAuthor = {
   actorKind: 'user',
   displayName: 'User One',
 };
+type VersionGraphCommitSuccess = Extract<
+  Awaited<ReturnType<VersionGraphStore['commit']>>,
+  { readonly status: 'success' }
+>;
+type VersionGraphRefRevision = Extract<
+  VersionGraphInitializeResult,
+  { readonly status: 'success' }
+>['initialHead']['revision'];
 
 function createMockEventBus() {
   return {
@@ -283,6 +292,234 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
   });
 
+  it('rejects immutable main and tag-shaped refs before provider write attempts', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const child = await commitGraphChild(
+      graph,
+      'graph-1',
+      initialized.rootCommit.id,
+      initialized.initialHead.revision,
+      'immutable-target',
+    );
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+      },
+    });
+    const readGraphRegistry = jest.spyOn(provider, 'readGraphRegistry');
+    const openGraph = jest.spyOn(provider, 'openGraph');
+    const tagRef = 'refs/tags/release-secret' as any;
+
+    const protectedCreate = await wb.version.createBranch({
+      name: 'refs/heads/main' as any,
+      targetCommitId: initialized.rootCommit.id,
+    });
+    expectNoWriteFailure(protectedCreate, 'VERSION_PERMISSION_DENIED', {
+      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+    });
+
+    const protectedAdvance = await wb.version.fastForwardBranch({
+      name: 'main' as any,
+      nextCommitId: child.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(protectedAdvance, 'VERSION_PERMISSION_DENIED', {
+      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+    });
+
+    const protectedDelete = await wb.version.deleteRef({
+      name: 'refs/heads/main' as any,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(protectedDelete, 'VERSION_PERMISSION_DENIED', {
+      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+    });
+
+    const tagCreate = await wb.version.createBranch({
+      name: tagRef,
+      targetCommitId: initialized.rootCommit.id,
+    });
+    expectNoWriteFailure(tagCreate, 'VERSION_INVALID_OPTIONS', {
+      payload: expect.objectContaining({ refName: 'redacted' }),
+    });
+    expectNoDiagnosticLeak(tagCreate, 'refs/tags/release-secret', 'release-secret');
+
+    const tagAdvance = await wb.version.fastForwardBranch({
+      name: tagRef,
+      nextCommitId: child.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(tagAdvance, 'VERSION_INVALID_OPTIONS', {
+      payload: expect.objectContaining({ refName: 'redacted' }),
+    });
+    expectNoDiagnosticLeak(tagAdvance, 'refs/tags/release-secret', 'release-secret');
+
+    const tagDelete = await wb.version.deleteRef({
+      name: tagRef,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(tagDelete, 'VERSION_INVALID_OPTIONS', {
+      payload: expect.objectContaining({ refName: 'redacted' }),
+    });
+    expectNoDiagnosticLeak(tagDelete, 'refs/tags/release-secret', 'release-secret');
+
+    expect(readGraphRegistry).not.toHaveBeenCalled();
+    expect(openGraph).not.toHaveBeenCalled();
+  });
+
+  it('surfaces duplicate provider branch names as redacted no-write conflicts', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+      },
+    });
+
+    await expect(
+      wb.version.createBranch({
+        name: 'scenario/duplicate' as any,
+        targetCommitId: initialized.rootCommit.id,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/duplicate',
+        commitId: initialized.rootCommit.id,
+        revision: { kind: 'counter', value: '0' },
+      },
+    });
+
+    const duplicate = await wb.version.createBranch({
+      name: 'refs/heads/scenario/duplicate' as any,
+      targetCommitId: initialized.rootCommit.id,
+    });
+    expectNoWriteFailure(duplicate, 'VERSION_REF_CONFLICT', {
+      recoverability: 'retry',
+      payload: expect.objectContaining({
+        actualHead: initialized.rootCommit.id,
+        actualRefRevision: 'rv:n:0',
+      }),
+    });
+    expectNoDiagnosticLeak(duplicate, 'scenario/duplicate');
+
+    await expect(wb.version.readRef('refs/heads/scenario/duplicate' as any)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/duplicate',
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
+        },
+      },
+    });
+    await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        items: [
+          expect.objectContaining({
+            name: 'refs/heads/scenario/duplicate',
+            commitId: initialized.rootCommit.id,
+          }),
+        ],
+        limit: 50,
+      },
+    });
+  });
+
+  it('keeps provider branches unchanged on stale fast-forward CAS failures', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const child = await commitGraphChild(
+      graph,
+      'graph-1',
+      initialized.rootCommit.id,
+      initialized.initialHead.revision,
+      'stale-cas-child',
+    );
+    const next = await commitGraphChild(
+      graph,
+      'graph-1',
+      child.commit.id,
+      child.ref.revision,
+      'stale-cas-next',
+    );
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+      },
+    });
+
+    await expect(
+      wb.version.createBranch({
+        name: 'scenario/stale-cas' as any,
+        targetCommitId: initialized.rootCommit.id,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/stale-cas',
+        commitId: initialized.rootCommit.id,
+        revision: { kind: 'counter', value: '0' },
+      },
+    });
+
+    await expect(
+      wb.version.fastForwardBranch({
+        name: 'scenario/stale-cas' as any,
+        nextCommitId: child.commit.id,
+        expectedHead: initialized.rootCommit.id,
+        expectedRefRevision: { kind: 'counter', value: '0' },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/stale-cas',
+        commitId: child.commit.id,
+        revision: { kind: 'counter', value: '1' },
+      },
+    });
+
+    const stale = await wb.version.fastForwardBranch({
+      name: 'refs/heads/scenario/stale-cas' as any,
+      nextCommitId: next.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
+      recoverability: 'retry',
+      payload: expect.objectContaining({
+        actualHead: child.commit.id,
+        actualRefRevision: 'rv:n:1',
+        conflict: 'expectedHeadMismatch',
+      }),
+    });
+    expectNoDiagnosticLeak(stale, 'scenario/stale-cas');
+
+    await expect(wb.version.readRef('refs/heads/scenario/stale-cas' as any)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/stale-cas',
+          commitId: child.commit.id,
+          revision: { kind: 'counter', value: '1' },
+        },
+      },
+    });
+  });
+
   it.each([
     ['branch name', 'scenario/provider-commit'],
     ['full ref', 'refs/heads/scenario/provider-commit'],
@@ -465,6 +702,26 @@ async function initializeInput(
   };
 }
 
+async function commitGraphChild(
+  graph: VersionGraphStore,
+  graphId: string,
+  parentCommitId: string,
+  expectedMainRefVersion: VersionGraphRefRevision,
+  label: string,
+): Promise<VersionGraphCommitSuccess> {
+  const childInput = await initializeInput(graphId, label);
+  const child = await graph.commit({
+    ...childInput.rootWrite,
+    expectedHeadCommitId: parentCommitId,
+    expectedMainRefVersion,
+  });
+  expect(child.status).toBe('success');
+  if (child.status !== 'success') {
+    throw new Error(`expected child graph commit: ${child.diagnostics[0]?.code}`);
+  }
+  return child;
+}
+
 function createNormalCommitCapture(label: string): VersionNormalCommitCapture {
   return async ({ namespace, currentRef }) => ({
     status: 'success',
@@ -497,5 +754,34 @@ function expectInitializeSuccess(
   expect(result.status).toBe('success');
   if (result.status !== 'success') {
     throw new Error(`expected version graph initialize success: ${result.diagnostics[0]?.code}`);
+  }
+}
+
+function expectNoWriteFailure(
+  result: unknown,
+  code: string,
+  data: Readonly<Record<string, unknown>> = {},
+): void {
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          code,
+          data: expect.objectContaining({
+            redacted: true,
+            mutationGuarantee: 'no-write-attempted',
+            ...data,
+          }),
+        }),
+      ]),
+    },
+  });
+}
+
+function expectNoDiagnosticLeak(result: unknown, ...secrets: readonly string[]): void {
+  const serialized = JSON.stringify(result) ?? '';
+  for (const secret of secrets) {
+    expect(serialized).not.toContain(secret);
   }
 }

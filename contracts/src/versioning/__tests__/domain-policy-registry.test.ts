@@ -26,6 +26,10 @@ const INTERNAL_ONLY_FIELDS = Object.freeze([
   'acceptedRisk',
   'evidenceDigest',
 ] as const);
+const DEPRECATED_SCALAR_SUPPORT_FIELDS = Object.freeze([
+  'capabilityState',
+  'capabilityStateWhenPresent',
+] as const);
 
 const PUBLIC_SAFE_SINK_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const UNSAFE_PUBLIC_DIAGNOSTIC_PAYLOAD =
@@ -66,8 +70,43 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       for (const internalField of INTERNAL_ONLY_FIELDS) {
         expect(row).not.toHaveProperty(internalField);
       }
+      for (const deprecatedScalarSupportField of DEPRECATED_SCALAR_SUPPORT_FIELDS) {
+        expect(row).not.toHaveProperty(deprecatedScalarSupportField);
+      }
     }
     expect(JSON.stringify(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY)).not.toContain('expected-failing');
+  });
+
+  it('keeps table and filter public policy identities explicit and map-backed', () => {
+    const rows = new Map(
+      PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.matrixRowId, row]),
+    );
+
+    expect(rows.get('tables')).toMatchObject({
+      domainPolicyId: 'tables',
+      matrixRowId: 'tables',
+      domainId: 'tables',
+    });
+    expect(rows.get('filters.auto-filter')).toMatchObject({
+      domainPolicyId: 'filters.auto-filter',
+      matrixRowId: 'filters.auto-filter',
+      domainId: 'filters',
+    });
+    expect(rows.get('filters.auto-filter')?.domainPolicyId).not.toBe(
+      rows.get('filters.auto-filter')?.domainId,
+    );
+
+    for (const matrixRowId of ['tables', 'filters.auto-filter'] as const) {
+      const row = rows.get(matrixRowId);
+      expect(row).toBeDefined();
+      expect(row?.capabilityStates).toBeDefined();
+      expect(Object.keys(row?.capabilityStates ?? {}).sort()).toEqual(
+        [...VERSION_DOMAIN_CAPABILITY_KEYS].sort(),
+      );
+      for (const deprecatedScalarSupportField of DEPRECATED_SCALAR_SUPPORT_FIELDS) {
+        expect(row).not.toHaveProperty(deprecatedScalarSupportField);
+      }
+    }
   });
 
   it('keeps first-slice public runtime states promoted and explicit', () => {

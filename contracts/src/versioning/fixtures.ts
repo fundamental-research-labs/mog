@@ -276,6 +276,13 @@ type _LegacyCapabilityStateFieldUsesCapabilityUnion = Assert<
     VersionDomainCapabilityState
   >
 >;
+type PublicDomainPolicyIdentityFixture = Pick<
+  DomainCapabilityPolicyManifest,
+  'domainPolicyId' | 'matrixRowId' | 'domainId'
+>;
+type _PublicDomainPolicyIdentityFixtureHasNoLegacyCapabilityState = Assert<
+  IsNever<Extract<keyof PublicDomainPolicyIdentityFixture, 'capabilityState'>>
+>;
 type _DomainClassFieldUsesDomainClassUnion = Assert<
   IsEqual<DomainCapabilityPolicyManifest['domainClass'], VersionDomainClass>
 >;

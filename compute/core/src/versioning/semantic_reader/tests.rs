@@ -21,6 +21,7 @@ use crate::versioning::{
     coverage_for_states, diff_semantic_workbook_states,
 };
 
+mod coverage;
 mod named_ranges;
 mod presence_domains;
 mod value_provenance;

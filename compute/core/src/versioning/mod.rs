@@ -7,6 +7,7 @@ use snapshot_types::versioning::{
     SemanticWorkbookDiff, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
 };
 
+mod coverage;
 mod formula_reader;
 mod semantic_ids;
 mod semantic_reader;

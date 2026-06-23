@@ -1,15 +1,25 @@
 import 'fake-indexeddb/auto';
 
-import type { ObjectDigest, VersionDiagnostic, VersionMergeResultId } from '@mog-sdk/contracts/api';
+import type {
+  ObjectDigest,
+  VersionCreateReviewInput,
+  VersionDiagnostic,
+  VersionDiffStructuralMetadata,
+  VersionDiffValue,
+  VersionMergeConflict,
+  VersionMergeResultId,
+} from '@mog-sdk/contracts/api';
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { WorkbookVersionImpl } from '../version';
+import { attachWorkbookVersioning } from '../version-wiring';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
+import { createMergePreviewArtifactRecord } from '../../../document/version-store/merge-attempt-artifacts';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
@@ -38,6 +48,17 @@ const SECRET_DOMAIN = 'cells.values.secret-domain';
 const SECRET_PATH = 'changes[1].after.value';
 const PRINCIPAL_SECRET = 'principal-secret';
 const PRINCIPAL_OTHER = 'principal-other';
+const SECRET_REF = 'refs/heads/w10-09-secret-review';
+const SECRET_BRANCH = 'w10-09-secret-branch';
+const SECRET_TABLE_ID = 'table:w10-09-secret';
+const SECRET_TABLE_NAME = 'W10-09 Hidden Table';
+const REVIEW_AUTHOR = { kind: 'user', trust: 'trusted', displayName: 'Reviewer' } as const;
+const REDACTION_POLICY = {
+  mode: 'default',
+  redactSecrets: true,
+  redactExternalLinks: true,
+  redactAgentTrace: true,
+} as const;
 
 describe('WorkbookVersion provider review access hardening', () => {
   it('redacts principal mismatch and raw value diagnostics from attached review services', async () => {
@@ -273,6 +294,108 @@ describe('WorkbookVersion provider review access hardening', () => {
     ]);
   });
 
+  it('redacts hidden branch and ref diagnostics while preserving capability state', () => {
+    const diagnostics = sanitizeReviewAccessDiagnostics([
+      {
+        code: 'VERSION_PERMISSION_DENIED',
+        severity: 'error',
+        message: `Capability state denied ${PRINCIPAL_SECRET} for ref ${SECRET_REF} branchName=${SECRET_BRANCH}.`,
+        data: {
+          payload: {
+            capability: 'version:reviewRead',
+            deniedCapabilities: ['version:reviewRead'],
+            dependency: 'hostCapability',
+            retryable: false,
+            reason: 'hostCapabilityDenied',
+            principalScope: PRINCIPAL_SECRET,
+            targetRef: SECRET_REF,
+            refName: SECRET_REF,
+            branchName: SECRET_BRANCH,
+            expectedTargetHead: {
+              commitId: HEAD_COMMIT_ID,
+              revision: 'rv:w10-09-secret',
+            },
+          },
+        },
+      },
+    ] satisfies readonly VersionDiagnostic[]);
+
+    expect(diagnostics).toMatchObject([
+      {
+        code: 'VERSION_PERMISSION_DENIED',
+        message:
+          'Capability state denied redacted-principal for ref redacted-ref branchName=redacted-ref.',
+        data: {
+          payload: {
+            capability: 'version:reviewRead',
+            deniedCapabilities: ['version:reviewRead'],
+            dependency: 'hostCapability',
+            retryable: false,
+            reason: 'hostCapabilityDenied',
+          },
+        },
+      },
+    ]);
+    expectNoDiagnosticLeaks(diagnostics, [
+      PRINCIPAL_SECRET,
+      SECRET_REF,
+      SECRET_BRANCH,
+      HEAD_COMMIT_ID,
+      'principalScope',
+      'targetRef',
+      'refName',
+      'branchName',
+      'expectedTargetHead',
+    ]);
+  });
+
+  it('fails provider-backed review diffs closed when denied projections hide detail values', async () => {
+    const graph = await providerWithRootAndChildReviewChanges(
+      'denied-review-diff-detail-projection',
+      [
+        {
+          changeId: 'change:w10-09-secret-table',
+          domain: 'tables',
+          entityId: SECRET_TABLE_ID,
+          propertyPath: ['definition'],
+          before: tableDefinitionValue('before'),
+          after: { kind: 'redacted', reason: 'permission-denied' },
+          hiddenRef: SECRET_REF,
+          hiddenPrincipal: PRINCIPAL_SECRET,
+        },
+      ],
+    );
+    const version = versionForProvider(graph.provider);
+    const review = await version.createReview(
+      createReviewInput(
+        'denied-review-diff-detail-projection',
+        graph.rootCommitId,
+        graph.childCommitId,
+      ),
+    );
+    if (!review.ok) throw new Error(`expected review create success: ${review.error.code}`);
+
+    const result = await version.getReviewDiff({ reviewId: review.value.id });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.getReviewDiff',
+      },
+    });
+    expect(result).not.toHaveProperty('value');
+    expectNoDiagnosticLeaks(result, [
+      SECRET_TABLE_ID,
+      SECRET_TABLE_NAME,
+      SECRET_REF,
+      PRINCIPAL_SECRET,
+      'change:w10-09-secret-table',
+      'hiddenRef',
+      'hiddenPrincipal',
+    ]);
+  });
+
   it('redacts denied conflict detail diagnostics from provider artifact reads', async () => {
     const provider = await providerWithInitializedRegistry('denied-conflict-detail');
     const resultDigest = digest('8');
@@ -322,6 +445,57 @@ describe('WorkbookVersion provider review access hardening', () => {
       'Version merge review is not authorized for this caller.',
     );
     expectNoDiagnosticLeaks(result, canaries);
+  });
+
+  it('rejects provider conflict detail when denied projections hide table definitions', async () => {
+    const graphId = 'denied-conflict-detail-projection';
+    const provider = await providerWithInitializedRegistry(graphId);
+    const namespace = namespaceForDocumentScope(provider.documentScope, graphId);
+    const graph = await provider.openGraph(namespace);
+    const head = await graph.readHead();
+    if (head.status !== 'success') throw new Error('expected initialized graph head');
+    const conflict = tableDefinitionConflict();
+    const previewRecord = await createMergePreviewArtifactRecord(namespace, {
+      status: 'conflicted',
+      base: head.head.id,
+      ours: head.head.id,
+      theirs: head.head.id,
+      conflicts: [conflict],
+    });
+    const put = await graph.putObjects([previewRecord]);
+    expect(put.status).toBe('success');
+    const version = new WorkbookVersionImpl({ versioning: { provider } } as any);
+
+    const result = await version.getMergeConflictDetail({
+      resultId: mergeResultIdForReviewDigest(previewRecord.digest),
+      resultDigest: previewRecord.digest,
+      redactionPolicyDigest: previewRecord.digest,
+      conflictId: conflict.conflictId,
+      expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+      valueRole: 'theirs',
+      purpose: 'review',
+      targetRef: SECRET_REF as any,
+      expectedTargetHead: {
+        commitId: head.head.id,
+        revision: head.head.refRevision,
+      },
+    });
+
+    expectMergeReviewDiagnostic(
+      result,
+      'getMergeConflictDetail',
+      'VERSION_INVALID_COMMIT_PAYLOAD',
+      'Persisted merge preview artifact payload is invalid or unsupported.',
+    );
+    expectNoDiagnosticLeaks(result, [
+      SECRET_TABLE_ID,
+      SECRET_TABLE_NAME,
+      SECRET_REF,
+      PRINCIPAL_SECRET,
+      conflict.conflictId,
+      conflict.conflictDigest,
+      previewRecord.digest.digest,
+    ]);
   });
 
   it('redacts principal mismatch and saved-resolution payload refs in provider diagnostics', async () => {
@@ -456,6 +630,77 @@ function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): v
   }
 }
 
+function versionForProvider(provider: ReturnType<typeof createInMemoryVersionStoreProvider>) {
+  const ctx = { documentId: provider.documentScope.documentId } as any;
+  attachWorkbookVersioning(ctx, { provider });
+  return new WorkbookVersionImpl(ctx);
+}
+
+function createReviewInput(
+  clientRequestId: string,
+  baseCommitId: string,
+  headCommitId: string,
+): VersionCreateReviewInput {
+  return {
+    clientRequestId,
+    subject: {
+      kind: 'commitRange',
+      baseCommitId: baseCommitId as VersionCreateReviewInput['baseCommitId'],
+      headCommitId: headCommitId as VersionCreateReviewInput['headCommitId'],
+    },
+    baseCommitId: baseCommitId as VersionCreateReviewInput['baseCommitId'],
+    headCommitId: headCommitId as VersionCreateReviewInput['headCommitId'],
+    createdBy: REVIEW_AUTHOR,
+    redactionPolicy: REDACTION_POLICY,
+  };
+}
+
+async function providerWithRootAndChildReviewChanges(
+  graphId: string,
+  reviewChanges: readonly unknown[],
+) {
+  const documentScope = {
+    ...DOCUMENT_SCOPE,
+    documentId: `${DOCUMENT_SCOPE.documentId}-${graphId}`,
+  };
+  const provider = createInMemoryVersionStoreProvider({ documentScope });
+  const initialized = await provider.initializeGraph(await initializeInput(graphId, documentScope));
+  expectInitializeSuccess(initialized);
+  const namespace = namespaceForDocumentScope(documentScope, graphId);
+  const graph = await provider.openGraph(namespace);
+  const head = await graph.readHead();
+  if (head.status !== 'success') throw new Error('expected initialized graph head');
+  const committed = await graph.commit({
+    snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+      label: 'child',
+      sheets: [],
+    }),
+    semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+      schemaVersion: 1,
+      changes: reviewChanges,
+      reviewChanges,
+    }),
+    mutationSegmentRecords: [
+      await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+        segmentId: 'child-segment-1',
+      }),
+    ],
+    author: GRAPH_AUTHOR,
+    createdAt: CREATED_AT,
+    completenessDiagnostics: [],
+    expectedHeadCommitId: head.head.id,
+    expectedMainRefVersion: head.head.refRevision as any,
+  });
+  if (committed.status !== 'success') {
+    throw new Error(`expected child commit success: ${JSON.stringify(committed.diagnostics)}`);
+  }
+  return {
+    provider,
+    rootCommitId: initialized.rootCommit.id,
+    childCommitId: committed.commit.id,
+  };
+}
+
 async function providerWithInitializedRegistry(graphId: string) {
   const documentScope = {
     ...DOCUMENT_SCOPE,
@@ -465,6 +710,70 @@ async function providerWithInitializedRegistry(graphId: string) {
   const initialized = await provider.initializeGraph(await initializeInput(graphId, documentScope));
   expectInitializeSuccess(initialized);
   return provider;
+}
+
+function tableDefinitionConflict(): VersionMergeConflict {
+  const conflictId = 'conflict:w10-09:secret-table';
+  const structural: VersionDiffStructuralMetadata = {
+    kind: 'metadata',
+    changeId: 'change:w10-09-secret-table',
+    domain: 'tables',
+    entityId: SECRET_TABLE_ID,
+    propertyPath: ['definition'],
+  };
+  const base = tableDefinitionValue('base');
+  const ours = tableDefinitionValue('ours');
+  const theirs = { kind: 'redacted', reason: 'permission-denied' } as const;
+  return {
+    conflictId,
+    conflictDigest: `sha256:${'a'.repeat(64)}`,
+    conflictKind: 'same-property',
+    structural,
+    base,
+    ours,
+    theirs,
+    resolutionOptions: [
+      resolutionOption(conflictId, 'acceptOurs', ours),
+      resolutionOption(conflictId, 'acceptTheirs', theirs),
+      resolutionOption(conflictId, 'acceptBase', base),
+    ],
+  };
+}
+
+function resolutionOption(
+  conflictId: string,
+  kind: VersionMergeConflict['resolutionOptions'][number]['kind'],
+  value: VersionDiffValue,
+): VersionMergeConflict['resolutionOptions'][number] {
+  return {
+    optionId: `option:w10-09:${kind}`,
+    conflictId,
+    kind,
+    value,
+    recalcRequired: false,
+  };
+}
+
+function tableDefinitionValue(name: string): VersionDiffValue {
+  return {
+    kind: 'value',
+    value: {
+      kind: 'object',
+      fields: [
+        { key: 'kind', value: 'tableDefinition' },
+        { key: 'tableId', value: SECRET_TABLE_ID },
+        { key: 'name', value: `${SECRET_TABLE_NAME} ${name}` },
+        { key: 'sheetId', value: 'sheet-1' },
+      ],
+    },
+  };
+}
+
+function conflictDigestObject(conflictDigest: string): ObjectDigest {
+  if (!conflictDigest.startsWith('sha256:')) {
+    throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
+  }
+  return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
 }
 
 async function initializeInput(

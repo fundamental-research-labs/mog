@@ -20,12 +20,19 @@ const REDACTED_VALUE_REASONS = new Set([
   'redaction-policy',
   'historical-acl-unavailable',
 ]);
+const INCOMPLETE_REVIEW_REDACTED_VALUE_REASONS = new Set([
+  'permission-denied',
+  'historical-acl-unavailable',
+]);
 const REVIEW_ACCESS_REDACTED_VALUE: VersionRedactedValue = {
   kind: 'redacted',
   reason: 'permission-denied',
 };
 const SENSITIVE_PRINCIPAL_TOKEN_RE =
   /\b(?:principal|actor|reviewer|agent|user)[_-][A-Za-z0-9_.:-]+\b/g;
+const SENSITIVE_REF_TOKEN_RE = /\brefs\/[A-Za-z0-9._/@:-]+\b/g;
+const SENSITIVE_BRANCH_OR_REF_FIELD_RE =
+  /\b((?:branch|ref)(?:\s*(?:name|id)?\s*[:=]\s*))[A-Za-z0-9._/@:-]+\b/gi;
 
 const RANGE_REVIEW_VALUE_SPEC = reviewObjectSpec(
   {
@@ -190,6 +197,11 @@ export function projectReviewAccessDiffPage(
         ),
       ],
     };
+  }
+
+  const incompleteProjectionDiagnostics = incompleteReviewProjectionDiagnostics(page);
+  if (incompleteProjectionDiagnostics.length > 0) {
+    return { ok: false, diagnostics: incompleteProjectionDiagnostics };
   }
 
   const changes = page.changes.map(projectReviewAccessDiffChange);
@@ -484,6 +496,33 @@ function hiddenAuthoredUpstreamChanges(
   return hidden;
 }
 
+function incompleteReviewProjectionDiagnostics(
+  page: WorkbookVersionReviewDiffPage,
+): readonly VersionDiagnostic[] {
+  const changes = [...page.changes, ...(page.derivedImpact ?? [])];
+  for (const change of changes) {
+    if (hasIncompleteReviewProjection(change)) {
+      return [
+        reviewAccessDiagnostic(
+          'VERSION_REVIEW_DIFF_INCOMPLETE',
+          'error',
+          'The requested review diff includes review values that are hidden by access control and cannot be accepted as complete review data.',
+        ),
+      ];
+    }
+  }
+  return [];
+}
+
+function hasIncompleteReviewProjection(change: WorkbookVersionReviewDiffChange): boolean {
+  const structural = structuralFromReviewTarget(change.target);
+  if (!structural) return false;
+  return [change.before, change.after].some((value) => {
+    const projected = projectReviewAccessDiffValue(structural, value);
+    return projected === null || isIncompleteReviewRedactedValue(projected);
+  });
+}
+
 function reviewDiffChangeKey(change: WorkbookVersionReviewDiffChange): string | null {
   const target = change.target;
   if (target.kind !== 'semanticChange') return null;
@@ -630,7 +669,10 @@ function sanitizeDiagnosticData(
 }
 
 function sanitizeDiagnosticString(value: string): string {
-  return value.replace(SENSITIVE_PRINCIPAL_TOKEN_RE, 'redacted-principal');
+  return value
+    .replace(SENSITIVE_PRINCIPAL_TOKEN_RE, 'redacted-principal')
+    .replace(SENSITIVE_REF_TOKEN_RE, 'redacted-ref')
+    .replace(SENSITIVE_BRANCH_OR_REF_FIELD_RE, '$1redacted-ref');
 }
 
 function isSensitiveDiagnosticKey(key: string): boolean {
@@ -649,8 +691,21 @@ function isSensitiveDiagnosticKey(key: string): boolean {
     normalized === 'omittedchangecount' ||
     normalized === 'omitteddomains' ||
     normalized === 'path' ||
+    normalized === 'branch' ||
+    normalized === 'branchid' ||
+    normalized === 'branchname' ||
     normalized === 'changeid' ||
+    normalized === 'commitid' ||
     normalized === 'entityid' ||
+    normalized === 'expectedhead' ||
+    normalized === 'expectedtargethead' ||
+    normalized === 'head' ||
+    normalized === 'headref' ||
+    normalized === 'ref' ||
+    normalized === 'refid' ||
+    normalized === 'refname' ||
+    normalized === 'refrevision' ||
+    normalized === 'revision' ||
     normalized === 'proposalid' ||
     normalized === 'mergepreviewid' ||
     normalized === 'conflictid' ||
@@ -661,6 +716,9 @@ function isSensitiveDiagnosticKey(key: string): boolean {
     normalized === 'resolvedattemptdigest' ||
     normalized === 'basecommitid' ||
     normalized === 'headcommitid' ||
+    normalized === 'sourceref' ||
+    normalized === 'targethead' ||
+    normalized === 'targetref' ||
     normalized === 'value' ||
     normalized === 'values' ||
     normalized === 'before' ||
@@ -696,10 +754,20 @@ function mapRedactedValue(value: unknown): VersionRedactedValue | null {
     return null;
   }
   if (!REDACTED_VALUE_REASONS.has(value.reason)) return null;
+  if (INCOMPLETE_REVIEW_REDACTED_VALUE_REASONS.has(value.reason)) return null;
   return {
     kind: 'redacted',
     reason: value.reason as VersionRedactedValue['reason'],
   };
+}
+
+function isIncompleteReviewRedactedValue(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.kind === 'redacted' &&
+    typeof value.reason === 'string' &&
+    INCOMPLETE_REVIEW_REDACTED_VALUE_REASONS.has(value.reason)
+  );
 }
 
 function hasPropertyPath(

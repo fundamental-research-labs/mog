@@ -8,6 +8,7 @@ import type {
   VersionCapabilityState,
   VersionRecordRevision,
   VersionResult,
+  VersionSemanticDiffPage,
   VersionSurfaceStatus,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -19,19 +20,9 @@ const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
 const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
-  'version:read',
-  'version:diff',
-  'version:commit',
-  'version:branch',
-  'version:checkout',
-  'version:reviewRead',
-  'version:reviewWrite',
-  'version:proposal',
-  'version:mergePreview',
-  'version:mergeApply',
-  'version:revert',
-  'version:provenance',
-  'version:remotePromote',
+  'version:read', 'version:diff', 'version:commit', 'version:branch', 'version:checkout',
+  'version:reviewRead', 'version:reviewWrite', 'version:proposal', 'version:mergePreview',
+  'version:mergeApply', 'version:revert', 'version:provenance', 'version:remotePromote',
 ];
 
 describe('VersionHistoryPanelContent', () => {
@@ -644,8 +635,25 @@ describe('VersionHistoryPanelContent', () => {
     expect(diffStatus).toHaveTextContent(
       `Parent Diff Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
         HEAD_COMMIT_ID,
-      )} Changes 1`,
+      )} State Changes. Change count 1`,
     );
+  });
+
+  it.each([
+    ['empty', semanticDiffPage([]), 'empty', 'Diff returned no entries', 'Empty preview'],
+    ['unsupported', semanticDiffPage([diffEntry({ diagnostics: [diffDiagnostic('unsupportedDomain', 'unsupported')] })]), 'unsupported', 'Unsupported semantic state', 'Unsupported state'],
+    ['stale', semanticDiffPage([diffEntry({ diagnostics: [diffDiagnostic('VERSION_REF_CONFLICT', 'retry')] })]), 'stale', 'Stale diff reference', 'Stale reference'],
+    ['conflict-only', semanticDiffPage([diffEntry({ changeId: 'merge-conflict:sha256:1' })]), 'conflict-only', 'Conflicts only', 'Conflicts only'],
+  ])('renders a distinct %s parent diff preview state', async (_, page, state, title, label) => {
+    const workbook = createWorkbook({ diff: jest.fn(async () => ({ ok: true, value: page })) });
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+    await screen.findByText('Calculated forecast');
+    await userEvent.setup().click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    const parentDiff = await screen.findByTestId('version-history-parent-diff');
+    expect(parentDiff).toHaveAttribute('data-state', state);
+    expect(parentDiff).toHaveTextContent(title);
+    expect(within(parentDiff).getByRole('status')).toHaveTextContent(`State ${label}`);
+    expect(parentDiff).not.toHaveTextContent('No semantic changes');
   });
 
   it('surfaces commit, branch, checkout, and parent diff errors in the action result region', async () => {
@@ -805,30 +813,33 @@ function createWorkbook(
         mutationGuarantee: 'no-workbook-mutation',
       },
     })),
-    diff: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [
-          {
-            structural: {
-              kind: 'metadata',
-              changeId: 'change-1',
-              domain: 'cells',
-              entityId: 'sheet-1!A1',
-              propertyPath: ['value'],
-            },
-            before: { kind: 'value', value: { kind: 'blank' } },
-            after: { kind: 'value', value: '42' },
-          },
-        ],
-        limit: 50,
-        readRevision: { kind: 'counter', value: '4' },
-        order: 'semantic-change-order',
-      },
-    })),
+    diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
     ...overrides,
   };
   return { version } as unknown as VersionHistoryWorkbook;
+}
+
+function semanticDiffPage(items: VersionSemanticDiffPage['items']): VersionSemanticDiffPage {
+  return { items, limit: 50, readRevision: { kind: 'counter', value: '4' }, order: 'semantic-change-order' };
+}
+
+function diffEntry({
+  changeId = 'change-1',
+  diagnostics,
+}: {
+  readonly changeId?: string;
+  readonly diagnostics?: VersionSemanticDiffPage['items'][number]['diagnostics'];
+} = {}): VersionSemanticDiffPage['items'][number] {
+  return {
+    structural: { kind: 'metadata', changeId, domain: 'cells', entityId: 'sheet-1!A1', propertyPath: ['value'] },
+    before: { kind: 'value', value: { kind: 'blank' } },
+    after: { kind: 'value', value: '42' },
+    ...(diagnostics ? { diagnostics } : {}),
+  };
+}
+
+function diffDiagnostic(issueCode: string, recoverability: 'retry' | 'unsupported') {
+  return { issueCode, severity: 'warning' as const, recoverability, messageTemplateId: `version.diff.${issueCode}`, safeMessage: issueCode, redacted: true };
 }
 
 function createSurfaceStatus({

@@ -1,7 +1,11 @@
 import { GitCompare } from 'lucide-react';
 import type { VersionSemanticDiffPage, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { shortCommitId } from './version-history-format';
+import {
+  shortCommitId,
+  versionDiffEntryLabel,
+  versionDiffPreviewState,
+} from './version-history-format';
 
 export type VersionDiffPreview = {
   readonly base: WorkbookCommitId;
@@ -16,10 +20,11 @@ export function VersionHistoryDiffPreview({
 }): React.JSX.Element | null {
   if (!diffPreview) return null;
   const count = diffPreview.page.items.length;
+  const state = versionDiffPreviewState(diffPreview.page);
   const summaryId = 'version-history-parent-diff-summary';
   const summary = `Parent Diff Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
     diffPreview.target,
-  )} Changes ${count}`;
+  )} State ${state.label}. Change count ${count}`;
 
   return (
     <section
@@ -27,6 +32,7 @@ export function VersionHistoryDiffPreview({
       aria-label="Parent diff"
       aria-describedby={summaryId}
       data-testid="version-history-parent-diff"
+      data-state={state.kind}
     >
       <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
         <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
@@ -50,23 +56,32 @@ export function VersionHistoryDiffPreview({
         <span className="text-ss-text-secondary">Changes</span>
         <span className="text-ss-text">{count}</span>
       </div>
-      {count === 0 ? (
-        <div className="text-body-sm text-ss-text-secondary">No semantic changes</div>
-      ) : (
+      {state.kind === 'changes' ? (
         <ol className="flex flex-col gap-1 m-0 p-0 list-none">
           {diffPreview.page.items.map((entry, index) => (
             <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-              {diffEntryLabel(entry)}
+              {versionDiffEntryLabel(entry)}
             </li>
           ))}
         </ol>
+      ) : (
+        <div
+          className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2 py-1.5 text-body-sm"
+          data-testid="version-history-parent-diff-state"
+        >
+          <div className="font-medium text-ss-text">{state.title}</div>
+          <div className="text-ss-text-secondary">{state.message}</div>
+          {state.kind === 'conflict-only' ? (
+            <ol className="mt-1 flex flex-col gap-1 m-0 p-0 list-none">
+              {diffPreview.page.items.map((entry, index) => (
+                <li key={index} className="text-[11px] text-ss-text-secondary truncate">
+                  {versionDiffEntryLabel(entry)}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
       )}
     </section>
   );
-}
-
-function diffEntryLabel(entry: VersionSemanticDiffPage['items'][number]): string {
-  if (entry.structural.kind !== 'metadata') return 'Redacted change';
-  const path = entry.structural.propertyPath.join('.');
-  return path ? `${entry.structural.domain} ${path}` : entry.structural.domain;
 }

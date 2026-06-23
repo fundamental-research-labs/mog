@@ -112,7 +112,7 @@ export function describePublicMergeBaseGateScenarios() {
         .filter((diagnostic) => diagnostic.code === 'VERSION_MISSING_OBJECT')
         .map((diagnostic) => diagnostic.data.payload?.mergeRef)
         .sort(),
-    ).toEqual(['base', 'ours', 'theirs']);
+    ).toEqual(['redacted', 'redacted', 'redacted']);
     expect(JSON.stringify(result.error.diagnostics)).not.toContain('commit:sha256:');
     expect(merge).not.toHaveBeenCalled();
   });
@@ -164,7 +164,7 @@ export function describePublicMergeBaseGateScenarios() {
     const result = await version.merge({ base, ours, theirs });
 
     expectPublicSafeMergeFailure(result, 'VERSION_MERGE_UNSUPPORTED_ANCESTRY', {
-      mergeRef: 'ours',
+      mergeRef: 'redacted',
       parentCount: 1,
       parentMatchesBase: false,
     });
@@ -200,7 +200,7 @@ export function describePublicMergeBaseGateScenarios() {
 
       const diagnostic = expectPublicSafeMergeFailure(result, 'VERSION_UNMATERIALIZABLE_COMMIT', {
         diagnosticCode: 'commitClosureRefMismatch',
-        mergeRef,
+        mergeRef: 'redacted',
       });
       expect(diagnostic.data).toMatchObject({
         operation: 'merge',
@@ -208,7 +208,7 @@ export function describePublicMergeBaseGateScenarios() {
         payload: {
           operation: 'merge',
           diagnosticCode: 'commitClosureRefMismatch',
-          mergeRef,
+          mergeRef: 'redacted',
         },
       });
       expect(JSON.stringify(diagnostic.data.payload)).not.toContain('commit:sha256:');

@@ -100,6 +100,9 @@ export * from './canvas-object-events';
 export * from './security-events';
 export * from './range-events';
 
+// Version-control lifecycle events
+export * from './version-events';
+
 // Sort events (from sorting module)
 export type {
   RangeSortedEvent,
@@ -147,6 +150,7 @@ import type { ViewEvent } from './view-events';
 import type { SecurityEvent } from './security-events';
 import type { RangeEvent } from './range-events';
 import type { TextEffectEvent } from './text-effect-events';
+import type { VersionEvent } from './version-events';
 
 // =============================================================================
 // SpreadsheetEvent Union Type
@@ -218,6 +222,8 @@ export type SpreadsheetEvent =
   | SecurityEvent
   // Range events (first-class range lifecycle)
   | RangeEvent
+  // Version-control lifecycle events
+  | VersionEvent
   // Sort events
   | RangeSortedEvent
   | ColumnSortedEvent

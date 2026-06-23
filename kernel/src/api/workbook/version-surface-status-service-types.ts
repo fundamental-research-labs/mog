@@ -43,10 +43,16 @@ export type VersionSurfaceCheckoutSession = {
   readonly detached: boolean;
 };
 
+export type VersionSurfaceBranchCommitMaterialization = {
+  readonly commitId: string;
+  readonly refName: string;
+};
+
 export type WorkbookVersionSurfaceStatusService = {
   readDirtyStatus(): MaybePromise<VersionSurfaceStatus['dirty']>;
   readActiveCheckoutSession(): VersionSurfaceCheckoutSession | null;
   recordCheckoutMaterialization(input: CheckoutSnapshotApplyInput): void;
+  recordActiveCheckoutBranchCommit(input: VersionSurfaceBranchCommitMaterialization): void;
 };
 
 export type AttachedVersionSurfaceStatusService = {

@@ -307,7 +307,7 @@ export abstract class WorkbookImplSubApis extends WorkbookImplFileLifecycle {
   }
 
   get version(): WorkbookVersion {
-    return (this._version ??= new WorkbookVersionWithDirtyTracking(this.ctx, {
+    return (this._version ??= new WorkbookVersionWithDirtyTracking(() => this.ctx, {
       checkoutTransactionGuard: this.checkoutTransactions.guard,
       readState: () => this.readVersionDirtyTrackingState(),
       markCleanIfRevisionUnchanged: (revision) => this.markCleanIfDirtyRevisionUnchanged(revision),

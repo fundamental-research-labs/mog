@@ -35,12 +35,15 @@ function createMockWorkbook() {
   };
 }
 
-function setupWithWorkbook(workbook: ReturnType<typeof createMockWorkbook>) {
+function setupWithWorkbook(
+  workbook: ReturnType<typeof createMockWorkbook>,
+  overrides: { readonly invalidateAll?: () => void } = {},
+) {
   return setupEventSubscriptions({
     workbook: workbook as any,
     getRenderer: () => null,
     getCurrentSheetId: () => 'sheet1',
-    invalidateAll: jest.fn(),
+    invalidateAll: overrides.invalidateAll ?? jest.fn(),
     updateRendererContext: jest.fn(),
     setFrozenPanes: jest.fn(),
     setViewportConfig: jest.fn(),
@@ -48,6 +51,22 @@ function setupWithWorkbook(workbook: ReturnType<typeof createMockWorkbook>) {
 }
 
 describe('Event Subscriptions sparkline integration', () => {
+  it('invalidates rendering after checkout materializes a new workbook context', () => {
+    const workbook = createMockWorkbook();
+    const invalidateAll = jest.fn();
+    setupWithWorkbook(workbook, { invalidateAll });
+
+    workbook.emit({
+      type: 'workbook:version-checkout-materialized',
+      commitId: 'commit:sha256:test',
+      targetKind: 'ref',
+      refName: 'scenario/manual-smoke',
+      timestamp: 1,
+    });
+
+    expect(invalidateAll).toHaveBeenCalledTimes(1);
+  });
+
   it('refreshes contextual selection state for the complete sparkline event family', () => {
     const workbook = createMockWorkbook();
     const subscriptions = setupWithWorkbook(workbook);

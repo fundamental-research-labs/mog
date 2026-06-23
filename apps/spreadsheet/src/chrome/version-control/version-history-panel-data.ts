@@ -22,6 +22,13 @@ import { shortCommitId } from './version-history-format';
 const COMMIT_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 5;
 const PROPOSAL_PAGE_SIZE = 5;
+const VERSION_HISTORY_REFRESH_DELAY_MS = 40;
+const VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS = [
+  'workbook:version-dirty-status-changed',
+  'workbook:version-checkout-materialized',
+] as const;
+
+type VersionHistoryWorkbookRefreshEvent = (typeof VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS)[number];
 
 export type VersionHistoryWorkbook = {
   readonly version: Pick<
@@ -40,6 +47,10 @@ export type VersionHistoryWorkbook = {
     | 'listReviews'
     | 'listProposals'
   >;
+  readonly on?: (
+    event: VersionHistoryWorkbookRefreshEvent,
+    handler: (event: unknown) => void,
+  ) => () => void;
 };
 
 export type VersionHistoryLoadState =
@@ -147,6 +158,34 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!workbook.on) return undefined;
+
+    let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
+    const scheduleRefresh = () => {
+      if (pendingRefresh !== undefined) {
+        clearTimeout(pendingRefresh);
+      }
+      pendingRefresh = setTimeout(() => {
+        pendingRefresh = undefined;
+        void load();
+      }, VERSION_HISTORY_REFRESH_DELAY_MS);
+    };
+
+    const unsubscriptions = VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS.map((event) =>
+      workbook.on?.(event, scheduleRefresh),
+    );
+
+    return () => {
+      if (pendingRefresh !== undefined) {
+        clearTimeout(pendingRefresh);
+      }
+      for (const unsubscribe of unsubscriptions) {
+        unsubscribe?.();
+      }
+    };
+  }, [load, workbook]);
 
   const data =
     loadState.status === 'ready'

@@ -13,6 +13,157 @@ import {
 } from './version-checkout-lifecycle-branch-test-utils';
 
 export function registerBranchCheckoutSessionStatusScenario(): void {
+  it('commits checked-out branch edits to the active branch without advancing main', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const handle = await createBranchLifecycleDocumentHandle();
+    installVersionDomainDetectorNoopsOnHandles(handle);
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+      const version = wb.version;
+      const mainAlpha = await commitActiveSheetBaseCell({
+        wb,
+        initialized,
+        value: 'alpha',
+        errorLabel: 'main alpha',
+      });
+
+      const created = await version.createBranch({
+        name: 'scenario/manual-smoke' as any,
+        targetCommitId: mainAlpha.id,
+      });
+      expect(created).toMatchObject({
+        ok: true,
+        value: {
+          name: 'refs/heads/scenario/manual-smoke',
+          commitId: mainAlpha.id,
+        },
+      });
+      if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
+
+      await expect(
+        version.checkout({ kind: 'ref', name: 'refs/heads/scenario/manual-smoke' as any }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(wb);
+
+      await expect(version.getHead()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          id: mainAlpha.id,
+          refName: 'refs/heads/scenario/manual-smoke',
+          resolvedFrom: 'refs/heads/scenario/manual-smoke',
+          refRevision: created.value.revision,
+        },
+      });
+
+      await wb.activeSheet.setCell('A1', 'beta');
+      const branchHeadBeforeCommit = await version.getHead();
+      if (!branchHeadBeforeCommit.ok || !branchHeadBeforeCommit.value.refRevision) {
+        throw new Error('expected checked-out branch head with ref revision');
+      }
+
+      const betaCommit = await version.commit({
+        message: 'beta on manual smoke branch',
+        expectedHead: {
+          commitId: branchHeadBeforeCommit.value.id,
+          revision: branchHeadBeforeCommit.value.refRevision,
+        },
+      });
+      expect(betaCommit).toMatchObject({
+        ok: true,
+        value: {
+          parents: [mainAlpha.id],
+        },
+      });
+      if (!betaCommit.ok) throw new Error(`expected beta commit success: ${betaCommit.error.code}`);
+
+      await expect(
+        version.readRef('refs/heads/scenario/manual-smoke' as any),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/manual-smoke',
+            commitId: betaCommit.value.id,
+          },
+        },
+      });
+      await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/main',
+            commitId: mainAlpha.id,
+          },
+        },
+      });
+      await expect(version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          headCommitId: betaCommit.value.id,
+          checkedOutCommitId: betaCommit.value.id,
+          branchName: 'scenario/manual-smoke',
+          refHeadAtMaterialization: betaCommit.value.id,
+          currentRefHeadId: betaCommit.value.id,
+          detached: false,
+          stale: false,
+        },
+        dirty: {
+          hasUncommittedLocalChanges: false,
+        },
+      });
+      expect(wb.isDirty).toBe(false);
+
+      wb.emit({
+        type: 'security:policies-reloaded',
+        timestamp: Date.now(),
+        policyVersionBefore: 0,
+        policyVersionAfter: 1,
+        active: false,
+      });
+      expect(wb.isDirty).toBe(false);
+      await expect(version.getSurfaceStatus()).resolves.toMatchObject({
+        dirty: {
+          hasUncommittedLocalChanges: false,
+        },
+      });
+
+      const mainCheckout = await wb.version.checkout({
+        kind: 'ref',
+        name: 'refs/heads/main',
+      });
+      await expect(Promise.resolve(mainCheckout)).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'alpha' });
+
+      await expect(
+        wb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/manual-smoke' as any }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: { status: 'success' },
+      });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'beta' });
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
+
   it('reports applied branch checkout session status and stale external ref movement', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const sourceHandle = await createBranchLifecycleDocumentHandle();
@@ -72,6 +223,27 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           hasUncommittedLocalChanges: false,
         },
       });
+
+      const postCheckoutCellEvents: unknown[] = [];
+      const unsubscribePostCheckoutCellEvents = checkoutWb.on('cell:changed', (event) => {
+        postCheckoutCellEvents.push(event);
+      });
+
+      await checkoutWb.activeSheet.setCell('A3', 'branch-v1-local-edit');
+      unsubscribePostCheckoutCellEvents();
+      await expect(checkoutWb.activeSheet.getCell('A3')).resolves.toMatchObject({
+        value: 'branch-v1-local-edit',
+      });
+      expect(checkoutWb.isDirty).toBe(true);
+      expect(postCheckoutCellEvents).toEqual([
+        expect.objectContaining({
+          type: 'cell:changed',
+          row: 2,
+          col: 0,
+          newValue: 'branch-v1-local-edit',
+        }),
+      ]);
+      checkoutWb.markClean();
 
       await sourceWb.activeSheet.setCell('A2', 'branch-v2');
       const movedResult = await sourceWb.version.commit({

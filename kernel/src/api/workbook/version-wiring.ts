@@ -1,5 +1,6 @@
 import type { DocumentContext } from '../../context';
 import { createProviderBackedBranchLifecycleService } from '../../document/version-store/branch-provider-service';
+import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
@@ -141,11 +142,16 @@ export function attachWorkbookVersioning(
     existing.diffService ??
     existing.versionDiffService ??
     (config.provider ? createWorkbookVersionDiffService({ provider: config.provider }) : undefined);
+  const checkoutSnapshotMaterializer =
+    config.checkoutSnapshotMaterializer ??
+    (isCheckoutSnapshotMaterializer(existing.checkoutSnapshotMaterializer)
+      ? existing.checkoutSnapshotMaterializer
+      : undefined);
   const checkoutService =
-    config.provider && config.checkoutSnapshotMaterializer
+    config.provider && checkoutSnapshotMaterializer
       ? createProviderBackedCheckoutMaterializationService({
           provider: config.provider,
-          snapshotMaterializer: config.checkoutSnapshotMaterializer,
+          snapshotMaterializer: checkoutSnapshotMaterializer,
         })
       : existing.checkoutService ??
         existing.checkoutMaterializationService ??
@@ -202,6 +208,7 @@ export function attachWorkbookVersioning(
     ...(config.snapshotRootByteSyncPort
       ? { snapshotRootByteSyncPort: config.snapshotRootByteSyncPort }
       : {}),
+    ...(checkoutSnapshotMaterializer ? { checkoutSnapshotMaterializer } : {}),
     ...(config.semanticStateReader ? { semanticStateReader: config.semanticStateReader } : {}),
     ...(writeService
       ? {
@@ -310,6 +317,10 @@ function isPendingRemotePromotionService(
   value: unknown,
 ): value is PendingRemotePromotionServiceLike {
   return isRecord(value) && typeof value.promotePendingRemoteSegments === 'function';
+}
+
+function isCheckoutSnapshotMaterializer(value: unknown): value is CheckoutSnapshotMaterializer {
+  return isRecord(value) && typeof value.applySnapshot === 'function';
 }
 
 function providerWriteActivityTrackerFrom(

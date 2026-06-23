@@ -126,13 +126,23 @@ import {
   updateWorkbookVersionFacadeReviewStatus,
 } from './version-facade-reviews';
 
+type WorkbookVersionContextSource = DocumentContext | (() => DocumentContext);
+
 export class WorkbookVersionImpl implements WorkbookVersion {
+  private readonly ctxSource: WorkbookVersionContextSource;
+
   constructor(
-    private readonly ctx: DocumentContext,
+    ctx: WorkbookVersionContextSource,
     private readonly options: {
       readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
     } = {},
-  ) {}
+  ) {
+    this.ctxSource = ctx;
+  }
+
+  private get ctx(): DocumentContext {
+    return typeof this.ctxSource === 'function' ? this.ctxSource() : this.ctxSource;
+  }
 
   async getStatus(): Promise<WorkbookVersionStatus> {
     return getWorkbookVersionFacadeStatus(this.ctx);

@@ -77,6 +77,7 @@ import { useRendererLifecycle } from './effects/useRendererLifecycle';
 import { useRendererSync } from './effects/useRendererSync';
 import { useRendererViewRestore } from './effects/useRendererViewRestore';
 import { useSparklineCFIntegration } from './effects/useSparklineCFIntegration';
+import { useVersionCheckoutMaterializationEpoch } from './effects/useVersionCheckoutMaterializationEpoch';
 import { useCellDataCallbacks } from './hooks/useCellDataCallbacks';
 // NOTE: useInputMessageTooltip is now called internally by InputMessageOverlay
 // for render isolation - see docs/ARCHITECTURE-CHECKLIST.md Section 15
@@ -166,6 +167,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
   // Get data from Workbook/Worksheet API
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
+  const checkoutMaterializationEpoch = useVersionCheckoutMaterializationEpoch(wb, coordinator);
   const ws = wb.getSheetById(activeSheetId);
 
   // PERFORMANCE: Subscribe only to active sheet's zoom level to prevent re-renders
@@ -389,7 +391,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
 
   const activeViewport = useMemo(() => {
     return wb.getSheetById(activeSheetId).viewport;
-  }, [wb, activeSheetId]);
+  }, [wb, activeSheetId, checkoutMaterializationEpoch]);
 
   // NOTE: useInputMessageTooltip is now called internally by InputMessageOverlay
   // for render isolation - see docs/ARCHITECTURE-CHECKLIST.md Section 15

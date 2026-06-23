@@ -67,6 +67,13 @@ export function registerVisibleActiveSheetMaterializationScenario(): void {
       await checkoutWb.activeSheet.setCell('A1', 'pre-checkout-active');
       expect(checkoutWb.activeSheet.name).toBe('Sheet1');
       checkoutWb.markClean();
+      const checkoutMaterializedEvents: unknown[] = [];
+      const unsubscribeCheckoutMaterialized = checkoutWb.on(
+        'workbook:version-checkout-materialized',
+        (event) => {
+          checkoutMaterializedEvents.push(event);
+        },
+      );
 
       await expect(
         checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
@@ -78,9 +85,18 @@ export function registerVisibleActiveSheetMaterializationScenario(): void {
           mutationGuarantee: 'workbook-state-materialized',
         },
       });
+      unsubscribeCheckoutMaterialized();
 
       expect(checkoutWb.activeSheet.name).toBe('Visible Output');
       expect(checkoutWb.activeSheet.index).toBe(1);
+      expect(checkoutWb.isDirty).toBe(false);
+      expect(checkoutMaterializedEvents).toEqual([
+        expect.objectContaining({
+          type: 'workbook:version-checkout-materialized',
+          commitId: committed.id,
+          targetKind: 'commit',
+        }),
+      ]);
       await expect(checkoutWb.activeSheet.getVisibility()).resolves.toBe('visible');
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'visible-output',

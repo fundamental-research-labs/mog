@@ -5,11 +5,14 @@ import type {
   VersionRefName,
   VersionRefSelector,
   VersionResult,
+  VersionStoreDiagnostic,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { publicDiagnostic } from './version-commit-diagnostics';
 import { WorkbookVersionImpl } from './version';
+import { versionFailureFromStoreDiagnostics } from './version-result';
 import type { VersionCheckoutTransactionGuard } from './version-checkout';
 
 export interface WorkbookVersionDirtyTrackingState {
@@ -38,11 +41,13 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly version?: unknown;
 };
 
+type WorkbookVersionContextSource = DocumentContext | (() => DocumentContext);
+
 export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
-  private readonly versionContext: DocumentContext;
+  private readonly readVersionContext: () => DocumentContext;
 
   constructor(
-    ctx: DocumentContext,
+    ctx: WorkbookVersionContextSource,
     private readonly dirtyTracking: {
       readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
       readonly readState: () => WorkbookVersionDirtyTrackingState;
@@ -54,18 +59,68 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
         ? { checkoutTransactionGuard: dirtyTracking.checkoutTransactionGuard }
         : {}),
     });
-    this.versionContext = ctx;
+    this.readVersionContext = typeof ctx === 'function' ? ctx : () => ctx;
   }
 
   override async commit(
     options: VersionCommitOptions = {},
   ): Promise<VersionResult<WorkbookCommitSummary>> {
     const beforeCommit = this.dirtyTracking.readState();
-    const result = await super.commit(options);
+    const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
+    const commitOptions = this.commitOptionsForRuntimeHead(options, beforeSaveHead);
+    if (!commitOptions.ok) {
+      return versionFailureFromStoreDiagnostics('commit', commitOptions.diagnostics);
+    }
+
+    const result = await super.commit(commitOptions.options);
+    if (result.ok) {
+      this.recordCheckoutBranchCommit(beforeSaveHead, commitOptions.options, result.value);
+    }
     if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
       this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
     }
     return result;
+  }
+
+  private commitOptionsForRuntimeHead(
+    options: VersionCommitOptions,
+    currentToken: RuntimeSaveHeadTokenState,
+  ):
+    | { readonly ok: true; readonly options: VersionCommitOptions }
+    | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] } {
+    if (hasExplicitTargetRef(options)) return { ok: true, options };
+    if (currentToken === 'stale') {
+      return {
+        ok: false,
+        diagnostics: [staleImplicitCheckoutCommitDiagnostic()],
+      };
+    }
+    if (currentToken?.source !== 'checkout-session' || !currentToken.refName) {
+      return { ok: true, options };
+    }
+    return {
+      ok: true,
+      options: {
+        ...options,
+        targetRef: currentToken.refName,
+      },
+    };
+  }
+
+  private recordCheckoutBranchCommit(
+    currentToken: RuntimeSaveHeadTokenState,
+    options: VersionCommitOptions,
+    commitSummary: WorkbookCommitSummary,
+  ): void {
+    if (currentToken === 'stale' || currentToken?.source !== 'checkout-session') return;
+    if (!currentToken.refName) return;
+    if (normalizeRefName(options.targetRef) !== currentToken.refName) return;
+
+    const service = readSurfaceStatusService(this.readVersionContext());
+    service?.recordActiveCheckoutBranchCommit?.({
+      commitId: commitSummary.id,
+      refName: currentToken.refName,
+    });
   }
 
   private async canMarkCleanAfterCommit(
@@ -76,7 +131,7 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     if (!afterCommit.isDirty) return false;
     if (afterCommit.revision !== beforeCommit.revision) return false;
 
-    const captureState = readNormalCommitCaptureDirtyState(this.versionContext);
+    const captureState = readNormalCommitCaptureDirtyState(this.readVersionContext());
     if (captureState && !isNormalCommitCaptureDrained(captureState)) {
       return false;
     }
@@ -123,6 +178,61 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
 
 function refNameFromBranchName(branchName: string): VersionMainRefName | VersionRefName {
   return branchName === 'main' ? 'refs/heads/main' : (`refs/heads/${branchName}` as VersionRefName);
+}
+
+function hasExplicitTargetRef(options: VersionCommitOptions): boolean {
+  return isRecord(options) && Object.prototype.hasOwnProperty.call(options, 'targetRef');
+}
+
+function normalizeRefName(value: unknown): VersionMainRefName | VersionRefName | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  return value.startsWith('refs/heads/')
+    ? (value as VersionMainRefName | VersionRefName)
+    : (`refs/heads/${value}` as VersionMainRefName | VersionRefName);
+}
+
+function staleImplicitCheckoutCommitDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+    'Commit is blocked because the active checkout session is stale relative to its branch head.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload: {
+        operation: 'commitGraphWrite',
+        reason: 'staleCheckoutSession',
+      },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function readSurfaceStatusService(ctx: DocumentContext): {
+  readonly recordActiveCheckoutBranchCommit?: (input: {
+    readonly commitId: string;
+    readonly refName: string;
+  }) => void;
+} | null {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return null;
+  for (const candidate of [
+    services.surfaceStatusService,
+    services.versionSurfaceStatusService,
+    services.statusService,
+    services.dirtyStatusService,
+    services,
+  ]) {
+    if (!isRecord(candidate)) continue;
+    const method = candidate.recordActiveCheckoutBranchCommit;
+    if (typeof method !== 'function') continue;
+    return {
+      recordActiveCheckoutBranchCommit: (input) => {
+        Reflect.apply(method, candidate, [input]);
+      },
+    };
+  }
+  return null;
 }
 
 function isNormalCommitCaptureDrained(captureState: NormalCommitCaptureDirtyState): boolean {

@@ -173,6 +173,11 @@
       "types": "./dist/validation-events.d.ts",
       "import": "./dist/validation-events.js"
     },
+    "./version-events": {
+      "development": "./src/version-events.ts",
+      "types": "./dist/version-events.d.ts",
+      "import": "./dist/version-events.js"
+    },
     "./view-events": {
       "development": "./src/view-events.ts",
       "types": "./dist/view-events.d.ts",

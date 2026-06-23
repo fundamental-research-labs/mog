@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
 
 import {
@@ -11,6 +11,7 @@ import {
   branchTargetTestId,
   checkoutBranchTestId,
   createDeferred,
+  createSurfaceStatus,
   createWorkbook,
   diffDiagnostic,
   diffEntry,
@@ -141,6 +142,45 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(
       within(screen.getByTestId('version-history-action-result')).getByRole('status'),
     ).toHaveTextContent('Committed changes');
+  });
+
+  it('refreshes commit availability when workbook edits dirty an open panel', async () => {
+    let hasUncommittedLocalChanges = false;
+    const refreshHandlers = new Map<string, (event: unknown) => void>();
+    const getSurfaceStatus = jest.fn(async () =>
+      createSurfaceStatus({
+        dirty: {
+          hasUncommittedLocalChanges,
+          commitEligibleChanges: hasUncommittedLocalChanges,
+        },
+      }),
+    );
+    const workbook: VersionHistoryWorkbook = {
+      ...createWorkbook({ getSurfaceStatus }),
+      on: jest.fn((event: string, handler: (event: unknown) => void) => {
+        refreshHandlers.set(event, handler);
+        return jest.fn();
+      }) as VersionHistoryWorkbook['on'],
+    };
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Branch edit');
+    const commitButton = screen.getByTestId('version-history-commit-button');
+    expectDisabledButtonReason(commitButton, 'Make a workbook change before committing.');
+
+    hasUncommittedLocalChanges = true;
+    act(() => {
+      refreshHandlers.get('workbook:version-dirty-status-changed')?.({
+        type: 'workbook:version-dirty-status-changed',
+        hasUncommittedLocalChanges: true,
+        previousHasUncommittedLocalChanges: false,
+        statusRevision: 2,
+      });
+    });
+
+    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(commitButton).toBeEnabled());
   });
 
   it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {

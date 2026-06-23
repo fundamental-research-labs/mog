@@ -380,7 +380,8 @@ export abstract class WorkbookImplFoundation {
     this.registerSheetRuntimeAdapter();
 
     // Subscribe to all events to track dirty state.
-    const unsub = this.eventBus.onAll(() => {
+    const unsub = this.eventBus.onAll((event) => {
+      if (!shouldTrackEventAsWorkbookDirty(event)) return;
       this.markDirty();
     });
     if (unsub) {
@@ -407,6 +408,9 @@ export abstract class WorkbookImplFoundation {
       versioning?: unknown;
     };
     mutableNextContext.eventBus = this.eventBus;
+    // The materialized lifecycle installed its mutation handler against its private bus.
+    // Rebuild it after swapping to the stable workbook bus so post-checkout edits publish normally.
+    nextContext.computeBridge.initMutationHandler();
     attachWorkbookVersioning(nextContext, nextVersioning);
     attachWorkbookVersionSurfaceStatusService(nextContext, this.versionSurfaceStatusService);
 
@@ -416,6 +420,15 @@ export abstract class WorkbookImplFoundation {
     this.resetRuntimeCachesAfterCheckoutPublish();
     await this.refreshSheetMetadata();
     await this.reconcileActiveSheetAfterCheckout();
+    this.eventBus.emit({
+      type: 'workbook:version-checkout-materialized',
+      commitId: String(input.commitId),
+      targetKind: input.resolvedTarget.kind,
+      ...(input.resolvedTarget.kind === 'ref' || input.resolvedTarget.kind === 'head'
+        ? { refName: String(input.resolvedTarget.refName) }
+        : {}),
+      timestamp: Date.now(),
+    } satisfies InternalSpreadsheetEvent);
   }
 
   private resetRuntimeCachesAfterCheckoutPublish(): void {
@@ -436,6 +449,24 @@ export abstract class WorkbookImplFoundation {
       this.codeExecutor.dispose();
       this.codeExecutor = null;
     }
+
+    this._sheets = undefined;
+    this._slicers = undefined;
+    this._slicerStyles = undefined;
+    this._timelineStyles = undefined;
+    this._pivotTableStyles = undefined;
+    this._functions = undefined;
+    this._names = undefined;
+    this._scenarios = undefined;
+    this._history = undefined;
+    this._version = undefined;
+    this._tableStyles = undefined;
+    this._cellStyles = undefined;
+    this._properties = undefined;
+    this._protection = undefined;
+    this._security = undefined;
+    this._theme = undefined;
+    this._changes = undefined;
 
     this.checkpointManager.clear();
     this.checkpointManager = createCheckpointManager(
@@ -489,6 +520,7 @@ export abstract class WorkbookImplFoundation {
   private markDirty(): void {
     if (this._dirty) {
       this._dirtyStatusSequence += 1;
+      this.emitVersionDirtyStatusChanged(true, true);
       return;
     }
     this.setDirtyState(true);
@@ -496,8 +528,23 @@ export abstract class WorkbookImplFoundation {
 
   private setDirtyState(next: boolean): void {
     if (this._dirty === next) return;
+    const previous = this._dirty;
     this._dirty = next;
     this._dirtyStatusSequence += 1;
+    this.emitVersionDirtyStatusChanged(next, previous);
+  }
+
+  private emitVersionDirtyStatusChanged(
+    hasUncommittedLocalChanges: boolean,
+    previousHasUncommittedLocalChanges: boolean,
+  ): void {
+    this.eventBus.emit({
+      type: 'workbook:version-dirty-status-changed',
+      hasUncommittedLocalChanges,
+      previousHasUncommittedLocalChanges,
+      statusRevision: this._dirtyStatusSequence,
+      timestamp: Date.now(),
+    } satisfies InternalSpreadsheetEvent);
   }
 
   markClean(): void {
@@ -899,4 +946,14 @@ export abstract class WorkbookImplFoundation {
   get mirror() {
     return this.ctx.mirror;
   }
+}
+
+const NON_MUTATING_WORKBOOK_EVENT_TYPES = new Set<InternalEventType>([
+  'workbook:version-checkout-materialized',
+  'workbook:version-dirty-status-changed',
+  'security:policies-reloaded',
+]);
+
+function shouldTrackEventAsWorkbookDirty(event: InternalSpreadsheetEvent): boolean {
+  return !NON_MUTATING_WORKBOOK_EVENT_TYPES.has(event.type);
 }

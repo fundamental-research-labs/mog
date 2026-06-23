@@ -24,6 +24,7 @@ import {
 } from './version-checkout';
 import { commitWorkbookVersion } from './version-commit';
 import { diffWorkbookVersion } from './version-diff';
+import { readActiveCheckoutHead } from './version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
 import { listWorkbookVersionCommits } from './version-list-commits';
 import {
@@ -62,6 +63,14 @@ export async function getWorkbookVersionFacadeHead(
 ): Promise<VersionResult<VersionHead>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'getHead', 'version:read');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getHead', gateDiagnostics);
+
+  const activeCheckoutHead = await readActiveCheckoutHead(ctx);
+  if (activeCheckoutHead.status === 'resolved') {
+    return versionResultFromHead(activeCheckoutHead.head);
+  }
+  if (activeCheckoutHead.status === 'degraded') {
+    return versionResultFromHead(activeCheckoutHead.result);
+  }
 
   const failHead = (diagnostics: readonly VersionStoreDiagnostic[]) =>
     versionResultFromHead(degradedHead(diagnostics));

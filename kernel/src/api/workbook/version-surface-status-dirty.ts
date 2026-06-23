@@ -42,6 +42,16 @@ export function createWorkbookVersionSurfaceStatusService(
     recordCheckoutMaterialization: (materialization) => {
       activeCheckoutSession = checkoutSessionFromMaterialization(materialization);
     },
+    recordActiveCheckoutBranchCommit: (materialization) => {
+      const branchName = branchNameFromRefName(materialization.refName);
+      if (!branchName) return;
+      activeCheckoutSession = Object.freeze({
+        checkedOutCommitId: materialization.commitId,
+        branchName,
+        refHeadAtMaterialization: materialization.commitId,
+        detached: false,
+      });
+    },
   };
 }
 
@@ -110,6 +120,13 @@ function checkoutSessionFromMaterialization(
     refHeadAtMaterialization: target.commitId,
     detached: false,
   });
+}
+
+function branchNameFromRefName(refName: string): string | null {
+  const prefix = 'refs/heads/';
+  if (refName === 'main') return 'main';
+  if (!refName.startsWith(prefix)) return null;
+  return refName.slice(prefix.length);
 }
 
 function dirtyStatusFromState(

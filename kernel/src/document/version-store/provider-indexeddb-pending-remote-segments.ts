@@ -39,7 +39,12 @@ import {
 import {
   conflictComplete,
   conflictReserve,
+  failedComplete,
+  failedList,
   failedRead,
+  failedReserve,
+  invalidReservation,
+  missingComplete,
   missingRead,
 } from './provider-indexeddb-pending-remote-segments-results';
 
@@ -70,17 +75,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
     try {
       record = await this.recordFromInput(input);
     } catch {
-      return {
-        status: 'failed',
-        record: null,
-        diagnostics: [
-          {
-            code: 'VERSION_INVALID_OPTIONS',
-            message: 'Pending remote segment reservation has invalid sync context.',
-            recoverability: 'none',
-          },
-        ],
-      };
+      return invalidReservation('Pending remote segment reservation has invalid sync context.');
     }
 
     try {
@@ -107,17 +102,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
       await this.putRecord(record);
       return { status: 'created', record, diagnostics: [] };
     } catch {
-      return {
-        status: 'failed',
-        record: null,
-        diagnostics: [
-          {
-            code: 'VERSION_PROVIDER_FAILED',
-            message: 'IndexedDB pending remote segment write failed.',
-            recoverability: 'retry',
-          },
-        ],
-      };
+      return failedReserve('IndexedDB pending remote segment write failed.');
     }
   }
 
@@ -152,17 +137,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
       const records = await this.findByState(state);
       return { status: 'success', records, diagnostics: [] };
     } catch {
-      return {
-        status: 'failed',
-        records: [],
-        diagnostics: [
-          {
-            code: 'VERSION_PROVIDER_FAILED',
-            message: 'IndexedDB pending remote segment list failed.',
-            recoverability: 'retry',
-          },
-        ],
-      };
+      return failedList('IndexedDB pending remote segment list failed.');
     }
   }
 
@@ -172,17 +147,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
     try {
       const existing = await this.findBySegmentId(input.pendingRemoteSegmentId);
       if (!existing) {
-        return {
-          status: 'missing',
-          record: null,
-          diagnostics: [
-            {
-              code: 'VERSION_PENDING_REMOTE_NOT_FOUND',
-              message: 'Pending remote segment was not found.',
-              recoverability: 'repair',
-            },
-          ],
-        };
+        return missingComplete('Pending remote segment was not found.');
       }
       if (!objectDigestsEqual(existing.mutationSegmentDigest, input.mutationSegmentDigest)) {
         return conflictComplete(
@@ -208,17 +173,7 @@ export class IndexedDbPendingRemoteSegmentStore implements PendingRemoteSegmentS
       await this.putRecord(completed);
       return { status: 'completed', record: completed, diagnostics: [] };
     } catch {
-      return {
-        status: 'failed',
-        record: null,
-        diagnostics: [
-          {
-            code: 'VERSION_PROVIDER_FAILED',
-            message: 'IndexedDB pending remote segment completion failed.',
-            recoverability: 'retry',
-          },
-        ],
-      };
+      return failedComplete('IndexedDB pending remote segment completion failed.');
     }
   }
 

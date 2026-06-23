@@ -10,8 +10,11 @@ import {
   type ListRefsResult,
   type RefMutationResult,
   type RefVersion,
+  type TombstoneRefRecord,
 } from '../ref-store';
+import { compareTombstoneRefs } from '../ref-store-ordering';
 import type { InMemoryRefStoreSnapshot } from '../ref-store-snapshot';
+import { parseRefName } from '../ref-name';
 
 const COMMIT_A = commit('aa');
 const COMMIT_B = commit('bb');
@@ -518,6 +521,98 @@ describe('InMemoryRefStore snapshot revision validation', () => {
   });
 });
 
+describe('InMemoryRefStore W17 lifecycle hardening', () => {
+  it('redacts invalid ref names from mutation diagnostics', () => {
+    const store = createStore();
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+
+    const rawRefName = 'scenario/Secret Branch';
+    const result = store.createBranch({
+      name: rawRefName,
+      targetCommitId: COMMIT_A,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected invalid ref name to fail');
+    expect(result.error.code).toBe('invalidRefName');
+    expect(result.diagnostics.length).toBeGreaterThan(0);
+    expect(result.diagnostics.every((item) => item.details?.redacted === true)).toBe(true);
+    expect(result.diagnostics.map((item) => item.code)).toContain('refName.containsWhitespace');
+    expect(JSON.stringify(result)).not.toContain(rawRefName);
+  });
+
+  it('rejects malformed snapshot ref names with redacted diagnostics', () => {
+    const store = createStore();
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+
+    const rawRefName = 'scenario/Secret Snapshot';
+    const malformedSnapshot = withMalformedRefName(store.exportSnapshot(), 'main', rawRefName);
+
+    expectSnapshotRejectedWithRedactedName(malformedSnapshot, rawRefName);
+  });
+
+  it('normalizes Date clocks and rejects malformed timestamps with redacted diagnostics', () => {
+    const dateStore = createInMemoryRefStore({
+      versionDocumentId: 'version-doc-1',
+      now: () => new Date('2026-06-20T00:00:00.123Z'),
+    });
+    const initialized = dateStore.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR });
+    expectMutationOk(initialized);
+    expect(initialized.ref.createdAt).toBe('2026-06-20T00:00:00.123Z');
+    expect(initialized.ref.updatedAt).toBe('2026-06-20T00:00:00.123Z');
+
+    const rawTimestamp = '2026-02-31T00:00:00.000Z';
+    const invalidClockStore = createInMemoryRefStore({
+      versionDocumentId: 'version-doc-1',
+      now: () => rawTimestamp,
+    });
+
+    expectTimestampRejectedWithRedactedDiagnostics(
+      () => invalidClockStore.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }),
+      'now',
+      rawTimestamp,
+    );
+  });
+
+  it('rejects malformed snapshot timestamps with redacted diagnostics', () => {
+    const store = createStore();
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+
+    const rawTimestamp = '2026-13-20T00:00:00.000Z';
+    const malformedSnapshot = withMalformedTimestamp(
+      store.exportSnapshot(),
+      'main',
+      'createdAt',
+      rawTimestamp,
+    );
+
+    expectTimestampRejectedWithRedactedDiagnostics(
+      () =>
+        createInMemoryRefStore({
+          versionDocumentId: 'version-doc-1',
+          snapshot: malformedSnapshot,
+        }),
+      'record.createdAt',
+      rawTimestamp,
+    );
+  });
+
+  it('keeps tombstone sorting deterministic when a persisted timestamp is malformed', () => {
+    const valid = tombstoneFixture('scenario/valid', '2026-06-20T00:00:00.000Z');
+    const invalidA = tombstoneFixture('scenario/a', 'invalid');
+    const invalidB = tombstoneFixture('scenario/b', 'invalid');
+
+    expect(compareTombstoneRefs(valid, invalidA)).toBeLessThan(0);
+    expect(compareTombstoneRefs(invalidA, valid)).toBeGreaterThan(0);
+    expect([invalidB, invalidA].sort(compareTombstoneRefs).map((record) => record.name)).toEqual([
+      'scenario/a',
+      'scenario/b',
+    ]);
+  });
+});
+
 function createBranch(store: ReturnType<typeof createInMemoryRefStore>, name: string) {
   const result = store.createBranch({
     name,
@@ -527,6 +622,21 @@ function createBranch(store: ReturnType<typeof createInMemoryRefStore>, name: st
   });
   expectCreateOk(result);
   return result.ref;
+}
+
+function withMalformedRefName(
+  snapshot: InMemoryRefStoreSnapshot,
+  existingName: string,
+  nextName: string,
+): InMemoryRefStoreSnapshot {
+  return Object.freeze({
+    ...snapshot,
+    records: Object.freeze(
+      snapshot.records.map((record) =>
+        record.name === existingName ? Object.freeze({ ...record, name: nextName }) : record,
+      ),
+    ),
+  }) as InMemoryRefStoreSnapshot;
 }
 
 function withMalformedRefVersion(
@@ -542,6 +652,46 @@ function withMalformedRefVersion(
       ),
     ),
   });
+}
+
+function withMalformedTimestamp(
+  snapshot: InMemoryRefStoreSnapshot,
+  name: string,
+  field: 'createdAt' | 'updatedAt' | 'deletedAt',
+  value: string,
+): InMemoryRefStoreSnapshot {
+  return Object.freeze({
+    ...snapshot,
+    records: Object.freeze(
+      snapshot.records.map((record) =>
+        record.name === name ? Object.freeze({ ...record, [field]: value }) : record,
+      ),
+    ),
+  }) as InMemoryRefStoreSnapshot;
+}
+
+function expectSnapshotRejectedWithRedactedName(
+  snapshot: InMemoryRefStoreSnapshot,
+  rawRefName: string,
+): void {
+  let caught: unknown;
+  try {
+    createInMemoryRefStore({
+      versionDocumentId: 'version-doc-1',
+      snapshot,
+    });
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(RefStoreValidationError);
+  if (!(caught instanceof RefStoreValidationError)) {
+    throw new Error('expected RefStoreValidationError');
+  }
+  expect(caught.code).toBe('invalidRefName');
+  expect(caught.diagnostics.length).toBeGreaterThan(0);
+  expect(caught.diagnostics.every((item) => item.details?.redacted === true)).toBe(true);
+  expect(JSON.stringify(caught.diagnostics)).not.toContain(rawRefName);
 }
 
 function expectSnapshotRejectedWithRedactedRevision(
@@ -573,4 +723,50 @@ function expectSnapshotRejectedWithRedactedRevision(
     },
   });
   expect(JSON.stringify(caught.diagnostics)).not.toContain('01');
+}
+
+function expectTimestampRejectedWithRedactedDiagnostics(
+  run: () => unknown,
+  expectedPath: string,
+  rawTimestamp: string,
+): void {
+  let caught: unknown;
+  try {
+    run();
+  } catch (error) {
+    caught = error;
+  }
+
+  expect(caught).toBeInstanceOf(RefStoreValidationError);
+  if (!(caught instanceof RefStoreValidationError)) {
+    throw new Error('expected RefStoreValidationError');
+  }
+  expect(caught.code).toBe('versionCapabilityDisabled');
+  expect(caught.diagnostics).toEqual([
+    expect.objectContaining({
+      code: 'invalidTimestamp',
+      severity: 'error',
+      details: expect.objectContaining({
+        path: expectedPath,
+        redacted: true,
+      }),
+    }),
+  ]);
+  expect(JSON.stringify(caught.diagnostics)).not.toContain(rawTimestamp);
+}
+
+function tombstoneFixture(name: string, deletedAt: string): TombstoneRefRecord {
+  return Object.freeze({
+    state: 'tombstone',
+    schemaVersion: 1,
+    versionDocumentId: 'version-doc-1',
+    name: parseRefName(name),
+    previousTargetCommitId: COMMIT_A,
+    previousProviderRefId: 'provider-ref:version-doc-1:1',
+    previousProviderEpoch: Object.freeze({ kind: 'counter', value: '0' }),
+    previousRefIncarnationId: 'ref-incarnation:version-doc-1:2',
+    deletedAt,
+    deletedBy: AUTHOR,
+    refVersion: refVersion('1'),
+  });
 }

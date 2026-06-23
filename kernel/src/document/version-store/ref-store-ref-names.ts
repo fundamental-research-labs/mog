@@ -5,6 +5,7 @@ import {
   type RefNameDiagnostic,
   type RefNamespace,
 } from './ref-name';
+import { redactedDiagnostic } from './ref-store-diagnostics';
 import type { VersionDiagnostic } from './ref-store';
 
 export type ParsedRefNameResult =
@@ -40,24 +41,16 @@ export function isCanonicalRefNamespace(value: unknown): value is RefNamespace {
 function refNameDiagnosticsToVersionDiagnostics(
   diagnostics: readonly RefNameDiagnostic[],
 ): readonly VersionDiagnostic[] {
-  return diagnostics.map((item) =>
-    diagnostic(item.code, item.message, item.value, {
+  return diagnostics.map((item) => {
+    const details: Record<string, string | boolean> = {
       issue: item.issue,
-    }),
-  );
-}
-
-function diagnostic(
-  code: string,
-  message: string,
-  refName?: string,
-  details?: Record<string, string | boolean>,
-): VersionDiagnostic {
-  return Object.freeze({
-    code,
-    severity: 'error',
-    message,
-    refName,
-    details: details === undefined ? undefined : Object.freeze({ ...details }),
+    };
+    if (item.byteLength !== undefined) {
+      details.byteLength = String(item.byteLength);
+    }
+    if (item.maxByteLength !== undefined) {
+      details.maxByteLength = String(item.maxByteLength);
+    }
+    return redactedDiagnostic(item.code, item.message, details);
   });
 }

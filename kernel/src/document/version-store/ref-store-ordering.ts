@@ -1,14 +1,14 @@
 import type { LiveRefRecord, TombstoneRefRecord } from './ref-store';
+import { compareRfc3339MillisecondsDescending } from './ref-store-timestamps';
 
 export function compareLiveRefs(left: LiveRefRecord, right: LiveRefRecord): number {
   return compareAscii(left.name, right.name);
 }
 
 export function compareTombstoneRefs(left: TombstoneRefRecord, right: TombstoneRefRecord): number {
-  const leftDeletedAt = Date.parse(left.deletedAt);
-  const rightDeletedAt = Date.parse(right.deletedAt);
-  if (leftDeletedAt !== rightDeletedAt) {
-    return rightDeletedAt - leftDeletedAt;
+  const deletedAtCompare = compareRfc3339MillisecondsDescending(left.deletedAt, right.deletedAt);
+  if (deletedAtCompare !== 0) {
+    return deletedAtCompare;
   }
 
   const nameCompare = compareAscii(left.name, right.name);

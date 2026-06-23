@@ -1,6 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { parseWorkbookCommitId, type ObjectDigest, type WorkbookCommitId } from './object-digest';
+import { diagnostic, failure, tombstoneDiagnostic } from './ref-store-diagnostics';
 import { compareAscii, compareLiveRefs, compareTombstoneRefs } from './ref-store-ordering';
 import {
   isCanonicalRefNamespace,
@@ -25,6 +26,11 @@ import {
   parseRefVersion,
   refVersionsEqual,
 } from './ref-store-revisions';
+import {
+  normalizeLiveRefRecordTimestamps,
+  normalizeRfc3339Milliseconds,
+  normalizeTombstoneRefRecordTimestamp,
+} from './ref-store-timestamps';
 export {
   RefStoreValidationError,
   encodeRefVersionKey,
@@ -250,8 +256,6 @@ export interface InMemoryRefStoreOptions {
   readonly snapshot?: InMemoryRefStoreSnapshot;
 }
 
-const RFC3339_MILLISECONDS_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-
 export class InMemoryRefStore {
   private readonly records = new Map<string, RefRecord>();
   private readonly versionDocumentId: string;
@@ -265,14 +269,28 @@ export class InMemoryRefStore {
     this.nowFn = options.now ?? (() => new Date());
     if (options.snapshot) {
       for (const record of options.snapshot.records) {
+        const parsedName = parseCanonicalRefName(record.name);
+        if (!parsedName.ok) {
+          throw new RefStoreValidationError(
+            'invalidRefName',
+            'Invalid ref name in snapshot.',
+            parsedName.diagnostics,
+          );
+        }
         if (record.versionDocumentId !== this.versionDocumentId) {
           throw new RefStoreValidationError('invalidRefName', 'Ref snapshot document mismatch.', [
             diagnostic('invalidRefName', 'Ref snapshot document mismatch.'),
           ]);
         }
+        const normalizedRecord =
+          record.state === 'live'
+            ? normalizeLiveRefRecordTimestamps({ ...record, name: parsedName.name })
+            : normalizeTombstoneRefRecordTimestamp({ ...record, name: parsedName.name });
         this.records.set(
-          record.name,
-          record.state === 'live' ? cloneLiveRefRecord(record) : cloneTombstoneRefRecord(record),
+          parsedName.name,
+          normalizedRecord.state === 'live'
+            ? cloneLiveRefRecord(normalizedRecord)
+            : cloneTombstoneRefRecord(normalizedRecord),
         );
       }
       this.liveRefCount = [...this.records.values()].filter(
@@ -398,10 +416,7 @@ export class InMemoryRefStore {
 
   getRef(name: RefName | string): GetRefResult;
   getRef(name: RefName | string, options: GetRefOptions): GetRefResult;
-  getRef(
-    name: RefName | string,
-    options: GetRefWithTombstoneOptions,
-  ): GetRefWithTombstoneResult;
+  getRef(name: RefName | string, options: GetRefWithTombstoneOptions): GetRefWithTombstoneResult;
   getRef(
     name: RefName | string,
     options: GetRefOptions | GetRefWithTombstoneOptions = {},
@@ -607,7 +622,7 @@ export class InMemoryRefStore {
   }
 
   private now(): string {
-    return normalizeRfc3339Milliseconds(this.nowFn());
+    return normalizeRfc3339Milliseconds(this.nowFn(), 'now');
   }
 
   private createLiveRef(input: {
@@ -769,11 +784,7 @@ function refAlreadyExists(record: LiveRefRecord): RefFailureResult {
 
 function refTombstoned(record: TombstoneRefRecord): RefFailureResult {
   const diagnostics = [
-    tombstoneDiagnostic(
-      record,
-      'refTombstoned',
-      `Ref ${record.name} is tombstoned.`,
-    ),
+    tombstoneDiagnostic(record, 'refTombstoned', `Ref ${record.name} is tombstoned.`),
   ];
   return failure('refTombstoned', `Ref ${record.name} is tombstoned.`, diagnostics, {
     code: 'refTombstoned',
@@ -799,13 +810,7 @@ function expectedTombstoneRefVersionMismatch(
   return failure(
     'expectedRefVersionMismatch',
     message,
-    [
-      tombstoneDiagnostic(
-        record,
-        'expectedRefVersionMismatch',
-        message,
-      ),
-    ],
+    [tombstoneDiagnostic(record, 'expectedRefVersionMismatch', message)],
     {
       code: 'expectedRefVersionMismatch',
       expectedRefVersion: cloneRefVersion(expectedRefVersion),
@@ -825,12 +830,9 @@ function expectedPreviousRefIncarnationIdMismatch(
     'expectedPreviousRefIncarnationIdMismatch',
     message,
     [
-      tombstoneDiagnostic(
-        record,
-        'expectedPreviousRefIncarnationIdMismatch',
-        message,
-        { expectedPreviousRefIncarnationId },
-      ),
+      tombstoneDiagnostic(record, 'expectedPreviousRefIncarnationIdMismatch', message, {
+        expectedPreviousRefIncarnationId,
+      }),
     ],
     {
       code: 'expectedPreviousRefIncarnationIdMismatch',
@@ -908,84 +910,4 @@ function expectedRefVersionMismatch(
       actualRefIncarnationId: record.refIncarnationId,
     },
   );
-}
-
-function failure(
-  code: VersionErrorCode,
-  message: string,
-  diagnostics: readonly VersionDiagnostic[],
-  conflict?: RefMutationConflict,
-): RefFailureResult {
-  return {
-    ok: false,
-    error: {
-      code,
-      message,
-      diagnostics,
-    },
-    conflict,
-    diagnostics,
-  };
-}
-
-function diagnostic(
-  code: string,
-  message: string,
-  refName?: string,
-  commitId?: WorkbookCommitId,
-  refVersion?: RefVersion,
-  refIncarnationId?: string,
-  previousRefIncarnationId?: string,
-  tombstoneRefVersion?: RefVersion,
-  details?: Record<string, string | boolean>,
-): VersionDiagnostic {
-  return Object.freeze({
-    code,
-    severity: 'error',
-    message,
-    refName,
-    commitId,
-    refVersion: refVersion === undefined ? undefined : cloneRefVersion(refVersion),
-    refIncarnationId,
-    previousRefIncarnationId,
-    tombstoneRefVersion:
-      tombstoneRefVersion === undefined ? undefined : cloneRefVersion(tombstoneRefVersion),
-    details: details === undefined ? undefined : Object.freeze({ ...details }),
-  });
-}
-
-function tombstoneDiagnostic(
-  record: TombstoneRefRecord,
-  code: string,
-  message: string,
-  details?: Record<string, string | boolean>,
-): VersionDiagnostic {
-  return diagnostic(
-    code,
-    message,
-    record.name,
-    record.previousTargetCommitId,
-    record.refVersion,
-    undefined,
-    record.previousRefIncarnationId,
-    record.refVersion,
-    details,
-  );
-}
-
-function normalizeRfc3339Milliseconds(value: Date | string): string {
-  const timestamp = typeof value === 'string' ? value : value.toISOString();
-  if (!RFC3339_MILLISECONDS_RE.test(timestamp)) {
-    throw new RefStoreValidationError(
-      'versionCapabilityDisabled',
-      'Ref store clock must return an RFC 3339 UTC timestamp with millisecond precision.',
-      [
-        diagnostic(
-          'invalidTimestamp',
-          'Ref store clock must return an RFC 3339 UTC timestamp with millisecond precision.',
-        ),
-      ],
-    );
-  }
-  return timestamp;
 }

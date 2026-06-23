@@ -26,6 +26,7 @@ export type WorkbookVersionProvenanceTruthRequirement =
   | 'providerInboundUpdateEnvelopeValidation'
   | 'rawAndLegacySyncClassification'
   | 'syncApplyAdmissionContext'
+  | 'providerCycleEvidence'
   | 'appliedSyncUpdateIdentityStore'
   | 'syncBatchStatusStore'
   | 'pendingRemoteSegmentStore'
@@ -63,6 +64,10 @@ export type WorkbookVersionProvenanceStatusClassification =
 export type WorkbookVersionProvenanceStatusProjectionItem = {
   readonly classification: WorkbookVersionProvenanceStatusClassification;
   readonly publicStatusCode: `version.provenanceAdmission.status.${WorkbookVersionProvenanceStatusClassification}`;
+  readonly safe: false;
+  readonly complete: false;
+  readonly projectedSafety: 'unsafe';
+  readonly projectedCompleteness: 'blocked';
   readonly redaction: 'classification-only';
   readonly rawProviderMaterialIncluded: false;
   readonly rawClientMaterialIncluded: false;
@@ -76,6 +81,24 @@ export type WorkbookVersionProvenanceStatusProjection = {
   readonly source: 'provider-backed-sync-provenance-status';
   readonly redaction: 'classification-only';
   readonly classifications: readonly WorkbookVersionProvenanceStatusProjectionItem[];
+};
+
+export type WorkbookVersionProvenanceProviderCycleEvidence = {
+  readonly schemaVersion: 1;
+  readonly source: 'vc09-provider-cycle-evidence';
+  readonly redaction: 'classification-only';
+  readonly providerInboundUpdateEnvelopeValidation: true;
+  readonly rawAndLegacySyncClassification: true;
+  readonly syncApplyAdmissionContext: true;
+  readonly appliedSyncUpdateIdentityStore: true;
+  readonly syncBatchStatusStore: true;
+  readonly pendingRemoteSegmentCapture: true;
+  readonly pendingRemotePromotionService: true;
+  readonly providerWriteActivityTracker: true;
+  readonly mixedRemoteProjectsAsBlocked: true;
+  readonly blockedBatchFailureProjectsAsBlocked: true;
+  readonly rawProviderMaterialIncluded: false;
+  readonly rawClientMaterialIncluded: false;
 };
 
 type PendingRemotePromotionServiceLike = Pick<
@@ -125,6 +148,7 @@ export function providerBackedWorkbookVersionProvenanceTruth(
       hasRawAndLegacySyncClassification(options.snapshotRootByteSyncPort),
     ),
     requirement('syncApplyAdmissionContext', typeof createAdmittedSyncApplyContext === 'function'),
+    requirement('providerCycleEvidence', hasProviderCycleEvidence(options)),
     requirement(
       'appliedSyncUpdateIdentityStore',
       hasAppliedSyncUpdateIdentityStoreProvider(provider),
@@ -238,6 +262,53 @@ function isSnapshotRootByteSyncPort(
   return isRecord(value) && typeof value.encodeDiff === 'function';
 }
 
+function hasProviderCycleEvidence(
+  options: ProviderBackedWorkbookVersionProvenanceTruthServiceOptions,
+): boolean {
+  return [
+    options.snapshotRootByteSyncPort,
+    options.semanticMutationCapture,
+    options.pendingRemotePromotionService,
+    options.providerWriteActivityTracker,
+    options.provider,
+  ].some((candidate) =>
+    isWorkbookVersionProvenanceProviderCycleEvidence(providerCycleEvidenceFrom(candidate)),
+  );
+}
+
+function providerCycleEvidenceFrom(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return (
+    value.vc09ProviderCycleEvidence ??
+    value.providerCycleEvidence ??
+    value.provenanceProviderCycleEvidence ??
+    value
+  );
+}
+
+function isWorkbookVersionProvenanceProviderCycleEvidence(
+  value: unknown,
+): value is WorkbookVersionProvenanceProviderCycleEvidence {
+  return (
+    isRecord(value) &&
+    value.schemaVersion === 1 &&
+    value.source === 'vc09-provider-cycle-evidence' &&
+    value.redaction === 'classification-only' &&
+    value.providerInboundUpdateEnvelopeValidation === true &&
+    value.rawAndLegacySyncClassification === true &&
+    value.syncApplyAdmissionContext === true &&
+    value.appliedSyncUpdateIdentityStore === true &&
+    value.syncBatchStatusStore === true &&
+    value.pendingRemoteSegmentCapture === true &&
+    value.pendingRemotePromotionService === true &&
+    value.providerWriteActivityTracker === true &&
+    value.mixedRemoteProjectsAsBlocked === true &&
+    value.blockedBatchFailureProjectsAsBlocked === true &&
+    value.rawProviderMaterialIncluded === false &&
+    value.rawClientMaterialIncluded === false
+  );
+}
+
 function isPendingRemotePromotionService(
   value: PendingRemotePromotionServiceLike | undefined,
   providerWriteActivityTracker: VersionProviderWriteActivityTracker | undefined,
@@ -322,6 +393,10 @@ function statusProjectionItem(
   return Object.freeze({
     classification,
     publicStatusCode: `version.provenanceAdmission.status.${classification}`,
+    safe: false,
+    complete: false,
+    projectedSafety: 'unsafe',
+    projectedCompleteness: 'blocked',
     redaction: 'classification-only',
     rawProviderMaterialIncluded: false,
     rawClientMaterialIncluded: false,
@@ -394,7 +469,7 @@ function provenanceStatusDiagnostic(
 ): WorkbookVersionDiagnostic {
   return Object.freeze({
     code: item.publicStatusCode,
-    severity: 'info',
+    severity: 'warning',
     message: provenanceStatusDiagnosticMessage(item.classification),
     dependency: 'version-service',
     data: provenanceStatusDiagnosticData(item),
@@ -424,6 +499,10 @@ function provenanceStatusDiagnosticData(
   return {
     requiredSlice: 'VC-09',
     classification: item.classification,
+    safe: item.safe,
+    complete: item.complete,
+    projectedSafety: item.projectedSafety,
+    projectedCompleteness: item.projectedCompleteness,
     redaction: item.redaction,
     rawProviderMaterialIncluded: item.rawProviderMaterialIncluded,
     rawClientMaterialIncluded: item.rawClientMaterialIncluded,

@@ -19,6 +19,23 @@ const PROVENANCE_STATUS_CODES = [
   'version.provenanceAdmission.status.quarantine',
   'version.provenanceAdmission.status.disconnect',
 ] as const;
+const PROVIDER_CYCLE_EVIDENCE = Object.freeze({
+  schemaVersion: 1,
+  source: 'vc09-provider-cycle-evidence',
+  redaction: 'classification-only',
+  providerInboundUpdateEnvelopeValidation: true,
+  rawAndLegacySyncClassification: true,
+  syncApplyAdmissionContext: true,
+  appliedSyncUpdateIdentityStore: true,
+  syncBatchStatusStore: true,
+  pendingRemoteSegmentCapture: true,
+  pendingRemotePromotionService: true,
+  providerWriteActivityTracker: true,
+  mixedRemoteProjectsAsBlocked: true,
+  blockedBatchFailureProjectsAsBlocked: true,
+  rawProviderMaterialIncluded: false,
+  rawClientMaterialIncluded: false,
+});
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
@@ -36,7 +53,9 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
-function createDocumentByteSyncPortStub() {
+function createDocumentByteSyncPortStub(
+  options: { readonly providerCycleEvidence?: boolean } = {},
+) {
   return {
     docId: DOCUMENT_SCOPE.documentId,
     applyUpdate: jest.fn(async () => undefined),
@@ -45,6 +64,9 @@ function createDocumentByteSyncPortStub() {
     applyUpdateWithProvenance: jest.fn(async () => undefined),
     applyProviderEnvelope: jest.fn(async () => undefined),
     applyClassifiedRawUpdate: jest.fn(async () => undefined),
+    ...(options.providerCycleEvidence
+      ? { vc09ProviderCycleEvidence: PROVIDER_CYCLE_EVIDENCE }
+      : {}),
   };
 }
 
@@ -122,7 +144,7 @@ describe('WorkbookVersion provenance status', () => {
   it('advertises provenance from the real provider-backed VC09 truth attachment', async () => {
     const ctx = createMockCtx();
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const syncPort = createDocumentByteSyncPortStub();
+    const syncPort = createDocumentByteSyncPortStub({ providerCycleEvidence: true });
 
     attachWorkbookVersioning(ctx, {
       provider,
@@ -177,6 +199,10 @@ describe('WorkbookVersion provenance status', () => {
               redaction: 'classification-only',
               rawProviderMaterialIncluded: false,
               rawClientMaterialIncluded: false,
+              safe: false,
+              complete: false,
+              projectedSafety: 'unsafe',
+              projectedCompleteness: 'blocked',
             }),
           }),
         ]),
@@ -184,6 +210,43 @@ describe('WorkbookVersion provenance status', () => {
     }
     expect(syncPort.encodeDiff).not.toHaveBeenCalled();
     expect(syncPort.applyProviderEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('does not attach complete provider-backed truth without provider-cycle evidence', async () => {
+    const ctx = createMockCtx();
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const syncPort = createDocumentByteSyncPortStub();
+
+    attachWorkbookVersioning(ctx, {
+      provider,
+      snapshotRootByteSyncPort: syncPort,
+    });
+
+    const versioning = ctx.versioning as {
+      readonly provenanceTruthService?: unknown;
+      readonly pendingRemotePromotionService?: unknown;
+    };
+    expect(versioning.pendingRemotePromotionService).toBeDefined();
+    expect(versioning.provenanceTruthService).toBeUndefined();
+
+    const status = await new WorkbookVersionImpl(ctx).getStatus();
+
+    expect(status.rolloutStage).toBe('disabled');
+    expect(status.provenanceAdmission).toMatchObject({
+      stage: 'unavailable',
+      available: false,
+    });
+    expect(status.provenanceAdmission.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.vc09TruthUnavailable',
+          data: expect.objectContaining({
+            pendingRemotePromotionServiceAttached: true,
+          }),
+        }),
+      ]),
+    );
+    expect(syncPort.encodeDiff).not.toHaveBeenCalled();
   });
 
   it('projects only redaction-safe provenance status classifications', async () => {
@@ -199,17 +262,29 @@ describe('WorkbookVersion provenance status', () => {
               classifications: [
                 {
                   classification: 'blockedBatchFailure',
+                  safe: true,
+                  complete: true,
                   providerRefId: 'provider-secret-ref',
                   payloadHash: 'raw-payload-hash',
+                  updateId: 'raw-sync-update-id',
+                  batchId: 'raw-sync-batch-id',
+                  batchStatusId: 'raw-sync-batch-status-id',
                 },
                 {
                   classification: 'mixedRemote',
+                  safe: true,
+                  complete: true,
                   remoteSessionId: 'client-secret-session',
                   correlationId: 'client-secret-correlation',
+                  stableOriginId: 'raw-stable-origin-id',
+                  providerEpoch: 'raw-provider-epoch',
+                  roomId: 'raw-sync-room-id',
+                  sequence: 'raw-sync-sequence',
                 },
                 {
                   classification: 'legacyRawUnknown',
                   providerId: 'provider-secret-id',
+                  orderedSubUpdatePayloadHashes: ['raw-sub-update-payload-hash'],
                 },
                 {
                   classification: 'quarantine',
@@ -248,6 +323,10 @@ describe('WorkbookVersion provenance status', () => {
           data: expect.objectContaining({
             classification: 'blockedBatchFailure',
             commitGrouping: 'blockedBatchFailure',
+            safe: false,
+            complete: false,
+            projectedSafety: 'unsafe',
+            projectedCompleteness: 'blocked',
           }),
         }),
         expect.objectContaining({
@@ -255,6 +334,10 @@ describe('WorkbookVersion provenance status', () => {
           data: expect.objectContaining({
             classification: 'mixedRemote',
             commitGrouping: 'blockedMixedRemote',
+            safe: false,
+            complete: false,
+            projectedSafety: 'unsafe',
+            projectedCompleteness: 'blocked',
           }),
         }),
         expect.objectContaining({
@@ -262,6 +345,10 @@ describe('WorkbookVersion provenance status', () => {
           data: expect.objectContaining({
             classification: 'legacyRawUnknown',
             sourceKind: 'legacyRawUnknown',
+            safe: false,
+            complete: false,
+            projectedSafety: 'unsafe',
+            projectedCompleteness: 'blocked',
           }),
         }),
         expect.objectContaining({
@@ -269,6 +356,10 @@ describe('WorkbookVersion provenance status', () => {
           data: expect.objectContaining({
             classification: 'quarantine',
             lifecycleClassification: 'quarantine',
+            safe: false,
+            complete: false,
+            projectedSafety: 'unsafe',
+            projectedCompleteness: 'blocked',
           }),
         }),
         expect.objectContaining({
@@ -276,6 +367,10 @@ describe('WorkbookVersion provenance status', () => {
           data: expect.objectContaining({
             classification: 'disconnect',
             lifecycleClassification: 'disconnect',
+            safe: false,
+            complete: false,
+            projectedSafety: 'unsafe',
+            projectedCompleteness: 'blocked',
           }),
         }),
       ]),
@@ -285,9 +380,17 @@ describe('WorkbookVersion provenance status', () => {
     for (const rawMaterial of [
       'provider-secret-ref',
       'raw-payload-hash',
+      'raw-sync-update-id',
+      'raw-sync-batch-id',
+      'raw-sync-batch-status-id',
       'client-secret-session',
       'client-secret-correlation',
+      'raw-stable-origin-id',
+      'raw-provider-epoch',
+      'raw-sync-room-id',
+      'raw-sync-sequence',
       'provider-secret-id',
+      'raw-sub-update-payload-hash',
       'provider-secret-quarantine',
       'client-secret-id',
       'provider-secret-future',

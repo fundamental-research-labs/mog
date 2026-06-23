@@ -282,9 +282,10 @@ export function ReviewRibbon() {
   }, [deps]);
 
   const handleOpenVersionHistory = useCallback(() => {
+    if (!versionControlEnabled) return;
     setSidePanelContent('version-history');
     setSidePanelVisible(true);
-  }, [setSidePanelContent, setSidePanelVisible]);
+  }, [setSidePanelContent, setSidePanelVisible, versionControlEnabled]);
 
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
@@ -475,6 +476,8 @@ export function ReviewRibbon() {
             icon={<VersionHistoryIcon size={16} strokeWidth={1.75} />}
             label={'Version\nHistory'}
             onClick={handleOpenVersionHistory}
+            data-testid="review-version-history"
+            data-action="open-version-history"
             title="Version History"
             aria-label="Version History"
           />

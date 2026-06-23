@@ -110,17 +110,27 @@ function SidePanelImpl() {
   }, [setCommentsPanelVisible]);
 
   const handleOpenVersionHistory = useCallback(() => {
+    if (!versionControlEnabled) return;
     uiStore.getState().setSidePanelContent('version-history');
-  }, [uiStore]);
+  }, [uiStore, versionControlEnabled]);
 
   const handleOpenExtensions = useCallback(() => {
     dispatch('TOGGLE_EXTENSION_PANEL', deps);
   }, [deps]);
 
-  if (sidePanelContent === 'formula-references') {
+  useEffect(() => {
+    if (!versionControlEnabled && sidePanelContent === 'version-history') {
+      uiStore.getState().setSidePanelContent('index');
+    }
+  }, [sidePanelContent, uiStore, versionControlEnabled]);
+
+  const effectiveSidePanelContent =
+    !versionControlEnabled && sidePanelContent === 'version-history' ? 'index' : sidePanelContent;
+
+  if (effectiveSidePanelContent === 'formula-references') {
     return <FormulaReferenceDiagnosticsPanel onClose={handleClose} />;
   }
-  if (sidePanelContent === 'version-history' && versionControlEnabled) {
+  if (effectiveSidePanelContent === 'version-history') {
     return <VersionHistoryPanel onClose={handleClose} />;
   }
 
@@ -164,7 +174,11 @@ function SidePanelImpl() {
           <button
             type="button"
             onClick={handleOpenVersionHistory}
+            data-testid="panel-side-version-history"
+            data-action="open-version-history"
             className="w-full text-left px-3 py-2 rounded text-body-sm text-ss-text hover:bg-ss-surface-hover"
+            aria-label="Open Version History"
+            title="Open Version History"
           >
             Version History
           </button>

@@ -1,4 +1,4 @@
-import type { LiveRefRecord, TombstoneRefRecord } from './ref-store';
+import type { LiveRefRecord, TombstoneRefRecord } from './ref-store-types';
 import { compareRfc3339MillisecondsDescending } from './ref-store-timestamps';
 
 export function compareLiveRefs(left: LiveRefRecord, right: LiveRefRecord): number {

@@ -7,7 +7,7 @@ import type {
   TombstoneRefRecord,
   VersionDiagnostic,
   VersionErrorCode,
-} from './ref-store';
+} from './ref-store-types';
 
 const REF_VERSION_VALUE_RE = /^(0|[1-9][0-9]*)$/;
 

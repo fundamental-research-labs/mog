@@ -2,7 +2,7 @@ import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
 import { diagnostic, failure } from './ref-store-diagnostics';
 import { parseCanonicalRefName } from './ref-store-ref-names';
 import { RefStoreValidationError, parseRefVersion } from './ref-store-revisions';
-import type { RefFailureResult, RefVersion } from './ref-store';
+import type { RefFailureResult, RefVersion } from './ref-store-types';
 import type { RefName } from './ref-name';
 
 export function parseRefNameForResult(

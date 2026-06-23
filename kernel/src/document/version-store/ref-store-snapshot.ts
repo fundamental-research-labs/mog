@@ -1,4 +1,4 @@
-import type { RefRecord } from './ref-store';
+import type { RefRecord } from './ref-store-types';
 
 export type InMemoryRefStoreSnapshot = {
   readonly records: readonly RefRecord[];

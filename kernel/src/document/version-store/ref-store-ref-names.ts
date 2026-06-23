@@ -6,7 +6,7 @@ import {
   type RefNamespace,
 } from './ref-name';
 import { redactedDiagnostic } from './ref-store-diagnostics';
-import type { VersionDiagnostic } from './ref-store';
+import type { VersionDiagnostic } from './ref-store-types';
 
 export type ParsedRefNameResult =
   | { readonly ok: true; readonly name: RefName }

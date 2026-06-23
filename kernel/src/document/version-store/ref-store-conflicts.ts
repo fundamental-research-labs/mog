@@ -2,7 +2,7 @@ import type { WorkbookCommitId } from './object-digest';
 import type { RefName } from './ref-name';
 import { diagnostic, failure } from './ref-store-diagnostics';
 import { cloneRefVersion } from './ref-store-revisions';
-import type { LiveRefRecord, RefFailureResult, RefVersion } from './ref-store';
+import type { LiveRefRecord, RefFailureResult, RefVersion } from './ref-store-types';
 
 export function refAlreadyExists(record: LiveRefRecord): RefFailureResult {
   const diagnostics = [

@@ -6,7 +6,7 @@ import type {
   TombstoneRefRecord,
   VersionDiagnostic,
   VersionErrorCode,
-} from './ref-store';
+} from './ref-store-types';
 import { cloneRefVersion } from './ref-store-revisions';
 
 export function failure(

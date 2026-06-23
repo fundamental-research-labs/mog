@@ -1,4 +1,4 @@
-import type { LiveRefRecord, TombstoneRefRecord } from './ref-store';
+import type { LiveRefRecord, TombstoneRefRecord } from './ref-store-types';
 import { redactedDiagnostic } from './ref-store-diagnostics';
 import { RefStoreValidationError } from './ref-store-revisions';
 

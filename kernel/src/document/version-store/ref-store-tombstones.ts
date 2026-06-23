@@ -1,7 +1,7 @@
 import { failure, tombstoneDiagnostic } from './ref-store-diagnostics';
 import { cloneRefVersion, isPlainRecord, refVersionsEqual } from './ref-store-revisions';
 import { parseRefVersionForResult } from './ref-store-validation';
-import type { RefFailureResult, RefVersion, TombstoneRefRecord } from './ref-store';
+import type { RefFailureResult, RefVersion, TombstoneRefRecord } from './ref-store-types';
 
 export function validateTombstoneReuseMetadata(
   record: TombstoneRefRecord,

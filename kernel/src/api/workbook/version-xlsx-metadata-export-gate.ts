@@ -15,7 +15,9 @@ import type { MogWorkbookVersionXlsxMetadata } from './xlsx-version-metadata';
 const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 const METADATA_EXPORT_OPERATION = 'workbook.toXlsx';
 const METADATA_EXPORT_BLOCKED_ISSUE_CODE = 'VERSION_XLSX_METADATA_EXPORT_BLOCKED';
+const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const OBJECT_DIGEST_RE = /^[0-9a-f]{64}$/;
+const REF_REVISION_COUNTER_RE = /^(0|[1-9][0-9]*)$/;
 export const MOG_VERSION_METADATA_REDACTION_POLICY = 'commit-document-and-object-digests-only';
 export const REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS = [
   'authors',
@@ -158,7 +160,10 @@ export function authorizeMetadataSinkWrite(
 ):
   | { readonly ok: true; readonly value: MogVersionMetadataExportSinkAuthorization }
   | { readonly ok: false; readonly reason: MogVersionMetadataExportBlockReason } {
-  if (metadata.diagnostics.length !== 0) {
+  if (!hasVersionMetadataExportEnvelope(metadata)) {
+    return { ok: false, reason: 'redaction-failed' };
+  }
+  if (!hasRedactedDiagnostics(metadata)) {
     return { ok: false, reason: 'redaction-failed' };
   }
   if (!metadata.head) {
@@ -202,10 +207,28 @@ export function authorizeMetadataSinkWrite(
   };
 }
 
+function hasVersionMetadataExportEnvelope(metadata: MogWorkbookVersionXlsxMetadata): boolean {
+  return (
+    metadata.schemaVersion === 'mog.workbookVersion.xlsxMetadata.v1' &&
+    isNonEmptyString(metadata.exportedAt) &&
+    !Number.isNaN(Date.parse(metadata.exportedAt)) &&
+    isNonEmptyString(metadata.documentId) &&
+    (metadata.workspaceId === undefined || isNonEmptyString(metadata.workspaceId)) &&
+    isRecord(metadata.redaction) &&
+    typeof metadata.redaction.policy === 'string' &&
+    Array.isArray(metadata.redaction.omitted)
+  );
+}
+
+function hasRedactedDiagnostics(metadata: MogWorkbookVersionXlsxMetadata): boolean {
+  return Array.isArray(metadata.diagnostics) && metadata.diagnostics.length === 0;
+}
+
 function hasVersionMetadataHeadAuthority(
   head: NonNullable<MogWorkbookVersionXlsxMetadata['head']>,
 ): boolean {
   return (
+    isWorkbookCommitId(head.commitId) &&
     isNonEmptyString(head.refName) &&
     isNonEmptyString(head.resolvedFrom) &&
     isVersionRecordRevision(head.refRevision)
@@ -259,9 +282,14 @@ function versionRecordRevisionMatches(
 function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHead['refRevision']> {
   return (
     isRecord(value) &&
-    (value.kind === 'counter' || value.kind === 'opaque') &&
-    typeof value.value === 'string'
+    typeof value.value === 'string' &&
+    ((value.kind === 'counter' && REF_REVISION_COUNTER_RE.test(value.value)) ||
+      (value.kind === 'opaque' && value.value.length > 0))
   );
+}
+
+function isWorkbookCommitId(value: unknown): value is VersionHead['id'] {
+  return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value);
 }
 
 function isObjectDigest(value: unknown): value is ObjectDigest {

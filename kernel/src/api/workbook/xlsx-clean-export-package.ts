@@ -5,6 +5,7 @@ export type XlsxCleanExportPackageDiagnosticCode =
   | 'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT'
   | 'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT'
   | 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT'
+  | 'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT'
   | 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT'
   | 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER'
   | 'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER'
@@ -15,6 +16,7 @@ export type XlsxCleanExportPackageDiagnosticCategory =
   | 'activeX'
   | 'oleOrEmbeddedExecutable'
   | 'externalDataConnection'
+  | 'externalRelationship'
   | 'customXmlMetadata'
   | 'encryptedPackage'
   | 'digitalSignature'
@@ -215,6 +217,11 @@ const CLEAN_EXPORT_DIAGNOSTIC_DEFINITIONS: ReadonlyArray<
     severity: 'error',
   },
   {
+    code: 'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT',
+    category: 'externalRelationship',
+    severity: 'error',
+  },
+  {
     code: 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT',
     category: 'customXmlMetadata',
     severity: 'error',
@@ -314,6 +321,9 @@ function scanRelationshipsXml(
     const type = xmlAttribute(tag, 'Type') ?? '';
     const target = xmlAttribute(tag, 'Target') ?? '';
     const targetMode = xmlAttribute(tag, 'TargetMode') ?? '';
+    if (isExternalRelationship(target, targetMode)) {
+      addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT');
+    }
     scanRelationshipTypeAndTarget(type, target, counts);
     if (target.length === 0 || targetMode.toLowerCase() === 'external') continue;
 
@@ -340,7 +350,8 @@ function scanContentType(
     normalized.includes('macrosheet') ||
     normalized.includes('dialogsheet') ||
     normalized.includes('customui') ||
-    normalized.includes('webextension')
+    normalized.includes('webextension') ||
+    normalized.includes('office.addin')
   ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
@@ -367,7 +378,11 @@ function scanContentType(
   if (normalized.includes('encryptedpackage') || normalized.includes('encryptioninfo')) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER');
   }
-  if (normalized.includes('digital-signature') || normalized.includes('xmlsignature')) {
+  if (
+    normalized.includes('digital-signature') ||
+    normalized.includes('xmlsignature') ||
+    normalized.includes('vbaprojectsignature')
+  ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER');
   }
 }
@@ -388,6 +403,7 @@ function scanRelationshipTypeAndTarget(
     normalizedType.endsWith('/macrosheet') ||
     normalizedType.endsWith('/dialogsheet') ||
     normalizedType.includes('/ui/extensibility') ||
+    normalizedType.includes('/office.addin') ||
     normalizedType.includes('/webextension') ||
     isMacroAdjacentActiveContentPath(normalizedTarget)
   ) {
@@ -401,6 +417,7 @@ function scanRelationshipTypeAndTarget(
   }
   if (
     normalizedType.includes('/oleobject') ||
+    normalizedType.includes('/oleobjects') ||
     (normalizedType.endsWith('/package') &&
       (hasUnsafeExecutablePackageExtension(normalizedTarget) ||
         normalizedTarget.includes('/embeddings/'))) ||
@@ -411,6 +428,8 @@ function scanRelationshipTypeAndTarget(
   }
   if (
     normalizedType.includes('/digital-signature/') ||
+    normalizedType.includes('/vbaprojectsignature') ||
+    normalizedTarget.includes('vbaprojectsignature') ||
     normalizedTarget.startsWith('_xmlsignatures/') ||
     normalizedTarget.includes('/_xmlsignatures/')
   ) {
@@ -462,7 +481,11 @@ function isMacroAdjacentActiveContentPath(path: string): boolean {
     path.includes('/customui/') ||
     path.includes('/customui14/') ||
     path.startsWith('xl/webextensions/') ||
-    path.includes('/webextensions/')
+    path.includes('/webextensions/') ||
+    path.startsWith('xl/webextension/') ||
+    path.includes('/webextension/') ||
+    path.startsWith('xl/addins/') ||
+    path.includes('/addins/')
   );
 }
 
@@ -471,7 +494,12 @@ function isActiveXPath(path: string): boolean {
 }
 
 function isOleOrEmbeddedExecutablePath(path: string): boolean {
-  return path.includes('/embeddings/') || hasUnsafeExecutablePackageExtension(path);
+  return (
+    path.includes('/embeddings/') ||
+    path.includes('/oleobjects/') ||
+    path.includes('/oleobject') ||
+    hasUnsafeExecutablePackageExtension(path)
+  );
 }
 
 function isEncryptedPackagePath(path: string): boolean {
@@ -481,7 +509,11 @@ function isEncryptedPackagePath(path: string): boolean {
 }
 
 function isDigitalSignaturePath(path: string): boolean {
-  return path.startsWith('_xmlsignatures/') || path.includes('/_xmlsignatures/');
+  return (
+    path.startsWith('_xmlsignatures/') ||
+    path.includes('/_xmlsignatures/') ||
+    path.includes('vbaprojectsignature')
+  );
 }
 
 function isExternalDataConnectionPath(path: string): boolean {
@@ -493,10 +525,15 @@ function isExternalDataConnectionPath(path: string): boolean {
 }
 
 function isCustomXmlMetadataPath(path: string): boolean {
+  return path.startsWith('customxml/') || path.includes('/customxml/') || path === 'xl/xmlmaps.xml';
+}
+
+function isExternalRelationship(target: string, targetMode: string): boolean {
+  const normalizedTarget = stripRelationshipTargetSuffixes(target).replace(/\\/g, '/');
   return (
-    path.startsWith('customxml/') ||
-    path.includes('/customxml/') ||
-    path === 'xl/xmlmaps.xml'
+    targetMode.toLowerCase() === 'external' ||
+    /^[a-z][a-z0-9+.-]*:/i.test(normalizedTarget) ||
+    normalizedTarget.startsWith('//')
   );
 }
 
@@ -879,7 +916,7 @@ function concatUint8Arrays(parts: readonly Uint8Array[]): Uint8Array {
 }
 
 function normalizePackagePath(value: string): string {
-  return value.replace(/^\/+/, '');
+  return normalizePackageSegments(value.replace(/\\/g, '/').replace(/^\/+/, ''));
 }
 
 function encodeUtf8(value: string): Uint8Array {

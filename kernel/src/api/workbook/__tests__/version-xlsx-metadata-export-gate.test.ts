@@ -10,9 +10,11 @@ import {
   readAndValidateMogVersionMetadataFromXlsx,
   type MogWorkbookVersionXlsxMetadata,
 } from '../xlsx-version-metadata';
-import type {
-  MogVersionMetadataExportSink,
-  MogVersionMetadataExportSinkAuthorization,
+import {
+  authorizeMetadataSinkWrite,
+  REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS,
+  type MogVersionMetadataExportSink,
+  type MogVersionMetadataExportSinkAuthorization,
 } from '../version-xlsx-metadata-export-gate';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 
@@ -25,7 +27,6 @@ const METADATA_EXPORT_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-workspace';
 const OTHER_METADATA_EXPORT_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-other-workspace';
 const COPIED_METADATA_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-copied';
 const METADATA_EXPORT_GRAPH_ID = 'vc10-xlsx-metadata-export-gate-graph';
-const WRONG_METADATA_EXPORT_GRAPH_ID = 'vc10-xlsx-metadata-export-gate-wrong-graph';
 const OLD_METADATA_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const OTHER_METADATA_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 const STALE_SOURCE_ROOT_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
@@ -41,13 +42,8 @@ const UNSAFE_AUTHORITY_DIAGNOSTICS = [
   { message: 'vc10-metadata-export-authority-leak', dependency: 'secret://authority' },
 ] as const;
 
-beforeEach(async () => {
-  await deleteVersionStoreIndexedDbForTesting();
-});
-
-afterEach(async () => {
-  await deleteVersionStoreIndexedDbForTesting();
-});
+beforeEach(deleteVersionStoreIndexedDbForTesting);
+afterEach(deleteVersionStoreIndexedDbForTesting);
 
 describe('VC-10 XLSX metadata export gating', () => {
   it('omits Mog version metadata by default on clean XLSX export', async () => {
@@ -145,15 +141,7 @@ describe('VC-10 XLSX metadata export gating', () => {
         },
         redaction: {
           policy: 'commit-document-and-object-digests-only',
-          omitted: expect.arrayContaining([
-            'authors',
-            'agentTraces',
-            'rawWorkbookBytes',
-            'credentials',
-            'externalDataSecrets',
-            'objectStoreNamespace',
-            'principalScope',
-          ]),
+          omitted: expect.arrayContaining(REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS),
         },
       },
       trust: {
@@ -352,7 +340,7 @@ describe('VC-10 XLSX metadata export gating', () => {
           provider: metadataExportAuthorityProvider({
             documentId: METADATA_EXPORT_DOCUMENT_ID,
             head: currentHead,
-            graphNamespaceGraphId: WRONG_METADATA_EXPORT_GRAPH_ID,
+            graphNamespaceGraphId: `${METADATA_EXPORT_GRAPH_ID}-wrong`,
           }),
         }),
         { getHead: async () => ({ ok: true, value: currentHead }) } as Parameters<
@@ -419,10 +407,8 @@ describe('VC-10 XLSX metadata export gating', () => {
       id: OLD_METADATA_COMMIT_ID,
       refRevision: REF_REVISION,
     });
-    const captured: {
-      writes: number;
-      authorization?: MogVersionMetadataExportSinkAuthorization;
-    } = { writes: 0 };
+    const captured: { writes: number; authorization?: MogVersionMetadataExportSinkAuthorization } =
+      { writes: 0 };
     const sinkResult = new Uint8Array([1, 2, 3]);
 
     const exported = await maybeAddMogVersionMetadataToXlsx(
@@ -463,15 +449,7 @@ describe('VC-10 XLSX metadata export gating', () => {
         diagnostics: [],
         redaction: {
           policy: 'commit-document-and-object-digests-only',
-          omitted: expect.arrayContaining([
-            'authors',
-            'agentTraces',
-            'rawWorkbookBytes',
-            'credentials',
-            'externalDataSecrets',
-            'objectStoreNamespace',
-            'principalScope',
-          ]),
+          omitted: expect.arrayContaining(REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS),
         },
         head: {
           commitId: OLD_METADATA_COMMIT_ID,
@@ -480,6 +458,41 @@ describe('VC-10 XLSX metadata export gating', () => {
         },
       },
     });
+    const authorization = captured.authorization;
+    if (!authorization) throw new Error('expected metadata sink authorization');
+    const sinkAuthority = {
+      currentHead: authorization.currentHead,
+      semanticChangeSetDigest: authorization.objectStoreAuthority.semanticChangeSetDigest,
+      snapshotRootDigest: authorization.objectStoreAuthority.snapshotRootDigest,
+    };
+    const metadata = authorization.metadata;
+    for (const [unsafeMetadata, reason] of [
+      [{ ...metadata, diagnostics: [{ message: 'secret' }] }, 'redaction-failed'],
+      [
+        { ...metadata, redaction: { ...metadata.redaction, omitted: ['authors'] } },
+        'redaction-failed',
+      ],
+      [
+        {
+          ...metadata,
+          head: { ...metadata.head!, commitId: 'commit:sha256:not-real' as VersionHead['id'] },
+        },
+        'head-unverified',
+      ],
+      [
+        { ...metadata, head: { ...metadata.head!, refRevision: { kind: 'counter', value: '01' } } },
+        'head-unverified',
+      ],
+      [
+        { ...metadata, head: { ...metadata.head!, snapshotRootDigest: objectDigest('3') } },
+        'head-unverified',
+      ],
+    ] as const) {
+      expect(authorizeMetadataSinkWrite(unsafeMetadata, sinkAuthority)).toEqual({
+        ok: false,
+        reason,
+      });
+    }
   });
 
   it('rejects imported Mog version metadata sidecars that name the wrong document', async () => {
@@ -504,9 +517,6 @@ describe('VC-10 XLSX metadata export gating', () => {
     expect(metadata).toMatchObject({
       status: 'untrusted',
       reason: 'wrong-document',
-      metadata: {
-        documentId: COPIED_METADATA_DOCUMENT_ID,
-      },
       trust: {
         status: 'untrusted',
         sidecarPart: MOG_VERSION_METADATA_PART,
@@ -526,6 +536,7 @@ describe('VC-10 XLSX metadata export gating', () => {
         }),
       ],
     });
+    expect(JSON.stringify(metadata)).not.toContain(COPIED_METADATA_DOCUMENT_ID);
   });
 
   it('blocks Mog version metadata sidecar export when stale-head revision proof is missing', async () => {
@@ -951,16 +962,7 @@ function testVersionMetadata(input: {
     diagnostics: [],
     redaction: {
       policy: 'commit-document-and-object-digests-only',
-      omitted: [
-        'authors',
-        'agentTraces',
-        'rawWorkbookBytes',
-        'credentials',
-        'externalDataSecrets',
-        'objectStoreNamespace',
-        'workspaceId',
-        'principalScope',
-      ],
+      omitted: [...REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS, 'workspaceId'],
     },
   };
 }

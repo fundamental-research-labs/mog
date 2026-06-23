@@ -141,33 +141,29 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
   });
 
   it('detects macro, embedded, external connection, and customXml package variants', async () => {
-    const unsafePackage = activePackageVariantFixture();
-    const diagnostics = await scanXlsxCleanExportPackageDiagnostics(unsafePackage);
-    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
-      'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
-      'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
-      'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
-      'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
-      'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT',
-    ]);
-    expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
-
-    let error: unknown;
-    try {
-      await removeMogVersionMetadataPackageInventoryFromXlsx(unsafePackage);
-    } catch (caught) {
-      error = caught;
-    }
-
-    expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
-    expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
+    await expectUnsafePackageScanRedacts(
+      activePackageVariantFixture(),
+      [
+        'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
+        'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
+        'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
+        'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
+        'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT',
+        'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT',
+        'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
+      ],
+      [ACTIVE_CONTENT_SECRET],
+    );
   });
 
   it('detects external connection and queryTable variants without exposing paths or targets', async () => {
     const redactedToken = 'w5-08-external-redacted-target';
     await expectUnsafePackageScanRedacts(
       externalConnectionAndQueryTableVariantFixture(redactedToken),
-      ['XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT'],
+      [
+        'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
+        'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT',
+      ],
       [redactedToken],
     );
   });
@@ -453,7 +449,10 @@ function activePackageVariantFixture(): Uint8Array {
     { name: 'xl/xmlMaps.xml', data: encodeUtf8('<xmlMaps/>') },
     { name: 'xl/tables/table1.xml', data: encodeUtf8('<table/>') },
     { name: 'xl/tables/_rels/table1.xml.rels', data: encodeUtf8(tableRels) },
-    { name: 'customXml/item1.xml', data: encodeUtf8(`<metadata>${ACTIVE_CONTENT_SECRET}</metadata>`) },
+    {
+      name: 'customXml/item1.xml',
+      data: encodeUtf8(`<metadata>${ACTIVE_CONTENT_SECRET}</metadata>`),
+    },
     { name: 'customXml/_rels/item1.xml.rels', data: encodeUtf8(customXmlRels) },
     {
       name: 'customXml/itemProps1.xml',
@@ -521,90 +520,95 @@ function activeContentVariantFixtures(): Array<{
       name: 'macrosheet',
       expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
       redactedToken: macrosheetToken,
-      createXlsxBytes: () => syntheticPackageFixture({
-        contentTypeOverrides: [
-          `<Override PartName="/xl/macrosheets/${macrosheetToken}-sheet1.xml" ContentType="application/vnd.ms-excel.macrosheet+xml"/>`,
-        ],
-        workbookRelationships: [
-          `<Relationship Id="rIdMacroSheet" Type="http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet" Target="macrosheets/${macrosheetToken}-sheet1.xml?token=${macrosheetToken}"/>`,
-        ],
-        extraEntries: [
-          {
-            name: `xl/macrosheets/${macrosheetToken}-sheet1.xml`,
-            data: encodeUtf8('<xm:macrosheet/>'),
-          },
-        ],
-      }),
+      createXlsxBytes: () =>
+        syntheticPackageFixture({
+          contentTypeOverrides: [
+            `<Override PartName="/xl/macrosheets/${macrosheetToken}-sheet1.xml" ContentType="application/vnd.ms-excel.macrosheet+xml"/>`,
+          ],
+          workbookRelationships: [
+            `<Relationship Id="rIdMacroSheet" Type="http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet" Target="macrosheets/${macrosheetToken}-sheet1.xml?token=${macrosheetToken}"/>`,
+          ],
+          extraEntries: [
+            {
+              name: `xl/macrosheets/${macrosheetToken}-sheet1.xml`,
+              data: encodeUtf8('<xm:macrosheet/>'),
+            },
+          ],
+        }),
     },
     {
       name: 'dialogsheet',
       expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
       redactedToken: dialogsheetToken,
-      createXlsxBytes: () => syntheticPackageFixture({
-        contentTypeOverrides: [
-          `<Override PartName="/xl/dialogsheets/${dialogsheetToken}-sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml"/>`,
-        ],
-        workbookRelationships: [
-          `<Relationship Id="rIdDialogSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet" Target="dialogsheets/${dialogsheetToken}-sheet1.xml?token=${dialogsheetToken}"/>`,
-        ],
-        extraEntries: [
-          {
-            name: `xl/dialogsheets/${dialogsheetToken}-sheet1.xml`,
-            data: encodeUtf8('<dialogsheet/>'),
-          },
-        ],
-      }),
+      createXlsxBytes: () =>
+        syntheticPackageFixture({
+          contentTypeOverrides: [
+            `<Override PartName="/xl/dialogsheets/${dialogsheetToken}-sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml"/>`,
+          ],
+          workbookRelationships: [
+            `<Relationship Id="rIdDialogSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet" Target="dialogsheets/${dialogsheetToken}-sheet1.xml?token=${dialogsheetToken}"/>`,
+          ],
+          extraEntries: [
+            {
+              name: `xl/dialogsheets/${dialogsheetToken}-sheet1.xml`,
+              data: encodeUtf8('<dialogsheet/>'),
+            },
+          ],
+        }),
     },
     {
       name: 'customUI',
       expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
       redactedToken: customUiToken,
-      createXlsxBytes: () => syntheticPackageFixture({
-        rootRelationships: [
-          `<Relationship Id="rIdCustomUi" Type="http://schemas.microsoft.com/office/2006/relationships/ui/extensibility" Target="customUI/${customUiToken}-customUI.xml?token=${customUiToken}"/>`,
-        ],
-        extraEntries: [
-          {
-            name: `customUI/${customUiToken}-customUI.xml`,
-            data: encodeUtf8('<customUI/>'),
-          },
-        ],
-      }),
+      createXlsxBytes: () =>
+        syntheticPackageFixture({
+          rootRelationships: [
+            `<Relationship Id="rIdCustomUi" Type="http://schemas.microsoft.com/office/2006/relationships/ui/extensibility" Target="customUI/${customUiToken}-customUI.xml?token=${customUiToken}"/>`,
+          ],
+          extraEntries: [
+            {
+              name: `customUI/${customUiToken}-customUI.xml`,
+              data: encodeUtf8('<customUI/>'),
+            },
+          ],
+        }),
     },
     {
       name: 'customUI14',
       expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
       redactedToken: customUi14Token,
-      createXlsxBytes: () => syntheticPackageFixture({
-        rootRelationships: [
-          `<Relationship Id="rIdCustomUi14" Type="http://schemas.microsoft.com/office/2007/relationships/ui/extensibility" Target="customUI14/${customUi14Token}-customUI.xml?token=${customUi14Token}"/>`,
-        ],
-        extraEntries: [
-          {
-            name: `customUI14/${customUi14Token}-customUI.xml`,
-            data: encodeUtf8('<customUI/>'),
-          },
-        ],
-      }),
+      createXlsxBytes: () =>
+        syntheticPackageFixture({
+          rootRelationships: [
+            `<Relationship Id="rIdCustomUi14" Type="http://schemas.microsoft.com/office/2007/relationships/ui/extensibility" Target="customUI14/${customUi14Token}-customUI.xml?token=${customUi14Token}"/>`,
+          ],
+          extraEntries: [
+            {
+              name: `customUI14/${customUi14Token}-customUI.xml`,
+              data: encodeUtf8('<customUI/>'),
+            },
+          ],
+        }),
     },
     {
       name: 'webExtension',
       expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
       redactedToken: webExtensionToken,
-      createXlsxBytes: () => syntheticPackageFixture({
-        contentTypeOverrides: [
-          `<Override PartName="/xl/webextensions/${webExtensionToken}-webextension1.xml" ContentType="application/vnd.ms-office.webextension+xml"/>`,
-        ],
-        workbookRelationships: [
-          `<Relationship Id="rIdWebExtension" Type="http://schemas.microsoft.com/office/2011/relationships/webextension" Target="webextensions/${webExtensionToken}-webextension1.xml?token=${webExtensionToken}"/>`,
-        ],
-        extraEntries: [
-          {
-            name: `xl/webextensions/${webExtensionToken}-webextension1.xml`,
-            data: encodeUtf8('<webextension/>'),
-          },
-        ],
-      }),
+      createXlsxBytes: () =>
+        syntheticPackageFixture({
+          contentTypeOverrides: [
+            `<Override PartName="/xl/webextensions/${webExtensionToken}-webextension1.xml" ContentType="application/vnd.ms-office.webextension+xml"/>`,
+          ],
+          workbookRelationships: [
+            `<Relationship Id="rIdWebExtension" Type="http://schemas.microsoft.com/office/2011/relationships/webextension" Target="webextensions/${webExtensionToken}-webextension1.xml?token=${webExtensionToken}"/>`,
+          ],
+          extraEntries: [
+            {
+              name: `xl/webextensions/${webExtensionToken}-webextension1.xml`,
+              data: encodeUtf8('<webextension/>'),
+            },
+          ],
+        }),
     },
   ];
 }

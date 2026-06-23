@@ -4,7 +4,11 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 import type { WorkbookCommit } from './commit-store';
 import type { CommitVersionGraphInput, VersionGraphBranchRefName } from './graph-store';
-import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
+import {
+  VERSION_GRAPH_HEAD_REF,
+  VERSION_GRAPH_MAIN_REF,
+  createInMemoryVersionGraphStore,
+} from './graph-store';
 import { isObjectDigest, type ObjectDigest, type WorkbookCommitId } from './object-digest';
 import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
 import {
@@ -52,6 +56,7 @@ export type XlsxVersionImportRootProvenance = {
 
 export const XLSX_IMPORT_ROOT_GRAPH_ID = 'xlsx-import-root';
 const XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX = 'import/external-change';
+const XLSX_IMPORT_NEW_ROOT_BRANCH_PREFIX = 'import/new-root';
 
 const XLSX_IMPORT_ROOT_AUTHOR: VersionAuthor = {
   authorId: 'mog.xlsx-import',
@@ -148,7 +153,7 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   input: XlsxVersionExistingGraphImportInput,
 ): Promise<XlsxVersionExistingGraphImportResult> {
   const candidate = input.provenance.versionMetadataHeadCandidate;
-  if (!candidate) return { status: 'skipped', diagnostics: [] };
+  if (!candidate) return applyXlsxVersionImportNewRootToExistingGraph(input);
 
   const visibleHead = await input.graph.readHead();
   if (visibleHead.status !== 'success') {
@@ -159,6 +164,12 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   }
 
   const trustedBase = await readTrustedBaseCommit(input, candidate);
+  if (trustedBase.status === 'skipped') {
+    return applyXlsxVersionImportNewRootToExistingGraph({
+      ...input,
+      provenance: untrustedImportRootProvenance(input.provenance),
+    });
+  }
   if (trustedBase.status !== 'success') return trustedBase;
 
   const parentCommit = trustedBase.commit;
@@ -237,6 +248,61 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   return {
     status: 'committed',
     commitId: committed.commit.id,
+    diagnostics: [],
+  };
+}
+
+async function applyXlsxVersionImportNewRootToExistingGraph(
+  input: XlsxVersionExistingGraphImportInput,
+): Promise<XlsxVersionExistingGraphImportResult> {
+  const rootWrite = await buildXlsxVersionImportRootWrite({
+    namespace: input.namespace,
+    snapshotRootByteSyncPort: input.snapshotRootByteSyncPort,
+    semanticStateReader: input.semanticStateReader,
+    provenance: input.provenance,
+    createdAt: input.createdAt,
+  });
+  const rootGraph = createInMemoryVersionGraphStore({ namespace: input.namespace });
+  const initialized = await rootGraph.initializeGraph(rootWrite);
+  if (initialized.status !== 'success') {
+    return {
+      status: 'failed',
+      diagnostics: mapGraphDiagnostics(initialized.diagnostics, 'commitGraphWrite'),
+    };
+  }
+
+  const snapshot = await rootGraph.exportSnapshot();
+  const persistedObjects = await input.graph.putObjects(snapshot.objectRecords);
+  if (persistedObjects.status !== 'success') {
+    return {
+      status: 'failed',
+      diagnostics: [
+        versionStoreDiagnostic('VERSION_OBJECT_STORE_FAILURE', {
+          operation: 'commitGraphWrite',
+          namespace: input.namespace,
+          safeMessage: 'XLSX reimport root objects could not be persisted.',
+          recoverability: 'retry',
+          mutationGuarantee: 'no-write-attempted',
+          details: { source: 'xlsx-import-root' },
+        }),
+      ],
+    };
+  }
+
+  const targetBranch = await createOrReadImportNewRootBranch({
+    graph: input.graph,
+    namespace: input.namespace,
+    rootCommitId: initialized.commit.id,
+    branchName: importNewRootBranchName(
+      initialized.commit.id,
+      input.provenance.versionMetadataTrust?.status ?? 'absent',
+    ),
+  });
+  if (targetBranch.status !== 'success') return targetBranch;
+
+  return {
+    status: 'committed',
+    commitId: initialized.commit.id,
     diagnostics: [],
   };
 }
@@ -363,10 +429,68 @@ async function createOrReadExternalChangeBranch(input: {
   };
 }
 
+async function createOrReadImportNewRootBranch(input: {
+  readonly graph: VersionGraphStore;
+  readonly namespace: VersionGraphNamespace;
+  readonly rootCommitId: WorkbookCommitId;
+  readonly branchName: string;
+}): Promise<
+  | {
+      readonly status: 'success';
+      readonly branch: {
+        readonly refName: VersionGraphBranchRefName;
+        readonly ref: { readonly refVersion: VersionRecordRevision };
+      };
+      readonly diagnostics: readonly [];
+    }
+  | Extract<XlsxVersionExistingGraphImportResult, { readonly status: 'failed' }>
+> {
+  const created = await input.graph.createBranch({
+    name: input.branchName,
+    targetCommitId: input.rootCommitId,
+    expectedAbsent: true,
+    createdBy: XLSX_IMPORT_ROOT_AUTHOR,
+  });
+  if (created.ok) {
+    return { status: 'success', branch: created.branch, diagnostics: [] };
+  }
+
+  const existing = await input.graph.readBranch(input.branchName);
+  if (
+    existing.ok &&
+    existing.branch !== null &&
+    existing.branch.ref.targetCommitId === input.rootCommitId
+  ) {
+    return { status: 'success', branch: existing.branch, diagnostics: [] };
+  }
+
+  return {
+    status: 'failed',
+    diagnostics: [
+      versionStoreDiagnostic('VERSION_REF_CONFLICT', {
+        operation: 'commitGraphWrite',
+        namespace: input.namespace,
+        safeMessage: 'XLSX reimport import-root branch could not be created.',
+        recoverability: 'retry',
+        mutationGuarantee: 'no-write-attempted',
+        details: {
+          source: 'xlsx-import-root',
+          branchNamespace: XLSX_IMPORT_NEW_ROOT_BRANCH_PREFIX,
+        },
+      }),
+    ],
+  };
+}
+
 function externalChangeBranchName(baseCommitId: WorkbookCommitId, afterDigest: unknown): string {
   const baseSegment = baseCommitId.slice('commit:sha256:'.length, 'commit:sha256:'.length + 16);
   const afterSegment = digestBranchSegment(afterDigest);
   return `${XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX}/${baseSegment}/${afterSegment}`;
+}
+
+function importNewRootBranchName(rootCommitId: WorkbookCommitId, trustStatus: string): string {
+  const rootSegment = rootCommitId.slice('commit:sha256:'.length, 'commit:sha256:'.length + 16);
+  return `${XLSX_IMPORT_NEW_ROOT_BRANCH_PREFIX}/${safeBranchSegment(trustStatus)}/${rootSegment}`;
 }
 
 function trustedVersionMetadataTrust(
@@ -458,6 +582,27 @@ function digestBranchSegment(value: unknown): string {
     return safeBranchSegment(value.digest);
   }
   return 'unknown-digest';
+}
+
+function untrustedImportRootProvenance(
+  provenance: XlsxVersionImportRootProvenance,
+): XlsxVersionImportRootProvenance {
+  if (
+    provenance.versionMetadataTrust?.status !== 'trusted' &&
+    provenance.versionMetadataTrust?.status !== 'trusted-stale-base'
+  ) {
+    return provenance;
+  }
+  const { versionMetadataHeadCandidate: _candidate, ...rest } = provenance;
+  return {
+    ...rest,
+    versionMetadataTrust: {
+      status: 'untrusted',
+      sidecarPart: provenance.versionMetadataTrust.sidecarPart,
+      reason: 'head-unverified',
+      redacted: true,
+    },
+  };
 }
 
 function safeBranchSegment(value: string): string {

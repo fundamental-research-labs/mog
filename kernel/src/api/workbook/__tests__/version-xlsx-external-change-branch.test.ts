@@ -12,7 +12,7 @@ import {
   type VersionGraphCommitRef,
   type VersionGraphRef,
 } from '../../../document/version-store/graph-store';
-import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
+import type { ObjectDigest, WorkbookCommitId } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
@@ -35,6 +35,84 @@ const TEST_AUTHOR = {
 };
 
 describe('VC-10 XLSX external-change branch routing', () => {
+  it('routes absent metadata on an existing graph to a zero-parent import-root branch', async () => {
+    const namespace = testNamespace('vc10-xlsx-absent-metadata-new-root');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base', 'a');
+    const localState = semanticState('local-main', 'b');
+    const importedState = semanticState('missing-metadata-import', 'c');
+
+    const { baseCommit, baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    const localCommit = await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-main',
+    });
+    const reader = semanticStateReader(importedState, baseState);
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x01),
+      semanticStateReader: reader,
+      provenance: {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 512 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'absent',
+          sidecarPart: SIDE_CAR_PART,
+        },
+      },
+      createdAt: CREATED_AT,
+    });
+
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected import-root branch commit, got ${result.status}`);
+    }
+    expect(reader.readCurrentSemanticState).toHaveBeenCalledTimes(1);
+    expect(reader.diffSemanticStates).not.toHaveBeenCalled();
+
+    const headAfter = await graph.readHead();
+    expect(headAfter).toMatchObject({
+      status: 'success',
+      head: { id: localCommit.id, refName: VERSION_GRAPH_MAIN_REF },
+    });
+
+    const branch = await findOnlyImportNewRootBranch(graph);
+    expect(branch.ref.targetCommitId).toBe(result.commitId);
+
+    const rootCommit = await graph.readCommit(result.commitId);
+    expect(rootCommit.status).toBe('success');
+    if (rootCommit.status !== 'success') {
+      throw new Error(`expected root commit readable: ${rootCommit.diagnostics[0]?.code}`);
+    }
+    expect(rootCommit.commit.payload.parentCommitIds).toEqual([]);
+    expect(rootCommit.commit.payload.parentCommitIds).not.toEqual([baseCommit.id]);
+    expect(rootCommit.commit.payload.author).toMatchObject({
+      authorId: 'mog.xlsx-import',
+      displayName: 'Mog XLSX Import',
+    });
+
+    const semanticRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: rootCommit.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticRecord.preimage.payload).toMatchObject({
+      source: {
+        kind: 'xlsxImportRoot',
+        versionMetadataTrust: {
+          status: 'absent',
+        },
+      },
+      semanticState: importedState,
+    });
+  });
+
   it('commits same-document external edits to an import external-change branch from the trusted base', async () => {
     const namespace = testNamespace('vc10-xlsx-external-change-branch');
     const graph = createInMemoryVersionGraphStore({ namespace });
@@ -146,6 +224,76 @@ describe('VC-10 XLSX external-change branch routing', () => {
     });
     const branches = await graph.listBranches({ prefix: 'import' });
     expect(branches).toMatchObject({ ok: true, branches: [] });
+  });
+
+  it('does not attach same-document metadata by commit id when object digests do not match', async () => {
+    const namespace = testNamespace('vc10-xlsx-digest-mismatch-new-root');
+    const graph = createInMemoryVersionGraphStore({ namespace });
+    const baseState = semanticState('base', 'd');
+    const localState = semanticState('local-main', 'e');
+    const externalState = semanticState('forged-external-edit', 'f');
+
+    const { baseCommit, baseHead } = await initializeImportRoot(graph, namespace, baseState);
+    const localCommit = await commitMain({
+      graph,
+      namespace,
+      head: baseHead,
+      state: localState,
+      label: 'local-main',
+    });
+    const reader = semanticStateReader(externalState, baseState);
+
+    const result = await applyXlsxVersionImportChangeToExistingGraph({
+      namespace,
+      graph,
+      snapshotRootByteSyncPort: snapshotPort(0x42),
+      semanticStateReader: reader,
+      provenance: trustedProvenance(namespace.documentId, baseCommit, baseHead.head, {
+        semanticChangeSetDigest: objectDigest('f'),
+      }),
+      createdAt: CREATED_AT,
+    });
+
+    expect(result).toMatchObject({ status: 'committed' });
+    if (result.status !== 'committed') {
+      throw new Error(`expected digest-mismatch import root, got ${result.status}`);
+    }
+    expect(reader.readCurrentSemanticState).toHaveBeenCalledTimes(1);
+    expect(reader.diffSemanticStates).not.toHaveBeenCalled();
+
+    const headAfter = await graph.readHead();
+    expect(headAfter).toMatchObject({
+      status: 'success',
+      head: { id: localCommit.id, refName: VERSION_GRAPH_MAIN_REF },
+    });
+
+    const branch = await findOnlyImportNewRootBranch(graph);
+    expect(branch.ref.targetCommitId).toBe(result.commitId);
+    expect(branch.ref.targetCommitId).not.toBe(baseCommit.id);
+
+    const rootCommit = await graph.readCommit(result.commitId);
+    expect(rootCommit.status).toBe('success');
+    if (rootCommit.status !== 'success') {
+      throw new Error(`expected digest-mismatch root readable: ${rootCommit.diagnostics[0]?.code}`);
+    }
+    expect(rootCommit.commit.payload.parentCommitIds).toEqual([]);
+
+    const semanticRecord = await graph.getObjectRecord({
+      kind: 'object',
+      objectType: 'workbook.semanticChangeSet.v1',
+      digest: rootCommit.commit.payload.semanticChangeSetDigest,
+    });
+    expect(semanticRecord.preimage.payload).toMatchObject({
+      source: {
+        kind: 'xlsxImportRoot',
+        versionMetadataTrust: {
+          status: 'untrusted',
+          reason: 'head-unverified',
+          redacted: true,
+        },
+      },
+      semanticState: externalState,
+    });
   });
 
   it('records stale trusted-base diagnostics when routing to an external-change branch', async () => {
@@ -368,6 +516,8 @@ function trustedProvenance(
   options?: {
     readonly trustStatus?: 'trusted' | 'trusted-stale-base';
     readonly diagnostics?: XlsxVersionImportRootProvenance['diagnostics'];
+    readonly semanticChangeSetDigest?: ObjectDigest;
+    readonly snapshotRootDigest?: ObjectDigest;
   },
 ): XlsxVersionImportRootProvenance {
   return {
@@ -386,8 +536,9 @@ function trustedProvenance(
         refName: VERSION_GRAPH_MAIN_REF,
         resolvedFrom: VERSION_GRAPH_HEAD_REF,
         refRevision: exportedHead?.refRevision ?? { kind: 'counter', value: '1' },
-        semanticChangeSetDigest: baseCommit.payload.semanticChangeSetDigest,
-        snapshotRootDigest: baseCommit.payload.snapshotRootDigest,
+        semanticChangeSetDigest:
+          options?.semanticChangeSetDigest ?? baseCommit.payload.semanticChangeSetDigest,
+        snapshotRootDigest: options?.snapshotRootDigest ?? baseCommit.payload.snapshotRootDigest,
       },
     },
   };
@@ -419,12 +570,29 @@ function staleTrustedBaseDiagnostic(): XlsxVersionImportRootProvenance['diagnost
 async function findOnlyImportExternalChangeBranch(
   graph: ReturnType<typeof createInMemoryVersionGraphStore>,
 ) {
+  return findOnlyImportBranch(graph, /^import\/external-change\//);
+}
+
+async function findOnlyImportNewRootBranch(
+  graph: ReturnType<typeof createInMemoryVersionGraphStore>,
+) {
+  return findOnlyImportBranch(graph, /^import\/new-root\//);
+}
+
+async function findOnlyImportBranch(
+  graph: ReturnType<typeof createInMemoryVersionGraphStore>,
+  branchNamePattern: RegExp,
+) {
   const branches = await graph.listBranches({ prefix: 'import' });
   expect(branches.ok).toBe(true);
   if (!branches.ok) throw new Error(`expected branch list success: ${branches.error.code}`);
-  expect(branches.branches).toHaveLength(1);
-  const branch = branches.branches[0];
-  if (!branch) throw new Error('expected external-change branch');
+  const matchingBranches = branches.branches.filter((branch) =>
+    branchNamePattern.test(branch.name),
+  );
+  expect(matchingBranches).toHaveLength(1);
+  const branch = matchingBranches[0];
+  if (!branch) throw new Error('expected import branch');
+  expect(branch.name).toMatch(branchNamePattern);
   return branch;
 }
 
@@ -432,5 +600,12 @@ function semanticDigest(seed: string): SemanticWorkbookStateEnvelope['stateDiges
   return {
     algorithm: 'sha256',
     value: seed.repeat(64).slice(0, 64),
+  };
+}
+
+function objectDigest(seed: string): ObjectDigest {
+  return {
+    algorithm: 'sha256',
+    digest: seed.repeat(64).slice(0, 64),
   };
 }

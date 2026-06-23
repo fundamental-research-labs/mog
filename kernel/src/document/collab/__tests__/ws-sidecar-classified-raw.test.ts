@@ -4,6 +4,7 @@ import { createDocumentByteSyncPort } from '../../../api/document/document-sync-
 import type { AdmittedSyncApplyContext } from '../../../bridges/compute/sync-apply-admission';
 import type { SyncUpdateAdmissionMetadata } from '../../providers/provider';
 import { applySidecarClassifiedRawSyncUpdate } from '../ws-sidecar';
+import { MSG, classifySyncUpdateWireSource } from '../wire-codec';
 
 const originalCryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
 let installedCrypto = false;
@@ -36,7 +37,7 @@ describe('WsSidecar classified raw sync admission', () => {
       syncPort: fixture.port,
       roomId: 'room-hydration',
       update,
-      classification: 'hydration',
+      classification: classifySyncUpdateWireSource(MSG.JOIN_RESPONSE),
     });
 
     expect(fixture.bridge.syncApply).toHaveBeenCalledWith(update, expect.any(Object));
@@ -44,7 +45,7 @@ describe('WsSidecar classified raw sync admission', () => {
     expect(fixture.admissions[0]).toMatchObject({
       source: 'document-sync-port',
       envelopeVersion: 'classified-raw',
-      updateId: `ws-sidecar-hydration:${payloadHash}`,
+      updateId: `ws-sidecar-joinResponseHydration:${payloadHash}`,
       payloadHash,
       validationDiagnostics: [],
       provenance: expect.objectContaining({
@@ -68,7 +69,7 @@ describe('WsSidecar classified raw sync admission', () => {
         sourceKind: 'collaborationHydration',
         originKind: 'room',
         roomId: 'room-hydration',
-        updateId: `ws-sidecar-hydration:${payloadHash}`,
+        updateId: `ws-sidecar-joinResponseHydration:${payloadHash}`,
         payloadHash,
         trustStatus: 'trustedLocalSystem',
         authorState: 'system',
@@ -90,13 +91,13 @@ describe('WsSidecar classified raw sync admission', () => {
       syncPort: fixture.port,
       roomId: 'room-mixed',
       update,
-      classification: 'mixedRemote',
+      classification: classifySyncUpdateWireSource(MSG.PULL_RESPONSE),
     });
 
     expect(fixture.bridge.syncApply).toHaveBeenCalledWith(update, expect.any(Object));
     expect(fixture.admissions[0]).toMatchObject({
       envelopeVersion: 'classified-raw',
-      updateId: `ws-sidecar-mixedRemote:${payloadHash}`,
+      updateId: `ws-sidecar-pullResponseMixedRemote:${payloadHash}`,
       payloadHash,
       validationDiagnostics: [],
       provenance: expect.objectContaining({
@@ -108,7 +109,7 @@ describe('WsSidecar classified raw sync admission', () => {
         capturePolicy: 'excluded',
         exclusionDiagnostic: {
           reason: 'mixedAuthors',
-          message: 'Collaboration server diff lacks per-update provenance boundaries.',
+          message: 'Collaboration PULL_RESPONSE diff lacks per-update provenance boundaries.',
         },
       }),
     });
@@ -123,7 +124,7 @@ describe('WsSidecar classified raw sync admission', () => {
         sourceKind: 'collaborationMixedRemote',
         originKind: 'room',
         roomId: 'room-mixed',
-        updateId: `ws-sidecar-mixedRemote:${payloadHash}`,
+        updateId: `ws-sidecar-pullResponseMixedRemote:${payloadHash}`,
         payloadHash,
         trustStatus: 'unverified',
         authorState: 'mixedRemote',

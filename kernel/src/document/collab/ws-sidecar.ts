@@ -5,7 +5,7 @@
  * Handles the full lifecycle: connect -> join -> hydrate -> live sync -> reconnect.
  */
 
-import { MSG, encodeJson, encodeBinary, decode } from './wire-codec';
+import { MSG, encodeJson, encodeBinary, decode, classifySyncUpdateWireSource } from './wire-codec';
 import type { EventLog, SidecarEventType } from './event-log';
 import { fetchRoomSnapshot, type RoomSnapshot } from './room-snapshot';
 import {
@@ -484,7 +484,11 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
               throw new Error(`Malformed PUSH_RESPONSE ${meta.pushId}: missing coordinatorSv`);
             }
             if (decoded.binary && decoded.binary.length > 0) {
-              await serialApply(new Uint8Array(decoded.binary), 'mixedRemote', false);
+              await serialApply(
+                new Uint8Array(decoded.binary),
+                classifySyncUpdateWireSource(decoded.type),
+                false,
+              );
             }
             lastServerSv = new Uint8Array(meta.coordinatorSv);
             settlePushResponse(meta.pushId);
@@ -500,7 +504,7 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
       case MSG.PULL_RESPONSE: {
         log('pull_res', { diff: decoded.binary?.length ?? 0 });
         if (decoded.binary && decoded.binary.length > 0) {
-          serialApply(new Uint8Array(decoded.binary), 'mixedRemote');
+          serialApply(new Uint8Array(decoded.binary), classifySyncUpdateWireSource(decoded.type));
         }
         break;
       }
@@ -658,7 +662,11 @@ export function attachWsSidecar(options: WsSidecarOptions): Promise<WsSidecar> {
             lastServerSv = coordinatorSv;
 
             if (fullState.length > 0) {
-              await serialApply(new Uint8Array(fullState), 'hydration', false);
+              await serialApply(
+                new Uint8Array(fullState),
+                classifySyncUpdateWireSource(decoded.type),
+                false,
+              );
             }
           })()
             .then(() => {

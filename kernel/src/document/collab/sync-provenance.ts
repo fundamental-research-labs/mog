@@ -1,24 +1,33 @@
 import { DEFAULT_PROVENANCE_REDACTION_POLICY } from '@mog-sdk/types-document/storage';
 import type { ClassifiedRawSyncUpdateProvenance } from '../providers/provider';
+import type { SyncUpdateWireSource } from './wire-codec';
 
-export type SidecarRawSyncClassification = 'hydration' | 'mixedRemote';
+export type SidecarRawSyncClassification = SyncUpdateWireSource;
 
 export function buildSidecarRawSyncProvenance(
   roomId: string,
   payloadHash: string,
   classification: SidecarRawSyncClassification,
 ): ClassifiedRawSyncUpdateProvenance {
-  const updateIdentity = {
-    originKind: 'room' as const,
-    roomId,
-    updateId: `ws-sidecar-${classification}:${payloadHash}`,
-    payloadHash,
-  };
+  const updateIdentity =
+    classification.sourceKind === 'legacyRawUnknown'
+      ? {
+          originKind: 'legacyRaw' as const,
+          roomId,
+          updateId: `ws-sidecar-${classification.kind}:${payloadHash}`,
+          payloadHash,
+        }
+      : {
+          originKind: 'room' as const,
+          roomId,
+          updateId: `ws-sidecar-${classification.kind}:${payloadHash}`,
+          payloadHash,
+        };
 
-  if (classification === 'hydration') {
+  if (classification.sourceKind === 'collaborationHydration') {
     return {
       schemaVersion: 'sync-update-provenance-v1',
-      sourceKind: 'collaborationHydration',
+      sourceKind: classification.sourceKind,
       updateIdentity,
       trust: { status: 'trustedLocalSystem' },
       author: { kind: 'system', systemRef: 'collaboration-hydration' },
@@ -28,14 +37,33 @@ export function buildSidecarRawSyncProvenance(
       redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
       exclusionDiagnostic: {
         reason: 'hydration',
-        message: 'Collaboration JOIN/RESUME full state is classified as hydration.',
+        message: `Collaboration ${classification.messageName} update bytes are classified as hydration.`,
+      },
+    };
+  }
+
+  if (classification.sourceKind === 'legacyRawUnknown') {
+    return {
+      schemaVersion: 'sync-update-provenance-v1',
+      sourceKind: classification.sourceKind,
+      updateIdentity,
+      trust: { status: 'legacyRaw' },
+      author: { kind: 'unknown', reason: 'legacyRaw' },
+      replay: false,
+      system: false,
+      capturePolicy: 'excluded',
+      redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
+      exclusionDiagnostic: {
+        reason: 'legacyRawUnknown',
+        subreason: 'rawUnclassified',
+        message: `Collaboration ${classification.messageName} update bytes reached ws-sidecar without an explicit provenance classifier; admitted as legacy raw unknown.`,
       },
     };
   }
 
   return {
     schemaVersion: 'sync-update-provenance-v1',
-    sourceKind: 'collaborationMixedRemote',
+    sourceKind: classification.sourceKind,
     updateIdentity,
     trust: { status: 'unverified' },
     author: { kind: 'mixedRemote', reason: 'aggregateWithoutBoundaries' },
@@ -45,7 +73,7 @@ export function buildSidecarRawSyncProvenance(
     redaction: DEFAULT_PROVENANCE_REDACTION_POLICY,
     exclusionDiagnostic: {
       reason: 'mixedAuthors',
-      message: 'Collaboration server diff lacks per-update provenance boundaries.',
+      message: `Collaboration ${classification.messageName} diff lacks per-update provenance boundaries.`,
     },
   };
 }

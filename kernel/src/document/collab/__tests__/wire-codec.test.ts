@@ -109,7 +109,58 @@ describe('wire codec decode compatibility', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Edge cases
+// 3. Sync update provenance classification
+// ---------------------------------------------------------------------------
+
+describe('sync update wire source classification', () => {
+  test.each([
+    [
+      browserCodec.MSG.JOIN_RESPONSE,
+      'JOIN_RESPONSE',
+      'joinResponseHydration',
+      'collaborationHydration',
+    ],
+    [
+      browserCodec.MSG.RESUME_RESPONSE,
+      'RESUME_RESPONSE',
+      'resumeResponseHydration',
+      'collaborationHydration',
+    ],
+    [
+      browserCodec.MSG.PULL_RESPONSE,
+      'PULL_RESPONSE',
+      'pullResponseMixedRemote',
+      'collaborationMixedRemote',
+    ],
+    [
+      browserCodec.MSG.PUSH_RESPONSE,
+      'PUSH_RESPONSE',
+      'pushResponseMixedRemote',
+      'collaborationMixedRemote',
+    ],
+  ])('classifies %s update bytes', (messageType, messageName, kind, sourceKind) => {
+    expect(browserCodec.classifySyncUpdateWireSource(messageType)).toEqual({
+      kind,
+      messageType,
+      messageName,
+      sourceKind,
+      legacyRawFallback: false,
+    });
+  });
+
+  test('falls back to legacy raw unknown for unclassified sync byte frames', () => {
+    expect(browserCodec.classifySyncUpdateWireSource(0x7f)).toEqual({
+      kind: 'legacyRawFallback',
+      messageType: 0x7f,
+      messageName: 'UNKNOWN_0x7f',
+      sourceKind: 'legacyRawUnknown',
+      legacyRawFallback: true,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4. Edge cases
 // ---------------------------------------------------------------------------
 
 describe('edge cases', () => {

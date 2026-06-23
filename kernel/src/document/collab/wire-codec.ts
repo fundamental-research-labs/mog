@@ -12,7 +12,7 @@
  * For pure-JSON messages (JOIN_REQUEST, LOCK_*, etc.):
  *   [type: 1 byte] [JSON payload as UTF-8]
  *
- * For binary+metadata messages (PUSH, PULL, JOIN_RESPONSE, BROADCAST_NUDGE):
+ * For binary+metadata messages (PUSH, PULL, JOIN_RESPONSE, RESUME_RESPONSE, BROADCAST_NUDGE):
  *   [type: 1 byte] [jsonLen: 4 bytes big-endian] [JSON metadata as UTF-8] [raw binary]
  */
 
@@ -42,6 +42,77 @@ export const MSG = {
 
 export type MsgType = (typeof MSG)[keyof typeof MSG];
 
+export const MSG_NAME_BY_TYPE = Object.freeze({
+  [MSG.JOIN_REQUEST]: 'JOIN_REQUEST',
+  [MSG.JOIN_RESPONSE]: 'JOIN_RESPONSE',
+  [MSG.PUSH]: 'PUSH',
+  [MSG.PUSH_RESPONSE]: 'PUSH_RESPONSE',
+  [MSG.PULL_REQUEST]: 'PULL_REQUEST',
+  [MSG.PULL_RESPONSE]: 'PULL_RESPONSE',
+  [MSG.LOCK_ACQUIRE]: 'LOCK_ACQUIRE',
+  [MSG.LOCK_RELEASE]: 'LOCK_RELEASE',
+  [MSG.LOCK_RESPONSE]: 'LOCK_RESPONSE',
+  [MSG.LOCK_LIST_REQ]: 'LOCK_LIST_REQ',
+  [MSG.LOCK_LIST_RES]: 'LOCK_LIST_RES',
+  [MSG.BROADCAST_NUDGE]: 'BROADCAST_NUDGE',
+  [MSG.AWARENESS_UPDATE]: 'AWARENESS_UPDATE',
+  [MSG.ROOM_SNAPSHOT]: 'ROOM_SNAPSHOT',
+  [MSG.ROOM_SNAPSHOT_RESPONSE]: 'ROOM_SNAPSHOT_RESPONSE',
+  [MSG.RESUME_REQUEST]: 'RESUME_REQUEST',
+  [MSG.RESUME_RESPONSE]: 'RESUME_RESPONSE',
+} as const satisfies Record<MsgType, string>);
+
+export type SyncUpdateWireProvenanceSourceKind =
+  | 'collaborationHydration'
+  | 'collaborationMixedRemote'
+  | 'legacyRawUnknown';
+
+export type SyncUpdateWireSourceKind =
+  | 'joinResponseHydration'
+  | 'resumeResponseHydration'
+  | 'pullResponseMixedRemote'
+  | 'pushResponseMixedRemote'
+  | 'legacyRawFallback';
+
+export interface SyncUpdateWireSource {
+  readonly kind: SyncUpdateWireSourceKind;
+  readonly messageType: number;
+  readonly messageName: string;
+  readonly sourceKind: SyncUpdateWireProvenanceSourceKind;
+  readonly legacyRawFallback: boolean;
+}
+
+export const SYNC_UPDATE_WIRE_SOURCE_BY_TYPE = Object.freeze({
+  [MSG.JOIN_RESPONSE]: {
+    kind: 'joinResponseHydration',
+    messageType: MSG.JOIN_RESPONSE,
+    messageName: MSG_NAME_BY_TYPE[MSG.JOIN_RESPONSE],
+    sourceKind: 'collaborationHydration',
+    legacyRawFallback: false,
+  },
+  [MSG.RESUME_RESPONSE]: {
+    kind: 'resumeResponseHydration',
+    messageType: MSG.RESUME_RESPONSE,
+    messageName: MSG_NAME_BY_TYPE[MSG.RESUME_RESPONSE],
+    sourceKind: 'collaborationHydration',
+    legacyRawFallback: false,
+  },
+  [MSG.PULL_RESPONSE]: {
+    kind: 'pullResponseMixedRemote',
+    messageType: MSG.PULL_RESPONSE,
+    messageName: MSG_NAME_BY_TYPE[MSG.PULL_RESPONSE],
+    sourceKind: 'collaborationMixedRemote',
+    legacyRawFallback: false,
+  },
+  [MSG.PUSH_RESPONSE]: {
+    kind: 'pushResponseMixedRemote',
+    messageType: MSG.PUSH_RESPONSE,
+    messageName: MSG_NAME_BY_TYPE[MSG.PUSH_RESPONSE],
+    sourceKind: 'collaborationMixedRemote',
+    legacyRawFallback: false,
+  },
+} as const satisfies Partial<Record<MsgType, SyncUpdateWireSource>>);
+
 // ---------------------------------------------------------------------------
 // Decoded message shape
 // ---------------------------------------------------------------------------
@@ -58,6 +129,31 @@ export interface DecodedMessage {
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+
+export function messageTypeName(type: number): string {
+  const knownName = (MSG_NAME_BY_TYPE as Readonly<Record<number, string | undefined>>)[type];
+  if (knownName) return knownName;
+  return `UNKNOWN_0x${formatMessageTypeHex(type)}`;
+}
+
+export function classifySyncUpdateWireSource(messageType: number): SyncUpdateWireSource {
+  const knownSource = (
+    SYNC_UPDATE_WIRE_SOURCE_BY_TYPE as Readonly<Record<number, SyncUpdateWireSource | undefined>>
+  )[messageType];
+  if (knownSource) return knownSource;
+  return {
+    kind: 'legacyRawFallback',
+    messageType,
+    messageName: messageTypeName(messageType),
+    sourceKind: 'legacyRawUnknown',
+    legacyRawFallback: true,
+  };
+}
+
+function formatMessageTypeHex(type: number): string {
+  if (!Number.isInteger(type) || type < 0) return 'unknown';
+  return type.toString(16).padStart(2, '0');
+}
 
 /** Message types that use the binary+metadata wire format. */
 const BINARY_TYPES: ReadonlySet<number> = new Set([

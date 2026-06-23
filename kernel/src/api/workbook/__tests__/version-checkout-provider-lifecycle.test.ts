@@ -368,6 +368,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   commitId: committed.id,
                   cause: 'VersionCheckoutRebindProviderIdentityError',
+                  identityFenceReason: 'providerDocumentMismatch',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
                 }),
@@ -436,6 +437,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   commitId: committed.id,
                   cause: 'VersionCheckoutRebindMaterializationIdentityError',
+                  identityFenceReason: 'materializationIdentityStale',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
                 }),

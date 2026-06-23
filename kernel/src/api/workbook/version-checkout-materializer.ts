@@ -12,6 +12,7 @@ import {
   createDocumentLifecycleSnapshotRootHydrator,
   type SnapshotRootFreshLifecycleMaterialization,
 } from '../document/snapshot-root-lifecycle-hydrator';
+import { checkoutRebindIdentityDiagnosticDetails } from './version-checkout-rebind';
 
 export interface WorkbookCheckoutPublisher {
   currentContext(): DocumentContext;
@@ -71,7 +72,7 @@ export function createWorkbookCheckoutSnapshotMaterializer(
               severity: 'error',
               message: 'Fresh lifecycle checkout materialization could not be published.',
               commitId: input.commitId,
-              details: { cause: errorName(error) },
+              details: checkoutPublishErrorDetails(error),
             },
           ],
           mutationGuarantee: 'unknown-after-partial-mutation',
@@ -102,4 +103,10 @@ function checkoutApplyDiagnostic(
 
 function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
+}
+
+function checkoutPublishErrorDetails(
+  error: unknown,
+): CheckoutMaterializationDiagnostic['details'] {
+  return checkoutRebindIdentityDiagnosticDetails(error) ?? { cause: errorName(error) };
 }

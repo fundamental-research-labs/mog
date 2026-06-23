@@ -36,6 +36,16 @@ class VersionCheckoutRebindIdentityError extends Error {
   }
 }
 
+export function checkoutRebindIdentityDiagnosticDetails(
+  error: unknown,
+): Readonly<Record<string, string>> | null {
+  if (!(error instanceof VersionCheckoutRebindIdentityError)) return null;
+  return Object.freeze({
+    cause: error.name,
+    identityFenceReason: error.reason,
+  });
+}
+
 export function rebindVersioningAfterCheckout(input: {
   readonly versioning: unknown;
   readonly nextContext: DocumentContext;

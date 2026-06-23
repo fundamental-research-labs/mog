@@ -39,6 +39,7 @@ export {
   VERSION_DIFF_RESOURCE_LIMITS,
   isPublicVersionDiffCursor,
 } from './diff-pagination';
+export * from './version-capability-gate';
 
 export const VERSION_OPERATION_KINDS = Object.freeze([
   'mutation',

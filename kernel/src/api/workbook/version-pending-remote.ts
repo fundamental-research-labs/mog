@@ -248,13 +248,14 @@ function mapPromotionResult(
 ): VersionResult<VersionPromotePendingRemoteResult> {
   if (!isRecord(value)) return invalidPayloadResult();
 
-  const status = toStatus(value.status);
+  const rawStatus = toStatus(value.status);
   const promotedSegmentIds = toStringArray(value.promotedSegmentIds, toSegmentId);
   const commitIds = toStringArray(value.commitIds, toCommitId);
   const skipped = toSkippedSegments(value.skipped);
-  if (!status || !promotedSegmentIds || !commitIds || !skipped) return invalidPayloadResult();
+  if (!rawStatus || !promotedSegmentIds || !commitIds || !skipped) return invalidPayloadResult();
 
   const diagnostics = mapDiagnostics(value.diagnostics);
+  const status = failClosedPromotionStatus(rawStatus, promotedSegmentIds, skipped, diagnostics);
   return {
     ok: true,
     value: {
@@ -265,6 +266,18 @@ function mapPromotionResult(
       diagnostics: options.includeDiagnostics === false && status === 'success' ? [] : diagnostics,
     },
   };
+}
+
+function failClosedPromotionStatus(
+  status: VersionPromotePendingRemoteStatus,
+  promotedSegmentIds: readonly VersionPromotePendingRemoteSkippedSegment['segmentId'][],
+  skipped: readonly VersionPromotePendingRemoteSkippedSegment[],
+  diagnostics: readonly VersionPromotePendingRemoteDiagnostic[],
+): VersionPromotePendingRemoteStatus {
+  const blocked = skipped.length > 0 || diagnostics.some((item) => item.severity === 'error');
+  if (!blocked) return status;
+  if (promotedSegmentIds.length === 0) return 'failed';
+  return status === 'success' ? 'partial' : status;
 }
 
 function invalidPayloadResult(): VersionResult<VersionPromotePendingRemoteResult> {

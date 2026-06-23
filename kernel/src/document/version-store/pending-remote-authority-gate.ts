@@ -26,6 +26,41 @@ export function validatePendingRemoteProviderAuthority(
       present: false,
     });
   }
+  if (record.operationContext.capturePolicy !== 'commitEligible') {
+    return unknownAuthority('Pending remote promotion requires commit-eligible updates.', {
+      gate: 'promotion-quarantine',
+      field: 'capturePolicy',
+      expected: 'commitEligible',
+      actual: record.operationContext.capturePolicy,
+    });
+  }
+  if (record.operationContext.writeAdmissionMode !== 'capture') {
+    return unknownAuthority('Pending remote promotion requires captured durable writes.', {
+      gate: 'promotion-quarantine',
+      field: 'writeAdmissionMode',
+      expected: 'capture',
+      actual: record.operationContext.writeAdmissionMode,
+    });
+  }
+  if (
+    typeof collaboration.validationDiagnosticCount !== 'number' ||
+    collaboration.validationDiagnosticCount !== 0
+  ) {
+    return unknownAuthority(
+      'Pending remote promotion requires validation-clean durable sync receipt metadata.',
+      {
+        gate: 'durable-gap-receipt',
+        field: 'validationDiagnosticCount',
+        expected: 0,
+        actual:
+          typeof collaboration.validationDiagnosticCount === 'number'
+            ? collaboration.validationDiagnosticCount
+            : null,
+        exclusionReason: collaboration.exclusionReason ?? null,
+        exclusionSubreason: collaboration.exclusionSubreason ?? null,
+      },
+    );
+  }
   if (collaboration.trustStatus !== 'verified') {
     return unknownAuthority('Pending remote promotion requires verified provider authority.', {
       gate: 'provider-authority',

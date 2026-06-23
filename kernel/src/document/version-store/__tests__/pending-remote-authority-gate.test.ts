@@ -19,6 +19,52 @@ describe('validatePendingRemoteProviderAuthority', () => {
     expect(validatePendingRemoteProviderAuthority(record)).toEqual({ status: 'ok' });
   });
 
+  it.each([
+    [
+      'quarantine capture policy',
+      { operation: { capturePolicy: 'excluded' } },
+      { gate: 'promotion-quarantine', field: 'capturePolicy', actual: 'excluded' },
+    ],
+    [
+      'blocked write admission',
+      { operation: { writeAdmissionMode: 'block' } },
+      { gate: 'promotion-quarantine', field: 'writeAdmissionMode', actual: 'block' },
+    ],
+    [
+      'missing durable gap receipt',
+      { collaboration: { validationDiagnosticCount: undefined } },
+      { gate: 'durable-gap-receipt', field: 'validationDiagnosticCount', actual: null },
+    ],
+    [
+      'quarantine-required validation diagnostics',
+      {
+        collaboration: {
+          validationDiagnosticCount: 1,
+          exclusionReason: 'missingProof',
+          exclusionSubreason: 'missingProofAudience',
+        },
+      },
+      {
+        gate: 'durable-gap-receipt',
+        field: 'validationDiagnosticCount',
+        actual: 1,
+        exclusionReason: 'missingProof',
+        exclusionSubreason: 'missingProofAudience',
+      },
+    ],
+  ] as const)('blocks %s as unknown authority', async (_label, options, details) => {
+    const record = await pendingRemoteRecord(options);
+
+    expect(validatePendingRemoteProviderAuthority(record)).toMatchObject({
+      status: 'blocked',
+      reason: 'provider-authority-unknown',
+      details: {
+        expected: details.field === 'validationDiagnosticCount' ? 0 : expect.any(String),
+        ...details,
+      },
+    });
+  });
+
   it('blocks provider identity mismatches as structured stale authority diagnostics', async () => {
     const record = await pendingRemoteRecord({
       syncIdentity: { providerId: 'provider-rotated' },
@@ -130,6 +176,9 @@ async function pendingRemoteRecord(
   options: {
     readonly author?: PendingRemoteSegmentOperationContext['author'];
     readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
+    readonly operation?: Partial<
+      Pick<PendingRemoteSegmentOperationContext, 'capturePolicy' | 'writeAdmissionMode'>
+    >;
     readonly syncIdentity?: Partial<PendingRemoteSegmentRecord['syncIdentity']>;
   } = {},
 ): Promise<PendingRemoteSegmentRecord> {
@@ -160,6 +209,9 @@ function pendingRemoteOperationContext(
   options: {
     readonly author?: PendingRemoteSegmentOperationContext['author'];
     readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
+    readonly operation?: Partial<
+      Pick<PendingRemoteSegmentOperationContext, 'capturePolicy' | 'writeAdmissionMode'>
+    >;
   } = {},
 ): PendingRemoteSegmentOperationContext {
   return {
@@ -169,8 +221,8 @@ function pendingRemoteOperationContext(
     createdAt: '2026-06-21T00:00:01.000Z',
     workbookId: 'document-1',
     domainIds: ['runtime-diagnostics'],
-    capturePolicy: 'commitEligible',
-    writeAdmissionMode: 'capture',
+    capturePolicy: options.operation?.capturePolicy ?? 'commitEligible',
+    writeAdmissionMode: options.operation?.writeAdmissionMode ?? 'capture',
     collaboration: {
       sourceKind: 'providerLiveInbound',
       originKind: 'provider',

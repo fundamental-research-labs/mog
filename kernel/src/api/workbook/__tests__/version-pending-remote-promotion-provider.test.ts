@@ -337,6 +337,84 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
     expect(staleRead.record.terminal).toBeUndefined();
   });
 
+  it.each([
+    [
+      'unknown remote authority',
+      'graph-unknown-provider-authority',
+      { trustStatus: 'unverified' },
+      'provider-authority-unknown',
+    ],
+    [
+      'quarantine-required update',
+      'graph-quarantine-required-update',
+      {
+        validationDiagnosticCount: 1,
+        exclusionReason: 'missingProof',
+        exclusionSubreason: 'missingProofAudience',
+      },
+      'provider-authority-unknown',
+    ],
+  ] as const)(
+    'blocks %s through wb.version.promotePendingRemote without promoting',
+    async (_label, graphId, collaboration, reason) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const namespace = await initializeProvider(provider, graphId);
+      const graph = await provider.openGraph(namespace);
+      const store = await provider.openPendingRemoteSegmentStore(namespace);
+      const fixture = await pendingSegmentFixture(namespace, { collaboration });
+      await persistAndReservePendingSegment(graph, store, fixture);
+      const headBefore = await expectReadHeadSuccess(graph);
+      const wb = createPromotionAuthorizedWorkbook({ provider });
+
+      const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+
+      await expectBlockedPromotion(result, graph, store, fixture, headBefore, reason);
+    },
+  );
+
+  it('blocks missing durable segment receipt without promoting', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider, 'graph-missing-durable-segment');
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await expect(store.reserveSegment(fixture.input)).resolves.toMatchObject({
+      status: 'created',
+    });
+    const headBefore = await expectReadHeadSuccess(graph);
+    const wb = createPromotionAuthorizedWorkbook({ provider });
+
+    const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+
+    await expectBlockedPromotion(result, graph, store, fixture, headBefore, 'missing-required-object');
+  });
+
+  it('blocks stale remote head promotion attempts without marking the segment promoted', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider, 'graph-stale-remote-head');
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await persistAndReservePendingSegment(graph, store, fixture);
+    const wb = createPromotionAuthorizedWorkbook({
+      provider: providerWithStaleHeadCommit(provider, namespace),
+    });
+
+    const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { status: 'failed', promotedSegmentIds: [], commitIds: [] },
+    });
+    if (!result.ok) throw new Error(`expected stale head block: ${result.error.code}`);
+    expect(result.value.skipped).toEqual([
+      { segmentId: fixture.input.pendingRemoteSegmentId, reason: 'graph-write-failed', message: expect.any(String) },
+    ]);
+    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      { status: 'found', record: { state: 'pending' } },
+    );
+  });
+
   it('preserves source batch binding on provider-backed pending segments', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const namespace = await initializeProvider(provider, 'graph-source-batch-binding');
@@ -826,6 +904,30 @@ async function expectGraphHead(
   expect(result).toEqual(expected);
 }
 
+async function expectBlockedPromotion(
+  result: any,
+  graph: VersionGraphStore,
+  store: PendingRemoteSegmentStore,
+  fixture: PendingSegmentFixture,
+  headBefore: { readonly commitId: WorkbookCommitId; readonly revision: RefVersion },
+  reason: string,
+): Promise<void> {
+  expect(result).toMatchObject({
+    ok: true,
+    value: {
+      status: 'failed',
+      promotedSegmentIds: [],
+      commitIds: [],
+      skipped: [{ segmentId: fixture.input.pendingRemoteSegmentId, reason }],
+      diagnostics: [expect.objectContaining({ reason })],
+    },
+  });
+  await expectGraphHead(graph, headBefore);
+  await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+    { status: 'found', record: { state: 'pending' } },
+  );
+}
+
 function expectSingleCommit(commitIds: readonly WorkbookCommitId[]): WorkbookCommitId {
   expect(commitIds).toHaveLength(1);
   const commitId = commitIds[0];
@@ -840,4 +942,56 @@ function expectInitializeSuccess(
   if (result.status !== 'success') {
     throw new Error(`expected version graph initialize success: ${result.diagnostics[0]?.code}`);
   }
+}
+
+function providerWithStaleHeadCommit(provider: InMemoryProvider, namespace: VersionGraphNamespace) {
+  return new Proxy(provider, {
+    get(target, property) {
+      if (property === 'openGraph') {
+        return async (...args: Parameters<InMemoryProvider['openGraph']>) =>
+          graphWithStaleHeadCommit(await target.openGraph(...args), namespace);
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as InMemoryProvider;
+}
+
+function graphWithStaleHeadCommit(graph: VersionGraphStore, namespace: VersionGraphNamespace) {
+  let advanced = false;
+  return new Proxy(graph, {
+    get(target, property) {
+      if (property === 'commit') {
+        return async (input: Parameters<VersionGraphStore['commit']>[0]) => {
+          if (!advanced) {
+            advanced = true;
+            await advanceHeadForStalePromotion(target, namespace);
+          }
+          return target.commit(input);
+        };
+      }
+      const value = Reflect.get(target, property);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as VersionGraphStore;
+}
+
+async function advanceHeadForStalePromotion(graph: VersionGraphStore, namespace: VersionGraphNamespace) {
+  const head = await expectReadHeadSuccess(graph);
+  await graph.commit({
+    snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+      label: 'stale-head',
+      sheets: [],
+    }),
+    semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+      label: 'stale-head',
+      changes: [],
+    }),
+    author: VERSION_AUTHOR,
+    createdAt: '2026-06-21T00:00:09.000Z',
+    completenessDiagnostics: [],
+    expectedHeadCommitId: head.commitId,
+    expectedTargetRefVersion: head.revision,
+    parentCommitIds: [head.commitId],
+  });
 }

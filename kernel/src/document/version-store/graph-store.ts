@@ -523,6 +523,9 @@ export class InMemoryVersionGraphStore {
   async fastForwardBranch(...args: Parameters<GraphBranchLifecycle['fastForwardBranch']>) {
     return this.branchService().fastForwardBranch(...args);
   }
+  async deleteBranch(...args: Parameters<GraphBranchLifecycle['deleteBranch']>) {
+    return this.branchService().deleteBranch(...args);
+  }
   async getHead() {
     return this.branchService().getHead();
   }

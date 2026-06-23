@@ -2,6 +2,8 @@ import type { ReadWorkbookCommitResult } from './commit-store';
 import type {
   CreateBranchInput,
   CreateBranchResult,
+  DeleteBranchInput,
+  DeleteBranchResult,
   FastForwardBranchInput,
   FastForwardBranchResult,
   GetBranchHeadResult,
@@ -46,6 +48,7 @@ export interface VersionGraphStore {
   readBranch(input: ReadBranchInput | string): Promise<ReadBranchResult>;
   listBranches(input?: ListBranchesInput): Promise<ListBranchesResult>;
   fastForwardBranch(input: FastForwardBranchInput): Promise<FastForwardBranchResult>;
+  deleteBranch(input: DeleteBranchInput): Promise<DeleteBranchResult>;
   getHead(): Promise<GetBranchHeadResult>;
   listCommits(options?: VersionGraphListCommitsOptions): Promise<VersionGraphCommitPageResult>;
   readCommitClosure(commitId: WorkbookCommitId | string): Promise<VersionGraphClosureReadResult>;

@@ -295,7 +295,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
   });
 
-  it('rejects immutable main and tag-shaped refs before provider write attempts', async () => {
+  it('rejects symbolic HEAD, immutable main, and tag-shaped refs before provider write attempts', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
     expectInitializeSuccess(initialized);
@@ -315,6 +315,27 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     const readGraphRegistry = jest.spyOn(provider, 'readGraphRegistry');
     const openGraph = jest.spyOn(provider, 'openGraph');
     const tagRef = 'refs/tags/release-secret' as any;
+
+    const protectedHeadCreate = await wb.version.createBranch({
+      name: 'HEAD' as any,
+      targetCommitId: initialized.rootCommit.id,
+    });
+    expectNoWriteFailure(protectedHeadCreate, 'VERSION_PERMISSION_DENIED');
+
+    const protectedHeadAdvance = await wb.version.fastForwardBranch({
+      name: 'HEAD' as any,
+      nextCommitId: child.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(protectedHeadAdvance, 'VERSION_PERMISSION_DENIED');
+
+    const protectedHeadDelete = await wb.version.deleteBranch({
+      name: 'HEAD' as any,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(protectedHeadDelete, 'VERSION_PERMISSION_DENIED');
 
     const protectedCreate = await wb.version.createBranch({
       name: 'refs/heads/main' as any,
@@ -340,6 +361,15 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
       expectedRefRevision: initialized.initialHead.revision,
     });
     expectNoWriteFailure(protectedDelete, 'VERSION_PERMISSION_DENIED', {
+      payload: expect.objectContaining({ refName: 'refs/heads/main' }),
+    });
+
+    const protectedDeleteBranch = await wb.version.deleteBranch({
+      name: 'main' as any,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: initialized.initialHead.revision,
+    });
+    expectNoWriteFailure(protectedDeleteBranch, 'VERSION_PERMISSION_DENIED', {
       payload: expect.objectContaining({ refName: 'refs/heads/main' }),
     });
 
@@ -414,17 +444,19 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
     expectNoDiagnosticLeak(duplicate, 'scenario/duplicate');
 
-    await expect(wb.version.readRef('refs/heads/scenario/duplicate' as any)).resolves.toMatchObject({
-      ok: true,
-      value: {
-        status: 'success',
-        ref: {
-          name: 'refs/heads/scenario/duplicate',
-          commitId: initialized.rootCommit.id,
-          revision: { kind: 'counter', value: '0' },
+    await expect(wb.version.readRef('refs/heads/scenario/duplicate' as any)).resolves.toMatchObject(
+      {
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/duplicate',
+            commitId: initialized.rootCommit.id,
+            revision: { kind: 'counter', value: '0' },
+          },
         },
       },
-    });
+    );
     await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
       value: {
@@ -510,17 +542,116 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     });
     expectNoDiagnosticLeak(stale, 'scenario/stale-cas');
 
-    await expect(wb.version.readRef('refs/heads/scenario/stale-cas' as any)).resolves.toMatchObject({
-      ok: true,
-      value: {
-        status: 'success',
-        ref: {
-          name: 'refs/heads/scenario/stale-cas',
-          commitId: child.commit.id,
-          revision: { kind: 'counter', value: '1' },
+    await expect(wb.version.readRef('refs/heads/scenario/stale-cas' as any)).resolves.toMatchObject(
+      {
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/stale-cas',
+            commitId: child.commit.id,
+            revision: { kind: 'counter', value: '1' },
+          },
         },
       },
+    );
+  });
+
+  it('keeps tombstoned provider branches deleted on stale fast-forward and delete attempts', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const child = await commitGraphChild(
+      graph,
+      'graph-1',
+      initialized.rootCommit.id,
+      initialized.initialHead.revision,
+      'deleted-stale-child',
+    );
+    const wb = createWorkbook({
+      versioning: {
+        provider,
+      },
     });
+
+    await expect(
+      wb.version.createBranch({
+        name: 'scenario/deleted-stale' as any,
+        targetCommitId: initialized.rootCommit.id,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/deleted-stale',
+        commitId: initialized.rootCommit.id,
+        revision: { kind: 'counter', value: '0' },
+      },
+    });
+
+    await expect(
+      wb.version.deleteRef({
+        name: 'scenario/deleted-stale' as any,
+        expectedHead: initialized.rootCommit.id,
+        expectedRefRevision: { kind: 'counter', value: '0' },
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/deleted-stale',
+        commitId: initialized.rootCommit.id,
+        revision: { kind: 'counter', value: '1' },
+      },
+    });
+
+    const staleAdvance = await wb.version.fastForwardBranch({
+      name: 'refs/heads/scenario/deleted-stale' as any,
+      nextCommitId: child.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(staleAdvance, 'VERSION_DANGLING_REF', {
+      recoverability: 'unsupported',
+      payload: expect.objectContaining({
+        actualHead: initialized.rootCommit.id,
+        actualRefRevision: 'rv:n:1',
+      }),
+    });
+    expectNoDiagnosticLeak(staleAdvance, 'scenario/deleted-stale');
+
+    const staleDelete = await wb.version.deleteRef({
+      name: 'scenario/deleted-stale' as any,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(staleDelete, 'VERSION_DANGLING_REF', {
+      recoverability: 'unsupported',
+      payload: expect.objectContaining({
+        actualHead: initialized.rootCommit.id,
+        actualRefRevision: 'rv:n:1',
+      }),
+    });
+    expectNoDiagnosticLeak(staleDelete, 'scenario/deleted-stale');
+
+    await expect(
+      wb.version.readRef('refs/heads/scenario/deleted-stale' as any),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DANGLING_REF',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
+      },
+    });
+    const listed = await wb.version.listRefs({ prefix: 'scenario' as any });
+    expect(listed.ok).toBe(true);
+    if (!listed.ok) throw new Error(`expected listRefs success: ${listed.error.code}`);
+    expect(listed.value.items.map((ref) => ref.name)).not.toContain(
+      'refs/heads/scenario/deleted-stale',
+    );
   });
 
   it.each([

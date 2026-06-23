@@ -76,9 +76,7 @@ export type VersionObjectPutBatchFailure = {
   readonly mutationGuarantee: 'no-objects-written';
 };
 
-export type VersionObjectPutBatchResult =
-  | VersionObjectPutBatchSuccess
-  | VersionObjectPutBatchFailure;
+export type VersionObjectPutBatchResult = VersionObjectPutBatchSuccess | VersionObjectPutBatchFailure;
 
 export interface VersionObjectStore {
   readonly namespace: VersionGraphNamespace;
@@ -111,10 +109,7 @@ class VersionObjectStoreValidationError extends Error {
 export class VersionObjectMemoryBackend {
   private readonly records = new Map<string, VersionObjectRecord<unknown>>();
 
-  get(
-    namespace: VersionGraphNamespace,
-    digest: ObjectDigest,
-  ): VersionObjectRecord<unknown> | undefined {
+  get(namespace: VersionGraphNamespace, digest: ObjectDigest): VersionObjectRecord<unknown> | undefined {
     return this.records.get(versionObjectStorageKey(namespace, digest));
   }
   put(record: VersionObjectRecord<unknown>): void {
@@ -126,7 +121,7 @@ export class VersionObjectMemoryBackend {
   list(namespace: VersionGraphNamespace): readonly VersionObjectRecord<unknown>[] {
     const prefix = `${versionGraphNamespaceKey(namespace)}\u0000`;
     const out = [...this.records.entries()]
-      .filter(([key]) => key.startsWith(prefix))
+      .filter(([key, record]) => key.startsWith(prefix) && recordBelongsToNamespace(namespace, record))
       .map(([, record]) => cloneVersionObjectRecord(record));
     return Object.freeze(
       out.sort((left, right) => left.digest.digest.localeCompare(right.digest.digest)),
@@ -137,10 +132,7 @@ export class VersionObjectMemoryBackend {
     digest: ObjectDigest,
     record: VersionObjectRecord<unknown>,
   ): void {
-    this.records.set(
-      versionObjectStorageKey(namespace, parseObjectDigest(digest)),
-      cloneVersionObjectRecord(record),
-    );
+    this.records.set(versionObjectStorageKey(namespace, parseObjectDigest(digest)), cloneVersionObjectRecord(record));
   }
 }
 
@@ -157,9 +149,7 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
     this.namespaceKey = versionGraphNamespaceKey(this.namespace);
     this.backend = options.backend ?? new VersionObjectMemoryBackend();
   }
-  async putObjects(
-    batch: readonly VersionObjectRecord<unknown>[],
-  ): Promise<VersionObjectPutBatchResult> {
+  async putObjects(batch: readonly VersionObjectRecord<unknown>[]): Promise<VersionObjectPutBatchResult> {
     if (!Array.isArray(batch)) {
       return failedBatch([
         diagnostic('VERSION_INVALID_PREIMAGE', 'putObjects batch must be an array.', {
@@ -235,7 +225,8 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
       for (const dependency of stagedRecord.dependencies) {
         const sameBatchDependency = staged.get(dependency.digest.digest);
         const satisfiedByBatch = Boolean(
-          sameBatchDependency && dependencyMatchesRecord(dependency, sameBatchDependency.record),
+          sameBatchDependency &&
+            dependencyMatchesRecord(this.namespace, dependency, sameBatchDependency.record),
         );
         const satisfiedByStore = hasDependencyRecord(this.backend, this.namespace, dependency);
         if (!satisfiedByBatch && !satisfiedByStore) {
@@ -265,9 +256,7 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
     return clonePayload(record.preimage.payload) as TPayload;
   }
 
-  async getObjectRecord<TPayload>(
-    ref: VersionDependencyRef,
-  ): Promise<VersionObjectRecord<TPayload>> {
+  async getObjectRecord<TPayload>(ref: VersionDependencyRef): Promise<VersionObjectRecord<TPayload>> {
     const dependency = parseSingleDependencyRef(ref, 'ref');
     const record = this.backend.get(this.namespace, dependency.digest);
     if (!record) {
@@ -296,7 +285,23 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
       );
     }
 
-    if (!dependencyMatchesRecord(dependency, record)) {
+    if (!recordBelongsToNamespace(this.namespace, record)) {
+      throw new VersionObjectStoreError(
+        diagnostic(
+          'VERSION_OBJECT_CORRUPTION',
+          'Stored version object namespace does not match the requested store namespace.',
+          {
+            namespace: this.namespace,
+            digest: dependency.digest,
+            objectType: record.preimage.objectType,
+            dependency,
+            severity: 'corruption',
+          },
+        ),
+      );
+    }
+
+    if (!dependencyMatchesRecord(this.namespace, dependency, record)) {
       throw new VersionObjectStoreError(
         diagnostic(
           'VERSION_OBJECT_TYPE_MISMATCH',
@@ -330,7 +335,7 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
   async hasObject(ref: VersionDependencyRef): Promise<boolean> {
     const dependency = parseSingleDependencyRef(ref, 'ref');
     const record = this.backend.get(this.namespace, dependency.digest);
-    return Boolean(record && dependencyMatchesRecord(dependency, record));
+    return Boolean(record && dependencyMatchesRecord(this.namespace, dependency, record));
   }
   listObjectRecords(): readonly VersionObjectRecord<unknown>[] {
     return this.backend.list(this.namespace);
@@ -340,17 +345,11 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
   }
 }
 
-export function createInMemoryVersionObjectStore(
-  namespace: VersionGraphNamespace,
-  options?: InMemoryVersionObjectStoreOptions,
-): InMemoryVersionObjectStore {
+export function createInMemoryVersionObjectStore(namespace: VersionGraphNamespace, options?: InMemoryVersionObjectStoreOptions): InMemoryVersionObjectStore {
   return new InMemoryVersionObjectStore(namespace, options);
 }
 
-export async function createVersionObjectRecord<TPayload>(
-  namespace: VersionGraphNamespace,
-  preimage: VersionObjectPreimage<TPayload>,
-): Promise<VersionObjectRecord<TPayload>> {
+export async function createVersionObjectRecord<TPayload>(namespace: VersionGraphNamespace, preimage: VersionObjectPreimage<TPayload>): Promise<VersionObjectRecord<TPayload>> {
   const normalizedNamespace = normalizeVersionGraphNamespace(namespace);
   const encoded = encodeVersionObjectPreimage(preimage);
   const digest = await sha256ObjectDigest(encoded.preimageBytes);
@@ -399,10 +398,7 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
     );
   }
 
-  if (
-    preimage.payloadEncoding !== 'mog-canonical-json-v1' &&
-    preimage.payloadEncoding !== 'bytes'
-  ) {
+  if (preimage.payloadEncoding !== 'mog-canonical-json-v1' && preimage.payloadEncoding !== 'bytes') {
     throwValidation(
       'VERSION_UNSUPPORTED_PAYLOAD_ENCODING',
       'Version object payload encoding is not supported.',
@@ -448,10 +444,7 @@ export function encodeVersionObjectPreimage<TPayload>(preimage: VersionObjectPre
   });
 }
 
-export function normalizeVersionGraphNamespace(
-  namespace: VersionGraphNamespace,
-  path = 'namespace',
-): VersionGraphNamespace {
+export function normalizeVersionGraphNamespace(namespace: VersionGraphNamespace, path = 'namespace'): VersionGraphNamespace {
   if (!isPlainRecord(namespace)) {
     throwValidation('VERSION_INVALID_NAMESPACE', 'Version graph namespace must be an object.', {
       path,
@@ -468,12 +461,7 @@ export function normalizeVersionGraphNamespace(
     graphId: normalizeNamespaceString(namespace.graphId, `${path}.graphId`),
     ...(namespace.principalScope === undefined
       ? {}
-      : {
-          principalScope: normalizeNamespaceString(
-            namespace.principalScope,
-            `${path}.principalScope`,
-          ),
-        }),
+      : { principalScope: normalizeNamespaceString(namespace.principalScope, `${path}.principalScope`) }),
   });
 }
 
@@ -492,10 +480,7 @@ type ValidatedVersionObjectRecord<TPayload> = {
   readonly dependencies: readonly VersionDependencyRef[];
 };
 
-async function validateVersionObjectRecord<TPayload>(
-  record: VersionObjectRecord<TPayload>,
-  path: string,
-): Promise<ValidatedVersionObjectRecord<TPayload>> {
+async function validateVersionObjectRecord<TPayload>(record: VersionObjectRecord<TPayload>, path: string): Promise<ValidatedVersionObjectRecord<TPayload>> {
   if (!isPlainRecord(record)) {
     throwValidation('VERSION_INVALID_PREIMAGE', 'Version object record must be an object.', {
       path,
@@ -504,16 +489,8 @@ async function validateVersionObjectRecord<TPayload>(
 
   const namespace = normalizeVersionGraphNamespace(record.namespace, `${path}.namespace`);
   const digest = parseObjectDigest(record.digest, `${path}.digest`);
-  assertNonNegativeSafeInteger(
-    record.payloadByteLength,
-    `${path}.payloadByteLength`,
-    'VERSION_BYTE_LENGTH_MISMATCH',
-  );
-  assertNonNegativeSafeInteger(
-    record.preimageByteLength,
-    `${path}.preimageByteLength`,
-    'VERSION_BYTE_LENGTH_MISMATCH',
-  );
+  assertNonNegativeSafeInteger(record.payloadByteLength, `${path}.payloadByteLength`, 'VERSION_BYTE_LENGTH_MISMATCH');
+  assertNonNegativeSafeInteger(record.preimageByteLength, `${path}.preimageByteLength`, 'VERSION_BYTE_LENGTH_MISMATCH');
 
   const encoded = encodeVersionObjectPreimage(record.preimage);
   const expectedDigest = await sha256ObjectDigest(encoded.preimageBytes);
@@ -561,9 +538,7 @@ async function validateVersionObjectRecord<TPayload>(
   });
 }
 
-function failedBatch(
-  diagnostics: readonly VersionObjectStoreDiagnostic[],
-): VersionObjectPutBatchFailure {
+function failedBatch(diagnostics: readonly VersionObjectStoreDiagnostic[]): VersionObjectPutBatchFailure {
   return Object.freeze({
     status: 'failed',
     diagnostics: Object.freeze([...diagnostics]),
@@ -577,7 +552,7 @@ function hasDependencyRecord(
   dependency: VersionDependencyRef,
 ): boolean {
   const record = backend.get(namespace, dependency.digest);
-  return Boolean(record && dependencyMatchesRecord(dependency, record));
+  return Boolean(record && dependencyMatchesRecord(namespace, dependency, record));
 }
 
 function missingDependencyDiagnostic(
@@ -595,9 +570,13 @@ function missingDependencyDiagnostic(
 }
 
 function dependencyMatchesRecord(
+  namespace: VersionGraphNamespace,
   dependency: VersionDependencyRef,
   record: VersionObjectRecord<unknown>,
 ): boolean {
+  if (!recordBelongsToNamespace(namespace, record)) {
+    return false;
+  }
   if (!objectDigestsEqual(record.digest, dependency.digest)) {
     return false;
   }
@@ -609,6 +588,17 @@ function dependencyMatchesRecord(
 
 function objectDigestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
   return left.algorithm === right.algorithm && left.digest === right.digest;
+}
+
+function recordBelongsToNamespace(
+  namespace: VersionGraphNamespace,
+  record: VersionObjectRecord<unknown>,
+): boolean {
+  try {
+    return versionGraphNamespaceKey(record.namespace) === versionGraphNamespaceKey(namespace);
+  } catch {
+    return false;
+  }
 }
 
 function parseSingleDependencyRef(value: VersionDependencyRef, path: string): VersionDependencyRef {
@@ -633,7 +623,7 @@ function versionObjectRecordsMatch(
 function versionObjectRecordIdentity(record: VersionObjectRecord<unknown>): string {
   const encoded = encodeVersionObjectPreimage(record.preimage);
   return canonicalJsonStringify({
-    namespace: namespaceIdentity(record.namespace),
+    namespace: versionGraphNamespaceKey(record.namespace),
     digest: record.digest,
     objectType: encoded.preimage.objectType,
     schemaVersion: encoded.preimage.schemaVersion,
@@ -644,16 +634,6 @@ function versionObjectRecordIdentity(record: VersionObjectRecord<unknown>): stri
     payloadBytesHex: bytesToHex(encoded.payloadBytes),
     preimageBytesHex: bytesToHex(encoded.preimageBytes),
   });
-}
-
-function namespaceIdentity(namespace: VersionGraphNamespace): Record<string, string | null> {
-  const normalized = normalizeVersionGraphNamespace(namespace);
-  return {
-    workspaceId: normalized.workspaceId ?? null,
-    documentId: normalized.documentId,
-    graphId: normalized.graphId,
-    principalScope: normalized.principalScope ?? null,
-  };
 }
 
 function versionObjectStorageKey(namespace: VersionGraphNamespace, digest: ObjectDigest): string {
@@ -694,11 +674,7 @@ function diagnostic(
   });
 }
 
-function throwValidation(
-  code: VersionObjectStoreDiagnosticCode,
-  message: string,
-  options: DiagnosticOptions = {},
-): never {
+function throwValidation(code: VersionObjectStoreDiagnosticCode, message: string, options: DiagnosticOptions = {}): never {
   throw new VersionObjectStoreValidationError(diagnostic(code, message, options));
 }
 
@@ -733,11 +709,7 @@ function normalizeNamespaceString(value: unknown, path: string): string {
   return normalized;
 }
 
-function assertAllowedKeys(
-  value: Record<string, unknown>,
-  allowedKeys: readonly string[],
-  path: string,
-): void {
+function assertAllowedKeys(value: Record<string, unknown>, allowedKeys: readonly string[], path: string): void {
   const unsupportedKey = Object.keys(value).find((key) => !allowedKeys.includes(key));
   if (unsupportedKey) {
     throwValidation(
@@ -912,9 +884,7 @@ function cloneBytesPayload(value: unknown, path: string): Uint8Array {
     return new Uint8Array(value.slice(0));
   }
   if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(
-      value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength),
-    );
+    return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
   }
   const message = 'Bytes payload must be ArrayBuffer or ArrayBufferView.';
   throwValidation('VERSION_INVALID_PAYLOAD', message, { path });

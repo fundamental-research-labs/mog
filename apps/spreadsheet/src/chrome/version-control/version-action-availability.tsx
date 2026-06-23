@@ -14,8 +14,6 @@ const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
   'version:diff': 'Diff',
 };
 
-const VERSIONING_DISABLED_REASON = 'Versioning is disabled for this workbook.';
-
 export type VersionActionAvailability = {
   readonly enabled: boolean;
   readonly disabledReason?: string;
@@ -36,10 +34,11 @@ export function getCommitAvailability(
   const commonReason = commonActionDisabledReason(actionBusy, loading);
   if (commonReason) return disabledAction(commonReason);
 
+  const capabilityReason = capabilityDisabledReason(data, 'version:commit');
+  if (capabilityReason) return disabledAction(capabilityReason);
+
   const surface = data.surface;
   if (!surface) return disabledAction('Version surface status is unavailable.');
-  const surfaceReason = actionSurfaceDisabledReason(surface, 'version:commit');
-  if (surfaceReason) return disabledAction(surfaceReason);
 
   const dirtyReason = commitDirtyDisabledReason(surface);
   if (dirtyReason) return disabledAction(dirtyReason);
@@ -63,8 +62,8 @@ export function getBranchAvailability(
   const commonReason = commonActionDisabledReason(actionBusy, loading);
   if (commonReason) return disabledAction(commonReason);
 
-  const surfaceReason = actionSurfaceDisabledReason(data.surface, 'version:branch');
-  if (surfaceReason) return disabledAction(surfaceReason);
+  const capabilityReason = capabilityDisabledReason(data, 'version:branch');
+  if (capabilityReason) return disabledAction(capabilityReason);
 
   if (!targetCommitId) return disabledAction('Select a commit target first.');
   if (branchName.trim().length === 0) return disabledAction('Enter a branch name.');
@@ -81,10 +80,11 @@ export function getCheckoutAvailability(
   const commonReason = commonActionDisabledReason(actionBusy, loading);
   if (commonReason) return disabledAction(commonReason);
 
+  const capabilityReason = capabilityDisabledReason(data, 'version:checkout');
+  if (capabilityReason) return disabledAction(capabilityReason);
+
   const surface = data.surface;
   if (!surface) return disabledAction('Version surface status is unavailable.');
-  const surfaceReason = actionSurfaceDisabledReason(surface, 'version:checkout');
-  if (surfaceReason) return disabledAction(surfaceReason);
 
   const checkoutReason = checkoutUnsafeDisabledReason(surface);
   if (checkoutReason) return disabledAction(checkoutReason);
@@ -101,16 +101,9 @@ export function getDiffAvailability(
   const commonReason = commonActionDisabledReason(actionBusy, loading);
   if (commonReason) return disabledAction(commonReason);
 
-  const surfaceReason = actionSurfaceDisabledReason(data.surface, 'version:diff');
-  if (surfaceReason) return disabledAction(surfaceReason);
+  const capabilityReason = capabilityDisabledReason(data, 'version:diff');
+  if (capabilityReason) return disabledAction(capabilityReason);
   return enabledAction();
-}
-
-export function isCapabilityEnabled(
-  surface: VersionSurfaceStatus,
-  capability: VersionCapability,
-): boolean {
-  return surface.capabilities[capability]?.enabled === true;
 }
 
 export function DisabledReason({
@@ -139,19 +132,13 @@ function commonActionDisabledReason(actionBusy: boolean, loading: boolean): stri
   return undefined;
 }
 
-function actionSurfaceDisabledReason(
-  surface: VersionSurfaceStatus | undefined,
-  capability: VersionCapability,
-): string | undefined {
-  if (!surface) return 'Version surface status is unavailable.';
-  if (!surface.featureGateEnabled) return VERSIONING_DISABLED_REASON;
-  return capabilityDisabledReason(surface, capability);
-}
-
 function capabilityDisabledReason(
-  surface: VersionSurfaceStatus,
+  data: VersionActionSurfaceData,
   capability: VersionCapability,
 ): string | undefined {
+  const surface = data.surface;
+  if (!surface) return 'Version surface status is unavailable.';
+
   const state = surface.capabilities[capability];
   if (state.enabled) return undefined;
   return state.reason || `${ACTION_CAPABILITY_LABELS[capability] ?? capability} is unavailable.`;
@@ -159,19 +146,19 @@ function capabilityDisabledReason(
 
 function commitDirtyDisabledReason(surface: VersionSurfaceStatus): string | undefined {
   const dirty = surface.dirty;
-
-  const providerWriteReason = providerWritesDisabledReason(surface, 'committing');
-  if (providerWriteReason) return providerWriteReason;
-
-  const dirtyDomainReason = unsupportedDirtyDomainsDisabledReason(surface, 'commit');
-  if (dirtyDomainReason) return dirtyDomainReason;
-
-  if (dirty.pendingRecalc) return 'Wait for recalculation to settle before committing.';
   if (dirty.commitEligibleChanges) return undefined;
+
+  const diagnosticMessage = firstDiagnosticMessage(dirty.diagnostics);
+  if (diagnosticMessage && dirty.unsupportedDirtyDomains.includes('unknown')) {
+    return diagnosticMessage;
+  }
+  if (dirty.unsupportedDirtyDomains.length > 0) {
+    return `Changes in ${formatInlineList(dirty.unsupportedDirtyDomains)} cannot be committed yet.`;
+  }
+  if (dirty.pendingProviderWrites) return 'Wait for provider writes to settle before committing.';
+  if (dirty.pendingRecalc) return 'Wait for recalculation to settle before committing.';
   if (!dirty.hasUncommittedLocalChanges) return 'Make a workbook change before committing.';
-  return (
-    firstDiagnosticMessage(dirty.diagnostics) ?? 'No commit-eligible local changes are available.'
-  );
+  return diagnosticMessage ?? 'No commit-eligible local changes are available.';
 }
 
 function currentStaleDisabledReason(surface: VersionSurfaceStatus): string | undefined {
@@ -194,48 +181,15 @@ function checkoutUnsafeDisabledReason(surface: VersionSurfaceStatus): string | u
   const dirty = surface.dirty;
   if (dirty.checkoutSafe) return undefined;
 
-  const providerWriteReason = providerWritesDisabledReason(surface, 'checking out');
-  if (providerWriteReason) return providerWriteReason;
-
-  const dirtyDomainReason = unsupportedDirtyDomainsDisabledReason(surface, 'checkout');
-  if (dirtyDomainReason) return dirtyDomainReason;
-
-  if (dirty.pendingRecalc) return 'Wait for recalculation to settle before checking out.';
-
   const diagnosticMessage =
     firstDiagnosticMessage(dirty.unsafeReasons) ?? firstDiagnosticMessage(dirty.diagnostics);
   if (diagnosticMessage) return diagnosticMessage;
   if (dirty.hasUncommittedLocalChanges) {
-    return 'Commit or discard local changes before checking out.';
+    return 'Commit or discard local changes before checkout.';
   }
+  if (dirty.pendingProviderWrites) return 'Wait for provider writes to settle before checkout.';
+  if (dirty.pendingRecalc) return 'Wait for recalculation to settle before checkout.';
   return 'Checkout preflight is unsafe for this workbook.';
-}
-
-function providerWritesDisabledReason(
-  surface: VersionSurfaceStatus,
-  action: 'committing' | 'checking out',
-): string | undefined {
-  return surface.dirty.pendingProviderWrites
-    ? `Wait for provider writes to settle before ${action}.`
-    : undefined;
-}
-
-function unsupportedDirtyDomainsDisabledReason(
-  surface: VersionSurfaceStatus,
-  action: 'commit' | 'checkout',
-): string | undefined {
-  const dirty = surface.dirty;
-  if (dirty.unsupportedDirtyDomains.length === 0) return undefined;
-
-  const diagnosticMessage = firstDiagnosticMessage(dirty.diagnostics);
-  if (diagnosticMessage && dirty.unsupportedDirtyDomains.includes('unknown')) {
-    return diagnosticMessage;
-  }
-
-  const domains = formatInlineList(dirty.unsupportedDirtyDomains);
-  return action === 'commit'
-    ? `Changes in ${domains} cannot be committed yet.`
-    : `Commit or discard changes in ${domains} before checking out.`;
 }
 
 function firstDiagnosticMessage(

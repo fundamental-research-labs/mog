@@ -5,7 +5,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
-  VersionCapabilityState,
   VersionRecordRevision,
   VersionSurfaceStatus,
   WorkbookCommitId,
@@ -136,155 +135,6 @@ describe('VersionHistoryPanelContent', () => {
     expect(diffButton).toBeDisabled();
     expect(diffButton).toHaveAccessibleDescription('version:diff is not available.');
     expect(screen.getByText('version:diff is not available.')).toBeVisible();
-  });
-
-  it('shows the disabled-versioning reason across commit, branch, checkout, and diff controls', async () => {
-    const workbook = createWorkbook({
-      getSurfaceStatus: jest.fn(async () => createSurfaceStatus({ featureGateEnabled: false })),
-    });
-    const user = userEvent.setup();
-    const reason = 'Versioning is disabled for this workbook.';
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
-    await user.type(screen.getByLabelText('Branch name'), 'refs/heads/review');
-
-    expectDisabledButtonReason(screen.getByRole('button', { name: /^Commit$/ }), reason);
-    expectDisabledButtonReason(screen.getByRole('button', { name: 'Create branch' }), reason);
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      reason,
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', {
-        name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
-      }),
-      reason,
-    );
-    expect(screen.getAllByText(reason)).toHaveLength(4);
-  });
-
-  it('shows capability-denied reasons across commit, branch, checkout, and diff controls', async () => {
-    const deniedCapabilities = [
-      'version:commit',
-      'version:branch',
-      'version:checkout',
-      'version:diff',
-    ] as const;
-    const workbook = createWorkbook({
-      getSurfaceStatus: jest.fn(async () =>
-        createSurfaceStatus({
-          capabilityOverrides: Object.fromEntries(
-            deniedCapabilities.map((capability) => [
-              capability,
-              hostDeniedCapabilityState(capability),
-            ]),
-          ) as Partial<Record<VersionCapability, VersionCapabilityState>>,
-        }),
-      ),
-    });
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
-    await user.type(screen.getByLabelText('Branch name'), 'refs/heads/review');
-
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: /^Commit$/ }),
-      'Host policy denies version:commit.',
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Create branch' }),
-      'Host policy denies version:branch.',
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      'Host policy denies version:checkout.',
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', {
-        name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
-      }),
-      'Host policy denies version:diff.',
-    );
-  });
-
-  it('shows provider-write disabled reasons for commit and checkout controls', async () => {
-    const providerWriteReason = {
-      code: 'version.surfaceStatus.pendingProviderWrites',
-      severity: 'warning' as const,
-      message: 'Version provider writes are in flight; checkout is unsafe until they settle.',
-    };
-    const workbook = createWorkbook({
-      getSurfaceStatus: jest.fn(async () =>
-        createSurfaceStatus({
-          dirty: {
-            hasUncommittedLocalChanges: true,
-            commitEligibleChanges: true,
-            pendingProviderWrites: true,
-            checkoutSafe: false,
-            unsafeReasons: [providerWriteReason],
-            diagnostics: [providerWriteReason],
-          },
-        }),
-      ),
-    });
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
-
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: /^Commit$/ }),
-      'Wait for provider writes to settle before committing.',
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      'Wait for provider writes to settle before checking out.',
-    );
-  });
-
-  it('shows dirty-domain disabled reasons for commit and checkout controls', async () => {
-    const workbook = createWorkbook({
-      getSurfaceStatus: jest.fn(async () =>
-        createSurfaceStatus({
-          dirty: {
-            hasUncommittedLocalChanges: true,
-            commitEligibleChanges: false,
-            unsupportedDirtyDomains: ['charts', 'pivotTables'],
-            checkoutSafe: false,
-            unsafeReasons: [
-              {
-                code: 'version.surfaceStatus.dirtyWorkingState',
-                severity: 'warning',
-                message: 'Workbook has uncommitted local changes; checkout would discard them.',
-              },
-            ],
-          },
-        }),
-      ),
-    });
-    const user = userEvent.setup();
-
-    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
-
-    await screen.findByText('Calculated forecast');
-    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
-
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: /^Commit$/ }),
-      'Changes in charts, pivotTables cannot be committed yet.',
-    );
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      'Commit or discard changes in charts, pivotTables before checking out.',
-    );
   });
 
   it('shows dirty checkout, stale commit, and parentless diff disabled reasons', async () => {
@@ -452,20 +302,6 @@ function createWorkbook(
         limit: 2,
       },
     })),
-    listReviews: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    listProposals: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
     commit: jest.fn(async () => ({
       ok: true,
       value: {
@@ -536,28 +372,20 @@ function createWorkbook(
 
 function createSurfaceStatus({
   disabledCapabilities = [],
-  featureGateEnabled = true,
   current = {},
   dirty = {},
-  capabilityOverrides = {},
 }: {
   readonly disabledCapabilities?: readonly VersionCapability[];
-  readonly featureGateEnabled?: boolean;
   readonly current?: Partial<VersionSurfaceStatus['current']>;
   readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
-  readonly capabilityOverrides?: Partial<Record<VersionCapability, VersionCapabilityState>>;
 } = {}): VersionSurfaceStatus {
-  const disabled = new Set<VersionCapability>([
-    'version:revert',
-    ...(!featureGateEnabled ? ALL_CAPABILITIES : []),
-    ...disabledCapabilities,
-  ]);
+  const disabled = new Set<VersionCapability>(['version:revert', ...disabledCapabilities]);
 
   return {
     schemaVersion: 1,
     documentId: 'document-1',
     stage: 'authoring',
-    featureGateEnabled,
+    featureGateEnabled: true,
     storage: {
       ready: true,
       backend: 'memory',
@@ -585,41 +413,20 @@ function createSurfaceStatus({
       ...dirty,
     },
     capabilities: Object.fromEntries(
-      ALL_CAPABILITIES.map((capability) => {
-        const defaultState: VersionCapabilityState = disabled.has(capability)
+      ALL_CAPABILITIES.map((capability) => [
+        capability,
+        disabled.has(capability)
           ? {
               enabled: false,
-              dependency: featureGateEnabled
-                ? capability === 'version:revert'
-                  ? 'upstreamRevertContract'
-                  : 'VC-05'
-                : 'featureGate',
-              reason: featureGateEnabled
-                ? `${capability} is not available.`
-                : 'The versionControl feature gate is disabled.',
+              dependency: capability === 'version:revert' ? 'upstreamRevertContract' : 'VC-05',
+              reason: `${capability} is not available.`,
               retryable: false,
             }
-          : { enabled: true };
-        return [capability, capabilityOverrides[capability] ?? defaultState];
-      }),
+          : { enabled: true },
+      ]),
     ) as VersionSurfaceStatus['capabilities'],
     diagnostics: [],
   };
-}
-
-function hostDeniedCapabilityState(capability: VersionCapability): VersionCapabilityState {
-  return {
-    enabled: false,
-    dependency: 'hostCapability',
-    reason: `Host policy denies ${capability}.`,
-    retryable: false,
-  };
-}
-
-function expectDisabledButtonReason(button: HTMLElement, reason: string): void {
-  expect(button).toBeDisabled();
-  expect(button).toHaveAccessibleDescription(reason);
-  expect(screen.getAllByText(reason)[0]).toBeVisible();
 }
 
 function shortCommitId(id: string): string {

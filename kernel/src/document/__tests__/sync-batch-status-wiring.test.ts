@@ -19,6 +19,7 @@ import {
   createInMemoryVersionStoreProvider,
   type VersionDocumentScope,
 } from '../version-store/provider';
+import type { AppliedSyncUpdateIdentityStore } from '../version-store/applied-sync-update-identity-store';
 import {
   syncBatchStatusKeyMaterialForOperationContext,
   type SyncBatchStatusId,
@@ -132,6 +133,92 @@ async function installSyncBatchStatusStore(
   });
 }
 
+type VersionMarkerStores = {
+  readonly syncBatchStatusStore: SyncBatchStatusStore;
+  readonly appliedSyncUpdateIdentityStore: AppliedSyncUpdateIdentityStore;
+};
+
+async function createTracedVersionMarkerStores(events: string[]): Promise<VersionMarkerStores> {
+  const provider = createInMemoryVersionStoreProvider({
+    documentScope: VERSION_DOCUMENT_SCOPE,
+    backend: new InMemoryVersionDocumentProviderBackend(),
+    durability: 'snapshot-test-double',
+  });
+  return {
+    syncBatchStatusStore: traceSyncBatchStatusStore(
+      await provider.openSyncBatchStatusStore(),
+      events,
+    ),
+    appliedSyncUpdateIdentityStore: traceAppliedSyncUpdateIdentityStore(
+      await provider.openAppliedSyncUpdateIdentityStore(),
+      events,
+    ),
+  };
+}
+
+function traceSyncBatchStatusStore(
+  store: SyncBatchStatusStore,
+  events: string[],
+): SyncBatchStatusStore {
+  return {
+    documentScope: store.documentScope,
+    reserveBatchStatus: jest.fn(async (input) => {
+      events.push('syncBatchStatus:reserve');
+      return store.reserveBatchStatus(input);
+    }),
+    readByBatchStatusId: (batchStatusId) => store.readByBatchStatusId(batchStatusId),
+    completeBatchStatus: jest.fn(async (input) => {
+      events.push(`syncBatchStatus:complete:${input.terminal.status}`);
+      return store.completeBatchStatus(input);
+    }),
+  };
+}
+
+function traceAppliedSyncUpdateIdentityStore(
+  store: AppliedSyncUpdateIdentityStore,
+  events: string[],
+): AppliedSyncUpdateIdentityStore {
+  return {
+    documentScope: store.documentScope,
+    reserveIdentity: jest.fn(async (input) => {
+      events.push('appliedSyncIdentity:reserve');
+      return store.reserveIdentity(input);
+    }),
+    readByIdentityKey: (identityKey) => store.readByIdentityKey(identityKey),
+    completeIdentity: jest.fn(async (input) => {
+      events.push(`appliedSyncIdentity:complete:${input.terminal.status}`);
+      return store.completeIdentity(input);
+    }),
+  };
+}
+
+async function installVersionMarkerStores(
+  doc: RustDocument,
+  stores: VersionMarkerStores,
+): Promise<void> {
+  await doc.installVersionSyncServicesFromProvider({
+    openSyncBatchStatusStore: async () => stores.syncBatchStatusStore,
+    openAppliedSyncUpdateIdentityStore: async () => stores.appliedSyncUpdateIdentityStore,
+  });
+}
+
+function installBridgeOrderingTrace(
+  bridge: StubBridge,
+  events: string[],
+): jest.SpiedFunction<StubBridge['syncApply']> {
+  const originalAdmission = bridge.recordProviderDocApplyUpdateAdmission.bind(bridge);
+  bridge.recordProviderDocApplyUpdateAdmission = (metadata) => {
+    events.push(`admission:${metadata.provenance.sourceKind}`);
+    originalAdmission(metadata);
+  };
+
+  return jest.spyOn(bridge, 'syncApply').mockImplementation(async (update: Uint8Array) => {
+    events.push('syncApply');
+    bridge.emit(update);
+    return { recalc: { changedCells: [] } };
+  });
+}
+
 function sha256Hex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
@@ -227,6 +314,28 @@ function makeLiveProvenance(
   };
 }
 
+function makeV2EnvelopeWithProvenance(
+  envelopeOverrides: Partial<ProviderInboundUpdateEnvelope> = {},
+  provenanceOverrides: Partial<SyncUpdateProvenance> = {},
+): ProviderInboundUpdateEnvelopeV2 {
+  const envelope = makeEnvelope(envelopeOverrides);
+  return makeV2Envelope({
+    providerRefId: envelope.providerRefId,
+    authorityRef: envelope.authorityRef,
+    storageScope: envelope.storageScope,
+    decisionId: envelope.decisionId,
+    sessionId: envelope.sessionId,
+    providerEpoch: envelope.providerEpoch,
+    updateId: envelope.updateId,
+    sequence: envelope.sequence,
+    payloadKind: envelope.payloadKind,
+    payloadHash: envelope.payloadHash,
+    payload: envelope.payload,
+    assetDependencies: envelope.assetDependencies,
+    provenance: makeLiveProvenance(envelope, provenanceOverrides),
+  });
+}
+
 function makeV2Envelope(
   overrides: Partial<ProviderInboundUpdateEnvelopeV2> = {},
 ): ProviderInboundUpdateEnvelopeV2 {
@@ -284,6 +393,152 @@ async function syncBatchStatusIdForAdmission(
 }
 
 describe('RustDocument sync batch status wiring', () => {
+  async function expectModernMarkersBeforeUpdate(options: {
+    readonly envelope: ProviderInboundUpdateEnvelopeV2;
+    readonly prime?: (fixture: {
+      readonly doc: RustDocument;
+      readonly bridge: StubBridge;
+      readonly events: string[];
+      readonly syncApply: jest.SpiedFunction<StubBridge['syncApply']>;
+    }) => Promise<void>;
+  }): Promise<void> {
+    const events: string[] = [];
+    const stores = await createTracedVersionMarkerStores(events);
+    const { doc, bridge } = await makeDocument();
+    await installVersionMarkerStores(doc, stores);
+    await doc.attachProvider(makeProvider('ProviderA'));
+    const syncApply = installBridgeOrderingTrace(bridge, events);
+
+    try {
+      await options.prime?.({ doc, bridge, events, syncApply });
+      events.length = 0;
+      bridge.admissions.length = 0;
+      syncApply.mockClear();
+
+      const result = await doc.applyProviderUpdate(options.envelope);
+
+      expect(result.status).toBe('applied');
+      expect(syncApply).toHaveBeenCalledTimes(1);
+      expect(bridge.admissions).toHaveLength(1);
+      expect(bridge.admissions[0]).toMatchObject({
+        envelopeVersion: 'provider-inbound-update-v2',
+        providerRefId: options.envelope.providerRefId,
+        providerEpoch: options.envelope.providerEpoch,
+        updateId: options.envelope.updateId,
+        payloadHash: options.envelope.payloadHash,
+      });
+      expect(events).toEqual([
+        'syncBatchStatus:reserve',
+        'appliedSyncIdentity:reserve',
+        'admission:providerLiveInbound',
+        'syncApply',
+        'syncBatchStatus:complete:complete',
+        'appliedSyncIdentity:complete:applied',
+      ]);
+    } finally {
+      await doc.destroy();
+    }
+  }
+
+  it('writes connected collaboration markers before applying the provider update', async () => {
+    await expectModernMarkersBeforeUpdate({
+      envelope: makeV2EnvelopeWithProvenance({
+        payload: new Uint8Array([0x11, 0x12]),
+        updateId: 'sync-batch-connected-1',
+        providerEpoch: '1',
+      }),
+    });
+  });
+
+  it('writes offline-queued collaboration markers before applying the provider update', async () => {
+    await expectModernMarkersBeforeUpdate({
+      envelope: makeV2EnvelopeWithProvenance(
+        {
+          payload: new Uint8Array([0x21, 0x22]),
+          updateId: 'sync-batch-offline-queued-1',
+          providerEpoch: 'offline-epoch-1',
+        },
+        {
+          replay: true,
+          system: false,
+          remoteSessionId: 'remote-session-offline-1',
+          correlationId: 'correlation-offline-1',
+        },
+      ),
+    });
+  });
+
+  it('writes reconnecting collaboration markers before applying the newer provider epoch update', async () => {
+    const firstEpochEnvelope = makeV2EnvelopeWithProvenance({
+      payload: new Uint8Array([0x31, 0x32]),
+      updateId: 'sync-batch-reconnecting-prime-1',
+      providerEpoch: '1',
+    });
+
+    await expectModernMarkersBeforeUpdate({
+      envelope: makeV2EnvelopeWithProvenance(
+        {
+          payload: new Uint8Array([0x33, 0x34]),
+          updateId: 'sync-batch-reconnecting-2',
+          providerEpoch: '2',
+        },
+        {
+          remoteSessionId: 'remote-session-reconnected-1',
+          correlationId: 'correlation-reconnected-1',
+          causationIds: ['sync-batch-reconnecting-prime-1'],
+        },
+      ),
+      prime: async ({ doc }) => {
+        await expect(doc.applyProviderUpdate(firstEpochEnvelope)).resolves.toMatchObject({
+          status: 'applied',
+        });
+      },
+    });
+  });
+
+  it('keeps old-client provider envelopes excluded without writing version sync markers', async () => {
+    const events: string[] = [];
+    const stores = await createTracedVersionMarkerStores(events);
+    const { doc, bridge } = await makeDocument();
+    await installVersionMarkerStores(doc, stores);
+    await doc.attachProvider(makeProvider('ProviderA'));
+    const syncApply = installBridgeOrderingTrace(bridge, events);
+
+    try {
+      const envelope = makeEnvelope({
+        payload: new Uint8Array([0x41, 0x42]),
+        updateId: 'sync-batch-old-client-v1-1',
+        providerEpoch: '1',
+      });
+
+      const result = await doc.applyProviderUpdate(envelope);
+
+      expect(result).toMatchObject({
+        status: 'applied',
+        provenance: {
+          sourceKind: 'providerReplay',
+          capturePolicy: 'excluded',
+          replay: true,
+          system: true,
+        },
+      });
+      expect(syncApply).toHaveBeenCalledTimes(1);
+      expect(bridge.admissions).toHaveLength(1);
+      expect(bridge.admissions[0]).toMatchObject({
+        envelopeVersion: 'provider-inbound-update-v1',
+        updateId: envelope.updateId,
+        payloadHash: envelope.payloadHash,
+        provenance: {
+          sourceKind: 'providerReplay',
+          capturePolicy: 'excluded',
+        },
+      });
+      expect(events).toEqual(['admission:providerReplay', 'syncApply']);
+    } finally {
+      await doc.destroy();
+    }
+  });
+
   it('reserves, completes, and duplicates verified live provider batches', async () => {
     const store = await createSyncBatchStatusStore();
     const { doc, bridge } = await makeDocument();

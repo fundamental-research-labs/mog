@@ -445,6 +445,156 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 hardening', () => {
     expectNoDiagnosticLeak(recreated, 'scenario/reload-tombstone');
   });
 
+  it('rejects current HEAD deletes before invoking the provider tombstone writer', async () => {
+    const branchName = 'scenario/current-head-delete';
+    const refName = `refs/heads/${branchName}`;
+    const branchService = {
+      getHead: jest.fn(async () => ({
+        ok: true,
+        head: {
+          mode: 'attached',
+          refName,
+          branchName,
+          commitId: AUX_COMMIT_ID,
+          refVersion: { kind: 'counter', value: '0' },
+          refIncarnationId: 'inc-current-head-delete',
+        },
+        diagnostics: [],
+      })),
+      readBranch: jest.fn(),
+      deleteBranch: jest.fn(),
+    };
+    const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
+
+    const currentHeadDelete = await version.deleteRef({
+      name: branchName as any,
+      expectedHead: AUX_COMMIT_ID as any,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(currentHeadDelete, 'VERSION_REF_WRITE_UNAVAILABLE', {
+      payload: expect.objectContaining({ issue: 'activeBranchDelete' }),
+    });
+    expectNoDiagnosticLeak(currentHeadDelete, branchName);
+    expect(branchService.getHead).toHaveBeenCalledTimes(1);
+    expect(branchService.readBranch).not.toHaveBeenCalled();
+    expect(branchService.deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('rejects stale expected-head provider deletes before tombstone writes', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-stale-delete'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(
+      namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-stale-delete'),
+    );
+    const child = await commitGraphChild(
+      graph,
+      'graph-stale-delete',
+      initialized.rootCommit.id,
+      initialized.initialHead.revision,
+      'stale-delete-child',
+    );
+    const wb = createWorkbook({ versioning: { provider } });
+
+    await expect(
+      wb.version.createBranch({
+        name: 'scenario/stale-delete-head' as any,
+        targetCommitId: initialized.rootCommit.id,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(
+      wb.version.fastForwardBranch({
+        name: 'scenario/stale-delete-head' as any,
+        nextCommitId: child.commit.id,
+        expectedHead: initialized.rootCommit.id,
+        expectedRefRevision: { kind: 'counter', value: '0' },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    const deleteBranch = jest.spyOn(graph, 'deleteBranch');
+    const stale = await wb.version.deleteRef({
+      name: 'scenario/stale-delete-head' as any,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: { kind: 'counter', value: '1' },
+    });
+    expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
+      recoverability: 'retry',
+      payload: expect.objectContaining({
+        actualHead: child.commit.id,
+        actualRefRevision: 'rv:n:1',
+        conflict: 'expectedHeadMismatch',
+      }),
+    });
+    expectNoDiagnosticLeak(stale, 'scenario/stale-delete-head');
+    expect(deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed delete ref names with redacted stable reasons before provider calls', async () => {
+    const branchService = {
+      readBranch: jest.fn(),
+      deleteBranch: jest.fn(),
+    };
+    const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
+    const malformedRefName = 'Scenario/Provider-Secret';
+
+    const malformed = await version.deleteRef({
+      name: malformedRefName as any,
+      expectedHead: AUX_COMMIT_ID as any,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(malformed, 'VERSION_INVALID_OPTIONS', {
+      payload: expect.objectContaining({
+        issue: 'containsUppercase',
+        refName: 'redacted',
+      }),
+    });
+    expectNoDiagnosticLeak(malformed, malformedRefName, 'Provider-Secret');
+    expect(branchService.readBranch).not.toHaveBeenCalled();
+    expect(branchService.deleteBranch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['returned', async () => providerDeniedFailure()],
+    [
+      'thrown',
+      async () => {
+        throw providerDeniedFailure();
+      },
+    ],
+  ])('redacts %s provider delete denials with a stable reason', async (_label, deleteBranchImpl) => {
+    const branchService = {
+      readBranch: jest.fn(async () => ({
+        ok: true,
+        branch: {
+          name: SECRET_REF_NAME,
+          ref: {
+            targetCommitId: AUX_COMMIT_ID,
+            refVersion: { kind: 'counter', value: '0' },
+          },
+        },
+        diagnostics: [],
+      })),
+      deleteBranch: jest.fn(deleteBranchImpl),
+    };
+    const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
+
+    const denied = await version.deleteRef({
+      name: SECRET_REF_NAME as any,
+      expectedHead: AUX_COMMIT_ID as any,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(denied, 'VERSION_PERMISSION_DENIED', {
+      recoverability: 'unsupported',
+      payload: expect.objectContaining({
+        conflict: 'redacted',
+        issue: 'providerDenied',
+      }),
+    });
+    expectNoDiagnosticLeak(denied, SECRET_REF_NAME, SECRET_CAUSE, SECRET_MESSAGE);
+    expect(branchService.readBranch).toHaveBeenCalledTimes(1);
+    expect(branchService.deleteBranch).toHaveBeenCalledTimes(1);
+  });
+
   it('redacts unknown provider diagnostic detail tokens for create and delete failures', async () => {
     const branchService = {
       createBranch: jest.fn(async () => unsafeProviderFailure('createBranch')),
@@ -638,6 +788,31 @@ function unsafeProviderFailure(operation: string) {
     ok: false,
     error: {
       code: 'versionCapabilityDisabled',
+      message: SECRET_MESSAGE,
+      diagnostics,
+    },
+    diagnostics,
+  };
+}
+
+function providerDeniedFailure() {
+  const diagnostics = [
+    {
+      code: 'VERSION_PERMISSION_DENIED',
+      severity: 'error',
+      message: SECRET_MESSAGE,
+      refName: SECRET_REF_NAME,
+      details: {
+        cause: SECRET_CAUSE,
+        issue: 'providerDenied',
+        mutationGuarantee: 'no-write-attempted',
+      },
+    },
+  ];
+  return {
+    ok: false,
+    error: {
+      code: 'VERSION_PERMISSION_DENIED',
       message: SECRET_MESSAGE,
       diagnostics,
     },

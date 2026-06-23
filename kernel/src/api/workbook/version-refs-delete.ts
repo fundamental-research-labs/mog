@@ -14,7 +14,10 @@ import type { DocumentContext } from '../../context';
 import { validateRefName } from '../../document/version-store/ref-name';
 import {
   branchDiagnosticMutationGuarantee,
+  issueCodeForBranchDiagnostic,
+  recoverabilityForBranchIssue,
   safeBranchDiagnosticToken,
+  safeMessageForBranchIssue,
 } from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
@@ -99,8 +102,8 @@ export async function deleteWorkbookVersionBranchRef(input: {
       }),
       input.operation,
     );
-  } catch {
-    return degradedMutation(null, [providerErrorDiagnostic(input.operation)]);
+  } catch (error) {
+    return degradedMutation(null, providerExceptionDiagnostics(error, input.operation));
   }
 }
 
@@ -409,6 +412,10 @@ function parsePublicBranchName(
           {
             severity: 'error',
             recoverability: 'unsupported',
+            payload: {
+              issue: safeBranchDiagnosticToken('issue', 'reservedSymbolicHead'),
+              refName: 'redacted',
+            },
             ...(isDeleteOperation(operation)
               ? { mutationGuarantee: 'no-write-attempted' as const }
               : {}),
@@ -433,7 +440,10 @@ function parsePublicBranchName(
           {
             severity: 'error',
             recoverability: 'none',
-            payload: { refName: 'redacted', issue: item.issue },
+            payload: {
+              refName: 'redacted',
+              issue: safeBranchDiagnosticToken('issue', item.issue),
+            },
             ...(isDeleteOperation(operation)
               ? { mutationGuarantee: 'no-write-attempted' as const }
               : {}),
@@ -515,6 +525,25 @@ function mapBranchFailureDiagnostics(
   return value.map((item) => mapBranchDiagnostic(item, operation));
 }
 
+function providerExceptionDiagnostics(
+  error: unknown,
+  operation: DeleteRefOperation,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics = diagnosticsFromProviderException(error);
+  return diagnostics
+    ? mapBranchFailureDiagnostics(diagnostics, operation)
+    : [providerErrorDiagnostic(operation)];
+}
+
+function diagnosticsFromProviderException(error: unknown): readonly unknown[] | null {
+  if (!isRecord(error)) return null;
+  if (Array.isArray(error.diagnostics)) return error.diagnostics;
+  if (isRecord(error.error) && Array.isArray(error.error.diagnostics)) {
+    return error.error.diagnostics;
+  }
+  return typeof error.code === 'string' || typeof error.issueCode === 'string' ? [error] : null;
+}
+
 function mapPreflightBranchFailureDiagnostics(
   value: unknown,
   operation: DeleteRefOperation,
@@ -541,12 +570,17 @@ function mapBranchDiagnostic(
   operation: DeleteRefOperation,
 ): VersionStoreDiagnostic {
   if (!isRecord(value)) return providerErrorDiagnostic(operation);
-  const code = typeof value.code === 'string' ? value.code : 'versionCapabilityDisabled';
+  const code =
+    typeof value.code === 'string'
+      ? value.code
+      : typeof value.issueCode === 'string'
+        ? value.issueCode
+        : 'versionCapabilityDisabled';
   const issueCode = issueCodeForBranchDiagnostic(code);
   const mutationGuarantee = branchDiagnosticMutationGuarantee(code, value.details);
-  return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
+  return publicDiagnostic(issueCode, operation, safeMessageForBranchIssue(issueCode, operation), {
     severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
+    recoverability: recoverabilityForBranchIssue(issueCode),
     payload: sanitizeBranchDiagnosticPayload(value, operation),
     ...(mutationGuarantee ? { mutationGuarantee } : {}),
   });
@@ -570,9 +604,9 @@ function mapGraphDiagnostic(value: unknown, operation: DeleteRefOperation): Vers
           : rawCode === 'VERSION_INVALID_OPTIONS' || rawCode === 'VERSION_DANGLING_REF'
             ? 'VERSION_DANGLING_REF'
             : 'VERSION_PROVIDER_ERROR';
-  return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
+  return publicDiagnostic(issueCode, operation, safeMessageForBranchIssue(issueCode, operation), {
     severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
+    recoverability: recoverabilityForBranchIssue(issueCode),
     payload: { operation },
     mutationGuarantee: 'no-write-attempted',
   });
@@ -647,7 +681,7 @@ function staleDeleteRefDiagnostic(
   return publicDiagnostic(
     'VERSION_REF_CONFLICT',
     operation,
-    safeMessageForIssue('VERSION_REF_CONFLICT', operation),
+    safeMessageForBranchIssue('VERSION_REF_CONFLICT', operation),
     {
       severity: 'error',
       recoverability: 'retry',
@@ -661,7 +695,7 @@ function danglingRefDiagnostic(operation: DeleteRefOperation): VersionStoreDiagn
   return publicDiagnostic(
     'VERSION_DANGLING_REF',
     operation,
-    safeMessageForIssue('VERSION_DANGLING_REF', operation),
+    safeMessageForBranchIssue('VERSION_DANGLING_REF', operation),
     {
       severity: 'error',
       recoverability: 'unsupported',
@@ -810,74 +844,13 @@ function publicDiagnostic(
   return {
     issueCode,
     severity: options.severity ?? 'error',
-    recoverability: options.recoverability ?? recoverabilityForIssue(issueCode),
+    recoverability: options.recoverability ?? recoverabilityForBranchIssue(issueCode),
     messageTemplateId: `version.${operation}.${issueCode}`,
     safeMessage,
     ...(options.payload ? { payload: options.payload } : {}),
     redacted: true,
     ...(options.mutationGuarantee ? { mutationGuarantee: options.mutationGuarantee } : {}),
   };
-}
-
-function issueCodeForBranchDiagnostic(code: string): string {
-  switch (code) {
-    case 'casConflict':
-    case 'expectedHeadMismatch':
-    case 'expectedRefVersionMismatch':
-    case 'refAlreadyExists':
-      return 'VERSION_REF_CONFLICT';
-    case 'refNotFound':
-    case 'refTombstoned':
-      return 'VERSION_DANGLING_REF';
-    case 'invalidCommitId':
-      return 'VERSION_INVALID_COMMIT_ID';
-    case 'protectedRef':
-    case 'reservedNamespace':
-    case 'unsupportedDetachedHead':
-      return 'VERSION_PERMISSION_DENIED';
-    case 'unsupportedRefOption':
-    case 'unsupportedRefMetadataMutation':
-    case 'versionCapabilityDisabled':
-    case 'activeRef':
-    case 'lastLiveRef':
-      return 'VERSION_REF_WRITE_UNAVAILABLE';
-    default:
-      return 'VERSION_INVALID_OPTIONS';
-  }
-}
-
-function safeMessageForIssue(issueCode: string, operation: DeleteRefOperation): string {
-  switch (issueCode) {
-    case 'VERSION_REF_CONFLICT':
-      return 'The public ref changed while the lifecycle operation was in progress.';
-    case 'VERSION_DANGLING_REF':
-      return 'The requested public ref does not resolve to a live branch.';
-    case 'VERSION_INVALID_OPTIONS':
-      return 'The version ref lifecycle options are invalid for this method.';
-    case 'VERSION_INVALID_COMMIT_ID':
-      return 'The supplied commit id is invalid.';
-    case 'VERSION_PERMISSION_DENIED':
-      return 'The requested ref lifecycle operation is not authorized in this public slice.';
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'The requested ref lifecycle mutation is not supported by the attached public service.';
-    default:
-      return `The version ref lifecycle service could not complete ${operation}.`;
-  }
-}
-
-function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
-  switch (issueCode) {
-    case 'VERSION_REF_CONFLICT':
-      return 'retry';
-    case 'VERSION_PROVIDER_ERROR':
-      return 'retry';
-    case 'VERSION_DANGLING_REF':
-    case 'VERSION_PERMISSION_DENIED':
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'unsupported';
-    default:
-      return 'none';
-  }
 }
 
 function toCommitId(value: unknown): WorkbookCommitId | null {

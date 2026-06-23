@@ -13,11 +13,13 @@ const NO_WRITE_ATTEMPTED_BRANCH_DIAGNOSTIC_CODES = new Set([
   'invalidRefVersion',
   'activeRef',
   'lastLiveRef',
+  'permissionDenied',
   'protectedRef',
   'reservedNamespace',
   'unsupportedDetachedHead',
   'unsupportedRefMetadataMutation',
   'unsupportedRefOption',
+  'VERSION_PERMISSION_DENIED',
 ]);
 const SAFE_BRANCH_DIAGNOSTIC_ISSUES = new Set([
   'activeBranchDelete',
@@ -33,6 +35,8 @@ const SAFE_BRANCH_DIAGNOSTIC_ISSUES = new Set([
   'lockSegment',
   'nonAscii',
   'notString',
+  'providerDenied',
+  'reservedSymbolicHead',
   'reservedDetached',
   'reservedSystemRef',
   'segmentEndsWithLock',
@@ -75,8 +79,10 @@ export function issueCodeForBranchDiagnostic(code: string): string {
     case 'invalidCommitId':
       return 'VERSION_INVALID_COMMIT_ID';
     case 'protectedRef':
+    case 'permissionDenied':
     case 'reservedNamespace':
     case 'unsupportedDetachedHead':
+    case 'VERSION_PERMISSION_DENIED':
       return 'VERSION_PERMISSION_DENIED';
     case 'unsupportedRefOption':
     case 'unsupportedRefMetadataMutation':
@@ -113,6 +119,7 @@ export function recoverabilityForBranchIssue(
 ): VersionStoreDiagnostic['recoverability'] {
   switch (issueCode) {
     case 'VERSION_REF_CONFLICT':
+    case 'VERSION_PROVIDER_ERROR':
       return 'retry';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_GRAPH_UNINITIALIZED':

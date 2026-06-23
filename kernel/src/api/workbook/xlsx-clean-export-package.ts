@@ -260,6 +260,9 @@ function scanPackagePartPath(
   if (isMacroVbaPath(normalized)) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
+  if (isMacroAdjacentActiveContentPath(normalized)) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
+  }
   if (isActiveXPath(normalized)) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT');
   }
@@ -333,7 +336,11 @@ function scanContentType(
     normalized.includes('vbaproject') ||
     normalized.includes('vba') ||
     normalized.includes('macroenabled') ||
-    normalized.includes('attachedtoolbars')
+    normalized.includes('attachedtoolbars') ||
+    normalized.includes('macrosheet') ||
+    normalized.includes('dialogsheet') ||
+    normalized.includes('customui') ||
+    normalized.includes('webextension')
   ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
@@ -376,7 +383,13 @@ function scanRelationshipTypeAndTarget(
   if (
     normalizedType.includes('/vbaproject') ||
     normalizedType.includes('/vbadata') ||
-    normalizedType.includes('/attachedtoolbars')
+    normalizedType.includes('/attachedtoolbars') ||
+    normalizedType.includes('/xlmacrosheet') ||
+    normalizedType.endsWith('/macrosheet') ||
+    normalizedType.endsWith('/dialogsheet') ||
+    normalizedType.includes('/ui/extensibility') ||
+    normalizedType.includes('/webextension') ||
+    isMacroAdjacentActiveContentPath(normalizedTarget)
   ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
@@ -437,6 +450,19 @@ function isMacroVbaPath(path: string): boolean {
     path.endsWith('.xlam') ||
     path.endsWith('.xlsm') ||
     path.endsWith('.xltm')
+  );
+}
+
+function isMacroAdjacentActiveContentPath(path: string): boolean {
+  return (
+    path.startsWith('xl/macrosheets/') ||
+    path.startsWith('xl/dialogsheets/') ||
+    path.startsWith('customui/') ||
+    path.startsWith('customui14/') ||
+    path.includes('/customui/') ||
+    path.includes('/customui14/') ||
+    path.startsWith('xl/webextensions/') ||
+    path.includes('/webextensions/')
   );
 }
 

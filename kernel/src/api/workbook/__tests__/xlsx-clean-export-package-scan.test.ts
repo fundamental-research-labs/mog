@@ -162,6 +162,22 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
     expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
   });
+
+  it('detects external connection and queryTable variants without exposing paths or targets', async () => {
+    const redactedToken = 'w5-08-external-redacted-target';
+    await expectUnsafePackageScanRedacts(
+      externalConnectionAndQueryTableVariantFixture(redactedToken),
+      ['XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT'],
+      [redactedToken],
+    );
+  });
+
+  it.each(activeContentVariantFixtures())(
+    'detects active-content package variant $name without exposing paths or targets',
+    async ({ createXlsxBytes, expectedCodes, redactedToken }) => {
+      await expectUnsafePackageScanRedacts(createXlsxBytes(), expectedCodes, [redactedToken]);
+    },
+  );
 });
 
 async function createSourceXlsx(): Promise<Uint8Array> {
@@ -448,6 +464,227 @@ function activePackageVariantFixture(): Uint8Array {
   ]);
 }
 
+function externalConnectionAndQueryTableVariantFixture(redactedToken: string): Uint8Array {
+  return syntheticPackageFixture({
+    contentTypeOverrides: [
+      `<Override PartName="/xl/${redactedToken}-connections.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"/>`,
+      `<Override PartName="/xl/queryTables/${redactedToken}-queryTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml"/>`,
+      '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/>',
+    ],
+    workbookRelationships: [
+      `<Relationship Id="rIdStrictConnections" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/connections" Target="${redactedToken}-connections.xml?token=${redactedToken}"/>`,
+      '<Relationship Id="rIdExternalLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink" Target="externalLinks/externalLink1.xml"/>',
+    ],
+    extraEntries: [
+      { name: `xl/${redactedToken}-connections.xml`, data: encodeUtf8('<connections/>') },
+      { name: 'xl/externalLinks/externalLink1.xml', data: encodeUtf8('<externalLink/>') },
+      {
+        name: 'xl/externalLinks/_rels/externalLink1.xml.rels',
+        data: encodeUtf8(
+          packageRelationshipsXml([
+            `<Relationship Id="rIdExternalLongPath" Type="http://schemas.microsoft.com/office/2019/04/relationships/externalLinkLongPath" Target="file:///tmp/${redactedToken}.xlsx" TargetMode="External"/>`,
+            `<Relationship Id="rIdExternalPath" Type="http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlPathMissing" Target="https://example.invalid/${redactedToken}.xlsx" TargetMode="External"/>`,
+          ]),
+        ),
+      },
+      { name: 'xl/tables/table1.xml', data: encodeUtf8('<table/>') },
+      {
+        name: 'xl/tables/_rels/table1.xml.rels',
+        data: encodeUtf8(
+          packageRelationshipsXml([
+            `<Relationship Id="rIdStrictQueryTable" Type="http://purl.oclc.org/ooxml/officeDocument/relationships/queryTable" Target="../queryTables/${redactedToken}-queryTable1.xml?token=${redactedToken}"/>`,
+          ]),
+        ),
+      },
+      {
+        name: `xl/queryTables/${redactedToken}-queryTable1.xml`,
+        data: encodeUtf8('<queryTable/>'),
+      },
+    ],
+  });
+}
+
+function activeContentVariantFixtures(): Array<{
+  readonly name: string;
+  readonly expectedCodes: readonly XlsxCleanExportPackageDiagnostic['code'][];
+  readonly redactedToken: string;
+  readonly createXlsxBytes: () => Uint8Array;
+}> {
+  const macrosheetToken = 'w5-08-macrosheet-redacted-target';
+  const dialogsheetToken = 'w5-08-dialogsheet-redacted-target';
+  const customUiToken = 'w5-08-customui-redacted-target';
+  const customUi14Token = 'w5-08-customui14-redacted-target';
+  const webExtensionToken = 'w5-08-webextension-redacted-target';
+
+  return [
+    {
+      name: 'macrosheet',
+      expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
+      redactedToken: macrosheetToken,
+      createXlsxBytes: () => syntheticPackageFixture({
+        contentTypeOverrides: [
+          `<Override PartName="/xl/macrosheets/${macrosheetToken}-sheet1.xml" ContentType="application/vnd.ms-excel.macrosheet+xml"/>`,
+        ],
+        workbookRelationships: [
+          `<Relationship Id="rIdMacroSheet" Type="http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet" Target="macrosheets/${macrosheetToken}-sheet1.xml?token=${macrosheetToken}"/>`,
+        ],
+        extraEntries: [
+          {
+            name: `xl/macrosheets/${macrosheetToken}-sheet1.xml`,
+            data: encodeUtf8('<xm:macrosheet/>'),
+          },
+        ],
+      }),
+    },
+    {
+      name: 'dialogsheet',
+      expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
+      redactedToken: dialogsheetToken,
+      createXlsxBytes: () => syntheticPackageFixture({
+        contentTypeOverrides: [
+          `<Override PartName="/xl/dialogsheets/${dialogsheetToken}-sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml"/>`,
+        ],
+        workbookRelationships: [
+          `<Relationship Id="rIdDialogSheet" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet" Target="dialogsheets/${dialogsheetToken}-sheet1.xml?token=${dialogsheetToken}"/>`,
+        ],
+        extraEntries: [
+          {
+            name: `xl/dialogsheets/${dialogsheetToken}-sheet1.xml`,
+            data: encodeUtf8('<dialogsheet/>'),
+          },
+        ],
+      }),
+    },
+    {
+      name: 'customUI',
+      expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
+      redactedToken: customUiToken,
+      createXlsxBytes: () => syntheticPackageFixture({
+        rootRelationships: [
+          `<Relationship Id="rIdCustomUi" Type="http://schemas.microsoft.com/office/2006/relationships/ui/extensibility" Target="customUI/${customUiToken}-customUI.xml?token=${customUiToken}"/>`,
+        ],
+        extraEntries: [
+          {
+            name: `customUI/${customUiToken}-customUI.xml`,
+            data: encodeUtf8('<customUI/>'),
+          },
+        ],
+      }),
+    },
+    {
+      name: 'customUI14',
+      expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
+      redactedToken: customUi14Token,
+      createXlsxBytes: () => syntheticPackageFixture({
+        rootRelationships: [
+          `<Relationship Id="rIdCustomUi14" Type="http://schemas.microsoft.com/office/2007/relationships/ui/extensibility" Target="customUI14/${customUi14Token}-customUI.xml?token=${customUi14Token}"/>`,
+        ],
+        extraEntries: [
+          {
+            name: `customUI14/${customUi14Token}-customUI.xml`,
+            data: encodeUtf8('<customUI/>'),
+          },
+        ],
+      }),
+    },
+    {
+      name: 'webExtension',
+      expectedCodes: ['XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'],
+      redactedToken: webExtensionToken,
+      createXlsxBytes: () => syntheticPackageFixture({
+        contentTypeOverrides: [
+          `<Override PartName="/xl/webextensions/${webExtensionToken}-webextension1.xml" ContentType="application/vnd.ms-office.webextension+xml"/>`,
+        ],
+        workbookRelationships: [
+          `<Relationship Id="rIdWebExtension" Type="http://schemas.microsoft.com/office/2011/relationships/webextension" Target="webextensions/${webExtensionToken}-webextension1.xml?token=${webExtensionToken}"/>`,
+        ],
+        extraEntries: [
+          {
+            name: `xl/webextensions/${webExtensionToken}-webextension1.xml`,
+            data: encodeUtf8('<webextension/>'),
+          },
+        ],
+      }),
+    },
+  ];
+}
+
+function syntheticPackageFixture(options: {
+  readonly contentTypeOverrides?: readonly string[];
+  readonly rootRelationships?: readonly string[];
+  readonly workbookRelationships?: readonly string[];
+  readonly extraEntries?: readonly ZipEntry[];
+}): Uint8Array {
+  const contentTypeOverrides = options.contentTypeOverrides ?? [];
+  const rootRelationships = options.rootRelationships ?? [];
+  const workbookRelationships = options.workbookRelationships ?? [];
+  return writeStoredZip([
+    {
+      name: '[Content_Types].xml',
+      data: encodeUtf8(
+        [
+          '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+          '<Default Extension="xml" ContentType="application/xml"/>',
+          '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+          ...contentTypeOverrides,
+          '</Types>',
+        ].join(''),
+      ),
+    },
+    {
+      name: '_rels/.rels',
+      data: encodeUtf8(
+        packageRelationshipsXml([
+          '<Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+          ...rootRelationships,
+        ]),
+      ),
+    },
+    { name: 'xl/workbook.xml', data: encodeUtf8('<workbook/>') },
+    {
+      name: 'xl/_rels/workbook.xml.rels',
+      data: encodeUtf8(packageRelationshipsXml(workbookRelationships)),
+    },
+    ...(options.extraEntries ?? []),
+  ]);
+}
+
+function packageRelationshipsXml(relationships: readonly string[]): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    ...relationships,
+    '</Relationships>',
+  ].join('');
+}
+
+async function expectUnsafePackageScanRedacts(
+  xlsxBytes: Uint8Array,
+  expectedCodes: readonly XlsxCleanExportPackageDiagnostic['code'][],
+  redactedTokens: readonly string[],
+): Promise<void> {
+  const diagnostics = await scanXlsxCleanExportPackageDiagnostics(xlsxBytes);
+  expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(expectedCodes);
+  expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
+  expectRedactedPayload({ diagnostics }, redactedTokens);
+
+  let error: unknown;
+  try {
+    await removeMogVersionMetadataPackageInventoryFromXlsx(xlsxBytes);
+  } catch (caught) {
+    error = caught;
+  }
+
+  expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
+  expect(error).toMatchObject({
+    code: 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE',
+    diagnostics,
+  });
+  expectRedactedPayload(error, redactedTokens);
+}
+
 function requiredEntry(entries: ReadonlyMap<string, Uint8Array>, name: string): Uint8Array {
   const entry = entries.get(name);
   if (!entry) throw new Error(`missing XLSX package part ${name}`);
@@ -539,6 +776,13 @@ function redactionCheckPayload(error: unknown): string {
     message: error instanceof Error ? error.message : String(error),
     diagnostics: isRecord(error) ? error.diagnostics : undefined,
   });
+}
+
+function expectRedactedPayload(value: unknown, redactedTokens: readonly string[]): void {
+  const payload = redactionCheckPayload(value);
+  for (const token of redactedTokens) {
+    expect(payload).not.toContain(token);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

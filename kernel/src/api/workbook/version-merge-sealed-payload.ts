@@ -13,8 +13,10 @@ import type {
 import { mergePreviewArtifactRef } from '../../document/version-store/merge-attempt-artifacts';
 import {
   REVIEW_EXTENSION_OBJECT_TYPE,
+  mergeResolutionPayloadAuthorityForNamespace,
   mergeReviewDiagnostic,
   toInternalSha256Digest,
+  type MergeResolutionPayloadAuthority,
 } from './version-merge-review-artifacts';
 import type { VersionMergePublicOperation } from './version-merge-capability';
 import { findResolutionOption, projectReviewValue } from './version-merge-review-conflicts';
@@ -42,16 +44,21 @@ const SEALED_REF_KEYS = new Set([
 const MERGE_RESOLUTION_PAYLOAD_KEYS = new Set([
   'schemaVersion',
   'recordKind',
+  'attemptId',
   'resultId',
   'resultDigest',
+  'previewArtifactDigest',
   'redactionPolicyDigest',
   'conflictId',
+  'conflictDigest',
   'expectedConflictDigest',
   'optionId',
   'kind',
   'targetRef',
   'expectedTargetHead',
+  'authority',
   'purpose',
+  'resolutionSetDigest',
   'domainPayloadSchema',
   'value',
 ]);
@@ -61,16 +68,21 @@ type InvalidDiagnostic = (path: string, safeMessage: string) => VersionStoreDiag
 type MergeResolutionPayloadRecord = {
   readonly schemaVersion: 1;
   readonly recordKind: 'mergeResolutionPayload';
+  readonly attemptId: string;
   readonly resultId: string;
   readonly resultDigest: ObjectDigest;
+  readonly previewArtifactDigest: ObjectDigest;
   readonly redactionPolicyDigest: ObjectDigest;
   readonly conflictId: string;
+  readonly conflictDigest: ObjectDigest;
   readonly expectedConflictDigest: string;
   readonly optionId: string;
   readonly kind: string;
   readonly targetRef: string;
   readonly expectedTargetHead: unknown;
+  readonly authority: MergeResolutionPayloadAuthority;
   readonly purpose: string;
+  readonly resolutionSetDigest?: ObjectDigest;
   readonly domainPayloadSchema?: string;
   readonly value: unknown;
 };
@@ -188,6 +200,7 @@ export async function validateSealedResolutionPayloadRefs(input: {
   readonly redactionPolicyDigest?: ObjectDigest;
   readonly targetRef?: VersionMainRefName | VersionRefName;
   readonly expectedTargetHead?: VersionCommitExpectedHead;
+  readonly resolutionSetDigest?: ObjectDigest;
   readonly conflicts: readonly VersionMergeConflict[];
   readonly resolutions: readonly VersionApplyMergeResolution[];
 }): Promise<readonly VersionStoreDiagnostic[]> {
@@ -240,6 +253,7 @@ function validateSealedRefBinding(
     readonly redactionPolicyDigest?: ObjectDigest;
     readonly targetRef?: VersionMainRefName | VersionRefName;
     readonly expectedTargetHead?: VersionCommitExpectedHead;
+    readonly resolutionSetDigest?: ObjectDigest;
     readonly conflicts: readonly VersionMergeConflict[];
   },
   resolution: VersionApplyMergeResolution,
@@ -376,6 +390,7 @@ function validateSealedPayloadRecord(
     readonly redactionPolicyDigest?: ObjectDigest;
     readonly targetRef?: VersionMainRefName | VersionRefName;
     readonly expectedTargetHead?: VersionCommitExpectedHead;
+    readonly resolutionSetDigest?: ObjectDigest;
     readonly conflicts: readonly VersionMergeConflict[];
   },
   resolution: VersionApplyMergeResolution,
@@ -384,18 +399,30 @@ function validateSealedPayloadRecord(
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
   const expectedRedactionPolicyDigest = input.redactionPolicyDigest ?? input.resultDigest;
+  const expectedConflictDigest = objectDigestFromConflictDigest(resolution.expectedConflictDigest);
   const artifactBindingDiagnostics = validateSealedPayloadArtifactBinding(input, record);
   diagnostics.push(...artifactBindingDiagnostics);
   if (
+    payload.attemptId !== input.resultId ||
     payload.resultId !== input.resultId ||
     !digestsEqual(payload.resultDigest, input.resultDigest) ||
+    !digestsEqual(payload.previewArtifactDigest, input.resultDigest) ||
     !digestsEqual(payload.redactionPolicyDigest, expectedRedactionPolicyDigest) ||
     payload.conflictId !== resolution.conflictId ||
+    !expectedConflictDigest ||
+    !digestsEqual(payload.conflictDigest, expectedConflictDigest) ||
     payload.expectedConflictDigest !== resolution.expectedConflictDigest ||
     payload.optionId !== resolution.optionId ||
     payload.kind !== resolution.kind ||
     payload.targetRef !== input.targetRef ||
-    canonicalJson(payload.expectedTargetHead) !== canonicalJson(input.expectedTargetHead)
+    canonicalJson(payload.expectedTargetHead) !== canonicalJson(input.expectedTargetHead) ||
+    canonicalJson(payload.authority) !==
+      canonicalJson(mergeResolutionPayloadAuthorityForNamespace(record.namespace)) ||
+    Boolean(
+      input.resolutionSetDigest &&
+      (!payload.resolutionSetDigest ||
+        !digestsEqual(payload.resolutionSetDigest, input.resolutionSetDigest)),
+    )
   ) {
     diagnostics.push(
       sealedPayloadMismatchDiagnostic(
@@ -406,10 +433,7 @@ function validateSealedPayloadRecord(
   }
   if (payload.purpose !== 'chooseValue') {
     diagnostics.push(
-      sealedPayloadMismatchDiagnostic(
-        input.operation,
-        'sealed payload purpose is not executable.',
-      ),
+      sealedPayloadMismatchDiagnostic(input.operation, 'sealed payload purpose is not executable.'),
     );
   }
 
@@ -448,14 +472,19 @@ function toMergeResolutionPayloadRecord(value: unknown): MergeResolutionPayloadR
   }
   if (
     typeof value.resultId !== 'string' ||
+    typeof value.attemptId !== 'string' ||
     !isObjectDigest(value.resultDigest) ||
+    !isObjectDigest(value.previewArtifactDigest) ||
     !isObjectDigest(value.redactionPolicyDigest) ||
     typeof value.conflictId !== 'string' ||
+    !isObjectDigest(value.conflictDigest) ||
     typeof value.expectedConflictDigest !== 'string' ||
     typeof value.optionId !== 'string' ||
     typeof value.kind !== 'string' ||
     typeof value.targetRef !== 'string' ||
+    !isMergeResolutionPayloadAuthority(value.authority) ||
     typeof value.purpose !== 'string' ||
+    (value.resolutionSetDigest !== undefined && !isObjectDigest(value.resolutionSetDigest)) ||
     (value.domainPayloadSchema !== undefined && typeof value.domainPayloadSchema !== 'string') ||
     !('expectedTargetHead' in value) ||
     !('value' in value)
@@ -538,6 +567,22 @@ function isObjectDigest(value: unknown): value is ObjectDigest {
     value.algorithm === 'sha256' &&
     typeof value.digest === 'string' &&
     /^[0-9a-f]{64}$/.test(value.digest)
+  );
+}
+
+function objectDigestFromConflictDigest(value: string): ObjectDigest | null {
+  if (!value.startsWith('sha256:')) return null;
+  const digest = value.slice('sha256:'.length);
+  return /^[0-9a-f]{64}$/.test(digest) ? { algorithm: 'sha256', digest } : null;
+}
+
+function isMergeResolutionPayloadAuthority(
+  value: unknown,
+): value is MergeResolutionPayloadAuthority {
+  return (
+    isRecord(value) &&
+    (value.workspaceId === null || typeof value.workspaceId === 'string') &&
+    (value.principalScope === null || typeof value.principalScope === 'string')
   );
 }
 

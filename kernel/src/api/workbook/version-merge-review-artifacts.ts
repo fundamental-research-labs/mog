@@ -72,6 +72,11 @@ export type MergeReviewPreviewReadResult =
   | { readonly ok: true; readonly payload: MergePreviewArtifactPayload }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
+export type MergeResolutionPayloadAuthority = {
+  readonly workspaceId: string | null;
+  readonly principalScope: string | null;
+};
+
 export async function openMergeReviewGraph(
   ctx: DocumentContext,
   operation: VersionMergePublicOperation,
@@ -164,6 +169,7 @@ export async function createMergeReviewPayloadRecord(
     readonly kind: string;
     readonly targetRef: string;
     readonly expectedTargetHead: JsonValue;
+    readonly resolutionSetDigest?: ObjectDigest;
     readonly purpose: string;
     readonly domainPayloadSchema?: string;
     readonly value: JsonValue;
@@ -177,15 +183,22 @@ export async function createMergeReviewPayloadRecord(
     payload: {
       schemaVersion: 1,
       recordKind: 'mergeResolutionPayload',
+      attemptId: input.resultId,
       resultId: input.resultId,
       resultDigest: input.resultDigest,
+      previewArtifactDigest: input.resultDigest,
       redactionPolicyDigest: input.redactionPolicyDigest,
       conflictId: input.conflictId,
+      conflictDigest: objectDigestFromConflictDigest(input.expectedConflictDigest),
       expectedConflictDigest: input.expectedConflictDigest,
       optionId: input.optionId,
       kind: input.kind,
       targetRef: input.targetRef,
       expectedTargetHead: input.expectedTargetHead,
+      authority: mergeResolutionPayloadAuthorityForNamespace(namespace),
+      ...(input.resolutionSetDigest === undefined
+        ? {}
+        : { resolutionSetDigest: input.resolutionSetDigest }),
       purpose: input.purpose,
       ...(input.domainPayloadSchema === undefined
         ? {}
@@ -193,6 +206,15 @@ export async function createMergeReviewPayloadRecord(
       value: input.value,
     },
   });
+}
+
+export function mergeResolutionPayloadAuthorityForNamespace(
+  namespace: VersionGraphNamespace,
+): MergeResolutionPayloadAuthority {
+  return {
+    workspaceId: namespace.workspaceId ?? null,
+    principalScope: namespace.principalScope ?? null,
+  };
 }
 
 export function validateMergePreviewIdentity(
@@ -228,6 +250,17 @@ export function toInternalSha256Digest(value: ObjectDigest): InternalObjectDiges
   return value.algorithm === 'sha256' && SHA256_HEX_RE.test(value.digest)
     ? (value as InternalObjectDigest)
     : null;
+}
+
+function objectDigestFromConflictDigest(value: string): ObjectDigest {
+  if (!value.startsWith('sha256:')) {
+    throw new Error('expected sha256 conflict digest.');
+  }
+  const digest = value.slice('sha256:'.length);
+  if (!SHA256_HEX_RE.test(digest)) {
+    throw new Error('expected sha256 conflict digest.');
+  }
+  return { algorithm: 'sha256', digest };
 }
 
 export function mergeReviewProviderErrorDiagnostic(

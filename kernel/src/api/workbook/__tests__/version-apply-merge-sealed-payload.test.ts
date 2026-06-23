@@ -258,6 +258,17 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
         const firstOption = requireResolutionOption(firstConflict, 'acceptTheirs');
         const firstResolution = resolutionFor(firstConflict, 'acceptTheirs');
         const secondResolution = resolutionFor(secondConflict, 'acceptTheirs');
+        const forgedPayloadInput = {
+          provider,
+          graphId,
+          documentScope,
+          preview,
+          conflict: firstConflict,
+          option: firstOption,
+          expectedTargetHead,
+          redactionPolicyDigest: preview.resultDigest,
+          value: firstOption.value as any,
+        };
         const firstPayload = await putResolutionPayload({
           sourceWb,
           preview,
@@ -296,16 +307,8 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           preview,
         });
         const wrongArtifactPayload = await putForgedResolutionPayload({
-          provider,
-          graphId,
-          documentScope,
-          preview,
-          conflict: firstConflict,
-          option: firstOption,
-          expectedTargetHead,
-          redactionPolicyDigest: preview.resultDigest,
+          ...forgedPayloadInput,
           dependencyResultDigest: wrongPreviewDigest,
-          value: firstOption.value as any,
         });
         await expectSealedApplyRejected({
           provider,
@@ -324,15 +327,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
 
         const principalCanary = 'principal-secret-sealed-payload';
         const principalPayload = await putForgedResolutionPayload({
-          provider,
-          graphId,
-          documentScope,
-          preview,
-          conflict: firstConflict,
-          option: firstOption,
-          expectedTargetHead,
-          redactionPolicyDigest: preview.resultDigest,
-          value: firstOption.value as any,
+          ...forgedPayloadInput,
           extraPayload: { principalScope: principalCanary },
         });
         await expectSealedApplyRejected({
@@ -349,6 +344,40 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           messages: ['sealed payload object is invalid.'],
           leakCanaries: [principalCanary, firstOption.optionId, 'theirs'],
         });
+
+        const missingDigestPayload = await putForgedResolutionPayload({
+          ...forgedPayloadInput,
+          omitPayloadKeys: ['conflictDigest'],
+        });
+        const staleAuthority = 'workspace-stale-sealed-payload';
+        const authorityPayload = await putForgedResolutionPayload({
+          ...forgedPayloadInput,
+          extraPayload: { authority: { workspaceId: staleAuthority, principalScope: null } },
+        });
+        for (const [payload, messages, leakCanaries] of [
+          [
+            missingDigestPayload,
+            ['sealed payload object is invalid.'],
+            [firstOption.optionId, 'theirs'],
+          ],
+          [
+            authorityPayload,
+            ['sealed payload object binding does not match.'],
+            [staleAuthority, firstOption.optionId, 'theirs'],
+          ],
+        ] as const) {
+          await expectSealedApplyRejected({
+            provider,
+            graphId,
+            documentScope,
+            sourceWb,
+            preview,
+            expectedTargetHead,
+            resolution: [{ ...firstResolution, sealedPayloadRef: payload }, secondResolution],
+            messages,
+            leakCanaries,
+          });
+        }
 
         await expectSealedApplyRejected({
           provider,
@@ -646,6 +675,7 @@ async function putForgedResolutionPayload(input: {
   readonly redactionPolicyDigest: ObjectDigest;
   readonly dependencyResultDigest?: ObjectDigest;
   readonly value: any;
+  readonly omitPayloadKeys?: readonly string[];
   readonly extraPayload?: Readonly<Record<string, unknown>>;
 }): Promise<VersionSealedResolutionPayloadRef> {
   const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
@@ -653,27 +683,33 @@ async function putForgedResolutionPayload(input: {
   const dependencyDigest = internalSha256Digest(
     input.dependencyResultDigest ?? input.preview.resultDigest,
   );
+  const payload = {
+    schemaVersion: 1,
+    recordKind: 'mergeResolutionPayload',
+    attemptId: input.preview.resultId,
+    resultId: input.preview.resultId,
+    resultDigest: input.preview.resultDigest,
+    previewArtifactDigest: input.preview.resultDigest,
+    redactionPolicyDigest: input.redactionPolicyDigest,
+    conflictId: input.conflict.conflictId,
+    conflictDigest: conflictDigestObject(input.conflict.conflictDigest),
+    expectedConflictDigest: input.conflict.conflictDigest,
+    optionId: input.option.optionId,
+    kind: input.option.kind,
+    targetRef: 'refs/heads/main' as VersionMainRefName,
+    expectedTargetHead: input.expectedTargetHead,
+    authority: payloadAuthorityForNamespace(namespace),
+    purpose: 'chooseValue',
+    value: input.value,
+    ...(input.extraPayload ?? {}),
+  };
+  for (const key of input.omitPayloadKeys ?? []) delete (payload as Record<string, unknown>)[key];
   const record = await createVersionObjectRecord(namespace, {
     objectType: REVIEW_EXTENSION_OBJECT_TYPE,
     schemaVersion: 1,
     payloadEncoding: 'mog-canonical-json-v1',
     dependencies: [mergePreviewArtifactRef(dependencyDigest)],
-    payload: {
-      schemaVersion: 1,
-      recordKind: 'mergeResolutionPayload',
-      resultId: input.preview.resultId,
-      resultDigest: input.preview.resultDigest,
-      redactionPolicyDigest: input.redactionPolicyDigest,
-      conflictId: input.conflict.conflictId,
-      expectedConflictDigest: input.conflict.conflictDigest,
-      optionId: input.option.optionId,
-      kind: input.option.kind,
-      targetRef: 'refs/heads/main' as VersionMainRefName,
-      expectedTargetHead: input.expectedTargetHead,
-      purpose: 'chooseValue',
-      value: input.value,
-      ...(input.extraPayload ?? {}),
-    },
+    payload,
   });
   const persisted = await graph.putObjects([record]);
   expect(persisted).toMatchObject({ status: 'success' });
@@ -854,6 +890,13 @@ function conflictDigestObject(conflictDigest: string): ObjectDigest {
   return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
 }
 
+function payloadAuthorityForNamespace(namespace: VersionGraphNamespace) {
+  return {
+    workspaceId: namespace.workspaceId ?? null,
+    principalScope: namespace.principalScope ?? null,
+  };
+}
+
 function internalSha256Digest(digest: ObjectDigest): VersionStoreObjectDigest {
   if (digest.algorithm !== 'sha256') {
     throw new Error(`expected sha256 object digest: ${digest.algorithm}`);
@@ -922,7 +965,11 @@ async function initializeInput(
 }
 
 function documentScopeForGraph(graphId: string): VersionDocumentScope {
-  return { documentId: `${DOCUMENT_ID}-${DOCUMENT_RUN_ID}-${graphId}` };
+  return {
+    workspaceId: `workspace-${graphId}`,
+    documentId: `${DOCUMENT_ID}-${DOCUMENT_RUN_ID}-${graphId}`,
+    principalScope: 'principal-user-1',
+  };
 }
 
 async function objectRecord(

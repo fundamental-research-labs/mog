@@ -24,7 +24,10 @@ import {
   type VersionGraphStore,
 } from '../../../document/version-store/provider';
 import type { RefVersion } from '../../../document/version-store/ref-store';
-import { syncBatchStatusKeyMaterialForOperationContext } from '../../../document/version-store/sync-batch-status-store';
+import {
+  syncBatchStatusKeyMaterialForOperationContext,
+  type SyncBatchStatusTerminal,
+} from '../../../document/version-store/sync-batch-status-store';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -90,6 +93,7 @@ const PROVENANCE_TRUTH_SERVICE = {
     requirements: [],
   },
 } as const;
+const SOURCE_BATCH_ID = `batch-digest:sha256:${'4'.repeat(64)}`;
 type InMemoryProvider = ReturnType<typeof createInMemoryVersionStoreProvider>;
 
 describe('WorkbookVersion pending remote promotion provider facade', () => {
@@ -184,15 +188,80 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
     });
   });
 
-  it('blocks failed sync batches through wb.version.promotePendingRemote', async () => {
+  it.each([
+    ['duplicate', { status: 'dropped', reason: 'duplicate-update-id' }, 'dropped'],
+    ['gapWaiting', { status: 'rejected', reason: 'source-gap-waiting' }, 'rejected'],
+    [
+      'failedAfterMutation',
+      { status: 'failedAfterMutation', reason: 'remote-import-failed' },
+      'failedAfterMutation',
+    ],
+  ] as const)(
+    'blocks %s source sync batches through wb.version.promotePendingRemote',
+    async (_label, terminal, batchStatusState) => {
+      const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+      const namespace = await initializeProvider(provider, `graph-blocked-batch-${batchStatusState}`);
+      const graph = await provider.openGraph(namespace);
+      const store = await provider.openPendingRemoteSegmentStore(namespace);
+      const fixture = await pendingSegmentFixture(namespace);
+      await persistAndReservePendingSegment(graph, store, fixture);
+      await markSyncBatchTerminal(provider, fixture.input.operationContext, terminal);
+      const headBefore = await expectReadHeadSuccess(graph);
+      const wb = createPromotionAuthorizedWorkbook({ provider });
+
+      const result = await wb.version.promotePendingRemote();
+
+      expect(result).toMatchObject({
+        ok: true,
+        value: {
+          status: 'failed',
+          promotedSegmentIds: [],
+          commitIds: [],
+          skipped: [
+            {
+              segmentId: fixture.input.pendingRemoteSegmentId,
+              reason: 'batch-status-terminal',
+            },
+          ],
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED',
+              reason: 'batch-status-terminal',
+              segmentId: fixture.input.pendingRemoteSegmentId,
+              data: expect.objectContaining({ batchStatusState }),
+            }),
+          ],
+        },
+      });
+      await expectGraphHead(graph, headBefore);
+      await expect(
+        store.readBySegmentId(fixture.input.pendingRemoteSegmentId),
+      ).resolves.toMatchObject({
+        status: 'found',
+        record: { state: 'pending' },
+      });
+    },
+  );
+
+  it('preserves source batch binding on provider-backed pending segments', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const namespace = await initializeProvider(provider, 'graph-failed-batch');
+    const namespace = await initializeProvider(provider, 'graph-source-batch-binding');
     const graph = await provider.openGraph(namespace);
     const store = await provider.openPendingRemoteSegmentStore(namespace);
-    const fixture = await pendingSegmentFixture(namespace);
+    const fixture = await pendingSegmentFixture(namespace, { sourceBatch: true });
     await persistAndReservePendingSegment(graph, store, fixture);
-    await markSyncBatchFailed(provider, fixture.input.operationContext);
-    const headBefore = await expectReadHeadSuccess(graph);
+    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject({
+      status: 'found',
+      record: {
+        operationContext: {
+          collaboration: {
+            batchId: SOURCE_BATCH_ID,
+            subUpdateIndex: 0,
+            subUpdateCount: 1,
+          },
+        },
+      },
+    });
     const wb = createPromotionAuthorizedWorkbook({ provider });
 
     const result = await wb.version.promotePendingRemote();
@@ -200,22 +269,74 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
     expect(result).toMatchObject({
       ok: true,
       value: {
-        status: 'failed',
-        promotedSegmentIds: [],
-        commitIds: [],
-        skipped: [
-          {
-            segmentId: fixture.input.pendingRemoteSegmentId,
-            reason: 'batch-status-terminal',
+        status: 'success',
+        promotedSegmentIds: [fixture.input.pendingRemoteSegmentId],
+        skipped: [],
+        diagnostics: [],
+      },
+    });
+    if (!result.ok) throw new Error(`expected source batch promotion success: ${result.error.code}`);
+    const commitId = expectSingleCommit(result.value.commitIds);
+    await expect(graph.readCommit(commitId)).resolves.toMatchObject(
+      {
+        status: 'success',
+        commit: {
+          payload: {
+            mutationSegmentDigests: [fixture.input.mutationSegmentDigest],
           },
-        ],
+        },
+      },
+    );
+  });
+
+  it('returns no-write diagnostics without invoking provider promotion when host gates are missing', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider, 'graph-no-write-gate');
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace);
+    await persistAndReservePendingSegment(graph, store, fixture);
+    const headBefore = await expectReadHeadSuccess(graph);
+    const ctx = createMockCtx();
+    const wb = createWorkbook({
+      ctx,
+      versioning: { provider, provenanceTruthService: PROVENANCE_TRUTH_SERVICE },
+    });
+    const promotePendingRemoteSegments = jest.spyOn(
+      ctx.versioning.pendingRemotePromotionService,
+      'promotePendingRemoteSegments',
+    );
+
+    const result = await wb.version.promotePendingRemote();
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
         diagnostics: [
           expect.objectContaining({
-            code: 'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED',
+            code: 'VERSION_CAPABILITY_DISABLED',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'promotePendingRemote',
+                requiredCapability: 'version:remotePromote',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            code: 'VERSION_CAPABILITY_DISABLED',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'promotePendingRemote',
+                requiredCapability: 'version:provenance',
+              }),
+            }),
           }),
         ],
       },
     });
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
     await expectGraphHead(graph, headBefore);
     await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
       {
@@ -294,6 +415,7 @@ async function pendingSegmentFixture(
   namespace: VersionGraphNamespace,
   options: {
     readonly payloadHash?: string;
+    readonly sourceBatch?: boolean;
     readonly updateId?: string;
   } = {},
 ): Promise<PendingSegmentFixture> {
@@ -335,6 +457,7 @@ async function pendingSegmentFixture(
 function syncOperationContext(
   options: {
     readonly payloadHash?: string;
+    readonly sourceBatch?: boolean;
     readonly updateId?: string;
   } = {},
 ): PendingRemoteSegmentOperationContext {
@@ -372,6 +495,13 @@ function syncOperationContext(
       replay: false,
       system: false,
       commitGrouping: 'pendingRemote',
+      ...(options.sourceBatch
+        ? {
+            batchId: SOURCE_BATCH_ID,
+            subUpdateIndex: 0,
+            subUpdateCount: 1,
+          }
+        : {}),
       validationDiagnosticCount: 0,
     },
   };
@@ -422,16 +552,22 @@ async function persistAndReservePendingSegment(
   ).resolves.toMatchObject({ status: 'created' });
 }
 
-async function markSyncBatchFailed(
+async function markSyncBatchTerminal(
   provider: InMemoryProvider,
   operationContext: PendingRemoteSegmentOperationContext,
-): Promise<void> {
+  terminal: SyncBatchStatusTerminal,
+): Promise<string> {
   const store = await provider.openSyncBatchStatusStore();
-  const keyMaterial = await syncBatchStatusKeyMaterialForOperationContext(operationContext);
+  const identityInput = syncBatchIdentityInputForOperationContext(operationContext);
+  const keyMaterial = await syncBatchStatusKeyMaterialForOperationContext(
+    operationContext,
+    identityInput,
+  );
   await expect(
     store.reserveBatchStatus({
       batchStatusId: keyMaterial.batchStatusId,
       operationContext,
+      ...identityInput,
       createdAt: operationContext.createdAt,
     }),
   ).resolves.toMatchObject({ status: 'reserved' });
@@ -439,10 +575,25 @@ async function markSyncBatchFailed(
     store.completeBatchStatus({
       batchStatusId: keyMaterial.batchStatusId,
       payloadHash: operationContext.collaboration.payloadHash,
+      ...identityInput,
       completedAt: '2026-06-21T00:00:05.000Z',
-      terminal: { status: 'failedAfterMutation', reason: 'remote-import-failed' },
+      terminal,
     }),
   ).resolves.toMatchObject({ status: 'completed' });
+  return keyMaterial.batchStatusId;
+}
+
+function syncBatchIdentityInputForOperationContext(
+  operationContext: PendingRemoteSegmentOperationContext,
+): {
+  readonly batchId?: string;
+} {
+  const { collaboration } = operationContext;
+  return collaboration.batchId === undefined
+    ? {}
+    : {
+        batchId: collaboration.batchId,
+      };
 }
 
 async function objectRecord(

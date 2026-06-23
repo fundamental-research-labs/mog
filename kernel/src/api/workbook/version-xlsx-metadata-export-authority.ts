@@ -1,20 +1,34 @@
 import type { ObjectDigest, VersionHead, VersionResult } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import type { VersionStoreProvider } from '../../document/version-store/provider';
 import {
-  namespaceForDocumentScope,
-  type VersionStoreProvider,
-} from '../../document/version-store/provider';
+  isObjectDigest,
+  isWorkbookCommitId,
+  type WorkbookCommitId,
+} from '../../document/version-store/object-digest';
+import {
+  versionGraphNamespaceKey,
+  type VersionGraphNamespace,
+} from '../../document/version-store/object-store';
+import {
+  namespaceForRegistry,
+  normalizeVersionDocumentScope,
+  versionDocumentScopeKey,
+  type VersionDocumentScope,
+} from '../../document/version-store/registry';
+import type { WorkbookCommit } from '../../document/version-store/commit-store';
 import type { MogVersionMetadataExportBlockReason } from './version-xlsx-metadata-export-gate';
 
 type VersionMetadataHeadIdentity = {
-  readonly commitId: VersionHead['id'];
+  readonly commitId?: VersionHead['id'];
   readonly refName?: VersionHead['refName'];
   readonly resolvedFrom?: VersionHead['resolvedFrom'];
   readonly refRevision?: VersionHead['refRevision'];
 };
 
 export type MogVersionMetadataAuthoritativeHeadIdentity = VersionMetadataHeadIdentity & {
+  readonly commitId: VersionHead['id'];
   readonly refName: NonNullable<VersionHead['refName']>;
   readonly resolvedFrom: NonNullable<VersionHead['resolvedFrom']>;
   readonly refRevision: NonNullable<VersionHead['refRevision']>;
@@ -43,15 +57,29 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
 
   const provider = versionStoreProviderFromContext(ctx);
   if (!provider) return { ok: false, reason: 'head-unverified' };
+  const providerScope = normalizeProviderDocumentScope(provider);
+  if (!providerScope || !documentScopeMatchesWorkbookContext(ctx, providerScope)) {
+    return { ok: false, reason: 'head-unverified' };
+  }
 
   try {
     const registry = await provider.readGraphRegistry();
     if (registry.status !== 'ok') return { ok: false, reason: 'head-unverified' };
+    const registryScope = normalizeRegistryDocumentScope(registry.registry);
+    if (!registryScope || !documentScopesMatch(registryScope, providerScope)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+    const sourceRootCommitId = registry.registry.rootCommitId;
+    if (!isWorkbookCommitId(sourceRootCommitId)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+    const namespace = namespaceForRegistry(registry.registry);
 
-    const graph = await provider.openGraph(
-      namespaceForDocumentScope(provider.documentScope, registry.registry.currentGraphId),
-      provider.accessContext,
-    );
+    const graph = await provider.openGraph(namespace, provider.accessContext);
+    if (!graphNamespaceMatches(graph.namespace, namespace)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+
     const currentHead = await graph.readHead();
     if (currentHead.status !== 'success') return { ok: false, reason: 'head-unverified' };
     const currentHeadIdentity = graphHeadIdentity(currentHead.head);
@@ -62,13 +90,30 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
       return { ok: false, reason: 'stale-head' };
     }
 
-    const commit = await graph.readCommit(head.value.id);
-    if (commit.status !== 'success') return { ok: false, reason: 'commit-missing' };
+    const closure = await graph.readCommitClosure(expectedHead.commitId);
+    if (closure.status !== 'success') return { ok: false, reason: 'commit-missing' };
+    const sourceRoot = closure.commits.find((commit) => commit.id === sourceRootCommitId);
+    if (
+      !sourceRoot ||
+      !commitClosureContainsAncestor(closure.commits, expectedHead.commitId, sourceRootCommitId) ||
+      sourceRoot.payload.parentCommitIds.length !== 0
+    ) {
+      return { ok: false, reason: 'stale-head' };
+    }
+    if (!commitPayloadMatchesAuthority(sourceRoot, sourceRootCommitId, providerScope.documentId)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+    const commit = closure.commits.find((candidate) => candidate.id === expectedHead.commitId);
+    if (!commit) return { ok: false, reason: 'commit-missing' };
+    if (!commitPayloadMatchesAuthority(commit, expectedHead.commitId, providerScope.documentId)) {
+      return { ok: false, reason: 'head-unverified' };
+    }
+
     return {
       ok: true,
       value: {
-        semanticChangeSetDigest: commit.commit.payload.semanticChangeSetDigest,
-        snapshotRootDigest: commit.commit.payload.snapshotRootDigest,
+        semanticChangeSetDigest: commit.payload.semanticChangeSetDigest,
+        snapshotRootDigest: commit.payload.snapshotRootDigest,
         currentHead: currentHeadIdentity,
       },
     };
@@ -84,7 +129,7 @@ function graphHeadIdentity(head: {
   readonly refRevision?: unknown;
 }): VersionMetadataHeadIdentity {
   return {
-    commitId: head.id as VersionHead['id'],
+    ...(isWorkbookCommitId(head.id) ? { commitId: head.id as VersionHead['id'] } : {}),
     ...(typeof head.refName === 'string'
       ? { refName: head.refName as VersionHead['refName'] }
       : {}),
@@ -123,11 +168,98 @@ function hasAuthoritativeHeadIdentity(
   value: VersionMetadataHeadIdentity,
 ): value is MogVersionMetadataAuthoritativeHeadIdentity {
   return (
-    isNonEmptyString(value.commitId) &&
+    isWorkbookCommitId(value.commitId) &&
     isNonEmptyString(value.refName) &&
     isNonEmptyString(value.resolvedFrom) &&
     isVersionRecordRevision(value.refRevision)
   );
+}
+
+function normalizeProviderDocumentScope(provider: VersionStoreProvider): VersionDocumentScope | null {
+  try {
+    return normalizeVersionDocumentScope(provider.documentScope);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeRegistryDocumentScope(registry: {
+  readonly workspaceId?: unknown;
+  readonly documentId?: unknown;
+  readonly principalScope?: unknown;
+}): VersionDocumentScope | null {
+  if (typeof registry.documentId !== 'string') return null;
+  if (registry.workspaceId !== undefined && typeof registry.workspaceId !== 'string') return null;
+  if (registry.principalScope !== undefined && typeof registry.principalScope !== 'string') {
+    return null;
+  }
+  try {
+    return normalizeVersionDocumentScope({
+      ...(registry.workspaceId === undefined ? {} : { workspaceId: registry.workspaceId }),
+      documentId: registry.documentId,
+      ...(registry.principalScope === undefined ? {} : { principalScope: registry.principalScope }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function documentScopeMatchesWorkbookContext(
+  ctx: DocumentContext,
+  providerScope: VersionDocumentScope,
+): boolean {
+  return providerScope.documentId === ctx.workbookLinkScope().requestingDocumentId;
+}
+
+function documentScopesMatch(left: VersionDocumentScope, right: VersionDocumentScope): boolean {
+  return versionDocumentScopeKey(left) === versionDocumentScopeKey(right);
+}
+
+function graphNamespaceMatches(
+  actual: VersionGraphNamespace,
+  expected: VersionGraphNamespace,
+): boolean {
+  try {
+    return versionGraphNamespaceKey(actual) === versionGraphNamespaceKey(expected);
+  } catch {
+    return false;
+  }
+}
+
+function commitPayloadMatchesAuthority(
+  commit: WorkbookCommit,
+  expectedCommitId: VersionHead['id'],
+  expectedDocumentId: string,
+): boolean {
+  return (
+    commit.id === expectedCommitId &&
+    commit.payload.documentId === expectedDocumentId &&
+    isObjectDigest(commit.payload.semanticChangeSetDigest) &&
+    isObjectDigest(commit.payload.snapshotRootDigest)
+  );
+}
+
+function commitClosureContainsAncestor(
+  commits: readonly WorkbookCommit[],
+  headCommitId: VersionHead['id'],
+  ancestorCommitId: WorkbookCommitId,
+): boolean {
+  const commitsById = new Map(commits.map((commit) => [commit.id, commit]));
+  const pending = [headCommitId as WorkbookCommitId];
+  const seen = new Set<WorkbookCommitId>();
+
+  while (pending.length > 0) {
+    const commitId = pending.shift() as WorkbookCommitId;
+    if (seen.has(commitId)) continue;
+    seen.add(commitId);
+    if (commitId === ancestorCommitId) return true;
+
+    const commit = commitsById.get(commitId);
+    if (!commit) return false;
+    pending.push(...commit.payload.parentCommitIds);
+  }
+
+  return false;
 }
 
 function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProvider | undefined {

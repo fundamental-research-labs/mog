@@ -3,6 +3,19 @@ import {
   createSdkVersionStoreLifecycleConfig,
 } from '../src/version-store';
 
+function captureVersionStoreConfigError(
+  config: unknown,
+  runtime: 'node' | 'wasm' = 'wasm',
+): MogSdkVersionStoreConfigError {
+  try {
+    createSdkVersionStoreLifecycleConfig(config as never, { runtime });
+  } catch (error) {
+    if (error instanceof MogSdkVersionStoreConfigError) return error;
+    throw error;
+  }
+  throw new Error('Expected version-store config to fail');
+}
+
 describe('SDK version-store config', () => {
   it('maps in-memory config to the memory provider selection', () => {
     expect(
@@ -26,6 +39,24 @@ describe('SDK version-store config', () => {
         requireDurablePersistence: true,
       },
     });
+  });
+
+  it('serializes public lifecycle config with stable field order', () => {
+    const config = createSdkVersionStoreLifecycleConfig(
+      {
+        kind: 'browser',
+        provider: 'indexeddb',
+        principalScope: 'principal-1',
+        readOnly: true,
+        requireDurablePersistence: false,
+        workspaceId: 'workspace-1',
+      },
+      { runtime: 'wasm' },
+    );
+
+    expect(JSON.stringify(config)).toBe(
+      '{"providerSelection":{"kind":"indexeddb","workspaceId":"workspace-1","principalScope":"principal-1","readOnly":true,"requireDurablePersistence":false}}',
+    );
   });
 
   it('maps explicit IndexedDB config to the existing registry provider kind', () => {
@@ -110,11 +141,48 @@ describe('SDK version-store config', () => {
 
   it('rejects provider selectors outside browser config', () => {
     expect(() =>
-      createSdkVersionStoreLifecycleConfig(
-        { kind: 'memory', provider: 'indexeddb' } as never,
-        { runtime: 'node' },
-      ),
+      createSdkVersionStoreLifecycleConfig({ kind: 'memory', provider: 'indexeddb' } as never, {
+        runtime: 'node',
+      }),
     ).toThrow("versionStore.provider is only valid with kind='browser'");
+  });
+
+  it('rejects malformed browser provider config', () => {
+    const error = captureVersionStoreConfigError({
+      kind: 'browser',
+      provider: { kind: 'indexeddb' },
+    });
+
+    expect(error).toMatchObject({
+      diagnostic: {
+        code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+        runtime: 'wasm',
+        requestedKind: 'browser',
+        details: {
+          field: 'provider',
+          category: 'provider-identity',
+        },
+      },
+    });
+    expect(error.message).toContain("provider kind string 'indexeddb'");
+  });
+
+  it('rejects internal provider/openGraph config', () => {
+    const error = captureVersionStoreConfigError({
+      kind: 'indexeddb',
+      openGraph: async () => undefined,
+    });
+
+    expect(error).toMatchObject({
+      diagnostic: {
+        code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+        requestedKind: 'indexeddb',
+        details: {
+          field: 'openGraph',
+          category: 'provider-internal',
+        },
+      },
+    });
   });
 
   it('rejects raw storage key material fields', () => {
@@ -142,6 +210,52 @@ describe('SDK version-store config', () => {
         },
       });
     }
+  });
+
+  it('rejects private host source fields', () => {
+    for (const [field, config] of [
+      ['source', { kind: 'indexeddb', source: { type: 'bytes', data: new Uint8Array() } }],
+      ['sourceKind', { kind: 'indexeddb', sourceKind: 'uploaded-bytes' }],
+      ['sourceHostId', { kind: 'indexeddb', sourceHostId: 'sdk-host' }],
+      [
+        'resourceContext',
+        {
+          kind: 'indexeddb',
+          resourceContext: { workspaceId: 'workspace-1', documentId: 'document-1' },
+        },
+      ],
+      ['storage', { kind: 'indexeddb', storage: { sourceHostId: 'sdk-host' } }],
+    ] as const) {
+      const error = captureVersionStoreConfigError(config);
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'internal-source',
+          },
+        },
+      });
+    }
+  });
+
+  it('rejects unknown fields instead of silently accepting them', () => {
+    const error = captureVersionStoreConfigError({
+      kind: 'indexeddb',
+      unrecognizedDurabilityMode: 'best-effort',
+    });
+
+    expect(error).toMatchObject({
+      diagnostic: {
+        code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+        requestedKind: 'indexeddb',
+        details: {
+          field: 'unrecognizedDurabilityMode',
+          category: 'unsupported-field',
+        },
+      },
+    });
   });
 
   it('rejects unsafe storage key material in scope strings', () => {

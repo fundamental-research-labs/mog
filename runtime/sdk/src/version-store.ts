@@ -94,13 +94,43 @@ export interface MogSdkVersionStoreDiagnostic {
 }
 
 type DisallowedVersionStoreConfigField = {
-  readonly category: 'provider-identity' | 'storage-key' | 'scope';
+  readonly category:
+    | 'provider-identity'
+    | 'provider-internal'
+    | 'storage-key'
+    | 'scope'
+    | 'internal-source';
   readonly message: string;
 };
 
 const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
   Record<string, DisallowedVersionStoreConfigField>
 > = Object.freeze({
+  accessContext: {
+    category: 'provider-internal',
+    message:
+      'versionStore.accessContext is an internal provider field; SDK version-store config selects a provider kind, not a provider instance.',
+  },
+  openGraph: {
+    category: 'provider-internal',
+    message:
+      'versionStore.openGraph is an internal provider method; SDK version-store config selects a provider kind, not a provider instance.',
+  },
+  readGraphRegistry: {
+    category: 'provider-internal',
+    message:
+      'versionStore.readGraphRegistry is an internal provider method; SDK version-store config selects a provider kind, not a provider instance.',
+  },
+  initializeGraph: {
+    category: 'provider-internal',
+    message:
+      'versionStore.initializeGraph is an internal provider method; SDK version-store config selects a provider kind, not a provider instance.',
+  },
+  commitGraphWrite: {
+    category: 'provider-internal',
+    message:
+      'versionStore.commitGraphWrite is an internal provider method; SDK version-store config selects a provider kind, not a provider instance.',
+  },
   providerId: {
     category: 'provider-identity',
     message:
@@ -196,6 +226,99 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     message:
       'versionStore.scope is inconsistent with SDK document scope; pass workspaceId/principalScope on versionStore and documentId to createWorkbook options.',
   },
+  source: {
+    category: 'internal-source',
+    message:
+      'versionStore.source is not version-store config; pass workbook import sources to createWorkbook options instead.',
+  },
+  documentRef: {
+    category: 'internal-source',
+    message:
+      'versionStore.documentRef is an internal host source reference; source handles are created by the SDK host adapter.',
+  },
+  sourceKind: {
+    category: 'internal-source',
+    message:
+      'versionStore.sourceKind is internal source provenance; source handles are created by the SDK host adapter.',
+  },
+  sourceHandleId: {
+    category: 'internal-source',
+    message:
+      'versionStore.sourceHandleId is internal source-handle material; source handles are created by the SDK host adapter.',
+  },
+  sourceHostId: {
+    category: 'internal-source',
+    message:
+      'versionStore.sourceHostId is internal host provenance; source handles are created by the SDK host adapter.',
+  },
+  sourceSessionId: {
+    category: 'internal-source',
+    message:
+      'versionStore.sourceSessionId is internal host provenance; source handles are created by the SDK host adapter.',
+  },
+  issuerHostId: {
+    category: 'internal-source',
+    message:
+      'versionStore.issuerHostId is internal source-handle material; source handles are created by the SDK host adapter.',
+  },
+  issuance: {
+    category: 'internal-source',
+    message:
+      'versionStore.issuance is internal source-handle material; source handles are created by the SDK host adapter.',
+  },
+  resourceContext: {
+    category: 'internal-source',
+    message:
+      'versionStore.resourceContext is internal host resource context; document scope is derived by the SDK host adapter.',
+  },
+  resourceContextFingerprint: {
+    category: 'internal-source',
+    message:
+      'versionStore.resourceContextFingerprint is internal host resource context; document scope is derived by the SDK host adapter.',
+  },
+  principalFingerprint: {
+    category: 'internal-source',
+    message:
+      'versionStore.principalFingerprint is internal host provenance; pass principal/security to createWorkbook options instead.',
+  },
+  operationAuthorization: {
+    category: 'internal-source',
+    message:
+      'versionStore.operationAuthorization is an internal host authorization handoff; SDK callers cannot provide it.',
+  },
+  storage: {
+    category: 'internal-source',
+    message:
+      'versionStore.storage is an internal host storage handoff; SDK version-store config only selects public storage behavior.',
+  },
+  sourceHandleResolvers: {
+    category: 'internal-source',
+    message:
+      'versionStore.sourceHandleResolvers is an internal host resolver registry; SDK callers cannot provide it.',
+  },
+  replayRegistry: {
+    category: 'internal-source',
+    message:
+      'versionStore.replayRegistry is an internal host replay registry; SDK callers cannot provide it.',
+  },
+});
+
+const BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS = Object.freeze([
+  'kind',
+  'workspaceId',
+  'principalScope',
+  'readOnly',
+  'requireDurablePersistence',
+]);
+
+const SUPPORTED_VERSION_STORE_CONFIG_FIELDS: Readonly<
+  Record<MogSdkSupportedVersionStoreKind, ReadonlySet<string>>
+> = Object.freeze({
+  memory: new Set(BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS),
+  'in-memory': new Set(BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS),
+  'memory-durable-snapshot': new Set(BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS),
+  indexeddb: new Set(BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS),
+  browser: new Set([...BASE_SUPPORTED_VERSION_STORE_CONFIG_FIELDS, 'provider']),
 });
 
 export class MogSdkVersionStoreConfigError extends Error {
@@ -273,16 +396,7 @@ export function createSdkVersionStoreLifecycleConfig(
     case 'indexeddb':
       return lifecycleConfig('indexeddb', parsed.config, options, true);
     case 'browser': {
-      const provider = optionalStringField(parsed.config, 'provider', options);
-      if (provider !== undefined && provider !== 'indexeddb') {
-        throw new MogSdkVersionStoreConfigError(
-          invalidVersionStoreDiagnostic(
-            options,
-            parsed.kind,
-            `Browser version stores only support provider='indexeddb'; received '${provider}'.`,
-          ),
-        );
-      }
+      optionalBrowserProviderField(parsed.config, options);
       return lifecycleConfig('indexeddb', parsed.config, options, true);
     }
     default:
@@ -335,6 +449,16 @@ function validateSupportedVersionStoreConfig(
 ): void {
   if (config === null) return;
 
+  for (const [field, fieldConfig] of Object.entries(DISALLOWED_VERSION_STORE_CONFIG_FIELDS)) {
+    if (!hasOwnField(config, field)) continue;
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(options, kind, fieldConfig.message, {
+        field,
+        category: fieldConfig.category,
+      }),
+    );
+  }
+
   if (kind !== 'browser' && hasOwnField(config, 'provider')) {
     throw new MogSdkVersionStoreConfigError(
       invalidVersionStoreDiagnostic(
@@ -346,13 +470,16 @@ function validateSupportedVersionStoreConfig(
     );
   }
 
-  for (const [field, fieldConfig] of Object.entries(DISALLOWED_VERSION_STORE_CONFIG_FIELDS)) {
-    if (!hasOwnField(config, field)) continue;
+  const allowedFields = SUPPORTED_VERSION_STORE_CONFIG_FIELDS[kind];
+  for (const field of Object.keys(config)) {
+    if (allowedFields.has(field)) continue;
     throw new MogSdkVersionStoreConfigError(
-      invalidVersionStoreDiagnostic(options, kind, fieldConfig.message, {
-        field,
-        category: fieldConfig.category,
-      }),
+      invalidVersionStoreDiagnostic(
+        options,
+        kind,
+        `versionStore.${field} is not a supported ${kind} version-store config field.`,
+        { field, category: 'unsupported-field' },
+      ),
     );
   }
 }
@@ -423,6 +550,36 @@ function optionalStringField(
     );
   }
   return normalized;
+}
+
+function optionalBrowserProviderField(
+  config: Readonly<Record<string, unknown>> | null,
+  options: { readonly runtime: MogSdkVersionStoreRuntime },
+): 'indexeddb' | undefined {
+  const value = config?.provider;
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(
+        options,
+        kindFromConfig(config),
+        "versionStore.provider must be the provider kind string 'indexeddb' when provided.",
+        { field: 'provider', category: 'provider-identity' },
+      ),
+    );
+  }
+  const provider = value.normalize('NFC');
+  if (provider !== 'indexeddb') {
+    throw new MogSdkVersionStoreConfigError(
+      invalidVersionStoreDiagnostic(
+        options,
+        kindFromConfig(config),
+        `Browser version stores only support provider='indexeddb'; received '${provider}'.`,
+        { field: 'provider', category: 'provider-identity' },
+      ),
+    );
+  }
+  return provider;
 }
 
 function optionalBooleanField(

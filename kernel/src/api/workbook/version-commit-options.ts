@@ -8,11 +8,11 @@ import type {
 
 import { validateRefName } from '../../document/version-store/ref-name';
 import {
-  publicDiagnostic,
   VERSION_BRANCH_REF_PREFIX,
   VERSION_HEAD_REF,
   VERSION_MAIN_REF,
-} from './version-commit-diagnostics';
+} from './version-commit-constants';
+import { publicDiagnostic } from './version-commit-diagnostics';
 import type { CommitValidationResult, NormalizedCommitOptions } from './version-commit-types';
 import { isRecord, toCommitId, toPublicRevision } from './version-commit-utils';
 

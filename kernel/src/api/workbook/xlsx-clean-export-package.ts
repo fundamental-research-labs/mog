@@ -124,6 +124,19 @@ export async function scanXlsxCleanExportPackageDiagnostics(
   const view = new DataView(xlsxBytes.buffer, xlsxBytes.byteOffset, xlsxBytes.byteLength);
   const eocd = readEndOfCentralDirectory(view);
   const entries = readCentralDirectoryEntries(xlsxBytes, view, eocd);
+  const inventoryXmlParts = await readPackageInventoryXmlParts(xlsxBytes, view, eocd, entries);
+  return scanXlsxCleanExportPackageInventoryDiagnostics(
+    entries.map((entry) => entry.name),
+    inventoryXmlParts,
+  );
+}
+
+async function readPackageInventoryXmlParts(
+  xlsxBytes: Uint8Array,
+  view: DataView,
+  eocd: ReturnType<typeof readEndOfCentralDirectory>,
+  entries: readonly ZipEntry[],
+): Promise<XlsxCleanExportPackageInventoryXmlPart[]> {
   const inventoryXmlParts: XlsxCleanExportPackageInventoryXmlPart[] = [];
   for (const entry of entries) {
     const path = normalizePackagePath(entry.name);
@@ -133,10 +146,7 @@ export async function scanXlsxCleanExportPackageDiagnostics(
       xml: decodeUtf8(await readEntryData(xlsxBytes, view, eocd, entry)),
     });
   }
-  return scanXlsxCleanExportPackageInventoryDiagnostics(
-    entries.map((entry) => entry.name),
-    inventoryXmlParts,
-  );
+  return inventoryXmlParts;
 }
 
 async function assertXlsxCleanExportPackageIsSafe(xlsxBytes: Uint8Array): Promise<void> {

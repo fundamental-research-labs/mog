@@ -3,7 +3,6 @@ import 'fake-indexeddb/auto';
 import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { createWorkbook } from '../create-workbook';
 import {
   installVersionDomainDetectorNoopsOnHandles,
   installVersionDomainDetectorNoopsOnWorkbook,
@@ -20,7 +19,6 @@ import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version
 import {
   ACTIVE_CONTENT_SECRET,
   CLEAN_EXPORT_METADATA_LEAK_TOKENS,
-  SOURCE_DOCUMENT_ID,
   TARGET_DOCUMENT_ID,
   activeContentVariantFixtures,
   activePackageVariantFixture,
@@ -42,18 +40,7 @@ afterEach(async () => {
 
 describe('WorkbookVersion default XLSX clean export package scan', () => {
   it('scrubs Mog customXml package inventory and redacted metadata from the default export', async () => {
-    const sourceXlsx = await createLeakySourceXlsx(async () => {
-      const wb = await createWorkbook({ documentId: SOURCE_DOCUMENT_ID, userTimezone: 'UTC' });
-      try {
-        await wb.activeSheet.setCell('A1', 'Clean export package scan');
-        await wb.activeSheet.setCell('B1', 10);
-        return wb.toXlsx();
-      } finally {
-        await wb.close('skipSave').catch(() => {
-          wb.dispose();
-        });
-      }
-    });
+    const sourceXlsx = await createLeakySourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: sourceXlsx },
       {

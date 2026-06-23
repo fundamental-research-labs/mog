@@ -23,6 +23,9 @@ import type {
 } from './version-proposal-types';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
+const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
+const AUTHOR_KINDS = new Set(['user', 'agent', 'system', 'unknown']);
+const AUTHOR_TRUST_LEVELS = new Set(['trusted', 'unknown', 'redacted']);
 
 const PROPOSAL_STATUSES = new Set<AgentProposalStatus>([
   'draft',
@@ -131,7 +134,7 @@ export function normalizeCreateProposalInput(
   validateRequiredString(input, 'targetRef', 'createProposal', diagnostics);
   validateOptionalCommitId(input, 'baseCommitId', 'createProposal', diagnostics);
   validateRequiredString(input, 'agentRunId', 'createProposal', diagnostics);
-  validateRequiredRecord(input, 'agent', 'createProposal', diagnostics);
+  validateTrustedAuthor(input, 'agent', 'createProposal', diagnostics, 'agent');
   validateOptionalString(input, 'proposalBranchNameHint', 'createProposal', diagnostics);
   validateRequiredRecord(input, 'redactionPolicy', 'createProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
@@ -146,9 +149,9 @@ export function normalizeStartProposalWorkspaceInput(
   }
   validateKnownKeys(input, START_PROPOSAL_WORKSPACE_KEYS, 'startProposalWorkspace', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'startProposalWorkspace', diagnostics);
-  validateRequiredString(input, 'proposalId', 'startProposalWorkspace', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'startProposalWorkspace', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'startProposalWorkspace', diagnostics);
-  validateRequiredRecord(input, 'actor', 'startProposalWorkspace', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'startProposalWorkspace', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -177,7 +180,7 @@ export function normalizeDisposeProposalWorkspaceInput(
   );
   validateRequiredString(input, 'clientRequestId', 'disposeProposalWorkspace', diagnostics);
   validateRequiredString(input, 'workspaceId', 'disposeProposalWorkspace', diagnostics);
-  validateRequiredRecord(input, 'actor', 'disposeProposalWorkspace', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'disposeProposalWorkspace', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -190,10 +193,10 @@ export function normalizeCommitProposalWorkspaceInput(
   }
   validateKnownKeys(input, COMMIT_PROPOSAL_WORKSPACE_KEYS, 'commitProposalWorkspace', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'commitProposalWorkspace', diagnostics);
-  validateRequiredString(input, 'proposalId', 'commitProposalWorkspace', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'commitProposalWorkspace', diagnostics);
   validateRequiredString(input, 'workspaceId', 'commitProposalWorkspace', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'commitProposalWorkspace', diagnostics);
-  validateRequiredRecord(input, 'actor', 'commitProposalWorkspace', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'commitProposalWorkspace', diagnostics);
   validateRequiredString(input, 'message', 'commitProposalWorkspace', diagnostics);
   validateOptionalRecord(input, 'verification', 'commitProposalWorkspace', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
@@ -206,9 +209,9 @@ export function normalizeFailProposalInput(
   if (!isPlainInput(input, 'failProposal', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, FAIL_PROPOSAL_KEYS, 'failProposal', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'failProposal', diagnostics);
-  validateRequiredString(input, 'proposalId', 'failProposal', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'failProposal', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'failProposal', diagnostics);
-  validateRequiredRecord(input, 'actor', 'failProposal', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'failProposal', diagnostics);
   validateRequiredArray(input, 'diagnostics', 'failProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -219,7 +222,7 @@ export function normalizeGetProposalInput(
   const diagnostics: VersionStoreDiagnostic[] = [];
   if (!isPlainInput(input, 'getProposal', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, GET_PROPOSAL_KEYS, 'getProposal', diagnostics);
-  validateRequiredString(input, 'proposalId', 'getProposal', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'getProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -244,10 +247,10 @@ export function normalizeMarkProposalVerifiedInput(
   if (!isPlainInput(input, 'markProposalVerified', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, MARK_PROPOSAL_VERIFIED_KEYS, 'markProposalVerified', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'markProposalVerified', diagnostics);
-  validateRequiredString(input, 'proposalId', 'markProposalVerified', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'markProposalVerified', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'markProposalVerified', diagnostics);
   validateRequiredRecord(input, 'verification', 'markProposalVerified', diagnostics);
-  validateRequiredRecord(input, 'actor', 'markProposalVerified', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'markProposalVerified', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -258,9 +261,9 @@ export function normalizeOpenProposalReviewInput(
   if (!isPlainInput(input, 'openProposalReview', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, OPEN_PROPOSAL_REVIEW_KEYS, 'openProposalReview', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'openProposalReview', diagnostics);
-  validateRequiredString(input, 'proposalId', 'openProposalReview', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'openProposalReview', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'openProposalReview', diagnostics);
-  validateRequiredRecord(input, 'actor', 'openProposalReview', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'openProposalReview', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -271,10 +274,10 @@ export function normalizeAcceptProposalInput(
   if (!isPlainInput(input, 'acceptProposal', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, ACCEPT_PROPOSAL_KEYS, 'acceptProposal', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'acceptProposal', diagnostics);
-  validateRequiredString(input, 'proposalId', 'acceptProposal', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'acceptProposal', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'acceptProposal', diagnostics);
   validateRequiredCommitId(input, 'expectedTargetHeadId', 'acceptProposal', diagnostics);
-  validateRequiredRecord(input, 'actor', 'acceptProposal', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'acceptProposal', diagnostics);
   validateRequiredResolutionPolicy(input, 'resolutionPolicy', 'acceptProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -286,9 +289,9 @@ export function normalizeRejectProposalInput(
   if (!isPlainInput(input, 'rejectProposal', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, REJECT_PROPOSAL_KEYS, 'rejectProposal', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'rejectProposal', diagnostics);
-  validateRequiredString(input, 'proposalId', 'rejectProposal', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'rejectProposal', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'rejectProposal', diagnostics);
-  validateRequiredRecord(input, 'actor', 'rejectProposal', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'rejectProposal', diagnostics);
   validateOptionalString(input, 'reason', 'rejectProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -300,10 +303,10 @@ export function normalizeSupersedeProposalInput(
   if (!isPlainInput(input, 'supersedeProposal', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, SUPERSEDE_PROPOSAL_KEYS, 'supersedeProposal', diagnostics);
   validateRequiredString(input, 'clientRequestId', 'supersedeProposal', diagnostics);
-  validateRequiredString(input, 'proposalId', 'supersedeProposal', diagnostics);
+  validateRequiredProposalId(input, 'proposalId', 'supersedeProposal', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'supersedeProposal', diagnostics);
-  validateRequiredRecord(input, 'actor', 'supersedeProposal', diagnostics);
-  validateOptionalString(input, 'supersededByProposalId', 'supersedeProposal', diagnostics);
+  validateTrustedAuthor(input, 'actor', 'supersedeProposal', diagnostics);
+  validateOptionalProposalId(input, 'supersededByProposalId', 'supersedeProposal', diagnostics);
   validateOptionalString(input, 'reason', 'supersedeProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -316,6 +319,30 @@ function invalidOptionDiagnostic(
   return proposalInputDiagnostic(operation, 'VERSION_INVALID_OPTIONS', safeMessage, {
     payload: { option },
   });
+}
+
+function invalidProposalIdDiagnostic(
+  operation: VersionProposalPublicOperation,
+  option: string,
+): VersionStoreDiagnostic {
+  return proposalInputDiagnostic(
+    operation,
+    'VERSION_INVALID_PROPOSAL_ID',
+    `${option} must be a public proposal id.`,
+    { payload: { option } },
+  );
+}
+
+function unauthorizedAuthorDiagnostic(
+  operation: VersionProposalPublicOperation,
+  option: string,
+): VersionStoreDiagnostic {
+  return proposalInputDiagnostic(
+    operation,
+    'VERSION_PERMISSION_DENIED',
+    `${option} is not authorized for proposal ${operation}.`,
+    { payload: { option, reason: 'unauthorizedActor' } },
+  );
 }
 
 function proposalInputDiagnostic(
@@ -371,6 +398,40 @@ function validateRequiredString(
   diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be a non-empty string.`));
 }
 
+function validateRequiredProposalId(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  operation: VersionProposalPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+): void {
+  validateProposalId(input[key], operation, key, diagnostics);
+}
+
+function validateOptionalProposalId(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  operation: VersionProposalPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+): void {
+  if (!(key in input)) return;
+  validateProposalId(input[key], operation, key, diagnostics);
+}
+
+function validateProposalId(
+  value: unknown,
+  operation: VersionProposalPublicOperation,
+  key: string,
+  diagnostics: VersionStoreDiagnostic[],
+): value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be a non-empty string.`));
+    return false;
+  }
+  if (PROPOSAL_ID_RE.test(value)) return true;
+  diagnostics.push(invalidProposalIdDiagnostic(operation, key));
+  return false;
+}
+
 function validateOptionalString(
   input: Readonly<Record<string, unknown>>,
   key: string,
@@ -389,6 +450,51 @@ function validateRequiredRecord(
 ): void {
   if (isRecord(input[key]) && !Array.isArray(input[key])) return;
   diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be an object.`));
+}
+
+function validateTrustedAuthor(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  operation: VersionProposalPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+  requiredKind?: string,
+): void {
+  const value = input[key];
+  if (!isRecord(value) || Array.isArray(value)) {
+    diagnostics.push(invalidOptionDiagnostic(operation, key, `${key} must be an object.`));
+    return;
+  }
+  if (!AUTHOR_KINDS.has(value.kind as string)) {
+    diagnostics.push(
+      invalidOptionDiagnostic(operation, `${key}.kind`, `${key}.kind is not supported.`),
+    );
+  }
+  if (requiredKind && value.kind !== requiredKind) {
+    diagnostics.push(invalidOptionDiagnostic(operation, `${key}.kind`, `${key}.kind is invalid.`));
+  }
+  if (!AUTHOR_TRUST_LEVELS.has(value.trust as string)) {
+    diagnostics.push(
+      invalidOptionDiagnostic(operation, `${key}.trust`, `${key}.trust is not supported.`),
+    );
+    return;
+  }
+  if (value.trust !== 'trusted') diagnostics.push(unauthorizedAuthorDiagnostic(operation, key));
+  validateOptionalAuthorString(value, 'displayName', key, operation, diagnostics);
+  validateOptionalAuthorString(value, 'principalId', key, operation, diagnostics);
+  validateOptionalAuthorString(value, 'agentRunId', key, operation, diagnostics);
+}
+
+function validateOptionalAuthorString(
+  author: Readonly<Record<string, unknown>>,
+  field: string,
+  key: string,
+  operation: VersionProposalPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+): void {
+  if (!(field in author) || typeof author[field] === 'string') return;
+  diagnostics.push(
+    invalidOptionDiagnostic(operation, `${key}.${field}`, `${key}.${field} must be a string.`),
+  );
 }
 
 function validateOptionalRecord(

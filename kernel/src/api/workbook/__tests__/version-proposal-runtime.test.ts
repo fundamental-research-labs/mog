@@ -4,6 +4,7 @@ import { WorkbookVersionImpl } from '../version';
 
 const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;
 const HEAD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
+const PROPOSAL_ID = `proposal:sha256:${'a'.repeat(64)}`;
 const ACTOR = { kind: 'user', trust: 'trusted', displayName: 'Reviewer' } as const;
 const AGENT = {
   kind: 'agent',
@@ -37,7 +38,7 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
 function createProposalRecord(overrides: Record<string, unknown> = {}) {
   return {
     schemaVersion: 1,
-    id: 'proposal:sha256:abc',
+    id: PROPOSAL_ID,
     documentId: 'document-1',
     title: 'Proposal One',
     targetRef: 'refs/heads/main',
@@ -112,7 +113,7 @@ describe('WorkbookVersion proposal runtime facade', () => {
   it('returns target_unavailable when no proposal service is attached', async () => {
     const version = new WorkbookVersionImpl(createMockCtx());
 
-    const result = await version.getProposal({ proposalId: 'proposal-1' } as any);
+    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: false,
@@ -154,7 +155,7 @@ describe('WorkbookVersion proposal runtime facade', () => {
       }),
     );
 
-    const result = await version.getProposal({ proposalId: 'proposal-1' } as any);
+    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: false,
@@ -206,7 +207,7 @@ describe('WorkbookVersion proposal runtime facade', () => {
       }),
     );
 
-    const result = await version.getProposal({ proposalId: 'proposal-1' } as any);
+    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: true,
@@ -229,6 +230,274 @@ describe('WorkbookVersion proposal runtime facade', () => {
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('principal-secret');
     expect(serialized).toContain('VERSION_PROPOSAL_STALE');
+  });
+
+  it('rejects malformed proposal ids before proposal service dispatch', async () => {
+    const proposalService = createCompleteProposalService();
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.acceptProposal({
+      ...acceptInput('accept-malformed-proposal-id'),
+      proposalId: 'proposal:sha256:not-a-digest',
+    } as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.acceptProposal',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_PROPOSAL_ID',
+            message: 'proposalId must be a public proposal id.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                operation: 'acceptProposal',
+                option: 'proposalId',
+              }),
+              mutationGuarantee: 'no-write-attempted',
+            }),
+          }),
+        ],
+      },
+    });
+    expect(proposalService.acceptProposal).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('not-a-digest');
+  });
+
+  it('rejects untrusted proposal agents and actors before dispatch', async () => {
+    const proposalService = createCompleteProposalService();
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const createResult = await version.createProposal({
+      clientRequestId: 'create-untrusted-agent',
+      title: 'Denied proposal',
+      targetRef: 'refs/heads/main',
+      agentRunId: 'agent-run-1',
+      agent: { ...AGENT, trust: 'unknown', principalId: 'agent-secret' },
+      redactionPolicy: REDACTION_POLICY,
+    } as any);
+    const acceptResult = await version.acceptProposal({
+      ...acceptInput('accept-untrusted-actor'),
+      actor: { ...ACTOR, trust: 'unknown', principalId: 'actor-secret' },
+    } as any);
+
+    expect(createResult).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PERMISSION_DENIED',
+            message: 'agent is not authorized for proposal createProposal.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                operation: 'createProposal',
+                option: 'agent',
+                reason: 'unauthorizedActor',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(acceptResult).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PERMISSION_DENIED',
+            message: 'actor is not authorized for proposal acceptProposal.',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                operation: 'acceptProposal',
+                option: 'actor',
+                reason: 'unauthorizedActor',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(proposalService.createProposal).not.toHaveBeenCalled();
+    expect(proposalService.acceptProposal).not.toHaveBeenCalled();
+    const serialized = JSON.stringify([createResult, acceptResult]);
+    expect(serialized).not.toContain('agent-secret');
+    expect(serialized).not.toContain('actor-secret');
+  });
+
+  it('normalizes missing workspace provider diagnostics from proposal services', async () => {
+    const proposalService = createCompleteProposalService({
+      startProposalWorkspace: jest.fn(async () =>
+        targetUnavailable('startProposalWorkspace', [
+          storeDiagnostic(
+            'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE',
+            'Provider-backed proposal workspace sessions require an attached branch-isolated workspace lifecycle service.',
+            {
+              operation: 'startProposalWorkspace',
+              actorId: 'actor-secret',
+            },
+            { recoverability: 'unsupported', severity: 'warning' },
+          ),
+        ]),
+      ),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.startProposalWorkspace({
+      clientRequestId: 'workspace-missing-provider',
+      proposalId: PROPOSAL_ID,
+      expectedRevision: 1,
+      actor: ACTOR,
+    } as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.startProposalWorkspace',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE',
+            severity: 'warning',
+            message:
+              'Provider-backed proposal workspace sessions require an attached branch-isolated workspace lifecycle service.',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              payload: expect.objectContaining({
+                operation: 'startProposalWorkspace',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('actor-secret');
+    expect(serialized).not.toContain('issueCode');
+    expect(proposalService.startProposalWorkspace).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes stale head diagnostics returned during proposal creation', async () => {
+    const proposalService = createCompleteProposalService({
+      createProposal: jest.fn(async () =>
+        targetUnavailable('createProposal', [
+          storeDiagnostic(
+            'VERSION_PROPOSAL_STALE_HEAD',
+            'Proposal baseCommitId must match the current target ref head.',
+            {
+              operation: 'createProposal',
+              expectedTargetHeadId: BASE_COMMIT_ID,
+              actualTargetHeadId: HEAD_COMMIT_ID,
+              proposalId: 'proposal:sha256:not-public',
+            },
+            { recoverability: 'retry' },
+          ),
+        ]),
+      ),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.createProposal({
+      clientRequestId: 'create-stale-head',
+      title: 'Stale proposal',
+      targetRef: 'refs/heads/main',
+      baseCommitId: BASE_COMMIT_ID,
+      agentRunId: 'agent-run-1',
+      agent: AGENT,
+      redactionPolicy: REDACTION_POLICY,
+    } as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.createProposal',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PROPOSAL_STALE_HEAD',
+            message: 'Proposal baseCommitId must match the current target ref head.',
+            data: expect.objectContaining({
+              recoverability: 'retry',
+              payload: expect.objectContaining({
+                operation: 'createProposal',
+                expectedTargetHeadId: BASE_COMMIT_ID,
+                actualTargetHeadId: HEAD_COMMIT_ID,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('not-public');
+    expect(proposalService.createProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes unsupported-domain accept diagnostics returned by proposal services', async () => {
+    const proposalService = createCompleteProposalService({
+      acceptProposal: jest.fn(async () =>
+        targetUnavailable('acceptProposal', [
+          storeDiagnostic(
+            'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            'Proposal acceptance is blocked by an unsupported authored domain.',
+            {
+              operation: 'acceptProposal',
+              domain: 'pivot.cache',
+              principalId: 'principal-secret',
+            },
+            { recoverability: 'unsupported' },
+          ),
+        ]),
+      ),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: {
+          proposalService,
+          mergeService: { merge: jest.fn() },
+          applyMergeService: { applyMerge: jest.fn() },
+        },
+      }),
+    );
+
+    const result = await version.acceptProposal(acceptInput('accept-unsupported-domain') as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.acceptProposal',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            message: 'Proposal acceptance is blocked by an unsupported authored domain.',
+            data: expect.objectContaining({
+              recoverability: 'unsupported',
+              payload: expect.objectContaining({
+                operation: 'acceptProposal',
+                domain: 'pivot.cache',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('principal-secret');
+    expect(serialized).not.toContain('issueCode');
+    expect(proposalService.acceptProposal).toHaveBeenCalledTimes(1);
   });
 
   it('keeps proposal capability disabled for incomplete attached services', async () => {
@@ -344,7 +613,7 @@ describe('WorkbookVersion proposal runtime facade', () => {
   it('dispatches acceptProposal only when proposal, merge preview, and merge apply are attached', async () => {
     const acceptResult = {
       status: 'stale',
-      proposalId: 'proposal:sha256:abc',
+      proposalId: PROPOSAL_ID,
       expectedTargetHeadId: BASE_COMMIT_ID,
       actualTargetHeadId: HEAD_COMMIT_ID,
     };
@@ -372,10 +641,39 @@ describe('WorkbookVersion proposal runtime facade', () => {
 function acceptInput(clientRequestId: string) {
   return {
     clientRequestId,
-    proposalId: 'proposal:sha256:abc',
+    proposalId: PROPOSAL_ID,
     expectedRevision: 1,
     expectedTargetHeadId: BASE_COMMIT_ID,
     actor: ACTOR,
     resolutionPolicy: 'fastForwardOnly',
+  };
+}
+
+function targetUnavailable(operation: string, diagnostics: readonly unknown[]) {
+  return {
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: `workbook.version.${operation}`,
+      diagnostics,
+    },
+  };
+}
+
+function storeDiagnostic(
+  issueCode: string,
+  safeMessage: string,
+  payload: Record<string, unknown>,
+  options: { readonly recoverability?: string; readonly severity?: string } = {},
+) {
+  return {
+    issueCode,
+    severity: options.severity ?? 'error',
+    recoverability: options.recoverability ?? 'none',
+    messageTemplateId: `version.proposal.${issueCode}`,
+    safeMessage,
+    payload,
+    redacted: true,
+    mutationGuarantee: 'no-write-attempted',
   };
 }

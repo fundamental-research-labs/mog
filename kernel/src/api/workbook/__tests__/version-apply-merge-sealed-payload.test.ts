@@ -3,9 +3,11 @@ import type {
   VersionApplyMergeResolution,
   VersionCommitExpectedHead,
   VersionHead,
+  VersionMainRefName,
   VersionMergeConflict,
   VersionMergeResult,
   VersionMergeResultId,
+  VersionRefName,
   VersionSealedResolutionPayloadRef,
   Workbook,
   WorkbookCommitSummary,
@@ -143,6 +145,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           expectedTargetHead,
           resolution: { ...resolution, sealedPayloadRef: mismatchedDigestPayload },
           messages: ['sealed payload object binding does not match.'],
+          leakCanaries: [option.optionId, 'theirs'],
         });
 
         const customPurposePayload = await putResolutionPayload({
@@ -168,6 +171,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
             'sealed payload purpose is not executable.',
             'sealed payload value does not match resolution option.',
           ],
+          leakCanaries: [option.optionId, 'custom'],
         });
       },
       {
@@ -214,6 +218,20 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           },
           resolution: { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
           messages: ['sealed payload object binding does not match.'],
+          leakCanaries: [option.optionId, 'theirs'],
+        });
+
+        await expectSealedApplyRejected({
+          provider,
+          graphId,
+          documentScope,
+          sourceWb,
+          preview,
+          targetRef: 'refs/heads/stale-sealed-payload' as VersionRefName,
+          expectedTargetHead,
+          resolution: { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
+          messages: ['sealed payload object binding does not match.'],
+          leakCanaries: ['refs/heads/stale-sealed-payload', option.optionId, 'theirs'],
         });
       },
       {
@@ -249,6 +267,27 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           sealedPayloadRef: payload,
         };
 
+        const reviewOnlySaved = await sourceWb.version.saveMergeResolutions({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          resolutions: [resolution],
+        });
+        expect(reviewOnlySaved).toMatchObject({
+          ok: false,
+          error: {
+            code: 'target_unavailable',
+            target: 'workbook.version.saveMergeResolutions',
+          },
+        });
+        if (reviewOnlySaved.ok) throw new Error('expected review-only sealed save rejection');
+        expectStableResolutionMismatchDiagnostics({
+          diagnostics: reviewOnlySaved.error.diagnostics,
+          operation: 'saveMergeResolutions',
+          messages: ['review-only merge attempts cannot save sealed resolution payload refs.'],
+          leakCanaries: [conflict.conflictId, conflict.conflictDigest, option.optionId, 'theirs'],
+        });
+
         const saved = await sourceWb.version.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
@@ -269,6 +308,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           diagnostics: saved.error.diagnostics,
           operation: 'saveMergeResolutions',
           messages: ['review-only merge attempts cannot save sealed resolution payload refs.'],
+          leakCanaries: [conflict.conflictId, conflict.conflictDigest, option.optionId, 'theirs'],
         });
 
         const namespace = namespaceForDocumentScope(documentScope, graphId);
@@ -295,15 +335,18 @@ async function expectSealedApplyRejected(input: {
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly resolution: VersionApplyMergeResolution;
   readonly messages: readonly string[];
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly leakCanaries?: readonly string[];
 }): Promise<void> {
   const namespace = namespaceForDocumentScope(input.documentScope, input.graphId);
+  const targetRef = input.targetRef ?? ('refs/heads/main' as VersionMainRefName);
   const expectedResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, [
     input.resolution,
   ]);
   const expectedResolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
     resultDigest: internalSha256Digest(input.preview.resultDigest),
     resolutionSetDigest: expectedResolutionSet.digest,
-    targetRef: 'refs/heads/main' as any,
+    targetRef,
     expectedTargetHead: input.expectedTargetHead,
   });
 
@@ -314,7 +357,7 @@ async function expectSealedApplyRejected(input: {
       previewArtifactDigest: input.preview.previewArtifactDigest,
       resolutions: [input.resolution],
     },
-    { targetRef: 'refs/heads/main' as any, expectedTargetHead: input.expectedTargetHead },
+    { targetRef, expectedTargetHead: input.expectedTargetHead },
   );
   expect(result).toMatchObject({
     ok: false,
@@ -328,6 +371,13 @@ async function expectSealedApplyRejected(input: {
     diagnostics: result.error.diagnostics,
     operation: 'applyMerge',
     messages: input.messages,
+    leakCanaries: diagnosticLeakCanaries({
+      preview: input.preview,
+      resolution: input.resolution,
+      targetRef,
+      expectedTargetHead: input.expectedTargetHead,
+      extra: input.leakCanaries ?? [],
+    }),
   });
 
   const graph = await input.provider.openGraph(namespace, input.provider.accessContext);
@@ -343,6 +393,7 @@ function expectStableResolutionMismatchDiagnostics(input: {
   readonly diagnostics: readonly unknown[];
   readonly operation: 'applyMerge' | 'saveMergeResolutions';
   readonly messages: readonly string[];
+  readonly leakCanaries?: readonly string[];
 }): void {
   expect(input.diagnostics).toStrictEqual(
     input.messages.map((message) => ({
@@ -360,6 +411,34 @@ function expectStableResolutionMismatchDiagnostics(input: {
       },
     })),
   );
+  expectNoDiagnosticLeaks(input.diagnostics, input.leakCanaries ?? []);
+}
+
+function diagnosticLeakCanaries(input: {
+  readonly preview: PersistedConflictPreview;
+  readonly resolution: VersionApplyMergeResolution;
+  readonly targetRef: VersionMainRefName | VersionRefName;
+  readonly expectedTargetHead: VersionCommitExpectedHead;
+  readonly extra: readonly string[];
+}): readonly string[] {
+  return compactStrings([
+    input.preview.resultId,
+    input.preview.resultDigest.digest,
+    input.resolution.conflictId,
+    input.resolution.expectedConflictDigest,
+    input.resolution.optionId,
+    input.resolution.sealedPayloadRef?.payloadId,
+    input.resolution.sealedPayloadRef?.payloadDigest.digest,
+    input.targetRef,
+    input.expectedTargetHead.commitId,
+    input.expectedTargetHead.revision.value,
+    ...input.extra,
+  ]);
+}
+
+function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): void {
+  const serialized = JSON.stringify(value);
+  for (const canary of canaries) expect(serialized).not.toContain(canary);
 }
 
 async function putResolutionPayload(input: {
@@ -369,6 +448,7 @@ async function putResolutionPayload(input: {
   readonly option: VersionMergeConflict['resolutionOptions'][number];
   readonly expectedTargetHead: VersionCommitExpectedHead;
   readonly redactionPolicyDigest: ObjectDigest;
+  readonly targetRef?: VersionMainRefName | VersionRefName;
   readonly domainPayloadSchema?: string;
   readonly value: any;
   readonly purpose: 'chooseValue' | 'custom';
@@ -382,7 +462,7 @@ async function putResolutionPayload(input: {
     optionId: input.option.optionId,
     kind: input.option.kind,
     ...(input.domainPayloadSchema ? { domainPayloadSchema: input.domainPayloadSchema } : {}),
-    targetRef: 'refs/heads/main' as any,
+    targetRef: input.targetRef ?? ('refs/heads/main' as VersionMainRefName),
     expectedTargetHead: input.expectedTargetHead,
     value: input.value,
     purpose: input.purpose,
@@ -570,12 +650,18 @@ function mutateDigest(digest: ObjectDigest): ObjectDigest {
   };
 }
 
+function compactStrings(values: readonly unknown[]): readonly string[] {
+  return values.filter((value): value is string => typeof value === 'string' && value.length > 0);
+}
+
 async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
   const result = await resultPromise;
   if (!result.ok) {
-    throw new Error(`expected commit success: ${result.error.code}: ${JSON.stringify(result.error)}`);
+    throw new Error(
+      `expected commit success: ${result.error.code}: ${JSON.stringify(result.error)}`,
+    );
   }
   return result.value;
 }

@@ -3,6 +3,13 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
+const PUBLIC_ISSUE_CODE_RE = /^[A-Z][A-Z0-9_]{0,80}$/;
+const MAX_PUBLIC_DIAGNOSTIC_PAYLOAD_STRING_BYTES = 128;
+const AUTHORITY_TEXT_RE =
+  /\b(?:principal|proposal|workspace|role|permission|authorization|auth|conflict|merge-result|merge-payload|option|commit:sha256|sha256:)[A-Za-z0-9_.:-]*\b/i;
+const SECRET_TEXT_RE =
+  /\b(?:secret|password|credential|api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer\s+[A-Za-z0-9._-]+|sk_(?:live|test)_[A-Za-z0-9_-]+)\b/i;
+
 export function mapGraphDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) {
     return [graphUninitializedDiagnostic()];
@@ -91,35 +98,83 @@ function mapGraphDiagnostic(value: unknown): VersionStoreDiagnostic {
       : typeof value.code === 'string'
         ? value.code
         : 'VERSION_PROVIDER_ERROR';
+  const publicIssueCode = publicIssueCodeForDiagnostic(issueCode);
   const severity = value.severity === 'corruption' ? 'error' : value.severity;
 
-  return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
+  return publicDiagnostic(publicIssueCode, safeMessageForIssue(publicIssueCode), {
     severity:
       severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
         ? severity
         : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
-    payload: sanitizeDiagnosticPayload(value),
+    recoverability: recoverabilityForIssue(publicIssueCode),
+    payload: sanitizeDiagnosticPayload(value, publicIssueCode),
   });
 }
 
 function sanitizeDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
+  issueCode: string,
 ): VersionDiagnosticPublicPayload {
-  const payload: Record<string, string | number | boolean | null> = {
-    operation: 'merge',
-  };
+  if (issueCode === 'VERSION_PERMISSION_DENIED') return {};
 
-  if (typeof value.option === 'string') payload.option = value.option;
-  if (typeof value.selector === 'string') payload.selector = value.selector;
+  const payload: Record<string, string | number | boolean | null> = {};
+
+  if (typeof value.option === 'string') {
+    const option = sanitizeDiagnosticPayloadValue('option', value.option);
+    if (option !== undefined) payload.option = option;
+  }
+  if (typeof value.selector === 'string') {
+    const selector = sanitizeDiagnosticPayloadValue('selector', value.selector);
+    if (selector !== undefined) payload.selector = selector;
+  }
   const details = isRecord(value.details) ? value.details : null;
   if (details) {
     for (const [key, detailValue] of Object.entries(details)) {
-      if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
+      const sanitized = sanitizeDiagnosticPayloadValue(key, detailValue);
+      if (sanitized !== undefined) payload[key] = sanitized;
     }
   }
 
   return payload;
+}
+
+function publicIssueCodeForDiagnostic(issueCode: string): string {
+  const normalized = issueCode.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  if (isAuthorizationDeniedIssue(normalized)) return 'VERSION_PERMISSION_DENIED';
+  return PUBLIC_ISSUE_CODE_RE.test(issueCode) ? issueCode : 'VERSION_PROVIDER_ERROR';
+}
+
+function isAuthorizationDeniedIssue(issueCode: string): boolean {
+  return (
+    issueCode === 'VERSION_PERMISSION_DENIED' ||
+    issueCode.includes('PERMISSION_DENIED') ||
+    issueCode.includes('AUTHORIZATION_DENIED') ||
+    issueCode.includes('ACCESS_DENIED') ||
+    issueCode.includes('CROSS_WORKSPACE') ||
+    (issueCode.includes('WORKSPACE') &&
+      (issueCode.includes('ROLE') || issueCode.includes('AUTH'))) ||
+    (issueCode.includes('PROPOSAL') &&
+      (issueCode.includes('DENIED') ||
+        issueCode.includes('MISMATCH') ||
+        issueCode.includes('STALE')))
+  );
+}
+
+function sanitizeDiagnosticPayloadValue(
+  key: string,
+  value: unknown,
+): string | number | boolean | null | undefined {
+  if (isSensitivePayloadKey(key)) return 'redacted';
+  switch (typeof value) {
+    case 'string':
+      return isUnsafePayloadString(value) ? 'redacted' : value;
+    case 'number':
+      return Number.isFinite(value) ? value : undefined;
+    case 'boolean':
+      return value;
+    default:
+      return value === null ? null : undefined;
+  }
 }
 
 function graphUninitializedDiagnostic(): VersionStoreDiagnostic {
@@ -151,6 +206,8 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The requested version merge commits do not share a common ancestor.';
     case 'VERSION_MERGE_UNSUPPORTED_ANCESTRY':
       return 'The requested version merge ancestry is not previewable by the attached service.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'Version merge preview is not authorized for this caller.';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
     case 'VERSION_MISSING_PARENT':
@@ -195,6 +252,40 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
 
-function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
-  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+function isSensitivePayloadKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.includes('principal') ||
+    normalized.includes('proposal') ||
+    normalized.includes('workspace') ||
+    normalized.includes('role') ||
+    normalized.includes('digest') ||
+    normalized.includes('conflict') ||
+    normalized.includes('option') ||
+    normalized.includes('payload') ||
+    normalized.includes('result') ||
+    normalized.includes('target') ||
+    normalized.includes('commit') ||
+    normalized.includes('value') ||
+    normalized === 'before' ||
+    normalized === 'after'
+  );
+}
+
+function isUnsafePayloadString(value: string): boolean {
+  return (
+    utf8ByteLength(value) > MAX_PUBLIC_DIAGNOSTIC_PAYLOAD_STRING_BYTES ||
+    /[\u0000-\u001f\u007f]/.test(value) ||
+    AUTHORITY_TEXT_RE.test(value) ||
+    SECRET_TEXT_RE.test(value)
+  );
+}
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4;
+  }
+  return bytes;
 }

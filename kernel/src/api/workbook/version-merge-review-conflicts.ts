@@ -84,29 +84,69 @@ export async function normalizeMergeReviewConflicts(
     conflictIds.add(mapped.conflict.conflictId);
     conflictDigests.add(mapped.conflict.conflictDigest);
     normalized.push(mapped.conflict);
-    conflictsByRequestKey.set(
-      conflictRequestKey(mapped.conflict.conflictId, mapped.conflict.conflictDigest),
+    if (
+      !addConflictRequestAlias(
+        conflictsByRequestKey,
+        mapped.conflict.conflictId,
+        mapped.conflict.conflictDigest,
+        mapped.conflict,
+      )
+    ) {
+      return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+    }
+    const allowOriginalConflictAlias = shouldAddOriginalConflictAlias(
+      mapped.originalConflictId,
+      mapped.originalConflictDigest,
       mapped.conflict,
     );
-    conflictsByRequestKey.set(
-      conflictRequestKey(mapped.originalConflictId, mapped.originalConflictDigest),
-      mapped.conflict,
-    );
+    if (
+      allowOriginalConflictAlias &&
+      !addConflictRequestAlias(
+        conflictsByRequestKey,
+        mapped.originalConflictId,
+        mapped.originalConflictDigest,
+        mapped.conflict,
+      )
+    ) {
+      return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+    }
     for (const option of mapped.conflict.resolutionOptions) {
-      optionsByRequestKey.set(
-        optionRequestKey(mapped.conflict.conflictId, option.optionId, option.kind),
-        option,
-      );
+      if (
+        !addOptionRequestAlias(
+          optionsByRequestKey,
+          mapped.conflict.conflictId,
+          option.optionId,
+          option.kind,
+          option,
+        )
+      ) {
+        return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+      }
       const originalOptionId = mapped.originalOptionIds.get(option.kind);
-      if (originalOptionId) {
-        optionsByRequestKey.set(
-          optionRequestKey(mapped.originalConflictId, originalOptionId, option.kind),
-          option,
-        );
-        optionsByRequestKey.set(
-          optionRequestKey(mapped.conflict.conflictId, originalOptionId, option.kind),
-          option,
-        );
+      if (originalOptionId && shouldAddOriginalOptionAlias(originalOptionId, option.optionId)) {
+        if (
+          allowOriginalConflictAlias &&
+          !addOptionRequestAlias(
+            optionsByRequestKey,
+            mapped.originalConflictId,
+            originalOptionId,
+            option.kind,
+            option,
+          )
+        ) {
+          return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+        }
+        if (
+          !addOptionRequestAlias(
+            optionsByRequestKey,
+            mapped.conflict.conflictId,
+            originalOptionId,
+            option.kind,
+            option,
+          )
+        ) {
+          return { ok: false, diagnostics: [invalidPreviewArtifactDiagnostic(operation)] };
+        }
       }
     }
   }
@@ -382,12 +422,65 @@ function conflictRequestKey(conflictId: string, conflictDigest: string): string 
   return `${conflictId}\u0000${conflictDigest}`;
 }
 
+function shouldAddOriginalConflictAlias(
+  originalConflictId: string,
+  originalConflictDigest: string,
+  conflict: VersionMergeConflict,
+): boolean {
+  if (
+    originalConflictId === conflict.conflictId &&
+    originalConflictDigest === conflict.conflictDigest
+  ) {
+    return true;
+  }
+  return !isStableConflictId(originalConflictId);
+}
+
+function addConflictRequestAlias(
+  aliases: Map<string, VersionMergeConflict>,
+  conflictId: string,
+  conflictDigest: string,
+  conflict: VersionMergeConflict,
+): boolean {
+  const key = conflictRequestKey(conflictId, conflictDigest);
+  const existing = aliases.get(key);
+  if (existing && existing !== conflict) return false;
+  aliases.set(key, conflict);
+  return true;
+}
+
 function optionRequestKey(
   conflictId: string,
   optionId: string,
   kind: VersionMergeConflictResolutionOptionKind,
 ): string {
   return `${conflictId}\u0000${optionId}\u0000${kind}`;
+}
+
+function shouldAddOriginalOptionAlias(originalOptionId: string, optionId: string): boolean {
+  return originalOptionId === optionId || !isStableOptionId(originalOptionId);
+}
+
+function addOptionRequestAlias(
+  aliases: Map<string, VersionMergeConflictResolutionOption>,
+  conflictId: string,
+  optionId: string,
+  kind: VersionMergeConflictResolutionOptionKind,
+  option: VersionMergeConflictResolutionOption,
+): boolean {
+  const key = optionRequestKey(conflictId, optionId, kind);
+  const existing = aliases.get(key);
+  if (existing && existing !== option) return false;
+  aliases.set(key, option);
+  return true;
+}
+
+function isStableConflictId(value: string): boolean {
+  return /^conflict:sha256:[0-9a-f]{64}$/.test(value);
+}
+
+function isStableOptionId(value: string): boolean {
+  return /^option:sha256:[0-9a-f]{64}$/.test(value);
 }
 
 function mapDiffValue(value: unknown): VersionDiffValue | null {
@@ -421,7 +514,11 @@ function mapSemanticValue(value: unknown, depth = 0): VersionSemanticValue | und
       return typeof value.iso === 'string' ? { kind: 'duration', iso: value.iso } : undefined;
     case 'error':
       return typeof value.code === 'string'
-        ? { kind: 'error', code: value.code, ...(typeof value.message === 'string' ? { message: value.message } : {}) }
+        ? {
+            kind: 'error',
+            code: value.code,
+            ...(typeof value.message === 'string' ? { message: value.message } : {}),
+          }
         : undefined;
     case 'formula': {
       if (typeof value.formula !== 'string') return undefined;
@@ -445,7 +542,10 @@ function mapSemanticValue(value: unknown, depth = 0): VersionSemanticValue | und
       });
       return runs.some((run) => run === null)
         ? undefined
-        : { kind: 'richText', runs: runs as { readonly text: string; readonly styleRef?: string }[] };
+        : {
+            kind: 'richText',
+            runs: runs as { readonly text: string; readonly styleRef?: string }[],
+          };
     }
     case 'object': {
       if (!Array.isArray(value.fields)) return undefined;
@@ -779,9 +879,7 @@ function identitySemanticValue(value: VersionSemanticValue): VersionSemanticValu
   }
 }
 
-function mapResolutionOptionKind(
-  value: unknown,
-): VersionMergeConflictResolutionOptionKind | null {
+function mapResolutionOptionKind(value: unknown): VersionMergeConflictResolutionOptionKind | null {
   return REQUIRED_RESOLUTION_OPTION_KINDS.includes(
     value as VersionMergeConflictResolutionOptionKind,
   )
@@ -808,10 +906,7 @@ async function sha256Hex(input: string): Promise<string> {
   if (typeof globalThis.crypto?.subtle?.digest !== 'function') {
     throw new Error('WorkbookVersion merge review requires SHA-256 support');
   }
-  const digest = await globalThis.crypto.subtle.digest(
-    'SHA-256',
-    new TextEncoder().encode(input),
-  );
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');

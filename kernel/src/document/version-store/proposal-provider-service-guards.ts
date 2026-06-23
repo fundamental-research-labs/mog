@@ -1,11 +1,8 @@
-import type { VersionStoreProvider } from './provider';
-import type { ProposalBranchService } from './proposal-provider-service';
+import type {
+  ProposalBranchService,
+  ProposalGraphProvider,
+} from './proposal-provider-service-types';
 import type { WorkbookVersionReviewService } from './review-service';
-
-type ProposalGraphProvider = Pick<
-  VersionStoreProvider,
-  'accessContext' | 'openGraph' | 'readGraphRegistry'
->;
 
 export function isProposalBranchService(value: unknown): value is ProposalBranchService {
   return (

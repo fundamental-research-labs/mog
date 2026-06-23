@@ -3,7 +3,6 @@ import type {
   AgentProposalSummary as PublicAgentProposalSummary,
   CreateAgentProposalInput,
   VersionBranchName,
-  VersionDiagnostic,
   VersionMainRefName,
   VersionRefName,
   VersionResult,
@@ -16,6 +15,10 @@ import type {
   AgentProposalRecord,
   AgentProposalSummary as StoreAgentProposalSummary,
 } from './proposal-store';
+import {
+  sanitizeProposalProviderDiagnostics,
+  sanitizeProposalProviderValue,
+} from './proposal-provider-service-diagnostics';
 import { validateRefName } from './ref-name';
 
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
@@ -87,7 +90,7 @@ export function parsePublicBranchName(value: unknown):
 }
 
 export function publicProposal(record: AgentProposalRecord): AgentProposal {
-  return {
+  const proposal: AgentProposal = {
     schemaVersion: 1,
     id: record.id as AgentProposal['id'],
     documentId: record.documentId,
@@ -109,10 +112,11 @@ export function publicProposal(record: AgentProposalRecord): AgentProposal {
     redaction: {
       policy: { ...record.redaction.policy },
       redactedFields: [...record.redaction.redactedFields],
-      diagnostics: record.redaction.diagnostics.map(cloneDiagnostic),
+      diagnostics: sanitizeProposalProviderDiagnostics(record.redaction.diagnostics),
     },
-    diagnostics: record.diagnostics.map(cloneDiagnostic),
+    diagnostics: sanitizeProposalProviderDiagnostics(record.diagnostics),
   };
+  return sanitizeProposalProviderValue(proposal);
 }
 
 export function publicProposalSummary(
@@ -150,17 +154,6 @@ function refSegment(value: string, maxLength: number): string {
     .replace(/^-+|-+$/g, '')
     .replace(/-+/g, '-');
   return segment.slice(0, maxLength).replace(/-+$/g, '');
-}
-
-function cloneDiagnostic(diagnostic: VersionDiagnostic): VersionDiagnostic {
-  return {
-    code: diagnostic.code,
-    severity: diagnostic.severity,
-    message: diagnostic.message,
-    ...(diagnostic.owner === undefined ? {} : { owner: diagnostic.owner }),
-    ...(diagnostic.dependency === undefined ? {} : { dependency: diagnostic.dependency }),
-    ...(diagnostic.data === undefined ? {} : { data: { ...diagnostic.data } }),
-  };
 }
 
 function invalidBranchName<T>(branchName: string, reason: string): VersionResult<T> {

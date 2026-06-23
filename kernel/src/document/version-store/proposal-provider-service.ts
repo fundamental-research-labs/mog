@@ -17,28 +17,46 @@ import type {
   RejectAgentProposalInput,
   StartProposalWorkspaceInput,
   SupersedeAgentProposalInput,
-  VersionDiagnostic,
-  VersionMainRefName,
-  VersionRefName,
   VersionResult,
   WorkbookCommitId,
   WorkbookVersionReviewRecord,
 } from '@mog-sdk/contracts/api';
-import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { CreateBranchResult, ReadBranchResult } from './branch-service';
 import { ensureProposalBranchHead } from './proposal-provider-branch-head-validation';
+import {
+  createProviderBackedProposalBranch,
+  ensureProviderBackedProposalBranch,
+  ensureProviderBackedProposalCommitExists,
+  openProviderBackedProposalStore,
+  readOptionalProviderBackedProposalBranch,
+  resolveProviderBackedProposalTargetHead,
+} from './proposal-provider-service-branch-access';
+import {
+  invalidState,
+  ok,
+  sanitizeProposalProviderDiagnostics,
+  sanitizeProposalProviderResult,
+  sanitizeProposalProviderValue,
+  staleRevision,
+  storeFailure,
+  targetUnavailable,
+  workspaceUnavailable,
+} from './proposal-provider-service-diagnostics';
+import type {
+  MaybePromise,
+  ProposalBranchService,
+  ProposalGraphProvider,
+  ProposalProviderOperation,
+  ResolvedBranchHead,
+} from './proposal-provider-service-types';
 import {
   hasAgentProposalMetadataStoreProvider,
   type AgentProposalMetadataStore,
   type AgentProposalMetadataStoreProvider,
   type AgentProposalRecord,
 } from './proposal-store';
-import { VersionStoreProviderError, type VersionStoreProvider } from './provider';
 import {
-  branchCommitId,
   isWorkbookCommitId,
-  parsePublicBranchName,
   proposalBranchNameFor,
   publicProposal,
   publicProposalSummary,
@@ -61,58 +79,9 @@ import {
   isProposalWorkspaceLifecycleService,
   type ProposalWorkspaceLifecycleService,
 } from './proposal-workspace-lifecycle-service';
-import { namespaceForRegistry } from './registry';
 import type { WorkbookVersionReviewService } from './review-service';
-import type { RefVersion } from './ref-store';
 
-type MaybePromise<T> = T | Promise<T>;
-
-type ProposalProviderOperation =
-  | 'acceptProposal'
-  | 'commitProposalWorkspace'
-  | 'createProposal'
-  | 'disposeProposalWorkspace'
-  | 'failProposal'
-  | 'getProposal'
-  | 'getProposalWorkspace'
-  | 'listProposals'
-  | 'markProposalVerified'
-  | 'openProposalReview'
-  | 'rejectProposal'
-  | 'startProposalWorkspace'
-  | 'supersedeProposal';
-
-export type ProposalBranchService = {
-  readBranch(
-    input: { readonly name: string } | string,
-  ): Promise<ReadBranchResult> | ReadBranchResult;
-  createBranch(input: {
-    readonly name: string;
-    readonly targetCommitId: WorkbookCommitId | string;
-    readonly expectedAbsent: true;
-    readonly baseCommitId?: WorkbookCommitId | string;
-    readonly createdBy: GraphVersionAuthor;
-    readonly protected?: boolean;
-  }): Promise<CreateBranchResult> | CreateBranchResult;
-};
-
-type ProposalGraphProvider = Pick<
-  VersionStoreProvider,
-  'accessContext' | 'openGraph' | 'readGraphRegistry'
->;
-
-export type ResolvedBranchHead = {
-  readonly branchName: string;
-  readonly refName: VersionMainRefName | VersionRefName;
-  readonly commitId: WorkbookCommitId;
-  readonly refVersion: RefVersion;
-};
-
-const PROPOSAL_BRANCH_AUTHOR: GraphVersionAuthor = Object.freeze({
-  authorId: 'version-proposal-service',
-  actorKind: 'system',
-  displayName: 'Version Proposal Service',
-});
+export type { ProposalBranchService, ResolvedBranchHead };
 
 export class ProviderBackedAgentProposalService {
   private readonly openStore: () => Promise<AgentProposalMetadataStore>;
@@ -219,7 +188,7 @@ export class ProviderBackedAgentProposalService {
     }
 
     const branchReady = await this.ensureProposalBranch(proposal.value, 'startProposalWorkspace');
-    if (!branchReady.ok) return branchReady.result;
+    if (!branchReady.ok) return sanitizeProposalProviderResult(branchReady.result);
 
     if (!this.workspaceService) return workspaceUnavailable('startProposalWorkspace');
     const started = await this.callWorkspaceService('startProposalWorkspace', () =>
@@ -234,7 +203,7 @@ export class ProviderBackedAgentProposalService {
       proposal: proposal.value,
       handle: started.value,
     });
-    if (!workspaceBinding.ok) return workspaceBinding.result;
+    if (!workspaceBinding.ok) return sanitizeProposalProviderResult(workspaceBinding.result);
 
     const updated = await store.value.updateProposal({
       clientRequestId: input.clientRequestId,
@@ -251,21 +220,25 @@ export class ProviderBackedAgentProposalService {
   async getProposalWorkspace(
     input: GetProposalWorkspaceInput,
   ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    return getProviderBackedProposalWorkspace({
-      input,
-      openStore: this.openStore,
-      ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
-    });
+    return sanitizeProposalProviderResult(
+      await getProviderBackedProposalWorkspace({
+        input,
+        openStore: this.openStore,
+        ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
+      }),
+    );
   }
 
   async disposeProposalWorkspace(
     input: DisposeProposalWorkspaceInput,
   ): Promise<VersionResult<{ readonly disposed: true }>> {
-    return disposeProviderBackedProposalWorkspace({
-      input,
-      openStore: this.openStore,
-      ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
-    });
+    return sanitizeProposalProviderResult(
+      await disposeProviderBackedProposalWorkspace({
+        input,
+        openStore: this.openStore,
+        ...(this.workspaceService ? { workspaceService: this.workspaceService } : {}),
+      }),
+    );
   }
 
   async commitProposalWorkspace(
@@ -306,7 +279,7 @@ export class ProviderBackedAgentProposalService {
       workspaceId: input.workspaceId,
       result: committed.value,
     });
-    if (!workspaceBinding.ok) return workspaceBinding.result;
+    if (!workspaceBinding.ok) return sanitizeProposalProviderResult(workspaceBinding.result);
     if (!isWorkbookCommitId(committed.value.proposalCommitId)) {
       return invalidState(
         'invalid_proposal_commit',
@@ -318,14 +291,14 @@ export class ProviderBackedAgentProposalService {
       committed.value.proposalCommitId,
       'commitProposalWorkspace',
     );
-    if (!commitExists.ok) return commitExists.result;
+    if (!commitExists.ok) return sanitizeProposalProviderResult(commitExists.result);
     const branchHead = await ensureProposalBranchHead({
       branchService: this.branchService,
       operation: 'commitProposalWorkspace',
       proposalBranchName: proposal.value.proposalBranchName,
       expectedHeadCommitId: committed.value.proposalCommitId,
     });
-    if (!branchHead.ok) return branchHead.result;
+    if (!branchHead.ok) return sanitizeProposalProviderResult(branchHead.result);
 
     return proposalStoreUpdateResult(
       await store.value.updateProposal({
@@ -335,10 +308,12 @@ export class ProviderBackedAgentProposalService {
         status: 'committed',
         trustedActor: input.actor,
         proposalCommitId: committed.value.proposalCommitId,
-        ...(input.verification === undefined ? {} : { verification: input.verification }),
+        ...(input.verification === undefined
+          ? {}
+          : { verification: sanitizeProposalProviderValue(input.verification) }),
         ...(committed.value.diagnostics === undefined
           ? {}
-          : { diagnostics: committed.value.diagnostics }),
+          : { diagnostics: sanitizeProposalProviderDiagnostics(committed.value.diagnostics) }),
       }),
     );
   }
@@ -353,7 +328,7 @@ export class ProviderBackedAgentProposalService {
         expectedRevision: input.expectedRevision,
         status: 'failed',
         trustedActor: input.actor,
-        diagnostics: input.diagnostics,
+        diagnostics: sanitizeProposalProviderDiagnostics(input.diagnostics),
       }),
     );
   }
@@ -396,7 +371,7 @@ export class ProviderBackedAgentProposalService {
         expectedRevision: input.expectedRevision,
         status: 'verified',
         trustedActor: input.actor,
-        verification: input.verification,
+        verification: sanitizeProposalProviderValue(input.verification),
       }),
     );
   }
@@ -423,7 +398,9 @@ export class ProviderBackedAgentProposalService {
       if (proposal.revision !== input.expectedRevision) {
         return staleRevision(input.expectedRevision, proposal.revision);
       }
-      return this.reviewService.getReview({ reviewId: proposal.reviewId });
+      return sanitizeProposalProviderResult(
+        await this.reviewService.getReview({ reviewId: proposal.reviewId }),
+      );
     }
 
     if (proposal.status !== 'verified') {
@@ -454,7 +431,7 @@ export class ProviderBackedAgentProposalService {
       proposal.proposalCommitId,
       'openProposalReview',
     );
-    if (!commitExists.ok) return commitExists.result;
+    if (!commitExists.ok) return sanitizeProposalProviderResult(commitExists.result);
 
     const review = await this.reviewService.createReview({
       clientRequestId: input.clientRequestId,
@@ -470,7 +447,7 @@ export class ProviderBackedAgentProposalService {
       headCommitId: proposal.proposalCommitId,
       redactionPolicy: proposal.redaction.policy,
     });
-    if (!review.ok) return review;
+    if (!review.ok) return sanitizeProposalProviderResult(review);
 
     const updated = await store.value.updateProposal({
       clientRequestId: input.clientRequestId,
@@ -488,21 +465,24 @@ export class ProviderBackedAgentProposalService {
   async acceptProposal(
     input: AcceptAgentProposalInput,
   ): Promise<VersionResult<AgentProposalAcceptResult>> {
-    return acceptProviderBackedAgentProposalWithStaleRecovery({
-      input,
-      openStore: this.openStore,
-      ...(this.graphProvider ? { graphProvider: this.graphProvider } : {}),
-      ensureCommitExists: (commitId) => this.ensureCommitExists(commitId, 'acceptProposal'),
-      resolveTargetHead: (targetRef) => this.resolveTargetHead(targetRef, 'acceptProposal'),
-      ...(this.reviewService
-        ? { getReview: (reviewId) => this.reviewService!.getReview({ reviewId }) }
-        : {}),
-      ...(this.reviewService?.markReviewApplied
-        ? {
-            markReviewApplied: (reviewInput) => this.reviewService!.markReviewApplied!(reviewInput),
-          }
-        : {}),
-    });
+    return sanitizeProposalProviderResult(
+      await acceptProviderBackedAgentProposalWithStaleRecovery({
+        input,
+        openStore: this.openStore,
+        ...(this.graphProvider ? { graphProvider: this.graphProvider } : {}),
+        ensureCommitExists: (commitId) => this.ensureCommitExists(commitId, 'acceptProposal'),
+        resolveTargetHead: (targetRef) => this.resolveTargetHead(targetRef, 'acceptProposal'),
+        ...(this.reviewService
+          ? { getReview: (reviewId) => this.reviewService!.getReview({ reviewId }) }
+          : {}),
+        ...(this.reviewService?.markReviewApplied
+          ? {
+              markReviewApplied: (reviewInput) =>
+                this.reviewService!.markReviewApplied!(reviewInput),
+            }
+          : {}),
+      }),
+    );
   }
 
   async rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
@@ -546,18 +526,7 @@ export class ProviderBackedAgentProposalService {
     | { readonly ok: true; readonly value: AgentProposalMetadataStore }
     | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    try {
-      return { ok: true, value: await this.openStore() };
-    } catch {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_PROVIDER_ERROR',
-          'Version proposal metadata store could not be opened.',
-        ),
-      };
-    }
+    return openProviderBackedProposalStore({ openStore: this.openStore, operation });
   }
 
   private async resolveTargetHead(
@@ -567,68 +536,11 @@ export class ProviderBackedAgentProposalService {
     | { readonly ok: true; readonly head: ResolvedBranchHead }
     | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    const branchName = parsePublicBranchName(targetRef);
-    if (!branchName.ok) return { ok: false, result: branchName.result };
-    if (!this.branchService?.readBranch) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_REF_WRITE_UNAVAILABLE',
-          'Provider-backed proposal creation requires an attached branch/ref service.',
-        ),
-      };
-    }
-
-    let read: ReadBranchResult;
-    try {
-      read = await this.branchService.readBranch({ name: branchName.branchName });
-    } catch {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_PROVIDER_ERROR',
-          'Version branch service failed while resolving the proposal target ref.',
-        ),
-      };
-    }
-
-    if (!read.ok) {
-      return { ok: false, result: branchFailure(operation, read.diagnostics) };
-    }
-    if (!read.branch) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_DANGLING_REF',
-          'Proposal target ref does not resolve to a live branch.',
-        ),
-      };
-    }
-
-    const commitId = branchCommitId(read.branch);
-    if (!commitId) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_INVALID_COMMIT_PAYLOAD',
-          'Proposal target ref did not expose a public commit id.',
-        ),
-      };
-    }
-
-    return {
-      ok: true,
-      head: {
-        branchName: branchName.branchName,
-        refName: branchName.refName,
-        commitId,
-        refVersion: read.branch.ref.refVersion,
-      },
-    };
+    return resolveProviderBackedProposalTargetHead({
+      branchService: this.branchService,
+      targetRef,
+      operation,
+    });
   }
 
   private async readOptionalProposalBranch(
@@ -639,43 +551,12 @@ export class ProviderBackedAgentProposalService {
     | { readonly ok: true; readonly exists: boolean }
     | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    if (!this.branchService?.readBranch) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_REF_WRITE_UNAVAILABLE',
-          'Provider-backed proposal creation requires an attached branch/ref service.',
-        ),
-      };
-    }
-
-    let read: ReadBranchResult;
-    try {
-      read = await this.branchService.readBranch({ name: proposalBranchName });
-    } catch {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_PROVIDER_ERROR',
-          'Version branch service failed while checking the proposal branch.',
-        ),
-      };
-    }
-
-    if (!read.ok) return { ok: false, result: branchFailure(operation, read.diagnostics) };
-    if (!read.branch) return { ok: true, exists: false };
-
-    const currentHead = branchCommitId(read.branch);
-    if (currentHead === baseCommitId) return { ok: true, exists: true };
-    return {
-      ok: false,
-      result: invalidBranchName(
-        proposalBranchName,
-        'Proposal branch name already exists at a different commit.',
-      ),
-    };
+    return readOptionalProviderBackedProposalBranch({
+      branchService: this.branchService,
+      proposalBranchName,
+      baseCommitId,
+      operation,
+    });
   }
 
   private async createProposalBranch(
@@ -685,43 +566,12 @@ export class ProviderBackedAgentProposalService {
   ): Promise<
     { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    if (!this.branchService?.createBranch) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_REF_WRITE_UNAVAILABLE',
-          'Provider-backed proposal creation requires branch/ref writes.',
-        ),
-      };
-    }
-
-    let created: CreateBranchResult;
-    try {
-      created = await this.branchService.createBranch({
-        name: proposalBranchName,
-        targetCommitId: baseCommitId,
-        expectedAbsent: true,
-        baseCommitId,
-        createdBy: PROPOSAL_BRANCH_AUTHOR,
-      });
-    } catch {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_PROVIDER_ERROR',
-          'Version branch service failed while creating the proposal branch.',
-        ),
-      };
-    }
-
-    if (created.ok) return { ok: true };
-
-    if (created.error.code === 'refAlreadyExists') {
-      return this.readOptionalProposalBranch(proposalBranchName, baseCommitId, operation);
-    }
-    return { ok: false, result: branchFailure(operation, created.diagnostics) };
+    return createProviderBackedProposalBranch({
+      branchService: this.branchService,
+      proposalBranchName,
+      baseCommitId,
+      operation,
+    });
   }
 
   private async ensureProposalBranch(
@@ -730,14 +580,11 @@ export class ProviderBackedAgentProposalService {
   ): Promise<
     { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    const existingBranch = await this.readOptionalProposalBranch(
-      proposal.proposalBranchName,
-      proposal.baseCommitId,
+    return ensureProviderBackedProposalBranch({
+      branchService: this.branchService,
+      proposal,
       operation,
-    );
-    if (!existingBranch.ok) return existingBranch;
-    if (existingBranch.exists) return { ok: true };
-    return this.createProposalBranch(proposal.proposalBranchName, proposal.baseCommitId, operation);
+    });
   }
 
   private async ensureCommitExists(
@@ -746,41 +593,11 @@ export class ProviderBackedAgentProposalService {
   ): Promise<
     { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> }
   > {
-    if (!this.graphProvider) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_GRAPH_UNAVAILABLE',
-          'Provider-backed proposal commit validation requires a visible version graph provider.',
-        ),
-      };
-    }
-
-    try {
-      const registryRead = await this.graphProvider.readGraphRegistry();
-      if (registryRead.status !== 'ok') {
-        return { ok: false, result: branchFailure(operation, registryRead.diagnostics) };
-      }
-      const graph = await this.graphProvider.openGraph(
-        namespaceForRegistry(registryRead.registry),
-        this.graphProvider.accessContext,
-      );
-      const read = await graph.readCommit(commitId);
-      if (read.status === 'success') return { ok: true };
-      return { ok: false, result: branchFailure(operation, read.diagnostics) };
-    } catch (error) {
-      return {
-        ok: false,
-        result: targetUnavailable(
-          operation,
-          'VERSION_PROVIDER_ERROR',
-          'Visible version graph could not validate the proposal commit.',
-          'error',
-          diagnosticsFromProviderError(error),
-        ),
-      };
-    }
+    return ensureProviderBackedProposalCommitExists({
+      graphProvider: this.graphProvider,
+      commitId,
+      operation,
+    });
   }
 
   private async callWorkspaceService<T>(
@@ -788,7 +605,7 @@ export class ProviderBackedAgentProposalService {
     call: () => MaybePromise<VersionResult<T>>,
   ): Promise<VersionResult<T>> {
     try {
-      return await call();
+      return sanitizeProposalProviderResult(await call());
     } catch {
       return targetUnavailable(
         operation,
@@ -835,165 +652,4 @@ function proposalStoreUpdateResult(
   result: VersionResult<AgentProposalRecord>,
 ): VersionResult<AgentProposal> {
   return proposalStoreResult(result);
-}
-
-function ok<T>(value: T): VersionResult<T> {
-  return { ok: true, value };
-}
-
-function storeFailure<T>(
-  result: Extract<VersionResult<unknown>, { readonly ok: false }>,
-): VersionResult<T> {
-  return { ok: false, error: result.error };
-}
-
-function staleRevision<T>(expectedRevision: number, actualRevision: number): VersionResult<T> {
-  return {
-    ok: false,
-    error: { code: 'stale_revision', expectedRevision, actualRevision },
-  };
-}
-
-function workspaceUnavailable<T>(operation: ProposalProviderOperation): VersionResult<T> {
-  return unsupported(
-    operation,
-    'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE',
-    'Provider-backed proposal workspace sessions require an attached branch-isolated workspace lifecycle service.',
-  );
-}
-
-function unsupported<T>(
-  operation: ProposalProviderOperation,
-  code: string,
-  message: string,
-): VersionResult<T> {
-  return targetUnavailable(operation, code, message, 'warning');
-}
-
-function targetUnavailable<T>(
-  operation: ProposalProviderOperation,
-  code: string,
-  message: string,
-  severity: VersionDiagnostic['severity'] = 'error',
-  sourceDiagnostics: readonly VersionDiagnostic[] = [],
-): VersionResult<T> {
-  return {
-    ok: false,
-    error: {
-      code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
-      diagnostics: [
-        diagnostic(code, severity, message, { operation }),
-        ...sourceDiagnostics.map(cloneDiagnostic),
-      ],
-    },
-  };
-}
-
-function branchFailure<T>(
-  operation: ProposalProviderOperation,
-  diagnostics: readonly unknown[],
-): VersionResult<T> {
-  return {
-    ok: false,
-    error: {
-      code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
-      diagnostics: diagnostics.length
-        ? diagnostics.map((item) => branchDiagnostic(item, operation))
-        : [
-            diagnostic(
-              'VERSION_PROVIDER_ERROR',
-              'error',
-              'Version branch service failed without public diagnostics.',
-              { operation },
-            ),
-          ],
-    },
-  };
-}
-
-function invalidState<T>(
-  state: string,
-  allowed: readonly string[],
-  reason: string,
-): VersionResult<T> {
-  return { ok: false, error: { code: 'invalid_state', state, allowed, reason } };
-}
-
-function invalidBranchName<T>(branchName: string, reason: string): VersionResult<T> {
-  return { ok: false, error: { code: 'invalid_branch_name', branchName, reason } };
-}
-
-function branchDiagnostic(value: unknown, operation: ProposalProviderOperation): VersionDiagnostic {
-  if (!isRecord(value)) {
-    return diagnostic(
-      'VERSION_PROVIDER_ERROR',
-      'error',
-      'Version branch service returned an invalid diagnostic.',
-      { operation },
-    );
-  }
-  return diagnostic(
-    typeof value.code === 'string' ? value.code : 'VERSION_PROVIDER_ERROR',
-    publicSeverity(value.severity),
-    typeof value.message === 'string'
-      ? value.message
-      : 'Version branch service returned a diagnostic without a public message.',
-    branchDiagnosticData(value, operation),
-  );
-}
-
-function branchDiagnosticData(
-  value: Readonly<Record<string, unknown>>,
-  operation: ProposalProviderOperation,
-): Readonly<Record<string, string | number | boolean | null>> {
-  const data: Record<string, string | number | boolean | null> = { operation };
-  const details = isRecord(value.details) ? value.details : null;
-  if (details && typeof details.cause === 'string') data.cause = details.cause;
-  if (details && typeof details.missingField === 'string') data.option = details.missingField;
-  return data;
-}
-
-function cloneDiagnostic(diagnostic: VersionDiagnostic): VersionDiagnostic {
-  return {
-    code: diagnostic.code,
-    severity: diagnostic.severity,
-    message: diagnostic.message,
-    ...(diagnostic.owner === undefined ? {} : { owner: diagnostic.owner }),
-    ...(diagnostic.dependency === undefined ? {} : { dependency: diagnostic.dependency }),
-    ...(diagnostic.data === undefined ? {} : { data: { ...diagnostic.data } }),
-  };
-}
-
-function diagnostic(
-  code: string,
-  severity: VersionDiagnostic['severity'],
-  message: string,
-  data?: Readonly<Record<string, string | number | boolean | null>>,
-): VersionDiagnostic {
-  return {
-    code,
-    severity,
-    message,
-    owner: 'version-store',
-    ...(data === undefined ? {} : { data }),
-  };
-}
-
-function publicSeverity(value: unknown): VersionDiagnostic['severity'] {
-  return value === 'info' || value === 'warning' || value === 'error' ? value : 'error';
-}
-
-function diagnosticsFromProviderError(error: unknown): readonly VersionDiagnostic[] {
-  if (!(error instanceof VersionStoreProviderError)) return [];
-  return error.diagnostics.map((item) =>
-    diagnostic(item.issueCode, publicSeverity(item.severity), item.safeMessage, {
-      operation: item.operation,
-    }),
-  );
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null;
 }

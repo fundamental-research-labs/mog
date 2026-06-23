@@ -175,7 +175,6 @@ describe('WorkbookVersion provider-backed proposal workspace lookup', () => {
             code: 'stale_proposal_workspace_head',
             data: expect.objectContaining({
               proposalId: opened.proposalId,
-              workspaceId: opened.workspaceId,
               proposalBranchName: safeProposalBranchName,
               expectedWorkspaceHeadId: graph.rootCommitId,
               actualProposalBranchHeadId: movedProposalBranchHeadId,
@@ -184,7 +183,10 @@ describe('WorkbookVersion provider-backed proposal workspace lookup', () => {
         ],
       },
     });
+    if (committed.ok) throw new Error('expected stale workspace commit to fail');
+    expect(committed.error.diagnostics[0]?.data).not.toHaveProperty('workspaceId');
     expect(JSON.stringify(committed)).not.toContain('agent-run-1');
+    expect(JSON.stringify(committed)).not.toContain(opened.workspaceId);
     await expect(version.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
@@ -222,7 +224,6 @@ describe('WorkbookVersion provider-backed proposal workspace lookup', () => {
             code: 'TEST_UNSAFE_WORKSPACE_DIAGNOSTIC',
             message: 'Workspace denied redacted-principal for redacted-principal.',
             data: expect.objectContaining({
-              safeWorkspaceId: 'workspace:redaction',
               safeNote: 'redacted-principal',
               safeTokens: ['redacted-principal', 'redacted-principal'],
               nested: expect.objectContaining({
@@ -238,13 +239,22 @@ describe('WorkbookVersion provider-backed proposal workspace lookup', () => {
     const diagnostic = opened.error.diagnostics[0] as any;
     expect(diagnostic.data).not.toHaveProperty('principalId');
     expect(diagnostic.data).not.toHaveProperty('agentRunId');
+    expect(diagnostic.data).not.toHaveProperty('safeWorkspaceId');
+    expect(diagnostic.data).not.toHaveProperty('workspaceId');
+    expect(diagnostic.data).not.toHaveProperty('providerId');
+    expect(diagnostic.data).not.toHaveProperty('providerIdentity');
+    expect(diagnostic.data).not.toHaveProperty('workspace');
     expect(diagnostic.data.nested).not.toHaveProperty('actorId');
     const serialized = JSON.stringify(opened);
     expect(serialized).not.toContain('principal-secret');
     expect(serialized).not.toContain('agent-run-1');
     expect(serialized).not.toContain('actor-secret');
+    expect(serialized).not.toContain('workspace:redaction');
+    expect(serialized).not.toContain('workspace-secret');
+    expect(serialized).not.toContain('provider-secret');
     expect(serialized).not.toContain('principalId');
     expect(serialized).not.toContain('agentRunId');
+    expect(serialized).not.toContain('providerId');
     await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },
@@ -556,8 +566,15 @@ function unsafeStartDiagnosticWorkspaceService(): ProposalWorkspaceLifecycleServ
                 principalId: 'principal-secret',
                 agentRunId: 'agent-run-1',
                 safeWorkspaceId: 'workspace:redaction',
+                workspaceId: 'workspace-secret',
+                providerId: 'provider-secret',
+                providerIdentity: 'provider-secret-identity',
                 safeNote: 'agent-run-1',
                 safeTokens: ['principal-secret', 'agent-run-1'],
+                workspace: {
+                  workspaceId: 'workspace-secret',
+                  principalScope: 'principal-secret',
+                },
                 nested: {
                   actorId: 'actor-secret',
                   safeStatus: 'kept',

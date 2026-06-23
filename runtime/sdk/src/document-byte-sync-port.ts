@@ -1,6 +1,7 @@
 import type {
   DocumentByteSyncPortApplyUpdateReturn,
   DocumentByteSyncPortClassifiedRawProvenance,
+  DocumentByteSyncPortRawSyncLifecycle,
 } from './document-sync-port-types';
 
 /**
@@ -38,6 +39,9 @@ export type DocumentByteSyncPortRawProvenance =
 export interface DocumentByteSyncPortLegacyRawProvenance {
   readonly schemaVersion: 'sync-update-provenance-v1';
   readonly sourceKind: 'legacyRawUnknown';
+  readonly sdkLifecycle: DocumentByteSyncPortRawSyncLifecycle & {
+    readonly source: 'legacyApplyUpdate';
+  };
   readonly updateIdentity: {
     readonly originKind: 'legacyRaw';
     readonly updateId?: string;
@@ -63,6 +67,12 @@ const SDK_RAW_SYNC_REDACTION_POLICY = Object.freeze({
   durableProviderIdentity: 'unknown',
   proofMaterial: 'diagnostics-only',
 } satisfies DocumentByteSyncPortLegacyRawProvenance['redaction']);
+
+const LEGACY_APPLY_UPDATE_LIFECYCLE = Object.freeze({
+  schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+  source: 'legacyApplyUpdate',
+  capturePolicy: 'excluded',
+} satisfies DocumentByteSyncPortLegacyRawProvenance['sdkLifecycle']);
 
 export function createClassifiedDocumentByteSyncPort(
   syncPort: DocumentByteSyncPort,
@@ -95,6 +105,7 @@ function legacyRawUpdateProvenance(payloadHash: string): DocumentByteSyncPortLeg
   return {
     schemaVersion: 'sync-update-provenance-v1',
     sourceKind: 'legacyRawUnknown',
+    sdkLifecycle: LEGACY_APPLY_UPDATE_LIFECYCLE,
     updateIdentity: { originKind: 'legacyRaw', updateId: `legacy-raw:${payloadHash}`, payloadHash },
     trust: { status: 'legacyRaw' },
     author: { kind: 'unknown', reason: 'legacyRaw' },
@@ -105,7 +116,8 @@ function legacyRawUpdateProvenance(payloadHash: string): DocumentByteSyncPortLeg
     exclusionDiagnostic: {
       reason: 'legacyRawUnknown',
       subreason: 'rawUnclassified',
-      message: 'Raw sync bytes have no authenticated provenance and cannot claim authorship.',
+      message:
+        'DocumentByteSyncPort.applyUpdate raw sync bytes are classified as legacyApplyUpdate with capturePolicy=excluded and cannot claim authorship.',
     },
   };
 }

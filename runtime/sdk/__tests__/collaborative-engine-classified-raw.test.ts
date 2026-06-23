@@ -46,6 +46,11 @@ describe('collaborative engine classified raw coordinator updates', () => {
     expect(classifiedCalls[0]?.[1]).toMatchObject({
       schemaVersion: 'sync-update-provenance-v1',
       sourceKind: 'collaborationHydration',
+      sdkLifecycle: {
+        schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+        source: 'collaborativeEngineBootstrap',
+        capturePolicy: 'excluded',
+      },
       trust: { status: 'trustedLocalSystem' },
       author: { kind: 'system', systemRef: 'collaboration-hydration' },
       replay: true,
@@ -64,6 +69,11 @@ describe('collaborative engine classified raw coordinator updates', () => {
       payloadHash: sha256Hex(update),
     });
 
+    const expectedLifecycleSources = {
+      flush: 'collaborativeEngineFlush',
+      pull: 'collaborativeEnginePull',
+      sync: 'collaborativeEngineSync',
+    } as const;
     for (const classification of ['flush', 'pull', 'sync'] as const) {
       classifiedCalls.length = 0;
       await _applyCoordinatorRawUpdate(syncPort, update, classification);
@@ -72,6 +82,11 @@ describe('collaborative engine classified raw coordinator updates', () => {
       expect(classifiedCalls).toHaveLength(1);
       expect(classifiedCalls[0]?.[1]).toMatchObject({
         sourceKind: 'collaborationMixedRemote',
+        sdkLifecycle: {
+          schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+          source: expectedLifecycleSources[classification],
+          capturePolicy: 'excluded',
+        },
         updateIdentity: {
           originKind: 'room',
           updateId: `sdk-coordinator-${classification}:${sha256Hex(update)}`,
@@ -84,7 +99,7 @@ describe('collaborative engine classified raw coordinator updates', () => {
         capturePolicy: 'excluded',
         exclusionDiagnostic: {
           reason: 'mixedAuthors',
-          message: `Coordinator ${classification} diff lacks per-update provenance boundaries.`,
+          message: `Coordinator ${classification} diff is classified as ${expectedLifecycleSources[classification]} with capturePolicy=excluded because it lacks per-update provenance boundaries.`,
         },
       });
     }
@@ -125,6 +140,25 @@ describe('collaborative engine classified raw coordinator updates', () => {
 
     expect(rawUpdates).toEqual([]);
   });
+
+  it('fails closed for unknown coordinator lifecycle classifications', async () => {
+    const update = new Uint8Array([17, 18, 19]);
+    const classifiedCalls: Array<readonly [Uint8Array, DocumentByteSyncPortRawProvenance]> = [];
+    const syncPort = createSyncPort({
+      applyUpdate: async () => {
+        throw new Error('raw apply should not run');
+      },
+      applyClassifiedRawUpdate: async (classifiedUpdate, provenance) => {
+        classifiedCalls.push([classifiedUpdate, provenance]);
+      },
+    });
+
+    await expect(_applyCoordinatorRawUpdate(syncPort, update, 'unknown' as never)).rejects.toThrow(
+      'Unknown CollaborativeEngine coordinator raw update lifecycle: unknown',
+    );
+
+    expect(classifiedCalls).toEqual([]);
+  });
 });
 
 describe('SDK document byte sync port classification wrapper', () => {
@@ -151,6 +185,11 @@ describe('SDK document byte sync port classification wrapper', () => {
     expect(classifiedCalls[0]?.[1]).toMatchObject({
       schemaVersion: 'sync-update-provenance-v1',
       sourceKind: 'legacyRawUnknown',
+      sdkLifecycle: {
+        schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+        source: 'legacyApplyUpdate',
+        capturePolicy: 'excluded',
+      },
       updateIdentity: {
         originKind: 'legacyRaw',
         updateId: `legacy-raw:${sha256Hex(update)}`,
@@ -164,7 +203,8 @@ describe('SDK document byte sync port classification wrapper', () => {
       exclusionDiagnostic: {
         reason: 'legacyRawUnknown',
         subreason: 'rawUnclassified',
-        message: 'Raw sync bytes have no authenticated provenance and cannot claim authorship.',
+        message:
+          'DocumentByteSyncPort.applyUpdate raw sync bytes are classified as legacyApplyUpdate with capturePolicy=excluded and cannot claim authorship.',
       },
     });
   });
@@ -180,9 +220,7 @@ describe('SDK document byte sync port classification wrapper', () => {
       }),
     );
 
-    await expect(syncPort.applyUpdate(update)).rejects.toThrow(
-      'requires applyClassifiedRawUpdate',
-    );
+    await expect(syncPort.applyUpdate(update)).rejects.toThrow('requires applyClassifiedRawUpdate');
 
     expect(rawUpdates).toEqual([]);
     expect(syncPort.applyClassifiedRawUpdate).toBeUndefined();

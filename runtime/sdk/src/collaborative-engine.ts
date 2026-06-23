@@ -21,7 +21,10 @@ import {
   type NapiAddonModule,
 } from './boot';
 import type { Workbook, Worksheet } from '@mog-sdk/contracts/api';
-import type { DocumentByteSyncPortClassifiedRawProvenance } from './document-sync-port-types';
+import type {
+  DocumentByteSyncPortClassifiedRawProvenance,
+  DocumentByteSyncPortRawSyncLifecycle,
+} from './document-sync-port-types';
 
 // =============================================================================
 // Types
@@ -87,6 +90,40 @@ export interface SyncResult {
 
 type CoordinatorRawUpdateClassification = 'bootstrap' | 'flush' | 'pull' | 'sync';
 
+type CoordinatorRawUpdateLifecycle =
+  | (DocumentByteSyncPortRawSyncLifecycle & {
+      readonly source: 'collaborativeEngineBootstrap';
+    })
+  | (DocumentByteSyncPortRawSyncLifecycle & {
+      readonly source:
+        | 'collaborativeEngineFlush'
+        | 'collaborativeEnginePull'
+        | 'collaborativeEngineSync';
+    });
+
+const COORDINATOR_RAW_UPDATE_LIFECYCLE_BY_CLASSIFICATION = Object.freeze({
+  bootstrap: {
+    schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+    source: 'collaborativeEngineBootstrap',
+    capturePolicy: 'excluded',
+  },
+  flush: {
+    schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+    source: 'collaborativeEngineFlush',
+    capturePolicy: 'excluded',
+  },
+  pull: {
+    schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+    source: 'collaborativeEnginePull',
+    capturePolicy: 'excluded',
+  },
+  sync: {
+    schemaVersion: 'sdk-raw-sync-lifecycle-v1',
+    source: 'collaborativeEngineSync',
+    capturePolicy: 'excluded',
+  },
+} satisfies Record<CoordinatorRawUpdateClassification, CoordinatorRawUpdateLifecycle>);
+
 const COORDINATOR_RAW_UPDATE_REDACTION_POLICY = Object.freeze({
   schemaVersion: 'provenance-redaction-policy-v1',
   mode: 'diagnostic-only',
@@ -108,28 +145,29 @@ export async function _applyCoordinatorRawUpdate(
   }
 
   const payloadHash = await sha256Hex(update);
+  const lifecycle = coordinatorLifecycleForClassification(classification);
   await syncPort.applyClassifiedRawUpdate(
     update,
-    buildCoordinatorRawUpdateProvenance(classification, payloadHash),
+    buildCoordinatorRawUpdateProvenance(classification, lifecycle, payloadHash),
   );
 }
 
 function buildCoordinatorRawUpdateProvenance(
   classification: CoordinatorRawUpdateClassification,
+  lifecycle: CoordinatorRawUpdateLifecycle,
   payloadHash: string,
 ): DocumentByteSyncPortClassifiedRawProvenance {
-  const sourceKind =
-    classification === 'bootstrap' ? 'collaborationHydration' : 'collaborationMixedRemote';
   const updateIdentity = {
     originKind: 'room' as const,
     updateId: `sdk-coordinator-${classification}:${payloadHash}`,
     payloadHash,
   };
 
-  if (sourceKind === 'collaborationHydration') {
+  if (lifecycle.source === 'collaborativeEngineBootstrap') {
     return {
       schemaVersion: 'sync-update-provenance-v1',
       sourceKind: 'collaborationHydration',
+      sdkLifecycle: lifecycle,
       updateIdentity,
       trust: { status: 'trustedLocalSystem' },
       author: { kind: 'system', systemRef: 'collaboration-hydration' },
@@ -139,7 +177,8 @@ function buildCoordinatorRawUpdateProvenance(
       redaction: COORDINATOR_RAW_UPDATE_REDACTION_POLICY,
       exclusionDiagnostic: {
         reason: 'hydration',
-        message: 'Coordinator bootstrap alignment is replayed as collaboration hydration.',
+        message:
+          'Coordinator bootstrap alignment is classified as collaborativeEngineBootstrap with capturePolicy=excluded.',
       },
     };
   }
@@ -147,6 +186,7 @@ function buildCoordinatorRawUpdateProvenance(
   return {
     schemaVersion: 'sync-update-provenance-v1',
     sourceKind: 'collaborationMixedRemote',
+    sdkLifecycle: lifecycle,
     updateIdentity,
     trust: { status: 'unverified' },
     author: { kind: 'mixedRemote', reason: 'aggregateWithoutBoundaries' },
@@ -156,9 +196,24 @@ function buildCoordinatorRawUpdateProvenance(
     redaction: COORDINATOR_RAW_UPDATE_REDACTION_POLICY,
     exclusionDiagnostic: {
       reason: 'mixedAuthors',
-      message: `Coordinator ${classification} diff lacks per-update provenance boundaries.`,
+      message: `Coordinator ${classification} diff is classified as ${lifecycle.source} with capturePolicy=excluded because it lacks per-update provenance boundaries.`,
     },
   };
+}
+
+function coordinatorLifecycleForClassification(
+  classification: CoordinatorRawUpdateClassification,
+): CoordinatorRawUpdateLifecycle {
+  const lifecycle =
+    COORDINATOR_RAW_UPDATE_LIFECYCLE_BY_CLASSIFICATION[
+      classification as CoordinatorRawUpdateClassification
+    ];
+  if (!lifecycle) {
+    throw new Error(
+      `Unknown CollaborativeEngine coordinator raw update lifecycle: ${classification}`,
+    );
+  }
+  return lifecycle;
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -404,11 +459,7 @@ export class CollaborativeEngine {
       );
       // Apply any existing state from the coordinator back to this engine
       if (pushRaw.ok && pushRaw.serverDiff && pushRaw.serverDiff.length > 0) {
-        await _applyCoordinatorRawUpdate(
-          syncPort,
-          new Uint8Array(pushRaw.serverDiff),
-          'bootstrap',
-        );
+        await _applyCoordinatorRawUpdate(syncPort, new Uint8Array(pushRaw.serverDiff), 'bootstrap');
       }
     }
 
@@ -469,11 +520,7 @@ export class CollaborativeEngine {
         Buffer.from(initSv),
       );
       if (pushRaw.ok && pushRaw.serverDiff && pushRaw.serverDiff.length > 0) {
-        await _applyCoordinatorRawUpdate(
-          syncPort,
-          new Uint8Array(pushRaw.serverDiff),
-          'bootstrap',
-        );
+        await _applyCoordinatorRawUpdate(syncPort, new Uint8Array(pushRaw.serverDiff), 'bootstrap');
       }
     }
 
@@ -555,11 +602,7 @@ export class CollaborativeEngine {
 
     // Apply server diff (changes from other participants)
     if (result.serverDiff && result.serverDiff.length > 0) {
-      await _applyCoordinatorRawUpdate(
-        syncPort,
-        new Uint8Array(result.serverDiff),
-        classification,
-      );
+      await _applyCoordinatorRawUpdate(syncPort, new Uint8Array(result.serverDiff), classification);
     }
 
     this._touchedSheets.clear();

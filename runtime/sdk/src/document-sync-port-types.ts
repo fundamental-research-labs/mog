@@ -2,6 +2,9 @@ export type DocumentByteSyncPortClassifiedRawProvenance =
   | {
       readonly schemaVersion: 'sync-update-provenance-v1';
       readonly sourceKind: 'collaborationHydration';
+      readonly sdkLifecycle: DocumentByteSyncPortRawSyncLifecycle & {
+        readonly source: 'collaborativeEngineBootstrap';
+      };
       readonly updateIdentity: DocumentByteSyncPortClassifiedRawUpdateIdentity;
       readonly trust: { readonly status: 'trustedLocalSystem' | 'unverified' };
       readonly author:
@@ -16,6 +19,12 @@ export type DocumentByteSyncPortClassifiedRawProvenance =
   | {
       readonly schemaVersion: 'sync-update-provenance-v1';
       readonly sourceKind: 'collaborationMixedRemote';
+      readonly sdkLifecycle: DocumentByteSyncPortRawSyncLifecycle & {
+        readonly source:
+          | 'collaborativeEngineFlush'
+          | 'collaborativeEnginePull'
+          | 'collaborativeEngineSync';
+      };
       readonly updateIdentity: DocumentByteSyncPortClassifiedRawUpdateIdentity;
       readonly trust: { readonly status: 'unverified' };
       readonly author:
@@ -31,6 +40,19 @@ export type DocumentByteSyncPortClassifiedRawProvenance =
       readonly redaction: DocumentByteSyncPortProvenanceRedactionPolicy;
       readonly exclusionDiagnostic: DocumentByteSyncPortSyncUpdateExclusionDiagnostic;
     };
+
+export type DocumentByteSyncPortRawSyncLifecycleSource =
+  | 'legacyApplyUpdate'
+  | 'collaborativeEngineBootstrap'
+  | 'collaborativeEngineFlush'
+  | 'collaborativeEnginePull'
+  | 'collaborativeEngineSync';
+
+export interface DocumentByteSyncPortRawSyncLifecycle {
+  readonly schemaVersion: 'sdk-raw-sync-lifecycle-v1';
+  readonly source: DocumentByteSyncPortRawSyncLifecycleSource;
+  readonly capturePolicy: 'excluded';
+}
 
 export interface DocumentByteSyncPortClassifiedRawUpdateIdentity {
   readonly originKind: 'room';
@@ -64,6 +86,4 @@ export interface DocumentByteSyncPortApplyUpdateResult {
   readonly metadata: unknown;
 }
 
-export type DocumentByteSyncPortApplyUpdateReturn =
-  | DocumentByteSyncPortApplyUpdateResult
-  | void;
+export type DocumentByteSyncPortApplyUpdateReturn = DocumentByteSyncPortApplyUpdateResult | void;

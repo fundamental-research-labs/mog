@@ -173,7 +173,7 @@ describe('WorkbookVersion public cell edit commit/diff vertical', () => {
           afterDigest: expectedSemanticDigest(),
           changes: expect.arrayContaining([
             expect.objectContaining({
-              domainId: 'authored-grid',
+              domainId: 'cells.values',
               kind: 'added',
               objectId: 'cell:sheet#0:r0:c0',
               objectKind: 'cell',

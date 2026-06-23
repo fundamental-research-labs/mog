@@ -482,6 +482,10 @@ describe('WorkbookVersion applyMerge production materializer persisted results',
       ) {
         throw new Error('expected fast-forward preview to expose a persisted result id and digest');
       }
+      const staleExpectedTargetHead = {
+        commitId: expectedTargetHead.commitId,
+        revision: { ...expectedTargetHead.revision },
+      };
 
       await sourceWb.activeSheet.setCell('D1', 'interloper');
       const interloperCommit = await expectCommit(
@@ -497,17 +501,20 @@ describe('WorkbookVersion applyMerge production materializer persisted results',
         },
         {
           targetRef: MATERIALIZER_TARGET_REF as any,
-          expectedTargetHead,
+          expectedTargetHead: staleExpectedTargetHead,
         },
       );
       expect(stale).toMatchObject({
-        ok: false,
-        error: {
-          code: 'target_unavailable',
-          target: 'workbook.version.applyMerge',
-          diagnostics: expect.arrayContaining([
-            expect.objectContaining({ code: 'VERSION_REF_CONFLICT' }),
-          ]),
+        ok: true,
+        value: {
+          status: 'staleTargetHead',
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+          targetRef: MATERIALIZER_TARGET_REF,
+          headBefore: oursCommit.id,
+          headAfter: interloperCommit.id,
+          mutationGuarantee: 'ref-not-mutated',
         },
       });
 

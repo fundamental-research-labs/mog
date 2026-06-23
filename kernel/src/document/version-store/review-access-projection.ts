@@ -672,7 +672,7 @@ function sanitizeDiagnosticString(value: string): string {
   return value
     .replace(SENSITIVE_PRINCIPAL_TOKEN_RE, 'redacted-principal')
     .replace(SENSITIVE_REF_TOKEN_RE, 'redacted-ref')
-    .replace(SENSITIVE_BRANCH_OR_REF_FIELD_RE, '$1redacted-ref');
+    .replace(SENSITIVE_BRANCH_OR_REF_FIELD_RE, 'redacted-ref');
 }
 
 function isSensitiveDiagnosticKey(key: string): boolean {

@@ -215,7 +215,7 @@ export class SnapshotRootReloadService<TMaterialized = unknown> {
     let hydration: SnapshotRootFreshLifecycleHydrationResult<TMaterialized>;
     try {
       hydration = await this.hydrator.hydrateYrsFullState(
-        createHydrationInput(decoded, cloneBytes(decoded.bytes), mergedInvariants),
+        createHydrationInput<TMaterialized>(decoded, cloneBytes(decoded.bytes), mergedInvariants),
       );
     } catch (error) {
       return failure(
@@ -315,10 +315,10 @@ function decodeSnapshotRoot(snapshotRoot: unknown): DecodedSnapshotRoot {
   });
 }
 
-function createHydrationInput(
+function createHydrationInput<TMaterialized>(
   decoded: DecodedSnapshotRoot,
   bytes: Uint8Array,
-  invariants: SnapshotRootReloadInvariants,
+  invariants: SnapshotRootReloadInvariants<TMaterialized>,
 ): SnapshotRootFreshLifecycleHydrationInput {
   return Object.freeze({
     yrsFullStateBytes: bytes,
@@ -405,7 +405,9 @@ function validatePreHydrationInvariants<TMaterialized>(
     ) {
       return false;
     }
-    return digestsEqual(root.snapshotRootDigest, decoded.objectDigest);
+    return (
+      decoded.objectDigest !== undefined && digestsEqual(root.snapshotRootDigest, decoded.objectDigest)
+    );
   });
 
   if (matchingRoot === undefined) {
@@ -564,7 +566,7 @@ function semanticIdentityFailure<TMaterialized>(
 } {
   return {
     ok: false,
-    result: failure(
+    result: failure<TMaterialized>(
       'semanticIdentityUnproven',
       'Snapshot root fresh-lifecycle reload could not prove semantic identity.',
       diagnostics.length > 0
@@ -626,7 +628,7 @@ function failure<TMaterialized>(
     'fresh-lifecycle-materialized'
   >,
   decodedByteLength?: number,
-): SnapshotRootReloadResult<TMaterialized> {
+): Extract<SnapshotRootReloadResult<TMaterialized>, { readonly ok: false }> {
   const frozenDiagnostics = freezeDiagnostics(diagnostics);
   return Object.freeze({
     ok: false,
@@ -708,7 +710,7 @@ function isValidCommitRoot(value: unknown): value is SnapshotRootReloadCommitRoo
   if (!isWorkbookCommitId(value.commitId)) return false;
   if (!isObjectDigest(value.snapshotRootDigest)) return false;
   try {
-    normalizeVersionGraphNamespace(value.namespace);
+    normalizeVersionGraphNamespace(value.namespace as VersionGraphNamespace);
     return true;
   } catch {
     return false;

@@ -23,6 +23,7 @@ import {
   VersionObjectStoreError,
   type VersionObjectRecord,
 } from '../../document/version-store/object-store';
+import type { VersionDependencyRef } from '../../document/version-store/object-digest';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
 
 const SEALED_REF_KEYS = new Set([
@@ -73,6 +74,8 @@ type MergeResolutionPayloadRecord = {
   readonly domainPayloadSchema?: string;
   readonly value: unknown;
 };
+
+type ObjectDependencyRef = Extract<VersionDependencyRef, { readonly kind: 'object' }>;
 
 export function normalizeSealedResolutionPayloadRefInput(
   value: unknown,
@@ -492,13 +495,21 @@ function validateSealedPayloadArtifactBinding(
 function isExpectedPreviewDependency(
   actual: unknown,
   expected: ReturnType<typeof mergePreviewArtifactRef>,
-): actual is ReturnType<typeof mergePreviewArtifactRef> {
+): actual is ObjectDependencyRef {
   return (
-    isRecord(actual) &&
-    actual.kind === 'object' &&
+    isObjectDependencyRef(actual) &&
+    isObjectDependencyRef(expected) &&
     actual.objectType === expected.objectType &&
-    isObjectDigest(actual.digest) &&
     digestsEqual(actual.digest, expected.digest)
+  );
+}
+
+function isObjectDependencyRef(value: unknown): value is ObjectDependencyRef {
+  return (
+    isRecord(value) &&
+    value.kind === 'object' &&
+    typeof value.objectType === 'string' &&
+    isObjectDigest(value.digest)
   );
 }
 

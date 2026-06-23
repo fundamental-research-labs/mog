@@ -323,8 +323,7 @@ describe('WorkbookVersion provider review access hardening', () => {
     expect(diagnostics).toMatchObject([
       {
         code: 'VERSION_PERMISSION_DENIED',
-        message:
-          'Capability state denied redacted-principal for ref redacted-ref branchName=redacted-ref.',
+        message: 'Capability state denied redacted-principal for ref redacted-ref redacted-ref.',
         data: {
           payload: {
             capability: 'version:reviewRead',
@@ -454,12 +453,22 @@ describe('WorkbookVersion provider review access hardening', () => {
     const graph = await provider.openGraph(namespace);
     const head = await graph.readHead();
     if (head.status !== 'success') throw new Error('expected initialized graph head');
+    const oursCommit = await commitReviewFixture(graph, namespace, {
+      expectedHeadCommitId: head.head.id,
+      expectedMainRefVersion: head.head.refRevision as any,
+      label: 'ours',
+    });
+    const theirsCommit = await commitReviewFixture(graph, namespace, {
+      expectedHeadCommitId: oursCommit.commit.id,
+      expectedMainRefVersion: oursCommit.main.revision,
+      label: 'theirs',
+    });
     const conflict = tableDefinitionConflict();
     const previewRecord = await createMergePreviewArtifactRecord(namespace, {
       status: 'conflicted',
       base: head.head.id,
-      ours: head.head.id,
-      theirs: head.head.id,
+      ours: oursCommit.commit.id,
+      theirs: theirsCommit.commit.id,
       conflicts: [conflict],
     });
     const put = await graph.putObjects([previewRecord]);
@@ -474,10 +483,10 @@ describe('WorkbookVersion provider review access hardening', () => {
       expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
       valueRole: 'theirs',
       purpose: 'review',
-      targetRef: SECRET_REF as any,
+      targetRef: 'refs/heads/main' as any,
       expectedTargetHead: {
-        commitId: head.head.id,
-        revision: head.head.refRevision,
+        commitId: oursCommit.commit.id,
+        revision: oursCommit.main.revision,
       },
     });
 
@@ -699,6 +708,41 @@ async function providerWithRootAndChildReviewChanges(
     rootCommitId: initialized.rootCommit.id,
     childCommitId: committed.commit.id,
   };
+}
+
+async function commitReviewFixture(
+  graph: Awaited<ReturnType<ReturnType<typeof createInMemoryVersionStoreProvider>['openGraph']>>,
+  namespace: VersionGraphNamespace,
+  input: {
+    readonly expectedHeadCommitId: string;
+    readonly expectedMainRefVersion: unknown;
+    readonly label: string;
+  },
+) {
+  const committed = await graph.commit({
+    snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
+      label: input.label,
+      sheets: [],
+    }),
+    semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+      schemaVersion: 1,
+      changes: [],
+    }),
+    mutationSegmentRecords: [
+      await objectRecord(namespace, 'workbook.mutationSegment.v1', {
+        segmentId: `${input.label}-segment`,
+      }),
+    ],
+    author: GRAPH_AUTHOR,
+    createdAt: CREATED_AT,
+    completenessDiagnostics: [],
+    expectedHeadCommitId: input.expectedHeadCommitId as any,
+    expectedMainRefVersion: input.expectedMainRefVersion as any,
+  });
+  if (committed.status !== 'success') {
+    throw new Error(`expected ${input.label} commit success: ${JSON.stringify(committed.diagnostics)}`);
+  }
+  return committed;
 }
 
 async function providerWithInitializedRegistry(graphId: string) {

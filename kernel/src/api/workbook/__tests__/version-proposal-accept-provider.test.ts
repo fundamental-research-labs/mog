@@ -148,6 +148,50 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
     });
   });
 
+  it('keeps target-head drift acceptance disabled without merge apply capability', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(
+      graph.provider,
+      graphCommittingWorkspaceService(graph.provider),
+      { proposalAcceptMergeApplyCapability: false },
+    );
+    const ready = await createReadyReviewedProposal(version, graph, 'target-stale-disabled');
+    const movedMainCommitId = await commitRef(
+      graph.provider,
+      'refs/heads/main',
+      graph.rootCommitId,
+    );
+
+    const accepted = await version.acceptProposal({
+      clientRequestId: 'proposal-accept-target-stale-disabled',
+      proposalId: ready.proposalId,
+      expectedRevision: 5,
+      expectedTargetHeadId: graph.rootCommitId,
+      actor: ACTOR,
+      resolutionPolicy: 'fastForwardOnly',
+    });
+
+    expect(accepted).toMatchObject({
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:mergeApply',
+        dependency: 'VC-07',
+      },
+    });
+    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: { commitId: movedMainCommitId },
+      },
+    });
+    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'ready_for_review', revision: 5 },
+    });
+  });
+
   it('marks a reviewed proposal stale when the proposal branch head changed', async () => {
     const graph = await graphWithRoot();
     const version = versionForProvider(
@@ -252,10 +296,21 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
 function versionForProvider(
   provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
   proposalWorkspaceService: ProposalWorkspaceLifecycleService,
+  options: { readonly proposalAcceptMergeApplyCapability?: boolean } = {},
 ): WorkbookVersionImpl {
   const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
-  attachWorkbookVersioning(ctx, { provider, proposalWorkspaceService });
+  attachWorkbookVersioning(ctx, {
+    provider,
+    proposalWorkspaceService,
+    ...(options.proposalAcceptMergeApplyCapability === false
+      ? {}
+      : { captureMergeCommit: unexpectedMergeCommitCapture }),
+  });
   return new WorkbookVersionImpl(ctx);
+}
+
+async function unexpectedMergeCommitCapture(): Promise<never> {
+  throw new Error('proposal accept capability fixture must not materialize merge commits');
 }
 
 async function createReadyReviewedProposal(

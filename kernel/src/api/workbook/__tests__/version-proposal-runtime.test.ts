@@ -184,4 +184,90 @@ describe('WorkbookVersion proposal runtime facade', () => {
     });
     expect(proposalService.createProposal).not.toHaveBeenCalled();
   });
+
+  it('keeps acceptProposal disabled by default without dynamic merge capabilities', async () => {
+    const proposalService = createCompleteProposalService();
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: { proposalService },
+      }),
+    );
+
+    const result = await version.acceptProposal(acceptInput('accept-default-disabled') as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:mergePreview',
+        dependency: 'VC-07',
+      },
+    });
+    expect(proposalService.acceptProposal).not.toHaveBeenCalled();
+  });
+
+  it('does not treat generic ref administration as merge apply capability', async () => {
+    const proposalService = createCompleteProposalService();
+    const fastForwardRef = jest.fn();
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: {
+          proposalService,
+          mergeService: { merge: jest.fn() },
+          refAdmin: { fastForwardRef },
+        },
+      }),
+    );
+
+    const result = await version.acceptProposal(acceptInput('accept-no-ref-admin-leak') as any);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'version_capability_unavailable',
+        capability: 'version:mergeApply',
+        dependency: 'VC-07',
+      },
+    });
+    expect(proposalService.acceptProposal).not.toHaveBeenCalled();
+    expect(fastForwardRef).not.toHaveBeenCalled();
+  });
+
+  it('dispatches acceptProposal only when proposal, merge preview, and merge apply are attached', async () => {
+    const acceptResult = {
+      status: 'stale',
+      proposalId: 'proposal:sha256:abc',
+      expectedTargetHeadId: BASE_COMMIT_ID,
+      actualTargetHeadId: HEAD_COMMIT_ID,
+    };
+    const proposalService = createCompleteProposalService({
+      acceptProposal: jest.fn(async () => acceptResult),
+    });
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: {
+          proposalService,
+          mergeService: { merge: jest.fn() },
+          applyMergeService: { applyMerge: jest.fn() },
+        },
+      }),
+    );
+    const input = acceptInput('accept-dispatch');
+
+    const result = await version.acceptProposal(input as any);
+
+    expect(result).toEqual({ ok: true, value: acceptResult });
+    expect(proposalService.acceptProposal).toHaveBeenCalledWith(input);
+  });
 });
+
+function acceptInput(clientRequestId: string) {
+  return {
+    clientRequestId,
+    proposalId: 'proposal:sha256:abc',
+    expectedRevision: 1,
+    expectedTargetHeadId: BASE_COMMIT_ID,
+    actor: ACTOR,
+    resolutionPolicy: 'fastForwardOnly',
+  };
+}

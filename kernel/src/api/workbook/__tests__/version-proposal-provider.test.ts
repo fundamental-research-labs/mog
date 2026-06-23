@@ -622,7 +622,8 @@ function versionForProvider(
   versioning: Partial<Parameters<typeof attachWorkbookVersioning>[1]> = {},
 ): WorkbookVersionImpl {
   const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
-  attachWorkbookVersioning(ctx, { provider, ...versioning });
+  const mergeCap = async () => undefined as never;
+  attachWorkbookVersioning(ctx, { provider, captureMergeCommit: mergeCap, ...versioning });
   return new WorkbookVersionImpl(ctx);
 }
 

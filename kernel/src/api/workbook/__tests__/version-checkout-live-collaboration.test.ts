@@ -2,7 +2,10 @@ import { jest } from '@jest/globals';
 
 import type { WorkbookConfig } from '../types';
 import { checkoutWorkbookVersion } from '../version-checkout';
-import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnBridgeMock,
+  versioningWithDomainSupportManifest,
+} from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -42,6 +45,10 @@ jest.unstable_mockModule('../../../bridges/compute/compute-bridge', () => ({
 
 const { WorkbookImpl } = await import('../workbook-impl');
 
+const RAW_ROOM_ID = 'raw-room-id:live-collaboration-room';
+const RAW_USER_ID = 'raw-user-id:live-collaboration-user';
+const RAW_PROVIDER_ID = 'raw-provider-id:live-collaboration-provider';
+
 function createMockEventBus() {
   return {
     on: jest.fn().mockReturnValue(() => undefined),
@@ -55,8 +62,10 @@ function createMockEventBus() {
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   const versioning = overrides.versioning as Record<string, unknown> | undefined;
+  const computeBridge = {};
+  installVersionDomainDetectorNoopsOnBridgeMock(computeBridge);
   return {
-    computeBridge: {},
+    computeBridge,
     writeGate: {
       assertWritable: jest.fn(),
     },
@@ -121,6 +130,13 @@ function cleanSurfaceDirtyStatus() {
   };
 }
 
+function expectNoRawCollaborationIdentifiers(value: unknown) {
+  const serialized = JSON.stringify(value);
+  expect(serialized).not.toContain(RAW_ROOM_ID);
+  expect(serialized).not.toContain(RAW_USER_ID);
+  expect(serialized).not.toContain(RAW_PROVIDER_ID);
+}
+
 describe('WorkbookVersion checkout live collaboration admission', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -140,35 +156,72 @@ describe('WorkbookVersion checkout live collaboration admission', () => {
             checkoutService: { checkout },
             readLiveCollaborationStatus: () => ({
               state: collaborationState,
-              statusRevision: `live:${collaborationState}`,
-              roomId: 'room-1',
+              statusRevision: `live:${collaborationState}:${RAW_ROOM_ID}:${RAW_USER_ID}:${RAW_PROVIDER_ID}`,
+              roomId: RAW_ROOM_ID,
+              userId: RAW_USER_ID,
+              providerId: RAW_PROVIDER_ID,
               sidecarStatus: collaborationState === 'active' ? 'online' : 'unknown',
               activeParticipantCount: collaborationState === 'active' ? 2 : 0,
+              diagnostics: [
+                {
+                  code: 'version.surfaceStatus.liveCollaborationUnknown',
+                  severity: 'warning',
+                  message: `Raw live collaboration ids ${RAW_ROOM_ID} ${RAW_USER_ID} ${RAW_PROVIDER_ID} must not leak.`,
+                  dependency: 'VC-09',
+                  data: {
+                    roomId: RAW_ROOM_ID,
+                    userId: RAW_USER_ID,
+                    providerId: RAW_PROVIDER_ID,
+                    note: `provider ${RAW_PROVIDER_ID}`,
+                    safeCount: 1,
+                  },
+                },
+              ],
             }),
           },
         }),
       });
 
-      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+      const surfaceStatus = await wb.version.getSurfaceStatus();
+      expect(surfaceStatus).toMatchObject({
         dirty: {
           checkoutSafe: false,
           liveCollaboration: {
             state: collaborationState,
-            roomId: 'room-1',
+            roomId: 'redacted',
           },
           unsafeReasons: [
             expect.objectContaining({
               code: unsafeReasonCode,
               data: expect.objectContaining({
                 collaborationState,
-                roomId: 'room-1',
+                roomId: 'redacted',
+                redacted: true,
               }),
             }),
           ],
         },
       });
+      expect(surfaceStatus.dirty.liveCollaboration?.statusRevision).toContain('room:redacted');
+      expect(surfaceStatus.dirty.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: 'Raw live collaboration ids redacted redacted redacted must not leak.',
+            data: expect.objectContaining({
+              roomId: 'redacted',
+              userId: 'redacted',
+              providerId: 'redacted',
+              note: 'provider redacted',
+              safeCount: 1,
+              redacted: true,
+            }),
+          }),
+        ]),
+      );
+      expectNoRawCollaborationIdentifiers(surfaceStatus);
 
-      await expect(wb.version.checkout({ kind: 'commit', id: commitId })).resolves.toMatchObject({
+      const checkoutResult = await wb.version.checkout({ kind: 'commit', id: commitId });
+      expect(checkoutResult).toMatchObject({
         ok: false,
         error: {
           diagnostics: [
@@ -178,16 +231,75 @@ describe('WorkbookVersion checkout live collaboration admission', () => {
                 payload: expect.objectContaining({
                   reason: 'liveCollaborationActive',
                   collaborationState,
-                  roomId: 'room-1',
+                  roomId: 'redacted',
                 }),
               }),
             }),
           ],
         },
       });
+      expectNoRawCollaborationIdentifiers(checkoutResult);
       expect(checkout).not.toHaveBeenCalled();
     },
   );
+
+  it('fails closed and redacts identifiers when live collaboration state is malformed', async () => {
+    const commitId = `commit:sha256:${'7'.repeat(64)}`;
+    const checkout = jest.fn(async () => plannedCheckoutResult(commitId));
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          checkoutService: { checkout },
+          readLiveCollaborationStatus: () => ({
+            state: 'joining',
+            statusRevision: `live:joining:${RAW_ROOM_ID}:${RAW_USER_ID}:${RAW_PROVIDER_ID}`,
+            roomId: RAW_ROOM_ID,
+            userId: RAW_USER_ID,
+            providerId: RAW_PROVIDER_ID,
+          }),
+        },
+      }),
+    });
+
+    const surfaceStatus = await wb.version.getSurfaceStatus();
+    expect(surfaceStatus).toMatchObject({
+      dirty: {
+        checkoutSafe: false,
+        liveCollaboration: {
+          state: 'unknown',
+        },
+        unsafeReasons: [
+          expect.objectContaining({
+            code: 'version.surfaceStatus.liveCollaborationUnknown',
+            data: expect.objectContaining({
+              collaborationState: 'unknown',
+            }),
+          }),
+        ],
+      },
+    });
+    expectNoRawCollaborationIdentifiers(surfaceStatus);
+
+    const checkoutResult = await wb.version.checkout({ kind: 'commit', id: commitId });
+    expect(checkoutResult).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE',
+            data: expect.objectContaining({
+              payload: expect.objectContaining({
+                reason: 'liveCollaborationActive',
+                collaborationState: 'unknown',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expectNoRawCollaborationIdentifiers(checkoutResult);
+    expect(checkout).not.toHaveBeenCalled();
+  });
 
   it('blocks checkout while workbook recalculation is pending', async () => {
     const commitId = `commit:sha256:${'a'.repeat(64)}`;

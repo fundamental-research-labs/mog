@@ -4,6 +4,17 @@ import type { DocumentContext } from '../../context';
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+const REDACTED_LIVE_COLLABORATION_ID = 'redacted';
+const LIVE_COLLABORATION_DIAGNOSTIC_DEPENDENCIES = new Set([
+  'VC-04',
+  'VC-05',
+  'VC-07',
+  'VC-09',
+  'storage',
+  'featureGate',
+  'hostCapability',
+  'upstreamRevertContract',
+]);
 
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -11,12 +22,7 @@ type MaybeVersionRuntimeContext = DocumentContext & {
   readonly version?: unknown;
 };
 
-export type VersionLiveCollaborationState =
-  | 'absent'
-  | 'disabled'
-  | 'idle'
-  | 'active'
-  | 'unknown';
+export type VersionLiveCollaborationState = 'absent' | 'disabled' | 'idle' | 'active' | 'unknown';
 
 export type VersionLiveCollaborationStatus = {
   readonly state: VersionLiveCollaborationState;
@@ -70,10 +76,13 @@ export function createVersionLiveCollaborationStatusReader(
 ): VersionLiveCollaborationStatusReader {
   return () => {
     const state = input.readState();
-    return {
-      ...state,
-      statusRevision: state.statusRevision ?? defaultStatusRevision(state),
-    };
+    const projected = projectLiveCollaborationStatus(withDefaultStatusRevision(state));
+    return (
+      projected ??
+      unknownLiveCollaborationStatus(
+        'The local VC-05 live-collaboration state reader returned an invalid payload.',
+      )
+    );
   };
 }
 
@@ -141,10 +150,7 @@ function liveCollaborationDirtyStatus(
     liveCollaboration,
     statusRevision: status.statusRevision,
     unsafeReasons,
-    diagnostics: dedupeDiagnostics([
-      ...unsafeReasons,
-      ...(status.diagnostics ?? []),
-    ]),
+    diagnostics: dedupeDiagnostics([...unsafeReasons, ...(status.diagnostics ?? [])]),
   };
 }
 
@@ -180,7 +186,7 @@ function toPublicLiveCollaborationStatus(
   return {
     state: status.state,
     statusRevision: status.statusRevision,
-    ...(status.roomId ? { roomId: status.roomId } : {}),
+    ...(status.roomId ? { roomId: REDACTED_LIVE_COLLABORATION_ID } : {}),
     ...(status.sidecarStatus ? { sidecarStatus: status.sidecarStatus } : {}),
     ...(typeof status.activeParticipantCount === 'number'
       ? { activeParticipantCount: status.activeParticipantCount }
@@ -224,53 +230,82 @@ function projectLiveCollaborationStatus(value: unknown): VersionLiveCollaboratio
   if (!isLiveCollaborationState(state)) return null;
   if (typeof value.statusRevision !== 'string' || value.statusRevision.length === 0) return null;
 
+  const roomId = optionalStringField(value, 'roomId');
+  const sidecarStatus = optionalStringField(value, 'sidecarStatus');
+  const activeParticipantCount = optionalNumberField(value, 'activeParticipantCount');
+  const remoteProviderAttached = optionalBooleanField(value, 'remoteProviderAttached');
+  const inFlightRemoteUpdateCount = optionalNumberField(value, 'inFlightRemoteUpdateCount');
+  const syncApplyRemoteQueueDepth = optionalNumberField(value, 'syncApplyRemoteQueueDepth');
+  if (
+    roomId === null ||
+    sidecarStatus === null ||
+    activeParticipantCount === null ||
+    remoteProviderAttached === null ||
+    inFlightRemoteUpdateCount === null ||
+    syncApplyRemoteQueueDepth === null
+  ) {
+    return null;
+  }
+
+  const redactedValues = collectSensitiveStrings(value, roomId ? [roomId] : []);
+  const diagnostics = optionalDiagnosticArray(value.diagnostics, redactedValues);
+  if (diagnostics === null) return null;
+
   const status: VersionLiveCollaborationStatus = {
     state,
-    statusRevision: value.statusRevision,
-    ...(optionalString(value.roomId) ? { roomId: optionalString(value.roomId) } : {}),
-    ...(optionalString(value.sidecarStatus)
-      ? { sidecarStatus: optionalString(value.sidecarStatus) }
-      : {}),
-    ...(optionalNumber(value.activeParticipantCount) === undefined
-      ? {}
-      : { activeParticipantCount: optionalNumber(value.activeParticipantCount) }),
-    ...(optionalBoolean(value.remoteProviderAttached) === undefined
-      ? {}
-      : { remoteProviderAttached: optionalBoolean(value.remoteProviderAttached) }),
-    ...(optionalNumber(value.inFlightRemoteUpdateCount) === undefined
-      ? {}
-      : { inFlightRemoteUpdateCount: optionalNumber(value.inFlightRemoteUpdateCount) }),
-    ...(optionalNumber(value.syncApplyRemoteQueueDepth) === undefined
-      ? {}
-      : { syncApplyRemoteQueueDepth: optionalNumber(value.syncApplyRemoteQueueDepth) }),
+    statusRevision: defaultStatusRevision({
+      state,
+      ...(roomId ? { roomId } : {}),
+      ...(sidecarStatus ? { sidecarStatus } : {}),
+      ...(activeParticipantCount === undefined ? {} : { activeParticipantCount }),
+      ...(remoteProviderAttached === undefined ? {} : { remoteProviderAttached }),
+      ...(inFlightRemoteUpdateCount === undefined ? {} : { inFlightRemoteUpdateCount }),
+      ...(syncApplyRemoteQueueDepth === undefined ? {} : { syncApplyRemoteQueueDepth }),
+    }),
+    ...(roomId ? { roomId } : {}),
+    ...(sidecarStatus ? { sidecarStatus } : {}),
+    ...(activeParticipantCount === undefined ? {} : { activeParticipantCount }),
+    ...(remoteProviderAttached === undefined ? {} : { remoteProviderAttached }),
+    ...(inFlightRemoteUpdateCount === undefined ? {} : { inFlightRemoteUpdateCount }),
+    ...(syncApplyRemoteQueueDepth === undefined ? {} : { syncApplyRemoteQueueDepth }),
   };
-  const diagnostics = optionalDiagnosticArray(value.diagnostics);
-  if (value.diagnostics !== undefined && !diagnostics) return null;
   return diagnostics ? { ...status, diagnostics } : status;
 }
 
-function defaultStatusRevision(
-  state:
-    | ReturnType<VersionLiveCollaborationStatusReaderInput['readState']>
-    | VersionLiveCollaborationStatus,
-): string {
+function withDefaultStatusRevision(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  return {
+    ...value,
+    statusRevision: optionalString(value.statusRevision) ?? defaultStatusRevision(value),
+  };
+}
+
+function defaultStatusRevision(state: {
+  readonly state?: unknown;
+  readonly roomId?: unknown;
+  readonly sidecarStatus?: unknown;
+  readonly activeParticipantCount?: unknown;
+  readonly remoteProviderAttached?: unknown;
+  readonly inFlightRemoteUpdateCount?: unknown;
+  readonly syncApplyRemoteQueueDepth?: unknown;
+}): string {
+  const collaborationState = isLiveCollaborationState(state.state) ? state.state : 'unknown';
+  const sidecarStatus = optionalString(state.sidecarStatus);
+  const activeParticipantCount = optionalNumber(state.activeParticipantCount);
+  const remoteProviderAttached = optionalBoolean(state.remoteProviderAttached);
+  const inFlightRemoteUpdateCount = optionalNumber(state.inFlightRemoteUpdateCount);
+  const syncApplyRemoteQueueDepth = optionalNumber(state.syncApplyRemoteQueueDepth);
   return [
     'liveCollaboration',
-    state.state,
-    'roomId' in state && state.roomId ? `room:${state.roomId}` : null,
-    'sidecarStatus' in state && state.sidecarStatus ? `sidecar:${state.sidecarStatus}` : null,
-    'activeParticipantCount' in state && typeof state.activeParticipantCount === 'number'
-      ? `participants:${state.activeParticipantCount}`
-      : null,
-    'remoteProviderAttached' in state && typeof state.remoteProviderAttached === 'boolean'
-      ? `provider:${state.remoteProviderAttached ? 'attached' : 'none'}`
-      : null,
-    'inFlightRemoteUpdateCount' in state && typeof state.inFlightRemoteUpdateCount === 'number'
-      ? `remoteUpdates:${state.inFlightRemoteUpdateCount}`
-      : null,
-    'syncApplyRemoteQueueDepth' in state && typeof state.syncApplyRemoteQueueDepth === 'number'
-      ? `syncApplyQueue:${state.syncApplyRemoteQueueDepth}`
-      : null,
+    collaborationState,
+    optionalString(state.roomId) ? `room:${REDACTED_LIVE_COLLABORATION_ID}` : null,
+    sidecarStatus ? `sidecar:${sidecarStatus}` : null,
+    activeParticipantCount === undefined ? null : `participants:${activeParticipantCount}`,
+    remoteProviderAttached === undefined
+      ? null
+      : `provider:${remoteProviderAttached ? 'attached' : 'none'}`,
+    inFlightRemoteUpdateCount === undefined ? null : `remoteUpdates:${inFlightRemoteUpdateCount}`,
+    syncApplyRemoteQueueDepth === undefined ? null : `syncApplyQueue:${syncApplyRemoteQueueDepth}`,
   ]
     .filter((entry): entry is string => entry !== null)
     .join(':');
@@ -298,7 +333,7 @@ function diagnosticData(
   return {
     collaborationState: status.state,
     statusRevision: status.statusRevision,
-    ...(status.roomId ? { roomId: status.roomId } : {}),
+    ...(status.roomId ? { roomId: REDACTED_LIVE_COLLABORATION_ID, redacted: true } : {}),
     ...(status.sidecarStatus ? { sidecarStatus: status.sidecarStatus } : {}),
     ...(typeof status.activeParticipantCount === 'number'
       ? { activeParticipantCount: status.activeParticipantCount }
@@ -341,20 +376,139 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function optionalDiagnosticArray(value: unknown): readonly VersionDiagnostic[] | null {
-  if (value === undefined) return [];
+function optionalStringField(
+  value: Readonly<Record<string, unknown>>,
+  key: string,
+): string | undefined | null {
+  if (value[key] === undefined) return undefined;
+  return optionalString(value[key]) ?? null;
+}
+
+function optionalNumberField(
+  value: Readonly<Record<string, unknown>>,
+  key: string,
+): number | undefined | null {
+  if (value[key] === undefined) return undefined;
+  return optionalNumber(value[key]) ?? null;
+}
+
+function optionalBooleanField(
+  value: Readonly<Record<string, unknown>>,
+  key: string,
+): boolean | undefined | null {
+  if (value[key] === undefined) return undefined;
+  return optionalBoolean(value[key]) ?? null;
+}
+
+function optionalDiagnosticArray(
+  value: unknown,
+  extraSensitiveValues: readonly string[],
+): readonly VersionDiagnostic[] | undefined | null {
+  if (value === undefined) return undefined;
   if (!Array.isArray(value)) return null;
+  const diagnostics: VersionDiagnostic[] = [];
   for (const entry of value) {
     if (!isRecord(entry)) return null;
     if (
       typeof entry.code !== 'string' ||
-      typeof entry.severity !== 'string' ||
+      !isDiagnosticSeverity(entry.severity) ||
       typeof entry.message !== 'string'
     ) {
       return null;
     }
+    const data = sanitizeDiagnosticData(entry.data, extraSensitiveValues);
+    const dependency = optionalDiagnosticDependency(entry.dependency);
+    diagnostics.push({
+      code: entry.code,
+      severity: entry.severity,
+      message: redactKnownSensitiveText(entry.message, data.sensitiveValues),
+      ...(dependency ? { dependency } : {}),
+      ...(data.data ? { data: data.data } : {}),
+    });
   }
-  return Object.freeze(value as VersionDiagnostic[]);
+  return Object.freeze(diagnostics);
+}
+
+function sanitizeDiagnosticData(
+  value: unknown,
+  extraSensitiveValues: readonly string[],
+): {
+  readonly data?: NonNullable<VersionDiagnostic['data']>;
+  readonly sensitiveValues: readonly string[];
+} {
+  if (!isRecord(value)) return { sensitiveValues: extraSensitiveValues };
+  const sensitiveValues = collectSensitiveStrings(value, extraSensitiveValues);
+  const data: Record<string, string | number | boolean | null> = {};
+  let redacted = false;
+
+  for (const [key, entry] of Object.entries(value)) {
+    if (!isDiagnosticDataValue(entry)) continue;
+    if (shouldRedactDiagnosticDataValue(key)) {
+      data[key] = REDACTED_LIVE_COLLABORATION_ID;
+      redacted = true;
+      continue;
+    }
+    const sanitized =
+      typeof entry === 'string' ? redactKnownSensitiveText(entry, sensitiveValues) : entry;
+    if (sanitized !== entry) redacted = true;
+    data[key] = sanitized;
+  }
+
+  if (redacted) data.redacted = true;
+  return {
+    ...(Object.keys(data).length > 0 ? { data } : {}),
+    sensitiveValues,
+  };
+}
+
+function collectSensitiveStrings(
+  value: Readonly<Record<string, unknown>>,
+  initialValues: readonly string[],
+): readonly string[] {
+  const sensitiveValues = new Set(initialValues.filter((entry) => entry.length > 0));
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === 'string' && shouldRedactDiagnosticDataValue(key)) {
+      sensitiveValues.add(entry);
+    }
+  }
+  return [...sensitiveValues];
+}
+
+function redactKnownSensitiveText(value: string, sensitiveValues: readonly string[]): string {
+  let redacted = value;
+  for (const sensitive of [...sensitiveValues].sort((a, b) => b.length - a.length)) {
+    redacted = redacted.split(sensitive).join(REDACTED_LIVE_COLLABORATION_ID);
+  }
+  return redacted;
+}
+
+function isDiagnosticDataValue(value: unknown): value is string | number | boolean | null {
+  return value === null || ['string', 'number', 'boolean'].includes(typeof value);
+}
+
+function shouldRedactDiagnosticDataValue(key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+  return (
+    normalizedKey.includes('roomid') ||
+    normalizedKey.includes('userid') ||
+    normalizedKey.includes('providerid') ||
+    normalizedKey.includes('providerref') ||
+    normalizedKey.includes('participantid') ||
+    normalizedKey.includes('clientid') ||
+    normalizedKey.includes('sessionid') ||
+    normalizedKey.includes('authorityref') ||
+    normalizedKey.includes('originid')
+  );
+}
+
+function isDiagnosticSeverity(value: unknown): value is VersionDiagnostic['severity'] {
+  return value === 'info' || value === 'warning' || value === 'error';
+}
+
+function optionalDiagnosticDependency(value: unknown): VersionDiagnostic['dependency'] | undefined {
+  return typeof value === 'string' && LIVE_COLLABORATION_DIAGNOSTIC_DEPENDENCIES.has(value)
+    ? (value as VersionDiagnostic['dependency'])
+    : undefined;
 }
 
 function isLiveCollaborationState(value: unknown): value is VersionLiveCollaborationState {

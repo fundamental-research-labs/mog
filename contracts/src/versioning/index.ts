@@ -26,6 +26,7 @@ export type {
   VersionHistoryWriteMode,
   VersionRedactionPolicy,
 } from './access-policy';
+export * from './runtime-contracts';
 export {
   VERSION_DIFF_DEFAULT_PAGE_LIMIT,
   VERSION_DIFF_MAX_PAGE_LIMIT,

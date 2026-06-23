@@ -39,14 +39,20 @@ import type {
   VersionMergePreviewRecord,
   VersionMergePreviewRecordStatus,
   VersionMetadataDiagnostic,
+  VersionMutationSegment,
+  VersionMutationSegmentFieldName,
+  VersionOperationContext,
   VersionPendingRemotePromotionResultMetadata,
   VersionPendingRemotePromotionSkipReason,
   VersionPendingRemotePromotionStatus,
   VersionPendingRemoteSegmentId,
   VersionProposalVerificationSummary,
+  VersionPublicContractPrivateFieldName,
   VersionRedactionKey,
   VersionRedactionKeySubject,
   VersionRedactionSummary,
+  VersionRuntimeOperationContext,
+  VersionRuntimeOperationContextFieldName,
 } from './index';
 import type {
   MogWorkbookVersionXlsxCommitId,
@@ -112,6 +118,54 @@ type ExpectedCaptureFailureDiagnosticCode =
   | 'write_admission_blocked'
   | 'capture_serialization_failed'
   | 'diagnostics_sink_unavailable';
+type ExpectedRuntimeOperationContextFieldName =
+  | 'runtimeContextId'
+  | 'operationContext'
+  | 'entrypointIds'
+  | 'command'
+  | 'runtimeKind'
+  | 'redactionPolicy'
+  | 'actor'
+  | 'diagnostics';
+type ExpectedMutationSegmentFieldName =
+  | 'segmentId'
+  | 'domainId'
+  | 'domainClass'
+  | 'capabilityState'
+  | 'operationKind'
+  | 'objectIds'
+  | 'beforeDigest'
+  | 'afterDigest'
+  | 'redactionPolicy'
+  | 'attachment';
+type ExpectedPublicContractPrivateFieldName =
+  | 'principal'
+  | 'principalId'
+  | 'principalIds'
+  | 'principalRef'
+  | 'principalScope'
+  | 'principalTag'
+  | 'principalTags'
+  | 'principal_tags'
+  | 'rawPayload'
+  | 'raw_payload'
+  | 'rawPayloadBytes'
+  | 'raw_payload_bytes'
+  | 'payload'
+  | 'payloadBytes'
+  | 'payload_bytes'
+  | 'providerPayload'
+  | 'provider_payload'
+  | 'rawWorkbookBytes'
+  | 'raw_workbook_bytes'
+  | 'workbookBytes'
+  | 'workbook_bytes'
+  | 'credential'
+  | 'credentials'
+  | 'accessToken'
+  | 'access_token'
+  | 'secret'
+  | 'secrets';
 type ExpectedPendingRemotePromotionStatus = 'success' | 'partial' | 'failed';
 type ExpectedPendingRemotePromotionSkipReason =
   | 'batch-status-read-failed'
@@ -165,6 +219,27 @@ type _ExactCaptureFailureStageSet = Assert<
 >;
 type _ExactCaptureFailureDiagnosticCodeSet = Assert<
   IsEqual<VersionCaptureFailureDiagnosticCode, ExpectedCaptureFailureDiagnosticCode>
+>;
+type _ExactRuntimeOperationContextFieldNameSet = Assert<
+  IsEqual<VersionRuntimeOperationContextFieldName, ExpectedRuntimeOperationContextFieldName>
+>;
+type _ExactMutationSegmentFieldNameSet = Assert<
+  IsEqual<VersionMutationSegmentFieldName, ExpectedMutationSegmentFieldName>
+>;
+type _ExactPrivateFieldDenyListSet = Assert<
+  IsEqual<VersionPublicContractPrivateFieldName, ExpectedPublicContractPrivateFieldName>
+>;
+type _RuntimeOperationContextFieldsCoverPublicKeys = Assert<
+  IsEqual<VersionRuntimeOperationContextFieldName, keyof VersionRuntimeOperationContext>
+>;
+type _MutationSegmentFieldsCoverPublicKeys = Assert<
+  IsEqual<VersionMutationSegmentFieldName, keyof VersionMutationSegment>
+>;
+type _RuntimeOperationContextHasNoPrivatePrincipalOrRawPayloadFields = Assert<
+  IsNever<Extract<keyof VersionRuntimeOperationContext, VersionPublicContractPrivateFieldName>>
+>;
+type _MutationSegmentHasNoPrivatePrincipalOrRawPayloadFields = Assert<
+  IsNever<Extract<keyof VersionMutationSegment, VersionPublicContractPrivateFieldName>>
 >;
 type _ExactPendingRemotePromotionStatusSet = Assert<
   IsEqual<VersionPendingRemotePromotionStatus, ExpectedPendingRemotePromotionStatus>
@@ -321,6 +396,111 @@ const metadataDiagnostic: VersionMetadataDiagnostic = Object.freeze({
     redacted: true,
   }),
 });
+
+const publicContractPrivateFieldDenyList = Object.freeze([
+  'principal',
+  'principalId',
+  'principalIds',
+  'principalRef',
+  'principalScope',
+  'principalTag',
+  'principalTags',
+  'principal_tags',
+  'rawPayload',
+  'raw_payload',
+  'rawPayloadBytes',
+  'raw_payload_bytes',
+  'payload',
+  'payloadBytes',
+  'payload_bytes',
+  'providerPayload',
+  'provider_payload',
+  'rawWorkbookBytes',
+  'raw_workbook_bytes',
+  'workbookBytes',
+  'workbook_bytes',
+  'credential',
+  'credentials',
+  'accessToken',
+  'access_token',
+  'secret',
+  'secrets',
+] as const satisfies readonly VersionPublicContractPrivateFieldName[]);
+
+function countForbiddenPrivateFieldKeys(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.reduce((count, item) => count + countForbiddenPrivateFieldKeys(item), 0);
+  }
+  if (value === null || typeof value !== 'object') {
+    return 0;
+  }
+  return Object.entries(value as Readonly<Record<string, unknown>>).reduce(
+    (count, [key, item]) =>
+      count +
+      (publicContractPrivateFieldDenyList.includes(key as VersionPublicContractPrivateFieldName)
+        ? 1
+        : 0) +
+      countForbiddenPrivateFieldKeys(item),
+    0,
+  );
+}
+
+const runtimeAuthor: VersionAuthor = Object.freeze({
+  authorId: 'author:sha256:vc02-runtime-public-fixture',
+  actorKind: 'automation',
+  displayName: 'VC02 Runtime Public Fixture',
+});
+
+const operationContext: VersionOperationContext = Object.freeze({
+  operationId: 'operation:vc02-runtime-public-fixture',
+  kind: 'mutation',
+  author: runtimeAuthor,
+  createdAt: '2026-06-22T00:00:00.000Z',
+  workbookId: 'workbook:vc02-runtime-public-fixture',
+  sheetIds: Object.freeze(['sheet:runtime-public-fixture']),
+  domainIds: Object.freeze(['cells.values']),
+  capturePolicy: 'commitEligible',
+  writeAdmissionMode: 'capture',
+  rolloutStage: versionCapabilityGate.rolloutStage,
+  capabilityGate: versionCapabilityGate,
+  clientRequestId: 'client-request:vc02-runtime-public-fixture',
+});
+
+const runtimeOperationContext: VersionRuntimeOperationContext = Object.freeze({
+  runtimeContextId: 'runtime-context:vc02-public-contract-spine',
+  operationContext,
+  entrypointIds: Object.freeze(['compute_batch_set_cells_by_position']),
+  command: 'compute_batch_set_cells_by_position',
+  runtimeKind: 'node',
+  redactionPolicy: 'metadata-only',
+  actor: Object.freeze({
+    actorKind: runtimeAuthor.actorKind,
+    redactedAuthorClass: runtimeAuthor.actorKind,
+  }),
+  diagnostics: Object.freeze([metadataDiagnostic]),
+});
+
+const mutationSegment: VersionMutationSegment = Object.freeze({
+  segmentId: 'mutation-segment:vc02-public-contract-spine',
+  domainId: 'cells.values',
+  domainClass: 'authored',
+  capabilityState: 'contracted',
+  operationKind: operationContext.kind,
+  objectIds: Object.freeze(['cell:sheet-runtime-public-fixture:A1']),
+  beforeDigest: digest,
+  afterDigest: digest,
+  redactionPolicy: runtimeOperationContext.redactionPolicy,
+});
+
+const publicContractPrivateFieldLeakCount = countForbiddenPrivateFieldKeys(
+  Object.freeze([runtimeOperationContext, mutationSegment]),
+);
+if (publicContractPrivateFieldLeakCount !== 0) {
+  throw new Error(
+    'VC-02 public runtime context fixtures contain private principal/raw payload keys.',
+  );
+}
+const publicContractPrivateFieldLeakCountZero = publicContractPrivateFieldLeakCount as 0;
 
 const pendingRemoteSegmentId =
   'pending-remote-segment:sha256:vc18-public-contract-fixture' as VersionPendingRemoteSegmentId;
@@ -780,6 +960,10 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   controlPlanePreflight,
   controlPlaneCompareAndSwap,
   metadataDiagnostic,
+  operationContext,
+  runtimeOperationContext,
+  mutationSegment,
+  publicContractPrivateFieldLeakCount: publicContractPrivateFieldLeakCountZero,
   pendingRemotePromotionResult,
   authorRedactionKey,
   providerRedactionKey,

@@ -131,6 +131,9 @@ import type {
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsAllRows,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS as ContractsVersioningDomainPolicyRegistryExportSupportsRequiredRows,
   PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT as ContractsVersioningDomainPolicyRowCount,
+  VERSION_MUTATION_SEGMENT_FIELD_NAMES as ContractsVersioningMutationSegmentFieldNames,
+  VERSION_PUBLIC_CONTRACT_PRIVATE_FIELD_DENY_LIST as ContractsVersioningPrivateFieldDenyList,
+  VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES as ContractsVersioningRuntimeOperationContextFieldNames,
   ReleaseArtifactManifest,
   VersionAgentProposalAcceptResolutionPolicy,
   VersionAgentProposalAcceptResult as VersioningAgentProposalAcceptResult,
@@ -179,6 +182,7 @@ import type {
   VersionPendingRemotePromotionStatus,
   VersionPendingRemoteSegmentId as VersioningPendingRemoteSegmentId,
   VersionProposalVerificationSummary,
+  VersionRuntimeOperationContext,
   VersionShadowObservationRecord,
   VersionShadowObservationSink,
   VersionSyncOperationContext,
@@ -197,6 +201,11 @@ import {
   PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
 } from './domain-policy-registry';
 import { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
+import {
+  VERSION_MUTATION_SEGMENT_FIELD_NAMES,
+  VERSION_PUBLIC_CONTRACT_PRIVATE_FIELD_DENY_LIST,
+  VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES,
+} from './runtime-contracts';
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
@@ -260,7 +269,10 @@ type _ContractsApiWorkbookEntryExportsListAgentProposalsInput = Assert<
   IsEqual<ContractsApiListAgentProposalsInput, ContractsWorkbookListAgentProposalsInput>
 >;
 type _ContractsApiWorkbookEntryExportsMarkAgentProposalVerifiedInput = Assert<
-  IsEqual<ContractsApiMarkAgentProposalVerifiedInput, ContractsWorkbookMarkAgentProposalVerifiedInput>
+  IsEqual<
+    ContractsApiMarkAgentProposalVerifiedInput,
+    ContractsWorkbookMarkAgentProposalVerifiedInput
+  >
 >;
 type _ContractsApiWorkbookEntryExportsOpenProposalReviewInput = Assert<
   IsEqual<ContractsApiOpenProposalReviewInput, ContractsWorkbookOpenProposalReviewInput>
@@ -451,6 +463,20 @@ type _ContractsVersioningExportsDomainPolicyAllRowsExportSupportValue = Assert<
     typeof PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS
   >
 >;
+type _ContractsVersioningExportsRuntimeContractValues = Assert<
+  IsEqual<
+    [
+      typeof ContractsVersioningRuntimeOperationContextFieldNames,
+      typeof ContractsVersioningMutationSegmentFieldNames,
+      typeof ContractsVersioningPrivateFieldDenyList,
+    ],
+    [
+      typeof VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES,
+      typeof VERSION_MUTATION_SEGMENT_FIELD_NAMES,
+      typeof VERSION_PUBLIC_CONTRACT_PRIVATE_FIELD_DENY_LIST,
+    ]
+  >
+>;
 
 const PUBLIC_DOMAIN_POLICY_INTERNAL_FIELD_NAMES = Object.freeze([
   'ownerWorkstream',
@@ -595,7 +621,8 @@ const vc03ExportSurfaceDomainIds = Object.freeze([
 const contractedCapabilityState: VersionDomainCapabilityState = 'contracted';
 const capturePolicy: CapturePolicy = 'commitEligible';
 const writeAdmissionMode: VersionWriteAdmissionMode = 'capture';
-const publicDomainPolicyRegistry: VersionDomainPolicyRegistry = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY;
+const publicDomainPolicyRegistry: VersionDomainPolicyRegistry =
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY;
 
 function requirePublicDomainPolicy(matrixRowId: string): DomainCapabilityPolicyManifest {
   const row = publicDomainPolicyRegistry.domains.find(
@@ -610,13 +637,15 @@ function requirePublicDomainPolicy(matrixRowId: string): DomainCapabilityPolicyM
 const publicDomainPolicy = requirePublicDomainPolicy('workbook-metadata');
 const publicDomainCapabilityStates: VersionDomainCapabilityStateMap =
   publicDomainPolicy.capabilityStates;
-const publicDomainPolicyInternalOracleFieldLeakCount =
-  publicDomainPolicyRegistry.domains.reduce((count, row) => {
+const publicDomainPolicyInternalOracleFieldLeakCount = publicDomainPolicyRegistry.domains.reduce(
+  (count, row) => {
     const leakedFieldCount = PUBLIC_DOMAIN_POLICY_INTERNAL_FIELD_NAMES.filter((field) =>
       Object.prototype.hasOwnProperty.call(row, field),
     ).length;
     return count + leakedFieldCount;
-  }, 0);
+  },
+  0,
+);
 
 if (publicDomainPolicyInternalOracleFieldLeakCount !== 0) {
   throw new Error('Public version domain policy registry contains internal oracle fields.');
@@ -813,6 +842,8 @@ const operationContext: VersionOperationContext = Object.freeze({
   writeAdmissionMode,
   collaboration: syncOperationContext,
 });
+const runtimeOperationContext: VersionRuntimeOperationContext =
+  VERSIONING_CONTRACT_FIXTURES.runtimeOperationContext;
 const mutationSegment: VersionMutationSegment = Object.freeze({
   segmentId: 'vc03-05-public-export-surface-segment',
   domainId: 'cells.values',
@@ -823,6 +854,8 @@ const mutationSegment: VersionMutationSegment = Object.freeze({
   afterDigest: digest,
   redactionPolicy: 'metadata-only',
 });
+const publicContractPrivateFieldLeakCount =
+  VERSIONING_CONTRACT_FIXTURES.publicContractPrivateFieldLeakCount;
 const domainReceipt: DomainMutationReceipt = Object.freeze({
   receiptId: 'vc03-05-public-export-surface-receipt',
   domainId: mutationSegment.domainId,
@@ -936,6 +969,14 @@ const shadowObservationSink: VersionShadowObservationSink = Object.freeze({
 export const VERSIONING_PUBLIC_EXPORT_FIXTURES = Object.freeze({
   vc03ExportSurfaceDomainIds,
   operationContext,
+  runtimeOperationContext,
+  runtimeContractFieldNames: Object.freeze({
+    runtimeOperationContext: VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES,
+    mutationSegment: VERSION_MUTATION_SEGMENT_FIELD_NAMES,
+    privateFieldDenyList: VERSION_PUBLIC_CONTRACT_PRIVATE_FIELD_DENY_LIST,
+  }),
+  publicContractPrivateFieldLeakCount,
+  mutationSegment,
   domainReceipt,
   exportMetadata,
   publicDomainPolicyExportSurface,

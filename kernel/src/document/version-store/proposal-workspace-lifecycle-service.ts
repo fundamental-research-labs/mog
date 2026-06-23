@@ -28,6 +28,8 @@ export type ProviderBackedCommitProposalWorkspaceInput = CommitProposalWorkspace
 export type ProviderBackedProposalWorkspaceCommitResult = {
   readonly workspaceId: string;
   readonly proposalCommitId: WorkbookCommitId;
+  readonly proposalBranchName?: AgentProposal['proposalBranchName'];
+  readonly committedFromHeadId?: WorkbookCommitId;
   readonly diagnostics?: readonly VersionDiagnostic[];
 };
 
@@ -56,6 +58,62 @@ export function isProposalWorkspaceLifecycleService(
     typeof value.disposeProposalWorkspace === 'function' &&
     typeof value.commitProposalWorkspace === 'function'
   );
+}
+
+export function proposalWorkspaceStaleHeadResult<T>(input: {
+  readonly operation: 'commitProposalWorkspace';
+  readonly proposalId: string;
+  readonly workspaceId: string;
+  readonly proposalBranchName: string;
+  readonly expectedWorkspaceHeadId: WorkbookCommitId;
+  readonly actualProposalBranchHeadId: WorkbookCommitId;
+}): VersionResult<T> {
+  return {
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: `workbook.version.${input.operation}`,
+      diagnostics: [proposalWorkspaceStaleHeadDiagnostic(input)],
+    },
+  };
+}
+
+export function proposalWorkspaceStaleHeadDiagnostic(input: {
+  readonly operation: 'commitProposalWorkspace';
+  readonly proposalId: string;
+  readonly workspaceId: string;
+  readonly proposalBranchName: string;
+  readonly expectedWorkspaceHeadId: WorkbookCommitId;
+  readonly actualProposalBranchHeadId: WorkbookCommitId;
+}): VersionDiagnostic {
+  return diagnostic(
+    'stale_proposal_workspace_head',
+    'warning',
+    'Proposal workspace branch head changed after the workspace was opened.',
+    {
+      operation: input.operation,
+      proposalId: input.proposalId,
+      workspaceId: input.workspaceId,
+      proposalBranchName: input.proposalBranchName,
+      expectedWorkspaceHeadId: input.expectedWorkspaceHeadId,
+      actualProposalBranchHeadId: input.actualProposalBranchHeadId,
+    },
+  );
+}
+
+function diagnostic(
+  code: string,
+  severity: VersionDiagnostic['severity'],
+  message: string,
+  data: Readonly<Record<string, string | number | boolean | null>>,
+): VersionDiagnostic {
+  return {
+    code,
+    severity,
+    message,
+    owner: 'version-store',
+    data,
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

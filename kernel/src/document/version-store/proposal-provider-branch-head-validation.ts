@@ -22,6 +22,7 @@ export type ProposalBranchFastForwardValidationResult =
   | {
       readonly ok: false;
       readonly stale: true;
+      readonly staleReason: 'proposal_branch_head_changed' | 'proposal_not_fast_forward';
       readonly diagnostics: readonly VersionDiagnostic[];
     }
   | { readonly ok: false; readonly result: VersionResult<never> };
@@ -124,19 +125,8 @@ export async function ensureProposalBranchFastForwardFromExpectedHead(input: {
       return {
         ok: false,
         stale: true,
-        diagnostics: [
-          diagnostic(
-            'stale_proposal_branch_head',
-            'warning',
-            'Proposal branch head changed after the proposal was committed.',
-            {
-              operation: input.operation,
-              proposalBranchName: input.proposalBranchName,
-              expectedProposalCommitId: input.proposalCommitId,
-              actualProposalBranchHeadId: branchRef.ref.commitId,
-            },
-          ),
-        ],
+        staleReason: 'proposal_branch_head_changed',
+        diagnostics: [staleProposalBranchHeadDiagnostic(input, branchRef.ref.commitId)],
       };
     }
 
@@ -148,19 +138,8 @@ export async function ensureProposalBranchFastForwardFromExpectedHead(input: {
       return {
         ok: false,
         stale: true,
-        diagnostics: [
-          diagnostic(
-            'proposal_not_fast_forward',
-            'warning',
-            'Proposal commit no longer descends from the expected target head.',
-            {
-              operation: input.operation,
-              proposalBranchName: input.proposalBranchName,
-              expectedTargetHeadId: input.expectedHeadCommitId,
-              proposalCommitId: input.proposalCommitId,
-            },
-          ),
-        ],
+        staleReason: 'proposal_not_fast_forward',
+        diagnostics: [proposalNotFastForwardDiagnostic(input)],
       };
     }
   } catch {
@@ -267,6 +246,46 @@ function diagnosticsForMissingProposalBranch(
   ];
 }
 
+function staleProposalBranchHeadDiagnostic(
+  input: {
+    readonly operation: string;
+    readonly proposalBranchName: string;
+    readonly proposalCommitId: WorkbookCommitId;
+  },
+  actualProposalBranchHeadId: WorkbookCommitId,
+): VersionDiagnostic {
+  return diagnostic(
+    'stale_proposal_branch_head',
+    'warning',
+    'Proposal branch head changed after the proposal was committed.',
+    {
+      operation: input.operation,
+      proposalBranchName: input.proposalBranchName,
+      expectedProposalCommitId: input.proposalCommitId,
+      actualProposalBranchHeadId,
+    },
+  );
+}
+
+function proposalNotFastForwardDiagnostic(input: {
+  readonly operation: string;
+  readonly proposalBranchName: string;
+  readonly expectedHeadCommitId: WorkbookCommitId;
+  readonly proposalCommitId: WorkbookCommitId;
+}): VersionDiagnostic {
+  return diagnostic(
+    'proposal_not_fast_forward',
+    'warning',
+    'Proposal commit no longer descends from the expected target head.',
+    {
+      operation: input.operation,
+      proposalBranchName: input.proposalBranchName,
+      expectedTargetHeadId: input.expectedHeadCommitId,
+      proposalCommitId: input.proposalCommitId,
+    },
+  );
+}
+
 function graphDiagnostic(value: unknown, operation: string): VersionDiagnostic {
   if (!isRecord(value)) {
     return diagnostic(
@@ -305,10 +324,17 @@ function graphDiagnosticData(
 }
 
 function cloneDiagnostic(value: VersionDiagnostic, operation: string): VersionDiagnostic {
-  return diagnostic(value.code, value.severity, value.message, {
-    operation,
-    ...(value.data ?? {}),
-  });
+  return {
+    code: value.code,
+    severity: value.severity,
+    message: value.message,
+    ...(value.owner === undefined ? {} : { owner: value.owner }),
+    ...(value.dependency === undefined ? {} : { dependency: value.dependency }),
+    data: {
+      operation,
+      ...(value.data ?? {}),
+    },
+  };
 }
 
 function diagnostic(
@@ -321,6 +347,7 @@ function diagnostic(
     code,
     severity,
     message,
+    owner: 'version-store',
     data,
   };
 }

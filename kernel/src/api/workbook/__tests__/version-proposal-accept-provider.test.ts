@@ -143,7 +143,15 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       value: {
         status: 'stale',
         revision: 6,
-        diagnostics: [expect.objectContaining({ code: 'stale_head' })],
+        diagnostics: [
+          expect.objectContaining({
+            code: 'stale_head',
+            data: expect.objectContaining({
+              expectedTargetHeadId: graph.rootCommitId,
+              actualTargetHeadId: movedMainCommitId,
+            }),
+          }),
+        ],
       },
     });
   });
@@ -236,8 +244,13 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         status: 'stale',
         revision: 6,
         diagnostics: [
-          expect.objectContaining({ code: 'stale_head' }),
-          expect.objectContaining({ code: 'stale_proposal_branch_head' }),
+          expect.objectContaining({
+            code: 'stale_proposal_branch_head',
+            data: expect.objectContaining({
+              expectedProposalCommitId: ready.proposalCommitId,
+              actualProposalBranchHeadId: expect.stringMatching(/^commit:sha256:/),
+            }),
+          }),
         ],
       },
     });

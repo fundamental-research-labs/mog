@@ -117,6 +117,7 @@ export async function acceptProviderBackedAgentProposal(options: {
       store: store.value,
       input: options.input,
       actualTargetHeadId: target.head.commitId,
+      targetHeadMoved: true,
     });
   }
 
@@ -133,6 +134,7 @@ export async function acceptProviderBackedAgentProposal(options: {
       store: store.value,
       input: options.input,
       actualTargetHeadId: target.head.commitId,
+      targetHeadMoved: false,
       diagnostics: proposalBranchReady.diagnostics,
     });
   }
@@ -149,6 +151,8 @@ export async function acceptProviderBackedAgentProposal(options: {
       store: store.value,
       input: options.input,
       actualTargetHeadId: advanced.actualTargetHeadId ?? target.head.commitId,
+      targetHeadMoved: true,
+      diagnostics: diagnosticsFromFailureResult(advanced.result),
     });
   }
 
@@ -356,21 +360,39 @@ async function markProposalStale(options: {
   readonly store: AgentProposalMetadataStore;
   readonly input: AcceptAgentProposalInput;
   readonly actualTargetHeadId: WorkbookCommitId;
+  readonly targetHeadMoved: boolean;
   readonly diagnostics?: readonly VersionDiagnostic[];
 }): Promise<VersionResult<AgentProposalAcceptResult>> {
+  const diagnostics = [
+    ...(options.targetHeadMoved
+      ? [
+          diagnostic('stale_head', 'warning', 'Target ref moved before proposal acceptance.', {
+            expectedTargetHeadId: options.input.expectedTargetHeadId,
+            actualTargetHeadId: options.actualTargetHeadId,
+          }),
+        ]
+      : []),
+    ...(options.diagnostics ?? []),
+  ];
   const updated = await options.store.updateProposal({
     clientRequestId: options.input.clientRequestId,
     proposalId: options.input.proposalId,
     expectedRevision: options.input.expectedRevision,
     status: 'stale',
     trustedActor: options.input.actor,
-    diagnostics: [
-      diagnostic('stale_head', 'warning', 'Target ref moved before proposal acceptance.', {
-        expectedTargetHeadId: options.input.expectedTargetHeadId,
-        actualTargetHeadId: options.actualTargetHeadId,
-      }),
-      ...(options.diagnostics ?? []),
-    ],
+    diagnostics: diagnostics.length
+      ? diagnostics
+      : [
+          diagnostic(
+            'proposal_stale',
+            'warning',
+            'Proposal became stale before acceptance completed.',
+            {
+              expectedTargetHeadId: options.input.expectedTargetHeadId,
+              actualTargetHeadId: options.actualTargetHeadId,
+            },
+          ),
+        ],
   });
   if (!updated.ok) return storeFailure(updated);
 
@@ -470,6 +492,10 @@ function graphFailure<T>(diagnostics: readonly unknown[]): VersionResult<T> {
           ],
     },
   };
+}
+
+function diagnosticsFromFailureResult(result: VersionResult<never>): readonly VersionDiagnostic[] {
+  return result.ok || result.error.code !== 'target_unavailable' ? [] : result.error.diagnostics;
 }
 
 function graphDiagnostic(value: unknown): VersionDiagnostic {

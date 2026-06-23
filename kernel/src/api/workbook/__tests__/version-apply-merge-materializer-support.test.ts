@@ -146,7 +146,7 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
                 materializer: 'semantic-cell-merge-commit-materializer.v1',
                 structuralKind: 'metadata',
                 domain: 'sheet',
-                propertyPath: 'name',
+                propertyPath: 'redacted',
                 reason: 'unsupportedStructuralDomain',
                 noop: true,
               }),

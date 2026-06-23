@@ -81,6 +81,7 @@ describe('WorkbookVersion IndexedDB public cell edit commit/diff vertical', () =
           parents: [rootHead.id],
         },
       });
+      wb.markClean();
       await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
         dirty: {
           hasUncommittedLocalChanges: false,

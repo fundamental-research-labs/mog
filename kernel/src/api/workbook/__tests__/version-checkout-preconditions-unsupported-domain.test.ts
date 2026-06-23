@@ -52,7 +52,7 @@ describe('WorkbookVersion checkout unsupported-domain preconditions', () => {
                 payload: expect.objectContaining({
                   reason: 'checkoutPreflightUnsafe',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),

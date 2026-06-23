@@ -51,7 +51,9 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
-      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      if (!commitResult.ok) {
+        throw new Error(`expected commit success: ${JSON.stringify(commitResult.error)}`);
+      }
       const committed = commitResult.value;
       sourceWb.markClean();
 
@@ -239,7 +241,17 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     let checkoutWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      sourceWb = await sourceHandle.workbook({
+        versioning: withVersionManifest({
+          provider,
+          captureNormalCommit: createCellEditNormalCommitCapture({
+            address: 'A1',
+            value: 'hidden-source',
+            label: 'visible active sheet selection',
+          }),
+        }),
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       await sourceWb.activeSheet.setName('Hidden Input');
       await sourceWb.activeSheet.setCell('A1', 'hidden-source');
       const visibleSheet = await sourceWb.sheets.add('Visible Output');
@@ -256,7 +268,9 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           symbolicHeadRevision: initialized.symbolicHead.revision,
         },
       });
-      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      if (!commitResult.ok) {
+        throw new Error(`expected commit success: ${JSON.stringify(commitResult.error)}`);
+      }
       const committed = commitResult.value;
       sourceWb.markClean();
 

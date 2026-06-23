@@ -50,7 +50,7 @@ describe('WorkbookVersion checkout local preconditions', () => {
                 payload: expect.objectContaining({
                   reason: 'dirtyWorkingState',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
@@ -107,7 +107,7 @@ describe('WorkbookVersion checkout local preconditions', () => {
                 payload: expect.objectContaining({
                   reason: 'checkoutPreflightUnsafe',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
@@ -159,7 +159,7 @@ describe('WorkbookVersion checkout local preconditions', () => {
                 payload: expect.objectContaining({
                   reason: 'checkoutPreflightStale',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
@@ -202,7 +202,7 @@ describe('WorkbookVersion checkout local preconditions', () => {
                 redacted: true,
                 payload: expect.objectContaining({
                   targetKind: 'commit',
-                  commitId: missingCommitId,
+                  commitId: 'redacted',
                 }),
               }),
             }),

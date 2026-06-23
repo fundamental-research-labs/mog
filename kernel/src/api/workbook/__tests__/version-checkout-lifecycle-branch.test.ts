@@ -126,8 +126,8 @@ describe('WorkbookVersion checkout branch lifecycle', () => {
                 payload: expect.objectContaining({
                   reason: 'staleWorkspaceHead',
                   staleReason: 'refMoved',
-                  currentRefHeadId: moved.id,
-                  refHeadAtMaterialization: branchBase.id,
+                  currentRefHeadId: 'redacted',
+                  refHeadAtMaterialization: 'redacted',
                 }),
               }),
             }),

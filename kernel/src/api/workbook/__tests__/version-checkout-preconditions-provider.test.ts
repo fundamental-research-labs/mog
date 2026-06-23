@@ -53,7 +53,7 @@ describe('WorkbookVersion checkout provider preconditions', () => {
                 payload: expect.objectContaining({
                   reason: 'pendingProviderWrites',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                   pendingRemoteSegmentCount: 1,
                 }),
               }),
@@ -118,7 +118,7 @@ describe('WorkbookVersion checkout provider preconditions', () => {
                 redacted: true,
                 payload: expect.objectContaining({
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                   mutationGuarantee: 'no-workbook-mutation',
                   rollbackSafe: true,
                 }),

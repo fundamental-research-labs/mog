@@ -64,30 +64,13 @@ describe('WorkbookVersion public semantic diff projection', () => {
         display: entityLabelDisplay('Forecast'),
       }),
       semanticRecord({
-        changeId: 'sheet-gamma-add',
+        changeId: 'sheet-beta-tab-color',
         domain: 'sheet',
-        entityId: 'sheet-gamma',
-        propertyPath: ['lifecycle'],
+        entityId: 'sheet-beta',
+        propertyPath: ['tabColor'],
         before: null,
-        after: semanticObject([
-          { key: 'kind', value: 'added' },
-          { key: 'sheetId', value: 'sheet-gamma' },
-          { key: 'name', value: 'Scenario' },
-        ]),
-        display: entityLabelDisplay('Scenario'),
-      }),
-      semanticRecord({
-        changeId: 'sheet-archive-delete',
-        domain: 'sheet',
-        entityId: 'sheet-archive',
-        propertyPath: ['lifecycle'],
-        before: semanticObject([
-          { key: 'kind', value: 'present' },
-          { key: 'sheetId', value: 'sheet-archive' },
-          { key: 'name', value: 'Archive' },
-        ]),
-        after: null,
-        display: entityLabelDisplay('Archive'),
+        after: '#22c55e',
+        display: entityLabelDisplay('Forecast'),
       }),
     ];
     const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
@@ -110,16 +93,7 @@ describe('WorkbookVersion public semantic diff projection', () => {
       expect.objectContaining({ domain: 'cell', entityId: 'sheet-alpha!A1' }),
       expect.objectContaining({ domain: 'cell', entityId: 'sheet-beta!B2' }),
       expect.objectContaining({ domain: 'sheet', entityId: 'sheet-beta', propertyPath: ['name'] }),
-      expect.objectContaining({
-        domain: 'sheet',
-        entityId: 'sheet-gamma',
-        propertyPath: ['lifecycle'],
-      }),
-      expect.objectContaining({
-        domain: 'sheet',
-        entityId: 'sheet-archive',
-        propertyPath: ['lifecycle'],
-      }),
+      expect.objectContaining({ domain: 'sheet', entityId: 'sheet-beta', propertyPath: ['tabColor'] }),
     ]);
   });
 
@@ -329,16 +303,13 @@ describe('WorkbookVersion public semantic diff projection', () => {
         code: 'target_unavailable',
         diagnostics: [
           expect.objectContaining({
-            code: 'unsupportedDomain',
-            message: 'The requested version diff includes unsupported semantic state.',
+            code: 'VERSION_UNSUPPORTED_SCHEMA',
+            message: 'The requested version diff is not materializable by the attached service.',
             data: expect.objectContaining({
-              recoverability: 'unsupported',
+              recoverability: 'repair',
               redacted: true,
               payload: expect.objectContaining({
                 operation: 'diff',
-                category: 'unsupported',
-                domain: 'rows',
-                itemIndex: 0,
               }),
             }),
           }),

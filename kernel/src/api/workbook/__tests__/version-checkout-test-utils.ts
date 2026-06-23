@@ -29,7 +29,10 @@ import {
   type VersionGraphInitializeResult,
   type VersionGraphStore,
 } from '../../../document/version-store/provider';
-import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnBridgeMock,
+  versioningWithDomainSupportManifest,
+} from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -112,7 +115,7 @@ export function createMockEventBus() {
 
 export function createMockCtx(overrides: Record<string, unknown> = {}) {
   const versioning = overrides.versioning as Record<string, unknown> | undefined;
-  return {
+  const ctx = {
     computeBridge: {},
     writeGate: {
       assertWritable: jest.fn(),
@@ -126,6 +129,8 @@ export function createMockCtx(overrides: Record<string, unknown> = {}) {
     ...overrides,
     ...(versioning ? { versioning: versioningWithDomainSupportManifest(versioning) } : {}),
   } as any;
+  installVersionDomainDetectorNoopsOnBridgeMock(ctx.computeBridge);
+  return ctx;
 }
 
 export function createWorkbook(overrides?: Partial<WorkbookConfig>) {

@@ -175,7 +175,7 @@ describe('WorkbookVersion diff ref selectors', () => {
               payload: expect.objectContaining({
                 operation: 'diff',
                 selector,
-                refName,
+                refName: 'redacted',
               }),
             }),
           }),
@@ -384,7 +384,7 @@ describe('WorkbookVersion diff ref selectors', () => {
                 redacted: true,
                 payload: expect.objectContaining({
                   operation: 'diff',
-                  category,
+                  category: category === 'subset-hidden' ? 'redacted' : category,
                   completenessCode: diagnostic.code,
                   completenessSeverity: diagnostic.severity,
                 }),

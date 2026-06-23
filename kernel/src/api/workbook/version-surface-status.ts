@@ -392,7 +392,7 @@ function buildCapabilityStates(
       diagnostics,
       capability,
       'hostCapability',
-      `Host policy denies ${capability}.`,
+      'Host policy denies this version capability.',
       false,
       'version.surfaceStatus.hostCapabilityDenied',
     );

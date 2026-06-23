@@ -31,6 +31,15 @@ const SURFACE_CAPABILITY_KEYS = [
   'version:remotePromote',
 ] as const;
 
+const HOST_DENIAL_SPLIT_CAPABILITIES = [
+  'version:reviewRead',
+  'version:reviewWrite',
+  'version:proposal',
+  'version:revert',
+  'version:provenance',
+  'version:mergeApply',
+] as const;
+
 type SurfaceCapabilityForAssertion = {
   readonly enabled: boolean;
   readonly dependency?: string;
@@ -183,6 +192,25 @@ function createSurfaceReadyVersionWithContext(
     planCheckout,
     merge,
   };
+}
+
+function createSplitCapabilityReadyVersion(ctxOverrides: Record<string, unknown> = {}) {
+  return createSurfaceReadyVersionWithContext(ctxOverrides, {
+    reviewService: {
+      listReviews: jest.fn(),
+      getReview: jest.fn(),
+      getReviewDiff: jest.fn(),
+      createReview: jest.fn(),
+      appendReviewDecision: jest.fn(),
+      updateReviewStatus: jest.fn(),
+    },
+    proposalService: createCompleteProposalService(),
+    captureMergeCommit: jest.fn(),
+    mergeCommitMaterializer: { kind: 'test-materializer' },
+    provenanceTruthService: {
+      vc09ProvenanceTruthComplete: true,
+    },
+  });
 }
 
 describe('WorkbookVersion surface status', () => {
@@ -444,7 +472,9 @@ describe('WorkbookVersion surface status', () => {
     const surface = await surfaceReady.version.getSurfaceStatus();
 
     expect(surface.stage).toBe('authoring');
+    expect(surface.featureGateEnabled).toBe(true);
     expect(surface.capabilities['version:read']).toEqual({ enabled: true });
+    expect(surface.capabilities['version:commit']).toEqual({ enabled: true });
     expect(surface.capabilities['version:mergePreview']).toMatchObject({
       enabled: false,
       dependency: 'featureGate',
@@ -745,6 +775,77 @@ describe('WorkbookVersion surface status', () => {
       'version.surfaceStatus.provenanceUnavailable',
     );
   });
+
+  it('derives review, proposal, revert, provenance, and merge apply capabilities independently', async () => {
+    const { version } = createSplitCapabilityReadyVersion();
+
+    const surface = await version.getSurfaceStatus();
+
+    for (const capability of [
+      'version:reviewRead',
+      'version:reviewWrite',
+      'version:proposal',
+      'version:provenance',
+      'version:mergeApply',
+    ] as const) {
+      expect(capabilityState(surface, capability)).toEqual({ enabled: true });
+    }
+    expect(surface.capabilities['version:mergePreview']).toEqual({ enabled: true });
+    expect(capabilityState(surface, 'version:revert')).toMatchObject({
+      enabled: false,
+      dependency: 'upstreamRevertContract',
+      retryable: false,
+    });
+    expect(surface.stage).toBe('provenance');
+  });
+
+  it.each(HOST_DENIAL_SPLIT_CAPABILITIES)(
+    'redacts host-denied disabled reason for %s without collapsing sibling capabilities',
+    async (deniedCapability) => {
+      const { version } = createSplitCapabilityReadyVersion({
+        policySnapshot: {
+          decisions: [{ capability: deniedCapability, decision: 'denied' }],
+        },
+      });
+
+      const surface = await version.getSurfaceStatus();
+      const disabled = capabilityState(surface, deniedCapability);
+
+      expect(disabled).toMatchObject({
+        enabled: false,
+        dependency: 'hostCapability',
+        reason: 'Host policy denies this version capability.',
+        retryable: false,
+      });
+      expect(disabled.reason).not.toContain('version:');
+      expect(disabled.reason).not.toContain(deniedCapability);
+
+      const diagnostic = surface.diagnostics.find(
+        (entry) =>
+          entry.code === 'version.surfaceStatus.hostCapabilityDenied' &&
+          entry.data?.capability === deniedCapability,
+      );
+      expect(diagnostic).toMatchObject({
+        dependency: 'hostCapability',
+        message: 'Host policy denies this version capability.',
+        data: { capability: deniedCapability },
+      });
+
+      for (const capability of HOST_DENIAL_SPLIT_CAPABILITIES) {
+        if (capability === deniedCapability) continue;
+        if (capability === 'version:revert') {
+          expect(capabilityState(surface, capability)).toMatchObject({
+            enabled: false,
+            dependency: 'upstreamRevertContract',
+            retryable: false,
+          });
+          continue;
+        }
+        expect(capabilityState(surface, capability)).toEqual({ enabled: true });
+      }
+      expect(surface.capabilities['version:mergePreview']).toEqual({ enabled: true });
+    },
+  );
 
   it('keeps read surfaces available and disables mutating capabilities when editing is false', async () => {
     const { version } = createSurfaceReadyVersionWithContext({

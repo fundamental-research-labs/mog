@@ -23,6 +23,139 @@ const EXPECTED_TARGET_HEAD = {
   commitId: OURS,
   revision: { kind: 'counter' as const, value: '1' },
 };
+const DETECTOR_SHEET_ID = 'sheet-detector-1';
+const MUTABLE_DOMAIN_DETECTOR_CASES = [
+  {
+    label: 'tables',
+    detectorId: 'detector.tables',
+    matrixRowId: 'tables',
+    domainId: 'tables',
+    missingMethods: ['getAllTablesInSheet'],
+    throwingMethod: 'getAllTablesInSheet',
+  },
+  {
+    label: 'filters',
+    detectorId: 'detector.filters.auto-filter',
+    matrixRowId: 'filters.auto-filter',
+    domainId: 'filters',
+    missingMethods: ['getFiltersInSheet'],
+    throwingMethod: 'getFiltersInSheet',
+  },
+  {
+    label: 'named ranges',
+    detectorId: 'detector.named-ranges',
+    matrixRowId: 'named-ranges',
+    domainId: 'named-ranges',
+    missingMethods: ['namedRangeCount', 'getAllNamedRangesWire'],
+    throwingMethod: 'namedRangeCount',
+  },
+  {
+    label: 'links',
+    detectorId: 'detector.external-links',
+    matrixRowId: 'external-links',
+    domainId: 'external-links',
+    missingMethods: ['getHyperlinks'],
+    throwingMethod: 'getHyperlinks',
+  },
+  {
+    label: 'data validation',
+    detectorId: 'detector.data-validation',
+    matrixRowId: 'data-validation',
+    domainId: 'data-validation',
+    missingMethods: ['getRangeSchemasForSheet'],
+    throwingMethod: 'getRangeSchemasForSheet',
+  },
+] as const;
+
+type MutableDomainDetectorCase = (typeof MUTABLE_DOMAIN_DETECTOR_CASES)[number];
+
+function mutableDomainDetectorNoopBridge(): Record<string, unknown> {
+  return {
+    getAllSheetIds: jest.fn(async () => [DETECTOR_SHEET_ID]),
+    getAllTablesInSheet: jest.fn(async () => []),
+    getFiltersInSheet: jest.fn(async () => []),
+    namedRangeCount: jest.fn(async () => 0),
+    getAllNamedRangesWire: jest.fn(async () => []),
+    getHyperlinks: jest.fn(async () => []),
+    getRangeSchemasForSheet: jest.fn(async () => []),
+  };
+}
+
+function mutableDomainDetectorBridgeWithMissingMethods(
+  detector: MutableDomainDetectorCase,
+): Record<string, unknown> {
+  const bridge = mutableDomainDetectorNoopBridge();
+  for (const method of detector.missingMethods) {
+    delete bridge[method];
+  }
+  return bridge;
+}
+
+function mutableDomainDetectorBridgeWithThrowingMethod(
+  detector: MutableDomainDetectorCase,
+  message: string,
+): Record<string, unknown> {
+  const bridge = mutableDomainDetectorNoopBridge();
+  bridge[detector.throwingMethod] = jest.fn(async () => {
+    throw new Error(message);
+  });
+  return bridge;
+}
+
+function versionWithMutableDomainDetectorBridge(
+  computeBridge: Record<string, unknown>,
+  commit: ReturnType<typeof jest.fn>,
+): WorkbookVersionImpl {
+  return new WorkbookVersionImpl({
+    versioning: {
+      writeService: { commit },
+      domainSupportManifest: freshManifest(),
+      domainSupportManifestOptions: { now: NOW, maxAgeMs: TEN_MINUTES_MS },
+    },
+    computeBridge,
+  } as any);
+}
+
+function expectDetectorPublicDiagnostic(
+  result: Awaited<ReturnType<WorkbookVersionImpl['commit']>>,
+  code:
+    | 'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE'
+    | 'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
+  detector: MutableDomainDetectorCase,
+  recoverability: 'none' | 'retry',
+): void {
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: 'workbook.version.commit',
+    },
+  });
+  if (result.ok) {
+    throw new Error('expected version.commit to fail');
+  }
+
+  expect(result.error.diagnostics).toHaveLength(1);
+  const diagnostic = result.error.diagnostics.find((item) => item.code === code);
+  expect(diagnostic).toMatchObject({
+    code,
+    severity: 'error',
+    message: expect.any(String),
+    data: expect.objectContaining({
+      operation: 'commit',
+      recoverability,
+      messageTemplateId: `version.commit.${code}`,
+      redacted: true,
+      mutationGuarantee: 'no-write-attempted',
+    }),
+  });
+  expect(diagnostic?.data?.payload).toEqual({
+    operation: 'commit',
+    detectorId: detector.detectorId,
+    matrixRowId: detector.matrixRowId,
+    domainId: detector.domainId,
+  });
+}
 
 describe('WorkbookVersion domain support manifest gate', () => {
   it('fails closed before invoking version-capable services when no manifest source is attached', async () => {
@@ -571,6 +704,51 @@ describe('WorkbookVersion domain support manifest gate', () => {
     });
     expect(checkout).not.toHaveBeenCalled();
     expect(planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before invoking the write service when mutable domain detector methods are missing', async () => {
+    for (const detector of MUTABLE_DOMAIN_DETECTOR_CASES) {
+      const commit = jest.fn();
+      const version = versionWithMutableDomainDetectorBridge(
+        mutableDomainDetectorBridgeWithMissingMethods(detector),
+        commit,
+      );
+
+      const result = await version.commit();
+
+      expectDetectorPublicDiagnostic(
+        result,
+        'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE',
+        detector,
+        'none',
+      );
+      expect(commit).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fails closed with redacted public diagnostics when mutable domain detector methods throw', async () => {
+    for (const detector of MUTABLE_DOMAIN_DETECTOR_CASES) {
+      const commit = jest.fn();
+      const version = versionWithMutableDomainDetectorBridge(
+        mutableDomainDetectorBridgeWithThrowingMethod(
+          detector,
+          `Detector read leaked ConfidentialDealRoom42 from https://private.example.invalid/customer-42 while checking ${detector.label}.`,
+        ),
+        commit,
+      );
+
+      const result = await version.commit();
+
+      expectDetectorPublicDiagnostic(
+        result,
+        'VERSION_DOMAIN_SUPPORT_DETECTOR_READ_FAILED',
+        detector,
+        'retry',
+      );
+      expect(JSON.stringify(result)).not.toContain('ConfidentialDealRoom42');
+      expect(JSON.stringify(result)).not.toContain('https://private.example.invalid/customer-42');
+      expect(commit).not.toHaveBeenCalled();
+    }
   });
 
   it('fails closed when an advertised required manifest source is missing', async () => {

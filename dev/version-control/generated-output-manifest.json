@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "vc02.generated-output-manifest.v1",
+  "manifestId": "vc02.generated-output-manifest",
+  "generatedOutputs": [
+    {
+      "path": "dev/version-control/inventory/compute-bridge-write-inventory.json",
+      "kind": "compute-bridge-write-inventory",
+      "generator": "vc02-inventory-baseline",
+      "sha256": "sha256:ba33b79637b60256ead508ad58ef7e010bd47c971975dc81fc0b430299b1734c",
+      "inputs": [
+        {
+          "path": "infra/rust-bridge/bridge-ts/src/emit/bridge.rs",
+          "tracking": "path-only"
+        },
+        {
+          "path": "kernel/src/bridges/compute/compute-bridge.gen.ts",
+          "tracking": "path-only"
+        },
+        {
+          "path": "kernel/src/bridges/compute/compute-bridge.ts",
+          "tracking": "path-only"
+        },
+        {
+          "path": "kernel/src/bridges/compute/compute-core.ts",
+          "tracking": "path-only"
+        },
+        {
+          "path": "kernel/src/bridges/compute/manifest.gen.ts",
+          "tracking": "path-only"
+        }
+      ],
+      "staleDiagnostic": "versioning.generated-output.stale"
+    },
+    {
+      "path": "dev/version-control/registry/operation-classification.json",
+      "kind": "operation-classification-registry",
+      "generator": "dev/version-control/registry/check-operation-classification.mjs",
+      "sha256": "sha256:f0560ece241908bff7e66b86658363a2f095096d0d83b17e4a198672aaad4946",
+      "inputs": [
+        {
+          "path": "dev/version-control/registry/check-operation-classification.mjs",
+          "sha256": "sha256:bf68329fd523fe11a49dec5b37215f2a1faa944a4eaf7aeec690fb9a7e699bae"
+        },
+        {
+          "path": "contracts/src/versioning/index.ts",
+          "tracking": "path-only"
+        },
+        {
+          "path": "dev/version-control/inventory/compute-bridge-write-inventory.json",
+          "sha256": "sha256:ba33b79637b60256ead508ad58ef7e010bd47c971975dc81fc0b430299b1734c"
+        },
+        {
+          "path": "dev/version-control/registry/operation-classification.schema.json",
+          "sha256": "sha256:e45e8124d1332704a39f4ae3b502603f9b0f0c5ef48db008dc0cd0c674bbd78e"
+        },
+        {
+          "path": "kernel/src/bridges/compute/mutation-admission.ts",
+          "tracking": "path-only"
+        },
+        {
+          "path": "kernel/src/bridges/compute/operation-classification.ts",
+          "tracking": "path-only"
+        }
+      ],
+      "staleDiagnostic": "versioning.generated-output.stale"
+    },
+    {
+      "path": "dev/version-control/registry/operation-classification.schema.json",
+      "kind": "operation-classification-schema",
+      "generator": "dev/version-control/registry/check-operation-classification.mjs",
+      "sha256": "sha256:e45e8124d1332704a39f4ae3b502603f9b0f0c5ef48db008dc0cd0c674bbd78e",
+      "inputs": [
+        {
+          "path": "dev/version-control/registry/check-operation-classification.mjs",
+          "sha256": "sha256:bf68329fd523fe11a49dec5b37215f2a1faa944a4eaf7aeec690fb9a7e699bae"
+        },
+        {
+          "path": "contracts/src/versioning/index.ts",
+          "tracking": "path-only"
+        }
+      ],
+      "staleDiagnostic": "versioning.generated-output.stale"
+    }
+  ],
+  "diagnostics": {
+    "staleGeneratedOutput": {
+      "code": "versioning.generated-output.stale",
+      "severity": "error",
+      "description": "A generated VC artifact or one of its declared inputs no longer matches the digest recorded in this manifest."
+    }
+  }
+}

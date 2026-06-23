@@ -1,0 +1,569 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mog.dev/schemas/version-control/operation-classification.schema.json",
+  "title": "VC-02 Operation Classification Registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "registryId",
+    "generated",
+    "contractSources",
+    "contractEnums",
+    "inventory",
+    "wrapperInvocationHints",
+    "capturePolicies",
+    "writeAdmissionModes",
+    "rules",
+    "requiredRepresentativeClasses",
+    "diagnostics"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "vc02.operation-classification.v1"
+    },
+    "registryId": {
+      "const": "vc02.write-admission.operation-classification"
+    },
+    "generated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generator", "deterministic", "sortOrder", "ruleOrder"],
+      "properties": {
+        "generator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deterministic": {
+          "const": true
+        },
+        "sortOrder": {
+          "const": "lexicographic-with-explicit-rule-precedence"
+        },
+        "ruleOrder": {
+          "const": "first-match-wins"
+        }
+      }
+    },
+    "contractSources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/repoPath"
+      }
+    },
+    "contractEnums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationKinds", "domainClasses", "capturePolicies", "writeAdmissionModes"],
+      "properties": {
+        "operationKinds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operationKind"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "domainClasses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/domainClass"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "capturePolicies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capturePolicy"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "writeAdmissionModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/writeAdmissionMode"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "schemaVersion", "baseCommit", "sourceDigest", "coverageExpectation"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repoPath"
+        },
+        "schemaVersion": {
+          "const": "vc02.compute-write-inventory.v1"
+        },
+        "baseCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "sourceDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "coverageExpectation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entryCount", "uniqueCommandCount", "duplicateCommands"],
+          "properties": {
+            "entryCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "uniqueCommandCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "duplicateCommands": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      }
+    },
+    "wrapperInvocationHints": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/invocationKind"
+      },
+      "minProperties": 1
+    },
+    "capturePolicies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "commitEligible",
+        "excluded",
+        "derivedOnly",
+        "rootCreation",
+        "historyGap",
+        "shadowOnly"
+      ],
+      "properties": {
+        "commitEligible": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        },
+        "excluded": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        },
+        "derivedOnly": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        },
+        "rootCreation": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        },
+        "historyGap": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        },
+        "shadowOnly": {
+          "$ref": "#/$defs/capturePolicyDefinition"
+        }
+      }
+    },
+    "writeAdmissionModes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capture",
+        "shadowOnly",
+        "captureDisabledNoHistory",
+        "captureSuspendedWithGap",
+        "block"
+      ],
+      "properties": {
+        "capture": {
+          "$ref": "#/$defs/writeAdmissionDefinition"
+        },
+        "shadowOnly": {
+          "$ref": "#/$defs/writeAdmissionDefinition"
+        },
+        "captureDisabledNoHistory": {
+          "$ref": "#/$defs/writeAdmissionDefinition"
+        },
+        "captureSuspendedWithGap": {
+          "$ref": "#/$defs/writeAdmissionDefinition"
+        },
+        "block": {
+          "$ref": "#/$defs/writeAdmissionDefinition"
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/classificationRule"
+      }
+    },
+    "requiredRepresentativeClasses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/representativeClass"
+      }
+    },
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unclassifiedWrite",
+        "blockedWrite",
+        "missingOperationContext",
+        "staleGeneratedOutput"
+      ],
+      "properties": {
+        "unclassifiedWrite": {
+          "$ref": "#/$defs/diagnosticDefinition"
+        },
+        "blockedWrite": {
+          "$ref": "#/$defs/diagnosticDefinition"
+        },
+        "missingOperationContext": {
+          "$ref": "#/$defs/diagnosticDefinition"
+        },
+        "staleGeneratedOutput": {
+          "$ref": "#/$defs/diagnosticDefinition"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "repoPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^/].*[^/]$|^[^/]$"
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "operationKind": {
+      "enum": [
+        "mutation",
+        "semantic-operation",
+        "derived-output-promotion",
+        "sync-import",
+        "sync-export",
+        "merge",
+        "revert",
+        "review"
+      ]
+    },
+    "domainClass": {
+      "enum": ["authored", "derived", "transient", "packageFidelity", "secret", "external"]
+    },
+    "capturePolicy": {
+      "enum": [
+        "commitEligible",
+        "excluded",
+        "derivedOnly",
+        "rootCreation",
+        "historyGap",
+        "shadowOnly"
+      ]
+    },
+    "writeAdmissionMode": {
+      "enum": [
+        "capture",
+        "shadowOnly",
+        "captureDisabledNoHistory",
+        "captureSuspendedWithGap",
+        "block"
+      ]
+    },
+    "invocationKind": {
+      "enum": [
+        "public-mutation",
+        "public-ui-state",
+        "system-mutation",
+        "undo-redo-control",
+        "lifecycle",
+        "direct-compute-api"
+      ]
+    },
+    "capturePolicyDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "writeAdmissionMode",
+        "captureDisposition",
+        "operationContextPolicy",
+        "historyEffect",
+        "recordsShadowObservation",
+        "description"
+      ],
+      "properties": {
+        "writeAdmissionMode": {
+          "$ref": "#/$defs/writeAdmissionMode"
+        },
+        "captureDisposition": {
+          "enum": ["capture", "exclude", "shadow-only", "suspend-with-gap"]
+        },
+        "operationContextPolicy": {
+          "const": "warning-if-missing-before-transport"
+        },
+        "historyEffect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "recordsShadowObservation": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "writeAdmissionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport", "historyCapture", "description"],
+      "properties": {
+        "transport": {
+          "enum": ["allow", "block"]
+        },
+        "historyCapture": {
+          "enum": ["capture", "shadow-only", "disabled", "suspended-gap", "none"]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "invocationResolution": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "value"],
+          "properties": {
+            "mode": {
+              "const": "fixed"
+            },
+            "value": {
+              "$ref": "#/$defs/invocationKind"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "default"],
+          "properties": {
+            "mode": {
+              "const": "hint-with-default"
+            },
+            "default": {
+              "$ref": "#/$defs/invocationKind"
+            }
+          }
+        }
+      ]
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "invocation",
+        "operationKind",
+        "domainClass",
+        "capturePolicy",
+        "writeAdmissionMode",
+        "rationale"
+      ],
+      "properties": {
+        "invocation": {
+          "$ref": "#/$defs/invocationResolution"
+        },
+        "operationKind": {
+          "$ref": "#/$defs/operationKind"
+        },
+        "domainClass": {
+          "$ref": "#/$defs/domainClass"
+        },
+        "capturePolicy": {
+          "$ref": "#/$defs/capturePolicy"
+        },
+        "writeAdmissionMode": {
+          "$ref": "#/$defs/writeAdmissionMode"
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "match": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "commands"],
+          "properties": {
+            "type": {
+              "const": "exact"
+            },
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "prefixes"],
+          "properties": {
+            "type": {
+              "const": "prefix"
+            },
+            "prefixes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "prefixes"],
+          "properties": {
+            "type": {
+              "const": "default-prefix"
+            },
+            "prefixes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          }
+        }
+      ]
+    },
+    "classificationRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "match", "classification"],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "classification": {
+          "$ref": "#/$defs/classification"
+        },
+        "modeOverrideRationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "representativeClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classId", "command", "inventoryWrapper", "expected", "coveragePurpose"],
+      "properties": {
+        "classId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inventoryWrapper": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "invocation",
+            "operationKind",
+            "domainClass",
+            "capturePolicy",
+            "writeAdmissionMode"
+          ],
+          "properties": {
+            "invocation": {
+              "$ref": "#/$defs/invocationKind"
+            },
+            "operationKind": {
+              "$ref": "#/$defs/operationKind"
+            },
+            "domainClass": {
+              "$ref": "#/$defs/domainClass"
+            },
+            "capturePolicy": {
+              "$ref": "#/$defs/capturePolicy"
+            },
+            "writeAdmissionMode": {
+              "$ref": "#/$defs/writeAdmissionMode"
+            }
+          }
+        },
+        "coveragePurpose": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "diagnosticDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "description"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": ["warning", "error"]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

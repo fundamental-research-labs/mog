@@ -1,0 +1,521 @@
+{
+  "$schema": "./operation-classification.schema.json",
+  "schemaVersion": "vc02.operation-classification.v1",
+  "registryId": "vc02.write-admission.operation-classification",
+  "generated": {
+    "generator": "dev/version-control/registry/check-operation-classification.mjs",
+    "deterministic": true,
+    "sortOrder": "lexicographic-with-explicit-rule-precedence",
+    "ruleOrder": "first-match-wins"
+  },
+  "contractSources": [
+    "contracts/src/versioning/index.ts",
+    "kernel/src/bridges/compute/operation-classification.ts",
+    "kernel/src/bridges/compute/mutation-admission.ts"
+  ],
+  "contractEnums": {
+    "operationKinds": [
+      "mutation",
+      "semantic-operation",
+      "derived-output-promotion",
+      "sync-import",
+      "sync-export",
+      "merge",
+      "revert",
+      "review"
+    ],
+    "domainClasses": ["authored", "derived", "transient", "packageFidelity", "secret", "external"],
+    "capturePolicies": [
+      "commitEligible",
+      "excluded",
+      "derivedOnly",
+      "rootCreation",
+      "historyGap",
+      "shadowOnly"
+    ],
+    "writeAdmissionModes": [
+      "capture",
+      "shadowOnly",
+      "captureDisabledNoHistory",
+      "captureSuspendedWithGap",
+      "block"
+    ]
+  },
+  "inventory": {
+    "path": "dev/version-control/inventory/compute-bridge-write-inventory.json",
+    "schemaVersion": "vc02.compute-write-inventory.v1",
+    "baseCommit": "5f272c766228d54ffe6ca504b746e580a20ad3fc",
+    "sourceDigest": "sha256:034c99758e04f8be713ff4ced7bc9c744633180a5548752d3068bb132496cc2c",
+    "coverageExpectation": {
+      "entryCount": 304,
+      "uniqueCommandCount": 296,
+      "duplicateCommands": [
+        "compute_add_comment_by_position",
+        "compute_apply_sync_update",
+        "compute_begin_undo_group",
+        "compute_complete_deferred_hydration",
+        "compute_end_undo_group",
+        "compute_patch_workbook_settings",
+        "compute_redo",
+        "compute_undo"
+      ]
+    }
+  },
+  "wrapperInvocationHints": {
+    "admitPublicMutation": "public-mutation",
+    "direct-compute-api": "direct-compute-api",
+    "mutatePublic": "public-mutation",
+    "mutatePublicUiState": "public-ui-state",
+    "mutateSystem": "system-mutation",
+    "mutateSystemResult": "system-mutation",
+    "transport.call": "lifecycle"
+  },
+  "capturePolicies": {
+    "commitEligible": {
+      "writeAdmissionMode": "capture",
+      "captureDisposition": "capture",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "append authored workbook mutation to active history",
+      "recordsShadowObservation": true,
+      "description": "Authored workbook writes that are eligible to become version commits."
+    },
+    "excluded": {
+      "writeAdmissionMode": "captureDisabledNoHistory",
+      "captureDisposition": "exclude",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "allow transport without authored history capture unless a rule overrides admission to block",
+      "recordsShadowObservation": true,
+      "description": "Lifecycle, replay, import, and secret-bearing writes that are not captured as authored history."
+    },
+    "derivedOnly": {
+      "writeAdmissionMode": "shadowOnly",
+      "captureDisposition": "shadow-only",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "observe derived output promotion without authoring a new commit",
+      "recordsShadowObservation": true,
+      "description": "Materialized outputs attributable to other authored inputs rather than direct user intent."
+    },
+    "rootCreation": {
+      "writeAdmissionMode": "capture",
+      "captureDisposition": "capture",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "create the initial version-history root for a workbook engine instance",
+      "recordsShadowObservation": true,
+      "description": "Workbook initialization writes that seed version history."
+    },
+    "historyGap": {
+      "writeAdmissionMode": "captureSuspendedWithGap",
+      "captureDisposition": "suspend-with-gap",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "suspend forward capture and require history-gap accounting",
+      "recordsShadowObservation": true,
+      "description": "Undo, redo, and history-position controls that must not be captured as new forward edits."
+    },
+    "shadowOnly": {
+      "writeAdmissionMode": "shadowOnly",
+      "captureDisposition": "shadow-only",
+      "operationContextPolicy": "warning-if-missing-before-transport",
+      "historyEffect": "observe runtime or control-plane state without authored history capture",
+      "recordsShadowObservation": true,
+      "description": "Transient UI, viewport, runtime, and control-plane writes."
+    }
+  },
+  "writeAdmissionModes": {
+    "capture": {
+      "transport": "allow",
+      "historyCapture": "capture",
+      "description": "Allow transport execution and admit the mutation to version capture."
+    },
+    "shadowOnly": {
+      "transport": "allow",
+      "historyCapture": "shadow-only",
+      "description": "Allow transport execution while recording only shadow observation diagnostics."
+    },
+    "captureDisabledNoHistory": {
+      "transport": "allow",
+      "historyCapture": "disabled",
+      "description": "Allow transport execution without version-history capture."
+    },
+    "captureSuspendedWithGap": {
+      "transport": "allow",
+      "historyCapture": "suspended-gap",
+      "description": "Allow transport execution while preserving an explicit history gap."
+    },
+    "block": {
+      "transport": "block",
+      "historyCapture": "none",
+      "description": "Block the write before transport execution."
+    }
+  },
+  "rules": [
+    {
+      "ruleId": "root-creation-exact",
+      "match": {
+        "type": "exact",
+        "commands": [
+          "compute_create_default_sheet_with_default_col_width",
+          "compute_init",
+          "compute_init_from_yrs_state"
+        ]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "lifecycle"
+        },
+        "operationKind": "mutation",
+        "domainClass": "authored",
+        "capturePolicy": "rootCreation",
+        "writeAdmissionMode": "capture",
+        "rationale": "Creates the initial version-history root for a workbook engine instance."
+      }
+    },
+    {
+      "ruleId": "lifecycle-excluded-exact",
+      "match": {
+        "type": "exact",
+        "commands": ["compute_destroy", "compute_register_viewport", "compute_unregister_viewport"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "lifecycle"
+        },
+        "operationKind": "mutation",
+        "domainClass": "transient",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "captureDisabledNoHistory",
+        "rationale": "Lifecycle resource management is not user history."
+      }
+    },
+    {
+      "ruleId": "sync-apply-excluded-exact",
+      "match": {
+        "type": "exact",
+        "commands": ["compute_apply_sync_update"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "system-mutation"
+        },
+        "operationKind": "sync-import",
+        "domainClass": "external",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "captureDisabledNoHistory",
+        "rationale": "Provider replay remains observable but is not captured as authored history."
+      }
+    },
+    {
+      "ruleId": "system-import-excluded-exact",
+      "match": {
+        "type": "exact",
+        "commands": [
+          "compute_complete_deferred_hydration",
+          "compute_flush_undo_capture",
+          "compute_import_from_csv_bytes",
+          "compute_import_from_xlsx_bytes",
+          "compute_import_from_xlsx_bytes_deferred",
+          "compute_import_sheets_from_xlsx",
+          "compute_settle_for_mirror"
+        ]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "system-mutation"
+        },
+        "operationKind": "mutation",
+        "domainClass": "external",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "captureDisabledNoHistory",
+        "rationale": "Import and hydration replay are externally sourced and not authored history."
+      }
+    },
+    {
+      "ruleId": "undo-redo-group-exact",
+      "match": {
+        "type": "exact",
+        "commands": ["compute_begin_undo_group", "compute_end_undo_group"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "undo-redo-control"
+        },
+        "operationKind": "mutation",
+        "domainClass": "authored",
+        "capturePolicy": "historyGap",
+        "writeAdmissionMode": "captureSuspendedWithGap",
+        "rationale": "Undo-group control affects history boundaries and is not a forward workbook edit."
+      }
+    },
+    {
+      "ruleId": "undo-redo-revert-exact",
+      "match": {
+        "type": "exact",
+        "commands": ["compute_redo", "compute_undo"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "undo-redo-control"
+        },
+        "operationKind": "revert",
+        "domainClass": "authored",
+        "capturePolicy": "historyGap",
+        "writeAdmissionMode": "captureSuspendedWithGap",
+        "rationale": "Undo and redo move history position and must not be captured as new forward edits."
+      }
+    },
+    {
+      "ruleId": "derived-only-exact",
+      "match": {
+        "type": "exact",
+        "commands": [
+          "compute_auto_fit_column_and_set",
+          "compute_auto_fit_columns_and_set",
+          "compute_auto_fit_rows_and_set",
+          "compute_pivot_materialize",
+          "compute_pivot_materialize_mutation",
+          "compute_pivot_register_def",
+          "compute_pivot_unregister_def"
+        ]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "hint-with-default",
+          "default": "public-mutation"
+        },
+        "operationKind": "derived-output-promotion",
+        "domainClass": "derived",
+        "capturePolicy": "derivedOnly",
+        "writeAdmissionMode": "shadowOnly",
+        "rationale": "Materialized or derived outputs are attributable to source data, not authored directly."
+      }
+    },
+    {
+      "ruleId": "shadow-only-exact",
+      "match": {
+        "type": "exact",
+        "commands": [
+          "compute_patch_workbook_settings",
+          "compute_reset_sheet_viewports",
+          "compute_set_current_time",
+          "compute_set_format_for_ranges_ui_state",
+          "compute_set_scroll_position",
+          "compute_set_view_option",
+          "compute_update_viewport_bounds"
+        ]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "hint-with-default",
+          "default": "public-ui-state"
+        },
+        "operationKind": "mutation",
+        "domainClass": "transient",
+        "capturePolicy": "shadowOnly",
+        "writeAdmissionMode": "shadowOnly",
+        "rationale": "Runtime, viewport, or control-plane state is observed in shadow mode only."
+      }
+    },
+    {
+      "ruleId": "secret-direct-compute-prefix",
+      "match": {
+        "type": "prefix",
+        "prefixes": ["compute_wb_security_"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "fixed",
+          "value": "direct-compute-api"
+        },
+        "operationKind": "mutation",
+        "domainClass": "secret",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "block",
+        "rationale": "Security-policy mutation payloads are not admitted to version capture in this slice."
+      },
+      "modeOverrideRationale": "Secret-bearing security writes use the excluded capture policy but block transport instead of merely disabling history capture."
+    },
+    {
+      "ruleId": "shadow-only-prefix",
+      "match": {
+        "type": "prefix",
+        "prefixes": [
+          "compute_set_calculation",
+          "compute_set_convergence",
+          "compute_set_default_",
+          "compute_set_frozen_panes",
+          "compute_set_iterative_calculation",
+          "compute_set_max_iterations",
+          "compute_set_sheet_enable_calculation",
+          "compute_set_sheet_hidden",
+          "compute_set_sheet_setting",
+          "compute_set_sheet_visibility",
+          "compute_set_split_config",
+          "compute_set_use_precision_as_displayed",
+          "compute_update_refresh_metadata"
+        ]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "hint-with-default",
+          "default": "public-ui-state"
+        },
+        "operationKind": "mutation",
+        "domainClass": "transient",
+        "capturePolicy": "shadowOnly",
+        "writeAdmissionMode": "shadowOnly",
+        "rationale": "Runtime, viewport, or control-plane state is observed in shadow mode only."
+      }
+    },
+    {
+      "ruleId": "generated-compute-default-prefix",
+      "match": {
+        "type": "default-prefix",
+        "prefixes": ["chart_", "compute_", "table_"]
+      },
+      "classification": {
+        "invocation": {
+          "mode": "hint-with-default",
+          "default": "public-mutation"
+        },
+        "operationKind": "mutation",
+        "domainClass": "authored",
+        "capturePolicy": "commitEligible",
+        "writeAdmissionMode": "capture",
+        "rationale": "Default generated or native compute write; captured as authored workbook mutation."
+      }
+    }
+  ],
+  "requiredRepresentativeClasses": [
+    {
+      "classId": "authored-mutation",
+      "command": "compute_set_cell",
+      "inventoryWrapper": "mutatePublic",
+      "expected": {
+        "invocation": "public-mutation",
+        "operationKind": "mutation",
+        "domainClass": "authored",
+        "capturePolicy": "commitEligible",
+        "writeAdmissionMode": "capture"
+      },
+      "coveragePurpose": "Default generated compute write admitted to authored capture."
+    },
+    {
+      "classId": "root-creation",
+      "command": "compute_init",
+      "inventoryWrapper": "transport.call",
+      "expected": {
+        "invocation": "lifecycle",
+        "operationKind": "mutation",
+        "domainClass": "authored",
+        "capturePolicy": "rootCreation",
+        "writeAdmissionMode": "capture"
+      },
+      "coveragePurpose": "Lifecycle initialization creates the version-history root."
+    },
+    {
+      "classId": "sync-import-excluded",
+      "command": "compute_apply_sync_update",
+      "inventoryWrapper": "mutateSystem",
+      "expected": {
+        "invocation": "system-mutation",
+        "operationKind": "sync-import",
+        "domainClass": "external",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "captureDisabledNoHistory"
+      },
+      "coveragePurpose": "Provider replay is observable but not authored history."
+    },
+    {
+      "classId": "lifecycle-excluded",
+      "command": "compute_destroy",
+      "inventoryWrapper": "transport.call",
+      "expected": {
+        "invocation": "lifecycle",
+        "operationKind": "mutation",
+        "domainClass": "transient",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "captureDisabledNoHistory"
+      },
+      "coveragePurpose": "Engine resource teardown is not user history."
+    },
+    {
+      "classId": "history-gap-revert",
+      "command": "compute_undo",
+      "inventoryWrapper": "admitPublicMutation",
+      "expected": {
+        "invocation": "undo-redo-control",
+        "operationKind": "revert",
+        "domainClass": "authored",
+        "capturePolicy": "historyGap",
+        "writeAdmissionMode": "captureSuspendedWithGap"
+      },
+      "coveragePurpose": "Undo and redo create explicit history gaps instead of forward edits."
+    },
+    {
+      "classId": "derived-output-promotion",
+      "command": "compute_pivot_materialize",
+      "inventoryWrapper": "query",
+      "expected": {
+        "invocation": "public-mutation",
+        "operationKind": "derived-output-promotion",
+        "domainClass": "derived",
+        "capturePolicy": "derivedOnly",
+        "writeAdmissionMode": "shadowOnly"
+      },
+      "coveragePurpose": "Materialized pivot output is derived from source data."
+    },
+    {
+      "classId": "shadow-only-ui-state",
+      "command": "compute_patch_workbook_settings",
+      "inventoryWrapper": "mutatePublicUiState",
+      "expected": {
+        "invocation": "public-ui-state",
+        "operationKind": "mutation",
+        "domainClass": "transient",
+        "capturePolicy": "shadowOnly",
+        "writeAdmissionMode": "shadowOnly"
+      },
+      "coveragePurpose": "Runtime control-plane state is observed without authored capture."
+    },
+    {
+      "classId": "blocked-secret-write",
+      "command": "compute_wb_security_add_policy",
+      "inventoryWrapper": "direct-compute-api",
+      "expected": {
+        "invocation": "direct-compute-api",
+        "operationKind": "mutation",
+        "domainClass": "secret",
+        "capturePolicy": "excluded",
+        "writeAdmissionMode": "block"
+      },
+      "coveragePurpose": "Secret-bearing security writes are blocked before transport."
+    }
+  ],
+  "diagnostics": {
+    "unclassifiedWrite": {
+      "code": "versioning.admission.unclassified-write",
+      "severity": "error",
+      "description": "A mutating command reached admission without a matching VC-02 classification rule."
+    },
+    "blockedWrite": {
+      "code": "versioning.admission.blocked-write",
+      "severity": "error",
+      "description": "A classified write was intentionally blocked before transport execution."
+    },
+    "missingOperationContext": {
+      "code": "versioning.admission.missing-context",
+      "severity": "warning",
+      "description": "A classified write reached admission without VersionOperationContext."
+    },
+    "staleGeneratedOutput": {
+      "code": "versioning.generated-output.stale",
+      "severity": "error",
+      "description": "A generated VC artifact or one of its declared inputs no longer matches the digest recorded in generated-output-manifest.json."
+    }
+  }
+}

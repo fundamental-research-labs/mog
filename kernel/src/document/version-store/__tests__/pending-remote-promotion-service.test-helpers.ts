@@ -48,22 +48,36 @@ export type PendingSegmentFixture = {
   readonly objectRecords: readonly VersionObjectRecord<unknown>[];
 };
 
+export type PendingSegmentFixtureOptions = {
+  readonly createdAt?: string;
+  readonly authorityRef?: string | null;
+  readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
+  readonly epoch?: string | null;
+  readonly groupId?: string;
+  readonly includeSnapshotRoot?: boolean;
+  readonly mutationSegmentId?: string;
+  readonly payloadHash?: string;
+  readonly sequence?: string;
+  readonly sharedSnapshotRootRecord?: VersionObjectRecord<unknown>;
+  readonly sharedSemanticChangeSetRecord?: VersionObjectRecord<unknown>;
+  readonly updateId?: string;
+};
+
+type SyncOperationContextOptions = Pick<
+  PendingSegmentFixtureOptions,
+  | 'createdAt'
+  | 'authorityRef'
+  | 'collaboration'
+  | 'epoch'
+  | 'groupId'
+  | 'payloadHash'
+  | 'sequence'
+  | 'updateId'
+>;
+
 export async function pendingSegmentFixture(
   namespace: VersionGraphNamespace,
-  options: {
-    readonly createdAt?: string;
-    readonly authorityRef?: string | null;
-    readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
-    readonly epoch?: string | null;
-    readonly groupId?: string;
-    readonly includeSnapshotRoot?: boolean;
-    readonly mutationSegmentId?: string;
-    readonly payloadHash?: string;
-    readonly sequence?: string;
-    readonly sharedSnapshotRootRecord?: VersionObjectRecord<unknown>;
-    readonly sharedSemanticChangeSetRecord?: VersionObjectRecord<unknown>;
-    readonly updateId?: string;
-  } = {},
+  options: PendingSegmentFixtureOptions = {},
 ): Promise<PendingSegmentFixture> {
   const includeSnapshotRoot = options.includeSnapshotRoot ?? true;
   const operationContext = syncOperationContext(options);
@@ -109,16 +123,7 @@ export async function pendingSegmentFixture(
 }
 
 function syncOperationContext(
-  options: {
-    readonly createdAt?: string;
-    readonly authorityRef?: string | null;
-    readonly collaboration?: Partial<PendingRemoteSegmentOperationContext['collaboration']>;
-    readonly epoch?: string | null;
-    readonly groupId?: string;
-    readonly payloadHash?: string;
-    readonly sequence?: string;
-    readonly updateId?: string;
-  } = {},
+  options: SyncOperationContextOptions = {},
 ): PendingRemoteSegmentOperationContext {
   const updateId = options.updateId ?? 'remote-update-1';
   const payloadHash = options.payloadHash ?? '3'.repeat(64);

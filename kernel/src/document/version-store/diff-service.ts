@@ -156,9 +156,9 @@ export class WorkbookVersionDiffService {
     const opened = await this.openVisibleGraph();
     if (!opened.ok) return degradedDiffPage(opened.diagnostics);
 
-    const resolvedBase = await resolveCommitish(opened.graph, base);
+    const resolvedBase = await resolveCommitish(opened.graph, base, 'base');
     if (!resolvedBase.ok) return degradedDiffPage(resolvedBase.diagnostics);
-    const resolvedTarget = await resolveCommitish(opened.graph, target);
+    const resolvedTarget = await resolveCommitish(opened.graph, target, 'target');
     if (!resolvedTarget.ok) return degradedDiffPage(resolvedTarget.diagnostics);
 
     const pageToken = parsePageToken(
@@ -328,6 +328,7 @@ function objectStoreFromGraph(graph: VersionGraphStore): VersionObjectRecordRead
 async function resolveCommitish(
   graph: VersionGraphStore,
   selector: NormalizedDiffCommitish,
+  selectorName: 'base' | 'target',
 ): Promise<
   | {
       readonly ok: true;
@@ -340,21 +341,38 @@ async function resolveCommitish(
     }
 > {
   if (selector.kind === 'commit') {
+    const closure = await graph.readCommitClosure(selector.id);
+    if (closure.status !== 'success') {
+      return {
+        ok: false,
+        diagnostics: graphDiagnostics(closure.diagnostics, { selector: selectorName }),
+      };
+    }
+
     const head = await graph.readHead();
     if (head.status !== 'success') {
-      return { ok: false, diagnostics: graphDiagnostics(head.diagnostics) };
+      return {
+        ok: false,
+        diagnostics: graphDiagnostics(head.diagnostics, { selector: selectorName }),
+      };
     }
     return { ok: true, commitId: selector.id, readRevision: head.main.revision };
   }
 
   const ref = await graph.readRef(selector.name);
   if (ref.status !== 'success') {
-    return { ok: false, diagnostics: graphDiagnostics(ref.diagnostics) };
+    return {
+      ok: false,
+      diagnostics: graphDiagnostics(ref.diagnostics, { selector: selectorName }),
+    };
   }
   if (ref.ref.name === VERSION_GRAPH_HEAD_REF) {
     const head = await graph.readHead();
     if (head.status !== 'success') {
-      return { ok: false, diagnostics: graphDiagnostics(head.diagnostics) };
+      return {
+        ok: false,
+        diagnostics: graphDiagnostics(head.diagnostics, { selector: selectorName }),
+      };
     }
     return { ok: true, commitId: head.head.id, readRevision: head.main.revision };
   }
@@ -978,17 +996,23 @@ function evictPublicDiffCursorCache(): void {
 
 function graphDiagnostics(
   diagnostics: readonly { readonly code?: string; readonly message?: string }[],
+  options: { readonly selector?: 'base' | 'target' } = {},
 ): readonly DiffServiceDiagnostic[] {
   if (diagnostics.length === 0) {
     return [
       diagnostic(
         'VERSION_UNMATERIALIZABLE_COMMIT',
         'Version graph did not return a readable commit.',
+        options,
       ),
     ];
   }
   return diagnostics.map((item) =>
-    diagnostic(item.code ?? 'VERSION_PROVIDER_ERROR', item.message ?? 'Version graph read failed.'),
+    diagnostic(
+      item.code ?? 'VERSION_PROVIDER_ERROR',
+      item.message ?? 'Version graph read failed.',
+      options,
+    ),
   );
 }
 

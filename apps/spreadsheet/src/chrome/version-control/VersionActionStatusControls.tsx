@@ -71,7 +71,7 @@ type VersionActionsProps = {
 type DisabledControlStatus = {
   readonly enabled: boolean;
   readonly reasonId: string;
-  readonly reason?: string;
+  readonly reason: string | undefined;
 };
 
 type VersionActionControls = {
@@ -79,7 +79,7 @@ type VersionActionControls = {
   readonly branch: DisabledControlStatus;
   readonly rollback: DisabledControlStatus;
   readonly remotePromote: DisabledControlStatus;
-  readonly remotePromotionDetail?: string;
+  readonly remotePromotionDetail: string | undefined;
 };
 
 export function VersionActions(props: VersionActionsProps): React.JSX.Element {
@@ -228,7 +228,7 @@ function BranchAction({
   onCreateBranch,
 }: {
   readonly branchName: string;
-  readonly targetCommitId?: WorkbookCommitId;
+  readonly targetCommitId: WorkbookCommitId | undefined;
   readonly control: DisabledControlStatus;
   readonly onBranchNameChange: (value: string) => void;
   readonly onCreateBranch: () => void;
@@ -277,7 +277,7 @@ function RollbackAction({
   onStageRollback,
 }: {
   readonly reason: string;
-  readonly targetCommitId?: WorkbookCommitId;
+  readonly targetCommitId: WorkbookCommitId | undefined;
   readonly control: DisabledControlStatus;
   readonly onReasonChange: (value: string) => void;
   readonly onStageRollback: () => void;
@@ -325,7 +325,7 @@ function RemotePromotionAction({
   onPromotePendingRemote,
 }: {
   readonly status: VersionRemotePromotionStatus;
-  readonly detail?: string;
+  readonly detail: string | undefined;
   readonly control: DisabledControlStatus;
   readonly onPromotePendingRemote: () => void;
 }): React.JSX.Element {
@@ -367,7 +367,7 @@ function TargetSummary({
   commitId,
 }: {
   readonly testId: string;
-  readonly commitId?: WorkbookCommitId;
+  readonly commitId: WorkbookCommitId | undefined;
 }): React.JSX.Element {
   return (
     <span

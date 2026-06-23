@@ -16,7 +16,9 @@ const MATERIALIZED_CONTEXT_ALLOWED_VERSIONING_KEYS = new Set([
 type CheckoutRebindIdentity = {
   readonly schemaVersion: 1;
   readonly providerDocumentScopeKey: string;
+  readonly providerWorkspaceId?: string;
   readonly providerDocumentId: string;
+  readonly providerPrincipalScope?: string;
 };
 
 type RebindIdentityErrorReason =
@@ -26,13 +28,23 @@ type RebindIdentityErrorReason =
   | 'providerScopeInvalid'
   | 'providerScopeMismatch';
 
+type ProviderIdentityClass =
+  | 'workspace'
+  | 'document'
+  | 'principal'
+  | 'scope'
+  | 'provider'
+  | 'materialization';
+
 class VersionCheckoutRebindIdentityError extends Error {
   readonly reason: RebindIdentityErrorReason;
+  readonly providerIdentityClass: ProviderIdentityClass;
 
-  constructor(reason: RebindIdentityErrorReason) {
+  constructor(reason: RebindIdentityErrorReason, providerIdentityClass?: ProviderIdentityClass) {
     super('Checkout versioning identity could not be safely rebound.');
     this.name = errorNameForReason(reason);
     this.reason = reason;
+    this.providerIdentityClass = providerIdentityClass ?? providerIdentityClassForReason(reason);
   }
 }
 
@@ -43,6 +55,7 @@ export function checkoutRebindIdentityDiagnosticDetails(
   return Object.freeze({
     cause: error.name,
     identityFenceReason: error.reason,
+    providerIdentityClass: error.providerIdentityClass,
   });
 }
 
@@ -53,7 +66,7 @@ export function rebindVersioningAfterCheckout(input: {
   if (!isVersioningRecord(input.versioning)) return {};
   const identity = providerRebindIdentity(input.versioning);
   validateCurrentRebindIdentity(input.versioning, identity);
-  assertMaterializedContextIsUnbound(input.nextContext);
+  assertMaterializedContextIsUnbound(input.nextContext, identity);
   seedMaterializedContextRebindIdentity(input.nextContext, identity);
 
   const semanticStateReader = createComputeBridgeSemanticStateReader(
@@ -80,12 +93,7 @@ function providerRebindIdentity(
   if (!isVersioningRecord(provider))
     throw new VersionCheckoutRebindIdentityError('providerScopeInvalid');
 
-  const documentScope = normalizeProviderDocumentScope(provider.documentScope);
-  return Object.freeze({
-    schemaVersion: 1 as const,
-    providerDocumentScopeKey: versionDocumentScopeKey(documentScope),
-    providerDocumentId: documentScope.documentId,
-  });
+  return identityForProviderScope(provider.documentScope, 'providerScopeInvalid');
 }
 
 function validateCurrentRebindIdentity(
@@ -95,20 +103,23 @@ function validateCurrentRebindIdentity(
   if (!identity) return;
 
   const storedIdentity = readStoredRebindIdentity(versioning, 'current');
-  if (
-    storedIdentity &&
-    storedIdentity.providerDocumentScopeKey !== identity.providerDocumentScopeKey
-  ) {
-    throw new VersionCheckoutRebindIdentityError('providerScopeMismatch');
+  const storedIdentityMismatch = storedIdentity
+    ? providerIdentityClassForMismatch(identity, storedIdentity)
+    : null;
+  if (storedIdentityMismatch) {
+    throw new VersionCheckoutRebindIdentityError('providerScopeMismatch', storedIdentityMismatch);
   }
 
   const snapshotPortDocumentId = snapshotRootPortDocumentId(versioning.snapshotRootByteSyncPort);
   if (snapshotPortDocumentId && snapshotPortDocumentId !== identity.providerDocumentId) {
-    throw new VersionCheckoutRebindIdentityError('providerDocumentMismatch');
+    throw new VersionCheckoutRebindIdentityError('providerDocumentMismatch', 'document');
   }
 }
 
-function assertMaterializedContextIsUnbound(nextContext: DocumentContext): void {
+function assertMaterializedContextIsUnbound(
+  nextContext: DocumentContext,
+  identity: CheckoutRebindIdentity | null,
+): void {
   const runtime = nextContext as DocumentContext & { versioning?: unknown };
   if (runtime.versioning === undefined || runtime.versioning === null) return;
   if (isVersioningRecord(runtime.versioning)) {
@@ -119,8 +130,28 @@ function assertMaterializedContextIsUnbound(nextContext: DocumentContext): void 
     ) {
       return;
     }
+
+    const materializedProviderIdentity = identity
+      ? materializedProviderRebindIdentity(runtime.versioning)
+      : null;
+    if (identity && materializedProviderIdentity) {
+      throw new VersionCheckoutRebindIdentityError(
+        'materializationIdentityStale',
+        providerIdentityClassForMismatch(identity, materializedProviderIdentity) ?? 'provider',
+      );
+    }
+
+    const storedIdentity = identity
+      ? readStoredRebindIdentityIfPresent(runtime.versioning, 'materialized')
+      : null;
+    if (identity && storedIdentity) {
+      throw new VersionCheckoutRebindIdentityError(
+        'materializationIdentityStale',
+        providerIdentityClassForMismatch(identity, storedIdentity) ?? 'materialization',
+      );
+    }
   }
-  throw new VersionCheckoutRebindIdentityError('materializationIdentityStale');
+  throw new VersionCheckoutRebindIdentityError('materializationIdentityStale', 'materialization');
 }
 
 function seedMaterializedContextRebindIdentity(
@@ -137,11 +168,46 @@ function seedMaterializedContextRebindIdentity(
   });
 }
 
-function normalizeProviderDocumentScope(value: unknown): VersionDocumentScope {
+function materializedProviderRebindIdentity(
+  versioning: Record<string, unknown>,
+): CheckoutRebindIdentity | null {
+  if (!('provider' in versioning) || versioning.provider === undefined) return null;
+  const provider = versioning.provider;
+  if (!isVersioningRecord(provider)) {
+    throw new VersionCheckoutRebindIdentityError('materializationIdentityStale', 'provider');
+  }
   try {
-    return normalizeVersionDocumentScope(value as VersionDocumentScope);
+    return identityForProviderScope(provider.documentScope, 'materializationIdentityStale');
+  } catch (error) {
+    if (error instanceof VersionCheckoutRebindIdentityError) {
+      throw new VersionCheckoutRebindIdentityError(
+        'materializationIdentityStale',
+        error.providerIdentityClass,
+      );
+    }
+    throw error;
+  }
+}
+
+function identityForProviderScope(
+  value: unknown,
+  invalidReason: RebindIdentityErrorReason,
+): CheckoutRebindIdentity {
+  try {
+    const documentScope = normalizeVersionDocumentScope(value as VersionDocumentScope);
+    return Object.freeze({
+      schemaVersion: 1 as const,
+      providerDocumentScopeKey: versionDocumentScopeKey(documentScope),
+      ...(documentScope.workspaceId === undefined
+        ? {}
+        : { providerWorkspaceId: documentScope.workspaceId }),
+      providerDocumentId: documentScope.documentId,
+      ...(documentScope.principalScope === undefined
+        ? {}
+        : { providerPrincipalScope: documentScope.principalScope }),
+    });
   } catch {
-    throw new VersionCheckoutRebindIdentityError('providerScopeInvalid');
+    throw new VersionCheckoutRebindIdentityError(invalidReason, 'provider');
   }
 }
 
@@ -155,17 +221,35 @@ function readStoredRebindIdentity(
     !isVersioningRecord(value) ||
     value.schemaVersion !== 1 ||
     typeof value.providerDocumentScopeKey !== 'string' ||
-    typeof value.providerDocumentId !== 'string'
+    typeof value.providerDocumentId !== 'string' ||
+    !isOptionalString(value.providerWorkspaceId) ||
+    !isOptionalString(value.providerPrincipalScope)
   ) {
     throw new VersionCheckoutRebindIdentityError(
       source === 'current' ? 'currentIdentityInvalid' : 'materializationIdentityStale',
+      source === 'current' ? 'scope' : 'materialization',
     );
   }
   return Object.freeze({
     schemaVersion: 1 as const,
     providerDocumentScopeKey: value.providerDocumentScopeKey,
+    ...(value.providerWorkspaceId === undefined
+      ? {}
+      : { providerWorkspaceId: value.providerWorkspaceId }),
     providerDocumentId: value.providerDocumentId,
+    ...(value.providerPrincipalScope === undefined
+      ? {}
+      : { providerPrincipalScope: value.providerPrincipalScope }),
   });
+}
+
+function readStoredRebindIdentityIfPresent(
+  versioning: Record<string, unknown>,
+  source: 'current' | 'materialized',
+): CheckoutRebindIdentity | null {
+  return CHECKOUT_REBIND_IDENTITY_FIELD in versioning
+    ? readStoredRebindIdentity(versioning, source)
+    : null;
 }
 
 function cloneRebindIdentity(identity: CheckoutRebindIdentity): CheckoutRebindIdentity {
@@ -190,6 +274,31 @@ function errorNameForReason(reason: RebindIdentityErrorReason): string {
       return 'VersionCheckoutRebindProviderIdentityError';
     case 'materializationIdentityStale':
       return 'VersionCheckoutRebindMaterializationIdentityError';
+  }
+}
+
+function providerIdentityClassForMismatch(
+  expected: CheckoutRebindIdentity,
+  actual: CheckoutRebindIdentity,
+): ProviderIdentityClass | null {
+  if (actual.providerDocumentScopeKey === expected.providerDocumentScopeKey) return null;
+  if (actual.providerWorkspaceId !== expected.providerWorkspaceId) return 'workspace';
+  if (actual.providerDocumentId !== expected.providerDocumentId) return 'document';
+  if (actual.providerPrincipalScope !== expected.providerPrincipalScope) return 'principal';
+  return 'scope';
+}
+
+function providerIdentityClassForReason(reason: RebindIdentityErrorReason): ProviderIdentityClass {
+  switch (reason) {
+    case 'providerDocumentMismatch':
+      return 'document';
+    case 'providerScopeInvalid':
+      return 'provider';
+    case 'currentIdentityInvalid':
+    case 'providerScopeMismatch':
+      return 'scope';
+    case 'materializationIdentityStale':
+      return 'materialization';
   }
 }
 
@@ -222,4 +331,8 @@ function deleteAttachedVersionServices(config: Record<string, unknown>): void {
 
 function isVersioningRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
 }

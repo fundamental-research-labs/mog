@@ -23,11 +23,14 @@ import {
   type ReservePendingRemoteSegmentInput,
 } from '../../../document/version-store/pending-remote-segment-store';
 import {
+  createVersionGraphRegistry,
   createInMemoryVersionStoreProvider,
+  InMemoryVersionDocumentProviderBackend,
   namespaceForDocumentScope,
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionGraphRegistry,
   type VersionGraphStore,
   type VersionStoreProvider,
 } from '../../../document/version-store/provider';
@@ -45,21 +48,23 @@ const VERSION_AUTHOR: VersionAuthor = {
 };
 
 let documentCreateSpy: { mockRestore(): void } | undefined;
-let injectStaleMaterializationVersioning = false;
+let staleMaterializationVersioningScope: VersionDocumentScope | null = null;
 let internalMaterializationCreateCount = 0;
 
 beforeEach(() => {
-  injectStaleMaterializationVersioning = false;
+  staleMaterializationVersioningScope = null;
   internalMaterializationCreateCount = 0;
   const createDocument = DocumentFactory.create.bind(DocumentFactory);
   const spy = jest.spyOn(DocumentFactory, 'create');
   spy.mockImplementation(async (options?: any) => {
     const handle = await createDocument(options);
+    const getAllSheetIds = bindProviderLifecycleGetAllSheetIds(handle);
     installVersionDomainDetectorNoopsOnHandles(handle);
+    installProviderLifecycleMetadataNoops(handle, getAllSheetIds);
     if (options?.internal === true) {
       internalMaterializationCreateCount += 1;
-      if (injectStaleMaterializationVersioning) {
-        attachStaleMaterializationVersioning(handle);
+      if (staleMaterializationVersioningScope) {
+        attachStaleMaterializationVersioning(handle, staleMaterializationVersioningScope);
       }
     }
     return handle;
@@ -70,7 +75,7 @@ beforeEach(() => {
 afterEach(() => {
   documentCreateSpy?.mockRestore();
   documentCreateSpy = undefined;
-  injectStaleMaterializationVersioning = false;
+  staleMaterializationVersioningScope = null;
   internalMaterializationCreateCount = 0;
 });
 
@@ -312,6 +317,80 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
     }
   });
 
+  it('leaves runtime head unchanged when the provider graph registry is stale during checkout', async () => {
+    const backend = new InMemoryVersionDocumentProviderBackend();
+    const { provider, initialized } = await initializeVersionGraph({ backend });
+    const stale = providerWithStaleRegistryRead(provider, initialized.registry);
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setCell('A1', 'target-before-stale-registry');
+      const committedResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!committedResult.ok) {
+        throw new Error(`expected commit success: ${committedResult.error.code}`);
+      }
+      const committed = committedResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({
+        versioning: withVersionManifest({ provider: stale.provider }),
+      });
+      await checkoutWb.activeSheet.setCell('A1', 'active-before-stale-registry-checkout');
+      checkoutWb.markClean();
+
+      await replaceVisibleRegistryGraph(backend, 'graph-2', 'replacement-root');
+      stale.useStaleRegistryAfterLiveReads(1);
+
+      await expect(
+        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_PROVIDER_ERROR',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  operation: 'checkout',
+                  targetKind: 'commit',
+                  commitId: committed.id,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(stale.openGraphCalls()).toBe(1);
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-stale-registry-checkout',
+      });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
   it('fails closed when provider identity changes after checkout services are attached', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const sourceHandle = await DocumentFactory.create({
@@ -369,6 +448,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   commitId: committed.id,
                   cause: 'VersionCheckoutRebindProviderIdentityError',
                   identityFenceReason: 'providerDocumentMismatch',
+                  providerIdentityClass: 'document',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
                 }),
@@ -493,6 +573,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   commitId: committed.id,
                   cause: 'VersionCheckoutRebindProviderIdentityError',
                   identityFenceReason: 'providerDocumentMismatch',
+                  providerIdentityClass: 'document',
                   mutationGuarantee: 'unknown-after-partial-mutation',
                   rollbackSafe: false,
                 }),
@@ -517,75 +598,95 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
     }
   });
 
-  it('fails closed when a fresh checkout reload already carries stale versioning identity', async () => {
-    const { provider, initialized } = await initializeVersionGraph();
-    const sourceHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_SCOPE.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    const checkoutHandle = await DocumentFactory.create({
-      documentId: DOCUMENT_SCOPE.documentId,
-      environment: 'headless',
-      userTimezone: 'UTC',
-    });
-    let sourceWb: Workbook | undefined;
-    let checkoutWb: Workbook | undefined;
-
-    try {
-      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
-      await sourceWb.activeSheet.setCell('A1', 'target-materialization-identity');
-      const committedResult = await sourceWb.version.commit({
-        expectedHead: {
-          commitId: initialized.rootCommit.id,
-          revision: initialized.initialHead.revision,
-          symbolicHeadRevision: initialized.symbolicHead.revision,
-        },
+  it.each([
+    ['workspace', { ...DOCUMENT_SCOPE, workspaceId: 'workspace-2' }, ['workspace-2']],
+    [
+      'document',
+      { ...DOCUMENT_SCOPE, documentId: 'checkout-provider-lifecycle-stale-materialized-doc' },
+      ['checkout-provider-lifecycle-stale-materialized-doc'],
+    ],
+    ['principal', { ...DOCUMENT_SCOPE, principalScope: 'principal-2' }, ['principal-2']],
+  ] as const)(
+    'fails closed when a fresh checkout reload carries stale %s materializer identity',
+    async (providerIdentityClass, materializationScope, forbiddenRawIds) => {
+      const { provider, initialized } = await initializeVersionGraph();
+      const sourceHandle = await DocumentFactory.create({
+        documentId: DOCUMENT_SCOPE.documentId,
+        environment: 'headless',
+        userTimezone: 'UTC',
       });
-      if (!committedResult.ok) {
-        throw new Error(`expected commit success: ${committedResult.error.code}`);
-      }
-      const committed = committedResult.value;
-      sourceWb.markClean();
+      const checkoutHandle = await DocumentFactory.create({
+        documentId: DOCUMENT_SCOPE.documentId,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      });
+      let sourceWb: Workbook | undefined;
+      let checkoutWb: Workbook | undefined;
 
-      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
-      await checkoutWb.activeSheet.setCell('A1', 'active-before-materialization-identity-fence');
-      checkoutWb.markClean();
-      injectStaleMaterializationVersioning = true;
+      try {
+        sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+        await sourceWb.activeSheet.setCell('A1', 'target-materialization-identity');
+        const committedResult = await sourceWb.version.commit({
+          expectedHead: {
+            commitId: initialized.rootCommit.id,
+            revision: initialized.initialHead.revision,
+            symbolicHeadRevision: initialized.symbolicHead.revision,
+          },
+        });
+        if (!committedResult.ok) {
+          throw new Error(`expected commit success: ${committedResult.error.code}`);
+        }
+        const committed = committedResult.value;
+        sourceWb.markClean();
 
-      await expect(
-        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
-      ).resolves.toMatchObject({
-        ok: false,
-        error: {
-          diagnostics: [
-            expect.objectContaining({
-              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
-              data: expect.objectContaining({
-                redacted: true,
-                payload: expect.objectContaining({
-                  commitId: committed.id,
-                  cause: 'VersionCheckoutRebindMaterializationIdentityError',
-                  identityFenceReason: 'materializationIdentityStale',
-                  mutationGuarantee: 'unknown-after-partial-mutation',
-                  rollbackSafe: false,
+        checkoutWb = await checkoutHandle.workbook({
+          versioning: withVersionManifest({ provider }),
+        });
+        await checkoutWb.activeSheet.setCell('A1', 'active-before-materialization-identity-fence');
+        checkoutWb.markClean();
+        staleMaterializationVersioningScope = materializationScope;
+
+        const checkoutResult = await checkoutWb.version.checkout({
+          kind: 'commit',
+          id: committed.id,
+        });
+        expect(checkoutResult).toMatchObject({
+          ok: false,
+          error: {
+            diagnostics: [
+              expect.objectContaining({
+                code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+                data: expect.objectContaining({
+                  redacted: true,
+                  payload: expect.objectContaining({
+                    commitId: committed.id,
+                    cause: 'VersionCheckoutRebindMaterializationIdentityError',
+                    identityFenceReason: 'materializationIdentityStale',
+                    providerIdentityClass,
+                    mutationGuarantee: 'unknown-after-partial-mutation',
+                    rollbackSafe: false,
+                  }),
                 }),
               }),
-            }),
-          ],
-        },
-      });
-      expect(internalMaterializationCreateCount).toBeGreaterThan(0);
-      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
-        value: 'active-before-materialization-identity-fence',
-      });
-    } finally {
-      if (checkoutWb) await checkoutWb.close('skipSave');
-      if (sourceWb) await sourceWb.close('skipSave');
-      await checkoutHandle.dispose();
-      await sourceHandle.dispose();
-    }
-  });
+            ],
+          },
+        });
+        expectPublicDiagnosticsNotToLeak(checkoutResult, [
+          ...forbiddenRawIds,
+          'providerDocumentScopeKey',
+        ]);
+        expect(internalMaterializationCreateCount).toBeGreaterThan(0);
+        await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+          value: 'active-before-materialization-identity-fence',
+        });
+      } finally {
+        if (checkoutWb) await checkoutWb.close('skipSave');
+        if (sourceWb) await sourceWb.close('skipSave');
+        await checkoutHandle.dispose();
+        await sourceHandle.dispose();
+      }
+    },
+  );
 });
 
 function expectInitializeSuccess(
@@ -597,14 +698,41 @@ function expectInitializeSuccess(
   }
 }
 
-async function initializeVersionGraph(): Promise<{
+async function initializeVersionGraph(
+  options: { readonly backend?: InMemoryVersionDocumentProviderBackend } = {},
+): Promise<{
   provider: ReturnType<typeof createInMemoryVersionStoreProvider>;
   initialized: Extract<VersionGraphInitializeResult, { status: 'success' }>;
 }> {
-  const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+  const provider = createInMemoryVersionStoreProvider({
+    documentScope: DOCUMENT_SCOPE,
+    ...(options.backend ? { backend: options.backend } : {}),
+  });
   const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
   expectInitializeSuccess(initialized);
   return { provider, initialized };
+}
+
+async function replaceVisibleRegistryGraph(
+  backend: InMemoryVersionDocumentProviderBackend,
+  graphId: string,
+  label: string,
+): Promise<void> {
+  const input = await initializeInput(graphId, label);
+  const graph = backend.getOrCreateGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, graphId));
+  const initialized = await graph.initializeGraph(input.rootWrite);
+  if (initialized.status !== 'success') {
+    throw new Error(
+      `expected replacement graph initialize success: ${initialized.diagnostics[0]?.code}`,
+    );
+  }
+  const registry = await createVersionGraphRegistry({
+    documentScope: DOCUMENT_SCOPE,
+    graphId,
+    rootCommitId: initialized.commit.id,
+    createdAt: initialized.commit.payload.createdAt,
+  });
+  backend.setRegistry(DOCUMENT_SCOPE, registry);
 }
 
 async function initializeInput(
@@ -763,6 +891,51 @@ function providerWithFailingRegistryRead<T extends VersionStoreProvider>(
   };
 }
 
+function providerWithStaleRegistryRead<T extends VersionStoreProvider>(
+  provider: T,
+  registry: VersionGraphRegistry,
+): {
+  readonly provider: T;
+  readonly openGraphCalls: () => number;
+  readonly useStaleRegistryAfterLiveReads: (count: number) => void;
+} {
+  let openGraphCalls = 0;
+  let liveRegistryReadsBeforeStale = Number.POSITIVE_INFINITY;
+  const wrapped = new Proxy(provider, {
+    get(target, prop, receiver) {
+      if (prop === 'readGraphRegistry') {
+        return async () => {
+          if (liveRegistryReadsBeforeStale > 0) {
+            liveRegistryReadsBeforeStale -= 1;
+            return target.readGraphRegistry();
+          }
+          return {
+            status: 'ok' as const,
+            registry,
+            diagnostics: [],
+          };
+        };
+      }
+      if (prop === 'openGraph') {
+        return async (...args: Parameters<VersionStoreProvider['openGraph']>) => {
+          openGraphCalls += 1;
+          return target.openGraph(...args);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  }) as T;
+
+  return {
+    provider: wrapped,
+    openGraphCalls: () => openGraphCalls,
+    useStaleRegistryAfterLiveReads: (count: number) => {
+      liveRegistryReadsBeforeStale = count;
+    },
+  };
+}
+
 function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFactory.create>>) {
   const context = (handle as DocumentHandleInternal).context as DocumentContext & {
     versioning?: unknown;
@@ -777,6 +950,30 @@ function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function bindProviderLifecycleGetAllSheetIds(
+  handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
+): (() => Promise<unknown>) | null {
+  const bridge = (
+    (handle as Partial<DocumentHandleInternal>).context as DocumentContext | undefined
+  )?.computeBridge;
+  if (!isMutableRecord(bridge) || typeof bridge.getAllSheetIds !== 'function') return null;
+  const getAllSheetIds = bridge.getAllSheetIds;
+  return () => getAllSheetIds.call(bridge);
+}
+
+function installProviderLifecycleMetadataNoops(
+  handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
+  getAllSheetIds: (() => Promise<unknown>) | null,
+): void {
+  const bridge = (
+    (handle as Partial<DocumentHandleInternal>).context as DocumentContext | undefined
+  )?.computeBridge;
+  if (!isMutableRecord(bridge)) return;
+  if (getAllSheetIds) bridge.getAllSheetIds = getAllSheetIds;
+  bridge.getSheetName = async () => 'Sheet1';
+  bridge.isSheetHidden = async () => false;
+}
+
 function expectPublicDiagnosticsNotToLeak(result: unknown, forbidden: readonly string[]): void {
   const serialized = JSON.stringify(result);
   for (const value of forbidden) {
@@ -786,17 +983,13 @@ function expectPublicDiagnosticsNotToLeak(result: unknown, forbidden: readonly s
 
 function attachStaleMaterializationVersioning(
   handle: Awaited<ReturnType<typeof DocumentFactory.create>>,
+  documentScope: VersionDocumentScope,
 ): void {
   const context = (handle as DocumentHandleInternal).context as DocumentContext & {
     versioning?: unknown;
   };
   context.versioning = {
-    provider: createInMemoryVersionStoreProvider({
-      documentScope: {
-        ...DOCUMENT_SCOPE,
-        documentId: 'checkout-provider-lifecycle-stale-materialized-doc',
-      },
-    }),
+    provider: createInMemoryVersionStoreProvider({ documentScope }),
     checkoutService: {
       checkout: jest.fn(),
     },

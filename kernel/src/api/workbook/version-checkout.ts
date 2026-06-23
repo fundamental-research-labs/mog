@@ -627,7 +627,13 @@ function sanitizeCheckoutDiagnosticPayload(
 
   const details = isRecord(value.details) ? value.details : null;
   if (details) {
-    for (const key of ['path', 'target', 'cause', 'identityFenceReason'] as const) {
+    for (const key of [
+      'path',
+      'target',
+      'cause',
+      'identityFenceReason',
+      'providerIdentityClass',
+    ] as const) {
       const detailValue = details[key];
       if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
     }

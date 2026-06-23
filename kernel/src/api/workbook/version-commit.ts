@@ -77,6 +77,15 @@ type AttachedVersionWriteService = {
   commit?: (options?: VersionCommitOptions) => MaybePromise<unknown>;
 };
 
+type NormalCommitCaptureAdmissionState = {
+  readonly pendingCapturedNormalMutationCount: number;
+  readonly pendingUncapturedNormalMutationCount: number;
+};
+
+type VersionSurfaceDirtyAdmissionState = {
+  readonly hasUncommittedLocalChanges: boolean;
+};
+
 type MaybeVersionRuntimeContext = DocumentContext & {
   readonly versioning?: unknown;
   readonly versionStore?: unknown;
@@ -131,6 +140,11 @@ export async function commitWorkbookVersion(
     return versionFailureFromStoreDiagnostics('commit', [serviceUnavailableDiagnostic()]);
   }
 
+  const admissionDiagnostics = await normalCommitCaptureAdmissionDiagnostics(ctx);
+  if (admissionDiagnostics.length > 0) {
+    return versionFailureFromStoreDiagnostics('commit', admissionDiagnostics);
+  }
+
   let result: unknown;
   try {
     result = await writeService.commit(validated.options);
@@ -142,8 +156,7 @@ export async function commitWorkbookVersion(
 }
 
 function getAttachedVersionWriteService(ctx: DocumentContext): AttachedVersionWriteService | null {
-  const runtime = ctx as MaybeVersionRuntimeContext;
-  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  const services = getAttachedVersionServices(ctx);
   if (!isRecord(services)) return null;
 
   for (const candidate of [
@@ -159,6 +172,11 @@ function getAttachedVersionWriteService(ctx: DocumentContext): AttachedVersionWr
   }
 
   return null;
+}
+
+function getAttachedVersionServices(ctx: DocumentContext): unknown {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  return runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
 }
 
 function toWriteService(value: unknown): AttachedVersionWriteService | null {
@@ -186,6 +204,101 @@ function isRawGraphStore(value: unknown): boolean {
     typeof value.initializeGraph === 'function' &&
     typeof value.readCommitClosure === 'function'
   );
+}
+
+async function normalCommitCaptureAdmissionDiagnostics(
+  ctx: DocumentContext,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  const captureState = readNormalCommitCaptureAdmissionState(ctx);
+  if (!captureState || captureState.pendingCapturedNormalMutationCount > 0) return [];
+
+  const hasUncapturedNormalMutations = captureState.pendingUncapturedNormalMutationCount > 0;
+  const dirtyState = await readSurfaceDirtyAdmissionState(ctx);
+  if (!hasUncapturedNormalMutations && dirtyState?.hasUncommittedLocalChanges !== true) {
+    return [];
+  }
+
+  return [missingChangeSetDiagnostic(captureState, dirtyState)];
+}
+
+function readNormalCommitCaptureAdmissionState(
+  ctx: DocumentContext,
+): NormalCommitCaptureAdmissionState | null {
+  const services = getAttachedVersionServices(ctx);
+  if (!isRecord(services)) return null;
+
+  for (const candidate of [services.semanticMutationCapture, services.mutationCapture, services]) {
+    const stateReader = readNormalCaptureStateMethod(candidate);
+    if (stateReader) return stateReader();
+  }
+
+  return null;
+}
+
+function readNormalCaptureStateMethod(
+  value: unknown,
+): (() => NormalCommitCaptureAdmissionState | null) | null {
+  if (!isRecord(value)) return null;
+  const method = value.readNormalCommitCaptureState;
+  if (typeof method !== 'function') return null;
+  return () => {
+    try {
+      const state = Reflect.apply(method, value, []) as unknown;
+      return isNormalCommitCaptureAdmissionState(state) ? state : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+function isNormalCommitCaptureAdmissionState(
+  value: unknown,
+): value is NormalCommitCaptureAdmissionState {
+  return (
+    isRecord(value) &&
+    typeof value.pendingCapturedNormalMutationCount === 'number' &&
+    typeof value.pendingUncapturedNormalMutationCount === 'number'
+  );
+}
+
+async function readSurfaceDirtyAdmissionState(
+  ctx: DocumentContext,
+): Promise<VersionSurfaceDirtyAdmissionState | null> {
+  const services = getAttachedVersionServices(ctx);
+  if (!isRecord(services)) return null;
+
+  for (const candidate of [
+    services.surfaceStatusService,
+    services.versionSurfaceStatusService,
+    services.statusService,
+    services.dirtyStatusService,
+    services,
+  ]) {
+    const dirtyState = await readDirtyStateFromCandidate(candidate);
+    if (dirtyState) return dirtyState;
+  }
+
+  return null;
+}
+
+async function readDirtyStateFromCandidate(
+  value: unknown,
+): Promise<VersionSurfaceDirtyAdmissionState | null> {
+  if (!isRecord(value)) return null;
+  const method = value.readDirtyStatus;
+  if (typeof method !== 'function') return null;
+  try {
+    const dirtyStatus = await Reflect.apply(method, value, []);
+    return isVersionSurfaceDirtyAdmissionState(dirtyStatus) ? dirtyStatus : null;
+  } catch {
+    return null;
+  }
+}
+
+function isVersionSurfaceDirtyAdmissionState(
+  value: unknown,
+): value is VersionSurfaceDirtyAdmissionState {
+  return isRecord(value) && typeof value.hasUncommittedLocalChanges === 'boolean';
 }
 
 function validateCommitOptions(input: VersionCommitOptions): CommitValidationResult {
@@ -628,6 +741,31 @@ function providerErrorDiagnostic(
       recoverability: 'retry',
       payload,
       mutationGuarantee: 'unknown-after-crash',
+    },
+  );
+}
+
+function missingChangeSetDiagnostic(
+  captureState: NormalCommitCaptureAdmissionState,
+  dirtyState: VersionSurfaceDirtyAdmissionState | null,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_MISSING_CHANGE_SET',
+    safeMessageForIssue('VERSION_MISSING_CHANGE_SET'),
+    {
+      severity: 'error',
+      recoverability: 'repair',
+      payload: {
+        operation: 'commitGraphWrite',
+        reason:
+          captureState.pendingUncapturedNormalMutationCount > 0
+            ? 'uncaptured-normal-mutations'
+            : 'empty-normal-capture',
+        dirtyWorkingState: dirtyState?.hasUncommittedLocalChanges === true,
+        pendingCapturedNormalMutationCount: captureState.pendingCapturedNormalMutationCount,
+        pendingUncapturedNormalMutationCount: captureState.pendingUncapturedNormalMutationCount,
+      },
+      mutationGuarantee: 'no-write-attempted',
     },
   );
 }

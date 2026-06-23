@@ -15,302 +15,45 @@ import {
   providerAuthorityProofCoveredFields,
   providerAuthorityProofSchemaVersion,
 } from './inbound-proof';
+import { isProviderInboundUpdateEnvelopeV2 } from './inbound-updates-envelope';
+import { requiredProviderInboundV2ProofFields } from './inbound-updates-proof-fields';
+import { DEFAULT_PROVENANCE_REDACTION_POLICY } from './inbound-updates-provenance';
 import type {
   ProviderAuthorityCanonicalPayloadHashAlgorithm,
   ProviderAuthorityProof,
   ProviderAuthorityProofAudienceKind,
   ProviderAuthorityProofSchemaVersion,
-  ProviderAuthorityProofV2,
   ProviderInboundProofField,
 } from './inbound-proof';
+import type {
+  ProviderInboundUpdateEnvelope,
+  ProviderInboundUpdateEnvelopeAny,
+  ProviderInboundUpdateEnvelopeV2,
+} from './inbound-updates-envelope';
+import type {
+  LegacyRawUnknownSyncUpdateProvenance,
+  ProvenanceRedactionPolicy,
+  ProviderReplaySyncUpdateProvenance,
+  RedactedAgentRef,
+  RedactedRemoteAuthorRef,
+  SyncUpdateAuthorState,
+  SyncUpdateCapturePolicy,
+  SyncUpdateExclusionReason,
+  SyncUpdateOriginKind,
+  SyncUpdateProvenance,
+  SyncUpdateSourceKind,
+  SyncUpdateTrustStatus,
+} from './inbound-updates-provenance';
 import type { StorageScopeBinding } from './provider-identity';
 
 export * from './inbound-proof';
-
-// =============================================================================
-// Sync Update Provenance
-// =============================================================================
-
-export type SyncUpdateSourceKind =
-  | 'providerReplay'
-  | 'providerLiveInbound'
-  | 'providerMixedInbound'
-  | 'collaborationHydration'
-  | 'collaborationLiveRemote'
-  | 'collaborationMixedRemote'
-  | 'importHydration'
-  | 'systemRepair'
-  | 'legacyRawUnknown';
-
-export type SyncUpdateOriginKind = 'provider' | 'room' | 'import' | 'system' | 'legacyRaw';
-export type SyncUpdateTrustStatus = 'verified' | 'trustedLocalSystem' | 'unverified' | 'legacyRaw';
-export type SyncUpdateCapturePolicy = 'excluded' | 'commitEligible' | 'derivedOnly';
-
-export type SyncUpdateExclusionReason =
-  | 'providerReplay'
-  | 'hydration'
-  | 'importHydration'
-  | 'systemRepair'
-  | 'legacyRawUnknown'
-  | 'mixedAuthors'
-  | 'unknownAuthor'
-  | 'unverifiedProvenance'
-  | 'missingStableOrigin'
-  | 'missingRedactionKey'
-  | 'unsupportedRedactionPolicy'
-  | 'partialProofCoverage'
-  | 'payloadHashMismatch'
-  | 'provenancePayloadHashMismatch'
-  | 'localEcho'
-  | 'rawUnclassified';
-
-export interface ProvenanceRedactionPolicy {
-  readonly schemaVersion: 'provenance-redaction-policy-v1';
-  readonly mode: 'metadata-only' | 'opaque-digest-only' | 'diagnostic-only' | 'drop';
-  readonly durableAuthorIdentity: 'unknown' | 'opaque-subject-ref' | 'hmac-sha256-digest';
-  readonly durableProviderIdentity: 'unknown' | 'opaque-provider-ref' | 'hmac-sha256-digest';
-  /**
-   * Required when durable author/provider identity uses an HMAC digest. Without
-   * a key, admission must keep authorship unknown instead of persisting raw
-   * identity material or unkeyed hashes.
-   */
-  readonly redactionKeyId?: string;
-  readonly proofMaterial: 'diagnostics-only' | 'drop';
-}
-
-export interface RedactedRemoteAuthorRef {
-  readonly kind: 'opaque-subject-ref' | 'hmac-sha256-digest';
-  readonly value: string;
-  readonly keyId?: string;
-}
-
-export interface RedactedAgentRef {
-  readonly kind: 'opaque-agent-ref' | 'hmac-sha256-digest';
-  readonly value: string;
-  readonly keyId?: string;
-}
-
-export type SyncUpdateAuthorState =
-  | {
-      readonly kind: 'singleRemote';
-      readonly remoteAuthorRef: RedactedRemoteAuthorRef;
-    }
-  | {
-      readonly kind: 'mixedRemote';
-      readonly participantCount?: number;
-      readonly reason: 'aggregateWithoutBoundaries' | 'multipleProvenAuthors';
-    }
-  | {
-      readonly kind: 'unknown';
-      readonly reason:
-        | 'legacyRaw'
-        | 'providerReplay'
-        | 'unverified'
-        | 'notProvided'
-        | 'redactionUnavailable'
-        | 'mixedAggregate';
-    }
-  | {
-      readonly kind: 'agent';
-      readonly agentRef: RedactedAgentRef;
-    }
-  | {
-      readonly kind: 'system';
-      readonly systemRef:
-        | 'provider-replay'
-        | 'collaboration-hydration'
-        | 'import-hydration'
-        | 'system-repair';
-    };
-
-export interface SyncUpdateTrust {
-  readonly status: SyncUpdateTrustStatus;
-  readonly authorityRef?: string;
-  readonly proofKind?: ProviderAuthorityProof['kind'];
-  readonly proofSchemaVersion?: ProviderAuthorityProofSchemaVersion;
-  readonly proofAudienceKinds?: readonly ProviderAuthorityProofAudienceKind[];
-  readonly canonicalPayloadHashAlgorithm?: ProviderAuthorityCanonicalPayloadHashAlgorithm;
-  readonly proofCoverage?: readonly ProviderInboundProofField[];
-  readonly issuer?: string;
-  readonly verifiedAt?: number;
-}
-
-export interface SyncUpdateIdentity {
-  readonly originKind: SyncUpdateOriginKind;
-  readonly stableOriginId?: string;
-  readonly providerId?: string;
-  readonly providerKind?: string;
-  readonly providerRefId?: string;
-  readonly storageScope?: StorageScopeBinding;
-  readonly roomId?: string;
-  readonly authorityRef?: string;
-  readonly epoch?: string;
-  readonly updateId?: string;
-  readonly sequence?: bigint;
-  readonly payloadHash: string;
-  readonly provenancePayloadHash?: string;
-}
-
-export interface SyncUpdateExclusionDiagnostic {
-  readonly reason: SyncUpdateExclusionReason;
-  readonly subreason?: string;
-  readonly message?: string;
-}
-
-export interface SyncUpdateProvenanceBase<K extends SyncUpdateSourceKind> {
-  readonly schemaVersion: 'sync-update-provenance-v1';
-  readonly sourceKind: K;
-  readonly updateIdentity: SyncUpdateIdentity;
-  readonly trust: SyncUpdateTrust;
-  readonly author: SyncUpdateAuthorState;
-  readonly remoteSessionId?: string;
-  readonly correlationId?: string;
-  readonly causationIds?: readonly string[];
-  readonly replay: boolean;
-  readonly system: boolean;
-  readonly capturePolicy: SyncUpdateCapturePolicy;
-  readonly redaction: ProvenanceRedactionPolicy;
-  readonly exclusionDiagnostic?: SyncUpdateExclusionDiagnostic;
-}
-
-export type ProviderReplaySyncUpdateProvenance = SyncUpdateProvenanceBase<'providerReplay'> & {
-  readonly replay: true;
-  readonly system: true;
-  readonly capturePolicy: 'excluded';
-  readonly author:
-    | Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>
-    | Extract<SyncUpdateAuthorState, { readonly kind: 'system' }>;
-};
-
-export type ProviderLiveInboundSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'providerLiveInbound'>;
-
-export type ProviderMixedInboundSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'providerMixedInbound'> & {
-    readonly capturePolicy: 'excluded';
-    readonly author:
-      | Extract<SyncUpdateAuthorState, { readonly kind: 'mixedRemote' }>
-      | Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>;
-    readonly exclusionDiagnostic: SyncUpdateExclusionDiagnostic;
-  };
-
-export type CollaborationHydrationSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'collaborationHydration'> & {
-    readonly replay: true;
-    readonly system: true;
-    readonly capturePolicy: 'excluded';
-  };
-
-export type CollaborationLiveRemoteSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'collaborationLiveRemote'>;
-
-export type CollaborationMixedRemoteSyncUpdateProvenance =
-  SyncUpdateProvenanceBase<'collaborationMixedRemote'> & {
-    readonly capturePolicy: 'excluded';
-    readonly author:
-      | Extract<SyncUpdateAuthorState, { readonly kind: 'mixedRemote' }>
-      | Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>;
-    readonly exclusionDiagnostic: SyncUpdateExclusionDiagnostic;
-  };
-
-export type ImportHydrationSyncUpdateProvenance = SyncUpdateProvenanceBase<'importHydration'> & {
-  readonly replay: true;
-  readonly system: true;
-  readonly capturePolicy: 'excluded';
-};
-
-export type SystemRepairSyncUpdateProvenance = SyncUpdateProvenanceBase<'systemRepair'> & {
-  readonly system: true;
-  readonly capturePolicy: 'excluded' | 'derivedOnly';
-};
-
-export type LegacyRawUnknownSyncUpdateProvenance = SyncUpdateProvenanceBase<'legacyRawUnknown'> & {
-  readonly capturePolicy: 'excluded';
-  readonly trust: SyncUpdateTrust & { readonly status: 'legacyRaw' };
-  readonly author: Extract<SyncUpdateAuthorState, { readonly kind: 'unknown' }>;
-  readonly exclusionDiagnostic: SyncUpdateExclusionDiagnostic;
-};
-
-export type SyncUpdateProvenance =
-  | ProviderReplaySyncUpdateProvenance
-  | ProviderLiveInboundSyncUpdateProvenance
-  | ProviderMixedInboundSyncUpdateProvenance
-  | CollaborationHydrationSyncUpdateProvenance
-  | CollaborationLiveRemoteSyncUpdateProvenance
-  | CollaborationMixedRemoteSyncUpdateProvenance
-  | ImportHydrationSyncUpdateProvenance
-  | SystemRepairSyncUpdateProvenance
-  | LegacyRawUnknownSyncUpdateProvenance;
-
-// =============================================================================
-// Inbound Update Envelope
-// =============================================================================
-
-export interface ProviderInboundUpdateEnvelope {
-  readonly providerRefId: string;
-  readonly authorityRef?: string;
-  readonly storageScope: StorageScopeBinding;
-  readonly decisionId: string;
-  readonly sessionId: string;
-  readonly providerEpoch: string;
-  readonly updateId: string;
-  readonly sequence?: bigint;
-  readonly payloadKind: 'yrs-update-v1' | 'yrs-state-vector-diff' | 'provider-snapshot-fragment';
-  readonly payloadHash: string;
-  readonly payload: Uint8Array;
-  readonly assetDependencies?: readonly ProviderInboundAssetDependency[];
-  readonly authorityProof: ProviderAuthorityProof;
-}
-
-export interface ProviderInboundUpdateEnvelopeV2 extends ProviderInboundUpdateEnvelope {
-  readonly schemaVersion: 'provider-inbound-update-v2';
-  readonly provenance: SyncUpdateProvenance;
-}
-
-export type ProviderInboundUpdateEnvelopeAny =
-  | ProviderInboundUpdateEnvelope
-  | ProviderInboundUpdateEnvelopeV2;
+export * from './inbound-updates-envelope';
+export * from './inbound-updates-proof-fields';
+export * from './inbound-updates-provenance';
 
 // =============================================================================
 // Provenance Classification And Validation Helpers
 // =============================================================================
-
-export const PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS = Object.freeze([
-  'sourceKind',
-  'originKind',
-  'stableOriginId',
-  'providerRefId',
-  'storageScope',
-  'authorityRef',
-  'authorState',
-  'provenanceRedactionPolicy',
-  'provenancePayloadHash',
-  'payloadHash',
-  'updateId',
-  'epoch',
-] as const satisfies readonly ProviderInboundProofField[]);
-
-export const PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS = Object.freeze([
-  'remoteSessionId',
-  'remoteAuthorRef',
-  'correlationId',
-  'causationIds',
-] as const satisfies readonly ProviderInboundProofField[]);
-
-export const PROVIDER_INBOUND_V2_OPTIONAL_IDENTITY_PROOF_FIELDS = Object.freeze([
-  'providerId',
-  'providerKind',
-  'roomId',
-  'sequence',
-] as const satisfies readonly ProviderInboundProofField[]);
-
-export const DEFAULT_PROVENANCE_REDACTION_POLICY: ProvenanceRedactionPolicy = Object.freeze({
-  schemaVersion: 'provenance-redaction-policy-v1',
-  mode: 'diagnostic-only',
-  durableAuthorIdentity: 'unknown',
-  durableProviderIdentity: 'unknown',
-  proofMaterial: 'diagnostics-only',
-});
 
 export type SyncUpdateValidationReason =
   | 'payloadHashMismatch'
@@ -477,31 +220,6 @@ export interface LegacyRawUpdateClassificationOptions {
   readonly sourceKind?: 'legacyRawUnknown';
   readonly replay?: boolean;
   readonly system?: boolean;
-}
-
-export function isProviderInboundUpdateEnvelopeV2(
-  envelope: ProviderInboundUpdateEnvelopeAny,
-): envelope is ProviderInboundUpdateEnvelopeV2 {
-  return (
-    (envelope as { readonly schemaVersion?: unknown }).schemaVersion ===
-    'provider-inbound-update-v2'
-  );
-}
-
-export function requiredProviderInboundV2ProofFields(
-  provenance: SyncUpdateProvenance,
-): readonly ProviderInboundProofField[] {
-  const required: ProviderInboundProofField[] = [...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS];
-  const identity = provenance.updateIdentity;
-  if (identity.providerId) required.push('providerId');
-  if (identity.providerKind) required.push('providerKind');
-  if (identity.roomId) required.push('roomId');
-  if (identity.sequence !== undefined) required.push('sequence');
-  if (provenance.trust.status === 'verified' && provenance.author.kind === 'singleRemote') {
-    required.push(...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS);
-  }
-
-  return [...new Set(required)];
 }
 
 export function classifyLegacyProviderInboundUpdate(
@@ -769,9 +487,7 @@ function buildSyncUpdateDiagnosticEvidence(
           ? provenance.trust.proofSchemaVersion
           : providerAuthorityProofSchemaVersion(authorityProof),
       proofAudienceKinds: sortedProofAudienceKinds(proofAudienceKinds),
-      ...(canonicalPayloadHashAlgorithm === undefined
-        ? {}
-        : { canonicalPayloadHashAlgorithm }),
+      ...(canonicalPayloadHashAlgorithm === undefined ? {} : { canonicalPayloadHashAlgorithm }),
       proofCoverage: sortedProofCoverage(
         authorityProof === undefined
           ? provenance.trust.proofCoverage
@@ -977,16 +693,4 @@ function validateProviderAuthorityProofV2Contract(
     });
   }
   return diagnostics;
-}
-
-// =============================================================================
-// Inbound Asset Dependency
-// =============================================================================
-
-export interface ProviderInboundAssetDependency {
-  readonly assetId: string;
-  readonly contentFingerprint: string;
-  readonly manifestFingerprint: string;
-  readonly policyLabelRef?: string;
-  readonly availabilityProofRef?: string;
 }

@@ -251,6 +251,34 @@ describe('VC-09 inbound update provenance helpers', () => {
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.reason === 'payloadHashMismatch'));
   });
 
+  it('requires V2 envelope fields in canonical proof coverage', () => {
+    const envelopeFields = [
+      'decisionId',
+      'sessionId',
+      'providerEpoch',
+      'payloadKind',
+    ] as const satisfies readonly ProviderInboundProofField[];
+    const requiredFields = requiredProviderInboundV2ProofFields(makeLiveProvenance());
+
+    for (const field of envelopeFields) {
+      assert.ok(requiredFields.includes(field), `missing canonical envelope field: ${field}`);
+    }
+
+    const result = validateProviderInboundUpdateEnvelope(
+      makeV2({
+        authorityProof: proofV2(requiredFields.filter((field) => field !== 'decisionId')),
+      }),
+    );
+
+    assert.equal(result.ok, false);
+    assert.ok(
+      result.diagnostics.some(
+        (diagnostic) =>
+          diagnostic.reason === 'partialCoverage' && diagnostic.field === 'decisionId',
+      ),
+    );
+  });
+
   it('computes the complete required V2 proof field set from provenance', () => {
     const provenance = makeLiveProvenance({
       updateIdentity: {

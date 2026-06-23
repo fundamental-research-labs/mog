@@ -42,6 +42,7 @@ type MergeResolutionPayloadRecord = {
   readonly recordKind: 'mergeResolutionPayload';
   readonly resultId: string;
   readonly resultDigest: ObjectDigest;
+  readonly redactionPolicyDigest: ObjectDigest;
   readonly conflictId: string;
   readonly expectedConflictDigest: string;
   readonly optionId: string;
@@ -159,6 +160,7 @@ export async function validateSealedResolutionPayloadRefs(input: {
   readonly operation: VersionMergePublicOperation;
   readonly resultId: VersionMergeResultId;
   readonly resultDigest: ObjectDigest;
+  readonly redactionPolicyDigest?: ObjectDigest;
   readonly targetRef?: VersionMainRefName | VersionRefName;
   readonly expectedTargetHead?: VersionCommitExpectedHead;
   readonly conflicts: readonly VersionMergeConflict[];
@@ -190,6 +192,7 @@ function validateSealedRefBinding(
     readonly operation: VersionMergePublicOperation;
     readonly resultId: VersionMergeResultId;
     readonly resultDigest: ObjectDigest;
+    readonly redactionPolicyDigest?: ObjectDigest;
     readonly targetRef?: VersionMainRefName | VersionRefName;
     readonly expectedTargetHead?: VersionCommitExpectedHead;
     readonly conflicts: readonly VersionMergeConflict[];
@@ -321,6 +324,7 @@ function validateSealedPayloadRecord(
     readonly operation: VersionMergePublicOperation;
     readonly resultId: VersionMergeResultId;
     readonly resultDigest: ObjectDigest;
+    readonly redactionPolicyDigest?: ObjectDigest;
     readonly targetRef?: VersionMainRefName | VersionRefName;
     readonly expectedTargetHead?: VersionCommitExpectedHead;
     readonly conflicts: readonly VersionMergeConflict[];
@@ -329,21 +333,30 @@ function validateSealedPayloadRecord(
   payload: MergeResolutionPayloadRecord,
 ): readonly VersionStoreDiagnostic[] {
   const diagnostics: VersionStoreDiagnostic[] = [];
+  const expectedRedactionPolicyDigest = input.redactionPolicyDigest ?? input.resultDigest;
   if (
     payload.resultId !== input.resultId ||
     !digestsEqual(payload.resultDigest, input.resultDigest) ||
+    !digestsEqual(payload.redactionPolicyDigest, expectedRedactionPolicyDigest) ||
     payload.conflictId !== resolution.conflictId ||
     payload.expectedConflictDigest !== resolution.expectedConflictDigest ||
     payload.optionId !== resolution.optionId ||
     payload.kind !== resolution.kind ||
     payload.targetRef !== input.targetRef ||
-    canonicalJson(payload.expectedTargetHead) !== canonicalJson(input.expectedTargetHead) ||
-    payload.purpose !== 'chooseValue'
+    canonicalJson(payload.expectedTargetHead) !== canonicalJson(input.expectedTargetHead)
   ) {
     diagnostics.push(
       sealedPayloadMismatchDiagnostic(
         input.operation,
         'sealed payload object binding does not match.',
+      ),
+    );
+  }
+  if (payload.purpose !== 'chooseValue') {
+    diagnostics.push(
+      sealedPayloadMismatchDiagnostic(
+        input.operation,
+        'sealed payload purpose is not executable.',
       ),
     );
   }
@@ -381,6 +394,7 @@ function toMergeResolutionPayloadRecord(value: unknown): MergeResolutionPayloadR
   if (
     typeof value.resultId !== 'string' ||
     !isObjectDigest(value.resultDigest) ||
+    !isObjectDigest(value.redactionPolicyDigest) ||
     typeof value.conflictId !== 'string' ||
     typeof value.expectedConflictDigest !== 'string' ||
     typeof value.optionId !== 'string' ||

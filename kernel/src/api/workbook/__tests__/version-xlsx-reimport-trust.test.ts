@@ -190,6 +190,18 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
         ),
     },
     {
+      name: 'wrong-workspace',
+      reason: 'wrong-workspace' as const,
+      xlsx: async (seed: TrustedExportSeed) =>
+        addMogVersionMetadataToXlsx(
+          await createSourceXlsx('Wrong workspace metadata'),
+          testVersionMetadata({
+            ...seed.metadata,
+            workspaceId: OTHER_WORKSPACE_ID,
+          }),
+        ),
+    },
+    {
       name: 'wrong-document',
       reason: 'wrong-document' as const,
       xlsx: async (seed: TrustedExportSeed) =>
@@ -845,9 +857,9 @@ async function expectImportBranchCounts(
     expect(
       branches.branches.filter((branch) => /^import\/external-change\//.test(branch.name)),
     ).toHaveLength(expected.externalChange);
-    expect(branches.branches.filter((branch) => /^import\/new-root\//.test(branch.name))).toHaveLength(
-      expected.newRoot,
-    );
+    expect(
+      branches.branches.filter((branch) => /^import\/new-root\//.test(branch.name)),
+    ).toHaveLength(expected.newRoot);
   } finally {
     await provider.close('test-teardown').catch(() => {});
   }

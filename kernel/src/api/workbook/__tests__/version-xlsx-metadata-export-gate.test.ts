@@ -20,6 +20,7 @@ const SOURCE_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-source';
 const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-clean';
 const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate';
 const STALE_IMPORTED_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-stale-imported';
+const STALE_IMPORTED_WORKSPACE_ID = 'vc10-xlsx-metadata-export-gate-stale-workspace';
 const COPIED_METADATA_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-copied';
 const OLD_METADATA_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const OTHER_METADATA_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
@@ -27,6 +28,10 @@ const SEMANTIC_CHANGE_SET_DIGEST = objectDigest('1');
 const SNAPSHOT_ROOT_DIGEST = objectDigest('2');
 const REF_REVISION = { kind: 'counter', value: '1' } as const;
 const OTHER_REF_REVISION = { kind: 'counter', value: '2' } as const;
+const STALE_IMPORTED_REF_REVISION = {
+  kind: 'opaque',
+  value: 'vc10-xlsx-metadata-export-gate-stale-ref-revision',
+} as const;
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -320,6 +325,8 @@ describe('VC-10 XLSX metadata export gating', () => {
 
   it('blocks Mog version metadata sidecar export instead of serializing failed-head diagnostics', async () => {
     const leakSentinel = 'vc10-metadata-export-redaction-leak';
+    const externalPackageRef =
+      'https://example.invalid/vc10-metadata-export-private-package-ref.xlsx?token=secret';
     const sinkWrites = { count: 0 };
 
     try {
@@ -336,6 +343,7 @@ describe('VC-10 XLSX metadata export gating', () => {
                   code: 'VERSION_TEST_HEAD_FAILURE',
                   severity: 'error',
                   message: leakSentinel,
+                  dependency: externalPackageRef,
                 },
               ],
             },
@@ -354,6 +362,7 @@ describe('VC-10 XLSX metadata export gating', () => {
         details: expect.objectContaining({ metadataIssue: 'redaction-failed' }),
       });
       expect(JSON.stringify(error)).not.toContain(leakSentinel);
+      expect(JSON.stringify(error)).not.toContain(externalPackageRef);
       expect(JSON.stringify(error)).not.toContain('VERSION_TEST_HEAD_FAILURE');
       expect(JSON.stringify(error)).not.toContain('target_unavailable');
       expect(error).toMatchObject({
@@ -384,9 +393,16 @@ async function expectCleanExportOmitsImportedMetadata(
     await createSourceXlsx(),
     testVersionMetadata({
       documentId: STALE_IMPORTED_DOCUMENT_ID,
-      commitId: OLD_METADATA_COMMIT_ID,
+      workspaceId: STALE_IMPORTED_WORKSPACE_ID,
+      commitId: OTHER_METADATA_COMMIT_ID,
+      refRevision: STALE_IMPORTED_REF_REVISION,
     }),
   );
+  const staleMetadataArchiveText = decodeUtf8(xlsxBytes);
+  expect(staleMetadataArchiveText).toContain(STALE_IMPORTED_DOCUMENT_ID);
+  expect(staleMetadataArchiveText).toContain(STALE_IMPORTED_WORKSPACE_ID);
+  expect(staleMetadataArchiveText).toContain(OTHER_METADATA_COMMIT_ID);
+  expect(staleMetadataArchiveText).toContain(STALE_IMPORTED_REF_REVISION.value);
 
   const exported = await maybeAddMogVersionMetadataToXlsx(
     metadataExportContext({ documentId: CLEAN_EXPORT_DOCUMENT_ID }),
@@ -404,6 +420,11 @@ async function expectCleanExportOmitsImportedMetadata(
       expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
     }),
   ).toMatchObject({ status: 'absent' });
+  const cleanArchiveText = decodeUtf8(exported);
+  expect(cleanArchiveText).not.toContain(STALE_IMPORTED_DOCUMENT_ID);
+  expect(cleanArchiveText).not.toContain(STALE_IMPORTED_WORKSPACE_ID);
+  expect(cleanArchiveText).not.toContain(OTHER_METADATA_COMMIT_ID);
+  expect(cleanArchiveText).not.toContain(STALE_IMPORTED_REF_REVISION.value);
 }
 
 async function createSourceXlsx(): Promise<Uint8Array> {
@@ -522,17 +543,20 @@ function recordingMetadataSink(
 
 function testVersionMetadata(input: {
   readonly documentId: string;
+  readonly workspaceId?: string;
   readonly commitId: WorkbookCommitId;
+  readonly refRevision?: NonNullable<VersionHead['refRevision']>;
 }): MogWorkbookVersionXlsxMetadata {
   return {
     schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
     exportedAt: '2026-06-23T00:00:00.000Z',
     documentId: input.documentId,
+    ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
     head: {
       commitId: input.commitId,
       refName: 'refs/heads/main',
       resolvedFrom: 'HEAD',
-      refRevision: REF_REVISION,
+      refRevision: input.refRevision ?? REF_REVISION,
       semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
       snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
     },
@@ -578,4 +602,8 @@ function expectedMetadataHead(head: VersionHead) {
 
 function objectDigest(seed: string): ObjectDigest {
   return { algorithm: 'sha256', digest: seed.repeat(64) };
+}
+
+function decodeUtf8(value: Uint8Array): string {
+  return new TextDecoder().decode(value);
 }

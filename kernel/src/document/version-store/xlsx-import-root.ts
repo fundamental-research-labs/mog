@@ -163,7 +163,7 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
     };
   }
 
-  const trustedBase = await readTrustedBaseCommit(input, candidate);
+  const trustedBase = await readTrustedBaseCommit(input, candidate, visibleHead.head.id);
   if (trustedBase.status === 'skipped') {
     return applyXlsxVersionImportNewRootToExistingGraph({
       ...input,
@@ -310,6 +310,7 @@ async function applyXlsxVersionImportNewRootToExistingGraph(
 async function readTrustedBaseCommit(
   input: XlsxVersionExistingGraphImportInput,
   candidate: XlsxVersionMetadataHeadCandidate,
+  visibleHeadCommitId: WorkbookCommitId,
 ): Promise<
   | {
       readonly status: 'success';
@@ -347,7 +348,45 @@ async function readTrustedBaseCommit(
     return { status: 'skipped', diagnostics: [] };
   }
 
+  const reachable = await metadataHeadCandidateIsOnVisibleHeadHistory({
+    graph: input.graph,
+    visibleHeadCommitId,
+    candidateCommitId: read.commit.id,
+  });
+  if (reachable.status !== 'success') return reachable;
+  if (!reachable.reachable) return { status: 'skipped', diagnostics: [] };
+
   return { status: 'success', commit: read.commit, diagnostics: [] };
+}
+
+async function metadataHeadCandidateIsOnVisibleHeadHistory(input: {
+  readonly graph: VersionGraphStore;
+  readonly visibleHeadCommitId: WorkbookCommitId;
+  readonly candidateCommitId: WorkbookCommitId;
+}): Promise<
+  | { readonly status: 'success'; readonly reachable: boolean; readonly diagnostics: readonly [] }
+  | { readonly status: 'failed'; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  const pending = [input.visibleHeadCommitId];
+  const seen = new Set<WorkbookCommitId>();
+  while (pending.length > 0) {
+    const commitId = pending.shift();
+    if (!commitId || seen.has(commitId)) continue;
+    if (commitId === input.candidateCommitId) {
+      return { status: 'success', reachable: true, diagnostics: [] };
+    }
+    seen.add(commitId);
+
+    const read = await input.graph.readCommit(commitId);
+    if (read.status !== 'success') {
+      return {
+        status: 'failed',
+        diagnostics: mapGraphDiagnostics(read.diagnostics, 'commitGraphWrite'),
+      };
+    }
+    pending.push(...read.commit.payload.parentCommitIds);
+  }
+  return { status: 'success', reachable: false, diagnostics: [] };
 }
 
 function metadataHeadCandidateNamesSupportedRef(

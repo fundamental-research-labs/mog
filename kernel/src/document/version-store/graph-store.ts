@@ -1,11 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import {
-  objectDigestFromWorkbookCommitId,
-  type ObjectDigest,
-  type VersionDependencyRef,
-  type WorkbookCommitId,
-} from './object-digest';
+import type { ObjectDigest, VersionDependencyRef, WorkbookCommitId } from './object-digest';
 import {
   createInMemoryVersionObjectStore,
   normalizeVersionGraphNamespace,
@@ -22,7 +17,6 @@ import {
   type InMemoryWorkbookCommitStore,
   type ReadWorkbookCommitResult,
   type WorkbookCommit,
-  type WorkbookCommitStoreDiagnostic,
 } from './commit-store';
 import {
   createInMemoryRefStore,
@@ -47,6 +41,12 @@ import {
   graphWriteSuccess,
   parseGraphCommitExpectedHead,
 } from './graph-store-commit-helpers';
+import {
+  danglingRefDiagnostic,
+  diagnostic,
+  mapCommitDiagnostics,
+  refConflictDiagnostic,
+} from './graph-store-diagnostics';
 import { fastForwardGraphRef } from './graph-store-fast-forward';
 import {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
@@ -56,14 +56,20 @@ import {
 import { resolveListCommitsRoot } from './graph-store-list-commits-root';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import { parseGraphCommitParentPlan, type GraphCommitParentPlan } from './graph-store-parent-plans';
-import { orderTopologicalNewestFirst, uniqueSortedCommitIds } from './graph-store-traversal';
+import {
+  collectReachableGraphCommits,
+  readCommitFromGraphRef,
+  readGraphBranchRef,
+  readGraphMainRef,
+} from './graph-store-read-helpers';
+import { validateInputNamespaces } from './graph-store-record-validation';
+import { orderTopologicalNewestFirst } from './graph-store-traversal';
 import type { RefName } from './ref-name';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   commitRefFromLiveRef,
   graphRefFromLiveRef,
-  graphRefNameFromRefName,
   missingGraphCommitExpectedRefVersionDiagnostic,
   parseGraphCommitTargetRef,
   parseGraphRefSelector,
@@ -633,115 +639,26 @@ export class InMemoryVersionGraphStore {
   private async readCommitFromRef(
     ref: LiveRefRecord,
     operation: VersionGraphStoreOperation,
-  ): Promise<
-    | { readonly ok: true; readonly commit: WorkbookCommit }
-    | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] }
-  > {
-    const read = await this.commitStore.readCommit(ref.targetCommitId);
-    if (read.status === 'success') {
-      return { ok: true, commit: read.commit };
-    }
-
-    const graphRef = graphRefFromLiveRef(ref);
-    return {
-      ok: false,
-      diagnostics: [
-        danglingRefDiagnostic(graphRef, operation, read.diagnostics),
-        ...missingCommitDiagnostics(ref.targetCommitId, operation, read.diagnostics),
-      ],
-    };
+  ): ReturnType<typeof readCommitFromGraphRef> {
+    return readCommitFromGraphRef(this.commitStore, ref, operation);
   }
 
   private async collectReachableCommits(
     rootCommitId: WorkbookCommitId,
     operation: VersionGraphStoreOperation,
-  ): Promise<
-    | {
-        readonly ok: true;
-        readonly commits: ReadonlyMap<WorkbookCommitId, WorkbookCommit>;
-      }
-    | {
-        readonly ok: false;
-        readonly commits: ReadonlyMap<WorkbookCommitId, WorkbookCommit>;
-        readonly diagnostics: readonly VersionGraphStoreDiagnostic[];
-        readonly sourceDiagnostics: readonly WorkbookCommitStoreDiagnostic[];
-      }
-  > {
-    const commits = new Map<WorkbookCommitId, WorkbookCommit>();
-    const sourceDiagnostics: WorkbookCommitStoreDiagnostic[] = [];
-    const diagnostics: VersionGraphStoreDiagnostic[] = [];
-    const pending = [rootCommitId];
-    const seen = new Set<WorkbookCommitId>();
-
-    while (pending.length > 0) {
-      const commitId = pending.shift() as WorkbookCommitId;
-      if (seen.has(commitId)) continue;
-      seen.add(commitId);
-
-      const read = await this.commitStore.readCommit(commitId);
-      if (read.status !== 'success') {
-        sourceDiagnostics.push(...read.diagnostics);
-        diagnostics.push(...missingCommitDiagnostics(commitId, operation, read.diagnostics));
-        continue;
-      }
-
-      commits.set(commitId, read.commit);
-      pending.push(...uniqueSortedCommitIds(read.commit.payload.parentCommitIds));
-    }
-
-    if (diagnostics.length > 0) {
-      return { ok: false, commits, diagnostics, sourceDiagnostics };
-    }
-    return { ok: true, commits };
+  ): ReturnType<typeof collectReachableGraphCommits> {
+    return collectReachableGraphCommits(this.commitStore, rootCommitId, operation);
   }
 
-  private readMainRef(
-    operation?: VersionGraphStoreOperation,
-  ):
-    | { readonly ok: true; readonly ref: LiveRefRecord }
-    | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-    const result = this.refStore.getRef('main');
-    if (!result.ok) {
-      return { ok: false, diagnostics: [refStoreDiagnostic(result.diagnostics, operation)] };
-    }
-    if (result.ref === null) {
-      return {
-        ok: false,
-        diagnostics: [
-          diagnostic('VERSION_GRAPH_UNINITIALIZED', 'Graph main ref is not initialized.', {
-            refName: VERSION_GRAPH_MAIN_REF,
-            operation,
-          }),
-        ],
-      };
-    }
-    return { ok: true, ref: result.ref };
+  private readMainRef(operation?: VersionGraphStoreOperation): ReturnType<typeof readGraphMainRef> {
+    return readGraphMainRef(this.refStore, operation);
   }
 
   private readBranchRef(
     refName: RefName,
     operation?: VersionGraphStoreOperation,
-  ):
-    | { readonly ok: true; readonly ref: LiveRefRecord }
-    | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
-    const result = this.refStore.getRef(refName);
-    if (!result.ok) {
-      return { ok: false, diagnostics: [refStoreDiagnostic(result.diagnostics, operation)] };
-    }
-    if (result.ref === null) {
-      return {
-        ok: false,
-        diagnostics: [
-          diagnostic('VERSION_INVALID_OPTIONS', 'Graph branch ref was not found.', {
-            refName: graphRefNameFromRefName(refName),
-            operation,
-            option: 'ref',
-            details: { refMissing: true },
-          }),
-        ],
-      };
-    }
-    return { ok: true, ref: result.ref };
+  ): ReturnType<typeof readGraphBranchRef> {
+    return readGraphBranchRef(this.refStore, refName, operation);
   }
 
   private branchService(): GraphBranchLifecycle {
@@ -779,220 +696,9 @@ export async function createInMemoryVersionGraphStoreFromSnapshot(
   return graph;
 }
 
-function validateInputNamespaces(
-  expectedNamespaceKey: string,
-  input: VersionGraphCommitContentInput,
-): readonly VersionGraphStoreDiagnostic[] {
-  const diagnostics: VersionGraphStoreDiagnostic[] = [];
-  for (const [path, record] of collectInputRecords(input)) {
-    if (!hasNamespace(record)) continue;
-    try {
-      if (versionGraphNamespaceKey(record.namespace) !== expectedNamespaceKey) {
-        diagnostics.push(
-          diagnostic('VERSION_WRONG_NAMESPACE', 'Object record namespace is outside this graph.', {
-            details: { path, namespace: 'redacted' },
-          }),
-        );
-      }
-    } catch {
-      diagnostics.push(
-        diagnostic('VERSION_WRONG_NAMESPACE', 'Object record namespace is invalid.', {
-          details: { path },
-        }),
-      );
-    }
-  }
-  return diagnostics;
-}
-
-function collectInputRecords(
-  input: VersionGraphCommitContentInput,
-): readonly (readonly [string, VersionObjectRecord<unknown> | undefined])[] {
-  return [
-    ['snapshotRootRecord', input.snapshotRootRecord],
-    ['semanticChangeSetRecord', input.semanticChangeSetRecord],
-    ...(input.mutationSegmentRecords ?? []).map(
-      (record, index) => [`mutationSegmentRecords[${index}]`, record] as const,
-    ),
-    ['redactionSummaryRecord', input.redactionSummaryRecord],
-    ['verificationSummaryRecord', input.verificationSummaryRecord],
-  ];
-}
-
-function hasNamespace(
-  record: VersionObjectRecord<unknown> | undefined,
-): record is VersionObjectRecord<unknown> {
-  return typeof record === 'object' && record !== null && 'namespace' in record;
-}
-
-function mapCommitDiagnostics(
-  diagnostics: readonly WorkbookCommitStoreDiagnostic[],
-  operation?: VersionGraphStoreOperation,
-): readonly VersionGraphStoreDiagnostic[] {
-  return diagnostics.map((item) => {
-    const sourceItem = sanitizeCommitDiagnostic(item);
-    const wrongNamespace = sourceItem.sourceDiagnostics?.find(
-      (source) => source.code === 'VERSION_WRONG_NAMESPACE',
-    );
-    if (wrongNamespace) {
-      return diagnostic(
-        'VERSION_WRONG_NAMESPACE',
-        'Object record namespace is outside this graph.',
-        {
-          operation,
-          sourceDiagnostics: [wrongNamespace],
-        },
-      );
-    }
-
-    const missingObject = sourceItem.sourceDiagnostics?.find(
-      (source) => source.code === 'VERSION_OBJECT_NOT_FOUND',
-    );
-    if (missingObject && sourceItem.code === 'VERSION_OBJECT_STORE_FAILURE') {
-      return missingCommitDiagnostic(
-        sourceItem.commitId,
-        operation,
-        [sourceItem],
-        'Commit object is missing from the graph store.',
-      );
-    }
-
-    const code = graphDiagnosticCodeFromCommit(sourceItem.code);
-    return diagnostic(code, sourceItem.message, {
-      commitId: sourceItem.commitId,
-      objectDigest: sourceItem.objectDigest,
-      dependency: sourceItem.dependency,
-      operation,
-      sourceDiagnostics: [sourceItem],
-      details: sourceItem.details,
-    });
-  });
-}
-
-function graphDiagnosticCodeFromCommit(
-  code: WorkbookCommitStoreDiagnostic['code'],
-): VersionGraphStoreDiagnosticCode {
-  if (code === 'VERSION_OBJECT_STORE_FAILURE') return 'VERSION_OBJECT_STORE_FAILURE';
-  if (code === 'VERSION_MISSING_PARENT') return 'VERSION_MISSING_PARENT';
-  if (code === 'VERSION_UNSUPPORTED_PARENT_COMMIT') return 'VERSION_UNSUPPORTED_PARENT_COMMIT';
-  if (code === 'VERSION_INVALID_COMMIT_ID') return 'VERSION_INVALID_COMMIT_ID';
-  if (code === 'VERSION_INVALID_COMMIT_PAYLOAD') return 'VERSION_INVALID_COMMIT_PAYLOAD';
-  if (code === 'VERSION_WRONG_DOCUMENT') return 'VERSION_WRONG_DOCUMENT';
-  return 'VERSION_MISSING_DEPENDENCY';
-}
-
-function missingCommitDiagnostics(
-  commitId: WorkbookCommitId,
-  operation: VersionGraphStoreOperation,
-  sourceDiagnostics: readonly WorkbookCommitStoreDiagnostic[],
-): readonly VersionGraphStoreDiagnostic[] {
-  const mapped = mapCommitDiagnostics(sourceDiagnostics, operation);
-  if (mapped.length === 0) {
-    return [
-      missingCommitDiagnostic(commitId, operation, sourceDiagnostics, 'Commit object is missing.'),
-    ];
-  }
-  return mapped.map((item) =>
-    item.commitId === undefined
-      ? {
-          ...item,
-          commitId,
-          objectKind: item.objectKind ?? 'commit',
-        }
-      : item,
-  );
-}
-
-function missingCommitDiagnostic(
-  commitId: WorkbookCommitId | undefined,
-  operation: VersionGraphStoreOperation | undefined,
-  sourceDiagnostics: readonly WorkbookCommitStoreDiagnostic[],
-  message: string,
-): VersionGraphStoreDiagnostic {
-  return diagnostic('VERSION_MISSING_OBJECT', message, {
-    commitId,
-    objectKind: 'commit',
-    operation,
-    sourceDiagnostics: sourceDiagnostics.map(sanitizeCommitDiagnostic),
-  });
-}
-
-function danglingRefDiagnostic(
-  ref: VersionGraphRef,
-  operation: VersionGraphStoreOperation,
-  sourceDiagnostics: readonly WorkbookCommitStoreDiagnostic[],
-): VersionGraphStoreDiagnostic {
-  return diagnostic('VERSION_DANGLING_REF', 'Graph ref points at a missing or unreadable commit.', {
-    refName: ref.name,
-    commitId: ref.commitId,
-    objectKind: 'commit',
-    operation,
-    sourceDiagnostics: sourceDiagnostics.map(sanitizeCommitDiagnostic),
-  });
-}
-
-function sanitizeCommitDiagnostic(
-  diagnostic: WorkbookCommitStoreDiagnostic,
-): WorkbookCommitStoreDiagnostic {
-  if (diagnostic.sourceDiagnostics === undefined) return diagnostic;
-  return {
-    ...diagnostic,
-    sourceDiagnostics: diagnostic.sourceDiagnostics.map(
-      ({ namespace: _namespace, path: _path, ...source }) => source,
-    ),
-  };
-}
-
-function refConflictDiagnostic(
-  currentRef: LiveRefRecord,
-  expectedHead: WorkbookCommitId,
-  sourceDiagnostics: readonly VersionDiagnostic[] = [],
-): VersionGraphStoreDiagnostic {
-  return diagnostic('VERSION_REF_CONFLICT', 'Graph ref no longer matches expected head.', {
-    refName: graphRefNameFromRefName(currentRef.name),
-    commitId: currentRef.targetCommitId,
-    details: {
-      expectedHead,
-      actualHead: currentRef.targetCommitId,
-      expectedDigest: objectDigestFromWorkbookCommitId(expectedHead).digest,
-      actualDigest: objectDigestFromWorkbookCommitId(currentRef.targetCommitId).digest,
-    },
-    sourceDiagnostics,
-  });
-}
-
-function refStoreDiagnostic(
-  sourceDiagnostics: readonly VersionDiagnostic[],
-  operation?: VersionGraphStoreOperation,
-): VersionGraphStoreDiagnostic {
-  return diagnostic('VERSION_REF_CONFLICT', 'Graph ref store rejected the operation.', {
-    refName: VERSION_GRAPH_MAIN_REF,
-    operation,
-    sourceDiagnostics,
-  });
-}
-
 function failedWrite(
   diagnostics: readonly VersionGraphStoreDiagnostic[],
   mutationGuarantee: VersionGraphWriteFailure['mutationGuarantee'],
 ): VersionGraphWriteFailure {
   return { status: 'failed', diagnostics, mutationGuarantee };
-}
-
-function diagnostic(
-  code: VersionGraphStoreDiagnosticCode,
-  message: string,
-  options: Omit<VersionGraphStoreDiagnostic, 'code' | 'severity' | 'message'> = {},
-): VersionGraphStoreDiagnostic {
-  return {
-    code,
-    severity:
-      code === 'VERSION_OBJECT_STORE_FAILURE' ||
-      code === 'VERSION_DANGLING_REF' ||
-      code === 'VERSION_MISSING_OBJECT'
-        ? 'corruption'
-        : 'error',
-    message,
-    ...options,
-  };
 }

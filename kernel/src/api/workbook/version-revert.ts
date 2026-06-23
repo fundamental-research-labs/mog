@@ -46,6 +46,9 @@ const REVERT_TARGET_KEYS = new Set([
   'headCommitId',
   'mainlineParent',
 ]);
+const REVERT_COMMIT_TARGET_KEYS = new Set(['kind', 'commitId']);
+const REVERT_RANGE_TARGET_KEYS = new Set(['kind', 'baseCommitId', 'headCommitId']);
+const REVERT_MERGE_COMMIT_TARGET_KEYS = new Set(['kind', 'commitId', 'mainlineParent']);
 const EXPECTED_HEAD_KEYS = new Set(['commitId', 'revision', 'symbolicHeadRevision']);
 const REVISION_KEYS = new Set(['kind', 'value']);
 const PREFLIGHT_KEYS = new Set([
@@ -118,20 +121,23 @@ function validateTarget(value: unknown, diagnostics: VersionStoreDiagnostic[]): 
     diagnostics.push(invalidOptionDiagnostic('target', 'revert target must be an object.'));
     return;
   }
-  validateKnownKeys(value, REVERT_TARGET_KEYS, diagnostics, 'target');
   switch (value.kind) {
     case 'commit':
+      validateKnownKeys(value, REVERT_COMMIT_TARGET_KEYS, diagnostics, 'target');
       validateCommitId(value.commitId, 'target.commitId', diagnostics);
       break;
     case 'range':
+      validateKnownKeys(value, REVERT_RANGE_TARGET_KEYS, diagnostics, 'target');
       validateCommitId(value.baseCommitId, 'target.baseCommitId', diagnostics);
       validateCommitId(value.headCommitId, 'target.headCommitId', diagnostics);
       break;
     case 'mergeCommit':
+      validateKnownKeys(value, REVERT_MERGE_COMMIT_TARGET_KEYS, diagnostics, 'target');
       validateCommitId(value.commitId, 'target.commitId', diagnostics);
       validatePositiveInteger(value.mainlineParent, 'target.mainlineParent', diagnostics);
       break;
     default:
+      validateKnownKeys(value, REVERT_TARGET_KEYS, diagnostics, 'target');
       diagnostics.push(invalidOptionDiagnostic('target.kind', 'revert target kind is unsupported.'));
   }
 }

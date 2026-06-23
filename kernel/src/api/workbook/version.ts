@@ -146,6 +146,7 @@ import {
   versionResultFromRefRead,
 } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
+import { projectWorkbookVersionProvenanceStatusDiagnostics } from './version-provenance-truth-service';
 import { validateVersionOperationGate } from './version-operation-gate';
 import {
   createWorkbookVersionBranch,
@@ -414,6 +415,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       'version-service',
       { sufficientForVc09Truth: false },
     );
+    const provenanceStatusProjectionDiagnostics = provenanceTruthComplete
+      ? projectWorkbookVersionProvenanceStatusDiagnostics([
+          services?.provenanceStatusService,
+          services?.provenanceTruthService,
+          services?.provenanceAdmissionService,
+          services,
+        ])
+      : [];
 
     const objectStoreDiagnostics = services?.objectStore
       ? [objectStoreFoundation]
@@ -430,6 +439,7 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       : [checkoutPending];
     const provenanceDiagnostics = [
       provenanceAdmission,
+      ...provenanceStatusProjectionDiagnostics,
       mutationAdmissionFoundation,
       ...(pendingRemotePromotionServiceAttached ? [provenancePromotionServiceAttached] : []),
     ];

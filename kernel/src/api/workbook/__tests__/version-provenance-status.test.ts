@@ -12,6 +12,13 @@ const DOCUMENT_SCOPE: VersionDocumentScope = {
   documentId: 'document-1',
   principalScope: 'principal-1',
 };
+const PROVENANCE_STATUS_CODES = [
+  'version.provenanceAdmission.status.blockedBatchFailure',
+  'version.provenanceAdmission.status.mixedRemote',
+  'version.provenanceAdmission.status.legacyRawUnknown',
+  'version.provenanceAdmission.status.quarantine',
+  'version.provenanceAdmission.status.disconnect',
+] as const;
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
   return {
@@ -130,10 +137,16 @@ describe('WorkbookVersion provenance status', () => {
           readonly vc09ProvenanceTruthComplete?: boolean;
           readonly requirements?: readonly { readonly attached: boolean }[];
         };
+        readonly vc09ProvenanceStatusProjection?: {
+          readonly redaction?: string;
+        };
       };
     };
     expect(versioning.provenanceTruthService).toMatchObject({
       vc09ProvenanceTruthComplete: true,
+      vc09ProvenanceStatusProjection: {
+        redaction: 'classification-only',
+      },
       vc09ProvenanceTruth: {
         source: 'provider-backed-sync-provenance',
         vc09ProvenanceTruthComplete: true,
@@ -153,10 +166,134 @@ describe('WorkbookVersion provenance status', () => {
       available: true,
     });
     expect(status.provenanceAdmission.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
-      expect.arrayContaining(['version.provenanceAdmission.present']),
+      expect.arrayContaining(['version.provenanceAdmission.present', ...PROVENANCE_STATUS_CODES]),
     );
+    for (const code of PROVENANCE_STATUS_CODES) {
+      expect(status.provenanceAdmission.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code,
+            data: expect.objectContaining({
+              redaction: 'classification-only',
+              rawProviderMaterialIncluded: false,
+              rawClientMaterialIncluded: false,
+            }),
+          }),
+        ]),
+      );
+    }
     expect(syncPort.encodeDiff).not.toHaveBeenCalled();
     expect(syncPort.applyProviderEnvelope).not.toHaveBeenCalled();
+  });
+
+  it('projects only redaction-safe provenance status classifications', async () => {
+    const version = new WorkbookVersionImpl(
+      createMockCtx({
+        versioning: {
+          provenanceTruthService: {
+            vc09ProvenanceTruthComplete: true,
+            vc09ProvenanceStatusProjection: {
+              schemaVersion: 1,
+              source: 'provider-backed-sync-provenance-status',
+              redaction: 'classification-only',
+              classifications: [
+                {
+                  classification: 'blockedBatchFailure',
+                  providerRefId: 'provider-secret-ref',
+                  payloadHash: 'raw-payload-hash',
+                },
+                {
+                  classification: 'mixedRemote',
+                  remoteSessionId: 'client-secret-session',
+                  correlationId: 'client-secret-correlation',
+                },
+                {
+                  classification: 'legacyRawUnknown',
+                  providerId: 'provider-secret-id',
+                },
+                {
+                  classification: 'quarantine',
+                  quarantineRecordId: 'provider-secret-quarantine',
+                },
+                {
+                  classification: 'disconnect',
+                  clientId: 'client-secret-id',
+                },
+                {
+                  classification: 'futureRawProviderClassification',
+                  providerRefId: 'provider-secret-future',
+                },
+              ],
+            },
+          },
+        },
+      }),
+    );
+
+    const status = await version.getStatus();
+    const diagnosticCodes = status.provenanceAdmission.diagnostics.map(
+      (diagnostic) => diagnostic.code,
+    );
+
+    expect(diagnosticCodes).toEqual(
+      expect.arrayContaining(['version.provenanceAdmission.present', ...PROVENANCE_STATUS_CODES]),
+    );
+    expect(diagnosticCodes).not.toContain(
+      'version.provenanceAdmission.status.futureRawProviderClassification',
+    );
+    expect(status.provenanceAdmission.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.status.blockedBatchFailure',
+          data: expect.objectContaining({
+            classification: 'blockedBatchFailure',
+            commitGrouping: 'blockedBatchFailure',
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.status.mixedRemote',
+          data: expect.objectContaining({
+            classification: 'mixedRemote',
+            commitGrouping: 'blockedMixedRemote',
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.status.legacyRawUnknown',
+          data: expect.objectContaining({
+            classification: 'legacyRawUnknown',
+            sourceKind: 'legacyRawUnknown',
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.status.quarantine',
+          data: expect.objectContaining({
+            classification: 'quarantine',
+            lifecycleClassification: 'quarantine',
+          }),
+        }),
+        expect.objectContaining({
+          code: 'version.provenanceAdmission.status.disconnect',
+          data: expect.objectContaining({
+            classification: 'disconnect',
+            lifecycleClassification: 'disconnect',
+          }),
+        }),
+      ]),
+    );
+
+    const publicStatusJson = JSON.stringify(status.provenanceAdmission);
+    for (const rawMaterial of [
+      'provider-secret-ref',
+      'raw-payload-hash',
+      'client-secret-session',
+      'client-secret-correlation',
+      'provider-secret-id',
+      'provider-secret-quarantine',
+      'client-secret-id',
+      'provider-secret-future',
+    ]) {
+      expect(publicStatusJson).not.toContain(rawMaterial);
+    }
   });
 
   it('does not attach complete provider-backed truth with only a snapshot encoder', async () => {

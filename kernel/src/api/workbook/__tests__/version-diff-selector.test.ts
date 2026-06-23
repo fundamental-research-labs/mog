@@ -79,6 +79,43 @@ describe('WorkbookVersion diff ref selectors', () => {
     expect(diff).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['unsupported ref namespace', { kind: 'ref', name: 'refs/heads/private-review' }],
+    ['tag ref', { kind: 'ref', name: 'refs/tags/v1' }],
+    ['system ref', { kind: 'ref', name: 'refs/system/secret' }],
+    ['malformed branch ref', { kind: 'ref', name: 'refs/heads/scenario/../secret' }],
+  ])('rejects %s before diff service lookup', async (_label, ref) => {
+    const diff = jest.fn(async () => {
+      throw new Error('diff service should not be called for unsafe refs');
+    });
+    const version = createVersion(diff);
+
+    const result = await version.diff(ref as any, ROOT_COMMIT_ID);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.diff',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PERMISSION_DENIED',
+            data: expect.objectContaining({
+              redacted: true,
+              payload: expect.objectContaining({
+                operation: 'diff',
+                selector: 'base',
+                refName: 'redacted',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain(String(ref.name));
+    expect(diff).not.toHaveBeenCalled();
+  });
+
   it('preserves HEAD and main ref selector behavior', async () => {
     const diff = jest.fn(async () => ({
       status: 'success',
@@ -134,15 +171,55 @@ describe('WorkbookVersion diff ref selectors', () => {
     expect(diff).not.toHaveBeenCalled();
   });
 
-  it('rejects public diff cursors with the wrong order key before provider calls', async () => {
+  it.each([
+    ['empty public cursor handle', VERSION_DIFF_PUBLIC_CURSOR_PREFIX],
+    ['cursor body with whitespace', `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}cursor handle`],
+    ['cursor body with unsafe slash', `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}cursor/handle`],
+    ['cursor body with unsafe percent', `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}cursor%2Fhandle`],
+  ])(
+    'rejects forged public diff cursor with %s before provider calls',
+    async (_label, pageToken) => {
+      const diff = jest.fn(async () => {
+        throw new Error('diff service should not be called for forged cursors');
+      });
+      const version = createVersion(diff);
+
+      const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID, { pageToken });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_INVALID_OPTIONS',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  operation: 'diff',
+                  option: 'pageToken',
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(pageToken);
+      expect(diff).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['wrong diff order key', 'mog-vdiff-v1.topological-newest.cursor-handle'],
+    ['wrong diff cursor schema version', 'mog-vdiff-v2.semantic-change-order.cursor-handle'],
+    ['foreign pagination cursor', 'mog-vcommits-v1.topological-newest.cursor-handle'],
+  ])('rejects %s before provider calls', async (_label, pageToken) => {
     const diff = jest.fn(async () => {
       throw new Error('diff service should not be called for wrong-order cursors');
     });
     const version = createVersion(diff);
 
-    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID, {
-      pageToken: 'mog-vdiff-v1.topological-newest.cursor-handle',
-    });
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID, { pageToken });
 
     expect(result).toMatchObject({
       ok: false,
@@ -161,8 +238,135 @@ describe('WorkbookVersion diff ref selectors', () => {
         ],
       },
     });
-    expect(JSON.stringify(result)).not.toContain('topological-newest.cursor-handle');
+    expect(JSON.stringify(result)).not.toContain(pageToken);
     expect(diff).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'unsupported domain',
+      {
+        code: 'unsupportedDomain',
+        severity: 'error',
+        message: 'Unsupported authored domain omitted for principal-secret.',
+        details: {
+          category: 'unsupported',
+          completenessCode: 'unsupportedDomain',
+          completenessSeverity: 'error',
+          path: 'domains.pivots',
+          domain: 'pivots',
+          deniedPrincipalId: 'principal-secret',
+          omittedDomains: 'macros.vba',
+          rawDomainDigest: 'sha256-secret',
+        },
+      },
+      'unsupported',
+      'The requested version diff includes unsupported semantic state.',
+      ['principal-secret', 'omittedDomains', 'macros.vba', 'rawDomainDigest', 'sha256-secret'],
+    ],
+    [
+      'subset-hidden domain',
+      {
+        code: 'indexKeyedRowVisibility',
+        severity: 'error',
+        message: 'Row hidden state exposes secret-row-ids.',
+        details: {
+          category: 'subset-hidden',
+          completenessCode: 'indexKeyedRowVisibility',
+          completenessSeverity: 'error',
+          path: 'sheets.sheet-1.rows.visibility',
+          domain: 'rows',
+          hiddenRowIds: 'secret-row-ids',
+          redactionBypassKey: 'secret-redaction-key',
+        },
+      },
+      'subset-hidden',
+      'The requested version diff includes subset-hidden semantic state.',
+      ['secret-row-ids', 'hiddenRowIds', 'secret-redaction-key', 'redactionBypassKey'],
+    ],
+  ] as const)(
+    'redacts provider-only fields from %s completeness diagnostics',
+    async (_label, diagnostic, category, safeMessage, forbiddenTerms) => {
+      const diff = jest.fn(async () => ({
+        status: 'degraded',
+        diagnostics: [diagnostic],
+      }));
+      const version = createVersion(diff);
+
+      const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          diagnostics: [
+            expect.objectContaining({
+              code: diagnostic.code,
+              message: safeMessage,
+              data: expect.objectContaining({
+                recoverability: 'unsupported',
+                redacted: true,
+                payload: expect.objectContaining({
+                  operation: 'diff',
+                  category,
+                  completenessCode: diagnostic.code,
+                  completenessSeverity: diagnostic.severity,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(diff).toHaveBeenCalledTimes(1);
+      const serialized = JSON.stringify(result);
+      expect(serialized).not.toContain(diagnostic.message);
+      for (const term of forbiddenTerms) {
+        expect(serialized).not.toContain(term);
+      }
+    },
+  );
+
+  it('preserves redacted diff entries without exposing hidden domain metadata', async () => {
+    const diff = jest.fn(async () => ({
+      status: 'success',
+      items: [
+        {
+          structural: { kind: 'redacted', reason: 'redaction-policy' },
+          before: { kind: 'redacted', reason: 'historical-acl-unavailable' },
+          after: { kind: 'redacted', reason: 'redaction-policy' },
+          display: {
+            entityLabel: { kind: 'redacted', reason: 'permission-denied' },
+          },
+        },
+      ],
+      readRevision: READ_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        items: [
+          {
+            structural: { kind: 'redacted', reason: 'redaction-policy' },
+            before: { kind: 'redacted', reason: 'historical-acl-unavailable' },
+            after: { kind: 'redacted', reason: 'redaction-policy' },
+            display: {
+              entityLabel: { kind: 'redacted', reason: 'permission-denied' },
+            },
+          },
+        ],
+        limit: 50,
+        readRevision: READ_REVISION,
+        order: 'semantic-change-order',
+      } satisfies VersionSemanticDiffPage,
+    });
+    expect(JSON.stringify(result)).not.toContain('hidden');
+    expect(JSON.stringify(result)).not.toContain('domain');
   });
 
   it('rejects diff service pages that use a non-semantic order key', async () => {

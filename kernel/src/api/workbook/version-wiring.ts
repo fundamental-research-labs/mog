@@ -139,16 +139,16 @@ export function attachWorkbookVersioning(
     existing.versionDiffService ??
     (config.provider ? createWorkbookVersionDiffService({ provider: config.provider }) : undefined);
   const checkoutService =
-    existing.checkoutService ??
-    existing.checkoutMaterializationService ??
-    (config.provider
+    config.provider && config.checkoutSnapshotMaterializer
       ? createProviderBackedCheckoutMaterializationService({
           provider: config.provider,
-          ...(config.checkoutSnapshotMaterializer
-            ? { snapshotMaterializer: config.checkoutSnapshotMaterializer }
-            : {}),
+          snapshotMaterializer: config.checkoutSnapshotMaterializer,
         })
-      : undefined);
+      : existing.checkoutService ??
+        existing.checkoutMaterializationService ??
+        (config.provider
+          ? createProviderBackedCheckoutMaterializationService({ provider: config.provider })
+          : undefined);
   const mergeService =
     config.mergeService ??
     existing.mergeService ??

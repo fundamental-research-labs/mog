@@ -388,6 +388,135 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
     }
   });
 
+  it('keeps dirty and rebound provider identity checkout diagnostics redacted after close and reopen', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const reboundProvider = createInMemoryVersionStoreProvider({
+      documentScope: {
+        ...DOCUMENT_SCOPE,
+        documentId: 'checkout-provider-lifecycle-rebound-doc',
+      },
+    });
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+    let reopenedWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setCell('A1', 'target-before-provider-rebound');
+      const committedResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!committedResult.ok) {
+        throw new Error(`expected commit success: ${committedResult.error.code}`);
+      }
+      const committed = committedResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      checkoutWb.markClean();
+      await expect(
+        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      });
+      await checkoutWb.close('skipSave');
+      checkoutWb = undefined;
+
+      reopenedWb = await checkoutHandle.workbook({
+        versioning: withVersionManifest({ provider }),
+      });
+      versioningRuntimeForHandle(checkoutHandle).provider = reboundProvider;
+      await reopenedWb.activeSheet.setCell('B1', 'dirty-after-rebound-reopen');
+
+      const dirtyResult = await reopenedWb.version.checkout({ kind: 'commit', id: committed.id });
+      expect(dirtyResult).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_DIRTY_WORKING_STATE',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  reason: 'dirtyWorkingState',
+                  targetKind: 'commit',
+                  commitId: committed.id,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expectPublicDiagnosticsNotToLeak(dirtyResult, [
+        'checkout-provider-lifecycle-rebound-doc',
+        'providerDocumentScopeKey',
+      ]);
+      await expect(reopenedWb.activeSheet.getCell('B1')).resolves.toMatchObject({
+        value: 'dirty-after-rebound-reopen',
+      });
+
+      reopenedWb.markClean();
+      const reboundResult = await reopenedWb.version.checkout({
+        kind: 'commit',
+        id: committed.id,
+      });
+      expect(reboundResult).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+              data: expect.objectContaining({
+                redacted: true,
+                payload: expect.objectContaining({
+                  operation: 'checkout',
+                  targetKind: 'commit',
+                  commitId: committed.id,
+                  cause: 'VersionCheckoutRebindProviderIdentityError',
+                  identityFenceReason: 'providerDocumentMismatch',
+                  mutationGuarantee: 'unknown-after-partial-mutation',
+                  rollbackSafe: false,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expectPublicDiagnosticsNotToLeak(reboundResult, [
+        'checkout-provider-lifecycle-rebound-doc',
+        'providerDocumentScopeKey',
+      ]);
+      await expect(reopenedWb.activeSheet.getCell('B1')).resolves.toMatchObject({
+        value: 'dirty-after-rebound-reopen',
+      });
+    } finally {
+      if (reopenedWb) await reopenedWb.close('skipSave');
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
   it('fails closed when a fresh checkout reload already carries stale versioning identity', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const sourceHandle = await DocumentFactory.create({
@@ -646,6 +775,13 @@ function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFa
 
 function isMutableRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function expectPublicDiagnosticsNotToLeak(result: unknown, forbidden: readonly string[]): void {
+  const serialized = JSON.stringify(result);
+  for (const value of forbidden) {
+    expect(serialized).not.toContain(value);
+  }
 }
 
 function attachStaleMaterializationVersioning(

@@ -267,6 +267,12 @@ export function remotePromoteSurfaceCapabilityState(
       'version.surfaceStatus.remotePromoteUnavailable',
     );
   }
+  if (input.diagnostics.some((entry) => entry.code === 'version.surfaceStatus.lowerGateEvidenceBlocked')) {
+    return disabledSurfaceCapability(
+      input.diagnostics, 'VC-09',
+      'Promoted version surfaces require current, clean, passing lower-gate evidence.', true,
+      'version.surfaceStatus.lowerGateEvidenceBlocked');
+  }
   if (!input.provenanceAvailable) {
     return disabledSurfaceCapability(
       input.diagnostics,

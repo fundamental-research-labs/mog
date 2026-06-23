@@ -321,13 +321,24 @@ describe('WorkbookVersion surface status derivation hardening', () => {
   });
 
   it('does not overclaim promoted surfaces when lower-gate evidence is mixed or lower rollout', async () => {
+    const promotePendingRemoteSegments = jest.fn();
     const surfaceReady = createSurfaceReadyVersionWithContext(
-      {},
+      {
+        policySnapshot: {
+          decisions: [
+            { capability: 'version:remotePromote', decision: 'allowed' },
+            { capability: 'version:provenance', decision: 'allowed' },
+          ],
+        },
+      },
       {
         captureMergeCommit: jest.fn(),
         mergeCommitMaterializer: { kind: 'test-materializer' },
         provenanceTruthService: {
           vc09ProvenanceTruthComplete: true,
+        },
+        pendingRemotePromotionService: {
+          promotePendingRemoteSegments,
         },
         surfaceStatusLowerGateEvidence: {
           promotionStatus: 'pass',
@@ -371,6 +382,7 @@ describe('WorkbookVersion surface status derivation hardening', () => {
       'version:mergeApply',
       'version:refAdmin',
       'version:provenance',
+      'version:remotePromote',
     ] as const) {
       expect(capabilityState(surface, capability)).toMatchObject({
         enabled: false,
@@ -411,6 +423,7 @@ describe('WorkbookVersion surface status derivation hardening', () => {
     expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
     expect(surfaceReady.merge).not.toHaveBeenCalled();
     expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
   });
 
   it('redacts lower-gate diagnostic projection payloads', async () => {

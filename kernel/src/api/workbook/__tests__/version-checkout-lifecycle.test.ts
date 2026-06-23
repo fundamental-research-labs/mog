@@ -2,7 +2,11 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 import {
@@ -43,13 +47,24 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(checkoutHandle);
     let sourceWb: Workbook | undefined;
     let checkoutWb: Workbook | undefined;
 
     try {
-      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      sourceWb = await sourceHandle.workbook({
+        versioning: withVersionManifest({
+          provider,
+          captureNormalCommit: createCellEditNormalCommitCapture({
+            address: 'A1',
+            value: 'vc06-snapshot-root-capture',
+            label: 'vc06 snapshot root materialization',
+          }),
+        }),
+      });
 
       await authorVc06State(sourceWb);
+      installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       const commitResult = await sourceWb.version.commit({
         expectedHead: {
           commitId: initialized.rootCommit.id,
@@ -228,6 +243,98 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
     }
   });
 
+  it('selects a visible active sheet and refreshes sheet metadata after checkout materialization', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const sourceHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, checkoutHandle);
+    let sourceWb: Workbook | undefined;
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      sourceWb = await sourceHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await sourceWb.activeSheet.setName('Hidden Input');
+      await sourceWb.activeSheet.setCell('A1', 'hidden-source');
+      const visibleSheet = await sourceWb.sheets.add('Visible Output');
+      await visibleSheet.setCell('A1', 'visible-output');
+      const archiveSheet = await sourceWb.sheets.add('Archive');
+      await archiveSheet.setCell('A1', 'archive-output');
+      await sourceWb.sheets.hide('Hidden Input');
+      await sourceWb.sheets.setActive('Archive');
+
+      const commitResult = await sourceWb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!commitResult.ok) throw new Error(`expected commit success: ${commitResult.error.code}`);
+      const committed = commitResult.value;
+      sourceWb.markClean();
+
+      checkoutWb = await checkoutHandle.workbook({ versioning: withVersionManifest({ provider }) });
+      await checkoutWb.activeSheet.setCell('A1', 'pre-checkout-active');
+      expect(checkoutWb.activeSheet.name).toBe('Sheet1');
+      checkoutWb.markClean();
+
+      await expect(
+        checkoutWb.version.checkout({ kind: 'commit', id: committed.id }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      });
+
+      expect(checkoutWb.activeSheet.name).toBe('Visible Output');
+      expect(checkoutWb.activeSheet.index).toBe(1);
+      await expect(checkoutWb.activeSheet.getVisibility()).resolves.toBe('visible');
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'visible-output',
+      });
+      await expect(checkoutWb.getSheetNames()).resolves.toEqual([
+        'Hidden Input',
+        'Visible Output',
+        'Archive',
+      ]);
+      expect(checkoutWb.sheetNames).toEqual(['Hidden Input', 'Visible Output', 'Archive']);
+
+      const sheets = await checkoutWb.getSheets();
+      await expect(
+        Promise.all(
+          sheets.map(async (sheet) => ({
+            name: sheet.name,
+            index: sheet.index,
+            visibility: await sheet.getVisibility(),
+          })),
+        ),
+      ).resolves.toEqual([
+        { name: 'Hidden Input', index: 0, visibility: 'hidden' },
+        { name: 'Visible Output', index: 1, visibility: 'visible' },
+        { name: 'Archive', index: 2, visibility: 'visible' },
+      ]);
+      const hiddenByIndex = await checkoutWb.getSheetByIndex(0);
+      expect(hiddenByIndex.name).toBe('Hidden Input');
+      expect(hiddenByIndex.index).toBe(0);
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      if (sourceWb) await sourceWb.close('skipSave');
+      await checkoutHandle.dispose();
+      await sourceHandle.dispose();
+    }
+  });
+
   it('rejects dirty post-commit checkout without discarding workbook edits', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const handle = await DocumentFactory.create({
@@ -235,6 +342,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(handle);
     let wb: Workbook | undefined;
 
     try {
@@ -255,6 +363,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
 
       await wb.activeSheet.setCell('A1', 99);
       await wb.activeSheet.setCell('A2', '=A1+1');
+      expect(wb.isDirty).toBe(true);
 
       const result = await wb.version.checkout({ kind: 'commit', id: committed.id });
 
@@ -271,6 +380,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       });
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 99 });
       await expect(wb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 100 });
+      expect(wb.isDirty).toBe(true);
     } finally {
       if (wb) await wb.close('skipSave');
       await handle.dispose();
@@ -289,6 +399,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, checkoutHandle);
     let sourceWb: Workbook | undefined;
     let checkoutWb: Workbook | undefined;
 
@@ -333,6 +444,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
           mutationGuarantee: 'workbook-state-materialized',
         },
       });
+      installVersionDomainDetectorNoopsOnWorkbook(checkoutWb);
 
       await expect(checkoutWb.version.getSurfaceStatus()).resolves.toMatchObject({
         current: {
@@ -423,6 +535,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, verifyHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let verifyWb: Workbook | undefined;
@@ -459,6 +572,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       if (!branchCheckout.ok) {
         throw new Error(`expected branch checkout success: ${branchCheckout.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
       expect(branchCheckout.value).toMatchObject({
         status: 'success',
         materialization: 'applied',
@@ -536,6 +650,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle, verifyHandle);
     let sourceWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let verifyWb: Workbook | undefined;
@@ -586,6 +701,7 @@ describe('WorkbookVersion checkout lifecycle materialization', () => {
       if (!branchCheckout.ok) {
         throw new Error(`expected branch checkout success: ${branchCheckout.error.code}`);
       }
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
 
       await branchWb.activeSheet.setCell('B1', 'custom-capture-edit');
       const branchCommitResult = await branchWb.version.commit({

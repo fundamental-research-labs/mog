@@ -18,7 +18,10 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 
 const CREATED_AT = '2026-06-20T00:00:00.000Z';
 const DOCUMENT_SCOPE: VersionDocumentScope = {
@@ -45,6 +48,7 @@ describe('WorkbookVersion checkout atomicity', () => {
       environment: 'headless',
       userTimezone: 'UTC',
     });
+    installVersionDomainDetectorNoopsOnHandles(sourceHandle, checkoutHandle);
     let sourceWb: Workbook | undefined;
     let checkoutWb: Workbook | undefined;
     const checkoutSnapshotMaterializer: CheckoutSnapshotMaterializer = {
@@ -124,6 +128,61 @@ describe('WorkbookVersion checkout atomicity', () => {
       if (sourceWb) await sourceWb.close('skipSave');
       await checkoutHandle.dispose();
       await sourceHandle.dispose();
+    }
+  });
+
+  it('does not publish a partial workbook when the target snapshot root cannot be reloaded', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const checkoutHandle = await DocumentFactory.create({
+      documentId: DOCUMENT_SCOPE.documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    installVersionDomainDetectorNoopsOnHandles(checkoutHandle);
+    let checkoutWb: Workbook | undefined;
+
+    try {
+      checkoutWb = await checkoutHandle.workbook({
+        versioning: withVersionManifest({ provider }),
+      });
+      await checkoutWb.activeSheet.setCell('A1', 'active-before-invalid-root');
+      await checkoutWb.activeSheet.setCell('B1', '=10+5');
+      checkoutWb.markClean();
+
+      const result = await checkoutWb.version.checkout({
+        kind: 'commit',
+        id: initialized.rootCommit.id,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+              data: expect.objectContaining({
+                recoverability: 'repair',
+                redacted: true,
+                payload: expect.objectContaining({
+                  commitId: initialized.rootCommit.id,
+                  cause: 'VERSION_SNAPSHOT_ROOT_RELOAD_INVALID_ROOT',
+                  mutationGuarantee: 'no-workbook-mutation',
+                  rollbackSafe: true,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(checkoutWb.sheetNames).toEqual(['Sheet1']);
+      expect(checkoutWb.activeSheet.name).toBe('Sheet1');
+      await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-invalid-root',
+      });
+      await expect(checkoutWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 15 });
+    } finally {
+      if (checkoutWb) await checkoutWb.close('skipSave');
+      await checkoutHandle.dispose();
     }
   });
 });

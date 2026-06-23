@@ -199,6 +199,7 @@ import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { bindWorkbookFeatureGates } from './workbook-feature-gates-context';
 import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
+import { reconcileCheckoutActiveSheet } from './version-checkout-materializer-active-sheet';
 import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
@@ -601,12 +602,7 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   private async reconcileActiveSheetAfterCheckout(): Promise<void> {
-    const order = await getOrder(this.ctx);
-    if (order.length === 0) return;
-    const active = this.stateProvider.getActiveSheetId();
-    if (!active || !order.includes(sheetId(active))) {
-      this.stateProvider.setActiveSheetId(String(order[0]));
-    }
+    await reconcileCheckoutActiveSheet({ ctx: this.ctx, stateProvider: this.stateProvider });
   }
 
   /**

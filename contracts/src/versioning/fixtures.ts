@@ -180,6 +180,8 @@ type ExpectedPendingRemotePromotionSkipReason =
   | 'missing-required-object'
   | 'missing-semantic-change-set'
   | 'missing-snapshot-root'
+  | 'provider-authority-stale'
+  | 'provider-authority-unknown'
   | 'provider-read-failed';
 type ExpectedAgentProposalStatus =
   | 'draft'

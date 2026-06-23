@@ -271,6 +271,7 @@ pub enum VersionSyncCommitGroupingWire {
     PendingRemote,
     ExcludedLifecycle,
     BlockedMissingRedactionKey,
+    BlockedBatchFailure,
     BlockedMixedRemote,
     BlockedUnknownRemote,
     BlockedUnverified,

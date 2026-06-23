@@ -6313,7 +6313,7 @@ export type VersionRedactionPolicyWire = "none" | "metadata-only" | "content-red
 
 export type VersionSyncAuthorStateWire = "singleRemote" | "mixedRemote" | "unknown" | "agent" | "system";
 
-export type VersionSyncCommitGroupingWire = "none" | "pendingRemote" | "excludedLifecycle" | "blockedMissingRedactionKey" | "blockedMixedRemote" | "blockedUnknownRemote" | "blockedUnverified";
+export type VersionSyncCommitGroupingWire = "none" | "pendingRemote" | "excludedLifecycle" | "blockedMissingRedactionKey" | "blockedBatchFailure" | "blockedMixedRemote" | "blockedUnknownRemote" | "blockedUnverified";
 
 export interface VersionSyncOperationContextWire {
   sourceKind: VersionSyncSourceKindWire;

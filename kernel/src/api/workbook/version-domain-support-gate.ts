@@ -425,9 +425,10 @@ function isRawGraphStore(value: unknown): boolean {
 
 function domainSupportManifestMissingDiagnostics(
   operation: VersionDomainSupportManifestGateOperation,
+  callerRequiredCapabilityKeys?: readonly VersionDomainCapabilityKey[],
 ): readonly VersionStoreDiagnostic[] {
-  return requiredManifestCapabilityKeys(operation).map((capabilityKey) =>
-    domainSupportManifestMissingDiagnostic(operation, capabilityKey),
+  return requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys).map(
+    (capabilityKey) => domainSupportManifestMissingDiagnostic(operation, capabilityKey),
   );
 }
 
@@ -445,9 +446,10 @@ function domainSupportManifestMissingDiagnostic(
 
 function domainSupportManifestReadFailedDiagnostics(
   operation: VersionDomainSupportManifestGateOperation,
+  callerRequiredCapabilityKeys?: readonly VersionDomainCapabilityKey[],
 ): readonly VersionStoreDiagnostic[] {
-  return requiredManifestCapabilityKeys(operation).map((capabilityKey) =>
-    domainSupportManifestReadFailedDiagnostic(operation, capabilityKey),
+  return requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys).map(
+    (capabilityKey) => domainSupportManifestReadFailedDiagnostic(operation, capabilityKey),
   );
 }
 

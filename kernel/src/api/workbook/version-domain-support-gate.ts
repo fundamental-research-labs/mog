@@ -80,6 +80,18 @@ const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
 
 const WORKBOOK_MUTABLE_DOMAIN_DETECTORS = Object.freeze([
   {
+    matrixRowId: 'tables',
+    domainId: 'tables',
+    detectorId: 'detector.tables',
+    isPresent: hasTablesPresent,
+  },
+  {
+    matrixRowId: 'filters.auto-filter',
+    domainId: 'filters',
+    detectorId: 'detector.filters.auto-filter',
+    isPresent: hasFiltersPresent,
+  },
+  {
     matrixRowId: 'named-ranges',
     domainId: 'named-ranges',
     detectorId: 'detector.named-ranges',
@@ -88,7 +100,7 @@ const WORKBOOK_MUTABLE_DOMAIN_DETECTORS = Object.freeze([
   {
     matrixRowId: 'external-links',
     domainId: 'external-links',
-    detectorId: 'detector.hyperlinks',
+    detectorId: 'detector.external-links',
     isPresent: hasHyperlinksPresent,
   },
   {
@@ -195,7 +207,10 @@ async function detectWorkbookMutableDomainRows(
       diagnostics.push(result.diagnostic);
       continue;
     }
-    if (result.present === null) continue;
+    if (result.present === null) {
+      diagnostics.push(domainSupportDetectorUnavailableDiagnostic(operation, result.detector));
+      continue;
+    }
     detectorRows.push({
       matrixRowId: result.detector.matrixRowId,
       domainId: result.detector.domainId,
@@ -252,6 +267,18 @@ async function hasNamedRangesPresent(ctx: DocumentContext): Promise<boolean | nu
 
   const names = await getAllNamedRangesWire();
   return Array.isArray(names) && names.length > 0;
+}
+
+async function hasTablesPresent(ctx: DocumentContext): Promise<boolean | null> {
+  const getAllTablesInSheet = bindMethod(ctx.computeBridge as unknown, 'getAllTablesInSheet');
+  if (!getAllTablesInSheet) return null;
+  return hasAnySheetScopedRows(ctx, (sheetId) => getAllTablesInSheet(sheetId));
+}
+
+async function hasFiltersPresent(ctx: DocumentContext): Promise<boolean | null> {
+  const getFiltersInSheet = bindMethod(ctx.computeBridge as unknown, 'getFiltersInSheet');
+  if (!getFiltersInSheet) return null;
+  return hasAnySheetScopedRows(ctx, (sheetId) => getFiltersInSheet(sheetId));
 }
 
 async function hasHyperlinksPresent(ctx: DocumentContext): Promise<boolean | null> {
@@ -650,6 +677,22 @@ function domainSupportDetectorReadFailedDiagnostic(
       domainId: detector.domainId,
     },
     'retry',
+  );
+}
+
+function domainSupportDetectorUnavailableDiagnostic(
+  operation: VersionDomainSupportManifestGateOperation,
+  detector: Pick<WorkbookMutableDomainDetector, 'matrixRowId' | 'domainId' | 'detectorId'>,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    operation,
+    'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE',
+    'Workbook mutable domain detection is unavailable before the durable version operation.',
+    {
+      detectorId: detector.detectorId,
+      matrixRowId: detector.matrixRowId,
+      domainId: detector.domainId,
+    },
   );
 }
 

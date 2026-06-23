@@ -203,9 +203,7 @@ export const withVersionManifest = versioningWithDomainSupportManifest;
 export const withExportSupportedVersionManifest =
   versioningWithExportSupportedDomainSupportManifest;
 
-export function installVersionDomainDetectorNoopsOnHandles(
-  ...handles: readonly unknown[]
-): void {
+export function installVersionDomainDetectorNoopsOnHandles(...handles: readonly unknown[]): void {
   for (const handle of handles) {
     installVersionDomainDetectorNoopsOnBridge(
       ((handle as Partial<DocumentHandleInternal>).context as DocumentContext | undefined)
@@ -219,13 +217,13 @@ export function installVersionDomainDetectorNoopsOnWorkbook(wb: Pick<Workbook, '
     ctx?: DocumentContext;
     versionContext?: DocumentContext;
   };
-  installVersionDomainDetectorNoopsOnBridge(
-    (version.ctx ?? version.versionContext)?.computeBridge,
-  );
+  installVersionDomainDetectorNoopsOnBridge((version.ctx ?? version.versionContext)?.computeBridge);
 }
 
 function installVersionDomainDetectorNoopsOnBridge(bridge: unknown): void {
   if (!isMutableRecord(bridge)) return;
+  bridge.getAllTablesInSheet = async () => [];
+  bridge.getFiltersInSheet = async () => [];
   bridge.namedRangeCount = async () => 0;
   bridge.getAllNamedRangesWire = async () => [];
   bridge.getHyperlinks = async () => [];

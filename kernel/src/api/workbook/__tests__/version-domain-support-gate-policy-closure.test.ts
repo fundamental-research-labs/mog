@@ -18,6 +18,20 @@ const DETECTOR_SHEET_ID = 'sheet-detector-1';
 
 function mutableDomainDetectorBridge() {
   return {
+    getAllTablesInSheet: jest.fn(async () => [
+      {
+        id: 'table-secret-1',
+        name: 'SecretRevenueTable',
+        range: { startRow: 0, startCol: 0, endRow: 9, endCol: 2 },
+      },
+    ]),
+    getFiltersInSheet: jest.fn(async () => [
+      {
+        id: 'filter-secret-1',
+        sheetId: DETECTOR_SHEET_ID,
+        range: { startRow: 0, startCol: 0, endRow: 9, endCol: 2 },
+      },
+    ]),
     getAllNamedRangesWire: jest.fn(async () => [
       {
         id: 'name-secret-1',
@@ -74,7 +88,7 @@ describe('WorkbookVersion domain support policy gate closure', () => {
     );
   });
 
-  it('auto-detects named ranges, hyperlinks, and data validations as required manifest rows', async () => {
+  it('auto-detects public mutable domains as required manifest rows', async () => {
     const diagnostics = await validateVersionDomainSupportManifestGate(
       {
         versioning: {
@@ -90,6 +104,8 @@ describe('WorkbookVersion domain support policy gate closure', () => {
     );
 
     for (const row of [
+      ['tables', 'tables'],
+      ['filters.auto-filter', 'filters'],
       ['named-ranges', 'named-ranges'],
       ['external-links', 'external-links'],
       ['data-validation', 'data-validation'],
@@ -119,6 +135,8 @@ describe('WorkbookVersion domain support policy gate closure', () => {
         ]),
       );
     }
+    expect(JSON.stringify(diagnostics)).not.toContain('SecretRevenueTable');
+    expect(JSON.stringify(diagnostics)).not.toContain('filter-secret-1');
     expect(JSON.stringify(diagnostics)).not.toContain('SecretRevenueRange');
     expect(JSON.stringify(diagnostics)).not.toContain('https://secret.example.invalid');
     expect(JSON.stringify(diagnostics)).not.toContain('validation-secret-1');
@@ -131,6 +149,8 @@ describe('WorkbookVersion domain support policy gate closure', () => {
           domainSupportManifest: freshManifest({
             domains: [
               ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+              domainRow('tables'),
+              domainRow('filters', { matrixRowId: 'filters.auto-filter' }),
               domainRow('named-ranges'),
               domainRow('external-links'),
               domainRow('data-validation'),
@@ -166,6 +186,30 @@ describe('WorkbookVersion domain support policy gate closure', () => {
           payload: expect.objectContaining({
             operation: 'commit',
             diagnosticCode: 'capability-state-blocked',
+            matrixRowId: 'tables',
+            domainId: 'tables',
+            capabilityKey: 'capture',
+            capabilityState: 'contracted',
+          }),
+        }),
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'commit',
+            diagnosticCode: 'capability-state-blocked',
+            matrixRowId: 'filters.auto-filter',
+            domainId: 'filters',
+            capabilityKey: 'capture',
+            capabilityState: 'contracted',
+          }),
+        }),
+        expect.objectContaining({
+          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+          mutationGuarantee: 'no-write-attempted',
+          payload: expect.objectContaining({
+            operation: 'commit',
+            diagnosticCode: 'capability-state-blocked',
             matrixRowId: 'external-links',
             domainId: 'external-links',
             capabilityKey: 'capture',
@@ -188,6 +232,48 @@ describe('WorkbookVersion domain support policy gate closure', () => {
     );
   });
 
+  it('fails closed with public-safe diagnostics when detector bridge methods are absent', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest(),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+          },
+        },
+        computeBridge: {},
+      } as any,
+      'commit',
+    );
+
+    for (const row of [
+      ['detector.tables', 'tables', 'tables'],
+      ['detector.filters.auto-filter', 'filters.auto-filter', 'filters'],
+      ['detector.named-ranges', 'named-ranges', 'named-ranges'],
+      ['detector.external-links', 'external-links', 'external-links'],
+      ['detector.data-validation', 'data-validation', 'data-validation'],
+    ] as const) {
+      const [detectorId, matrixRowId, domainId] = row;
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_DETECTOR_UNAVAILABLE',
+            recoverability: 'none',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+            payload: expect.objectContaining({
+              operation: 'commit',
+              detectorId,
+              matrixRowId,
+              domainId,
+            }),
+          }),
+        ]),
+      );
+    }
+  });
+
   it('fails closed with redacted diagnostics when mutable domain detection cannot read workbook state', async () => {
     const diagnostics = await validateVersionDomainSupportManifestGate(
       {
@@ -199,9 +285,14 @@ describe('WorkbookVersion domain support policy gate closure', () => {
           },
         },
         computeBridge: {
+          getAllSheetIds: jest.fn(async () => [DETECTOR_SHEET_ID]),
+          getAllTablesInSheet: jest.fn(async () => []),
+          getFiltersInSheet: jest.fn(async () => []),
           getAllNamedRangesWire: jest.fn(async () => {
             throw new Error('SecretRevenueRange read failed for https://secret.example.invalid');
           }),
+          getHyperlinks: jest.fn(async () => []),
+          getRangeSchemasForSheet: jest.fn(async () => []),
         },
       } as any,
       'commit',

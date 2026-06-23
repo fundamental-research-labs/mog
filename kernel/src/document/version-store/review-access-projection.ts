@@ -15,6 +15,11 @@ import type {
   WorkbookVersionReviewRecordSummary,
 } from '@mog-sdk/contracts/api';
 
+import {
+  reviewServiceSemanticTargetSupport,
+  reviewServiceStructuralTargetSupport,
+} from './review-service-target-support';
+
 const REDACTED_VALUE_REASONS = new Set([
   'permission-denied',
   'redaction-policy',
@@ -132,6 +137,8 @@ export function projectReviewAccessDiffValue(
   structural: VersionDiffStructuralMetadata,
   value: unknown,
 ): VersionDiffValue | null | undefined {
+  if (!reviewServiceStructuralTargetSupport(structural).ok) return null;
+
   const reviewSpec = reviewSpecForStructural(structural);
   if (reviewSpec === undefined) return undefined;
   if (reviewSpec === null) return null;
@@ -197,6 +204,11 @@ export function projectReviewAccessDiffPage(
         ),
       ],
     };
+  }
+
+  const unsupportedTargetDiagnostics = unsupportedReviewTargetDiagnostics(page);
+  if (unsupportedTargetDiagnostics.length > 0) {
+    return { ok: false, diagnostics: unsupportedTargetDiagnostics };
   }
 
   const incompleteProjectionDiagnostics = incompleteReviewProjectionDiagnostics(page);
@@ -510,6 +522,26 @@ function incompleteReviewProjectionDiagnostics(
         ),
       ];
     }
+  }
+  return [];
+}
+
+function unsupportedReviewTargetDiagnostics(
+  page: WorkbookVersionReviewDiffPage,
+): readonly VersionDiagnostic[] {
+  const changes = [...page.changes, ...(page.derivedImpact ?? [])];
+  for (const change of changes) {
+    const target = change.target;
+    if (target.kind !== 'semanticChange') continue;
+    const support = reviewServiceSemanticTargetSupport(target);
+    if (support.ok) continue;
+    return [
+      reviewAccessDiagnostic(
+        'VERSION_REVIEW_DIFF_INCOMPLETE',
+        'error',
+        'The requested review diff includes unsupported semantic review targets that cannot be accepted as complete review data.',
+      ),
+    ];
   }
   return [];
 }

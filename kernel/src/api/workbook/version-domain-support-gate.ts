@@ -31,12 +31,17 @@ import {
 type MaybePromise<T> = T | Promise<T>;
 type VersionDomainSupportManifestGateOperation =
   | 'commit'
+  | 'diff'
   | 'checkout'
   | 'merge'
   | 'applyMerge'
   | 'review'
+  | 'reviewAccess'
   | 'import'
-  | 'export';
+  | 'export'
+  | 'revert'
+  | 'undo'
+  | 'redo';
 
 type MaybeDomainSupportManifestContext = DocumentContext & {
   readonly versioning?: unknown;
@@ -63,35 +68,72 @@ type AttachedDomainSupportManifestGate = {
   readonly options?: DomainSupportManifestValidationOptions;
 };
 
-const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
-  commit: ['capture', 'persistence'],
-  checkout: ['checkout'],
-  merge: ['merge'],
-  applyMerge: ['merge', 'persistence'],
-  review: ['reviewAccess'],
-  import: ['import'],
-  export: ['export'],
+type VersionDomainSupportOperationCapabilityMatrixRow = {
+  readonly requiredCapabilityKeys: readonly VersionDomainCapabilityKey[];
+  readonly requiredMatrixRowIds: readonly string[];
+  readonly validatorOperation?: DomainSupportManifestValidationOperation;
+};
+
+const REQUIRED_MANIFEST_OPERATION_CAPABILITY_MATRIX = Object.freeze({
+  commit: {
+    requiredCapabilityKeys: ['capture', 'persistence'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+    validatorOperation: 'commit',
+  },
+  diff: {
+    requiredCapabilityKeys: ['diff'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  checkout: {
+    requiredCapabilityKeys: ['checkout'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+    validatorOperation: 'checkout',
+  },
+  merge: {
+    requiredCapabilityKeys: ['merge'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+    validatorOperation: 'merge',
+  },
+  applyMerge: {
+    requiredCapabilityKeys: ['merge', 'persistence'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+    validatorOperation: 'applyMerge',
+  },
+  review: {
+    requiredCapabilityKeys: ['reviewAccess'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  reviewAccess: {
+    requiredCapabilityKeys: ['reviewAccess'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  import: {
+    requiredCapabilityKeys: ['import'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  export: {
+    requiredCapabilityKeys: ['export'],
+    requiredMatrixRowIds: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+    validatorOperation: 'export',
+  },
+  revert: {
+    requiredCapabilityKeys: ['replay', 'persistence'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  undo: {
+    requiredCapabilityKeys: ['replay'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
+  redo: {
+    requiredCapabilityKeys: ['replay'],
+    requiredMatrixRowIds: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
+  },
 } satisfies Readonly<
-  Record<VersionDomainSupportManifestGateOperation, readonly VersionDomainCapabilityKey[]>
+  Record<
+    VersionDomainSupportManifestGateOperation,
+    VersionDomainSupportOperationCapabilityMatrixRow
+  >
 >);
-
-const REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION = Object.freeze({
-  commit: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  checkout: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  merge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  applyMerge: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  review: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  import: REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
-  export: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
-} satisfies Readonly<Record<VersionDomainSupportManifestGateOperation, readonly string[]>>);
-
-const VALIDATOR_BACKED_OPERATIONS = new Set<VersionDomainSupportManifestGateOperation>([
-  'commit',
-  'checkout',
-  'merge',
-  'applyMerge',
-  'export',
-]);
 
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
@@ -134,10 +176,15 @@ export async function validateVersionDomainSupportManifestGate(
   ctx: DocumentContext,
   operation: VersionDomainSupportManifestGateOperation,
 ): Promise<readonly VersionStoreDiagnostic[]> {
+  const operationMatrixRow = domainSupportOperationCapabilityMatrixRow(operation);
+  if (!operationMatrixRow) {
+    return domainSupportOperationCapabilityMatrixInvalidDiagnostics(operation);
+  }
+
   const gate = getAttachedDomainSupportManifestGate(ctx);
   if (!gate) {
     return isVersionDomainSupportManifestRequired(ctx, operation)
-      ? domainSupportManifestMissingDiagnostics(operation)
+      ? domainSupportManifestMissingDiagnostics(operation, operationMatrixRow)
       : [];
   }
 
@@ -146,14 +193,14 @@ export async function validateVersionDomainSupportManifestGate(
     try {
       manifest = await gate.readManifest();
     } catch {
-      return domainSupportManifestReadFailedDiagnostics(operation);
+      return domainSupportManifestReadFailedDiagnostics(operation, operationMatrixRow);
     }
   } else if (gate.hasManifestSource) {
     manifest = gate.manifest;
   }
 
   if (manifest === undefined || manifest === null) {
-    return domainSupportManifestMissingDiagnostics(operation);
+    return domainSupportManifestMissingDiagnostics(operation, operationMatrixRow);
   }
 
   const {
@@ -171,15 +218,19 @@ export async function validateVersionDomainSupportManifestGate(
     callerOptions.detectorRows,
     detected.detectorRows,
   );
-  const validatorOperation = domainSupportManifestValidationOperation(operation);
   const options: DomainSupportManifestValidationOptions = {
     ...callerOptions,
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
-    ...(validatorOperation ? { operation: validatorOperation } : {}),
-    requiredCapabilityKeys: requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys),
+    ...(operationMatrixRow.validatorOperation
+      ? { operation: operationMatrixRow.validatorOperation }
+      : {}),
+    requiredCapabilityKeys: requiredManifestCapabilityKeys(
+      operationMatrixRow,
+      callerRequiredCapabilityKeys,
+    ),
     requiredMatrixRowIds: requiredManifestMatrixRowIds(
-      operation,
+      operationMatrixRow,
       callerRequiredMatrixRowIds,
       detectorRows,
     ),
@@ -373,21 +424,13 @@ function mergeDetectedDomainDiagnostics(
   return diagnostics;
 }
 
-function domainSupportManifestValidationOperation(
-  operation: VersionDomainSupportManifestGateOperation,
-): DomainSupportManifestValidationOperation | undefined {
-  return VALIDATOR_BACKED_OPERATIONS.has(operation)
-    ? (operation as DomainSupportManifestValidationOperation)
-    : undefined;
-}
-
 function requiredManifestMatrixRowIds(
-  operation: VersionDomainSupportManifestGateOperation,
+  operationMatrixRow: VersionDomainSupportOperationCapabilityMatrixRow,
   callerRequiredMatrixRowIds: readonly string[] | undefined,
   detectorRows: readonly DomainSupportDetectorRow[] | undefined,
 ): readonly string[] {
   return uniquePublicIds(
-    REQUIRED_MANIFEST_MATRIX_ROW_IDS_BY_OPERATION[operation],
+    operationMatrixRow.requiredMatrixRowIds,
     callerRequiredMatrixRowIds,
     detectorRows?.filter((row) => row.present).map((row) => row.matrixRowId),
   );
@@ -466,6 +509,8 @@ function isVersionDomainSupportManifestRequired(
   switch (operation) {
     case 'commit':
       return hasCommitService(services);
+    case 'diff':
+      return hasDiffService(services);
     case 'checkout':
       return hasCheckoutService(services);
     case 'merge':
@@ -473,6 +518,7 @@ function isVersionDomainSupportManifestRequired(
     case 'applyMerge':
       return hasApplyMergeService(services) || hasMergeService(services);
     case 'review':
+    case 'reviewAccess':
       return (
         hasAttachedVersionReviewReadService(services) ||
         hasAttachedVersionReviewWriteService(services)
@@ -481,6 +527,10 @@ function isVersionDomainSupportManifestRequired(
       return hasImportService(services);
     case 'export':
       return hasVersionOperationService(services);
+    case 'revert':
+    case 'undo':
+    case 'redo':
+      return hasRevertService(services);
   }
 }
 
@@ -523,13 +573,28 @@ function hasVersionOperationService(services: Readonly<Record<string, unknown>>)
 }
 
 function requiredManifestCapabilityKeys(
-  operation: VersionDomainSupportManifestGateOperation,
+  operationMatrixRow: VersionDomainSupportOperationCapabilityMatrixRow,
   callerRequiredCapabilityKeys: readonly VersionDomainCapabilityKey[] | undefined,
 ): readonly VersionDomainCapabilityKey[] {
   return uniquePublicIds(
-    REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION[operation],
+    operationMatrixRow.requiredCapabilityKeys,
     callerRequiredCapabilityKeys,
   ) as readonly VersionDomainCapabilityKey[];
+}
+
+function domainSupportOperationCapabilityMatrixRow(
+  operation: VersionDomainSupportManifestGateOperation,
+): VersionDomainSupportOperationCapabilityMatrixRow | null {
+  const row = (
+    REQUIRED_MANIFEST_OPERATION_CAPABILITY_MATRIX as Readonly<
+      Record<string, VersionDomainSupportOperationCapabilityMatrixRow | undefined>
+    >
+  )[operation];
+  if (!row) return null;
+  if (row.requiredCapabilityKeys.length === 0 || row.requiredMatrixRowIds.length === 0) return null;
+  if (new Set(row.requiredCapabilityKeys).size !== row.requiredCapabilityKeys.length) return null;
+  if (new Set(row.requiredMatrixRowIds).size !== row.requiredMatrixRowIds.length) return null;
+  return row;
 }
 
 function uniquePublicIds(
@@ -598,6 +663,29 @@ function hasMergeService(services: Readonly<Record<string, unknown>>): boolean {
   return false;
 }
 
+function hasDiffService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.diffService,
+    services.versionDiffService,
+    services.publicService,
+    services.readService,
+    services.graphService,
+    services.graphStore,
+    services.graph,
+    services,
+  ]) {
+    if (
+      hasMethod(candidate, 'diff') ||
+      hasMethod(candidate, 'diffVersions') ||
+      hasMethod(candidate, 'diffCommits') ||
+      hasMethod(candidate, 'getDiff')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasApplyMergeService(services: Readonly<Record<string, unknown>>): boolean {
   for (const candidate of [
     services.applyMergeService,
@@ -618,6 +706,29 @@ function hasApplyMergeService(services: Readonly<Record<string, unknown>>): bool
       hasMethod(candidate, 'fastForwardApplyMerge') ||
       hasMethod(candidate, 'applyMergeFastForward') ||
       hasMethod(candidate, 'applyFastForwardMerge')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasRevertService(services: Readonly<Record<string, unknown>>): boolean {
+  for (const candidate of [
+    services.revertService,
+    services.versionRevertService,
+    services.publicService,
+    services.writeService,
+    services.commitService,
+    services,
+  ]) {
+    if (
+      hasMethod(candidate, 'revert') ||
+      hasMethod(candidate, 'revertVersion') ||
+      hasMethod(candidate, 'revertCommit') ||
+      hasMethod(candidate, 'revertCommits') ||
+      hasMethod(candidate, 'undo') ||
+      hasMethod(candidate, 'redo')
     ) {
       return true;
     }
@@ -701,11 +812,25 @@ function isRawGraphStore(value: unknown): boolean {
 
 function domainSupportManifestMissingDiagnostics(
   operation: VersionDomainSupportManifestGateOperation,
+  operationMatrixRow: VersionDomainSupportOperationCapabilityMatrixRow,
   callerRequiredCapabilityKeys?: readonly VersionDomainCapabilityKey[],
 ): readonly VersionStoreDiagnostic[] {
-  return requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys).map(
+  return requiredManifestCapabilityKeys(operationMatrixRow, callerRequiredCapabilityKeys).map(
     (capabilityKey) => domainSupportManifestMissingDiagnostic(operation, capabilityKey),
   );
+}
+
+function domainSupportOperationCapabilityMatrixInvalidDiagnostics(
+  operation: VersionDomainSupportManifestGateOperation,
+): readonly VersionStoreDiagnostic[] {
+  return [
+    publicDiagnostic(
+      operation,
+      'VERSION_DOMAIN_SUPPORT_OPERATION_CAPABILITY_MATRIX_INVALID',
+      'The domain support gate could not map this durable version operation to explicit capability columns.',
+      { diagnosticCode: 'operation-capability-mapping-missing-or-ambiguous' },
+    ),
+  ];
 }
 
 function domainSupportManifestMissingDiagnostic(
@@ -722,9 +847,10 @@ function domainSupportManifestMissingDiagnostic(
 
 function domainSupportManifestReadFailedDiagnostics(
   operation: VersionDomainSupportManifestGateOperation,
+  operationMatrixRow: VersionDomainSupportOperationCapabilityMatrixRow,
   callerRequiredCapabilityKeys?: readonly VersionDomainCapabilityKey[],
 ): readonly VersionStoreDiagnostic[] {
-  return requiredManifestCapabilityKeys(operation, callerRequiredCapabilityKeys).map(
+  return requiredManifestCapabilityKeys(operationMatrixRow, callerRequiredCapabilityKeys).map(
     (capabilityKey) => domainSupportManifestReadFailedDiagnostic(operation, capabilityKey),
   );
 }
@@ -815,20 +941,21 @@ function publicSafeDiagnosticValue(value: string | undefined): string | undefine
 }
 
 function publicDiagnostic(
-  operation: VersionDomainSupportManifestGateOperation,
+  operation: VersionDomainSupportManifestGateOperation | string,
   issueCode: string,
   safeMessage: string,
   payload: VersionDiagnosticPublicPayload = {},
   recoverability: VersionStoreDiagnostic['recoverability'] = 'none',
 ): VersionStoreDiagnostic {
+  const publicOperation = publicSafeDiagnosticValue(String(operation)) ?? 'unknown';
   return {
     issueCode,
     severity: 'error',
     recoverability,
-    messageTemplateId: `version.${operation}.${issueCode}`,
+    messageTemplateId: `version.${publicOperation}.${issueCode}`,
     safeMessage,
     payload: {
-      operation,
+      operation: publicOperation,
       ...payload,
     },
     redacted: true,

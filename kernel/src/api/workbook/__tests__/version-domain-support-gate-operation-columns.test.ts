@@ -8,15 +8,33 @@ import {
   freshVersionDomainSupportManifest as freshManifest,
 } from './version-domain-support-test-utils';
 
-type PublicGateOperation = 'commit' | 'checkout' | 'merge' | 'review' | 'export' | 'import';
+type PublicGateOperation =
+  | 'commit'
+  | 'diff'
+  | 'checkout'
+  | 'merge'
+  | 'applyMerge'
+  | 'review'
+  | 'reviewAccess'
+  | 'export'
+  | 'import'
+  | 'revert'
+  | 'undo'
+  | 'redo';
 
 const PUBLIC_GATE_CAPABILITY_CASES = [
   { operation: 'commit', capabilityKeys: ['capture', 'persistence'] },
+  { operation: 'diff', capabilityKeys: ['diff'] },
   { operation: 'checkout', capabilityKeys: ['checkout'] },
   { operation: 'merge', capabilityKeys: ['merge'] },
+  { operation: 'applyMerge', capabilityKeys: ['merge', 'persistence'] },
   { operation: 'review', capabilityKeys: ['reviewAccess'] },
+  { operation: 'reviewAccess', capabilityKeys: ['reviewAccess'] },
   { operation: 'export', capabilityKeys: ['export'] },
   { operation: 'import', capabilityKeys: ['import'] },
+  { operation: 'revert', capabilityKeys: ['replay', 'persistence'] },
+  { operation: 'undo', capabilityKeys: ['replay'] },
+  { operation: 'redo', capabilityKeys: ['replay'] },
 ] as const satisfies readonly {
   readonly operation: PublicGateOperation;
   readonly capabilityKeys: readonly VersionDomainCapabilityKey[];
@@ -26,18 +44,24 @@ const PUBLIC_PARTIAL_SUPPORT_SUPPORTED_OPERATIONS = [
   'commit',
   'checkout',
   'merge',
+  'applyMerge',
   'export',
+  'revert',
+  'undo',
+  'redo',
 ] as const;
 const PUBLIC_PARTIAL_SUPPORT_BLOCKED_OPERATIONS = [
+  { operation: 'diff', capabilityKey: 'diff' },
   { operation: 'review', capabilityKey: 'reviewAccess' },
+  { operation: 'reviewAccess', capabilityKey: 'reviewAccess' },
   { operation: 'import', capabilityKey: 'import' },
 ] as const satisfies readonly {
-  readonly operation: 'review' | 'import';
+  readonly operation: 'diff' | 'review' | 'reviewAccess' | 'import';
   readonly capabilityKey: VersionDomainCapabilityKey;
 }[];
 
 describe('WorkbookVersion domain support gate operation capability columns', () => {
-  it('maps each public operation to its exact manifest capability keys', async () => {
+  it('maps each operation to its exact manifest capability keys', async () => {
     for (const { operation, capabilityKeys } of PUBLIC_GATE_CAPABILITY_CASES) {
       const diagnostics = await validateVersionDomainSupportManifestGate(
         {
@@ -65,6 +89,34 @@ describe('WorkbookVersion domain support gate operation capability columns', () 
     }
   });
 
+  it('fails closed when an operation has no explicit capability-matrix row', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          requireDomainSupportManifest: true,
+          domainSupportManifest: freshManifest(),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+          },
+        },
+      } as any,
+      'futureOperation' as any,
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        issueCode: 'VERSION_DOMAIN_SUPPORT_OPERATION_CAPABILITY_MATRIX_INVALID',
+        mutationGuarantee: 'no-write-attempted',
+        redacted: true,
+        payload: expect.objectContaining({
+          operation: 'futureOperation',
+          diagnosticCode: 'operation-capability-mapping-missing-or-ambiguous',
+        }),
+      }),
+    ]);
+  });
+
   it('allows public partially supported domains for operations whose capability columns are supported', async () => {
     for (const operation of PUBLIC_PARTIAL_SUPPORT_SUPPORTED_OPERATIONS) {
       await expect(
@@ -81,6 +133,81 @@ describe('WorkbookVersion domain support gate operation capability columns', () 
           operation,
         ),
       ).resolves.toEqual([]);
+    }
+  });
+
+  it('fails closed for every mapped operation when a required matrix row is missing', async () => {
+    const missingMatrixRowId = 'sheets';
+
+    for (const { operation } of PUBLIC_GATE_CAPABILITY_CASES) {
+      const manifest = freshManifest();
+      const diagnostics = await validateVersionDomainSupportManifestGate(
+        {
+          versioning: {
+            domainSupportManifest: {
+              ...manifest,
+              domains: manifest.domains.filter((row) => row.matrixRowId !== missingMatrixRowId),
+            },
+            domainSupportManifestOptions: {
+              now: NOW,
+              maxAgeMs: TEN_MINUTES_MS,
+            },
+          },
+        } as any,
+        operation,
+      );
+
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+            payload: expect.objectContaining({
+              operation,
+              diagnosticCode: 'required-matrix-row-missing',
+              matrixRowId: missingMatrixRowId,
+            }),
+          }),
+        ]),
+      );
+    }
+  });
+
+  it('fails closed for every mapped operation when a matrix row is ambiguous', async () => {
+    for (const { operation } of PUBLIC_GATE_CAPABILITY_CASES) {
+      const manifest = freshManifest();
+      const duplicateRow = manifest.domains[0]!;
+      const diagnostics = await validateVersionDomainSupportManifestGate(
+        {
+          versioning: {
+            domainSupportManifest: {
+              ...manifest,
+              domains: [...manifest.domains, duplicateRow],
+            },
+            domainSupportManifestOptions: {
+              now: NOW,
+              maxAgeMs: TEN_MINUTES_MS,
+            },
+          },
+        } as any,
+        operation,
+      );
+
+      expect(diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
+            mutationGuarantee: 'no-write-attempted',
+            redacted: true,
+            payload: expect.objectContaining({
+              operation,
+              diagnosticCode: 'duplicate-matrix-row',
+              matrixRowId: duplicateRow.matrixRowId,
+            }),
+          }),
+        ]),
+      );
     }
   });
 

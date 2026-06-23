@@ -16,7 +16,6 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
 import {
-  installVersionDomainDetectorNoopsOnHandles,
   installVersionDomainDetectorNoopsOnWorkbook,
   withVersionManifest,
 } from './version-domain-support-test-utils';
@@ -227,11 +226,11 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           documentScope,
           sourceWb,
           preview,
-          targetRef: 'refs/heads/stale-sealed-payload' as VersionRefName,
+          targetRef: 'scenario/stale-sealed-payload' as VersionRefName,
           expectedTargetHead,
           resolution: { ...resolutionFor(conflict, 'acceptTheirs'), sealedPayloadRef: payload },
           messages: ['sealed payload object binding does not match.'],
-          leakCanaries: ['refs/heads/stale-sealed-payload', option.optionId, 'theirs'],
+          leakCanaries: ['scenario/stale-sealed-payload', option.optionId, 'theirs'],
         });
       },
       {
@@ -501,7 +500,6 @@ async function withPersistedConflictPreview(
     environment: 'headless',
     userTimezone: 'UTC',
   });
-  installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle);
   let sourceWb: Workbook | undefined;
   let branchWb: Workbook | undefined;
 

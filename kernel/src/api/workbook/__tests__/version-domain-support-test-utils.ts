@@ -222,7 +222,13 @@ export function installVersionDomainDetectorNoopsOnWorkbook(wb: Pick<Workbook, '
 
 function installVersionDomainDetectorNoopsOnBridge(bridge: unknown): void {
   if (!isMutableRecord(bridge)) return;
-  bridge.getAllSheetIds = async () => ['sheet-detector-noop'];
+  const getAllSheetIds =
+    typeof bridge.getAllSheetIds === 'function' ? bridge.getAllSheetIds.bind(bridge) : undefined;
+  bridge.getAllSheetIds = async () => {
+    if (!getAllSheetIds) return ['sheet-detector-noop'];
+    const sheetIds = await getAllSheetIds();
+    return Array.isArray(sheetIds) ? sheetIds : [];
+  };
   bridge.getAllTablesInSheet = async () => [];
   bridge.getFiltersInSheet = async () => [];
   bridge.namedRangeCount = async () => 0;

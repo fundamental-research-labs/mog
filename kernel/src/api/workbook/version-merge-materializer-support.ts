@@ -24,6 +24,7 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
   'cells.formats.direct',
   'rows-columns',
 ]);
+export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND = 'semantic-cell-merge-commit-materializer.v1';
 const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
   ['cell', new Set(['cell', 'cells.values', 'cells.formulas'])],
   ['cells.values', new Set(['cell', 'cells.values'])],
@@ -78,6 +79,8 @@ export type MergeMaterializationSupport =
       readonly reason: string;
       readonly structuralKind: VersionDiffStructuralMetadata['kind'];
       readonly domain: string;
+      readonly propertyPath: string;
+      readonly noop?: boolean;
     };
 
 export function inspectMaterializableMergeChange(
@@ -86,7 +89,9 @@ export function inspectMaterializableMergeChange(
 ): MergeMaterializationSupport {
   const structural = parseMaterializableStructural(change.structural);
   if (!structural) {
-    return unsupported(change.structural, unsupportedStructuralReason(change.structural));
+    return unsupported(change.structural, unsupportedStructuralReason(change.structural), {
+      noop: isNoopMergeChange(change),
+    });
   }
   if (structural.domain === 'cells.formats.direct') {
     if (!parseCellEntity(structural.entityId)) {
@@ -179,6 +184,7 @@ export function unsupportedDetectedMergeDomainDiagnostic(
       reason: 'unsupportedDetectedDomain',
       structuralKind: 'metadata',
       domain: reference.domainId,
+      propertyPath: 'redacted',
     },
     {
       ...(reference.matrixRowId ? { matrixRowId: reference.matrixRowId } : {}),
@@ -355,12 +361,15 @@ function isMaterializableCellFormat(value: unknown): value is CellFormat {
 function unsupported(
   structural: VersionDiffStructuralMetadata,
   reason: string,
+  options: { readonly noop?: boolean } = {},
 ): Extract<MergeMaterializationSupport, { readonly ok: false }> {
   return {
     ok: false,
     reason,
     structuralKind: structural.kind,
     domain: structural.kind === 'metadata' ? structural.domain : 'redacted',
+    propertyPath: structural.kind === 'metadata' ? structural.propertyPath.join('.') : 'redacted',
+    ...(options.noop === undefined ? {} : { noop: options.noop }),
   };
 }
 
@@ -391,14 +400,25 @@ function unsupportedDiagnostic(
     payload: {
       operation,
       itemIndex,
+      materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
       structuralKind: support.structuralKind,
       domain: support.domain,
+      propertyPath: support.propertyPath,
       reason: support.reason,
+      ...(support.noop === undefined ? {} : { noop: support.noop }),
       ...extra,
     },
     redacted: true,
     mutationGuarantee: 'no-write-attempted',
   };
+}
+
+function isNoopMergeChange(
+  change: Pick<VersionMergeChange, 'merged'> & Partial<Pick<VersionMergeChange, 'base' | 'ours'>>,
+): boolean | undefined {
+  const before = change.ours ?? change.base;
+  if (before === undefined) return undefined;
+  return JSON.stringify(before) === JSON.stringify(change.merged);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

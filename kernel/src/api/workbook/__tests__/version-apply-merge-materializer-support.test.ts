@@ -7,7 +7,15 @@ import type {
   VersionSemanticValue,
 } from '@mog-sdk/contracts/api';
 
+import {
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+} from '../../../document/version-store/provider';
 import { WorkbookVersionImpl } from '../version';
+import {
+  DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
+  createSemanticMergeCommitCapture,
+} from '../version-merge-materializer';
 import {
   inspectMaterializableMergeChange,
   isMaterializableMergeDomainReference,
@@ -22,6 +30,10 @@ const BASE = `commit:sha256:${'1'.repeat(64)}` as VersionMergeInput['base'];
 const OURS = `commit:sha256:${'2'.repeat(64)}` as VersionMergeInput['ours'];
 const THEIRS = `commit:sha256:${'3'.repeat(64)}` as VersionMergeInput['theirs'];
 const TARGET_REF = 'refs/heads/main';
+const DOCUMENT_SCOPE: VersionDocumentScope = {
+  documentId: 'vc07-apply-merge-materializer-support',
+};
+const CREATED_AT = '2026-06-21T00:00:00.000Z';
 const EXPECTED_TARGET_HEAD = {
   commitId: OURS,
   revision: { kind: 'counter' as const, value: '1' },
@@ -85,8 +97,10 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
               operation: 'applyMerge',
               mutationGuarantee: 'no-write-attempted',
               payload: expect.objectContaining({
+                materializer: 'semantic-cell-merge-commit-materializer.v1',
                 structuralKind: 'metadata',
                 domain,
+                propertyPath: expect.any(String),
                 reason: 'unsupportedStructuralDomain',
               }),
             }),
@@ -101,6 +115,89 @@ describe('WorkbookVersion applyMerge materializer unsupported structural domains
       },
     );
     expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported structural domain no-op changes before any write', async () => {
+    const result: VersionMergeResult = cleanResult([sheetNameNoopChange()]);
+    const merge = jest.fn(async () => result);
+    const mergeCommit = jest.fn();
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      writeService: { mergeCommit },
+    });
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.applyMerge',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
+            data: expect.objectContaining({
+              operation: 'applyMerge',
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                materializer: 'semantic-cell-merge-commit-materializer.v1',
+                structuralKind: 'metadata',
+                domain: 'sheet',
+                propertyPath: 'name',
+                reason: 'unsupportedStructuralDomain',
+                noop: true,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(mergeCommit).not.toHaveBeenCalled();
+  });
+
+  it('returns materializer boundary diagnostics for unsupported no-op changes before hydration', async () => {
+    const capture = createSemanticMergeCommitCapture({
+      userTimezone: 'UTC',
+      now: () => new Date(CREATED_AT),
+    });
+
+    const result = await capture({
+      provider: { documentScope: DOCUMENT_SCOPE } as any,
+      graph: {} as any,
+      accessContext: {},
+      namespace: namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-materializer-boundary'),
+      registry: {} as any,
+      currentRef: { name: TARGET_REF } as any,
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: TARGET_REF as any,
+      expectedTargetHead: EXPECTED_TARGET_HEAD,
+      changes: [sheetNameNoopChange()],
+      resolutionCount: 0,
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      mutationGuarantee: 'no-write-attempted',
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_MISSING_CHANGE_SET',
+          details: expect.objectContaining({
+            itemIndex: 0,
+            materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
+            structuralKind: 'metadata',
+            domain: 'sheet',
+            propertyPath: 'name',
+            reason: 'unsupportedStructuralDomain',
+            noop: true,
+          }),
+        }),
+      ],
+    });
   });
 
   it.each([
@@ -324,6 +421,15 @@ function sheetNameChange(): VersionMergeChange {
     base: { kind: 'value', value: 'Sheet1' },
     theirs: { kind: 'value', value: 'Forecast' },
     merged: { kind: 'value', value: 'Forecast' },
+  };
+}
+
+function sheetNameNoopChange(): VersionMergeChange {
+  const value = { kind: 'value' as const, value: 'Sheet1' };
+  return {
+    ...sheetNameChange(),
+    theirs: value,
+    merged: value,
   };
 }
 

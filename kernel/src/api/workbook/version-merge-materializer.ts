@@ -26,9 +26,12 @@ import { createDocumentLifecycleSnapshotRootHydrator } from '../document/snapsho
 import { parseCellAddress } from '../internal/utils';
 import * as CellOps from '../worksheet/operations/cell-operations';
 import * as FormatOps from '../worksheet/operations/format-operations';
-import { inspectMaterializableMergeChange } from './version-merge-materializer-support';
+import {
+  DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
+  inspectMaterializableMergeChange,
+} from './version-merge-materializer-support';
 
-export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND = 'semantic-cell-merge-commit-materializer.v1';
+export { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND };
 
 const MERGE_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
   authorId: 'mog.version-merge',
@@ -256,7 +259,10 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
     const change = input.changes[index];
     const support = inspectMaterializableMergeChange(change);
     if (!support.ok) {
-      return unsupportedMergeChange(input, index, change.structural, { reason: support.reason });
+      return unsupportedMergeChange(input, index, change.structural, {
+        reason: support.reason,
+        ...(support.noop === undefined ? {} : { noop: support.noop }),
+      });
     }
     const structural =
       parseCellStructural(change.structural) ??
@@ -340,7 +346,7 @@ function parseMergeChanges(input: VersionMergeCommitCaptureInput):
       merged,
     });
   }
-  return { ok: true, changes: parsed };
+  return { ok: true, changes: parsed.sort(compareParsedMergeChanges) };
 }
 
 function parseCellStructural(
@@ -634,6 +640,19 @@ function compareRowColumnInsertChanges(
   );
 }
 
+function compareParsedMergeChanges(left: ParsedMergeChange, right: ParsedMergeChange): number {
+  return (
+    compareStrings(left.structural.domain, right.structural.domain) ||
+    compareStrings(left.structural.entityId, right.structural.entityId) ||
+    compareStrings(
+      left.structural.propertyPath.join('\u0000'),
+      right.structural.propertyPath.join('\u0000'),
+    ) ||
+    compareStrings(left.structural.changeId, right.structural.changeId) ||
+    left.itemIndex - right.itemIndex
+  );
+}
+
 function assertFormatOperationSuccess(
   result: { readonly success: boolean; readonly error?: unknown },
   operation: string,
@@ -749,8 +768,11 @@ function unsupportedMergeChange(
           mutationGuarantee: 'no-write-attempted',
           details: {
             itemIndex: index,
+            materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
             structuralKind: structural.kind,
             domain: structural.kind === 'metadata' ? structural.domain : 'redacted',
+            propertyPath:
+              structural.kind === 'metadata' ? structural.propertyPath.join('.') : 'redacted',
             ...details,
           },
         }),

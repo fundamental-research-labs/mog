@@ -114,6 +114,35 @@ describe('WorkbookVersion VC-07 merge-base gate', () => {
     expect(merge).not.toHaveBeenCalled();
   });
 
+  it('reports every missing public merge ref before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-missing-all-refs');
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({
+      base: commitId('d'),
+      ours: commitId('e'),
+      theirs: commitId('f'),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.merge',
+      },
+    });
+    if (result.ok) throw new Error('expected public merge failure');
+    expect(
+      result.error.diagnostics
+        .filter((diagnostic) => diagnostic.code === 'VERSION_MISSING_OBJECT')
+        .map((diagnostic) => diagnostic.data.payload?.mergeRef)
+        .sort(),
+    ).toEqual(['base', 'ours', 'theirs']);
+    expect(JSON.stringify(result.error.diagnostics)).not.toContain('commit:sha256:');
+    expect(merge).not.toHaveBeenCalled();
+  });
+
   it('blocks public ancestry shortcuts without a base proof before invoking the merge service', async () => {
     const graph = await graphWithRoot('graph-public-missing-base-proof');
     const staleBase = await createCommit(graph, {
@@ -133,6 +162,37 @@ describe('WorkbookVersion VC-07 merge-base gate', () => {
       diagnosticCode: 'missingBaseProof',
       baseInOurs: false,
       baseInTheirs: false,
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('blocks divergent non-direct ancestry before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-divergent-non-direct-ancestry');
+    const base = await createCommit(graph, {
+      label: 'base',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const intermediate = await createCommit(graph, {
+      label: 'ours-intermediate',
+      parentCommitIds: [base],
+    });
+    const ours = await createCommit(graph, {
+      label: 'ours-grandchild',
+      parentCommitIds: [intermediate],
+    });
+    const theirs = await createCommit(graph, {
+      label: 'theirs-direct-child',
+      parentCommitIds: [base],
+    });
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({ base, ours, theirs });
+
+    expectPublicSafeMergeFailure(result, 'VERSION_MERGE_UNSUPPORTED_ANCESTRY', {
+      mergeRef: 'ours',
+      parentCount: 1,
+      parentMatchesBase: false,
     });
     expect(merge).not.toHaveBeenCalled();
   });

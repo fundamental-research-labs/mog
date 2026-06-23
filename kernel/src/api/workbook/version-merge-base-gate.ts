@@ -38,18 +38,25 @@ export async function validatePublicMergeBaseGate(
   const opened = await openPublicMergeBaseGraph(provider);
   if (!opened.ok) return opened.diagnostics;
 
-  const base = await readPublicMergeBaseCommit(opened.graph, input.base, 'base');
-  if (!base.ok) return base.diagnostics;
-  const ours = await readPublicMergeBaseCommit(opened.graph, input.ours, 'ours');
-  if (!ours.ok) return ours.diagnostics;
-  const theirs = await readPublicMergeBaseCommit(opened.graph, input.theirs, 'theirs');
-  if (!theirs.ok) return theirs.diagnostics;
+  const reads = await Promise.all([
+    readPublicMergeBaseCommit(opened.graph, input.base, 'base'),
+    readPublicMergeBaseCommit(opened.graph, input.ours, 'ours'),
+    readPublicMergeBaseCommit(opened.graph, input.theirs, 'theirs'),
+  ]);
+  const readDiagnostics = reads.flatMap((read) => (read.ok ? [] : read.diagnostics));
+  if (readDiagnostics.length > 0) return readDiagnostics;
+  const [base, ours, theirs] = reads;
+  if (!base.ok || !ours.ok || !theirs.ok) return readDiagnostics;
 
   const resolution = resolveVersionMergeBase(input, ours.commit, theirs.commit);
   if (resolution.status === 'blocked') return [resolution.diagnostic];
 
   const baseProofDiagnostic = validatePublicMergeBaseProof(input, ours.commit, theirs.commit);
-  return baseProofDiagnostic ? [baseProofDiagnostic] : [];
+  if (baseProofDiagnostic) return [baseProofDiagnostic];
+
+  return resolution.status === 'divergent'
+    ? validatePublicMergeAncestry(input, ours.commit.commit, theirs.commit.commit)
+    : [];
 }
 
 export async function publicMergeBaseGateResult(
@@ -151,37 +158,52 @@ async function readPublicMergeBaseCommit(
   | { readonly ok: true; readonly commit: VersionMergeBaseCommitRead }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
-  const closure = await graph.readCommitClosure(commitId);
-  if (closure.status !== 'success') {
-    return {
-      ok: false,
-      diagnostics: mapGraphDiagnostics(closure.diagnostics).map((diagnostic) =>
-        diagnosticWithMergeRef(diagnostic, mergeRef),
-      ),
-    };
-  }
-
-  const commit = closure.commits.find((candidate) => candidate.id === commitId);
-  if (!commit) {
-    return {
-      ok: false,
-      diagnostics: [
-        publicDiagnostic(
-          'VERSION_UNMATERIALIZABLE_COMMIT',
-          'The requested version merge is not previewable by the attached service.',
-          {
-            recoverability: 'unsupported',
-            payload: {
-              diagnosticCode: 'commitClosureRefMismatch',
-              mergeRef,
-            },
-          },
+  try {
+    const closure = await graph.readCommitClosure(commitId);
+    if (closure.status !== 'success') {
+      return {
+        ok: false,
+        diagnostics: mapGraphDiagnostics(closure.diagnostics).map((diagnostic) =>
+          diagnosticWithMergeRef(diagnostic, mergeRef),
         ),
-      ],
+      };
+    }
+
+    const commit = closure.commits.find((candidate) => candidate.id === commitId);
+    if (!commit) {
+      return {
+        ok: false,
+        diagnostics: [
+          publicDiagnostic(
+            'VERSION_UNMATERIALIZABLE_COMMIT',
+            'The requested version merge is not previewable by the attached service.',
+            {
+              recoverability: 'unsupported',
+              payload: {
+                diagnosticCode: 'commitClosureRefMismatch',
+                mergeRef,
+              },
+            },
+          ),
+        ],
+      };
+    }
+
+    return { ok: true, commit: { commit, closure: closure.commits } };
+  } catch (error) {
+    if (error instanceof VersionStoreProviderError) {
+      return {
+        ok: false,
+        diagnostics: mapGraphDiagnostics(error.diagnostics).map((diagnostic) =>
+          diagnosticWithMergeRef(diagnostic, mergeRef),
+        ),
+      };
+    }
+    return {
+      ok: false,
+      diagnostics: [diagnosticWithMergeRef(providerErrorDiagnostic(), mergeRef)],
     };
   }
-
-  return { ok: true, commit: { commit, closure: closure.commits } };
 }
 
 function validatePublicMergeBaseProof(
@@ -212,6 +234,43 @@ function commitClosureContains(
   commitId: WorkbookCommitId,
 ): boolean {
   return read.closure.some((candidate) => candidate.id === commitId);
+}
+
+function validatePublicMergeAncestry(
+  input: VersionMergeInput,
+  ours: VersionMergeBaseCommitRead['commit'],
+  theirs: VersionMergeBaseCommitRead['commit'],
+): readonly VersionStoreDiagnostic[] {
+  return [
+    publicDirectChildDiagnostic(input.base, ours, 'ours'),
+    publicDirectChildDiagnostic(input.base, theirs, 'theirs'),
+  ].filter((diagnostic): diagnostic is VersionStoreDiagnostic => Boolean(diagnostic));
+}
+
+function publicDirectChildDiagnostic(
+  baseCommitId: WorkbookCommitId,
+  commit: VersionMergeBaseCommitRead['commit'],
+  mergeRef: Exclude<MergeInputRef, 'base'>,
+): VersionStoreDiagnostic | null {
+  if (
+    commit.payload.parentCommitIds.length === 1 &&
+    commit.payload.parentCommitIds[0] === baseCommitId
+  ) {
+    return null;
+  }
+
+  return publicDiagnostic(
+    'VERSION_MERGE_UNSUPPORTED_ANCESTRY',
+    'Merge preview requires non-ancestral divergent commits to be direct children of base.',
+    {
+      recoverability: 'unsupported',
+      payload: {
+        mergeRef,
+        parentCount: commit.payload.parentCommitIds.length,
+        parentMatchesBase: commit.payload.parentCommitIds[0] === baseCommitId,
+      },
+    },
+  );
 }
 
 function diagnosticWithMergeRef(

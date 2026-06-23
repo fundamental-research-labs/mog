@@ -42,6 +42,18 @@ const SKIP_REASONS = new Set<VersionPromotePendingRemoteSkipReason>([
   'provider-authority-unknown',
   'provider-read-failed',
 ]);
+const REDACTED_DETAIL_KEYS = new Set([
+  'authorityref',
+  'originid',
+  'payloadhash',
+  'providerid',
+  'providerrefid',
+  'remotesessionid',
+  'roomid',
+  'sessionid',
+  'stableoriginid',
+  'updateid',
+]);
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
@@ -386,6 +398,7 @@ function sanitizeDetailValue(
 
 function shouldRedactDetailValue(key: string, value: string | number | boolean | null): boolean {
   const normalizedKey = key.toLowerCase();
+  if (REDACTED_DETAIL_KEYS.has(normalizedKey)) return true;
   if (
     normalizedKey === 'cursor' ||
     normalizedKey === 'pagetoken' ||

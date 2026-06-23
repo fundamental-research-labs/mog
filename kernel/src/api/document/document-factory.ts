@@ -45,6 +45,7 @@ import type { TrapError } from '@mog/transport';
 import { DocumentLifecycleSystem } from '../../document';
 import { slog } from '../../lib/slog';
 import type { RoomSnapshot as CollaborationRoomSnapshot } from '../../document/collab/ws-sidecar';
+import type { WorkbookLinkStatusScope } from '../../services/workbook-links';
 import { resolveUserTimezone } from './resolve-user-timezone';
 import type {
   CollaborationDocumentCreateOptions,
@@ -211,6 +212,15 @@ function generateDocumentId(): string {
   return `doc-${uuid}`;
 }
 
+function publicDocumentWorkbookLinkScope(documentId: string): WorkbookLinkStatusScope {
+  return {
+    requestingDocumentId: documentId,
+    requestingSessionId: 'unknown-session',
+    actor: 'trusted-host',
+    principal: { tags: ['host:trusted'] },
+  };
+}
+
 // =============================================================================
 // DocumentFactory
 // =============================================================================
@@ -300,6 +310,7 @@ export const DocumentFactory = {
       security: options?.security,
       userTimezone,
       clock: DOCUMENT_FACTORY_CLOCK,
+      workbookLinkScope: publicDocumentWorkbookLinkScope(documentId),
     });
     lifecycle.create(documentId, options ?? {});
     await lifecycle.waitForReady();
@@ -422,6 +433,7 @@ export const DocumentFactory = {
         options?.userTimezone,
         environment === 'headless' ? 'headless' : 'browser',
       );
+      const requestedDocumentId = options?.documentId ?? generateDocumentId();
 
       lifecycle = new DocumentLifecycleSystem({
         environment: options?.environment,
@@ -429,9 +441,10 @@ export const DocumentFactory = {
         security: options?.security,
         userTimezone,
         clock: DOCUMENT_FACTORY_CLOCK,
+        workbookLinkScope: publicDocumentWorkbookLinkScope(requestedDocumentId),
       });
       lifecycle.createFromCsv(
-        options?.documentId ?? generateDocumentId(),
+        requestedDocumentId,
         {
           skipDefaultSheet: true,
           ...(options?.skipLocalPersistence === true ? { skipLocalPersistence: true } : {}),

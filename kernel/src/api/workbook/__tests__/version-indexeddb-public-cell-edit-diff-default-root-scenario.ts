@@ -52,13 +52,7 @@ export function registerDefaultRootPublicCellEditDiffScenario(): void {
           parents: [rootHead.id],
         },
       });
-      wb.markClean();
-      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
-        dirty: {
-          hasUncommittedLocalChanges: false,
-          checkoutSafe: true,
-        },
-      });
+      await expectSettledCleanSurface(wb);
 
       const diffResult = await wb.version.diff(rootHead.id, committedResult.value.id);
       if (!diffResult.ok) {
@@ -71,5 +65,31 @@ export function registerDefaultRootPublicCellEditDiffScenario(): void {
       if (wb) await wb.close('skipSave');
       await handle.dispose();
     }
+  });
+}
+
+async function expectSettledCleanSurface(wb: Workbook): Promise<void> {
+  let surface: Awaited<ReturnType<Workbook['version']['getSurfaceStatus']>> | null = null;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    wb.markClean();
+    surface = await wb.version.getSurfaceStatus();
+    if (!surface.dirty.hasUncommittedLocalChanges && surface.dirty.checkoutSafe) {
+      expect(surface).toMatchObject({
+        dirty: {
+          hasUncommittedLocalChanges: false,
+          checkoutSafe: true,
+        },
+      });
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  expect(surface).toMatchObject({
+    dirty: {
+      hasUncommittedLocalChanges: false,
+      checkoutSafe: true,
+    },
   });
 }

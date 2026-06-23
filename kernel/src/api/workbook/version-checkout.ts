@@ -53,6 +53,7 @@ type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 
 type VersionCheckoutOperation = 'checkout';
+type CheckoutFailureMutationGuarantee = 'no-workbook-mutation' | 'unknown-after-partial-mutation';
 
 export type VersionCheckoutTransactionToken = object;
 
@@ -430,6 +431,10 @@ function mapCheckoutResult(
   }
 
   if (value.ok === false) {
+    const mutationGuarantee =
+      value.mutationGuarantee === 'unknown-after-partial-mutation'
+        ? 'unknown-after-partial-mutation'
+        : 'no-workbook-mutation';
     return degradedCheckout(
       mapCheckoutDiagnostics(
         Array.isArray(value.diagnostics)
@@ -438,10 +443,9 @@ function mapCheckoutResult(
             ? value.error.diagnostics
             : undefined,
         fallbackPayload,
+        mutationGuarantee,
       ),
-      value.mutationGuarantee === 'unknown-after-partial-mutation'
-        ? 'unknown-after-partial-mutation'
-        : 'no-workbook-mutation',
+      mutationGuarantee,
     );
   }
 
@@ -544,9 +548,12 @@ function mapRequiredDependency(value: unknown): VersionCheckoutDependencySummary
 function mapCheckoutDiagnostics(
   value: unknown,
   fallbackPayload: VersionDiagnosticPublicPayload,
+  mutationGuarantee?: CheckoutFailureMutationGuarantee,
 ): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) return [];
-  return value.map((entry) => mapCheckoutDiagnostic(entry, fallbackPayload));
+  return value.map((entry) =>
+    mapCheckoutDiagnostic(entry, fallbackPayload, mutationGuarantee),
+  );
 }
 
 function isMaterializerUnavailableResult(value: unknown): boolean {
@@ -563,6 +570,7 @@ function isMaterializerUnavailableResult(value: unknown): boolean {
 function mapCheckoutDiagnostic(
   value: unknown,
   fallbackPayload: VersionDiagnosticPublicPayload,
+  mutationGuarantee?: CheckoutFailureMutationGuarantee,
 ): VersionStoreDiagnostic {
   if (!isRecord(value)) return providerErrorDiagnostic(fallbackPayload);
 
@@ -580,18 +588,24 @@ function mapCheckoutDiagnostic(
         ? severity
         : 'error',
     recoverability: recoverabilityForCheckoutIssue(issueCode),
-    payload: sanitizeCheckoutDiagnosticPayload(value, fallbackPayload),
+    payload: sanitizeCheckoutDiagnosticPayload(value, fallbackPayload, mutationGuarantee),
   });
 }
 
 function sanitizeCheckoutDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
   fallbackPayload: VersionDiagnosticPublicPayload,
+  mutationGuarantee?: CheckoutFailureMutationGuarantee,
 ): VersionDiagnosticPublicPayload {
   const payload: Record<string, string | number | boolean | null> = {
     operation: 'checkout',
     ...fallbackPayload,
   };
+
+  if (mutationGuarantee) {
+    payload.mutationGuarantee = mutationGuarantee;
+    payload.rollbackSafe = mutationGuarantee === 'no-workbook-mutation';
+  }
 
   const commitId = toCommitId(value.commitId);
   if (commitId) payload.commitId = commitId;

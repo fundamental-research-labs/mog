@@ -18,7 +18,10 @@ import {
   type VersionObjectRecord,
 } from '../../../document/version-store/object-store';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 
 const createCheckpointManagerMock = jest.fn();
 const worksheetImplMock = jest.fn().mockImplementation((sheetId: string) => ({
@@ -536,6 +539,7 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
           captureNormalCommit,
         },
       });
+      installVersionDomainDetectorNoopsOnWorkbook(wb);
 
       await expect(
         wb.version.createBranch({

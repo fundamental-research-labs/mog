@@ -329,19 +329,30 @@ function domainSupportDetectorRowKey(row: DomainSupportDetectorRow): string {
 
 async function hasNamedRangesPresent(ctx: DocumentContext): Promise<boolean | null> {
   const namedRangeCount = bindMethod(ctx.computeBridge as unknown, 'namedRangeCount');
+  const getAllNamedRangesWire = bindMethod(ctx.computeBridge as unknown, 'getAllNamedRangesWire');
   if (namedRangeCount) {
-    const count = await namedRangeCount();
-    if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
-      throw new Error('namedRangeCount returned a malformed count.');
+    try {
+      const count = await namedRangeCount();
+      if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) {
+        throw new Error('namedRangeCount returned a malformed count.');
+      }
+      return count > 0;
+    } catch (error) {
+      if (!getAllNamedRangesWire || !isNamedRangeCountTransportUnavailable(error)) {
+        throw error;
+      }
     }
-    return count > 0;
   }
 
-  const getAllNamedRangesWire = bindMethod(ctx.computeBridge as unknown, 'getAllNamedRangesWire');
   if (!getAllNamedRangesWire) return null;
 
   const names = await getAllNamedRangesWire();
   return expectArrayResult(names, 'getAllNamedRangesWire').length > 0;
+}
+
+function isNamedRangeCountTransportUnavailable(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /compute_named_range_count|namedRangeCount.*(unavailable|unsupported|not implemented|not registered|not found|unknown)/i.test(message);
 }
 
 async function hasTablesPresent(ctx: DocumentContext): Promise<boolean | null> {

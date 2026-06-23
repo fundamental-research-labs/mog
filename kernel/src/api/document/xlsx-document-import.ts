@@ -159,6 +159,7 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       options?.userTimezone,
       environment === 'headless' ? 'headless' : 'browser',
     );
+    const requestedDocumentId = options?.documentId ?? deps.generateDocumentId();
 
     const perfStartTime = performance.now();
     performance.mark('docFactory:createFromXlsx:start');
@@ -168,8 +169,13 @@ export async function createFromXlsxDocument<THandle extends DocumentHandleInter
       security: options?.security,
       userTimezone,
       clock: deps.clock,
+      workbookLinkScope: {
+        requestingDocumentId: requestedDocumentId,
+        requestingSessionId: 'unknown-session',
+        actor: 'trusted-host',
+        principal: { tags: ['host:trusted'] },
+      },
     });
-    const requestedDocumentId = options?.documentId ?? deps.generateDocumentId();
     lifecycle.createFromXlsx(requestedDocumentId, { skipDefaultSheet: true }, source, options);
     await lifecycle.waitForReady();
 

@@ -133,6 +133,29 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     });
     expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
   });
+
+  it('detects macro, embedded, external connection, and customXml package variants', async () => {
+    const unsafePackage = activePackageVariantFixture();
+    const diagnostics = await scanXlsxCleanExportPackageDiagnostics(unsafePackage);
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
+      'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
+      'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
+      'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
+      'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT',
+    ]);
+    expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
+
+    let error: unknown;
+    try {
+      await removeMogVersionMetadataPackageInventoryFromXlsx(unsafePackage);
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
+    expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
+  });
 });
 
 async function createSourceXlsx(): Promise<Uint8Array> {
@@ -328,6 +351,94 @@ function activeUnsafePackageFixture(): Uint8Array {
     { name: 'EncryptionInfo', data: encodeUtf8('encryption info') },
     { name: 'EncryptedPackage', data: encodeUtf8('encrypted package') },
     { name: '_xmlsignatures/origin.sigs', data: encodeUtf8('<Signature/>') },
+  ]);
+}
+
+function activePackageVariantFixture(): Uint8Array {
+  const contentTypes = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.ms-excel.sheet.macroEnabled.main+xml"/>',
+    '<Override PartName="/xl/vbaProjectSignature.bin" ContentType="application/vnd.ms-office.vbaProjectSignature"/>',
+    '<Override PartName="/xl/attachedToolbars.bin" ContentType="application/vnd.ms-office.attachedToolbars"/>',
+    '<Override PartName="/xl/activeX/activeX1.bin" ContentType="application/vnd.ms-office.activeX"/>',
+    '<Override PartName="/xl/embeddings/package1.bin" ContentType="application/vnd.ms-package"/>',
+    '<Override PartName="/xl/connections.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"/>',
+    '<Override PartName="/xl/queryTables/queryTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml"/>',
+    '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/>',
+    '<Override PartName="/xl/xmlMaps.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.xmlMaps+xml"/>',
+    '<Override PartName="/customXml/item1.xml" ContentType="application/xml"/>',
+    '<Override PartName="/customXml/itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/>',
+    '</Types>',
+  ].join('');
+  const rootRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    '<Relationship Id="rIdCustomXml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="customXml/item1.xml"/>',
+    '</Relationships>',
+  ].join('');
+  const workbookRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdVbaSignature" Type="http://schemas.microsoft.com/office/2006/relationships/vbaProjectSignature" Target="vbaProjectSignature.bin"/>',
+    '<Relationship Id="rIdAttachedToolbars" Type="http://schemas.microsoft.com/office/2006/relationships/attachedToolbars" Target="attachedToolbars.bin"/>',
+    '<Relationship Id="rIdActiveXBinary" Type="http://schemas.microsoft.com/office/2006/relationships/activeXControlBinary" Target="activeX/activeX1.bin"/>',
+    '<Relationship Id="rIdEmbeddedPackage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="embeddings/package1.bin"/>',
+    '<Relationship Id="rIdConnections" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections" Target="connections.xml"/>',
+    '<Relationship Id="rIdExternalLink" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink" Target="externalLinks/externalLink1.xml"/>',
+    '<Relationship Id="rIdXmlMaps" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/xmlMaps" Target="xmlMaps.xml"/>',
+    '</Relationships>',
+  ].join('');
+  const externalLinkRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    `<Relationship Id="rIdExternalPath" Type="http://schemas.microsoft.com/office/2019/04/relationships/externalLinkLongPath" Target="file:///tmp/${ACTIVE_CONTENT_SECRET}.xlsx" TargetMode="External"/>`,
+    '<Relationship Id="rIdExternalStartup" Type="http://schemas.microsoft.com/office/2006/relationships/xlExternalLinkPath/xlStartup" Target="startup.xlsx" TargetMode="External"/>',
+    '</Relationships>',
+  ].join('');
+  const tableRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdQueryTable" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable" Target="../queryTables/queryTable1.xml"/>',
+    '</Relationships>',
+  ].join('');
+  const customXmlRels = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+    '<Relationship Id="rIdCustomXmlProps" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps" Target="itemProps1.xml"/>',
+    '</Relationships>',
+  ].join('');
+
+  return writeStoredZip([
+    { name: '[Content_Types].xml', data: encodeUtf8(contentTypes) },
+    { name: '_rels/.rels', data: encodeUtf8(rootRels) },
+    { name: 'xl/workbook.xml', data: encodeUtf8('<workbook/>') },
+    { name: 'xl/_rels/workbook.xml.rels', data: encodeUtf8(workbookRels) },
+    { name: 'xl/vbaProjectSignature.bin', data: encodeUtf8('vba signature') },
+    { name: 'xl/attachedToolbars.bin', data: encodeUtf8('toolbar macro state') },
+    { name: 'xl/activeX/activeX1.bin', data: encodeUtf8('activex binary') },
+    { name: 'xl/embeddings/package1.bin', data: encodeUtf8('embedded package') },
+    { name: 'xl/connections.xml', data: encodeUtf8('<connections/>') },
+    { name: 'xl/queryTables/queryTable1.xml', data: encodeUtf8('<queryTable/>') },
+    { name: 'xl/externalLinks/externalLink1.xml', data: encodeUtf8('<externalLink/>') },
+    {
+      name: 'xl/externalLinks/_rels/externalLink1.xml.rels',
+      data: encodeUtf8(externalLinkRels),
+    },
+    { name: 'xl/xmlMaps.xml', data: encodeUtf8('<xmlMaps/>') },
+    { name: 'xl/tables/table1.xml', data: encodeUtf8('<table/>') },
+    { name: 'xl/tables/_rels/table1.xml.rels', data: encodeUtf8(tableRels) },
+    { name: 'customXml/item1.xml', data: encodeUtf8(`<metadata>${ACTIVE_CONTENT_SECRET}</metadata>`) },
+    { name: 'customXml/_rels/item1.xml.rels', data: encodeUtf8(customXmlRels) },
+    {
+      name: 'customXml/itemProps1.xml',
+      data: encodeUtf8(
+        '<ds:datastoreItem ds:itemID="{22222222-2222-2222-2222-222222222222}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"/>',
+      ),
+    },
   ]);
 }
 

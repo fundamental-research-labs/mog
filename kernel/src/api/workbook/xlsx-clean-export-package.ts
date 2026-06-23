@@ -4,6 +4,8 @@ export type XlsxCleanExportPackageDiagnosticCode =
   | 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT'
   | 'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT'
   | 'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT'
+  | 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT'
+  | 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT'
   | 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER'
   | 'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER'
   | 'XLSX_CLEAN_EXPORT_DANGLING_PACKAGE_REFERENCE';
@@ -12,6 +14,8 @@ export type XlsxCleanExportPackageDiagnosticCategory =
   | 'macrosVba'
   | 'activeX'
   | 'oleOrEmbeddedExecutable'
+  | 'externalDataConnection'
+  | 'customXmlMetadata'
   | 'encryptedPackage'
   | 'digitalSignature'
   | 'danglingPackageReference';
@@ -206,6 +210,16 @@ const CLEAN_EXPORT_DIAGNOSTIC_DEFINITIONS: ReadonlyArray<
     severity: 'error',
   },
   {
+    code: 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
+    category: 'externalDataConnection',
+    severity: 'error',
+  },
+  {
+    code: 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT',
+    category: 'customXmlMetadata',
+    severity: 'error',
+  },
+  {
     code: 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER',
     category: 'encryptedPackage',
     severity: 'error',
@@ -251,6 +265,12 @@ function scanPackagePartPath(
   }
   if (isOleOrEmbeddedExecutablePath(normalized)) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT');
+  }
+  if (isExternalDataConnectionPath(normalized)) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT');
+  }
+  if (isCustomXmlMetadataPath(normalized)) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT');
   }
   if (isEncryptedPackagePath(normalized)) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER');
@@ -312,7 +332,8 @@ function scanContentType(
   if (
     normalized.includes('vbaproject') ||
     normalized.includes('vba') ||
-    normalized.includes('macroenabled')
+    normalized.includes('macroenabled') ||
+    normalized.includes('attachedtoolbars')
   ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
@@ -321,6 +342,20 @@ function scanContentType(
   }
   if (normalized.includes('oleobject') || normalized.includes('vnd.ms-package')) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT');
+  }
+  if (
+    normalized.includes('spreadsheetml.connections') ||
+    normalized.includes('spreadsheetml.querytable') ||
+    normalized.includes('spreadsheetml.externallink')
+  ) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT');
+  }
+  if (
+    normalized.includes('customxml') ||
+    normalized.includes('xmlmaps') ||
+    normalized.includes('datastoreitem')
+  ) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT');
   }
   if (normalized.includes('encryptedpackage') || normalized.includes('encryptioninfo')) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_ENCRYPTED_PACKAGE_MARKER');
@@ -338,7 +373,11 @@ function scanRelationshipTypeAndTarget(
   const normalizedType = type.toLowerCase();
   const normalizedTarget = stripRelationshipTargetSuffixes(target).toLowerCase();
 
-  if (normalizedType.includes('/vbaproject') || normalizedType.includes('/vbadata')) {
+  if (
+    normalizedType.includes('/vbaproject') ||
+    normalizedType.includes('/vbadata') ||
+    normalizedType.includes('/attachedtoolbars')
+  ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT');
   }
   if (
@@ -364,12 +403,34 @@ function scanRelationshipTypeAndTarget(
   ) {
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER');
   }
+  if (
+    normalizedType.endsWith('/connections') ||
+    normalizedType.endsWith('/querytable') ||
+    normalizedType.endsWith('/externallink') ||
+    normalizedType.endsWith('/externallinkpath') ||
+    normalizedType.endsWith('/externallinklongpath') ||
+    normalizedType.includes('/externallinkpath/') ||
+    normalizedType.includes('/xlexternallinkpath/') ||
+    normalizedType.includes('/xlexternallinklongpath/')
+  ) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT');
+  }
+  if (
+    normalizedType.endsWith('/customxml') ||
+    normalizedType.endsWith('/customxmlprops') ||
+    normalizedType.endsWith('/xmlmaps') ||
+    normalizedTarget.startsWith('customxml/') ||
+    normalizedTarget.includes('/customxml/')
+  ) {
+    addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT');
+  }
 }
 
 function isMacroVbaPath(path: string): boolean {
   return (
     path.includes('vbaproject') ||
     path.endsWith('/vbadata.xml') ||
+    path.endsWith('/attachedtoolbars.bin') ||
     path.endsWith('.vba') ||
     path.endsWith('.bas') ||
     path.endsWith('.xla') ||
@@ -395,6 +456,22 @@ function isEncryptedPackagePath(path: string): boolean {
 
 function isDigitalSignaturePath(path: string): boolean {
   return path.startsWith('_xmlsignatures/') || path.includes('/_xmlsignatures/');
+}
+
+function isExternalDataConnectionPath(path: string): boolean {
+  return (
+    path === 'xl/connections.xml' ||
+    (path.startsWith('xl/querytables/') && path.endsWith('.xml')) ||
+    path.startsWith('xl/externallinks/')
+  );
+}
+
+function isCustomXmlMetadataPath(path: string): boolean {
+  return (
+    path.startsWith('customxml/') ||
+    path.includes('/customxml/') ||
+    path === 'xl/xmlmaps.xml'
+  );
 }
 
 function hasUnsafeExecutablePackageExtension(path: string): boolean {

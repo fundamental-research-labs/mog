@@ -30,6 +30,10 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../../../document/version-store/provider';
+import {
+  mapMergeReviewProviderDiagnostics,
+  mergeReviewDiagnostic,
+} from '../version-merge-review-artifacts';
 
 const DOCUMENT_ID = 'vc07-merge-review-endpoints';
 const DOCUMENT_RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -77,6 +81,111 @@ describe('WorkbookVersion merge review endpoints', () => {
         },
       });
     });
+  });
+
+  it('keeps conflict identity stable while redacting unsafe public diagnostics', async () => {
+    await withPersistedConflictPreview(
+      'detail-identity-redaction',
+      async ({ sourceWb, preview }) => {
+        const conflict = preview.conflicts[0];
+        const detail = await sourceWb.version.getMergeConflictDetail({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          valueRole: 'ours',
+          purpose: 'review',
+        });
+        if (!detail.ok) throw new Error(`expected detail read success: ${detail.error.code}`);
+
+        expect(detail.value.conflictId).toBe(conflict.conflictId);
+        expect(detail.value.conflictDigest).toBe(conflict.conflictDigest);
+        expect(
+          detail.value.resolutionOptions.map(optionIdentity).sort(compareOptionIdentity),
+        ).toEqual(
+          conflict.resolutionOptions
+            .map((option) => ({
+              conflictId: conflict.conflictId,
+              optionId: option.optionId,
+              kind: option.kind,
+            }))
+            .sort(compareOptionIdentity),
+        );
+
+        const unsafePackagePath = 'xl/worksheets/sheet1.xml';
+        const unsafeCellPath = 'cells/A1';
+        const unsafeValue = 'sk_live_merge_secret';
+        const invalid = await sourceWb.version.getMergeConflictDetail({
+          resultId: preview.resultId,
+          resultDigest: preview.resultDigest,
+          redactionPolicyDigest: preview.resultDigest,
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
+          valueRole: 'ours',
+          purpose: 'review',
+          [`${unsafePackagePath}!${unsafeCellPath}`]: unsafeValue,
+        } as any);
+        expect(invalid).toMatchObject({
+          ok: false,
+          error: {
+            diagnostics: [
+              expect.objectContaining({
+                message: 'The version merge review request is invalid.',
+                data: expect.objectContaining({
+                  redacted: true,
+                  payload: expect.objectContaining({
+                    operation: 'getMergeConflictDetail',
+                    option: 'redacted',
+                  }),
+                }),
+              }),
+            ],
+          },
+        });
+        expectNoDiagnosticLeaks(invalid, [unsafePackagePath, unsafeCellPath, unsafeValue]);
+
+        const directDiagnostic = mergeReviewDiagnostic(
+          'getMergeConflictDetail',
+          'VERSION_INVALID_OPTIONS',
+          `Unknown field "${unsafePackagePath}!${unsafeCellPath}".`,
+          {
+            payload: {
+              option: `input.${unsafePackagePath}!${unsafeCellPath}`,
+              attemptedValue: unsafeValue,
+              safeOption: 'resultDigest',
+            } as any,
+          },
+        );
+        expect(directDiagnostic).toMatchObject({
+          safeMessage: 'The version merge review request is invalid.',
+          payload: {
+            operation: 'getMergeConflictDetail',
+            option: 'redacted',
+            attemptedValue: 'redacted',
+            safeOption: 'resultDigest',
+          },
+        });
+        expectNoDiagnosticLeaks(directDiagnostic, [unsafePackagePath, unsafeCellPath, unsafeValue]);
+
+        const providerDiagnostics = mapMergeReviewProviderDiagnostics('saveMergeResolutions', [
+          {
+            issueCode: 'VERSION_PROVIDER_FAILED',
+            message: `provider exposed ${unsafePackagePath}!${unsafeCellPath} ${unsafeValue}`,
+          },
+        ]);
+        expect(providerDiagnostics[0]).toMatchObject({
+          issueCode: 'VERSION_PROVIDER_FAILED',
+          safeMessage: 'Version merge review provider failed.',
+          payload: { operation: 'saveMergeResolutions' },
+        });
+        expectNoDiagnosticLeaks(providerDiagnostics, [
+          unsafePackagePath,
+          unsafeCellPath,
+          unsafeValue,
+        ]);
+      },
+    );
   });
 
   it('persists saved resolutions as resolution-set and resolved-attempt artifacts', async () => {
@@ -560,6 +669,36 @@ function conflictDigestObject(conflictDigest: string): ObjectDigest {
     throw new Error(`expected sha256 conflict digest: ${conflictDigest}`);
   }
   return { algorithm: 'sha256', digest: conflictDigest.slice('sha256:'.length) };
+}
+
+function expectNoDiagnosticLeaks(value: unknown, canaries: readonly string[]): void {
+  const serialized = JSON.stringify(value);
+  for (const canary of canaries) {
+    expect(serialized).not.toContain(canary);
+  }
+}
+
+function optionIdentity(option: {
+  readonly conflictId: string;
+  readonly optionId: string;
+  readonly kind: string;
+}) {
+  return {
+    conflictId: option.conflictId,
+    optionId: option.optionId,
+    kind: option.kind,
+  };
+}
+
+function compareOptionIdentity(
+  left: ReturnType<typeof optionIdentity>,
+  right: ReturnType<typeof optionIdentity>,
+): number {
+  return (
+    left.kind.localeCompare(right.kind) ||
+    left.optionId.localeCompare(right.optionId) ||
+    left.conflictId.localeCompare(right.conflictId)
+  );
 }
 
 async function initializeInput(

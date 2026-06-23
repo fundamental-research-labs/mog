@@ -179,15 +179,15 @@ export function getCheckoutAvailability(
   const surfaceReason = actionSurfaceDisabledReason(surface, 'version:checkout');
   if (surfaceReason) return disabledAction(surfaceReason);
 
-  const staleReason = currentStaleDisabledReason(surface, 'checkout');
-  if (staleReason) return disabledAction(staleReason);
-
   const providerWriteReason =
     providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, 'checking out');
   if (providerWriteReason) return disabledAction(providerWriteReason);
 
   const checkoutReason = checkoutUnsafeDisabledReason(surface);
   if (checkoutReason) return disabledAction(checkoutReason);
+
+  const staleReason = currentStaleDisabledReason(surface, 'checkout');
+  if (staleReason) return disabledAction(staleReason);
 
   return enabledAction();
 }

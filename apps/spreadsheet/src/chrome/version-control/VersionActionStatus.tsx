@@ -506,7 +506,7 @@ function redactSensitiveVersionDiagnosticText(message: string): string {
       /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+)/gi,
       `principal ${REDACTED_PRINCIPAL}`,
     )
-    .replace(/\brefs\/[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
+    .replace(/\brefs\/(?!heads\/(?:<branch>|\*))[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
     .replace(/\bcommit:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_COMMIT)
     .replace(/\bpending-remote-segment:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_PENDING_REMOTE_SEGMENT)
     .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH);

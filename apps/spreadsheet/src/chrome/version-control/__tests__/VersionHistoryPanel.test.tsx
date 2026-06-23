@@ -425,8 +425,9 @@ describe('VersionHistoryPanelContent', () => {
       screen.getByText('main is stale because the branch head moved. Refresh before committing.'),
     ).toBeVisible();
     expect(checkoutButton).toBeDisabled();
-    expect(checkoutButton).toHaveAccessibleDescription(checkoutUnsafeReason.message);
-    expect(screen.getByText(checkoutUnsafeReason.message)).toBeVisible();
+    expect(checkoutButton).toHaveAccessibleDescription(
+      'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
+    );
     expect(rootDiffButton).toBeDisabled();
     expect(rootDiffButton).toHaveAccessibleDescription('Root commits do not have a parent diff.');
     expect(screen.getByText('Root commits do not have a parent diff.')).toBeVisible();
@@ -459,12 +460,10 @@ describe('VersionHistoryPanelContent', () => {
 
     const staleStatus = screen.getByTestId('version-history-current-stale-status');
     expect(staleStatus).toBeVisible();
-    expect(staleStatus).toHaveAttribute('data-checked-out-commit-id', HEAD_COMMIT_ID);
-    expect(staleStatus).toHaveAttribute('data-latest-commit-id', LATEST_COMMIT_ID);
     expect(staleStatus).toHaveTextContent('Current checkout is stale');
     expect(staleStatus).toHaveTextContent('main is stale because the branch head moved.');
-    expect(within(staleStatus).getByText(shortCommitId(HEAD_COMMIT_ID))).toBeVisible();
-    expect(within(staleStatus).getByText(shortCommitId(LATEST_COMMIT_ID))).toBeVisible();
+    expect(staleStatus).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
+    expect(staleStatus).not.toHaveTextContent(shortCommitId(LATEST_COMMIT_ID));
 
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
 

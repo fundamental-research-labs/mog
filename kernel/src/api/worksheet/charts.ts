@@ -113,6 +113,7 @@ import {
   switchChartSeriesOrientationMutation,
 } from './chart-app-model-mutations';
 import { getWorksheetChartAppModel } from './chart-app-model-read';
+import { assertChartSourceRefsResolvable } from './chart-source-validation';
 
 // =============================================================================
 // Implementation
@@ -139,6 +140,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     if (!config.dataRange && !hasSeriesValues)
       throw invalidChartConfig('dataRange is required when series[].values are not provided');
     await awaitSheetMaterialized(this.ctx, this.sheetId);
+    await assertChartSourceRefsResolvable(this.ctx, config);
 
     // Generate a stable ID once and pass it through the entire pipeline.
     // If the caller already provided an ID (e.g., via config), preserve it.

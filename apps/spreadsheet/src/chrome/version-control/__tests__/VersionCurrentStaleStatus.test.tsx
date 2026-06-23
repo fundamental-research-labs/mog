@@ -156,6 +156,33 @@ describe('VersionCurrentStaleStatus', () => {
     expect(staleStatus).not.toHaveTextContent(RAW_PRINCIPAL_ID);
   });
 
+  it('projects missing dirty status as a public refresh requirement', () => {
+    render(
+      <VersionCurrentStaleStatus
+        surface={createSurfaceStatus({
+          current: {
+            stale: true,
+            staleReason: 'unknown',
+          },
+          dirty: {
+            source: undefined as never,
+            checkoutPreflightToken: '',
+          },
+        })}
+      />,
+    );
+
+    const staleStatus = screen.getByTestId('version-history-current-stale-status');
+    expect(staleStatus).toHaveAttribute(
+      'data-reconciliation-code',
+      'version.surfaceStatus.dirtyStatusUnavailable',
+    );
+    expect(staleStatus).toHaveTextContent(
+      'Dirty status is unavailable; refresh version status before continuing.',
+    );
+    expect(staleStatus).not.toHaveTextContent('VC-05');
+  });
+
   it('projects non-promotion provider writes as settling state', () => {
     const providerWrites = pendingProviderWritesDiagnostic({
       message: `Provider ${RAW_PROVIDER_REF} writes are in flight for ${RAW_PRINCIPAL_ID}.`,

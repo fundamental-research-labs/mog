@@ -359,7 +359,11 @@ describe('version action availability', () => {
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
-    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expectDisabled(
+      getRemotePromoteAvailability({ surface }, false, false),
+      historyDiagnostic.message,
+      'version-history-incomplete',
+    );
   });
 
   it('blocks host-denied capability diagnostics even when capability state is enabled', () => {
@@ -761,7 +765,11 @@ describe('version action availability', () => {
       getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
-    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expectDisabled(
+      getRemotePromoteAvailability({ surface }, false, false),
+      'main is stale because the branch head moved. Refresh before promoting remote changes.',
+      'version-head-stale',
+    );
   });
 
   it('enables actions when surface capabilities and local prerequisites pass', () => {

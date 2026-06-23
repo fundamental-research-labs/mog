@@ -7,7 +7,7 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import { DisabledReason } from './version-action-availability';
+import { DisabledReason, sanitizeVersionStatusText } from './version-action-availability';
 import { shortCommitId } from './version-history-format';
 
 export type VersionPanelDiagnostic = {
@@ -371,11 +371,6 @@ export function diagnosticFromRemotePromotionResult(
 }
 
 const VERSION_ACTION_UNAVAILABLE = 'Version action is unavailable.';
-const REDACTED_VERSION_REF = '[version ref]';
-const REDACTED_PRINCIPAL = '[principal]';
-const REDACTED_COMMIT = '[commit]';
-const REDACTED_PENDING_REMOTE_SEGMENT = '[pending remote segment]';
-const REDACTED_SYNC_BATCH = '[sync batch]';
 
 type RemotePromotionDiagnosticCandidate = {
   readonly diagnostic: VersionPanelDiagnostic;
@@ -480,36 +475,6 @@ function sanitizeVersionPanelDiagnostic(
       sanitizeVersionStatusText(diagnostic.message, fallbackDiagnosticMessage(diagnostic)) ??
       fallbackDiagnosticMessage(diagnostic),
   };
-}
-
-function sanitizeVersionStatusText(
-  value: string | undefined,
-  fallback: string,
-): string | undefined {
-  const message = value?.trim() ?? '';
-  if (message.length === 0) return undefined;
-  const redacted = redactSensitiveVersionDiagnosticText(message).replace(/\s+/g, ' ').trim();
-  return redacted.length > 0 ? redacted : fallback;
-}
-
-function redactSensitiveVersionDiagnosticText(message: string): string {
-  return message
-    .replace(
-      /["']?\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b["']?\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
-      `principal ${REDACTED_PRINCIPAL}`,
-    )
-    .replace(
-      /\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
-      `principal ${REDACTED_PRINCIPAL}`,
-    )
-    .replace(
-      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+)/gi,
-      `principal ${REDACTED_PRINCIPAL}`,
-    )
-    .replace(/\brefs\/(?!heads\/(?:<branch>|\*))[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
-    .replace(/\bcommit:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_COMMIT)
-    .replace(/\bpending-remote-segment:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_PENDING_REMOTE_SEGMENT)
-    .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH);
 }
 
 function fallbackDiagnosticMessage(diagnostic: VersionPanelDiagnostic): string {

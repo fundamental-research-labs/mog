@@ -9,6 +9,9 @@ import type {
 
 import {
   getCapabilityAvailability,
+  getCheckoutAvailability,
+  getCommitAvailability,
+  getDiffAvailability,
   getRemotePromoteAvailability,
   getRollbackAvailability,
   type VersionActionAvailability,
@@ -18,6 +21,11 @@ import {
 const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const TARGET_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
+const DIRTY_STATUS_UNAVAILABLE_REASON =
+  'Dirty status is unavailable; refresh version status before continuing.';
+const RAW_PRIVATE_REF = 'refs/provider-internal/sync/private-main';
+const RAW_PRIVATE_PRINCIPAL = 'alice@example.com';
+const PRIVATE_COMMIT_ID = `commit:sha256:${'d'.repeat(64)}`;
 
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:read',
@@ -76,8 +84,7 @@ describe('version action availability W11 hardening', () => {
         staleReason: 'activeSessionBehind',
       },
     });
-    const prefix =
-      'main is stale because the active checkout session is behind the branch head.';
+    const prefix = 'main is stale because the active checkout session is behind the branch head.';
     const expectedReasons: Record<(typeof SPLIT_CAPABILITIES)[number], string> = {
       'version:reviewRead': `${prefix} Refresh before reviewing version changes.`,
       'version:reviewWrite': `${prefix} Refresh before reviewing version changes.`,
@@ -177,6 +184,118 @@ describe('version action availability W11 hardening', () => {
       getRemotePromoteAvailability({ surface }, false, false),
       reason,
       'version-capability-host-denied',
+    );
+  });
+
+  it('blocks dirty-dependent actions when the VC-05 dirty snapshot is unavailable', () => {
+    const surface = createSurfaceStatus({
+      dirty: {
+        source: undefined as never,
+        checkoutPreflightToken: '',
+        diagnostics: undefined as never,
+      },
+    });
+
+    expectDisabled(
+      getCommitAvailability({ surface }, false, false, 'Checkpoint'),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
+      getCheckoutAvailability({ surface }, false, false),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
+      getRollbackAvailability(
+        { surface },
+        false,
+        false,
+        'Rollback selected commit',
+        TARGET_COMMIT_ID,
+      ),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:mergeApply'),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expectDisabled(
+      getRemotePromoteAvailability({ surface }, false, false),
+      DIRTY_STATUS_UNAVAILABLE_REASON,
+      'version-dirty-status-unavailable',
+    );
+    expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
+    expect(getCapabilityAvailability({ surface }, false, false, 'version:reviewRead')).toEqual({
+      enabled: true,
+    });
+  });
+
+  it('blocks split write capabilities while provider writes are pending', () => {
+    const pendingProviderWrites = diagnostic(
+      'Provider writes are still settling before write actions can continue.',
+      'version.surfaceStatus.pendingProviderWrites',
+    );
+    const surface = createSurfaceStatus({
+      dirty: {
+        pendingProviderWrites: true,
+        checkoutSafe: false,
+        unsafeReasons: [pendingProviderWrites],
+        diagnostics: [pendingProviderWrites],
+      },
+    });
+
+    for (const capability of [
+      'version:reviewWrite',
+      'version:proposal',
+      'version:mergeApply',
+      'version:provenance',
+    ] as const satisfies readonly VersionCapability[]) {
+      expectDisabled(
+        getCapabilityAvailability({ surface }, false, false, capability),
+        pendingProviderWrites.message,
+        'version-provider-writes-pending',
+      );
+    }
+    expect(getCapabilityAvailability({ surface }, false, false, 'version:reviewRead')).toEqual({
+      enabled: true,
+    });
+    expect(getCapabilityAvailability({ surface }, false, false, 'version:mergePreview')).toEqual({
+      enabled: true,
+    });
+    expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
+  });
+
+  it('sanitizes private diagnostic and capability-owner details in disabled reasons', () => {
+    const surfaceDiagnostic = diagnostic(
+      `Checkout blocked for ${RAW_PRIVATE_REF} principalId=${RAW_PRIVATE_PRINCIPAL} at ${PRIVATE_COMMIT_ID}.`,
+      'version.surfaceStatus.pendingProviderWrites',
+    );
+    const capabilityReason =
+      'Proposal is disabled by owner note /Users/private/mog-internal/plans/active/version-control.md token=private-token.';
+    const surface = createSurfaceStatus({
+      dirty: {
+        pendingProviderWrites: true,
+        checkoutSafe: false,
+        unsafeReasons: [surfaceDiagnostic],
+        diagnostics: [surfaceDiagnostic],
+      },
+      capabilityOverrides: {
+        'version:proposal': disabledCapability(capabilityReason, 'VC-05', true),
+      },
+    });
+
+    expectDisabled(
+      getCheckoutAvailability({ surface }, false, false),
+      'Checkout blocked for [version ref] principal [principal] at [commit].',
+      'version-provider-writes-pending',
+    );
+    expectDisabled(
+      getCapabilityAvailability({ surface }, false, false, 'version:proposal'),
+      'Proposal is disabled by owner note [internal reference] token [secret]',
+      'version-capability-unavailable',
     );
   });
 });

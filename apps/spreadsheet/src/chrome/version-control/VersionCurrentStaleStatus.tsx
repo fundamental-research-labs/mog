@@ -8,6 +8,7 @@ type CurrentStaleStatusCode =
   | 'version.surfaceStatus.currentStale.unverifiedHead';
 
 type CurrentReconciliationStatusCode =
+  | 'version.surfaceStatus.dirtyStatusUnavailable'
   | 'version.surfaceStatus.pendingRemotePromotion'
   | 'version.surfaceStatus.pendingProviderWrites'
   | 'version.surfaceStatus.pendingProviderWritesUnknown';
@@ -91,12 +92,35 @@ function currentStaleReason(statusCode: CurrentStaleStatusCode): string {
 function currentReconciliationStatusCode(
   surface: VersionSurfaceStatus,
 ): Pick<CurrentStaleStatus, 'reconciliationCode' | 'reconciliationMessage'> {
+  if (!hasTrustedDirtyStatus(surface)) {
+    return {
+      reconciliationCode: 'version.surfaceStatus.dirtyStatusUnavailable',
+      reconciliationMessage:
+        'Dirty status is unavailable; refresh version status before continuing.',
+    };
+  }
   if (!surface.dirty.pendingProviderWrites) return {};
   const reconciliation = currentReconciliationStatus(surface);
   return {
     reconciliationCode: reconciliation.reconciliationCode,
     reconciliationMessage: reconciliation.reconciliationMessage,
   };
+}
+
+function hasTrustedDirtyStatus(surface: VersionSurfaceStatus): boolean {
+  const dirty = surface.dirty as Partial<VersionSurfaceStatus['dirty']> & {
+    readonly source?: unknown;
+  };
+  return (
+    dirty.source === 'VC-05' &&
+    typeof dirty.statusRevision === 'string' &&
+    dirty.statusRevision.length > 0 &&
+    typeof dirty.checkoutPreflightToken === 'string' &&
+    dirty.checkoutPreflightToken.length > 0 &&
+    Array.isArray(dirty.unsupportedDirtyDomains) &&
+    Array.isArray(dirty.unsafeReasons) &&
+    Array.isArray(dirty.diagnostics)
+  );
 }
 
 function currentReconciliationStatus(surface: VersionSurfaceStatus): CurrentReconciliationStatus {

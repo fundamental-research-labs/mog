@@ -25,6 +25,17 @@ const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
 };
 
 const VERSIONING_DISABLED_REASON = 'Versioning is disabled for this workbook.';
+const VERSION_ACTION_UNAVAILABLE = 'Version action is unavailable.';
+const DIRTY_STATUS_UNAVAILABLE_REASON =
+  'Dirty status is unavailable; refresh version status before continuing.';
+const REDACTED_VERSION_REF = '[version ref]';
+const REDACTED_PRINCIPAL = '[principal]';
+const REDACTED_COMMIT = '[commit]';
+const REDACTED_PENDING_REMOTE_SEGMENT = '[pending remote segment]';
+const REDACTED_SYNC_BATCH = '[sync batch]';
+const REDACTED_INTERNAL_REFERENCE = '[internal reference]';
+const REDACTED_EXTERNAL_LINK = '[external link]';
+const REDACTED_SECRET = '[secret]';
 
 const INCOMPLETE_HISTORY_DIAGNOSTIC_CODES = new Set([
   'VERSION_DANGLING_REF',
@@ -73,6 +84,7 @@ export type VersionActionDisabledReasonId =
   | 'version-commit-message-required'
   | 'version-commit-no-eligible-changes'
   | 'version-commit-no-local-changes'
+  | 'version-dirty-status-unavailable'
   | 'version-head-stale'
   | 'version-history-incomplete'
   | 'version-provider-writes-pending'
@@ -128,6 +140,9 @@ export function getCommitAvailability(
   const staleReason = currentStaleDisabledReason(surface, 'commit');
   if (staleReason) return disabledAction(staleReason);
 
+  const dirtyStatusReason = dirtyStatusUnavailableDisabledReason(surface);
+  if (dirtyStatusReason) return disabledAction(dirtyStatusReason);
+
   const dirtyReason = commitDirtyDisabledReason(surface);
   if (dirtyReason) return disabledAction(dirtyReason);
 
@@ -179,15 +194,19 @@ export function getCheckoutAvailability(
   const surfaceReason = actionSurfaceDisabledReason(surface, 'version:checkout');
   if (surfaceReason) return disabledAction(surfaceReason);
 
+  const staleReason = currentStaleDisabledReason(surface, 'checkout');
+  if (staleReason) return disabledAction(staleReason);
+
+  const dirtyStatusReason = dirtyStatusUnavailableDisabledReason(surface);
+  if (dirtyStatusReason) return disabledAction(dirtyStatusReason);
+
   const providerWriteReason =
-    providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, 'checking out');
+    providerWritesDiagnosticReason(surface) ??
+    providerWritesDisabledReason(surface, 'checking out');
   if (providerWriteReason) return disabledAction(providerWriteReason);
 
   const checkoutReason = checkoutUnsafeDisabledReason(surface);
   if (checkoutReason) return disabledAction(checkoutReason);
-
-  const staleReason = currentStaleDisabledReason(surface, 'checkout');
-  if (staleReason) return disabledAction(staleReason);
 
   return enabledAction();
 }
@@ -228,6 +247,9 @@ export function getRollbackAvailability(
 
   const staleReason = currentStaleDisabledReason(surface, 'rollback');
   if (staleReason) return disabledAction(staleReason);
+
+  const dirtyStatusReason = dirtyStatusUnavailableDisabledReason(surface);
+  if (dirtyStatusReason) return disabledAction(dirtyStatusReason);
 
   const providerWriteReason =
     providerWritesDiagnosticReason(surface) ??
@@ -288,17 +310,59 @@ export function DisabledReason({
   readonly id: string;
   readonly reason?: string;
 }): React.JSX.Element | null {
-  if (!reason) return null;
+  const sanitizedReason = sanitizeVersionStatusText(reason, VERSION_ACTION_UNAVAILABLE);
+  if (!sanitizedReason) return null;
 
   return (
     <div id={id} className="text-[11px] leading-snug text-ss-text-secondary">
-      {reason}
+      {sanitizedReason}
     </div>
   );
 }
 
 export function safeDomId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
+}
+
+export function sanitizeVersionStatusText(
+  value: string | undefined,
+  fallback: string,
+): string | undefined {
+  const message = value?.trim() ?? '';
+  if (message.length === 0) return undefined;
+  const redacted = redactSensitiveVersionDiagnosticText(message).replace(/\s+/g, ' ').trim();
+  return redacted.length > 0 ? redacted : fallback;
+}
+
+function redactSensitiveVersionDiagnosticText(message: string): string {
+  return message
+    .replace(
+      /["']?\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b["']?\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED_PRINCIPAL)
+    .replace(/\brefs\/(?!heads\/(?:<branch>|\*))[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
+    .replace(/\bcommit:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_COMMIT)
+    .replace(/\bpending-remote-segment:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_PENDING_REMOTE_SEGMENT)
+    .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH)
+    .replace(/\/Users\/[^\s"'`<>),;]+/g, REDACTED_INTERNAL_REFERENCE)
+    .replace(
+      /\b(?:mog-internal|dev\/version-control-eval|plans\/active|plans\/)[^\s"'`<>),;]*/g,
+      REDACTED_INTERNAL_REFERENCE,
+    )
+    .replace(/\bhttps?:\/\/[^\s"'`<>),;]+/gi, REDACTED_EXTERNAL_LINK)
+    .replace(
+      /\b(password|token|secret|api[_-]?key)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      (_match, label: string) => `${label} ${REDACTED_SECRET}`,
+    );
 }
 
 function commonActionDisabledReason(
@@ -350,6 +414,12 @@ function publicStatusDisabledReason(
   const staleReason = currentStaleDisabledReason(surface, action);
   if (staleReason) return staleReason;
 
+  const dirtyStatusReason = dirtyStatusDisabledReasonForCapability(surface, capability);
+  if (dirtyStatusReason) return dirtyStatusReason;
+
+  const providerWriteReason = providerWritesDisabledReasonForCapability(surface, capability);
+  if (providerWriteReason) return providerWriteReason;
+
   const unsupportedDomainAction = unsupportedDirtyDomainActionForCapability(capability);
   if (unsupportedDomainAction) {
     const unsupportedDomainReason = unsupportedDirtyDomainsDisabledReason(
@@ -381,6 +451,8 @@ function publicStatusActionForCapability(
       return 'merge';
     case 'version:provenance':
       return 'export';
+    case 'version:remotePromote':
+      return 'remotePromote';
     default:
       return undefined;
   }
@@ -472,11 +544,7 @@ function publicStatusDiagnosticReasonId(
 function isStaleHeadDiagnostic(diagnostic: VersionDiagnostic): boolean {
   const code = String(diagnostic.code);
   const reason = diagnosticString(diagnosticData(diagnostic), 'reason');
-  return (
-    STALE_HEAD_DIAGNOSTIC_CODES.has(code) ||
-    reason === 'stale-head' ||
-    reason === 'staleHead'
-  );
+  return STALE_HEAD_DIAGNOSTIC_CODES.has(code) || reason === 'stale-head' || reason === 'staleHead';
 }
 
 function isUnsupportedDomainDiagnostic(diagnostic: VersionDiagnostic): boolean {
@@ -516,6 +584,8 @@ function fallbackDiagnosticMessage(reasonId: VersionActionDisabledReasonId): str
   switch (reasonId) {
     case 'version-capability-host-denied':
       return 'Host policy denies this version capability.';
+    case 'version-dirty-status-unavailable':
+      return DIRTY_STATUS_UNAVAILABLE_REASON;
     case 'version-head-stale':
       return 'Refresh version status before continuing.';
     case 'version-history-incomplete':
@@ -544,7 +614,9 @@ function capabilityDisabledReason(
   };
 }
 
-function commitDirtyDisabledReason(surface: VersionSurfaceStatus): DisabledActionReason | undefined {
+function commitDirtyDisabledReason(
+  surface: VersionSurfaceStatus,
+): DisabledActionReason | undefined {
   const dirty = surface.dirty;
 
   const providerWriteReason = providerWritesDisabledReason(surface, 'committing');
@@ -574,7 +646,14 @@ function commitDirtyDisabledReason(surface: VersionSurfaceStatus): DisabledActio
   );
 }
 
-type CurrentStaleAction = 'commit' | 'checkout' | 'rollback' | 'review' | 'merge' | 'export';
+type CurrentStaleAction =
+  | 'commit'
+  | 'checkout'
+  | 'rollback'
+  | 'review'
+  | 'merge'
+  | 'export'
+  | 'remotePromote';
 
 function currentStaleDisabledReason(
   surface: VersionSurfaceStatus,
@@ -603,7 +682,9 @@ function currentStaleDisabledReason(
             ? 'Refresh before reviewing version changes.'
             : action === 'merge'
               ? 'Refresh before merging.'
-              : 'Refresh before exporting version metadata.';
+              : action === 'remotePromote'
+                ? 'Refresh before promoting remote changes.'
+                : 'Refresh before exporting version metadata.';
   return {
     id: 'version-head-stale',
     message: `${branchLabel} is stale because ${reason}. ${suffix}`,
@@ -643,7 +724,7 @@ function checkoutUnsafeDisabledReason(
 
 function providerWritesDisabledReason(
   surface: VersionSurfaceStatus,
-  action: 'committing' | 'checking out' | 'staging rollback',
+  action: string,
 ): DisabledActionReason | undefined {
   return surface.dirty.pendingProviderWrites
     ? {
@@ -651,6 +732,86 @@ function providerWritesDisabledReason(
         message: `Wait for provider writes to settle before ${action}.`,
       }
     : undefined;
+}
+
+function dirtyStatusDisabledReasonForCapability(
+  surface: VersionSurfaceStatus,
+  capability: VersionCapability,
+): DisabledActionReason | undefined {
+  return dirtyStatusRequiredForCapability(capability)
+    ? dirtyStatusUnavailableDisabledReason(surface)
+    : undefined;
+}
+
+function dirtyStatusRequiredForCapability(capability: VersionCapability): boolean {
+  switch (capability) {
+    case 'version:commit':
+    case 'version:checkout':
+    case 'version:reviewWrite':
+    case 'version:proposal':
+    case 'version:mergeApply':
+    case 'version:revert':
+    case 'version:provenance':
+    case 'version:remotePromote':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function dirtyStatusUnavailableDisabledReason(
+  surface: VersionSurfaceStatus,
+): DisabledActionReason | undefined {
+  const dirty = surface.dirty as Partial<VersionSurfaceStatus['dirty']> & {
+    readonly source?: unknown;
+  };
+  if (
+    dirty.source === 'VC-05' &&
+    typeof dirty.statusRevision === 'string' &&
+    dirty.statusRevision.length > 0 &&
+    typeof dirty.checkoutPreflightToken === 'string' &&
+    dirty.checkoutPreflightToken.length > 0 &&
+    Array.isArray(dirty.unsupportedDirtyDomains) &&
+    Array.isArray(dirty.unsafeReasons) &&
+    Array.isArray(dirty.diagnostics)
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: 'version-dirty-status-unavailable',
+    message: DIRTY_STATUS_UNAVAILABLE_REASON,
+  };
+}
+
+function providerWritesDisabledReasonForCapability(
+  surface: VersionSurfaceStatus,
+  capability: VersionCapability,
+): DisabledActionReason | undefined {
+  const action = providerWriteActionForCapability(capability);
+  if (!action) return undefined;
+  return providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, action);
+}
+
+function providerWriteActionForCapability(capability: VersionCapability): string | undefined {
+  switch (capability) {
+    case 'version:commit':
+      return 'committing';
+    case 'version:checkout':
+      return 'checking out';
+    case 'version:reviewWrite':
+      return 'updating reviews';
+    case 'version:proposal':
+      return 'updating proposals';
+    case 'version:mergeApply':
+      return 'applying merge changes';
+    case 'version:revert':
+      return 'staging rollback';
+    case 'version:provenance':
+      return 'exporting version metadata';
+    default:
+      return undefined;
+  }
 }
 
 function providerWritesDiagnosticReason(
@@ -717,11 +878,15 @@ function diagnosticMessageReason(
 
 function allSurfaceDiagnostics(surface: VersionSurfaceStatus): readonly VersionDiagnostic[] {
   return [
-    ...surface.diagnostics,
-    ...surface.storage.diagnostics,
-    ...surface.dirty.diagnostics,
-    ...surface.dirty.unsafeReasons,
+    ...diagnosticsArray(surface.diagnostics),
+    ...diagnosticsArray(surface.storage?.diagnostics),
+    ...diagnosticsArray(surface.dirty?.diagnostics),
+    ...diagnosticsArray(surface.dirty?.unsafeReasons),
   ];
+}
+
+function diagnosticsArray(value: unknown): readonly VersionDiagnostic[] {
+  return Array.isArray(value) ? (value as readonly VersionDiagnostic[]) : [];
 }
 
 function diagnosticData(
@@ -779,5 +944,10 @@ function disabledAction(
     typeof idOrReason === 'string'
       ? { id: idOrReason, message: message ?? idOrReason }
       : idOrReason;
-  return { enabled: false, disabledReason: reason.message, disabledReasonId: reason.id };
+  const fallback = fallbackDiagnosticMessage(reason.id);
+  return {
+    enabled: false,
+    disabledReason: sanitizeVersionStatusText(reason.message, fallback) ?? fallback,
+    disabledReasonId: reason.id,
+  };
 }

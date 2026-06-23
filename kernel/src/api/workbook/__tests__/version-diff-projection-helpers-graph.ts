@@ -1,14 +1,10 @@
-import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
-import type { VersionGraphNamespace } from '../../../document/version-store/object-store';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
-  type VersionGraphInitializeInput,
-  type VersionGraphInitializeResult,
-  type VersionStoreProvider,
 } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
-import { AUTHOR, CREATED_AT, DOCUMENT_SCOPE } from './version-diff-projection-helpers-constants';
+import { AUTHOR, DOCUMENT_SCOPE } from './version-diff-projection-helpers-constants';
+import { appendChild, expectInitializeSuccess } from './version-diff-projection-helpers-graph-operations';
+import { commitInput, initializeInput } from './version-diff-projection-helpers-graph-inputs';
 import { graphContentInput } from './version-diff-projection-helpers-records';
 import { defaultCellChange, validSemanticPayload } from './version-diff-projection-fixtures';
 
@@ -96,81 +92,5 @@ export async function graphWithMergeTarget() {
     oursCommitId: ours.commit.id,
     theirsCommitId: theirs.commit.id,
     mergeCommitId: merge.commit.id,
-  };
-}
-
-function expectInitializeSuccess(
-  result: VersionGraphInitializeResult,
-): asserts result is Extract<VersionGraphInitializeResult, { status: 'success' }> {
-  expect(result.status).toBe('success');
-  if (result.status !== 'success') {
-    throw new Error(`expected initialize success: ${result.diagnostics[0]?.issueCode}`);
-  }
-}
-
-async function appendChild(
-  graph: {
-    readonly provider: VersionStoreProvider;
-    readonly namespace: VersionGraphNamespace;
-  },
-  options: {
-    readonly label: string;
-    readonly semanticPayload: unknown;
-  },
-): Promise<{ readonly childCommitId: WorkbookCommitId }> {
-  const opened = await graph.provider.openGraph(graph.namespace);
-  const head = await opened.readHead();
-  if (head.status !== 'success') throw new Error('expected graph head before append');
-
-  const committed = await opened.commit(
-    await commitInput(
-      graph.namespace,
-      options.label,
-      options.semanticPayload,
-      head.head.id,
-      head.head.refRevision as RefVersion,
-    ),
-  );
-  if (committed.status !== 'success') {
-    throw new Error(`expected commit success: ${committed.diagnostics[0]?.code}`);
-  }
-  return { childCommitId: committed.commit.id };
-}
-
-async function initializeInput(
-  graphId: string,
-  label: string,
-): Promise<VersionGraphInitializeInput> {
-  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
-  return {
-    expectedRegistryRevision: null,
-    graphId,
-    rootWrite: {
-      ...(await graphContentInput(namespace, label, validSemanticPayload(label, []))),
-      author: AUTHOR,
-      createdAt: CREATED_AT,
-      completenessDiagnostics: [],
-    },
-  };
-}
-
-async function commitInput(
-  namespace: VersionGraphNamespace,
-  label: string,
-  semanticPayload: unknown,
-  expectedHeadCommitId: WorkbookCommitId,
-  expectedRefVersion: RefVersion,
-  options: {
-    readonly targetRef?: string;
-    readonly parentCommitIds?: readonly WorkbookCommitId[];
-  } = {},
-) {
-  return {
-    ...(await graphContentInput(namespace, label, semanticPayload)),
-    ...(options.targetRef
-      ? { targetRef: options.targetRef, expectedTargetRefVersion: expectedRefVersion }
-      : { expectedMainRefVersion: expectedRefVersion }),
-    ...(options.parentCommitIds ? { parentCommitIds: options.parentCommitIds } : {}),
-    expectedHeadCommitId,
   };
 }

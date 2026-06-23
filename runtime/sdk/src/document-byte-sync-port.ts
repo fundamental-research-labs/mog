@@ -71,7 +71,11 @@ export function createClassifiedDocumentByteSyncPort(
   const wrapped: DocumentByteSyncPort = {
     docId: syncPort.docId,
     async applyUpdate(update) {
-      if (!applyClassifiedRawUpdate) return syncPort.applyUpdate(update);
+      if (!applyClassifiedRawUpdate) {
+        throw new Error(
+          'DocumentByteSyncPort.applyUpdate requires applyClassifiedRawUpdate for raw sync provenance admission',
+        );
+      }
       const payloadHash = await sha256Hex(update, 'DocumentByteSyncPort.applyUpdate');
       await applyClassifiedRawUpdate(update, legacyRawUpdateProvenance(payloadHash));
     },

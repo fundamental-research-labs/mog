@@ -169,7 +169,7 @@ describe('SDK document byte sync port classification wrapper', () => {
     });
   });
 
-  it('preserves legacy raw fallback for ports without classified admission', async () => {
+  it('rejects legacy raw fallback for ports without classified admission', async () => {
     const update = new Uint8Array([13, 14, 15]);
     const rawUpdates: Uint8Array[] = [];
     const syncPort = createClassifiedDocumentByteSyncPort(
@@ -180,9 +180,11 @@ describe('SDK document byte sync port classification wrapper', () => {
       }),
     );
 
-    await syncPort.applyUpdate(update);
+    await expect(syncPort.applyUpdate(update)).rejects.toThrow(
+      'requires applyClassifiedRawUpdate',
+    );
 
-    expect(rawUpdates).toEqual([update]);
+    expect(rawUpdates).toEqual([]);
     expect(syncPort.applyClassifiedRawUpdate).toBeUndefined();
   });
 });

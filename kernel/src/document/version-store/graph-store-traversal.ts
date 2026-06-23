@@ -3,6 +3,21 @@ import type { WorkbookCommitId } from './object-digest';
 import type { VersionGraphStoreDiagnostic } from './graph-store';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 
+export type VersionGraphMetadataCompletenessCondition = 'stale' | 'history-gap' | 'corrupt';
+
+export function graphMetadataCompletenessDetails(
+  condition: VersionGraphMetadataCompletenessCondition,
+  details: Readonly<Record<string, string | number | boolean | null>> = {},
+): Readonly<Record<string, string | number | boolean | null>> {
+  return {
+    completenessMarker: 'diagnostic-read',
+    completenessScope: 'graph-metadata',
+    completenessCondition: condition,
+    accessFiltered: true,
+    ...details,
+  };
+}
+
 export function orderTopologicalNewestFirst(
   rootCommitId: WorkbookCommitId,
   commits: ReadonlyMap<WorkbookCommitId, WorkbookCommit>,
@@ -21,6 +36,11 @@ export function orderTopologicalNewestFirst(
         missingCommitDiagnostic(rootCommitId, operation, 'Traversal root commit is missing.'),
       ],
     };
+  }
+
+  const validation = validateTraversalShape(rootCommitId, commits, operation);
+  if (!validation.ok) {
+    return { commits: [], diagnostics: validation.diagnostics };
   }
 
   const reachableChildCounts = new Map<WorkbookCommitId, number>();
@@ -78,6 +98,7 @@ export function orderTopologicalNewestFirst(
           message: 'Commit graph traversal could not reach a stable topological order.',
           operation,
           details: {
+            ...graphMetadataCompletenessDetails('corrupt'),
             orderedCommitCount: ordered.length,
             reachableCommitCount: commits.size,
           },
@@ -93,6 +114,50 @@ export function uniqueSortedCommitIds(
   commitIds: readonly WorkbookCommitId[],
 ): readonly WorkbookCommitId[] {
   return [...new Set(commitIds)].sort((left, right) => left.localeCompare(right));
+}
+
+function validateTraversalShape(
+  rootCommitId: WorkbookCommitId,
+  commits: ReadonlyMap<WorkbookCommitId, WorkbookCommit>,
+  operation: VersionGraphStoreOperation,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
+  const visiting = new Set<WorkbookCommitId>();
+  const visited = new Set<WorkbookCommitId>();
+
+  const visit = (
+    commitId: WorkbookCommitId,
+    childCommitId?: WorkbookCommitId,
+  ): readonly VersionGraphStoreDiagnostic[] => {
+    const commit = commits.get(commitId);
+    if (commit === undefined) {
+      return [missingParentDiagnostic(commitId, childCommitId, operation)];
+    }
+    if (visiting.has(commitId)) {
+      return [cyclicTraversalDiagnostic(commitId, childCommitId, operation)];
+    }
+    if (visited.has(commitId)) return [];
+
+    visiting.add(commitId);
+    for (const parentId of uniqueSortedCommitIds(commit.payload.parentCommitIds)) {
+      const diagnostics = visit(parentId, commitId);
+      if (diagnostics.length > 0) return diagnostics;
+    }
+    visiting.delete(commitId);
+    visited.add(commitId);
+    return [];
+  };
+
+  const diagnostics = visit(rootCommitId);
+  if (diagnostics.length > 0) return { ok: false, diagnostics };
+  if (visited.size !== commits.size) {
+    return {
+      ok: false,
+      diagnostics: [unreachableTraversalDiagnostic(visited.size, commits.size, operation)],
+    };
+  }
+  return { ok: true };
 }
 
 function compareQueueEntries(
@@ -124,5 +189,62 @@ function missingCommitDiagnostic(
     commitId,
     objectKind: 'commit',
     operation,
+    details: graphMetadataCompletenessDetails('history-gap', { missingCommitRole: 'root' }),
+  };
+}
+
+function missingParentDiagnostic(
+  commitId: WorkbookCommitId,
+  childCommitId: WorkbookCommitId | undefined,
+  operation: VersionGraphStoreOperation,
+): VersionGraphStoreDiagnostic {
+  return {
+    code: 'VERSION_MISSING_PARENT',
+    severity: 'corruption',
+    message: 'Commit graph traversal found a missing parent commit.',
+    commitId,
+    objectKind: 'commit',
+    operation,
+    details: graphMetadataCompletenessDetails('history-gap', {
+      missingCommitRole: 'parent',
+      ...(childCommitId === undefined ? {} : { childCommitId }),
+    }),
+  };
+}
+
+function cyclicTraversalDiagnostic(
+  commitId: WorkbookCommitId,
+  childCommitId: WorkbookCommitId | undefined,
+  operation: VersionGraphStoreOperation,
+): VersionGraphStoreDiagnostic {
+  return {
+    code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+    severity: 'corruption',
+    message: 'Commit graph traversal encountered a parent cycle.',
+    commitId,
+    objectKind: 'commit',
+    operation,
+    details: graphMetadataCompletenessDetails('corrupt', {
+      corruptTraversalCondition: 'parentCycle',
+      ...(childCommitId === undefined ? {} : { childCommitId }),
+    }),
+  };
+}
+
+function unreachableTraversalDiagnostic(
+  reachableCommitCount: number,
+  commitCount: number,
+  operation: VersionGraphStoreOperation,
+): VersionGraphStoreDiagnostic {
+  return {
+    code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+    severity: 'corruption',
+    message: 'Commit graph traversal includes commits that are not reachable from the root.',
+    operation,
+    details: graphMetadataCompletenessDetails('corrupt', {
+      corruptTraversalCondition: 'unreachableCommit',
+      reachableCommitCount,
+      commitCount,
+    }),
   };
 }

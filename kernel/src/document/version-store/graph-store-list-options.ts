@@ -3,6 +3,7 @@ import {
   parseGraphRefSelector,
   type ParsedGraphRefSelector,
 } from './graph-store-refs';
+import { graphMetadataCompletenessDetails } from './graph-store-traversal';
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
 import type {
   VersionGraphListCommitsOptions,
@@ -98,8 +99,12 @@ export function parseListCommitsOptions(
           {
             operation: 'listCommits',
             option: 'pageToken',
-            details:
-              pageToken.kind === 'stale' ? pageToken.details : { pageTokenUnsupported: true },
+            details: graphMetadataCompletenessDetails(
+              'stale',
+              pageToken.kind === 'stale'
+                ? pageToken.details
+                : { cursorCategory: 'unsupportedCursor', pageTokenUnsupported: true },
+            ),
           },
         ),
       ],

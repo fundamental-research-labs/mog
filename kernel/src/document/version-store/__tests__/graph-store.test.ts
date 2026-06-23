@@ -987,7 +987,7 @@ describe('InMemoryVersionGraphStore commit listing', () => {
         code: 'VERSION_STALE_PAGE_CURSOR',
         operation: 'listCommits',
         option: 'pageToken',
-        details: { pageTokenUnsupported: true },
+        details: expect.objectContaining({ pageTokenUnsupported: true }),
       }),
     ]);
   });

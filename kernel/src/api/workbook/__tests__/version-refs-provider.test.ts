@@ -654,6 +654,71 @@ describe('WorkbookVersion provider-backed ref lifecycle facade', () => {
     );
   });
 
+  it('preflights provider delete current and stale revisions before tombstone writes', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const child = await commitGraphChild(
+      graph,
+      'graph-1',
+      initialized.rootCommit.id,
+      initialized.initialHead.revision,
+      'delete-preflight-child',
+    );
+    const deleteBranch = jest.spyOn(graph, 'deleteBranch');
+    const wb = createWorkbook({ versioning: { provider } });
+
+    await wb.version.createBranch({
+      name: 'scenario/delete-preflight' as any,
+      targetCommitId: initialized.rootCommit.id,
+    });
+    await wb.version.fastForwardBranch({
+      name: 'scenario/delete-preflight' as any,
+      nextCommitId: child.commit.id,
+      expectedHead: initialized.rootCommit.id,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+
+    const stale = await wb.version.deleteRef({
+      name: 'scenario/delete-preflight' as any,
+      expectedHead: child.commit.id,
+      expectedRefRevision: { kind: 'counter', value: '0' },
+    });
+    expectNoWriteFailure(stale, 'VERSION_REF_CONFLICT', {
+      recoverability: 'retry',
+      payload: expect.objectContaining({
+        actualHead: child.commit.id,
+        actualRefRevision: 'rv:n:1',
+        conflict: 'expectedRefVersionMismatch',
+      }),
+    });
+    expectNoDiagnosticLeak(stale, 'scenario/delete-preflight');
+
+    const readActiveCheckoutSession = jest.fn(() => ({
+      checkedOutCommitId: child.commit.id,
+      branchName: 'refs/heads/scenario/delete-preflight',
+      refHeadAtMaterialization: child.commit.id,
+      detached: false,
+    }));
+    const versioning = (wb.version as any).ctx.versioning as Record<string, unknown>;
+    const surfaceStatusService = { readActiveCheckoutSession };
+    versioning.surfaceStatusService = surfaceStatusService;
+    versioning.versionSurfaceStatusService = surfaceStatusService;
+
+    const active = await wb.version.deleteRef({
+      name: 'scenario/delete-preflight' as any,
+      expectedHead: child.commit.id,
+      expectedRefRevision: { kind: 'counter', value: '1' },
+    });
+    expectNoWriteFailure(active, 'VERSION_REF_WRITE_UNAVAILABLE', {
+      payload: expect.objectContaining({ issue: 'activeBranchDelete' }),
+    });
+    expectNoDiagnosticLeak(active, 'scenario/delete-preflight');
+    expect(readActiveCheckoutSession).toHaveBeenCalled();
+    expect(deleteBranch).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['branch name', 'scenario/provider-commit'],
     ['full ref', 'refs/heads/scenario/provider-commit'],

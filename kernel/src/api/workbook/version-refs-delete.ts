@@ -28,6 +28,11 @@ type DeleteRefOperation = 'deleteBranch' | 'deleteRef';
 
 type DeleteCapableVersionRefLifecycleService = {
   deleteBranch?: (input: Readonly<Record<string, unknown>>) => MaybePromise<unknown>;
+  readBranch?: (input: Readonly<Record<string, unknown>>) => MaybePromise<unknown>;
+  readRef?: (name: string) => MaybePromise<unknown>;
+  getHead?: () => MaybePromise<unknown>;
+  readHead?: () => MaybePromise<unknown>;
+  readActiveCheckoutSession?: () => MaybePromise<unknown>;
 };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
@@ -42,8 +47,19 @@ type ParsedDeleteRefOptions =
       readonly branchName: string;
       readonly expectedHead?: WorkbookCommitId;
       readonly expectedRefVersion: VersionRecordRevision;
+      readonly refName: VersionRef['name'];
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+type DeletePreflightRef =
+  | {
+      readonly status: 'checked';
+      readonly commitId: WorkbookCommitId;
+      readonly revision: VersionRecordRevision;
+      readonly protected: boolean;
+    }
+  | { readonly status: 'missing'; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+  | { readonly status: 'unchecked' };
 
 export async function deleteWorkbookVersionBranchRef(input: {
   readonly ctx: DocumentContext;
@@ -61,6 +77,16 @@ export async function deleteWorkbookVersionBranchRef(input: {
   const service = getDeleteCapableVersionRefLifecycleService(input.ctx);
   if (!service?.deleteBranch) {
     return degradedMutation(null, [deleteUnsupportedDiagnostic(input.operation)]);
+  }
+
+  const preflightDiagnostics = await preflightDeleteRef(
+    input.ctx,
+    service,
+    validated,
+    input.operation,
+  );
+  if (preflightDiagnostics.length > 0) {
+    return degradedMutation(null, preflightDiagnostics);
   }
 
   try {
@@ -106,7 +132,21 @@ function toDeleteCapableVersionRefLifecycleService(
 ): DeleteCapableVersionRefLifecycleService | null {
   const deleteBranch = bindMethod(value, 'deleteBranch') ?? bindMethod(value, 'deleteRef');
   if (!deleteBranch) return null;
-  return { deleteBranch: (input) => deleteBranch(input) };
+  const readBranch = bindMethod(value, 'readBranch');
+  const readRef = bindMethod(value, 'readRef');
+  const getHead = bindMethod(value, 'getHead');
+  const readHead = bindMethod(value, 'readHead');
+  const readActiveCheckoutSession = bindMethod(value, 'readActiveCheckoutSession');
+  return {
+    deleteBranch: (input) => deleteBranch(input),
+    ...(readBranch ? { readBranch: (input) => readBranch(input) } : {}),
+    ...(readRef ? { readRef: (name) => readRef(name) } : {}),
+    ...(getHead ? { getHead: () => getHead() } : {}),
+    ...(readHead ? { readHead: () => readHead() } : {}),
+    ...(readActiveCheckoutSession
+      ? { readActiveCheckoutSession: () => readActiveCheckoutSession() }
+      : {}),
+  };
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {
@@ -152,7 +192,197 @@ function validateDeleteRefOptions(
     branchName: parsedName.branchName,
     ...(expectedHead ? { expectedHead } : {}),
     expectedRefVersion,
+    refName: parsedName.refName,
   };
+}
+
+async function preflightDeleteRef(
+  ctx: DocumentContext,
+  service: DeleteCapableVersionRefLifecycleService,
+  input: Extract<ParsedDeleteRefOptions, { readonly ok: true }>,
+  operation: DeleteRefOperation,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  const activeDiagnostics = await activeRefDeleteDiagnostics(ctx, service, input, operation);
+  if (activeDiagnostics.length > 0) return activeDiagnostics;
+
+  const ref = await readDeletePreflightRef(service, input, operation);
+  if (ref.status === 'missing') return ref.diagnostics;
+  if (ref.status !== 'checked') return [];
+
+  if (ref.protected) return [protectedRefDiagnostic(operation)];
+
+  if (input.expectedHead && input.expectedHead !== ref.commitId) {
+    return [
+      staleDeleteRefDiagnostic(operation, 'expectedHeadMismatch', {
+        commitId: ref.commitId,
+        revision: ref.revision,
+      }),
+    ];
+  }
+  if (!revisionsEqual(input.expectedRefVersion, ref.revision)) {
+    return [
+      staleDeleteRefDiagnostic(operation, 'expectedRefVersionMismatch', {
+        commitId: ref.commitId,
+        revision: ref.revision,
+      }),
+    ];
+  }
+  return [];
+}
+
+async function activeRefDeleteDiagnostics(
+  ctx: DocumentContext,
+  service: DeleteCapableVersionRefLifecycleService,
+  input: Extract<ParsedDeleteRefOptions, { readonly ok: true }>,
+  operation: DeleteRefOperation,
+): Promise<readonly VersionStoreDiagnostic[]> {
+  const activeSessionReader = getActiveCheckoutSessionReader(ctx, service);
+  if (activeSessionReader) {
+    try {
+      const activeRefName = checkedOutRefName(await activeSessionReader());
+      if (activeRefName && activeRefName === input.refName) {
+        return [activeRefDeleteDiagnostic(operation)];
+      }
+    } catch {
+      return [preflightReadFailedDiagnostic(operation, 'activeCheckoutSession')];
+    }
+  }
+
+  const headReader = service.getHead ?? service.readHead;
+  if (!headReader) return [];
+  try {
+    const headRefName = currentHeadRefName(await headReader());
+    return headRefName === input.refName ? [activeRefDeleteDiagnostic(operation)] : [];
+  } catch {
+    return [preflightReadFailedDiagnostic(operation, 'currentHead')];
+  }
+}
+
+async function readDeletePreflightRef(
+  service: DeleteCapableVersionRefLifecycleService,
+  input: Extract<ParsedDeleteRefOptions, { readonly ok: true }>,
+  operation: DeleteRefOperation,
+): Promise<DeletePreflightRef> {
+  if (service.readBranch) {
+    try {
+      return projectBranchRead(await service.readBranch({ name: input.branchName }), operation);
+    } catch {
+      return { status: 'missing', diagnostics: [preflightReadFailedDiagnostic(operation, 'ref')] };
+    }
+  }
+  if (service.readRef) {
+    try {
+      return projectRefRead(await service.readRef(input.refName), operation);
+    } catch {
+      return { status: 'missing', diagnostics: [preflightReadFailedDiagnostic(operation, 'ref')] };
+    }
+  }
+  return { status: 'unchecked' };
+}
+
+function projectBranchRead(value: unknown, operation: DeleteRefOperation): DeletePreflightRef {
+  if (!isRecord(value)) {
+    return { status: 'missing', diagnostics: [preflightInvalidPayloadDiagnostic(operation)] };
+  }
+  if (value.ok === false) {
+    return {
+      status: 'missing',
+      diagnostics: mapPreflightBranchFailureDiagnostics(value.diagnostics, operation),
+    };
+  }
+  if (value.ok !== true) return projectRefRead(value, operation);
+  if (value.branch === null) {
+    return { status: 'missing', diagnostics: [danglingRefDiagnostic(operation)] };
+  }
+  const ref =
+    isRecord(value.branch) && isRecord(value.branch.ref) ? value.branch.ref : value.branch;
+  return projectLiveRefRecord(ref, operation);
+}
+
+function projectRefRead(value: unknown, operation: DeleteRefOperation): DeletePreflightRef {
+  if (!isRecord(value)) {
+    return { status: 'missing', diagnostics: [preflightInvalidPayloadDiagnostic(operation)] };
+  }
+  if (value.status === 'degraded' || value.status === 'failed') {
+    return {
+      status: 'missing',
+      diagnostics: mapGraphFailureDiagnostics(value.diagnostics, operation),
+    };
+  }
+  const ref =
+    value.status === 'success' && isRecord(value.ref)
+      ? value.ref
+      : isRecord(value.ref)
+        ? value.ref
+        : value;
+  return projectLiveRefRecord(ref, operation);
+}
+
+function projectLiveRefRecord(value: unknown, operation: DeleteRefOperation): DeletePreflightRef {
+  if (!isRecord(value) || value.name === VERSION_HEAD_REF) {
+    return { status: 'missing', diagnostics: [preflightInvalidPayloadDiagnostic(operation)] };
+  }
+  const commitId =
+    toCommitId(value.targetCommitId) ??
+    toCommitId(value.commitId) ??
+    toCommitId(value.previousTargetCommitId);
+  const revision = toCounterRevision(value.refVersion) ?? toRevision(value.revision);
+  if (!commitId || !revision) {
+    return { status: 'missing', diagnostics: [preflightInvalidPayloadDiagnostic(operation)] };
+  }
+  return { status: 'checked', commitId, revision, protected: value.protected === true };
+}
+
+function getActiveCheckoutSessionReader(
+  ctx: DocumentContext,
+  service: DeleteCapableVersionRefLifecycleService,
+): (() => MaybePromise<unknown>) | null {
+  if (service.readActiveCheckoutSession) return service.readActiveCheckoutSession;
+  const services = getAttachedVersionServices(ctx);
+  if (!services) return null;
+  for (const candidate of [
+    services.surfaceStatusService,
+    services.versionSurfaceStatusService,
+    services.statusService,
+    services,
+  ]) {
+    const reader = bindMethod(candidate, 'readActiveCheckoutSession');
+    if (reader) return () => reader();
+  }
+  return null;
+}
+
+function getAttachedVersionServices(
+  ctx: DocumentContext,
+): Readonly<Record<string, unknown>> | null {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  return isRecord(services) ? services : null;
+}
+
+function checkedOutRefName(value: unknown): VersionRef['name'] | null {
+  if (!isRecord(value) || value.detached === true || typeof value.branchName !== 'string') {
+    return null;
+  }
+  const parsed = parsePublicBranchName(value.branchName, 'readRef');
+  return parsed.ok ? parsed.refName : null;
+}
+
+function currentHeadRefName(value: unknown): VersionRef['name'] | null {
+  if (!isRecord(value)) return null;
+  const head = isRecord(value.head) ? value.head : isRecord(value.ref) ? value.ref : value;
+  if (head.mode === 'detached') return null;
+  const candidate =
+    typeof head.refName === 'string'
+      ? head.refName
+      : typeof head.branchName === 'string'
+        ? head.branchName
+        : typeof head.target === 'string'
+          ? head.target
+          : undefined;
+  if (!candidate) return null;
+  const parsed = parsePublicBranchName(candidate, 'readRef');
+  return parsed.ok ? parsed.refName : null;
 }
 
 function parsePublicBranchName(
@@ -285,6 +515,27 @@ function mapBranchFailureDiagnostics(
   return value.map((item) => mapBranchDiagnostic(item, operation));
 }
 
+function mapPreflightBranchFailureDiagnostics(
+  value: unknown,
+  operation: DeleteRefOperation,
+): readonly VersionStoreDiagnostic[] {
+  return mapBranchFailureDiagnostics(value, operation).map((diagnostic) =>
+    diagnostic.mutationGuarantee
+      ? diagnostic
+      : { ...diagnostic, mutationGuarantee: 'no-write-attempted' as const },
+  );
+}
+
+function mapGraphFailureDiagnostics(
+  value: unknown,
+  operation: DeleteRefOperation,
+): readonly VersionStoreDiagnostic[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [preflightReadFailedDiagnostic(operation, 'ref')];
+  }
+  return value.map((item) => mapGraphDiagnostic(item, operation));
+}
+
 function mapBranchDiagnostic(
   value: unknown,
   operation: DeleteRefOperation,
@@ -298,6 +549,32 @@ function mapBranchDiagnostic(
     recoverability: recoverabilityForIssue(issueCode),
     payload: sanitizeBranchDiagnosticPayload(value, operation),
     ...(mutationGuarantee ? { mutationGuarantee } : {}),
+  });
+}
+
+function mapGraphDiagnostic(value: unknown, operation: DeleteRefOperation): VersionStoreDiagnostic {
+  if (!isRecord(value)) return preflightReadFailedDiagnostic(operation, 'ref');
+  const rawCode =
+    typeof value.issueCode === 'string'
+      ? value.issueCode
+      : typeof value.code === 'string'
+        ? value.code
+        : 'VERSION_PROVIDER_ERROR';
+  const issueCode =
+    rawCode === 'VERSION_PERMISSION_DENIED'
+      ? 'VERSION_PERMISSION_DENIED'
+      : rawCode === 'VERSION_REF_CONFLICT'
+        ? 'VERSION_REF_CONFLICT'
+        : rawCode === 'VERSION_INVALID_COMMIT_ID'
+          ? 'VERSION_INVALID_COMMIT_ID'
+          : rawCode === 'VERSION_INVALID_OPTIONS' || rawCode === 'VERSION_DANGLING_REF'
+            ? 'VERSION_DANGLING_REF'
+            : 'VERSION_PROVIDER_ERROR';
+  return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
+    severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
+    recoverability: recoverabilityForIssue(issueCode),
+    payload: { operation },
+    mutationGuarantee: 'no-write-attempted',
   });
 }
 
@@ -338,6 +615,92 @@ function deleteUnsupportedDiagnostic(operation: DeleteRefOperation): VersionStor
   );
 }
 
+function activeRefDeleteDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_REF_WRITE_UNAVAILABLE',
+    operation,
+    'The active public ref cannot be deleted before switching the workbook to another ref.',
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
+      payload: { operation, issue: safeBranchDiagnosticToken('issue', 'activeBranchDelete') },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function staleDeleteRefDiagnostic(
+  operation: DeleteRefOperation,
+  conflict: 'expectedHeadMismatch' | 'expectedRefVersionMismatch',
+  actual: {
+    readonly commitId: WorkbookCommitId;
+    readonly revision: VersionRecordRevision;
+  },
+): VersionStoreDiagnostic {
+  const payload: Record<string, string | number | boolean | null> = {
+    operation,
+    actualHead: actual.commitId,
+    conflict: safeBranchDiagnosticToken('conflict', conflict),
+  };
+  const actualRefRevision = publicRevisionToken(actual.revision);
+  if (actualRefRevision) payload.actualRefRevision = actualRefRevision;
+  return publicDiagnostic(
+    'VERSION_REF_CONFLICT',
+    operation,
+    safeMessageForIssue('VERSION_REF_CONFLICT', operation),
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload,
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function danglingRefDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_DANGLING_REF',
+    operation,
+    safeMessageForIssue('VERSION_DANGLING_REF', operation),
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
+      payload: { operation },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function preflightReadFailedDiagnostic(
+  operation: DeleteRefOperation,
+  phase: string,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_PROVIDER_ERROR',
+    operation,
+    'The version ref lifecycle service failed during delete preflight.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload: { operation, phase },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function preflightInvalidPayloadDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_INVALID_COMMIT_PAYLOAD',
+    operation,
+    'The version ref lifecycle service returned an invalid public ref payload.',
+    {
+      severity: 'error',
+      recoverability: 'repair',
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
 function protectedMainDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_PERMISSION_DENIED',
@@ -347,6 +710,19 @@ function protectedMainDiagnostic(operation: DeleteRefOperation): VersionStoreDia
       severity: 'error',
       recoverability: 'unsupported',
       payload: { refName: VERSION_MAIN_REF },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function protectedRefDiagnostic(operation: DeleteRefOperation): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_PERMISSION_DENIED',
+    operation,
+    'The requested public ref is protected and cannot be deleted.',
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
       mutationGuarantee: 'no-write-attempted',
     },
   );
@@ -493,6 +869,8 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
   switch (issueCode) {
     case 'VERSION_REF_CONFLICT':
       return 'retry';
+    case 'VERSION_PROVIDER_ERROR':
+      return 'retry';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_PERMISSION_DENIED':
     case 'VERSION_REF_WRITE_UNAVAILABLE':
@@ -523,6 +901,14 @@ function toCounterRevision(
 ): Extract<VersionRecordRevision, { readonly kind: 'counter' }> | undefined {
   const revision = toRevision(value);
   return revision?.kind === 'counter' ? revision : undefined;
+}
+
+function publicRevisionToken(value: VersionRecordRevision): string | undefined {
+  return value.kind === 'counter' ? `rv:n:${value.value}` : undefined;
+}
+
+function revisionsEqual(left: VersionRecordRevision, right: VersionRecordRevision): boolean {
+  return left.kind === right.kind && left.value === right.value;
 }
 
 function degradedMutation(

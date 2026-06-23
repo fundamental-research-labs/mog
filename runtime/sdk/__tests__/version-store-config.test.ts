@@ -126,6 +126,45 @@ describe('SDK version-store config', () => {
     }
   });
 
+  it('fails closed for unsupported durable Node filesystem aliases without leaking paths', () => {
+    for (const kind of ['file-system', 'node-filesystem', 'node:fs', 'fs'] as const) {
+      const error = captureVersionStoreConfigError(
+        { kind, path: `/tmp/mog-version-store/${kind}` },
+        'node',
+      );
+
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
+          runtime: 'node',
+          requestedKind: kind,
+          details: {
+            noFallbackToMemory: true,
+            pathProvided: true,
+          },
+        },
+      });
+      expect(error.message).not.toContain('/tmp/mog-version-store');
+      expect(JSON.stringify(error.diagnostic)).not.toContain('/tmp/mog-version-store');
+    }
+  });
+
+  it('keeps unsupported arbitrary kind diagnostics value-safe', () => {
+    const error = captureVersionStoreConfigError({
+      kind: 'tenant-prod-provider-secret',
+      path: '/tmp/tenant-prod-provider-secret',
+    });
+
+    expect(error).toMatchObject({
+      diagnostic: {
+        code: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
+      },
+    });
+    expect(error.diagnostic.requestedKind).toBeUndefined();
+    expect(error.diagnostic.safeMessage).not.toContain('tenant-prod-provider-secret');
+    expect(error.message).not.toContain('tenant-prod-provider-secret');
+  });
+
   it('rejects durable requirements on ephemeral memory config', () => {
     expect(() =>
       createSdkVersionStoreLifecycleConfig(
@@ -216,7 +255,14 @@ describe('SDK version-store config', () => {
   });
 
   it('rejects provider authority fields from remote provenance', () => {
-    for (const field of ['authorityRef', 'stableOriginId', 'remoteSessionId'] as const) {
+    for (const field of [
+      'authorityRef',
+      'stableOriginId',
+      'remoteSessionId',
+      'providerKind',
+      'providerEpoch',
+      'syncIdentity',
+    ] as const) {
       const error = captureVersionStoreConfigError({
         kind: 'indexeddb',
         workspaceId: 'workspace-1',
@@ -300,6 +346,56 @@ describe('SDK version-store config', () => {
     }
   });
 
+  it('rejects storage namespace and backing store key aliases', () => {
+    for (const field of [
+      'storageNamespace',
+      'registryStorageKey',
+      'indexedDBName',
+      'objectStoreKey',
+    ] as const) {
+      const error = captureVersionStoreConfigError({
+        kind: 'indexeddb',
+        workspaceId: 'workspace-1',
+        [field]: `${field}-1`,
+      });
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'storage-key',
+          },
+        },
+      });
+    }
+  });
+
+  it('rejects workspace and remote authority aliases', () => {
+    for (const field of [
+      'workspace',
+      'remoteWorkspaceId',
+      'remoteAuthority',
+      'collaborationAuthority',
+    ] as const) {
+      const error = captureVersionStoreConfigError({
+        kind: 'indexeddb',
+        workspaceId: 'workspace-1',
+        [field]: `${field}-1`,
+      });
+      expect(error).toMatchObject({
+        diagnostic: {
+          code: 'MOG_SDK_VERSION_STORE_INVALID_CONFIG',
+          requestedKind: 'indexeddb',
+          details: {
+            field,
+            category: 'workspace-authority',
+          },
+        },
+      });
+    }
+  });
+
   it('rejects private host source fields', () => {
     for (const [field, config] of [
       ['source', { kind: 'indexeddb', source: { type: 'bytes', data: new Uint8Array() } }],
@@ -351,6 +447,10 @@ describe('SDK version-store config', () => {
       ['defaultOn', true],
       ['enableDefaultVersioning', true],
       ['rolloutStage', 'default-on'],
+      ['controlPlane', {}],
+      ['featureGates', {}],
+      ['casToken', 'token-1'],
+      ['defaultProviderKind', 'indexeddb'],
     ] as const) {
       const error = captureVersionStoreConfigError({
         kind: 'indexeddb',

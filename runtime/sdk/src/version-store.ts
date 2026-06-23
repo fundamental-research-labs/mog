@@ -10,6 +10,11 @@ export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS = [
   'node-file',
   'nodeFile',
   'filesystem',
+  'file-system',
+  'node-filesystem',
+  'nodeFileSystem',
+  'node:fs',
+  'fs',
 ] as const;
 
 export type MogSdkSupportedVersionStoreKind =
@@ -174,10 +179,17 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     [
       'authorityRef',
       'providerAuthority',
+      'providerKind',
+      'providerRef',
+      'providerHandle',
+      'providerHandleId',
       'stableOriginId',
       'originKind',
       'roomId',
       'remoteSessionId',
+      'syncIdentity',
+      'updateIdentity',
+      'providerEpoch',
       'epoch',
       'updateId',
       'sequence',
@@ -188,56 +200,34 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
     (field) =>
       `versionStore.${field} is host or remote provider provenance; SDK version-store config cannot assert it.`,
   ),
-  storageKey: {
-    category: 'storage-key',
-    message:
-      'versionStore.storageKey is unsafe storage key material; storage keys are derived from the validated document scope.',
-  },
-  storageKeyPrefix: {
-    category: 'storage-key',
-    message:
-      'versionStore.storageKeyPrefix is unsafe storage key material; storage keys are derived from the validated document scope.',
-  },
-  keyPrefix: {
-    category: 'storage-key',
-    message:
-      'versionStore.keyPrefix is unsafe storage key material; storage keys are derived from the validated document scope.',
-  },
-  documentScopeKey: {
-    category: 'storage-key',
-    message:
-      'versionStore.documentScopeKey is unsafe storage key material; document scope keys are kernel-owned derived values.',
-  },
-  namespaceKey: {
-    category: 'storage-key',
-    message:
-      'versionStore.namespaceKey is unsafe storage key material; namespace keys are kernel-owned derived values.',
-  },
-  namespace: {
-    category: 'storage-key',
-    message:
-      'versionStore.namespace is unsafe storage key material; graph namespaces are kernel-owned derived values.',
-  },
-  graphId: {
-    category: 'storage-key',
-    message:
-      'versionStore.graphId is unsafe storage key material; root graph IDs are selected by the kernel lifecycle.',
-  },
-  databaseName: {
-    category: 'storage-key',
-    message:
-      'versionStore.databaseName is unsafe storage key material; IndexedDB database naming is SDK-owned.',
-  },
-  dbName: {
-    category: 'storage-key',
-    message:
-      'versionStore.dbName is unsafe storage key material; IndexedDB database naming is SDK-owned.',
-  },
-  objectStoreName: {
-    category: 'storage-key',
-    message:
-      'versionStore.objectStoreName is unsafe storage key material; IndexedDB object store naming is SDK-owned.',
-  },
+  ...disallowedConfigFields(
+    'storage-key',
+    [
+      'storageKey',
+      'storageKeyPrefix',
+      'keyPrefix',
+      'documentScopeKey',
+      'namespaceKey',
+      'namespacePrefix',
+      'storageNamespace',
+      'namespace',
+      'graphId',
+      'registryKey',
+      'registryStorageKey',
+      'refStorageKey',
+      'objectStorageKey',
+      'databaseName',
+      'dbName',
+      'indexedDbName',
+      'indexedDBName',
+      'objectStoreName',
+      'objectStoreKey',
+      'objectStorePrefix',
+      'storeName',
+    ],
+    (field) =>
+      `versionStore.${field} is unsafe storage key material; storage keys are derived from the validated document scope.`,
+  ),
   ...disallowedConfigFields(
     'mode-overclaim',
     [
@@ -254,10 +244,15 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
       'collaboration',
       'collaborationMode',
       'liveCollaboration',
+      'remoteProvider',
+      'remoteProviderKind',
       'remoteProviderAttached',
       'pendingRemotePromotion',
       'remotePromote',
       'enableRemotePromote',
+      'fallbackToMemory',
+      'fallbackKind',
+      'autoFallback',
     ],
     (field) =>
       `versionStore.${field} cannot claim local, local-first, remote-backed, or sync provider mode; select a supported kind instead.`,
@@ -292,6 +287,13 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
       'tenant',
       'organizationId',
       'orgId',
+      'workspace',
+      'workspaceRef',
+      'remoteWorkspaceId',
+      'remoteAuthority',
+      'remoteAuthorityRef',
+      'syncAuthority',
+      'collaborationAuthority',
     ],
     (field) =>
       `versionStore.${field} is workspace authority material; SDK version-store config accepts only workspaceId as public scope.`,
@@ -388,6 +390,23 @@ const DISALLOWED_VERSION_STORE_CONFIG_FIELDS: Readonly<
       'gateStage',
       'gateId',
       'capabilityGate',
+      'capabilityGates',
+      'capabilityGateStage',
+      'featureGate',
+      'featureGates',
+      'readFeatureGates',
+      'controlPlane',
+      'controlPlaneClient',
+      'controlPlaneEntrypoints',
+      'gate',
+      'gateKey',
+      'gateStatus',
+      'casKey',
+      'casToken',
+      'expectedPriorCasToken',
+      'defaultProvider',
+      'defaultProviderKind',
+      'defaultVersionStore',
     ],
     (field) =>
       `versionStore.${field} is stale default-on/control-plane state; omit versionStore or pass an explicit supported kind.`,
@@ -761,7 +780,7 @@ function optionalBrowserProviderField(
       invalidVersionStoreDiagnostic(
         options,
         kindFromConfig(config),
-        `versionStore.provider must use canonical provider id 'indexeddb'; received '${provider}'.`,
+        "versionStore.provider must use canonical provider id 'indexeddb'.",
         { field: 'provider', category: 'provider-identity', canonicalProvider: 'indexeddb' },
       ),
     );
@@ -796,13 +815,13 @@ function unsupportedVersionStoreDiagnostic(
   const isNodeFile = isUnsupportedVersionStoreKind(kind);
   const safeMessage = isNodeFile
     ? 'Node durable file version stores are not supported by this SDK release.'
-    : `Version store kind '${kind}' is not supported by this SDK release.`;
+    : 'The requested version store kind is not supported by this SDK release.';
   const message = `${safeMessage} No in-memory fallback was selected; choose an explicit supported versionStore kind.`;
   return {
     code: 'MOG_SDK_VERSION_STORE_UNSUPPORTED',
     severity: 'error',
     runtime: options.runtime,
-    requestedKind: kind,
+    ...(isKnownPublicVersionStoreKind(kind) ? { requestedKind: kind } : {}),
     supportedKinds: MOG_SDK_SUPPORTED_VERSION_STORE_KINDS,
     safeMessage,
     message,
@@ -846,7 +865,7 @@ function assertCanonicalVersionStoreKind(
     invalidVersionStoreDiagnostic(
       options,
       kind,
-      `versionStore.kind must use canonical provider id '${canonicalKind}'; received '${kind}'.`,
+      `versionStore.kind must use canonical provider id '${canonicalKind}'.`,
       { field: 'kind', category: 'provider-identity', canonicalKind },
     ),
   );
@@ -868,6 +887,10 @@ function isUnsupportedVersionStoreKind(kind: string): kind is MogSdkUnsupportedV
 
 function isSupportedVersionStoreKind(kind: string): kind is MogSdkSupportedVersionStoreKind {
   return (MOG_SDK_SUPPORTED_VERSION_STORE_KINDS as readonly string[]).includes(kind);
+}
+
+function isKnownPublicVersionStoreKind(kind: string): boolean {
+  return isSupportedVersionStoreKind(kind) || isUnsupportedVersionStoreKind(kind);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

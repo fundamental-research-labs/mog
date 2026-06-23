@@ -5,8 +5,8 @@ export function hasAttachedVersionReviewReadService(services: unknown): boolean 
   return reviewServiceCandidates(services).some((candidate) =>
     Boolean(
       bindMethod(candidate, 'listReviews') ??
-        bindMethod(candidate, 'getReview') ??
-        bindMethod(candidate, 'getReviewDiff'),
+      bindMethod(candidate, 'getReview') ??
+      bindMethod(candidate, 'getReviewDiff'),
     ),
   );
 }
@@ -15,8 +15,8 @@ export function hasAttachedVersionReviewWriteService(services: unknown): boolean
   return reviewServiceCandidates(services).some((candidate) =>
     Boolean(
       bindMethod(candidate, 'createReview') ??
-        bindMethod(candidate, 'appendReviewDecision') ??
-        bindMethod(candidate, 'updateReviewStatus'),
+      bindMethod(candidate, 'appendReviewDecision') ??
+      bindMethod(candidate, 'updateReviewStatus'),
     ),
   );
 }
@@ -24,11 +24,11 @@ export function hasAttachedVersionReviewWriteService(services: unknown): boolean
 function reviewServiceCandidates(services: unknown): readonly unknown[] {
   if (!isRecord(services)) return [];
   return [
+    services.publicService,
     services.reviewService,
     services.versionReviewService,
     services.reviewRecordService,
     services.reviewMetadataStore,
-    services.publicService,
     services,
   ];
 }

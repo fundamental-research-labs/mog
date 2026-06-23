@@ -1,8 +1,18 @@
 import type {
+  VersionAuthor,
+  VersionDiagnostic,
+  VersionDiffEntry,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
   VersionRedactedValue,
   VersionSemanticValue,
+  WorkbookVersionReviewApprovalEvidence,
+  WorkbookVersionReviewDecision,
+  WorkbookVersionReviewDecisionTarget,
+  WorkbookVersionReviewDiffChange,
+  WorkbookVersionReviewDiffPage,
+  WorkbookVersionReviewRecord,
+  WorkbookVersionReviewRecordSummary,
 } from '@mog-sdk/contracts/api';
 
 const REDACTED_VALUE_REASONS = new Set([
@@ -10,6 +20,12 @@ const REDACTED_VALUE_REASONS = new Set([
   'redaction-policy',
   'historical-acl-unavailable',
 ]);
+const REVIEW_ACCESS_REDACTED_VALUE: VersionRedactedValue = {
+  kind: 'redacted',
+  reason: 'permission-denied',
+};
+const SENSITIVE_PRINCIPAL_TOKEN_RE =
+  /\b(?:principal|actor|reviewer|agent|user)[_-][A-Za-z0-9_.:-]+\b/g;
 
 const RANGE_REVIEW_VALUE_SPEC = reviewObjectSpec(
   {
@@ -30,14 +46,11 @@ const VC06_REVIEW_VALUE_SPECS = {
     { kind: 'string', tableId: 'string', name: 'string', sheetId: 'string' },
     ['kind', 'tableId', 'sheetId'],
   ),
-  commentCell: reviewObjectSpec(
-    { kind: 'string', cellId: 'string', address: 'string' },
-    ['kind', 'cellId'],
-  ),
-  conditionalFormatRule: reviewObjectSpec({ kind: 'string', ruleId: 'string' }, [
+  commentCell: reviewObjectSpec({ kind: 'string', cellId: 'string', address: 'string' }, [
     'kind',
-    'ruleId',
+    'cellId',
   ]),
+  conditionalFormatRule: reviewObjectSpec({ kind: 'string', ruleId: 'string' }, ['kind', 'ruleId']),
   filterState: reviewObjectSpec(
     {
       kind: 'string',
@@ -54,10 +67,11 @@ const VC06_REVIEW_VALUE_SPECS = {
     },
     ['kind'],
   ),
-  sortOrder: reviewObjectSpec(
-    { kind: 'string', range: 'string', rowsMoved: 'number' },
-    ['kind', 'range', 'rowsMoved'],
-  ),
+  sortOrder: reviewObjectSpec({ kind: 'string', range: 'string', rowsMoved: 'number' }, [
+    'kind',
+    'range',
+    'rowsMoved',
+  ]),
   chartSourceRange: reviewObjectSpec(
     {
       kind: 'string',
@@ -121,6 +135,92 @@ export function projectReviewAccessDiffValue(
 
   const semanticValue = projectReviewSemanticValue(value.value, reviewSpec);
   return semanticValue === undefined ? null : { kind: 'value', value: semanticValue };
+}
+
+export function projectReviewAccessRecordSummary(
+  record: WorkbookVersionReviewRecordSummary,
+): WorkbookVersionReviewRecordSummary {
+  return {
+    ...cloneJson(record),
+    ...(record.title === undefined ? {} : { title: sanitizeDiagnosticString(record.title) }),
+    createdBy: projectReviewAccessAuthor(record.createdBy),
+  };
+}
+
+export function projectReviewAccessRecord(
+  record: WorkbookVersionReviewRecord,
+): WorkbookVersionReviewRecord {
+  const summary = projectReviewAccessRecordSummary(record);
+  return {
+    ...cloneJson(record),
+    ...summary,
+    decisions: record.decisions.map(projectReviewAccessDecision),
+    ...(record.approval === undefined
+      ? {}
+      : { approval: projectReviewAccessApproval(record.approval) }),
+    redaction: {
+      policy: cloneJson(record.redaction.policy),
+      redactedFields: record.redaction.redactedFields.includes('reviewAuthors.principalTrace')
+        ? [...record.redaction.redactedFields]
+        : [...record.redaction.redactedFields, 'reviewAuthors.principalTrace'],
+      diagnostics: sanitizeVersionDiagnostics(record.redaction.diagnostics),
+    },
+    diagnostics: sanitizeVersionDiagnostics(record.diagnostics),
+  };
+}
+
+export function projectReviewAccessDiffPage(
+  page: WorkbookVersionReviewDiffPage,
+):
+  | { readonly ok: true; readonly value: WorkbookVersionReviewDiffPage }
+  | { readonly ok: false; readonly diagnostics: readonly VersionDiagnostic[] } {
+  const blockingDiagnostics = blockingReviewDiffDiagnostics(page);
+  if (blockingDiagnostics.length > 0) {
+    return { ok: false, diagnostics: blockingDiagnostics };
+  }
+
+  if (hiddenAuthoredUpstreamChanges(page).length > 0) {
+    return {
+      ok: false,
+      diagnostics: [
+        reviewAccessDiagnostic(
+          'VERSION_REVIEW_DIFF_INCOMPLETE',
+          'error',
+          'The requested review diff includes semantic changes that are not visible through the review access projection.',
+        ),
+      ],
+    };
+  }
+
+  const changes = page.changes.map(projectReviewAccessDiffChange);
+  const derivedImpact = page.derivedImpact?.map(projectReviewAccessDiffChange);
+  return {
+    ok: true,
+    value: {
+      schemaVersion: page.schemaVersion,
+      source: page.source,
+      baseCommitId: page.baseCommitId,
+      headCommitId: page.headCommitId,
+      changeSetDigest: cloneJson(page.changeSetDigest),
+      ...(page.reviewId === undefined ? {} : { reviewId: page.reviewId }),
+      changes,
+      ...(derivedImpact === undefined ? {} : { derivedImpact }),
+      summary: {
+        ...cloneJson(page.summary),
+        authoredChanges: changes.length,
+        derivedChanges: derivedImpact?.length ?? page.summary.derivedChanges,
+      },
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+      limit: page.limit,
+      diagnostics: sanitizeVersionDiagnostics(page.diagnostics),
+    },
+  };
+}
+
+export function sanitizeReviewAccessDiagnostics(
+  diagnostics: readonly VersionDiagnostic[],
+): readonly VersionDiagnostic[] {
+  return sanitizeVersionDiagnostics(diagnostics);
 }
 
 function reviewSpecForStructural(
@@ -266,6 +366,298 @@ function projectReviewFieldValue(
   }
 }
 
+function projectReviewAccessDecision(
+  decision: WorkbookVersionReviewDecision,
+): WorkbookVersionReviewDecision {
+  return {
+    ...cloneJson(decision),
+    reviewer: projectReviewAccessAuthor(decision.reviewer),
+    ...(decision.body === undefined ? {} : { body: sanitizeDiagnosticString(decision.body) }),
+    ...(decision.metadata === undefined
+      ? {}
+      : {
+          metadata: sanitizeDiagnosticData(
+            decision.metadata,
+          ) as WorkbookVersionReviewDecision['metadata'],
+        }),
+  };
+}
+
+function projectReviewAccessApproval(
+  approval: WorkbookVersionReviewApprovalEvidence,
+): WorkbookVersionReviewApprovalEvidence {
+  return {
+    ...cloneJson(approval),
+    approvedBy: projectReviewAccessAuthor(approval.approvedBy),
+  };
+}
+
+function projectReviewAccessAuthor(author: VersionAuthor): VersionAuthor {
+  return {
+    kind: author.kind,
+    trust: author.trust,
+    ...(author.displayName === undefined
+      ? {}
+      : { displayName: sanitizeDiagnosticString(author.displayName) }),
+  };
+}
+
+function projectReviewAccessDiffChange(
+  change: WorkbookVersionReviewDiffChange,
+): WorkbookVersionReviewDiffChange {
+  const structural = structuralFromReviewTarget(change.target);
+  return {
+    ...cloneJson(change),
+    before: structural
+      ? projectReviewAccessChangeValue(structural, change.before)
+      : cloneJson(change.before),
+    after: structural
+      ? projectReviewAccessChangeValue(structural, change.after)
+      : cloneJson(change.after),
+    diagnostics: sanitizeVersionDiagnostics(change.diagnostics),
+  };
+}
+
+function projectReviewAccessChangeValue(
+  structural: VersionDiffStructuralMetadata,
+  value: VersionDiffValue,
+): VersionDiffValue {
+  const projected = projectReviewAccessDiffValue(structural, value);
+  if (projected === undefined) return cloneJson(value);
+  return projected ?? REVIEW_ACCESS_REDACTED_VALUE;
+}
+
+function structuralFromReviewTarget(
+  target: WorkbookVersionReviewDecisionTarget,
+): VersionDiffStructuralMetadata | null {
+  if (target.kind !== 'semanticChange') return null;
+  return {
+    kind: 'metadata',
+    changeId: target.changeId,
+    domain: target.entityKind,
+    entityId: target.entityId,
+    propertyPath: [...target.propertyPath],
+  };
+}
+
+function blockingReviewDiffDiagnostics(
+  page: WorkbookVersionReviewDiffPage,
+): readonly VersionDiagnostic[] {
+  const diagnostics = [
+    ...publicDiagnosticsFrom(page.diagnostics),
+    ...publicDiagnosticsFrom(
+      isRecord(page.upstreamDiff) ? page.upstreamDiff.diagnostics : undefined,
+    ),
+  ];
+  return diagnostics
+    .filter(isBlockingReviewDiffDiagnostic)
+    .map((item) =>
+      reviewAccessDiagnostic(
+        diagnosticCode(item) ?? 'VERSION_REVIEW_DIFF_COMPLETENESS_BLOCKED',
+        diagnosticSeverity(item),
+        'The requested review diff includes hidden or unsupported semantic state.',
+      ),
+    );
+}
+
+function hiddenAuthoredUpstreamChanges(
+  page: WorkbookVersionReviewDiffPage,
+): readonly VersionDiffEntry[] {
+  const upstreamDiff = page.upstreamDiff;
+  if (!isRecord(upstreamDiff) || !Array.isArray(upstreamDiff.items)) return [];
+
+  const projectedKeys = new Set<string>();
+  for (const change of page.changes) {
+    const key = reviewDiffChangeKey(change);
+    if (key) projectedKeys.add(key);
+  }
+  for (const change of page.derivedImpact ?? []) {
+    const key = reviewDiffChangeKey(change);
+    if (key) projectedKeys.add(key);
+  }
+
+  const hidden: VersionDiffEntry[] = [];
+  for (const item of upstreamDiff.items) {
+    const key = upstreamEntryKey(item);
+    if (key && !projectedKeys.has(key)) hidden.push(item as VersionDiffEntry);
+  }
+  return hidden;
+}
+
+function reviewDiffChangeKey(change: WorkbookVersionReviewDiffChange): string | null {
+  const target = change.target;
+  if (target.kind !== 'semanticChange') return null;
+  return semanticChangeKey(
+    target.changeId,
+    target.entityKind,
+    target.entityId,
+    target.propertyPath,
+  );
+}
+
+function upstreamEntryKey(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  const structural = value.structural;
+  if (!isRecord(structural) || structural.kind !== 'metadata') return null;
+  const changeId = structural.changeId;
+  const domain = structural.domain;
+  const entityId = structural.entityId;
+  const propertyPath = structural.propertyPath;
+  if (
+    typeof changeId !== 'string' ||
+    typeof domain !== 'string' ||
+    typeof entityId !== 'string' ||
+    !Array.isArray(propertyPath) ||
+    !propertyPath.every((segment) => typeof segment === 'string')
+  ) {
+    return null;
+  }
+  return semanticChangeKey(changeId, domain, entityId, propertyPath);
+}
+
+function semanticChangeKey(
+  changeId: string,
+  entityKind: string,
+  entityId: string,
+  propertyPath: readonly string[],
+): string {
+  return JSON.stringify([changeId, entityKind, entityId, propertyPath]);
+}
+
+function isBlockingReviewDiffDiagnostic(value: Readonly<Record<string, unknown>>): boolean {
+  const code = diagnosticCode(value)?.toLowerCase() ?? '';
+  const message = diagnosticMessage(value).toLowerCase();
+  const data = diagnosticData(value);
+  const category = diagnosticStringField(data, 'category')?.toLowerCase();
+  return (
+    code.includes('completeness') ||
+    code.includes('unsupported') ||
+    code.includes('opaque') ||
+    message.includes('completeness') ||
+    message.includes('unsupported') ||
+    message.includes('opaque') ||
+    message.includes('subset-hidden') ||
+    category === 'unsupported' ||
+    category === 'opaque' ||
+    category === 'subset-hidden' ||
+    category === 'incomplete'
+  );
+}
+
+function publicDiagnosticsFrom(value: unknown): Readonly<Record<string, unknown>>[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is Readonly<Record<string, unknown>> => isRecord(item))
+    : [];
+}
+
+function diagnosticCode(value: Readonly<Record<string, unknown>>): string | undefined {
+  if (typeof value.code === 'string') return value.code;
+  return typeof value.issueCode === 'string' ? value.issueCode : undefined;
+}
+
+function diagnosticSeverity(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiagnostic['severity'] {
+  return value.severity === 'info' || value.severity === 'warning' ? value.severity : 'error';
+}
+
+function diagnosticMessage(value: Readonly<Record<string, unknown>>): string {
+  if (typeof value.message === 'string') return value.message;
+  return typeof value.safeMessage === 'string' ? value.safeMessage : '';
+}
+
+function diagnosticData(
+  value: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> | undefined {
+  if (isRecord(value.data)) return value.data;
+  if (isRecord(value.payload)) return value.payload;
+  if (isRecord(value.details)) return value.details;
+  return undefined;
+}
+
+function diagnosticStringField(
+  value: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): string | undefined {
+  const field = value?.[key];
+  return typeof field === 'string' ? field : undefined;
+}
+
+function reviewAccessDiagnostic(
+  code: string,
+  severity: VersionDiagnostic['severity'],
+  message: string,
+): VersionDiagnostic {
+  return { code, severity, message };
+}
+
+function sanitizeVersionDiagnostics(
+  diagnostics: readonly VersionDiagnostic[],
+): readonly VersionDiagnostic[] {
+  return diagnostics.map((diagnostic) => ({
+    ...diagnostic,
+    message: sanitizeDiagnosticString(diagnostic.message),
+    ...(diagnostic.owner === undefined
+      ? {}
+      : { owner: sanitizeDiagnosticString(diagnostic.owner) }),
+    ...(diagnostic.data === undefined
+      ? {}
+      : { data: sanitizeDiagnosticData(diagnostic.data) as VersionDiagnostic['data'] }),
+  }));
+}
+
+const OMIT_DIAGNOSTIC_FIELD = Symbol('omitDiagnosticField');
+
+function sanitizeDiagnosticData(
+  value: unknown,
+  key?: string,
+): unknown | typeof OMIT_DIAGNOSTIC_FIELD {
+  if (key && isSensitiveDiagnosticKey(key)) return OMIT_DIAGNOSTIC_FIELD;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeDiagnosticData(item))
+      .filter((item) => item !== OMIT_DIAGNOSTIC_FIELD);
+  }
+  if (isRecord(value)) {
+    const output: Record<string, unknown> = {};
+    for (const [childKey, child] of Object.entries(value)) {
+      const sanitized = sanitizeDiagnosticData(child, childKey);
+      if (sanitized !== OMIT_DIAGNOSTIC_FIELD) output[childKey] = sanitized;
+    }
+    return output;
+  }
+  return typeof value === 'string' ? sanitizeDiagnosticString(value) : value;
+}
+
+function sanitizeDiagnosticString(value: string): string {
+  return value.replace(SENSITIVE_PRINCIPAL_TOKEN_RE, 'redacted-principal');
+}
+
+function isSensitiveDiagnosticKey(key: string): boolean {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.includes('principal') ||
+    normalized.includes('hidden') ||
+    normalized === 'actorid' ||
+    normalized === 'reviewerid' ||
+    normalized === 'agentrunid' ||
+    normalized === 'userid' ||
+    normalized === 'useremail' ||
+    normalized === 'domain' ||
+    normalized === 'domains' ||
+    normalized === 'omittedchangecount' ||
+    normalized === 'omitteddomains' ||
+    normalized === 'path' ||
+    normalized === 'changeid' ||
+    normalized === 'entityid' ||
+    normalized === 'proposalid' ||
+    normalized === 'mergepreviewid' ||
+    normalized === 'conflictid' ||
+    normalized === 'basecommitid' ||
+    normalized === 'headcommitid'
+  );
+}
+
 function projectNestedReviewObject(
   value: unknown,
   spec: ReviewObjectSpec,
@@ -308,6 +700,10 @@ function reviewObjectSpec(
   required: readonly string[],
 ): ReviewObjectSpec {
   return { fields, required };
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

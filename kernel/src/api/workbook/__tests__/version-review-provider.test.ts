@@ -131,6 +131,69 @@ describe('WorkbookVersion provider-backed review service', () => {
     expect(surface.capabilities['version:reviewWrite']).toEqual({ enabled: true });
   });
 
+  it('projects provider-backed review read and write records through public-safe access', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const ctx = { documentId: DOCUMENT_SCOPE.documentId } as any;
+    attachWorkbookVersioning(ctx, { provider });
+    const version = new WorkbookVersionImpl(ctx);
+    const sensitiveActor = {
+      kind: 'agent',
+      trust: 'trusted',
+      displayName: 'Reviewer',
+      principalId: 'principal-secret',
+      agentRunId: 'agent-secret',
+    } as const;
+
+    const created = await version.createReview({
+      ...createReviewInput('projection-review-1'),
+      createdBy: sensitiveActor,
+    });
+    if (!created.ok) throw new Error(`expected create success: ${created.error.code}`);
+    expect(JSON.stringify(created.value)).not.toContain('principal-secret');
+    expect(JSON.stringify(created.value)).not.toContain('agent-secret');
+    expect(created.value.redaction.redactedFields).toContain('reviewAuthors.principalTrace');
+
+    const listed = await version.listReviews({});
+    if (!listed.ok) throw new Error(`expected list success: ${listed.error.code}`);
+    expect(JSON.stringify(listed.value)).not.toContain('principal-secret');
+    expect(JSON.stringify(listed.value)).not.toContain('agent-secret');
+
+    const fetched = await version.getReview({ reviewId: created.value.id });
+    if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
+    expect(JSON.stringify(fetched.value)).not.toContain('principal-secret');
+    expect(JSON.stringify(fetched.value)).not.toContain('agent-secret');
+
+    const decision = await version.appendReviewDecision({
+      reviewId: created.value.id,
+      expectedRevision: 1,
+      clientRequestId: 'projection-decision-1',
+      decision: {
+        target: { kind: 'proposal', proposalId: 'proposal-1' },
+        decision: 'comment',
+        reviewer: sensitiveActor,
+        body: 'Please review with principal-secret.',
+        metadata: { principalId: 'principal-secret', publicNote: 'kept' },
+      },
+    });
+    if (!decision.ok) throw new Error(`expected decision success: ${decision.error.code}`);
+    expect(JSON.stringify(decision.value)).not.toContain('principal-secret');
+    expect(JSON.stringify(decision.value)).not.toContain('agent-secret');
+    expect(JSON.stringify(decision.value)).toContain('publicNote');
+
+    const status = await version.updateReviewStatus({
+      reviewId: created.value.id,
+      expectedRevision: 2,
+      clientRequestId: 'projection-status-1',
+      status: 'changes_requested',
+      actor: sensitiveActor,
+      reason: 'Blocked for principal-secret.',
+    });
+    if (!status.ok) throw new Error(`expected status success: ${status.error.code}`);
+    expect(JSON.stringify(status.value)).not.toContain('principal-secret');
+    expect(JSON.stringify(status.value)).not.toContain('agent-secret');
+    expect(JSON.stringify(status.value)).toContain('redacted-principal');
+  });
+
   it('projects provider-backed semantic diffs into review diff pages by review id and commit range', async () => {
     const graph = await graphWithRootAndChild([
       {
@@ -204,17 +267,12 @@ describe('WorkbookVersion provider-backed review service', () => {
         },
         nextCursor: expect.stringMatching(/^mog-vdiff-v1\.semantic-change-order\./),
         limit: 1,
-        upstreamDiff: {
-          items: [{ structural: { changeId: 'change-cell-a1' } }],
-          nextCursor: expect.stringMatching(/^mog-vdiff-v1\.semantic-change-order\./),
-          limit: 1,
-          order: 'semantic-change-order',
-        },
       },
     });
     if (!firstPage.ok || !firstPage.value.nextCursor) {
       throw new Error('expected review diff page cursor');
     }
+    expect(firstPage.value).not.toHaveProperty('upstreamDiff');
 
     await expect(
       version.getReviewDiff({
@@ -326,6 +384,34 @@ describe('WorkbookVersion provider-backed review service', () => {
     const serialized = JSON.stringify(diff);
     expect(serialized).not.toContain('principal-secret');
     expect(serialized).not.toContain('deniedPrincipal');
+    expect(serialized).not.toContain('macros.vba');
+    expect(serialized).not.toContain('module-1');
+    expect(serialized).not.toContain('private macro source');
+    expect(serialized).not.toContain('changes[1]');
+
+    const approved = await version.updateReviewStatus({
+      reviewId: review.value.id,
+      expectedRevision: 1,
+      clientRequestId: 'hidden-unsupported-domain-approve',
+      status: 'approved',
+      actor: AUTHOR,
+    });
+    expect(approved).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.updateReviewStatus',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN' })],
+      },
+    });
+    const approvalJson = JSON.stringify(approved);
+    expect(approvalJson).not.toContain('principal-secret');
+    expect(approvalJson).not.toContain('deniedPrincipal');
+    expect(approvalJson).not.toContain('macros.vba');
+    expect(approvalJson).not.toContain('module-1');
+    expect(approvalJson).not.toContain('private macro source');
+    expect(approvalJson).not.toContain('changes[1]');
+    expect(approvalJson).not.toContain('upstreamDiff');
   });
 
   it('approves commit-range reviews with diff-backed evidence and idempotent retry', async () => {

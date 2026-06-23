@@ -1,21 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import type { WorkbookCommitId as PublicWorkbookCommitId } from '@mog-sdk/contracts/api';
-import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
-
-import { VERSION_GRAPH_MAIN_REF, type VersionGraphReadHeadResult } from '../graph-store';
-import {
-  createMergePreviewArtifactRecord,
-  mergePreviewArtifactRef,
-} from '../merge-attempt-artifacts';
-import {
-  createVersionObjectRecord,
-  versionGraphNamespaceKey,
-  type VersionGraphNamespace,
-  type VersionObjectRecord,
-} from '../object-store';
-import type { VersionObjectType } from '../object-digest';
-import { objectDigestFromWorkbookCommitId } from '../object-digest';
+import { versionGraphNamespaceKey } from '../object-store';
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_CAPABILITIES,
@@ -29,7 +14,6 @@ import {
   REFS_STORE,
   REGISTRIES_STORE,
   SYMBOLIC_REFS_STORE,
-  deleteVersionStoreIndexedDbForTesting,
   openVersionStoreIndexedDb,
 } from '../provider-indexeddb-schema';
 import {
@@ -40,104 +24,27 @@ import {
   createVersionGraphRegistry,
   namespaceForDocumentScope,
   versionDocumentScopeKey,
-  type VersionDocumentScope,
-  type VersionGraphInitializeInput,
-  type VersionGraphInitializeResult,
-  type VersionGraphRegistryReadResult,
 } from '../provider';
-
-const DOCUMENT_SCOPE: VersionDocumentScope = {
-  workspaceId: 'workspace-1',
-  documentId: 'document-1',
-  principalScope: 'principal-1',
-};
-
-const AUTHOR: VersionAuthor = {
-  authorId: 'user-1',
-  actorKind: 'user',
-  displayName: 'User One',
-};
-const MISSING_COMMIT_ID =
-  'commit:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff' as PublicWorkbookCommitId;
+import {
+  DOCUMENT_SCOPE,
+  count,
+  deleteStoreRecord,
+  expectInitializeSuccess,
+  expectReadHeadSuccess,
+  expectRegistryOk,
+  initializeInput,
+  putRegistryEnvelope,
+  resetIndexedDbVersionStoreForTesting,
+  updateFirstByNamespace,
+} from './provider-indexeddb-test-utils';
 
 beforeEach(async () => {
-  await deleteVersionStoreIndexedDbForTesting();
+  await resetIndexedDbVersionStoreForTesting();
 });
 
 afterEach(async () => {
-  await deleteVersionStoreIndexedDbForTesting();
+  await resetIndexedDbVersionStoreForTesting();
 });
-
-function expectRegistryOk(
-  result: VersionGraphRegistryReadResult,
-): asserts result is Extract<VersionGraphRegistryReadResult, { status: 'ok' }> {
-  expect(result.status).toBe('ok');
-  if (result.status !== 'ok')
-    throw new Error(`expected registry ok: ${result.diagnostics[0]?.code}`);
-}
-
-function expectInitializeSuccess(
-  result: VersionGraphInitializeResult,
-): asserts result is Extract<VersionGraphInitializeResult, { status: 'success' }> {
-  expect(result.status).toBe('success');
-  if (result.status !== 'success') {
-    throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
-  }
-}
-
-function expectReadHeadSuccess(
-  result: VersionGraphReadHeadResult,
-): asserts result is Extract<VersionGraphReadHeadResult, { status: 'success' }> {
-  expect(result.status).toBe('success');
-  if (result.status !== 'success') throw new Error(`expected readHead success`);
-}
-
-async function objectRecord(
-  objectType: VersionObjectType,
-  payload: unknown,
-  namespace: VersionGraphNamespace,
-): Promise<VersionObjectRecord<unknown>> {
-  return createVersionObjectRecord(namespace, {
-    objectType,
-    schemaVersion: 1,
-    payloadEncoding: 'mog-canonical-json-v1',
-    dependencies: [],
-    payload,
-  });
-}
-
-async function rootWrite(
-  label: string,
-  namespace: VersionGraphNamespace,
-): Promise<VersionGraphInitializeInput['rootWrite']> {
-  return {
-    snapshotRootRecord: await objectRecord(
-      'workbook.snapshotRoot.v1',
-      { label, sheets: [] },
-      namespace,
-    ),
-    semanticChangeSetRecord: await objectRecord(
-      'workbook.semanticChangeSet.v1',
-      { label, changes: [] },
-      namespace,
-    ),
-    author: AUTHOR,
-    createdAt: '2026-06-20T00:00:00.000Z',
-    completenessDiagnostics: [],
-  };
-}
-
-async function initializeInput(
-  graphId: string,
-  label = 'root',
-): Promise<VersionGraphInitializeInput> {
-  const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, graphId);
-  return {
-    expectedRegistryRevision: null,
-    graphId,
-    rootWrite: await rootWrite(label, namespace),
-  };
-}
 
 describe('IndexedDbVersionStoreProvider', () => {
   it('creates separate VC stores and reports truthful browser capabilities', async () => {
@@ -217,8 +124,9 @@ describe('IndexedDbVersionStoreProvider', () => {
 
   it('fails closed on unsupported persisted object rows during durable reload', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    await expect(provider.initializeGraph(await initializeInput('graph-unsupported-row'))).resolves
-      .toMatchObject({ status: 'success' });
+    await expect(
+      provider.initializeGraph(await initializeInput('graph-unsupported-row')),
+    ).resolves.toMatchObject({ status: 'success' });
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-unsupported-row');
     await updateFirstByNamespace(OBJECTS_STORE, namespace, (row) => ({
       ...row,
@@ -241,8 +149,9 @@ describe('IndexedDbVersionStoreProvider', () => {
 
   it('fails closed on wrong-scope persisted ref rows during durable reload', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    await expect(provider.initializeGraph(await initializeInput('graph-wrong-ref-scope'))).resolves
-      .toMatchObject({ status: 'success' });
+    await expect(
+      provider.initializeGraph(await initializeInput('graph-wrong-ref-scope')),
+    ).resolves.toMatchObject({ status: 'success' });
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-wrong-ref-scope');
     await updateFirstByNamespace(REFS_STORE, namespace, (row) => ({
       ...row,
@@ -266,8 +175,9 @@ describe('IndexedDbVersionStoreProvider', () => {
 
   it('fails closed when the visible registry points at a graph without a reload manifest', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    await expect(provider.initializeGraph(await initializeInput('graph-missing-manifest'))).resolves
-      .toMatchObject({ status: 'success' });
+    await expect(
+      provider.initializeGraph(await initializeInput('graph-missing-manifest')),
+    ).resolves.toMatchObject({ status: 'success' });
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-missing-manifest');
     await deleteStoreRecord(INDEX_MANIFESTS_STORE, versionGraphNamespaceKey(namespace));
 
@@ -320,7 +230,7 @@ describe('IndexedDbVersionStoreProvider', () => {
     });
 
     await corruptProvider.close('test-teardown');
-    await deleteVersionStoreIndexedDbForTesting();
+    await resetIndexedDbVersionStoreForTesting();
     await putRegistryEnvelope({ schemaVersion: 99, registry: null });
     const unsupportedProvider = createIndexedDbVersionStoreProvider({
       documentScope: DOCUMENT_SCOPE,
@@ -329,396 +239,6 @@ describe('IndexedDbVersionStoreProvider', () => {
       status: 'unsupported',
       diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_REGISTRY' })],
     });
-  });
-
-  it('enforces single-process ref CAS for stale graph commits', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-cas'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-cas');
-    const left = await provider.openGraph(namespace);
-    const right = await provider.openGraph(namespace);
-    const leftHead = await left.readHead();
-    const rightHead = await right.readHead();
-    expectReadHeadSuccess(leftHead);
-    expectReadHeadSuccess(rightHead);
-
-    const leftCommit = await left.commit({
-      ...(await rootWrite('left', namespace)),
-      expectedHeadCommitId: leftHead.head.id,
-      expectedMainRefVersion: leftHead.main.revision,
-      parentCommitIds: [leftHead.head.id],
-    });
-    expect(leftCommit.status).toBe('success');
-
-    const staleCommit = await right.commit({
-      ...(await rootWrite('right', namespace)),
-      expectedHeadCommitId: rightHead.head.id,
-      expectedMainRefVersion: rightHead.main.revision,
-      parentCommitIds: [rightHead.head.id],
-    });
-    expect(staleCommit).toMatchObject({
-      status: 'failed',
-      mutationGuarantee: 'no-write-attempted',
-      diagnostics: [expect.objectContaining({ code: 'VERSION_REF_CONFLICT' })],
-    });
-  });
-
-  it('persists target branch commits with branch-scoped CAS', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-branch-cas'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-branch-cas');
-    await copyMainRefToBranch(namespace, 'scenario/idb-branch');
-    const left = await provider.openGraph(namespace);
-    const right = await provider.openGraph(namespace);
-    const leftBranch = await left.readRef('refs/heads/scenario/idb-branch');
-    expect(leftBranch.status).toBe('success');
-    if (leftBranch.status !== 'success' || !('commitId' in leftBranch.ref)) {
-      throw new Error('expected readable branch ref');
-    }
-
-    const leftCommit = await left.commit({
-      ...(await rootWrite('left-branch', namespace)),
-      targetRef: 'refs/heads/scenario/idb-branch',
-      expectedHeadCommitId: leftBranch.ref.commitId,
-      expectedTargetRefVersion: leftBranch.ref.revision,
-      parentCommitIds: [leftBranch.ref.commitId],
-    });
-    expect(leftCommit.status).toBe('success');
-
-    const staleCommit = await right.commit({
-      ...(await rootWrite('right-branch', namespace)),
-      targetRef: 'refs/heads/scenario/idb-branch',
-      expectedHeadCommitId: leftBranch.ref.commitId,
-      expectedTargetRefVersion: leftBranch.ref.revision,
-      parentCommitIds: [leftBranch.ref.commitId],
-    });
-    expect(staleCommit).toMatchObject({
-      status: 'failed',
-      mutationGuarantee: 'no-write-attempted',
-      diagnostics: [
-        expect.objectContaining({
-          code: 'VERSION_REF_CONFLICT',
-          refName: 'refs/heads/scenario/idb-branch',
-        }),
-      ],
-    });
-
-    const reloaded = await provider.openGraph(namespace);
-    await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        commitId: initialized.rootCommit.id,
-        revision: initialized.initialHead.revision,
-      },
-    });
-    await expect(reloaded.readRef('refs/heads/scenario/idb-branch')).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        commitId: leftCommit.status === 'success' ? leftCommit.commit.id : undefined,
-        revision: { kind: 'counter', value: '1' },
-      },
-    });
-  });
-
-  it('preserves a concurrently advanced main ref when persisting branch commits', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-branch-isolation'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-branch-isolation');
-    const bootstrap = await provider.openGraph(namespace);
-    const createdBranch = await bootstrap.createBranch({
-      name: 'scenario/idb-branch-isolation',
-      targetCommitId: initialized.rootCommit.id,
-      expectedAbsent: true,
-      createdBy: AUTHOR,
-    });
-    expect(createdBranch.ok).toBe(true);
-    if (!createdBranch.ok) throw new Error('expected branch create success');
-
-    const left = await provider.openGraph(namespace);
-    const right = await provider.openGraph(namespace);
-    const leftHead = await left.readHead();
-    const rightBranch = await right.readBranch({ name: 'scenario/idb-branch-isolation' });
-    expectReadHeadSuccess(leftHead);
-    expect(rightBranch.ok).toBe(true);
-    if (!rightBranch.ok || rightBranch.branch === null) {
-      throw new Error('expected readable branch ref');
-    }
-
-    const leftCommit = await left.commit({
-      ...(await rootWrite('main-advanced', namespace)),
-      expectedHeadCommitId: leftHead.head.id,
-      expectedMainRefVersion: leftHead.main.revision,
-      parentCommitIds: [leftHead.head.id],
-    });
-    expect(leftCommit.status).toBe('success');
-    if (leftCommit.status !== 'success') throw new Error('expected main commit success');
-
-    const rightCommit = await right.commit({
-      ...(await rootWrite('branch-advanced', namespace)),
-      targetRef: 'refs/heads/scenario/idb-branch-isolation',
-      expectedHeadCommitId: rightBranch.branch.ref.targetCommitId,
-      expectedTargetRefVersion: rightBranch.branch.ref.refVersion,
-      parentCommitIds: [rightBranch.branch.ref.targetCommitId],
-    });
-    expect(rightCommit.status).toBe('success');
-    if (rightCommit.status !== 'success') throw new Error('expected branch commit success');
-
-    const reloaded = await provider.openGraph(namespace);
-    await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        commitId: leftCommit.commit.id,
-        revision: { kind: 'counter', value: '1' },
-      },
-    });
-    await expect(reloaded.readRef('refs/heads/scenario/idb-branch-isolation')).resolves
-      .toMatchObject({
-        status: 'success',
-        ref: {
-          commitId: rightCommit.commit.id,
-          revision: { kind: 'counter', value: '1' },
-        },
-      });
-  });
-
-  it('persists explicit two-parent merge commits with main-ref CAS', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-merge-cas'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-merge-cas');
-    await copyMainRefToBranch(namespace, 'scenario/idb-merge-parent');
-    const graph = await provider.openGraph(namespace);
-    const head = await graph.readHead();
-    const branch = await graph.readRef('refs/heads/scenario/idb-merge-parent');
-    expectReadHeadSuccess(head);
-    expect(branch.status).toBe('success');
-    if (branch.status !== 'success' || !('commitId' in branch.ref)) {
-      throw new Error('expected readable branch ref');
-    }
-
-    const ours = await graph.commit({
-      ...(await rootWrite('merge-ours', namespace)),
-      expectedHeadCommitId: head.head.id,
-      expectedMainRefVersion: head.main.revision,
-      parentCommitIds: [head.head.id],
-    });
-    expect(ours.status).toBe('success');
-    if (ours.status !== 'success') throw new Error('expected ours commit success');
-
-    const theirs = await graph.commit({
-      ...(await rootWrite('merge-theirs', namespace)),
-      targetRef: 'refs/heads/scenario/idb-merge-parent',
-      expectedHeadCommitId: branch.ref.commitId,
-      expectedTargetRefVersion: branch.ref.revision,
-      parentCommitIds: [branch.ref.commitId],
-    });
-    expect(theirs.status).toBe('success');
-    if (theirs.status !== 'success') throw new Error('expected theirs commit success');
-
-    const merge = await graph.mergeCommit({
-      ...(await rootWrite('merge-result', namespace)),
-      expectedHeadCommitId: ours.commit.id,
-      expectedMainRefVersion: ours.main.revision,
-      mergeParentCommitId: theirs.commit.id,
-    });
-    expect(merge.status).toBe('success');
-    if (merge.status !== 'success') throw new Error('expected merge commit success');
-    expect(merge.commit.payload.parentCommitIds).toEqual([ours.commit.id, theirs.commit.id]);
-
-    const stale = await graph.mergeCommit({
-      ...(await rootWrite('merge-stale', namespace)),
-      expectedHeadCommitId: ours.commit.id,
-      expectedMainRefVersion: ours.main.revision,
-      mergeParentCommitId: theirs.commit.id,
-    });
-    expect(stale).toMatchObject({
-      status: 'failed',
-      mutationGuarantee: 'no-write-attempted',
-      diagnostics: [expect.objectContaining({ code: 'VERSION_REF_CONFLICT' })],
-    });
-
-    const reloaded = await provider.openGraph(namespace);
-    const reloadedMerge = await reloaded.readCommit(merge.commit.id);
-    expect(reloadedMerge).toMatchObject({
-      status: 'success',
-      commit: {
-        payload: {
-          parentCommitIds: [ours.commit.id, theirs.commit.id],
-        },
-      },
-    });
-    const intentStore = await provider.openMergeApplyIntentStore(namespace);
-    await expect(
-      intentStore.readRefCasProof({
-        applyKind: 'mergeCommit',
-        targetRef: VERSION_GRAPH_MAIN_REF,
-        headBefore: ours.commit.id,
-        headAfter: merge.commit.id,
-      }),
-    ).resolves.toMatchObject({
-      status: 'found',
-      proof: {
-        schemaVersion: 1,
-        applyKind: 'mergeCommit',
-        commitMetadataDigest: objectDigestFromWorkbookCommitId(merge.commit.id),
-      },
-    });
-    await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        commitId: merge.commit.id,
-        revision: { kind: 'counter', value: '2' },
-      },
-    });
-  });
-
-  it('persists graph fast-forward ref advances with main-ref CAS', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-fast-forward-cas'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-fast-forward-cas');
-    await copyMainRefToBranch(namespace, 'scenario/idb-fast-forward');
-    const graph = await provider.openGraph(namespace);
-    const branch = await graph.readRef('refs/heads/scenario/idb-fast-forward');
-    expect(branch.status).toBe('success');
-    if (branch.status !== 'success' || !('commitId' in branch.ref)) {
-      throw new Error('expected readable branch ref');
-    }
-
-    const incoming = await graph.commit({
-      ...(await rootWrite('fast-forward-incoming', namespace)),
-      targetRef: 'refs/heads/scenario/idb-fast-forward',
-      expectedHeadCommitId: branch.ref.commitId,
-      expectedTargetRefVersion: branch.ref.revision,
-      parentCommitIds: [branch.ref.commitId],
-    });
-    expect(incoming.status).toBe('success');
-    if (incoming.status !== 'success') throw new Error('expected incoming commit success');
-
-    const fastForward = await graph.fastForwardRef({
-      expectedHeadCommitId: initialized.rootCommit.id,
-      expectedMainRefVersion: initialized.initialHead.revision,
-      nextCommitId: incoming.commit.id,
-      updatedBy: AUTHOR,
-    });
-    expect(fastForward).toMatchObject({
-      status: 'success',
-      commit: { id: incoming.commit.id },
-      main: {
-        commitId: incoming.commit.id,
-        revision: { kind: 'counter', value: '1' },
-      },
-    });
-
-    const reloaded = await provider.openGraph(namespace);
-    await expect(reloaded.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
-      status: 'success',
-      ref: {
-        commitId: incoming.commit.id,
-        revision: { kind: 'counter', value: '1' },
-      },
-    });
-    const reloadedCommit = await reloaded.readCommit(incoming.commit.id);
-    expect(reloadedCommit).toMatchObject({
-      status: 'success',
-      commit: {
-        payload: {
-          parentCommitIds: [initialized.rootCommit.id],
-        },
-      },
-    });
-    const intentStore = await provider.openMergeApplyIntentStore(namespace);
-    await expect(
-      intentStore.readRefCasProof({
-        applyKind: 'fastForward',
-        targetRef: VERSION_GRAPH_MAIN_REF,
-        headBefore: initialized.rootCommit.id,
-        headAfter: incoming.commit.id,
-      }),
-    ).resolves.toMatchObject({
-      status: 'found',
-      proof: {
-        schemaVersion: 1,
-        applyKind: 'fastForward',
-        commitMetadataDigest: objectDigestFromWorkbookCommitId(incoming.commit.id),
-      },
-    });
-  });
-
-  it('persists standalone graph object batches across provider reopen without moving refs', async () => {
-    const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-object-batch'));
-    expectInitializeSuccess(initialized);
-
-    const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-object-batch');
-    const graph = await provider.openGraph(namespace);
-    const ours = await graph.commit({
-      ...(await rootWrite('object-batch-ours', namespace)),
-      expectedHeadCommitId: initialized.rootCommit.id,
-      expectedMainRefVersion: initialized.initialHead.revision,
-      parentCommitIds: [initialized.rootCommit.id],
-    });
-    expect(ours.status).toBe('success');
-    if (ours.status !== 'success') throw new Error('expected ours commit success');
-    const theirs = await graph.commit({
-      ...(await rootWrite('object-batch-theirs', namespace)),
-      expectedHeadCommitId: ours.commit.id,
-      expectedMainRefVersion: ours.main.revision,
-      parentCommitIds: [ours.commit.id],
-    });
-    expect(theirs.status).toBe('success');
-    if (theirs.status !== 'success') throw new Error('expected theirs commit success');
-    const headBefore = await graph.readHead();
-    expectReadHeadSuccess(headBefore);
-
-    const preview = await createMergePreviewArtifactRecord(namespace, {
-      status: 'clean',
-      base: initialized.rootCommit.id,
-      ours: ours.commit.id,
-      theirs: theirs.commit.id,
-    });
-    const put = await graph.putObjects([preview]);
-    expect(put).toMatchObject({ status: 'success', records: [preview] });
-
-    const missingDependencyPreview = await createMergePreviewArtifactRecord(namespace, {
-      status: 'clean',
-      base: initialized.rootCommit.id,
-      ours: ours.commit.id,
-      theirs: MISSING_COMMIT_ID,
-    });
-    const rejected = await graph.putObjects([missingDependencyPreview]);
-    expect(rejected).toMatchObject({
-      status: 'failed',
-      mutationGuarantee: 'no-objects-written',
-      diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_DEPENDENCY' })],
-    });
-
-    await provider.close('test-teardown');
-    const reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const reloaded = await reloadedProvider.openGraph(namespace);
-    await expect(reloaded.readHead()).resolves.toMatchObject({
-      status: 'success',
-      head: { id: headBefore.head.id },
-      main: { commitId: headBefore.main.commitId, revision: headBefore.main.revision },
-    });
-    await expect(reloaded.getObjectRecord(mergePreviewArtifactRef(preview.digest))).resolves
-      .toMatchObject({
-        preimage: {
-          objectType: 'workbook.mergePreview.v1',
-          payload: { recordKind: 'mergePreview', status: 'clean' },
-        },
-      });
-    await expect(
-      reloaded.hasObject(mergePreviewArtifactRef(missingDependencyPreview.digest)),
-    ).resolves.toBe(false);
   });
 });
 
@@ -741,123 +261,3 @@ describe('VersionStoreProviderRegistry IndexedDB registration', () => {
     expect(provider.capabilities.durableObjects).toBe(true);
   });
 });
-
-function count(store: IDBObjectStore): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const request = store.count();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('count failed'));
-  });
-}
-
-async function putRegistryEnvelope(value: unknown): Promise<void> {
-  const db = await openVersionStoreIndexedDb();
-  const tx = db.transaction(REGISTRIES_STORE, 'readwrite');
-  tx.objectStore(REGISTRIES_STORE).put(value, versionDocumentScopeKey(DOCUMENT_SCOPE));
-  await new Promise<void>((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error('registry put failed'));
-    tx.onabort = () => reject(tx.error ?? new Error('registry put aborted'));
-  });
-  db.close();
-}
-
-async function copyMainRefToBranch(
-  namespace: VersionGraphNamespace,
-  branchName: string,
-): Promise<void> {
-  const db = await openVersionStoreIndexedDb();
-  const tx = db.transaction([REFS_STORE, INDEX_MANIFESTS_STORE], 'readwrite');
-  const done = transactionDone(tx, 'branch ref seed transaction failed');
-  const namespaceKey = versionGraphNamespaceKey(namespace);
-  const mainRow = asRecord(
-    await requestValue(tx.objectStore(REFS_STORE).get(`${namespaceKey}\u0000main`)),
-  );
-  const branchRow = JSON.parse(JSON.stringify(mainRow)) as Record<string, unknown>;
-  const record = asRecord(branchRow.record);
-  branchRow.record = {
-    ...record,
-    name: branchName,
-    protected: false,
-    providerRefId: `test-ref-${branchName}`,
-    refIncarnationId: `test-incarnation-${branchName}`,
-  };
-  tx.objectStore(REFS_STORE).put(branchRow, `${namespaceKey}\u0000${branchName}`);
-  const manifestStore = tx.objectStore(INDEX_MANIFESTS_STORE);
-  const manifest = asRecord(await requestValue(manifestStore.get(namespaceKey)));
-  const liveRefCount =
-    typeof manifest.refStoreLiveRefCount === 'number' ? manifest.refStoreLiveRefCount : 0;
-  manifestStore.put(
-    {
-      ...manifest,
-      refStoreLiveRefCount: liveRefCount + 1,
-    },
-    namespaceKey,
-  );
-  await done;
-  db.close();
-}
-
-async function updateFirstByNamespace(
-  storeName: string,
-  namespace: VersionGraphNamespace,
-  mutate: (row: Record<string, unknown>) => Record<string, unknown>,
-): Promise<void> {
-  const db = await openVersionStoreIndexedDb();
-  const tx = db.transaction(storeName, 'readwrite');
-  const done = transactionDone(tx, `${storeName} update transaction failed`);
-  const request = tx
-    .objectStore(storeName)
-    .index('namespaceKey')
-    .openCursor(IDBKeyRange.only(versionGraphNamespaceKey(namespace)));
-  await new Promise<void>((resolve, reject) => {
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) {
-        reject(new Error(`No ${storeName} row found for namespace.`));
-        return;
-      }
-      const update = cursor.update(mutate(asRecord(cursor.value)));
-      update.onsuccess = () => resolve();
-      update.onerror = () => reject(update.error ?? new Error(`${storeName} update failed`));
-    };
-    request.onerror = () => reject(request.error ?? new Error(`${storeName} cursor failed`));
-  });
-  await done;
-  db.close();
-}
-
-async function deleteStoreRecord(storeName: string, key: IDBValidKey): Promise<void> {
-  const db = await openVersionStoreIndexedDb();
-  const tx = db.transaction(storeName, 'readwrite');
-  const done = transactionDone(tx, `${storeName} delete transaction failed`);
-  const request = tx.objectStore(storeName).delete(key);
-  await new Promise<void>((resolve, reject) => {
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error(`${storeName} delete failed`));
-  });
-  await done;
-  db.close();
-}
-
-function transactionDone(tx: IDBTransaction, message: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error ?? new Error(message));
-    tx.onabort = () => reject(tx.error ?? new Error(message));
-  });
-}
-
-function requestValue<T>(request: IDBRequest<T>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('IndexedDB request failed'));
-  });
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  throw new Error('IndexedDB row is not an object.');
-}

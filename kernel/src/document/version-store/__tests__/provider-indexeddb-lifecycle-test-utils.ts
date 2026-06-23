@@ -172,7 +172,7 @@ export async function createLifecycleDocumentHandle(documentId: string) {
   });
 }
 
-export async function openWorkbook(
+export async function openLifecycleWorkbook(
   documentId: string,
   versioning: NonNullable<LifecycleVersioningConfig>,
 ) {

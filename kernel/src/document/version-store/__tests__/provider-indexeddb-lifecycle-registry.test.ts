@@ -1,6 +1,6 @@
 import {
   captureNormalCommit,
-  openWorkbook,
+  openLifecycleWorkbook,
   putRegistryEnvelope,
   resetIndexedDbVersionStoreForTesting,
 } from './provider-indexeddb-lifecycle-test-utils';
@@ -25,7 +25,7 @@ describe('IndexedDB version provider document/workbook lifecycle registry failur
       },
     });
 
-    const corruptWorkbook = await openWorkbook(documentId, {
+    const corruptWorkbook = await openLifecycleWorkbook(documentId, {
       providerSelection: { kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND },
       captureNormalCommit,
     });
@@ -45,7 +45,7 @@ describe('IndexedDB version provider document/workbook lifecycle registry failur
 
     await resetIndexedDbVersionStoreForTesting();
     await putRegistryEnvelope(documentScope, { schemaVersion: 99, registry: null });
-    const unsupportedWorkbook = await openWorkbook(documentId, {
+    const unsupportedWorkbook = await openLifecycleWorkbook(documentId, {
       providerSelection: { kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND },
       captureNormalCommit,
     });

@@ -1,7 +1,7 @@
 import {
   captureNormalCommit,
   createLifecycleDocumentHandle,
-  openWorkbook,
+  openLifecycleWorkbook,
   rootWrite,
 } from './provider-indexeddb-lifecycle-test-utils';
 import {
@@ -31,7 +31,7 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     const graphId = 'graph-readonly';
     const root = await rootWrite('root', namespaceForDocumentScope(documentScope, graphId));
 
-    const writable = await openWorkbook(documentId, {
+    const writable = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         initialize: { graphId, rootWrite: root },
@@ -43,7 +43,7 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     const head = headResult.value;
     await writable.handle.dispose();
 
-    const readOnly = await openWorkbook(documentId, {
+    const readOnly = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         readOnly: true,
@@ -70,7 +70,7 @@ describe('IndexedDB version provider document/workbook lifecycle', () => {
     const provider = createIndexedDbVersionStoreProvider({
       documentScope: { documentId: 'vc04-other-document' },
     });
-    const opened = await openWorkbook('vc04-provider-mismatch', { provider });
+    const opened = await openLifecycleWorkbook('vc04-provider-mismatch', { provider });
 
     await expect(opened.wb.version.getHead()).resolves.toMatchObject({
       ok: false,

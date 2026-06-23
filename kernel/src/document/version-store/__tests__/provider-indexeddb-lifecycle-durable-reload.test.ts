@@ -1,7 +1,7 @@
 import {
   captureNormalCommit,
   FULL_STATE_BYTES,
-  openWorkbook,
+  openLifecycleWorkbook,
   rootWrite,
   updateFirstByNamespace,
 } from './provider-indexeddb-lifecycle-test-utils';
@@ -24,7 +24,7 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
     const graphId = 'graph-lifecycle-reload';
     const root = await rootWrite('root', namespaceForDocumentScope(documentScope, graphId));
 
-    const first = await openWorkbook(documentId, {
+    const first = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         requireDurablePersistence: true,
@@ -78,7 +78,7 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
     await reader.dispose();
     await first.handle.dispose();
 
-    const reopened = await openWorkbook(documentId, {
+    const reopened = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         requireDurablePersistence: true,
@@ -110,7 +110,7 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
     const graphId = 'graph-reload-corrupt-row';
     const root = await rootWrite('root', namespaceForDocumentScope(documentScope, graphId));
 
-    const writable = await openWorkbook(documentId, {
+    const writable = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         initialize: { graphId, rootWrite: root },
@@ -128,7 +128,7 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
       }),
     );
 
-    const reopened = await openWorkbook(documentId, {
+    const reopened = await openLifecycleWorkbook(documentId, {
       providerSelection: { kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND },
       captureNormalCommit,
     });
@@ -140,7 +140,7 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
     });
     await reopened.handle.dispose();
 
-    const readOnly = await openWorkbook(documentId, {
+    const readOnly = await openLifecycleWorkbook(documentId, {
       providerSelection: {
         kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
         readOnly: true,

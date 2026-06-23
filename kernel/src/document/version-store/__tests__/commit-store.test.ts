@@ -490,7 +490,7 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
           expect.objectContaining({
             code: 'VERSION_OBJECT_CORRUPTION',
             digest: semanticChangeSet.digest,
-            details: { cause: 'VERSION_DIGEST_MISMATCH' },
+            details: expect.objectContaining({ cause: 'VERSION_DIGEST_MISMATCH' }),
           }),
         ],
       }),

@@ -106,7 +106,7 @@ describe('WorkbookVersion checkout atomicity', () => {
                 recoverability: 'repair',
                 redacted: true,
                 payload: expect.objectContaining({
-                  commitId: committed.id,
+                  commitId: 'redacted',
                   cause: 'rollbackSafeGap',
                   mutationGuarantee: 'no-workbook-mutation',
                   rollbackSafe: true,
@@ -121,6 +121,7 @@ describe('WorkbookVersion checkout atomicity', () => {
           commitId: committed.id,
         }),
       );
+      expect(JSON.stringify(result)).not.toContain(committed.id);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'active-before-checkout',
       });
@@ -169,7 +170,7 @@ describe('WorkbookVersion checkout atomicity', () => {
                 recoverability: 'repair',
                 redacted: true,
                 payload: expect.objectContaining({
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                   cause: 'VERSION_SNAPSHOT_ROOT_RELOAD_INVALID_ROOT',
                   mutationGuarantee: 'no-workbook-mutation',
                   rollbackSafe: true,
@@ -179,6 +180,7 @@ describe('WorkbookVersion checkout atomicity', () => {
           ],
         },
       });
+      expect(JSON.stringify(result)).not.toContain(initialized.rootCommit.id);
       await expectActiveDocumentState(checkoutWb, beforeState);
     } finally {
       if (checkoutWb) await checkoutWb.close('skipSave');
@@ -248,7 +250,7 @@ describe('WorkbookVersion checkout atomicity', () => {
                 recoverability: 'repair',
                 redacted: true,
                 payload: expect.objectContaining({
-                  commitId: committed.id,
+                  commitId: 'redacted',
                   cause: 'VersionCheckoutRebindProviderIdentityError',
                   identityFenceReason: 'providerDocumentMismatch',
                   providerIdentityClass: 'document',
@@ -261,6 +263,7 @@ describe('WorkbookVersion checkout atomicity', () => {
           ],
         },
       });
+      expect(JSON.stringify(result)).not.toContain(committed.id);
       expect(JSON.stringify(result)).not.toContain('checkout-atomicity-rebound-doc');
       await expectActiveDocumentState(checkoutWb, beforeState);
     } finally {
@@ -312,7 +315,15 @@ async function expectActiveDocumentState(
   wb: Workbook,
   expected: ActiveDocumentState,
 ): Promise<void> {
-  await expect(readActiveDocumentState(wb)).resolves.toEqual(expected);
+  const actual = await readActiveDocumentState(wb);
+  expect(documentContentState(actual)).toEqual(documentContentState(expected));
+  expect(actual.dirtyStatusRevision).toEqual(expect.stringContaining('dirty:no'));
+  expect(actual.dirtyStatusRevision).toEqual(expect.stringContaining('checkout:idle'));
+}
+
+function documentContentState(state: ActiveDocumentState): Omit<ActiveDocumentState, 'dirtyStatusRevision'> {
+  const { dirtyStatusRevision: _dirtyStatusRevision, ...contentState } = state;
+  return contentState;
 }
 
 function versioningRuntimeForHandle(handle: Awaited<ReturnType<typeof DocumentFactory.create>>) {

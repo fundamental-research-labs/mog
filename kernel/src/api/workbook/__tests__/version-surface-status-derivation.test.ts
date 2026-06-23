@@ -2,697 +2,120 @@ import 'fake-indexeddb/auto';
 
 import { jest } from '@jest/globals';
 
-import { WorkbookVersionImpl } from '../version';
-import { createWorkbookVersionSurfaceStatusService } from '../version-surface-status-service';
 import {
-  freshVersionDomainSupportManifest,
-  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW,
-  VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS,
-  versionDomainSupportManifestOptions,
-  withVersionManifest,
-} from './version-domain-support-test-utils';
-
-const CHILD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}`;
-const REF_REVISION = { kind: 'counter', value: '2' } as const;
-const REDACTED_BATCH_STATUS_ID = `sync-batch-status:sha256:${'9'.repeat(64)}`;
-const REDACTED_CURSOR = 'mog-pending-remote-v1.pending.cursor-secret';
-
-type SurfaceCapabilityForAssertion = {
-  readonly enabled: boolean;
-  readonly dependency?: string;
-  readonly reason?: string;
-  readonly retryable?: boolean;
-};
-
-function capabilityState(
-  surface: { readonly capabilities: object },
-  capability: string,
-): SurfaceCapabilityForAssertion {
-  return (surface.capabilities as Record<string, SurfaceCapabilityForAssertion>)[capability];
-}
-
-function createMockCtx(overrides: Record<string, unknown> = {}) {
-  return {
-    computeBridge: {
-      getAllSheetIds: jest.fn(async () => []),
-      getAllTablesInSheet: jest.fn(async () => []),
-      getFiltersInSheet: jest.fn(async () => []),
-      namedRangeCount: jest.fn(async () => 0),
-      getAllNamedRangesWire: jest.fn(async () => []),
-      getHyperlinks: jest.fn(async () => []),
-      getRangeSchemasForSheet: jest.fn(async () => []),
-    },
-    writeGate: {
-      assertWritable: jest.fn(),
-    },
-    services: {
-      undo: {},
-    },
-    floatingObjectManager: {
-      dispose: jest.fn(),
-    },
-    workbookLinkScope: () => ({
-      requestingDocumentId: 'document-1',
-      requestingSessionId: 'session-1',
-      actor: 'user-1',
-      principal: { tags: ['host:trusted'] },
-    }),
-    ...overrides,
-  } as any;
-}
-
-function createSurfaceReadyVersionWithContext(
-  ctxOverrides: Record<string, unknown> = {},
-  versioningOverrides: Record<string, unknown> = {},
-) {
-  const readHead = jest.fn(async () => ({
-    status: 'success',
-    head: {
-      id: CHILD_COMMIT_ID,
-      refName: 'refs/heads/main',
-      resolvedFrom: 'HEAD',
-      refRevision: REF_REVISION,
-    },
-    diagnostics: [],
-  }));
-  const readRef = jest.fn(async () => ({
-    status: 'success',
-    ref: {
-      name: 'refs/heads/main',
-      commitId: CHILD_COMMIT_ID,
-      revision: REF_REVISION,
-    },
-    diagnostics: [],
-  }));
-  const listCommits = jest.fn(async () => ({
-    status: 'success',
-    commits: [],
-    readRevision: REF_REVISION,
-    diagnostics: [],
-  }));
-  const diff = jest.fn();
-  const commit = jest.fn();
-  const mergeCommit = jest.fn();
-  const createBranch = jest.fn();
-  const readBranch = jest.fn();
-  const listBranches = jest.fn();
-  const fastForwardBranch = jest.fn();
-  const planCheckout = jest.fn();
-  const merge = jest.fn();
-  const version = new WorkbookVersionImpl(
-    createMockCtx({
-      ...ctxOverrides,
-      versioning: withVersionManifest({
-        provider: {
-          kind: 'memory',
-          documentScope: { documentId: 'document-1' },
-          capabilities: {
-            reads: {
-              graphRegistry: true,
-              objects: true,
-              refs: true,
-              commits: true,
-            },
-          },
-        },
-        readService: {
-          readHead,
-          readRef,
-          listCommits,
-        },
-        diffService: { diff },
-        writeService: {
-          commit,
-          mergeCommit,
-        },
-        branchService: {
-          createBranch,
-          readBranch,
-          listBranches,
-          fastForwardBranch,
-        },
-        checkoutService: { planCheckout },
-        mergeService: { merge },
-        ...versioningOverrides,
-      }),
-    }),
-  );
-
-  return {
-    version,
-    commit,
-    mergeCommit,
-    fastForwardBranch,
-    planCheckout,
-    merge,
-  };
-}
+  FEATURE_GATE_DIAGNOSTIC_CODES,
+  FEATURE_GATE_SIBLING_CAPABILITIES,
+  MANIFEST_OPERATION_CAPABILITIES,
+  PROVIDER_WRITE_CAPABILITIES,
+  READ_ONLY_PROVIDER_BACKED_CAPABILITIES,
+  READ_ONLY_PROVIDER_DIAGNOSTIC_CODES,
+  capabilityState,
+  createCheckoutAndRevertFeatureGateVersion,
+  createReadOnlyProviderBackedSurfaceVersion,
+  createStaleManifestSurfaceVersion,
+} from './version-surface-status-derivation-test-utils';
 
 describe('WorkbookVersion surface status derivation hardening', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('keeps read-only provider-backed surfaces available while disabling provider writes', async () => {
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {},
-      {
-        provider: {
-          kind: 'memory',
-          documentScope: { documentId: 'document-1' },
-          capabilities: {
-            readOnlyHistory: true,
-            reads: {
-              graphRegistry: true,
-              objects: true,
-              refs: true,
-              commits: true,
-            },
-            writes: {
-              commitGraphWrite: false,
-              putObjects: false,
-              updateRefs: false,
-            },
-          },
-        },
-        captureMergeCommit: jest.fn(),
-        mergeCommitMaterializer: { kind: 'test-materializer' },
-      },
-    );
+  describe('storage and feature gates', () => {
+    it('keeps read-only provider-backed surfaces available while disabling provider writes', async () => {
+      const surfaceReady = createReadOnlyProviderBackedSurfaceVersion();
 
-    const surface = await surfaceReady.version.getSurfaceStatus();
+      const surface = await surfaceReady.version.getSurfaceStatus();
 
-    expect(surface.stage).toBe('authoring');
-    for (const capability of [
-      'version:read',
-      'version:diff',
-      'version:checkout',
-      'version:mergePreview',
-    ] as const) {
-      expect(surface.capabilities[capability]).toEqual({ enabled: true });
-    }
-    for (const capability of [
-      'version:commit',
-      'version:branch',
-      'version:mergeApply',
-    ] as const) {
-      expect(surface.capabilities[capability]).toMatchObject({
+      expect(surface.stage).toBe('authoring');
+      for (const capability of READ_ONLY_PROVIDER_BACKED_CAPABILITIES) {
+        expect(surface.capabilities[capability]).toEqual({ enabled: true });
+      }
+      for (const capability of PROVIDER_WRITE_CAPABILITIES) {
+        expect(surface.capabilities[capability]).toMatchObject({
+          enabled: false,
+          dependency: 'storage',
+          retryable: false,
+        });
+      }
+      expect(capabilityState(surface, 'version:refAdmin')).toMatchObject({
         enabled: false,
         dependency: 'storage',
         retryable: false,
       });
-    }
-    expect(capabilityState(surface, 'version:refAdmin')).toMatchObject({
-      enabled: false,
-      dependency: 'storage',
-      retryable: false,
+      expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
+        expect.arrayContaining([...READ_ONLY_PROVIDER_DIAGNOSTIC_CODES]),
+      );
+      expect(surfaceReady.commit).not.toHaveBeenCalled();
+      expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
+      expect(surfaceReady.fastForwardBranch).not.toHaveBeenCalled();
     });
-    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
-      expect.arrayContaining([
-        'version.surfaceStatus.commitUnavailable',
-        'version.surfaceStatus.branchUnavailable',
-        'version.surfaceStatus.mergeApplyUnavailable',
-        'version.surfaceStatus.refAdminUnavailable',
-      ]),
-    );
-    expect(surfaceReady.commit).not.toHaveBeenCalled();
-    expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
-    expect(surfaceReady.fastForwardBranch).not.toHaveBeenCalled();
-  });
 
-  it('honors checkout and revert feature flags without disabling sibling surfaces', async () => {
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {
-        featureGates: {
-          capabilities: {
-            'versionControl.checkout': false,
-            'versionControl.revert': false,
-          },
-        },
-      },
-      {
-        captureMergeCommit: jest.fn(),
-        mergeCommitMaterializer: { kind: 'test-materializer' },
-      },
-    );
+    it('honors checkout and revert feature flags without disabling sibling surfaces', async () => {
+      const surfaceReady = createCheckoutAndRevertFeatureGateVersion();
 
-    const surface = await surfaceReady.version.getSurfaceStatus();
+      const surface = await surfaceReady.version.getSurfaceStatus();
 
-    expect(surface.capabilities['version:read']).toEqual({ enabled: true });
-    expect(surface.capabilities['version:commit']).toEqual({ enabled: true });
-    expect(surface.capabilities['version:mergePreview']).toEqual({ enabled: true });
-    expect(surface.capabilities['version:mergeApply']).toEqual({ enabled: true });
-    expect(surface.capabilities['version:checkout']).toMatchObject({
-      enabled: false,
-      dependency: 'featureGate',
-      reason: 'The versionControl.checkout feature gate is disabled.',
-      retryable: false,
-    });
-    expect(capabilityState(surface, 'version:revert')).toMatchObject({
-      enabled: false,
-      dependency: 'featureGate',
-      reason: 'The versionControl.revert feature gate is disabled.',
-      retryable: false,
-    });
-    expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
-      expect.arrayContaining([
-        'version.surfaceStatus.checkoutCapabilityDisabled',
-        'version.surfaceStatus.revertCapabilityDisabled',
-      ]),
-    );
-    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
-    expect(surfaceReady.merge).not.toHaveBeenCalled();
-    expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
-  });
-
-  it('disables operation capabilities when the attached domain-support manifest is stale', async () => {
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {},
-      {
-        domainSupportManifest: freshVersionDomainSupportManifest({
-          generatedAt: '2026-06-20T00:00:00.000Z',
-        }),
-        domainSupportManifestOptions: versionDomainSupportManifestOptions({
-          now: VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW,
-          maxAgeMs: VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_ONE_MINUTE_MS,
-        }),
-        captureMergeCommit: jest.fn(),
-        mergeCommitMaterializer: { kind: 'test-materializer' },
-      },
-    );
-
-    const surface = await surfaceReady.version.getSurfaceStatus();
-
-    for (const capability of [
-      'version:commit',
-      'version:checkout',
-      'version:mergePreview',
-      'version:mergeApply',
-    ] as const) {
-      expect(surface.capabilities[capability]).toMatchObject({
+      for (const capability of FEATURE_GATE_SIBLING_CAPABILITIES) {
+        expect(surface.capabilities[capability]).toEqual({ enabled: true });
+      }
+      expect(surface.capabilities['version:checkout']).toMatchObject({
         enabled: false,
-        dependency: 'storage',
-        reason:
-          'The attached document domain support manifest is stale for this version capability.',
-        retryable: true,
+        dependency: 'featureGate',
+        reason: 'The versionControl.checkout feature gate is disabled.',
+        retryable: false,
       });
-    }
-    const manifestDiagnostics = surface.diagnostics.filter(
-      (diagnostic) => diagnostic.code === 'version.surfaceStatus.domainSupportManifestDiagnostic',
-    );
-    expect(manifestDiagnostics.length).toBeGreaterThan(0);
-    expect(manifestDiagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          message:
-            'The document domain support manifest is invalid for durable version operations.',
-          data: expect.objectContaining({
-            redacted: true,
-            payload: expect.objectContaining({
-              diagnosticCode: 'manifest-stale',
+      expect(capabilityState(surface, 'version:revert')).toMatchObject({
+        enabled: false,
+        dependency: 'featureGate',
+        reason: 'The versionControl.revert feature gate is disabled.',
+        retryable: false,
+      });
+      expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toEqual(
+        expect.arrayContaining([...FEATURE_GATE_DIAGNOSTIC_CODES]),
+      );
+      expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+      expect(surfaceReady.merge).not.toHaveBeenCalled();
+      expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('domain support manifests', () => {
+    it('disables operation capabilities when the attached domain-support manifest is stale', async () => {
+      const surfaceReady = createStaleManifestSurfaceVersion();
+
+      const surface = await surfaceReady.version.getSurfaceStatus();
+
+      for (const capability of MANIFEST_OPERATION_CAPABILITIES) {
+        expect(surface.capabilities[capability]).toMatchObject({
+          enabled: false,
+          dependency: 'storage',
+          reason:
+            'The attached document domain support manifest is stale for this version capability.',
+          retryable: true,
+        });
+      }
+      const manifestDiagnostics = surface.diagnostics.filter(
+        (diagnostic) => diagnostic.code === 'version.surfaceStatus.domainSupportManifestDiagnostic',
+      );
+      expect(manifestDiagnostics.length).toBeGreaterThan(0);
+      expect(manifestDiagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message:
+              'The document domain support manifest is invalid for durable version operations.',
+            data: expect.objectContaining({
+              redacted: true,
+              payload: expect.objectContaining({
+                diagnosticCode: 'manifest-stale',
+              }),
             }),
           }),
-        }),
-      ]),
-    );
-    expect(surfaceReady.commit).not.toHaveBeenCalled();
-    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
-    expect(surfaceReady.merge).not.toHaveBeenCalled();
-    expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
-  });
-
-  it('does not overclaim promoted surfaces when lower-gate evidence is mixed or lower rollout', async () => {
-    const promotePendingRemoteSegments = jest.fn();
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {
-        policySnapshot: {
-          decisions: [
-            { capability: 'version:remotePromote', decision: 'allowed' },
-            { capability: 'version:provenance', decision: 'allowed' },
-          ],
-        },
-      },
-      {
-        captureMergeCommit: jest.fn(),
-        mergeCommitMaterializer: { kind: 'test-materializer' },
-        provenanceTruthService: {
-          vc09ProvenanceTruthComplete: true,
-        },
-        pendingRemotePromotionService: {
-          promotePendingRemoteSegments,
-        },
-        surfaceStatusLowerGateEvidence: {
-          promotionStatus: 'pass',
-          rolloutStage: 'ui-beta',
-          requiredLowerGates: [
-            'g1-shadow-only-stage-entry',
-            'gate5-corpus-shadow-threshold',
-            'g7-merge-shadow-apply-proof',
-          ],
-          lowerGateResults: [
-            {
-              gateId: 'g1-shadow-only-stage-entry',
-              status: 'pass',
-              currentForTarget: true,
-            },
-            {
-              gateId: 'gate5-corpus-shadow-threshold',
-              status: 'blocked',
-              currentForTarget: false,
-            },
-          ],
-          sourceRepos: [{ repoId: 'mog', status: 'dirtyBlocked' }],
-          capabilityGateCas: {
-            status: 'pass',
-            readbackStage: 'ui-beta',
-          },
-        },
-      },
-    );
-
-    const surface = await surfaceReady.version.getSurfaceStatus();
-
-    expect(surface.stage).toBe('readOnly');
-    expect(surface.capabilities['version:read']).toEqual({ enabled: true });
-    expect(surface.capabilities['version:diff']).toEqual({ enabled: true });
-    for (const capability of [
-      'version:commit',
-      'version:branch',
-      'version:checkout',
-      'version:mergePreview',
-      'version:mergeApply',
-      'version:refAdmin',
-      'version:provenance',
-      'version:remotePromote',
-    ] as const) {
-      expect(capabilityState(surface, capability)).toMatchObject({
-        enabled: false,
-        dependency: 'VC-09',
-        reason:
-          'Promoted version surfaces require current, clean, passing lower-gate evidence.',
-        retryable: true,
-      });
-    }
-    expect(surface.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({ rolloutStage: 'ui-beta' }),
-        }),
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({
-            gateId: 'gate5-corpus-shadow-threshold',
-            status: 'blocked',
-            currentForTarget: false,
-          }),
-        }),
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({
-            gateId: 'g7-merge-shadow-apply-proof',
-            status: 'missing',
-          }),
-        }),
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({ repoId: 'mog', status: 'dirtyBlocked' }),
-        }),
-      ]),
-    );
-    expect(surfaceReady.commit).not.toHaveBeenCalled();
-    expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
-    expect(surfaceReady.merge).not.toHaveBeenCalled();
-    expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
-    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
-  });
-
-  it('redacts lower-gate diagnostic projection payloads', async () => {
-    const rawGateId = 'gate-secret-token';
-    const rawRepoId = 'repo-secret-token';
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {},
-      {
-        provenanceTruthService: {
-          vc09ProvenanceTruthComplete: true,
-        },
-        surfaceStatusLowerGateEvidence: {
-          status: 'blockedByLowerGateEvidence',
-          lowerGateResults: [
-            {
-              gateId: rawGateId,
-              status: 'blocked',
-              currentForTarget: false,
-            },
-          ],
-          sourceRepos: [{ repoId: rawRepoId, status: 'dirtyBlocked' }],
-        },
-      },
-    );
-
-    const surface = await surfaceReady.version.getSurfaceStatus();
-    const serialized = JSON.stringify(surface);
-
-    expect(surface.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({ gateId: 'redacted', status: 'blocked' }),
-        }),
-        expect.objectContaining({
-          code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
-          data: expect.objectContaining({ repoId: 'redacted', status: 'dirtyBlocked' }),
-        }),
-      ]),
-    );
-    expect(serialized).not.toContain(rawGateId);
-    expect(serialized).not.toContain(rawRepoId);
-  });
-
-  it('redacts malformed manifest and attached dirty-status diagnostic payloads', async () => {
-    const readDirtyStatus = jest.fn(() => ({
-      statusRevision: 'dirty-redacted',
-      checkoutPreflightToken: 'checkout-preflight-redacted',
-      hasUncommittedLocalChanges: false,
-      commitEligibleChanges: false,
-      unsupportedDirtyDomains: [],
-      pendingProviderWrites: false,
-      pendingRecalc: false,
-      checkoutSafe: false,
-      unsafeReasons: [
-        {
-          code: 'version.surfaceStatus.pendingProviderWrites',
-          severity: 'warning',
-          message: 'Provider writes are not settled.',
-          dependency: 'VC-09',
-          data: {
-            cursor: REDACTED_CURSOR,
-            batchStatusId: REDACTED_BATCH_STATUS_ID,
-            hiddenSheetId: 'sheet-secret',
-            safeCount: 2,
-            nested: { raw: 'not-public' },
-          },
-        },
-      ],
-      source: 'VC-05' as const,
-      diagnostics: [
-        {
-          code: 'version.surfaceStatus.pendingProviderWrites',
-          severity: 'warning',
-          message: 'Provider writes are not settled.',
-          dependency: 'VC-09',
-          data: {
-            cursor: REDACTED_CURSOR,
-            batchStatusId: REDACTED_BATCH_STATUS_ID,
-            secretToken: 'token-secret',
-            safeCount: 2,
-          },
-        },
-      ],
-    }));
-    const surfaceReady = createSurfaceReadyVersionWithContext(
-      {},
-      {
-        domainSupportManifest: {
-          schemaVersion: 'not-public-secret-schema',
-          generatedAt: 'not-public-secret-date',
-          domains: [],
-        },
-        domainSupportManifestOptions: versionDomainSupportManifestOptions(),
-        surfaceStatusService: {
-          readDirtyStatus,
-        },
-      },
-    );
-
-    const surface = await surfaceReady.version.getSurfaceStatus();
-    const serialized = JSON.stringify(surface);
-
-    expect(surface.dirty.unsafeReasons[0]?.data).toMatchObject({
-      cursor: 'redacted',
-      batchStatusId: 'redacted',
-      hiddenSheetId: 'redacted',
-      safeCount: 2,
+        ]),
+      );
+      expect(surfaceReady.commit).not.toHaveBeenCalled();
+      expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+      expect(surfaceReady.merge).not.toHaveBeenCalled();
+      expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
     });
-    expect(surface.dirty.diagnostics[0]?.data).toMatchObject({
-      cursor: 'redacted',
-      batchStatusId: 'redacted',
-      secretToken: 'redacted',
-      safeCount: 2,
-    });
-    expect(serialized).not.toContain(REDACTED_CURSOR);
-    expect(serialized).not.toContain(REDACTED_BATCH_STATUS_ID);
-    expect(serialized).not.toContain('sheet-secret');
-    expect(serialized).not.toContain('token-secret');
-    expect(serialized).not.toContain('not-public-secret-schema');
-    expect(serialized).not.toContain('not-public-secret-date');
-    expect(readDirtyStatus).toHaveBeenCalledTimes(1);
-  });
-
-  it('reports pending remote provider state while enabling explicitly authorized promotion', async () => {
-    const promotePendingRemoteSegments = jest.fn();
-    const pendingProviderDiagnostic = {
-      code: 'version.surfaceStatus.pendingProviderWrites',
-      severity: 'warning' as const,
-      message:
-        'Remote sync changes are waiting to be promoted into version history; checkout is unsafe.',
-      dependency: 'VC-09' as const,
-      data: { pendingRemoteSegmentCount: 2 },
-    };
-    const { version } = createSurfaceReadyVersionWithContext(
-      {
-        policySnapshot: {
-          decisions: [
-            { capability: 'version:remotePromote', decision: 'allowed' },
-            { capability: 'version:provenance', decision: 'allowed' },
-          ],
-        },
-      },
-      {
-        provenanceTruthService: {
-          vc09ProvenanceTruthComplete: true,
-        },
-        pendingRemotePromotionService: {
-          promotePendingRemoteSegments,
-        },
-        surfaceStatusService: {
-          readDirtyStatus: () => ({
-            statusRevision: 'pendingRemote:2',
-            checkoutPreflightToken: 'token:pendingRemote:2',
-            hasUncommittedLocalChanges: false,
-            commitEligibleChanges: false,
-            unsupportedDirtyDomains: [],
-            pendingProviderWrites: true,
-            pendingRecalc: false,
-            checkoutSafe: false,
-            unsafeReasons: [pendingProviderDiagnostic],
-            source: 'VC-05' as const,
-            diagnostics: [pendingProviderDiagnostic],
-          }),
-        },
-      },
-    );
-
-    const surface = await version.getSurfaceStatus();
-
-    expect(surface.stage).toBe('provenance');
-    expect(surface.dirty).toMatchObject({
-      pendingProviderWrites: true,
-      checkoutSafe: false,
-      unsafeReasons: [
-        expect.objectContaining({
-          code: 'version.surfaceStatus.pendingProviderWrites',
-          data: { pendingRemoteSegmentCount: 2 },
-        }),
-      ],
-    });
-    expect(capabilityState(surface, 'version:remotePromote')).toEqual({ enabled: true });
-    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
-  });
-
-  it('treats malformed provider write activity status as unknown and unsafe', async () => {
-    const service = createWorkbookVersionSurfaceStatusService({
-      readDirtyState: () => ({
-        hasUncommittedLocalChanges: false,
-        calculationState: 'done',
-        checkoutInProgress: false,
-        revision: 1,
-        contextGeneration: 1,
-      }),
-      readPendingProviderWrites: () =>
-        ({
-          pendingProviderWrites: false,
-          statusRevision: 'providerActivity:stale secret cursor',
-          unsafeReasons: [],
-          diagnostics: [],
-        }),
-    });
-
-    const dirty = await service.readDirtyStatus();
-
-    expect(dirty.pendingProviderWrites).toBe(true);
-    expect(dirty.checkoutSafe).toBe(false);
-    expect(dirty.statusRevision).toContain('providerWrites:providerActivity:unknown');
-    expect(dirty.unsafeReasons).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
-          dependency: 'VC-09',
-          data: expect.objectContaining({
-            redacted: true,
-            providerPayload: 'providerWriteStatus',
-          }),
-        }),
-      ]),
-    );
-  });
-
-  it('does not trust attached dirty status that reports provider failure as checkout-safe', async () => {
-    const providerReadFailed = {
-      code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
-      severity: 'warning' as const,
-      message: 'Version provider write activity could not be proven settled.',
-      dependency: 'VC-09' as const,
-      data: { safeCount: 1 },
-    };
-    const readDirtyStatus = jest.fn(() => ({
-      statusRevision: 'dirty-provider-unknown',
-      checkoutPreflightToken: 'checkout-provider-unknown',
-      hasUncommittedLocalChanges: false,
-      commitEligibleChanges: false,
-      unsupportedDirtyDomains: [],
-      pendingProviderWrites: false,
-      pendingRecalc: false,
-      checkoutSafe: true,
-      unsafeReasons: [],
-      source: 'VC-05' as const,
-      diagnostics: [providerReadFailed],
-    }));
-    const { version } = createSurfaceReadyVersionWithContext(
-      {},
-      { surfaceStatusService: { readDirtyStatus } },
-    );
-
-    const surface = await version.getSurfaceStatus();
-
-    expect(surface.dirty.pendingProviderWrites).toBe(true);
-    expect(surface.dirty.checkoutSafe).toBe(false);
-    expect(surface.dirty.unsafeReasons).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
-          data: { safeCount: 1 },
-        }),
-      ]),
-    );
-    expect(surface.diagnostics).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
-          data: { safeCount: 1 },
-        }),
-      ]),
-    );
-    expect(readDirtyStatus).toHaveBeenCalledTimes(1);
   });
 });

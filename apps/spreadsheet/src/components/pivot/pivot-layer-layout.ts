@@ -53,7 +53,7 @@ interface PositionDimensionsLike {
 interface PivotLayerGeometryLike {
   getPositionDimensions(): PositionDimensionsLike;
   getCellPageRect(cell: { row: number; col: number }): PivotLayerRect | null;
-  getContainerRect(): Pick<PivotLayerRect, 'x' | 'y'>;
+  getContainerRect(): PivotLayerRect;
   getCellAreaOffset(): Pick<PivotLayerRect, 'x' | 'y'>;
 }
 
@@ -62,6 +62,59 @@ interface PivotLayerViewportLike {
 }
 
 type ReadCellPageRect = (cell: { row: number; col: number }) => PivotLayerRect | null;
+
+function rectsIntersect(a: PivotLayerRect, b: PivotLayerRect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function fallbackCellPageRect(
+  cell: { row: number; col: number },
+  positionDimensions: PositionDimensionsLike,
+  containerRect: PivotLayerRect,
+  cellAreaOffset: Pick<PivotLayerRect, 'x' | 'y'>,
+  scrollPosition: { x: number; y: number },
+): PivotLayerRect {
+  return {
+    x:
+      containerRect.x +
+      cellAreaOffset.x +
+      positionDimensions.getColLeft(cell.col) -
+      scrollPosition.x,
+    y:
+      containerRect.y +
+      cellAreaOffset.y +
+      positionDimensions.getRowTop(cell.row) -
+      scrollPosition.y,
+    width: positionDimensions.getColWidth(cell.col),
+    height: positionDimensions.getRowHeight(cell.row),
+  };
+}
+
+function visibleCellPageRect(
+  cell: { row: number; col: number },
+  geometry: PivotLayerGeometryLike,
+  positionDimensions: PositionDimensionsLike,
+  containerRect: PivotLayerRect,
+  cellAreaOffset: Pick<PivotLayerRect, 'x' | 'y'>,
+  scrollPosition: { x: number; y: number },
+): PivotLayerRect | null {
+  const visibleRect = geometry.getCellPageRect(cell);
+  if (visibleRect) return visibleRect;
+  const fallbackRect = fallbackCellPageRect(
+    cell,
+    positionDimensions,
+    containerRect,
+    cellAreaOffset,
+    scrollPosition,
+  );
+  const cellAreaRect = {
+    x: containerRect.x + cellAreaOffset.x,
+    y: containerRect.y + cellAreaOffset.y,
+    width: Math.max(0, containerRect.width - cellAreaOffset.x),
+    height: Math.max(0, containerRect.height - cellAreaOffset.y),
+  };
+  return rectsIntersect(fallbackRect, cellAreaRect) ? fallbackRect : null;
+}
 
 export function hasPivotOutputPlacements(config: PivotViewModel['config']): boolean {
   return config.placements.some(
@@ -172,22 +225,28 @@ export function getPivotMarker(
   const containerRect = geometry.getContainerRect();
   const cellAreaOffset = geometry.getCellAreaOffset();
   const bounds = pivotBoundsForView(pivot.config, pivot.result);
-  const visibleAnchorRect = geometry.getCellPageRect({
+  const anchorCell = {
     row: bounds.startRow,
     col: bounds.startCol,
-  });
-  const anchorRect = visibleAnchorRect ?? {
-    x:
-      containerRect.x +
-      cellAreaOffset.x +
-      positionDimensions.getColLeft(bounds.startCol) -
-      scrollPosition.x,
-    y:
-      containerRect.y +
-      cellAreaOffset.y +
-      positionDimensions.getRowTop(bounds.startRow) -
-      scrollPosition.y,
   };
+  const anchorRect =
+    geometry.getCellPageRect(anchorCell) ??
+    fallbackCellPageRect(
+      anchorCell,
+      positionDimensions,
+      containerRect,
+      cellAreaOffset,
+      scrollPosition,
+    );
+  const getVisibleCellPageRect = (cell: { row: number; col: number }) =>
+    visibleCellPageRect(
+      cell,
+      geometry,
+      positionDimensions,
+      containerRect,
+      cellAreaOffset,
+      scrollPosition,
+    );
 
   let width = 0;
   for (let col = bounds.startCol; col <= bounds.endCol; col += 1) {
@@ -215,13 +274,13 @@ export function getPivotMarker(
     bounds,
     rect,
     reportFilterControls: getVisiblePivotReportFilterControls(pivot.config, bounds, rect, (cell) =>
-      geometry.getCellPageRect(cell),
+      getVisibleCellPageRect(cell),
     ),
     fieldHeaderControls: getVisiblePivotFieldHeaderControls(
       pivot.config,
       bounds,
       rect,
-      (cell) => geometry.getCellPageRect(cell),
+      (cell) => getVisibleCellPageRect(cell),
       pivotRenderedBoundsForView(pivot.config, pivot.result),
     ),
   };

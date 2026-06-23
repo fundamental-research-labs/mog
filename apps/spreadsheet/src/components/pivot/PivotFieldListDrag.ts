@@ -22,6 +22,12 @@ export type PointerDropTarget =
   | { kind: 'available' }
   | { kind: 'position'; area: PivotFieldArea; position: number; indicatorPosition: number };
 
+export interface NativePositionDropTarget {
+  state: DragState;
+  area: PivotFieldArea;
+  position: number;
+}
+
 export const PIVOT_FIELD_LIST_AREAS: PivotFieldArea[] = ['filter', 'column', 'row', 'value'];
 export const DROP_PAYLOAD_TYPE = 'application/x-mog-pivot-field-pane';
 export const POINTER_DRAG_THRESHOLD_PX = 4;
@@ -143,10 +149,7 @@ export function resolvePointerDropTarget(options: {
     if (!isPlacementChip(candidate)) return false;
     const rect = candidate.getBoundingClientRect();
     return (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
+      clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
     );
   });
   if (geometryChip) {
@@ -190,6 +193,26 @@ export function resolvePointerDropTarget(options: {
   }
 
   return null;
+}
+
+export function nativePositionDropTargetFromPoint(options: {
+  dragPoint: { x: number; y: number } | null;
+  state: DragState | null;
+  canRemoveFields: boolean;
+  placementsByArea: Record<PivotFieldArea, Array<{ placement: PivotFieldPlacement }>>;
+}): NativePositionDropTarget | null {
+  const { dragPoint, state, canRemoveFields, placementsByArea } = options;
+  if (!dragPoint || !state) return null;
+  const target = resolvePointerDropTarget({
+    clientX: dragPoint.x,
+    clientY: dragPoint.y,
+    state,
+    canRemoveFields,
+    placementsByArea,
+  });
+  return target?.kind === 'position'
+    ? { state, area: target.area, position: target.position }
+    : null;
 }
 
 export function dragStateFromPoint(options: {

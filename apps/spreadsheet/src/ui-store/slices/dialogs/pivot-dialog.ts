@@ -46,6 +46,8 @@ export interface PivotUIState {
   selectedPivotId: string | null;
   /** Pivot being edited (field panel open) */
   editingPivotId: string | null;
+  /** Pivot whose field panel was explicitly closed by the user. */
+  fieldPanelSuppressedPivotId: string | null;
   /** Transient pivot overlay/menu owned by pivot interaction state */
   openTransientOverlay: PivotTransientOverlay;
   /** Last dismissal reason, useful for dev/test readback */
@@ -88,6 +90,7 @@ const initialState: PivotUIState = {
   isDialogOpen: false,
   selectedPivotId: null,
   editingPivotId: null,
+  fieldPanelSuppressedPivotId: null,
   openTransientOverlay: null,
   lastOverlayDismissReason: null,
   fieldPanelWidth: DEFAULT_PIVOT_FIELD_PANEL_WIDTH,
@@ -186,6 +189,10 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
           pivotId == null || (s.pivot.editingPivotId != null && s.pivot.editingPivotId !== pivotId)
             ? null
             : s.pivot.editingPivotId,
+        fieldPanelSuppressedPivotId:
+          pivotId == null || s.pivot.fieldPanelSuppressedPivotId !== pivotId
+            ? null
+            : s.pivot.fieldPanelSuppressedPivotId,
         openTransientOverlay: null,
         lastOverlayDismissReason:
           s.pivot.openTransientOverlay != null
@@ -201,6 +208,7 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
         ...s.pivot,
         selectedPivotId: pivotId,
         editingPivotId: pivotId,
+        fieldPanelSuppressedPivotId: null,
         openTransientOverlay: null,
         lastOverlayDismissReason:
           s.pivot.openTransientOverlay != null ? 'panel-open' : s.pivot.lastOverlayDismissReason,
@@ -213,6 +221,7 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
       pivot: {
         ...s.pivot,
         editingPivotId: null,
+        fieldPanelSuppressedPivotId: s.pivot.editingPivotId ?? s.pivot.selectedPivotId,
       },
     }));
   },
@@ -226,6 +235,7 @@ export const createPivotDialogSlice: StateCreator<PivotDialogSlice, [], [], Pivo
           s.pivot.editingPivotId != null && s.pivot.editingPivotId !== overlay.pivotId
             ? null
             : s.pivot.editingPivotId,
+        fieldPanelSuppressedPivotId: null,
         openTransientOverlay: overlay,
         lastOverlayDismissReason: null,
       },

@@ -27,8 +27,15 @@ import {
 } from './PivotFieldListControls';
 import { PivotFieldDropZone, type PlacedField } from './PivotFieldListDropZone';
 import {
+  defaultAggregate,
+  defaultAreaForField,
+  displayName,
+  type PendingAutoActivatedMove,
+} from './PivotFieldListModel';
+import {
   DROP_PAYLOAD_TYPE,
   dragStateFromPoint,
+  nativePositionDropTargetFromPoint,
   POINTER_DRAG_THRESHOLD_PX,
   parseDragState,
   placementId,
@@ -36,6 +43,7 @@ import {
   serializeDragState,
   type DragState,
   type DropIndicator,
+  type NativePositionDropTarget,
   type PointerDropTarget,
 } from './PivotFieldListDrag';
 
@@ -62,28 +70,9 @@ export interface PivotFieldListProps {
   getDragScrollContainer?: () => HTMLElement | null;
 }
 
-interface PendingAutoActivatedMove {
-  fieldId: string;
-  fromArea: PivotFieldArea;
-  toArea: PivotFieldArea;
-  position: number;
-}
-
 const DRAG_SCROLL_EDGE_PX = 48;
 const POINTER_DRAG_IGNORED_SELECTOR =
   'button, select, input, textarea, [data-pivot-target="placement-controls"], [data-pivot-target="remove-field"]';
-
-function displayName(field: PivotField, placement: PivotFieldPlacement): string {
-  return placement.displayName || field.name;
-}
-
-function defaultAggregate(area: PivotFieldArea, field?: PivotField): AggregateFunction {
-  return area === 'value' && field?.dataType === 'number' ? 'sum' : 'count';
-}
-
-function defaultAreaForField(field: PivotField): PivotFieldArea {
-  return field.dataType === 'number' ? 'value' : 'row';
-}
 
 export function PivotFieldList({
   fields,
@@ -112,11 +101,8 @@ export function PivotFieldList({
   const autoActivatedFieldRef = useRef<{ fieldId: string; area: PivotFieldArea } | null>(null);
   const pendingAutoActivatedMoveRef = useRef<PendingAutoActivatedMove | null>(null);
   const pointerDragCancelRef = useRef<(() => void) | null>(null);
-  const nativeDropTargetRef = useRef<{
-    state: DragState;
-    area: PivotFieldArea;
-    position: number;
-  } | null>(null);
+  const nativeDragStateRef = useRef<DragState | null>(null);
+  const nativeDropTargetRef = useRef<NativePositionDropTarget | null>(null);
 
   const fieldById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
   const placedFieldIds = useMemo(
@@ -225,7 +211,10 @@ export function PivotFieldList({
     if (!activatedPlacement) return;
 
     pendingAutoActivatedMoveRef.current = null;
-    const position = Math.max(0, Math.min(pending.position, placementsByArea[pending.toArea].length));
+    const position = Math.max(
+      0,
+      Math.min(pending.position, placementsByArea[pending.toArea].length),
+    );
     onMovePlacement(placementId(activatedPlacement.placement), pending.toArea, position);
   }, [onMovePlacement, placementsByArea]);
 
@@ -252,24 +241,37 @@ export function PivotFieldList({
     [canDragState, fieldById, onAddField, onMovePlacement, placementsByArea],
   );
 
-  const finishNativeDrag = useCallback(() => {
-    const pendingDropTarget = nativeDropTargetRef.current;
-    nativeDropTargetRef.current = null;
-    if (pendingDropTarget) {
-      pointerDragCancelRef.current?.();
-      pointerDragCancelRef.current = null;
-      applyDragStateToPosition(
-        pendingDropTarget.state,
-        pendingDropTarget.area,
-        pendingDropTarget.position,
-      );
-    }
-    stopAutoScroll();
+  const clearDragFeedback = useCallback(() => {
     setDragState(null);
     setDragOverArea(null);
     setDropIndicator(null);
     setSelectedItem(null);
-  }, [applyDragStateToPosition, stopAutoScroll]);
+    stopAutoScroll();
+  }, [stopAutoScroll]);
+
+  const finishNativeDrag = useCallback(() => {
+    const pendingDropTarget = nativeDropTargetRef.current;
+    const resolvedDropTarget =
+      pendingDropTarget ??
+      nativePositionDropTargetFromPoint({
+        dragPoint: dragPointRef.current,
+        state: nativeDragStateRef.current,
+        canRemoveFields,
+        placementsByArea,
+      });
+    nativeDropTargetRef.current = null;
+    nativeDragStateRef.current = null;
+    if (resolvedDropTarget) {
+      pointerDragCancelRef.current?.();
+      pointerDragCancelRef.current = null;
+      applyDragStateToPosition(
+        resolvedDropTarget.state,
+        resolvedDropTarget.area,
+        resolvedDropTarget.position,
+      );
+    }
+    clearDragFeedback();
+  }, [applyDragStateToPosition, canRemoveFields, clearDragFeedback, placementsByArea]);
 
   const handleDragStart = useCallback(
     (event: DragEvent, state: DragState) => {
@@ -279,6 +281,7 @@ export function PivotFieldList({
         return;
       }
       nativeDropTargetRef.current = null;
+      nativeDragStateRef.current = state;
       setDragState(state);
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData(DROP_PAYLOAD_TYPE, serializeDragState(state));
@@ -310,15 +313,18 @@ export function PivotFieldList({
     [canRemoveFields, placementsByArea],
   );
 
-  const setNativePositionDropTarget = useCallback((state: DragState, target: NonNullable<ReturnType<typeof resolvePositionDropTarget>>) => {
-    nativeDropTargetRef.current = {
-      state,
-      area: target.area,
-      position: target.position,
-    };
-    setDragOverArea(target.area);
-    setDropIndicator({ area: target.area, position: target.indicatorPosition });
-  }, []);
+  const setNativePositionDropTarget = useCallback(
+    (state: DragState, target: NonNullable<ReturnType<typeof resolvePositionDropTarget>>) => {
+      nativeDropTargetRef.current = {
+        state,
+        area: target.area,
+        position: target.position,
+      };
+      setDragOverArea(target.area);
+      setDropIndicator({ area: target.area, position: target.indicatorPosition });
+    },
+    [],
+  );
 
   const handleListDragOver = useCallback(
     (event: DragEvent<HTMLDivElement>) => {
@@ -383,7 +389,13 @@ export function PivotFieldList({
       setDragOverArea(area);
       setDropIndicator(null);
     },
-    [canDragState, dragStateFromEvent, placementsByArea, resolvePositionDropTarget, setNativePositionDropTarget],
+    [
+      canDragState,
+      dragStateFromEvent,
+      placementsByArea,
+      resolvePositionDropTarget,
+      setNativePositionDropTarget,
+    ],
   );
 
   const handlePlacementDragOver = useCallback(
@@ -437,17 +449,13 @@ export function PivotFieldList({
       }
 
       nativeDropTargetRef.current = null;
+      nativeDragStateRef.current = null;
       pointerDragCancelRef.current?.();
       pointerDragCancelRef.current = null;
       applyDragStateToPosition(state, toArea, toPosition);
-
-      setDragState(null);
-      setDragOverArea(null);
-      setDropIndicator(null);
-      setSelectedItem(null);
-      stopAutoScroll();
+      clearDragFeedback();
     },
-    [canDragState, dragStateFromEvent, applyDragStateToPosition, stopAutoScroll],
+    [canDragState, dragStateFromEvent, applyDragStateToPosition, clearDragFeedback, stopAutoScroll],
   );
 
   const dropTargetFromPoint = useCallback(
@@ -455,14 +463,6 @@ export function PivotFieldList({
       resolvePointerDropTarget({ clientX, clientY, state, canRemoveFields, placementsByArea }),
     [canRemoveFields, placementsByArea],
   );
-
-  const clearDragFeedback = useCallback(() => {
-    setDragState(null);
-    setDragOverArea(null);
-    setDropIndicator(null);
-    setSelectedItem(null);
-    stopAutoScroll();
-  }, [stopAutoScroll]);
 
   const handleMouseDragStart = useCallback(
     (event: MouseEvent<HTMLElement>, state: DragState) => {
@@ -501,7 +501,8 @@ export function PivotFieldList({
         cleanup();
         if (!active) return;
         const currentTarget = dropTargetFromPoint(upEvent.clientX, upEvent.clientY, state);
-        const target = currentTarget?.kind === 'available' ? currentTarget : lastDropTarget ?? currentTarget;
+        const target =
+          currentTarget?.kind === 'available' ? currentTarget : (lastDropTarget ?? currentTarget);
         if (target?.kind === 'available' && state.kind === 'placement' && canRemoveFields) {
           onRemovePlacement(state.placementId);
         } else if (target?.kind === 'position') {
@@ -578,6 +579,7 @@ export function PivotFieldList({
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
       nativeDropTargetRef.current = null;
+      nativeDragStateRef.current = null;
       setDragOverArea(null);
       setDropIndicator(null);
     },
@@ -594,16 +596,13 @@ export function PivotFieldList({
       event.preventDefault();
       event.stopPropagation();
       nativeDropTargetRef.current = null;
+      nativeDragStateRef.current = null;
       pointerDragCancelRef.current?.();
       pointerDragCancelRef.current = null;
       onRemovePlacement(state.placementId);
-      setDragState(null);
-      setDragOverArea(null);
-      setDropIndicator(null);
-      setSelectedItem(null);
-      stopAutoScroll();
+      clearDragFeedback();
     },
-    [canDragState, canRemoveFields, dragStateFromEvent, onRemovePlacement, stopAutoScroll],
+    [canDragState, canRemoveFields, clearDragFeedback, dragStateFromEvent, onRemovePlacement],
   );
 
   const handleDropOnPlacement = useCallback(

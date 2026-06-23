@@ -118,6 +118,7 @@ export interface GridEditingUIStore {
   pivot: {
     selectedPivotId: string | null;
     editingPivotId: string | null;
+    fieldPanelSuppressedPivotId?: string | null;
     openTransientOverlay?: unknown;
   };
   /** Set the currently selected pivot */

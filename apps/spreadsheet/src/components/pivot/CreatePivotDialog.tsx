@@ -20,6 +20,7 @@ import type { CellRange } from '@mog-sdk/contracts/core';
 import type { PivotField } from '@mog-sdk/contracts/pivot';
 import { parseCellAddress, parseCellRange } from '@mog/spreadsheet-utils/a1';
 import { usePivotEditorActions } from '../../hooks/data/use-pivot-editor-actions';
+import { useCoordinator } from '../../hooks/shared/use-coordinator';
 import {
   useActiveSheetId,
   useIsPivotDialogOpen,
@@ -78,6 +79,42 @@ export function parseRange(rangeStr: string): CellRange | null {
   };
 }
 
+function scrollCellIntoRenderedViewport(
+  coordinator: ReturnType<typeof useCoordinator>,
+  cell: { row: number; col: number },
+): void {
+  const geometry = coordinator.renderer.getGeometry();
+  const viewport = coordinator.renderer.getViewport();
+  const scrollPosition = viewport?.getScrollPosition();
+  if (!geometry || !viewport || !scrollPosition) {
+    coordinator.renderer.scrollToActiveCell(cell);
+    return;
+  }
+
+  const dimensions = geometry.getPositionDimensions();
+  const containerRect = geometry.getContainerRect();
+  const cellAreaOffset = geometry.getCellAreaOffset();
+  const visibleWidth = Math.max(0, containerRect.width - cellAreaOffset.x);
+  const visibleHeight = Math.max(0, containerRect.height - cellAreaOffset.y);
+  const cellLeft = dimensions.getColLeft(cell.col);
+  const cellRight = cellLeft + dimensions.getColWidth(cell.col);
+  const cellTop = dimensions.getRowTop(cell.row);
+  const cellBottom = cellTop + dimensions.getRowHeight(cell.row);
+  const nextX =
+    cellRight > scrollPosition.x + visibleWidth
+      ? Math.max(0, cellRight - visibleWidth)
+      : cellLeft < scrollPosition.x
+        ? cellLeft
+        : scrollPosition.x;
+  const nextY =
+    cellBottom > scrollPosition.y + visibleHeight
+      ? Math.max(0, cellBottom - visibleHeight)
+      : cellTop < scrollPosition.y
+        ? cellTop
+        : scrollPosition.y;
+  coordinator.input.inputCoordinator.scrollTo(nextX, nextY);
+}
+
 // =============================================================================
 // Main Component
 // =============================================================================
@@ -89,6 +126,7 @@ export function CreatePivotDialog() {
   const initialSourceRange = useUIStore((s) => s.pivot.initialSourceRange);
   const activeSheetId = useActiveSheetId();
   const wb = useWorkbook();
+  const coordinator = useCoordinator();
 
   // Location selection state from UIStore
   const locationMode = useUIStore((s) => s.pivot.locationMode);
@@ -304,11 +342,24 @@ export function CreatePivotDialog() {
     // Create pivot table with location selection
     // For "New Worksheet" mode, this atomically creates both the sheet AND the pivot
     // in a single Yjs transaction for proper undo behavior
-    const { config } = await createPivotTable(name, range, sourceSheetId, outputLocation);
+    const { config, outputSheetId } = await createPivotTable(
+      name,
+      range,
+      sourceSheetId,
+      outputLocation,
+    );
 
     // Start editing the newly created pivot
     startEditingPivot(config.id);
     closePivotDialog();
+    if (outputSheetId === activeSheetId) {
+      const followCell = {
+        row: config.outputLocation.row,
+        col: config.outputLocation.col + 3,
+      };
+      scrollCellIntoRenderedViewport(coordinator, followCell);
+      window.requestAnimationFrame(() => scrollCellIntoRenderedViewport(coordinator, followCell));
+    }
   }, [
     name,
     rangeStr,
@@ -318,6 +369,7 @@ export function CreatePivotDialog() {
     destinationCellRef,
     createPivotTable,
     activeSheetId,
+    coordinator,
     resolveSourceSheetId,
     startEditingPivot,
     closePivotDialog,

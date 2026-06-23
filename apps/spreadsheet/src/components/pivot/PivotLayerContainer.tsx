@@ -7,7 +7,7 @@
  * overlays anchored to those materialized cells, not by a floating DOM table.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SortOrder } from '@mog-sdk/contracts/pivot';
 import { useCoordinator, useRendererActions, useRendererStatus } from '../../hooks';
@@ -16,6 +16,7 @@ import { usePivotTables } from '../../hooks/data/use-pivot-tables';
 import { PivotLayerOverlay } from './PivotLayerOverlay';
 import {
   getPivotMarker,
+  hasPivotOutputPlacements,
   type PivotFieldHeaderControlLayout,
   type PivotMarker,
 } from './pivot-layer-layout';
@@ -111,6 +112,7 @@ export function PivotLayerContainer() {
   const { isReady } = useRendererStatus();
   const { getGeometry, getViewport } = useRendererActions();
   const coordinator = useCoordinator();
+  const editingPivotId = useUIStore((s) => s.pivot.editingPivotId);
   const openTransientOverlay = useUIStore((s) => s.pivot.openTransientOverlay);
   const openPivotOverlay = useUIStore((s) => s.openPivotOverlay);
   const closePivotOverlays = useUIStore((s) => s.closePivotOverlays);
@@ -137,6 +139,36 @@ export function PivotLayerContainer() {
       .map((pivot) => getPivotMarker(pivot, geometry, viewport))
       .filter((marker): marker is PivotMarker => marker != null);
   }, [geometry, getViewport, isReady, pivotTables, scrollTick]);
+
+  const followedEditingPivotKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isReady || editingPivotId == null) {
+      followedEditingPivotKeyRef.current = null;
+      return;
+    }
+    const marker = markers.find(
+      (candidate) =>
+        candidate.id === editingPivotId ||
+        candidate.pivot.alternateIds?.includes(editingPivotId) === true,
+    );
+    if (!marker) return;
+    const followCol = hasPivotOutputPlacements(marker.pivot.config)
+      ? Math.min(marker.bounds.endCol, marker.bounds.startCol + 3)
+      : marker.bounds.startCol + 3;
+    const followCell = {
+      row: marker.bounds.startRow,
+      col: followCol,
+    };
+    const followKey = [
+      marker.id,
+      followCell.row,
+      followCell.col,
+      marker.pivot.config.placements.map((placement) => String(placement.placementId)).join(','),
+    ].join(':');
+    if (followedEditingPivotKeyRef.current === followKey) return;
+    followedEditingPivotKeyRef.current = followKey;
+    coordinator.renderer.scrollToActiveCell(followCell);
+  }, [coordinator, editingPivotId, isReady, markers]);
 
   const applyHeaderSort = (
     marker: PivotMarker,

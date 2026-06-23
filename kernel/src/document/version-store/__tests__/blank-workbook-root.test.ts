@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 import { BLANK_WORKBOOK_ROOT_GRAPH_ID, buildBlankWorkbookRootWrite } from '../blank-workbook-root';
 import { decodeWorkbookSnapshotRootRecord } from '../snapshot-root-capture';
 import type { VersionGraphNamespace } from '../object-store';

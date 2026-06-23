@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 
+import { jest } from '@jest/globals';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import {

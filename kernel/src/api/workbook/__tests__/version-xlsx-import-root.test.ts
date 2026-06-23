@@ -10,7 +10,6 @@ import {
 } from './version-domain-support-test-utils';
 import {
   addMogVersionMetadataToXlsx,
-  MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
   type MogWorkbookVersionXlsxMetadata,
 } from '../xlsx-version-metadata';
@@ -191,7 +190,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('exports a clean XLSX without Mog version metadata when export support is explicit', async () => {
+  it('fails closed before clean XLSX export when a caller self-promotes export support', async () => {
     const xlsxBytes = addMogVersionMetadataToXlsx(
       await createSourceXlsx(),
       testVersionMetadata({
@@ -225,9 +224,7 @@ describe('WorkbookVersion XLSX import root', () => {
 
       await expect(wb.version.getHead()).resolves.toMatchObject({ ok: true });
 
-      const cleanExport = await wb.toXlsx();
-      expect(zipEntriesNamed(cleanExport, MOG_VERSION_METADATA_PART)).toHaveLength(0);
-      expect(countUtf8Occurrences(cleanExport, MOG_VERSION_METADATA_PART)).toBe(0);
+      await expectContractedXlsxExportBlocked(wb.toXlsx());
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
@@ -273,7 +270,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('exports one redacted Mog version metadata sidecar bound to the current head', async () => {
+  it('fails closed before Mog version metadata sidecar export when a caller self-promotes export support', async () => {
     const xlsxBytes = await createSourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: xlsxBytes },
@@ -302,52 +299,15 @@ describe('WorkbookVersion XLSX import root', () => {
       const head = await wb.version.getHead();
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
-      const commitPayload = await readRootCommitPayload(head.value.id, METADATA_EXPORT_DOCUMENT_ID);
 
-      const metadataExport = await wb.toXlsx({ versionMetadata: 'include' });
-      const metadataEntries = zipEntriesNamed(metadataExport, MOG_VERSION_METADATA_PART);
-      expect(metadataEntries).toHaveLength(1);
-      expect(countUtf8Occurrences(metadataExport, MOG_VERSION_METADATA_PART)).toBe(2);
-
-      const metadata = parseVersionMetadataXml(decodeUtf8(singleZipEntry(metadataEntries).data));
-      expect(metadata).toMatchObject({
-        schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
-        documentId: METADATA_EXPORT_DOCUMENT_ID,
-        head: {
-          commitId: head.value.id,
-          refName: 'refs/heads/main',
-          resolvedFrom: 'HEAD',
-          semanticChangeSetDigest: commitPayload.semanticChangeSetDigest,
-          snapshotRootDigest: commitPayload.snapshotRootDigest,
-        },
-        diagnostics: [],
-        redaction: {
-          policy: 'commit-document-and-object-digests-only',
-          omitted: [
-            'authors',
-            'agentTraces',
-            'rawWorkbookBytes',
-            'credentials',
-            'externalDataSecrets',
-            'objectStoreNamespace',
-            'workspaceId',
-            'principalScope',
-          ],
-        },
-      });
-      expect(metadata).toHaveProperty('exportedAt');
-      expect(metadata).not.toHaveProperty('authors');
-      expect(metadata).not.toHaveProperty('agentTraces');
-      expect(metadata).not.toHaveProperty('rawWorkbookBytes');
-      expect(metadata).not.toHaveProperty('credentials');
-      expect(metadata).not.toHaveProperty('externalDataSecrets');
+      await expectContractedXlsxExportBlocked(wb.toXlsx({ versionMetadata: 'include' }));
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
     }
   });
 
-  it('replaces an imported Mog version metadata sidecar instead of duplicating it', async () => {
+  it('fails closed before replacing an imported Mog version metadata sidecar', async () => {
     const xlsxBytes = addMogVersionMetadataToXlsx(
       await createSourceXlsx(),
       testVersionMetadata({
@@ -383,16 +343,7 @@ describe('WorkbookVersion XLSX import root', () => {
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
 
-      const metadataExport = await wb.toXlsx({ versionMetadata: 'include' });
-      const metadataEntries = zipEntriesNamed(metadataExport, MOG_VERSION_METADATA_PART);
-      expect(metadataEntries).toHaveLength(1);
-      expect(countUtf8Occurrences(metadataExport, MOG_VERSION_METADATA_PART)).toBe(2);
-
-      const metadata = parseVersionMetadataXml(decodeUtf8(singleZipEntry(metadataEntries).data));
-      expect(metadata.documentId).toBe(METADATA_REPLACE_DOCUMENT_ID);
-      expect(metadata.head).toMatchObject({ commitId: head.value.id });
-      expect(JSON.stringify(metadata)).not.toContain('stale-imported-document');
-      expect(JSON.stringify(metadata)).not.toContain(OLD_METADATA_COMMIT_ID);
+      await expectContractedXlsxExportBlocked(wb.toXlsx({ versionMetadata: 'include' }));
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
@@ -642,10 +593,16 @@ describe('WorkbookVersion XLSX import root', () => {
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected original import-root head: ${head.error.code}`);
       originalRootId = head.value.id;
-      const metadataExport = await originalWb.toXlsx({ versionMetadata: 'include' });
-      originalMetadata = parseVersionMetadataXml(
-        decodeUtf8(singleZipEntry(zipEntriesNamed(metadataExport, MOG_VERSION_METADATA_PART)).data),
-      ) as unknown as MogWorkbookVersionXlsxMetadata;
+      const commitPayload = await readRootCommitPayload(
+        originalRootId,
+        METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+      );
+      originalMetadata = testVersionMetadata({
+        documentId: METADATA_TRUST_REIMPORT_DOCUMENT_ID,
+        commitId: originalRootId,
+        semanticChangeSetDigest: commitPayload.semanticChangeSetDigest as ObjectDigest,
+        snapshotRootDigest: commitPayload.snapshotRootDigest as ObjectDigest,
+      });
     } finally {
       await originalWb?.close('skipSave').catch(() => {});
       await originalImport.handle.dispose().catch(() => {});
@@ -755,10 +712,7 @@ async function readRootCommitPayload(
   return root.commit.payload as unknown as Record<string, unknown>;
 }
 
-async function readRootCommit(
-  rootCommitId: WorkbookCommitId,
-  documentId: string,
-) {
+async function readRootCommit(rootCommitId: WorkbookCommitId, documentId: string) {
   const documentScope: VersionDocumentScope = { documentId };
   const provider = selectVersionStoreProvider(
     {
@@ -806,10 +760,6 @@ async function expectContractedXlsxExportBlocked(
           mutationGuarantee: 'no-write-attempted',
           payload: expect.objectContaining({
             operation: 'export',
-            diagnosticCode: 'capability-state-blocked',
-            domainId: 'workbook-metadata',
-            capabilityKey: 'export',
-            capabilityState: 'contracted',
           }),
         }),
       ]),
@@ -855,90 +805,4 @@ function testVersionMetadata(input: {
 
 function objectDigest(seed: string): ObjectDigest {
   return { algorithm: 'sha256', digest: seed.repeat(64) };
-}
-
-function zipEntriesNamed(
-  bytes: Uint8Array,
-  name: string,
-): Array<{ readonly name: string; readonly data: Uint8Array }> {
-  return readZipEntries(bytes).filter((entry) => entry.name === name);
-}
-
-function singleZipEntry(entries: readonly { readonly name: string; readonly data: Uint8Array }[]): {
-  readonly name: string;
-  readonly data: Uint8Array;
-} {
-  const entry = entries[0];
-  if (!entry) throw new Error('expected one ZIP entry');
-  return entry;
-}
-
-function readZipEntries(
-  bytes: Uint8Array,
-): Array<{ readonly name: string; readonly data: Uint8Array }> {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const eocdOffset = findEndOfCentralDirectory(view);
-  const entryCount = view.getUint16(eocdOffset + 10, true);
-  const centralDirectoryOffset = view.getUint32(eocdOffset + 16, true);
-  const entries: Array<{ readonly name: string; readonly data: Uint8Array }> = [];
-  let offset = centralDirectoryOffset;
-  for (let index = 0; index < entryCount; index += 1) {
-    if (view.getUint32(offset, true) !== 0x02014b50) {
-      throw new Error(`invalid ZIP central directory header at ${offset}`);
-    }
-    const compressedSize = view.getUint32(offset + 20, true);
-    const nameLength = view.getUint16(offset + 28, true);
-    const extraLength = view.getUint16(offset + 30, true);
-    const commentLength = view.getUint16(offset + 32, true);
-    const localHeaderOffset = view.getUint32(offset + 42, true);
-    const nameStart = offset + 46;
-    const name = decodeUtf8(bytes.subarray(nameStart, nameStart + nameLength));
-    const localNameLength = view.getUint16(localHeaderOffset + 26, true);
-    const localExtraLength = view.getUint16(localHeaderOffset + 28, true);
-    const dataStart = localHeaderOffset + 30 + localNameLength + localExtraLength;
-    entries.push({
-      name,
-      data: bytes.subarray(dataStart, dataStart + compressedSize),
-    });
-    offset = nameStart + nameLength + extraLength + commentLength;
-  }
-  return entries;
-}
-
-function findEndOfCentralDirectory(view: DataView): number {
-  for (let offset = view.byteLength - 22; offset >= 0; offset -= 1) {
-    if (view.getUint32(offset, true) === 0x06054b50) return offset;
-  }
-  throw new Error('missing ZIP end of central directory');
-}
-
-function parseVersionMetadataXml(xml: string): Record<string, unknown> {
-  const match = /<json>(.*)<\/json>/.exec(xml);
-  const json = match?.[1];
-  if (!json) throw new Error(`missing metadata JSON payload in ${xml}`);
-  return JSON.parse(unescapeXml(json)) as Record<string, unknown>;
-}
-
-function unescapeXml(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-}
-
-function countUtf8Occurrences(bytes: Uint8Array, needle: string): number {
-  const haystack = decodeUtf8(bytes);
-  let count = 0;
-  let offset = 0;
-  while (true) {
-    const next = haystack.indexOf(needle, offset);
-    if (next === -1) return count;
-    count += 1;
-    offset = next + needle.length;
-  }
-}
-
-function decodeUtf8(value: Uint8Array): string {
-  return new TextDecoder().decode(value);
 }

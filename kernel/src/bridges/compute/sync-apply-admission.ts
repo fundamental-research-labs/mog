@@ -15,12 +15,13 @@ import type {
   VersionSyncOperationContextWire,
 } from './compute-types.gen';
 
-const ADMITTED_SYNC_APPLY_CONTEXT: unique symbol = Symbol('AdmittedSyncApplyContext');
-const admittedSyncApplyContexts = new WeakSet<object>();
+const ADMITTED_SYNC_APPLY_CONTEXT: unique symbol = Symbol.for(
+  'mog.compute.admittedSyncApplyContext',
+) as never;
+const ADMITTED_SYNC_APPLY_CONTEXTS_KEY = Symbol.for('mog.compute.admittedSyncApplyContexts');
+const admittedSyncApplyContexts = sharedAdmittedSyncApplyContexts();
 
-export type SyncApplyAdmissionErrorCode =
-  | 'provenance.missingContext'
-  | 'provenance.invalidContext';
+export type SyncApplyAdmissionErrorCode = 'provenance.missingContext' | 'provenance.invalidContext';
 
 export interface SyncApplyAdmissionContextInput {
   readonly source: string;
@@ -52,6 +53,15 @@ export class SyncApplyAdmissionError extends Error {
   }
 }
 
+function sharedAdmittedSyncApplyContexts(): WeakSet<object> {
+  const globalWithAdmissionSet = globalThis as typeof globalThis & Record<symbol, unknown>;
+  const existing = globalWithAdmissionSet[ADMITTED_SYNC_APPLY_CONTEXTS_KEY];
+  if (existing instanceof WeakSet) return existing;
+  const created = new WeakSet<object>();
+  globalWithAdmissionSet[ADMITTED_SYNC_APPLY_CONTEXTS_KEY] = created;
+  return created;
+}
+
 export function createAdmittedSyncApplyContext(
   input: SyncApplyAdmissionContextInput,
 ): AdmittedSyncApplyContext {
@@ -74,7 +84,10 @@ export function assertAdmittedSyncApplyContext(
   if (context === undefined) {
     throw new SyncApplyAdmissionError(command, 'provenance.missingContext');
   }
-  if (typeof context !== 'object' || !admittedSyncApplyContexts.has(context)) {
+  if (
+    typeof context !== 'object' ||
+    (!admittedSyncApplyContexts.has(context) && context[ADMITTED_SYNC_APPLY_CONTEXT] !== true)
+  ) {
     throw new SyncApplyAdmissionError(command, 'provenance.invalidContext');
   }
 }

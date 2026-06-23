@@ -642,14 +642,14 @@ describe('WorkbookVersion domain support manifest gate', () => {
         domainSupportManifest: freshManifest({
           domains: [
             ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
-            domainRow('filters'),
+            domainRow('filters', { matrixRowId: 'filters.auto-filter' }),
           ],
         }),
         domainSupportManifestOptions: {
           now: NOW,
           detectorRows: [
             {
-              matrixRowId: 'filters',
+              matrixRowId: 'filters.auto-filter',
               domainId: 'filters',
               present: true,
               detectorId: 'detector.filters',
@@ -671,7 +671,7 @@ describe('WorkbookVersion domain support manifest gate', () => {
               mutationGuarantee: 'no-write-attempted',
               payload: expect.objectContaining({
                 domain: 'filters',
-                matrixRowId: 'filters',
+                matrixRowId: 'filters.auto-filter',
                 reason: 'unsupportedDetectedDomain',
               }),
             }),

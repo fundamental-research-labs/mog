@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 import { BLANK_WORKBOOK_ROOT_GRAPH_ID } from '../blank-workbook-root';
 import { withDocumentRootInitializer } from '../document-root-initializer';
 import { namespaceForDocumentScope } from '../provider';

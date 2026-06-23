@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { jest } from '@jest/globals';
 import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import {
   DEFAULT_PROVENANCE_REDACTION_POLICY,
@@ -92,7 +93,8 @@ describe('RustDocument pending remote sync capture', () => {
     });
     const namespace = await initializeVersionGraph(versionProvider, 'graph-pending-remote-sync');
     const identityStore = await versionProvider.openAppliedSyncUpdateIdentityStore();
-    const pendingRemoteSegmentStore = await versionProvider.openPendingRemoteSegmentStore(namespace);
+    const pendingRemoteSegmentStore =
+      await versionProvider.openPendingRemoteSegmentStore(namespace);
     const semanticMutationCapture = createSemanticMutationCapture({
       author: VERSION_AUTHOR,
       now: () => new Date('2026-06-21T00:00:00.000Z'),
@@ -272,10 +274,7 @@ describe('RustDocument pending remote sync capture', () => {
       documentScope: VERSION_DOCUMENT_SCOPE,
       backend: new InMemoryVersionDocumentProviderBackend(),
     });
-    const namespace = await initializeVersionGraph(
-      versionProvider,
-      'graph-pending-remote-ignore',
-    );
+    const namespace = await initializeVersionGraph(versionProvider, 'graph-pending-remote-ignore');
     const { graph, registry, pendingRemoteSegmentStore } =
       await openPendingRemoteCaptureDependencies(versionProvider, namespace);
     const tracked = trackPutObjects(graph);
@@ -604,11 +603,7 @@ function syncAuthoredCellMutationResult(
   } as unknown as MutationResult;
 }
 
-function sheetRenameMutationResult(
-  sheetId: string,
-  oldName: string,
-  name: string,
-): MutationResult {
+function sheetRenameMutationResult(sheetId: string, oldName: string, name: string): MutationResult {
   return {
     recalc: {
       changedCells: [],
@@ -689,9 +684,7 @@ function pendingRemoteOperationContext(options: {
   readonly operationId: string;
   readonly updateId: string;
   readonly payloadHash: string;
-  readonly commitGrouping?: NonNullable<
-    VersionOperationContext['collaboration']
-  >['commitGrouping'];
+  readonly commitGrouping?: NonNullable<VersionOperationContext['collaboration']>['commitGrouping'];
 }): VersionOperationContext {
   return {
     operationId: options.operationId,

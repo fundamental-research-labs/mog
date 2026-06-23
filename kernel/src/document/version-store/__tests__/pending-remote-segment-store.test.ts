@@ -136,8 +136,8 @@ describe('pending remote segment store', () => {
       operationContext: syncOperationContext({ updateId: 'remote-update-2' }),
     });
     expect(changedIdentity).toMatchObject({
-      status: 'conflict',
-      diagnostics: [{ code: 'VERSION_PENDING_REMOTE_CONFLICT' }],
+      status: 'failed',
+      diagnostics: [{ code: 'VERSION_INVALID_OPTIONS' }],
     });
 
     const changedMutationSegmentRecord = await objectRecord(

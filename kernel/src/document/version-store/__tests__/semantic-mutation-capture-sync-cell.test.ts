@@ -8,6 +8,12 @@ import type {
 import type { VersionGraphNamespace } from '../object-store';
 import { createSemanticMutationCapture } from '../semantic-mutation-capture';
 
+const DOCUMENT_SCOPE = {
+  workspaceId: 'workspace-1',
+  documentId: 'document-1',
+  principalScope: 'principal-1',
+};
+
 const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',
   documentId: 'document-1',
@@ -28,6 +34,7 @@ const REMOTE_AUTHOR: VersionAuthor = {
 };
 
 const NOW = new Date('2026-06-20T00:00:00.000Z');
+const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as const;
 
 describe('semantic mutation capture sync cell lane', () => {
   it('captures sync-authored cell changes only in the pending remote lane', async () => {
@@ -87,13 +94,7 @@ describe('semantic mutation capture sync cell lane', () => {
       ],
     });
 
-    const normalCommit = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(normalCommit.input.semanticChangeSetRecord.preimage.payload).toEqual({
-      schemaVersion: 1,
-      changes: [],
-    });
-    expect(normalCommit.input.mutationSegmentRecords).toEqual([]);
-    expect(normalCommit.input.author).toEqual(LOCAL_AUTHOR);
+    expectCaptureMissingChangeSet(await capture.captureNormalCommit(captureInput()));
     expect(pendingRemoteSnapshots(capture)).toHaveLength(1);
   });
 });
@@ -149,15 +150,35 @@ function pendingRemoteSnapshots(capture: ReturnType<typeof createSemanticMutatio
 }
 
 function captureInput(): VersionNormalCommitCaptureInput {
-  return { namespace: NAMESPACE } as VersionNormalCommitCaptureInput;
+  return {
+    provider: { documentScope: DOCUMENT_SCOPE },
+    graph: {},
+    accessContext: {},
+    namespace: NAMESPACE,
+    registry: {},
+    currentHead: {
+      name: 'HEAD',
+      target: 'refs/heads/main',
+      revision: { providerEpoch: 'test', counter: 1 },
+    },
+    currentMain: currentRef(),
+    currentRef: currentRef(),
+    options: {},
+  } as VersionNormalCommitCaptureInput;
 }
 
-function expectCaptureSuccess(
-  result: VersionNormalCommitCaptureResult,
-): Extract<VersionNormalCommitCaptureResult, { status: 'success' }> {
-  expect(result.status).toBe('success');
-  if (result.status !== 'success') {
-    throw new Error(`expected capture success: ${result.diagnostics[0]?.code}`);
-  }
-  return result;
+function currentRef() {
+  return {
+    name: 'refs/heads/main',
+    commitId: COMMIT_ID,
+    revision: { providerEpoch: 'test', counter: 1 },
+    updatedAt: NOW.toISOString(),
+  };
+}
+
+function expectCaptureMissingChangeSet(result: VersionNormalCommitCaptureResult): void {
+  expect(result).toMatchObject({
+    status: 'failed',
+    diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_CHANGE_SET' })],
+  });
 }

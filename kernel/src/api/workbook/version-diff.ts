@@ -29,6 +29,7 @@ import {
 import type { DocumentContext } from '../../context';
 import { projectReviewAccessDiffValue } from '../../document/version-store/review-access-projection';
 import { validateRefName } from '../../document/version-store/ref-name';
+import { recoverabilityForVersionObjectRead } from './version-object-read-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -681,7 +682,12 @@ function mapGraphDiagnostic(value: unknown): VersionStoreDiagnostic {
       severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
         ? severity
         : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
+    recoverability: recoverabilityForVersionObjectRead(
+      issueCode,
+      isRecoverability(value.recoverability)
+        ? value.recoverability
+        : recoverabilityForIssue(issueCode),
+    ),
     payload: sanitizeDiagnosticPayload(value),
   });
 }
@@ -718,7 +724,8 @@ function sanitizeDiagnosticPayload(
       'source',
     ] as const) {
       const detailValue = details[key];
-      if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
+      const sanitized = sanitizePayloadPrimitive(detailValue);
+      if (sanitized !== undefined) payload[key] = sanitized;
     }
   }
 
@@ -831,7 +838,15 @@ function safeMessageForIssue(issueCode: string): string {
       return 'The version diff page token is stale or unsupported by this read slice.';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_BYTE_LENGTH_MISMATCH':
+    case 'VERSION_DIGEST_MISMATCH':
+    case 'VERSION_INVALID_PAYLOAD':
+    case 'VERSION_INVALID_PREIMAGE':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_TYPE_MISMATCH':
     case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
+    case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
       return 'The version graph could not validate the requested diff commit closure.';
     case 'VERSION_UNMATERIALIZABLE_COMMIT':
     case 'VERSION_UNSUPPORTED_SCHEMA':
@@ -867,7 +882,15 @@ function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['reco
       return 'retry';
     case 'VERSION_DANGLING_REF':
     case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_BYTE_LENGTH_MISMATCH':
+    case 'VERSION_DIGEST_MISMATCH':
+    case 'VERSION_INVALID_PAYLOAD':
+    case 'VERSION_INVALID_PREIMAGE':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_TYPE_MISMATCH':
     case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
+    case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
       return 'repair';
     case 'VERSION_GRAPH_UNINITIALIZED':
     case 'VERSION_PERMISSION_DENIED':
@@ -945,4 +968,18 @@ function isPayloadPrimitive(value: unknown): value is string | number | boolean 
 
 function formatPrimitiveForPayload(value: unknown): string | number | boolean | null {
   return isPayloadPrimitive(value) ? value : String(value);
+}
+
+function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {
+  return value === 'retry' || value === 'repair' || value === 'unsupported' || value === 'none';
+}
+
+function sanitizePayloadPrimitive(value: unknown): string | number | boolean | null | undefined {
+  if (!isPayloadPrimitive(value)) return undefined;
+  if (typeof value !== 'string') return value;
+  return /\b(?:preimage|commit:sha256:|merge-result:|sha256:[0-9a-f]{64}|secret|token)\b/i.test(
+    value,
+  )
+    ? 'redacted'
+    : value;
 }

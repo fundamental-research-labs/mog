@@ -335,6 +335,9 @@ export class InMemoryVersionObjectStore implements VersionObjectStore {
   listObjectRecords(): readonly VersionObjectRecord<unknown>[] {
     return this.backend.list(this.namespace);
   }
+  putCorruptRecordForTesting(digest: ObjectDigest, record: VersionObjectRecord<unknown>): void {
+    this.backend.putCorruptRecordForTesting(this.namespace, digest, record);
+  }
 }
 
 export function createInMemoryVersionObjectStore(

@@ -29,10 +29,7 @@ import {
   type MergePreviewArtifactPayload,
 } from '../../document/version-store/merge-attempt-artifacts';
 import type { ObjectDigest as InternalObjectDigest } from '../../document/version-store/object-digest';
-import {
-  VersionObjectStoreError,
-  type VersionGraphNamespace,
-} from '../../document/version-store/object-store';
+import type { VersionGraphNamespace } from '../../document/version-store/object-store';
 import type { VersionStoreProvider } from '../../document/version-store/provider';
 import { namespaceForRegistry } from '../../document/version-store/registry';
 import type { VersionGraphStore } from '../../document/version-store/provider-graph-store';
@@ -46,6 +43,7 @@ import {
   intentStoreDiagnostics,
   invalidPreviewArtifactDiagnostic,
   mapProviderDiagnostics,
+  persistedPreviewArtifactReadDiagnostic,
   providerErrorDiagnostic,
   publicDiagnostic,
   resolutionMismatchDiagnostic,
@@ -445,16 +443,7 @@ async function readPreviewArtifact(
   } catch (error) {
     return {
       ok: false,
-      diagnostics: [
-        publicDiagnostic(
-          error instanceof VersionObjectStoreError &&
-            error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND'
-            ? 'VERSION_MISSING_OBJECT'
-            : 'VERSION_PROVIDER_FAILED',
-          'Persisted merge preview artifact could not be read.',
-          { recoverability: error instanceof VersionObjectStoreError ? 'repair' : 'retry' },
-        ),
-      ],
+      diagnostics: [persistedPreviewArtifactReadDiagnostic(error)],
     };
   }
 }

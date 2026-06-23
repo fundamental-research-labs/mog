@@ -5,6 +5,11 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { MergeApplyIntentStoreDiagnostic } from '../../document/version-store/merge-apply-intent-store';
+import { VersionObjectStoreError } from '../../document/version-store/object-store';
+import {
+  isVersionObjectReadRepairDiagnosticCode,
+  recoverabilityForVersionObjectRead,
+} from './version-object-read-diagnostics';
 
 export function mapProviderDiagnostics(
   diagnostics: readonly unknown[],
@@ -19,15 +24,16 @@ export function mapProviderDiagnostics(
           ? diagnostic.code
           : 'VERSION_PROVIDER_FAILED';
     return publicDiagnostic(
-      issueCode,
+      publicIssueCodeForProviderIssue(issueCode),
       typeof diagnostic.safeMessage === 'string' &&
         isPublicSafeProviderMessage(diagnostic.safeMessage)
         ? diagnostic.safeMessage
         : safeProviderMessage(issueCode),
       {
-        recoverability: isRecoverability(diagnostic.recoverability)
-          ? diagnostic.recoverability
-          : 'retry',
+        recoverability: recoverabilityForVersionObjectRead(
+          issueCode,
+          isRecoverability(diagnostic.recoverability) ? diagnostic.recoverability : 'retry',
+        ),
       },
     );
   });
@@ -71,6 +77,26 @@ export function invalidPreviewArtifactDiagnostic(): VersionStoreDiagnostic {
   );
 }
 
+export function persistedPreviewArtifactReadDiagnostic(error: unknown): VersionStoreDiagnostic {
+  if (error instanceof VersionObjectStoreError) {
+    if (error.diagnostic.code === 'VERSION_OBJECT_NOT_FOUND') {
+      return publicDiagnostic(
+        'VERSION_MISSING_OBJECT',
+        'Persisted merge preview artifact could not be found.',
+        { recoverability: 'repair' },
+      );
+    }
+    if (isVersionObjectReadRepairDiagnosticCode(error.diagnostic.code)) {
+      return invalidPreviewArtifactDiagnostic();
+    }
+  }
+  return publicDiagnostic(
+    'VERSION_PROVIDER_FAILED',
+    'Persisted merge preview artifact could not be read.',
+    { recoverability: 'retry' },
+  );
+}
+
 export function resolutionMismatchDiagnostic(safeMessage: string): VersionStoreDiagnostic {
   return publicDiagnostic('VERSION_MERGE_RESOLUTION_MISMATCH', safeMessage, {
     recoverability: 'none',
@@ -93,6 +119,15 @@ export function providerErrorDiagnostic(): VersionStoreDiagnostic {
 
 function safeProviderMessage(issueCode: string): string {
   switch (issueCode) {
+    case 'VERSION_BYTE_LENGTH_MISMATCH':
+    case 'VERSION_DIGEST_MISMATCH':
+    case 'VERSION_INVALID_PAYLOAD':
+    case 'VERSION_INVALID_PREIMAGE':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_TYPE_MISMATCH':
+    case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
+    case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
+      return 'Persisted merge preview artifact payload is invalid.';
     case 'VERSION_MISSING_OBJECT':
     case 'VERSION_OBJECT_NOT_FOUND':
       return 'Version applyMerge provider could not read a required object.';
@@ -100,6 +135,24 @@ function safeProviderMessage(issueCode: string): string {
       return 'Version applyMerge provider denied access to required version data.';
     default:
       return 'Version applyMerge provider failed.';
+  }
+}
+
+function publicIssueCodeForProviderIssue(issueCode: string): string {
+  switch (issueCode) {
+    case 'VERSION_BYTE_LENGTH_MISMATCH':
+    case 'VERSION_DIGEST_MISMATCH':
+    case 'VERSION_INVALID_PAYLOAD':
+    case 'VERSION_INVALID_PREIMAGE':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_TYPE_MISMATCH':
+    case 'VERSION_UNSUPPORTED_OBJECT_TYPE':
+    case 'VERSION_UNSUPPORTED_PAYLOAD_ENCODING':
+      return 'VERSION_INVALID_COMMIT_PAYLOAD';
+    case 'VERSION_OBJECT_NOT_FOUND':
+      return 'VERSION_MISSING_OBJECT';
+    default:
+      return issueCode;
   }
 }
 

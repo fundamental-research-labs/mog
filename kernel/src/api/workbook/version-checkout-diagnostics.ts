@@ -25,6 +25,54 @@ type SyncBatchStatusAdmissionBlock = Extract<
   { reason: 'syncBatchStatusBlocked' }
 >;
 
+export type VersionCheckoutHistoryDenialClass =
+  | 'access-denied'
+  | 'stale-history'
+  | 'missing-graph-state'
+  | 'corrupt-graph-state';
+
+const ACCESS_DENIED_CHECKOUT_ISSUES = new Set(['VERSION_PERMISSION_DENIED']);
+
+const STALE_HISTORY_CHECKOUT_ISSUES = new Set([
+  'VERSION_CHECKOUT_REF_READ_FAILED',
+  'VERSION_CHECKOUT_COMMIT_READ_FAILED',
+  'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED',
+  'VERSION_CHECKOUT_PROVIDER_ERROR',
+  'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
+  'VERSION_CHECKOUT_SYNC_BATCH_STATUS_BLOCKED',
+  'VERSION_CHECKOUT_PENDING_RECALC',
+  'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE',
+  'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+  'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
+  'VERSION_CHECKOUT_WRITE_FENCE_STALE',
+  'VERSION_REF_CONFLICT',
+  'VERSION_STALE_PAGE_CURSOR',
+]);
+
+const MISSING_GRAPH_STATE_CHECKOUT_ISSUES = new Set([
+  'VERSION_CHECKOUT_MISSING_COMMIT',
+  'VERSION_CHECKOUT_MISSING_DEPENDENCY',
+  'VERSION_DANGLING_REF',
+  'VERSION_MISSING_OBJECT',
+  'VERSION_MISSING_PARENT',
+  'VERSION_MISSING_DEPENDENCY',
+  'VERSION_OBJECT_NOT_FOUND',
+]);
+
+const CORRUPT_GRAPH_STATE_CHECKOUT_ISSUES = new Set([
+  'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT',
+  'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+  'VERSION_GRAPH_CONFLICT',
+  'VERSION_INVALID_COMMIT_ID',
+  'VERSION_INVALID_COMMIT_PAYLOAD',
+  'VERSION_OBJECT_CORRUPTION',
+  'VERSION_OBJECT_STORE_FAILURE',
+  'VERSION_UNSUPPORTED_PARENT_COMMIT',
+  'VERSION_UNSUPPORTED_SCHEMA',
+  'VERSION_WRONG_DOCUMENT',
+  'VERSION_WRONG_NAMESPACE',
+]);
+
 export function checkoutSyncBatchStatusBlockedDiagnostic(
   block: SyncBatchStatusAdmissionBlock,
   payload: VersionDiagnosticPublicPayload,
@@ -99,43 +147,70 @@ export function safeMessageForCheckoutIssue(issueCode: string): string {
       return 'Workbook state changed while checkout materialization was in progress.';
     case 'VERSION_PERMISSION_DENIED':
       return 'Checkout is not authorized for the requested version target.';
+    case 'VERSION_GRAPH_UNINITIALIZED':
+      return 'The workbook version graph is not initialized for checkout.';
+    case 'VERSION_REF_CONFLICT':
+      return 'Checkout is blocked because the version ref changed during checkout planning.';
+    case 'VERSION_STALE_PAGE_CURSOR':
+      return 'Checkout history metadata is stale and must be refreshed before checkout.';
+    case 'VERSION_DANGLING_REF':
+      return 'Checkout cannot resolve the target because version history points at missing graph state.';
+    case 'VERSION_MISSING_OBJECT':
+    case 'VERSION_OBJECT_NOT_FOUND':
+      return 'Checkout cannot resolve the target because required version graph state is missing.';
+    case 'VERSION_MISSING_PARENT':
+    case 'VERSION_MISSING_DEPENDENCY':
+      return 'Checkout cannot materialize the target because required version history dependencies are missing.';
+    case 'VERSION_GRAPH_CONFLICT':
+    case 'VERSION_INVALID_COMMIT_ID':
+    case 'VERSION_INVALID_COMMIT_PAYLOAD':
+    case 'VERSION_OBJECT_CORRUPTION':
+    case 'VERSION_OBJECT_STORE_FAILURE':
+    case 'VERSION_UNSUPPORTED_PARENT_COMMIT':
+    case 'VERSION_UNSUPPORTED_SCHEMA':
+    case 'VERSION_WRONG_DOCUMENT':
+    case 'VERSION_WRONG_NAMESPACE':
+      return 'Checkout cannot materialize the target because version graph state is corrupt or unsupported.';
     default:
       return 'The checkout materialization service could not complete checkout planning.';
   }
 }
 
+export function historyDenialClassForCheckoutIssue(
+  issueCode: string,
+): VersionCheckoutHistoryDenialClass | null {
+  if (ACCESS_DENIED_CHECKOUT_ISSUES.has(issueCode)) return 'access-denied';
+  if (STALE_HISTORY_CHECKOUT_ISSUES.has(issueCode)) return 'stale-history';
+  if (MISSING_GRAPH_STATE_CHECKOUT_ISSUES.has(issueCode)) return 'missing-graph-state';
+  if (CORRUPT_GRAPH_STATE_CHECKOUT_ISSUES.has(issueCode)) return 'corrupt-graph-state';
+  return null;
+}
+
 export function recoverabilityForCheckoutIssue(
   issueCode: string,
 ): VersionStoreDiagnostic['recoverability'] {
+  const historyDenialClass = historyDenialClassForCheckoutIssue(issueCode);
+  if (historyDenialClass === 'stale-history') return 'retry';
+  if (
+    historyDenialClass === 'missing-graph-state' ||
+    historyDenialClass === 'corrupt-graph-state'
+  ) {
+    return 'repair';
+  }
+  if (historyDenialClass === 'access-denied') return 'unsupported';
+
   switch (issueCode) {
-    case 'VERSION_CHECKOUT_REF_READ_FAILED':
-    case 'VERSION_CHECKOUT_COMMIT_READ_FAILED':
-    case 'VERSION_CHECKOUT_DEPENDENCY_READ_FAILED':
-    case 'VERSION_CHECKOUT_PROVIDER_ERROR':
     case 'VERSION_CHECKOUT_SNAPSHOT_READ_FAILED':
-    case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':
-    case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
-    case 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES':
-    case 'VERSION_CHECKOUT_SYNC_BATCH_STATUS_BLOCKED':
-    case 'VERSION_CHECKOUT_PENDING_RECALC':
-    case 'VERSION_CHECKOUT_LIVE_COLLABORATION_ACTIVE':
-    case 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD':
       return 'retry';
-    case 'VERSION_CHECKOUT_MISSING_COMMIT':
-    case 'VERSION_CHECKOUT_MISSING_DEPENDENCY':
-    case 'VERSION_CHECKOUT_UNMATERIALIZABLE_COMMIT':
-    case 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED':
-      return 'repair';
     case 'VERSION_CHECKOUT_UNSUPPORTED_TARGET':
     case 'VERSION_CHECKOUT_DETACHED_TARGET_UNSUPPORTED':
     case 'VERSION_CHECKOUT_DETACHED_HEAD_UNSUPPORTED':
     case 'VERSION_CHECKOUT_MISSING_REF_READER':
     case 'VERSION_CHECKOUT_MISSING_HEAD_READER':
-    case 'VERSION_CHECKOUT_MISSING_REF':
     case 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE':
     case 'VERSION_CHECKOUT_MATERIALIZER_UNAVAILABLE':
     case 'VERSION_CHECKOUT_REQUIRE_CLEAN_UNSUPPORTED':
-    case 'VERSION_PERMISSION_DENIED':
+    case 'VERSION_GRAPH_UNINITIALIZED':
       return 'unsupported';
     default:
       return 'none';

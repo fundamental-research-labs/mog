@@ -18,6 +18,7 @@ import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../Vers
 const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 const PROMOTED_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
+const LATEST_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}` as WorkbookCommitId;
 const PENDING_REMOTE_SEGMENT_ID = `pending-remote-segment:sha256:${'d'.repeat(64)}` as const;
 const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
@@ -76,6 +77,90 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
       }),
     );
     await expectActionResult('Promoted 1 pending remote segment into 1 commit', 'success');
+  });
+
+  it('projects stale current status through stable redacted codes', async () => {
+    const rawProviderRef = 'refs/provider-internal/main';
+    const workbook = createWorkbook({
+      surface: createSurfaceStatus({
+        current: {
+          branchName: rawProviderRef,
+          checkedOutCommitId: HEAD_COMMIT_ID,
+          refHeadAtMaterialization: HEAD_COMMIT_ID,
+          currentRefHeadId: LATEST_COMMIT_ID,
+          stale: true,
+          staleReason: 'refMoved',
+        },
+      }),
+    });
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+
+    const staleStatus = screen.getByTestId('version-history-current-stale-status');
+    expect(staleStatus).toHaveAttribute(
+      'data-status-code',
+      'version.surfaceStatus.currentStale.refMoved',
+    );
+    expect(staleStatus).not.toHaveAttribute('data-checked-out-commit-id');
+    expect(staleStatus).not.toHaveAttribute('data-latest-commit-id');
+    expect(staleStatus).toHaveTextContent('Current checkout is stale');
+    expect(staleStatus).toHaveTextContent(
+      'Current checkout is stale because the branch head moved.',
+    );
+    expect(staleStatus).toHaveTextContent('version.surfaceStatus.currentStale.refMoved');
+    expect(staleStatus).not.toHaveTextContent(rawProviderRef);
+    expect(staleStatus).not.toHaveTextContent(HEAD_COMMIT_ID);
+    expect(staleStatus).not.toHaveTextContent(LATEST_COMMIT_ID);
+    expect(staleStatus).not.toHaveTextContent('aaaaaaaaaaaa');
+    expect(staleStatus).not.toHaveTextContent('eeeeeeeeeeee');
+  });
+
+  it('projects stale pending remote reconciliation through stable redacted codes', async () => {
+    const rawProviderRef = 'refs/provider-internal/sync/main';
+    const pendingPromotion = diagnostic('Remote promotion is pending.', {
+      pendingRemotePromotionActiveCount: 1,
+      providerRef: rawProviderRef,
+      providerKind: 'provider-yjs',
+    });
+    const workbook = createWorkbook({
+      surface: createSurfaceStatus({
+        current: {
+          checkedOutCommitId: HEAD_COMMIT_ID,
+          refHeadAtMaterialization: HEAD_COMMIT_ID,
+          currentRefHeadId: LATEST_COMMIT_ID,
+          stale: true,
+          staleReason: 'activeSessionBehind',
+        },
+        dirty: {
+          pendingProviderWrites: true,
+          checkoutSafe: false,
+          unsafeReasons: [pendingPromotion],
+          diagnostics: [pendingPromotion],
+        },
+      }),
+    });
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+
+    const staleStatus = screen.getByTestId('version-history-current-stale-status');
+    expect(staleStatus).toHaveAttribute(
+      'data-status-code',
+      'version.surfaceStatus.currentStale.activeSessionBehind',
+    );
+    expect(staleStatus).toHaveAttribute(
+      'data-reconciliation-code',
+      'version.surfaceStatus.pendingRemotePromotion',
+    );
+    expect(staleStatus).toHaveTextContent(
+      'version.surfaceStatus.currentStale.activeSessionBehind',
+    );
+    expect(staleStatus).toHaveTextContent('version.surfaceStatus.pendingRemotePromotion');
+    expect(staleStatus).not.toHaveTextContent(rawProviderRef);
+    expect(staleStatus).not.toHaveTextContent('provider-yjs');
   });
 
   it('shows remote promote disabled reason from the surface capability', async () => {
@@ -178,6 +263,72 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
     ).toHaveAccessibleName(`Remote promote unavailable: ${refreshedReason}`);
   });
 
+  it('keeps destructive controls disabled while remote promotion is in flight', async () => {
+    const pendingProviderWrites = diagnostic(
+      'Remote sync changes are waiting to be promoted into version history; checkout is unsafe.',
+      { pendingRemoteSegmentCount: 1 },
+    );
+    const promotion = createDeferred<
+      Awaited<ReturnType<VersionHistoryWorkbook['version']['promotePendingRemote']>>
+    >();
+    const workbook = createWorkbook({
+      surface: createSurfaceStatus({
+        dirty: {
+          pendingProviderWrites: true,
+          checkoutSafe: false,
+          unsafeReasons: [pendingProviderWrites],
+          diagnostics: [pendingProviderWrites],
+        },
+      }),
+      promotePendingRemote: jest.fn(() => promotion.promise),
+    });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await user.type(screen.getByLabelText('Branch name'), 'scenario/frozen');
+    await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
+    await user.click(screen.getByTestId('version-history-promote-remote-button'));
+
+    await waitFor(() =>
+      expect(workbook.version.promotePendingRemote).toHaveBeenCalledWith({
+        includeDiagnostics: true,
+      }),
+    );
+
+    const runningReason = 'Wait for the current version action to finish.';
+    expectDisabledButtonReason(screen.getByRole('button', { name: /^Commit$/ }), runningReason);
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Create branch' }),
+      runningReason,
+    );
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Stage rollback' }),
+      runningReason,
+    );
+    expectDisabledButtonReason(
+      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
+      runningReason,
+    );
+
+    await act(async () => {
+      promotion.resolve({
+        ok: true,
+        value: {
+          status: 'success',
+          promotedSegmentIds: [PENDING_REMOTE_SEGMENT_ID],
+          commitIds: [PROMOTED_COMMIT_ID],
+          skipped: [],
+          diagnostics: [],
+        },
+      });
+      await promotion.promise;
+    });
+    await expectActionResult('Promoted 1 pending remote segment into 1 commit', 'success');
+  });
+
   it('surfaces failed pending remote promotion diagnostics in the action result region', async () => {
     const workbook = createWorkbook({
       promotePendingRemote: jest.fn(async () => ({
@@ -278,9 +429,11 @@ function createWorkbook({
 }
 
 function createSurfaceStatus({
+  current = {},
   dirty = {},
   capabilityOverrides = {},
 }: {
+  readonly current?: Partial<VersionSurfaceStatus['current']>;
   readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
   readonly capabilityOverrides?: Partial<Record<VersionCapability, VersionCapabilityState>>;
 } = {}): VersionSurfaceStatus {
@@ -295,6 +448,7 @@ function createSurfaceStatus({
       branchName: 'refs/heads/main',
       detached: false,
       stale: false,
+      ...current,
     },
     dirty: {
       statusRevision: '1',

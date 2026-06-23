@@ -243,6 +243,13 @@ export async function applyPersistedMergePreviewArtifact(
     theirs: artifact.payload.theirs,
     changes: [...artifact.payload.changes, ...resolutionPlan.changes],
     resolutionCount: input.resolutions.length,
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+    resultId: input.resultId,
+    previewArtifactDigest: input.previewArtifactDigest ?? input.resultDigest,
+    resultDigest: input.resultDigest,
+    resolutionSetDigest: prepared.intent.resolutionSetDigest,
+    resolvedAttemptDigest: prepared.intent.resolvedAttemptDigest,
   };
 
   try {
@@ -266,12 +273,17 @@ export async function applyPersistedMergePreviewArtifact(
       },
     );
     if (identityDiagnostics.length > 0) {
-      return blockedApplyMergeResult(
-        artifact.payload.base,
-        artifact.payload.ours,
-        artifact.payload.theirs,
-        identityDiagnostics,
-        'unknown-after-crash',
+      return applyArtifactMetadata(
+        blockedApplyMergeResult(
+          artifact.payload.base,
+          artifact.payload.ours,
+          artifact.payload.theirs,
+          identityDiagnostics,
+          'unknown-after-crash',
+        ),
+        input,
+        prepared.intent,
+        mapped.commitRef.id,
       );
     }
     const completed = await prepared.store.completeIntent({
@@ -286,12 +298,17 @@ export async function applyPersistedMergePreviewArtifact(
       },
     });
     if (completed.status !== 'completed') {
-      return blockedApplyMergeResult(
-        artifact.payload.base,
-        artifact.payload.ours,
-        artifact.payload.theirs,
-        intentStoreDiagnostics(completed.diagnostics),
-        'unknown-after-crash',
+      return applyArtifactMetadata(
+        blockedApplyMergeResult(
+          artifact.payload.base,
+          artifact.payload.ours,
+          artifact.payload.theirs,
+          intentStoreDiagnostics(completed.diagnostics),
+          'unknown-after-crash',
+        ),
+        input,
+        prepared.intent,
+        mapped.commitRef.id,
       );
     }
     return applyArtifactMetadata(mapped, input, completed.record, mapped.commitRef.id);

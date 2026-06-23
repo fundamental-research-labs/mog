@@ -132,6 +132,106 @@ describe('persisted applyMerge artifact recovery hardening', () => {
     expect(mergeCommit).not.toHaveBeenCalled();
   });
 
+  it('returns staleTargetHead for staged fast-forward intents before writer calls', async () => {
+    const fixture = await artifactFixture('fast-forward-stale-before-writer');
+    const record: MergeApplyIntentRecord = { ...fixture.record, applyKind: 'fastForward' };
+    const readRef = jest.fn(async () => refReadSuccess(ADVANCED));
+    const fastForwardMerge = jest.fn();
+
+    const result = await applyPersistedMergeResult(
+      persistedIntentContext({ fixture, record, readRef, fastForwardMerge }),
+      persistedIntentInput(fixture),
+      { targetRef: TARGET_REF, expectedTargetHead: EXPECTED_TARGET_HEAD },
+    );
+
+    expect(result).toMatchObject({
+      status: 'staleTargetHead',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      resultId: `merge-result:${fixture.resolvedAttemptDigest.digest}`,
+      resultDigest: RESULT_DIGEST,
+      resolutionSetDigest: fixture.resolutionSetDigest,
+      resolvedAttemptDigest: fixture.resolvedAttemptDigest,
+      targetRef: TARGET_REF,
+      headBefore: OURS,
+      headAfter: ADVANCED,
+      diagnostics: [],
+      mutationGuarantee: 'ref-not-mutated',
+    });
+    expect(fastForwardMerge).not.toHaveBeenCalled();
+  });
+
+  it('exposes the visible merge head when artifact intent completion fails after write', async () => {
+    const fixture = await artifactFixture('completion-failure-visible-head');
+    const readRef = jest.fn(async () => refReadSuccess(OURS));
+    const readCommit = jest.fn(async () => ({
+      status: 'success',
+      commit: {
+        payload: {
+          parentCommitIds: [OURS, THEIRS],
+          resolvedMergeAttemptDigest: fixture.resolvedAttemptDigest,
+        },
+      },
+      diagnostics: [],
+    }));
+    const mergeCommit = jest.fn(async () => ({
+      status: 'success',
+      commitRef: { id: MERGE, refName: TARGET_REF, resolvedFrom: TARGET_REF },
+      diagnostics: [],
+    }));
+    const completeIntent = jest.fn(async () => ({
+      status: 'failed',
+      record: null,
+      diagnostics: [
+        {
+          code: 'VERSION_PROVIDER_FAILED',
+          message: 'completion failed',
+          recoverability: 'retry',
+        },
+      ],
+    }));
+
+    const result = await applyPersistedMergeResult(
+      artifactContext({
+        fixture,
+        record: fixture.record,
+        readRef,
+        readCommit,
+        mergeCommit,
+        completeIntent,
+      }),
+      artifactInput(),
+      { targetRef: TARGET_REF, expectedTargetHead: EXPECTED_TARGET_HEAD },
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      resultId: fixture.resultId,
+      resultDigest: RESULT_DIGEST,
+      previewArtifactDigest: RESULT_DIGEST,
+      resolutionSetDigest: fixture.resolutionSetDigest,
+      resolvedAttemptDigest: fixture.resolvedAttemptDigest,
+      targetRef: TARGET_REF,
+      headBefore: OURS,
+      headAfter: MERGE,
+      mutationGuarantee: 'unknown-after-crash',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_PROVIDER_FAILED',
+          safeMessage: 'completion failed',
+        }),
+      ],
+    });
+    expect(readRef).toHaveBeenCalledWith(TARGET_REF);
+    expect(readCommit).toHaveBeenCalledWith(MERGE);
+    expect(mergeCommit).toHaveBeenCalledTimes(1);
+    expect(completeIntent).toHaveBeenCalledTimes(1);
+  });
+
   it('does not recover a staged artifact intent from a non-matching merge commit', async () => {
     const fixture = await artifactFixture('non-matching-merge-commit');
     const completeIntent = jest.fn();
@@ -477,11 +577,22 @@ function artifactInput() {
   };
 }
 
+function persistedIntentInput(fixture: Awaited<ReturnType<typeof artifactFixture>>) {
+  return {
+    resultId: `merge-result:${fixture.resolvedAttemptDigest.digest}` as VersionMergeResultId,
+    resultDigest: RESULT_DIGEST,
+    resolutionSetDigest: fixture.resolutionSetDigest,
+    resolvedAttemptDigest: fixture.resolvedAttemptDigest,
+  };
+}
+
 function artifactContext(input: {
   readonly fixture: Awaited<ReturnType<typeof artifactFixture>>;
   readonly record: MergeApplyIntentRecord;
   readonly readRef?: jest.Mock;
+  readonly readCommit?: jest.Mock;
   readonly beginIntent?: jest.Mock;
+  readonly completeIntent?: jest.Mock;
   readonly mergeCommit?: jest.Mock;
 }) {
   const registryPromise = createVersionGraphRegistry({
@@ -500,7 +611,7 @@ function artifactContext(input: {
       diagnostics: [],
     })),
     readRefCasProof: jest.fn(),
-    completeIntent: jest.fn(),
+    completeIntent: input.completeIntent ?? jest.fn(),
   };
   return {
     versioning: {
@@ -513,6 +624,7 @@ function artifactContext(input: {
         })),
         openGraph: jest.fn(async () => ({
           readRef: input.readRef ?? jest.fn(async () => refReadSuccess(MERGE)),
+          readCommit: input.readCommit ?? jest.fn(),
           getObjectRecord: jest.fn(async () => ({
             preimage: {
               objectType: MERGE_PREVIEW_OBJECT_TYPE,
@@ -535,6 +647,43 @@ function artifactContext(input: {
       writeService: {
         mergeCommit: input.mergeCommit ?? jest.fn(),
       },
+    },
+  } as Parameters<typeof applyPersistedMergeResult>[0];
+}
+
+function persistedIntentContext(input: {
+  readonly fixture: Awaited<ReturnType<typeof artifactFixture>>;
+  readonly record: MergeApplyIntentRecord;
+  readonly readRef: jest.Mock;
+  readonly fastForwardMerge: jest.Mock;
+}) {
+  const registryPromise = createVersionGraphRegistry({
+    documentScope: DOCUMENT_SCOPE,
+    graphId: input.fixture.namespace.graphId,
+    rootCommitId: BASE,
+    createdAt: CREATED_AT,
+  });
+  const store: MergeApplyIntentStore = {
+    namespace: input.fixture.namespace,
+    beginIntent: jest.fn(),
+    readByIntentId: jest.fn(async () => ({ status: 'found', record: input.record, diagnostics: [] })),
+    readByIdempotencyKey: jest.fn(),
+    readRefCasProof: jest.fn(),
+    completeIntent: jest.fn(),
+  };
+  return {
+    versioning: {
+      provider: {
+        accessContext: {},
+        readGraphRegistry: jest.fn(async () => ({
+          status: 'ok',
+          registry: await registryPromise,
+          diagnostics: [],
+        })),
+        openGraph: jest.fn(async () => ({ readRef: input.readRef })),
+        openMergeApplyIntentStore: jest.fn(async () => store),
+      },
+      writeService: { fastForwardMerge: input.fastForwardMerge },
     },
   } as Parameters<typeof applyPersistedMergeResult>[0];
 }

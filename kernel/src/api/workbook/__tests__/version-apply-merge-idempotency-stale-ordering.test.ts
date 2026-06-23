@@ -184,6 +184,65 @@ describe('WorkbookVersion public applyMerge idempotency and stale ordering', () 
     });
   });
 
+  it('blocks successful write results when echoed metadata differs from the staged plan', async () => {
+    const fixture = await createCleanReviewFixture('success-payload-mismatch', () => ({}));
+    const alternatePreview = await createAlternatePreview(fixture, 'success-payload-mismatch');
+
+    const result = mapApplyMergeWriteResult(
+      {
+        status: 'success',
+        resultId: alternatePreview.resultId,
+        resultDigest: alternatePreview.resultDigest,
+        previewArtifactDigest: alternatePreview.previewArtifactDigest,
+        targetRef: TARGET_REF,
+        headBefore: fixture.oursCommitId,
+        headAfter: fixture.theirsCommitId,
+        commitRef: {
+          id: fixture.theirsCommitId,
+          refName: TARGET_REF,
+          resolvedFrom: TARGET_REF,
+          refRevision: fixture.expectedTargetHead.revision,
+        },
+        diagnostics: [],
+      },
+      {
+        base: fixture.baseCommitId,
+        ours: fixture.oursCommitId,
+        theirs: fixture.theirsCommitId,
+        changes: [],
+        resolutionCount: 0,
+        targetRef: TARGET_REF,
+        expectedTargetHead: fixture.expectedTargetHead,
+        resultId: fixture.preview.resultId,
+        resultDigest: fixture.preview.resultDigest,
+        previewArtifactDigest: fixture.preview.previewArtifactDigest,
+      },
+      'merge-commit-created',
+    );
+
+    expect(result).toMatchObject({
+      status: 'blocked',
+      base: fixture.baseCommitId,
+      ours: fixture.oursCommitId,
+      theirs: fixture.theirsCommitId,
+      resultId: fixture.preview.resultId,
+      resultDigest: fixture.preview.resultDigest,
+      previewArtifactDigest: fixture.preview.previewArtifactDigest,
+      targetRef: TARGET_REF,
+      headBefore: fixture.oursCommitId,
+      headAfter: fixture.theirsCommitId,
+      changes: [],
+      conflicts: [],
+      mutationGuarantee: 'unknown-after-crash',
+      diagnostics: expect.arrayContaining([
+        expect.objectContaining({
+          issueCode: 'VERSION_INVALID_COMMIT_PAYLOAD',
+          mutationGuarantee: 'unknown-after-crash',
+        }),
+      ]),
+    });
+  });
+
   it('replays a successful apply with the same intent before stale-target rejection', async () => {
     const fixture = await createCleanReviewFixture(
       'terminal-replay-before-stale',

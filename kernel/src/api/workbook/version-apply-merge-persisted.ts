@@ -470,6 +470,8 @@ async function applyPersistedFastForwardIntent(
       resultId,
     );
     if (recovered) return recovered;
+    const staleBeforeWrite = await resultIfTargetMoved(provider, record, resultId, record.ours);
+    if (staleBeforeWrite) return staleBeforeWrite;
 
     const service = getAttachedVersionApplyMergeService(ctx);
     if (!service?.fastForwardMerge) {
@@ -490,20 +492,18 @@ async function applyPersistedFastForwardIntent(
         resolutionMismatchDiagnostic('persisted merge attempt is not a fast-forward.'),
       ]);
     }
-    const mapped = mapApplyMergeWriteResult(raw, persistedPlan(record), 'ref-fast-forwarded');
+    const mapped = mapApplyMergeWriteResult(raw, persistedPlan(record, resultId), 'ref-fast-forwarded');
     if (!isApplyMergeWriteSuccessResult(mapped)) return mapped;
     const commitRef = 'commitRef' in mapped ? mapped.commitRef : null;
     if (!commitRef) return mapped;
 
     const completed = await completeFastForwardIntent(store, record, commitRef.id);
     if (completed.status !== 'completed') {
-      return blockedApplyMergeResult(
-        record.base,
-        record.ours,
-        record.theirs,
-        intentStoreDiagnostics(completed.diagnostics),
-        'unknown-after-crash',
-      );
+      return {
+        ...persistedMetadata(record, resultId),
+        headAfter: commitRef.id,
+        ...blockedApplyMergeResult(record.base, record.ours, record.theirs, intentStoreDiagnostics(completed.diagnostics), 'unknown-after-crash'),
+      };
     }
     return fastForwardedPersistedResult(completed.record, resultId, commitRef);
   } catch {
@@ -778,8 +778,10 @@ function persistedMetadata(record: MergeApplyIntentRecord, resultId: VersionMerg
   };
 }
 
-function persistedPlan(record: MergeApplyIntentRecord) {
+function persistedPlan(record: MergeApplyIntentRecord, resultId: VersionMergeResultId) {
   return {
+    ...persistedMetadata(record, resultId),
+    expectedTargetHead: record.expectedTargetHead,
     base: record.base,
     ours: record.ours,
     theirs: record.theirs,
@@ -788,32 +790,19 @@ function persistedPlan(record: MergeApplyIntentRecord) {
   };
 }
 
-function commitRefForIntent(
-  record: MergeApplyIntentRecord,
-  commitId: WorkbookCommitId,
-): WorkbookCommitRef {
-  return {
-    id: commitId,
-    refName: record.targetRef,
-    resolvedFrom: record.targetRef,
-  };
+function commitRefForIntent(record: MergeApplyIntentRecord, commitId: WorkbookCommitId): WorkbookCommitRef {
+  return { id: commitId, refName: record.targetRef, resolvedFrom: record.targetRef };
 }
 
 function publicResultId(record: MergeApplyIntentRecord): VersionMergeResultId {
   return `merge-result:${record.resolvedAttemptDigest.digest}` as VersionMergeResultId;
 }
 
-function digestsEqual(
-  left: { readonly algorithm: string; readonly digest: string },
-  right: { readonly algorithm: string; readonly digest: string },
-): boolean {
+function digestsEqual(left: { readonly algorithm: string; readonly digest: string }, right: { readonly algorithm: string; readonly digest: string }): boolean {
   return left.algorithm === right.algorithm && left.digest === right.digest;
 }
 
-function expectedHeadsEqual(
-  left: VersionCommitExpectedHead,
-  right: VersionCommitExpectedHead,
-): boolean {
+function expectedHeadsEqual(left: VersionCommitExpectedHead, right: VersionCommitExpectedHead): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 

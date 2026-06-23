@@ -15,7 +15,24 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import {
+  mapCommitId,
+  mapPublicExpectedTargetHead,
+  mapPublicRevision,
+  mapPublicTargetRef,
+} from './version-attempt-metadata';
+import {
+  readVersionCheckoutAdmissionBlock,
+  type VersionCheckoutAdmissionBlock,
+} from './version-checkout-admission';
 import { validateVersionOperationGate } from './version-operation-gate';
+import {
+  getAttachedVersionRevertService,
+  mapRevertProviderResult,
+  providerErrorDiagnostic,
+  VERSION_REVERT_INVALID_PROVIDER_PAYLOAD_DIAGNOSTIC_CODE,
+  VERSION_REVERT_PROVIDER_ERROR_DIAGNOSTIC_CODE,
+} from './version-revert-provider';
 
 export const VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE = 'VERSION_REVERT_UNAVAILABLE';
 export const VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE = 'VERSION_REVERT_TARGET_REJECTED';
@@ -27,6 +44,14 @@ export const VERSION_REVERT_HISTORY_GAP_DIAGNOSTIC_CODE = 'VERSION_REVERT_HISTOR
 export const VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE = 'VERSION_REVERT_CAS_UNAVAILABLE';
 export const VERSION_REVERT_REVIEW_INVALIDATION_DIAGNOSTIC_CODE =
   'VERSION_REVERT_REVIEW_INVALIDATION_UNSUPPORTED';
+export const VERSION_REVERT_PENDING_PROVIDER_WRITES_DIAGNOSTIC_CODE =
+  'VERSION_REVERT_PENDING_PROVIDER_WRITES';
+export const VERSION_REVERT_WRITE_FENCE_UNAVAILABLE_DIAGNOSTIC_CODE =
+  'VERSION_REVERT_WRITE_FENCE_UNAVAILABLE';
+export {
+  VERSION_REVERT_INVALID_PROVIDER_PAYLOAD_DIAGNOSTIC_CODE,
+  VERSION_REVERT_PROVIDER_ERROR_DIAGNOSTIC_CODE,
+};
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
@@ -73,6 +98,31 @@ type ValidationResult =
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
+type MaybePromise<T> = T | Promise<T>;
+type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
+
+type AttachedVersionReadRefService = {
+  readonly readRef: (name: string) => MaybePromise<unknown>;
+};
+
+type MaybeVersionRuntimeContext = DocumentContext & {
+  readonly versioning?: unknown;
+  readonly versionStore?: unknown;
+  readonly version?: unknown;
+};
+
+type AttachedVersionServices = {
+  readonly publicService?: unknown;
+  readonly writeService?: unknown;
+  readonly commitService?: unknown;
+  readonly readService?: unknown;
+  readonly refService?: unknown;
+};
+
+type RevertTargetRefCasResult =
+  | { readonly ok: true; readonly checked: boolean }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
 export async function revertWorkbookVersion(
   ctx: DocumentContext,
   input: VersionRevertInput,
@@ -88,9 +138,149 @@ export async function revertWorkbookVersion(
     return versionFailureFromRevertDiagnostics(gateDiagnostics);
   }
 
-  return versionFailureFromRevertDiagnostics(
-    revertDisabledDiagnostics(validated.input, validated.options),
-  );
+  const service = getAttachedVersionRevertService(ctx);
+  if (!service) {
+    return versionFailureFromRevertDiagnostics(
+      revertDisabledDiagnostics(validated.input, validated.options),
+    );
+  }
+
+  const preflightDiagnostics = revertPreflightDiagnostics(validated.input);
+  if (preflightDiagnostics.length > 0) {
+    return versionFailureFromRevertDiagnostics(preflightDiagnostics);
+  }
+
+  const admissionBlock = await readVersionCheckoutAdmissionBlock(ctx);
+  if (admissionBlock) {
+    return versionFailureFromRevertDiagnostics([
+      revertAdmissionDiagnostic(admissionBlock, validated.input),
+    ]);
+  }
+
+  if (validated.options.dryRun !== true) {
+    const cas = await validateRevertTargetRefCas(ctx, validated.input);
+    if (!cas.ok) return versionFailureFromRevertDiagnostics(cas.diagnostics);
+  }
+
+  try {
+    const result = mapRevertProviderResult(
+      await service.revert(validated.input, validated.options),
+      validated.input,
+      validated.options,
+    );
+    return result.ok
+      ? { ok: true, value: result.value }
+      : versionFailureFromRevertDiagnostics(result.diagnostics);
+  } catch {
+    return versionFailureFromRevertDiagnostics([providerErrorDiagnostic()]);
+  }
+}
+
+function getAttachedReadRefService(ctx: DocumentContext): AttachedVersionReadRefService | null {
+  const services = getAttachedVersionServices(ctx);
+  if (!services) return null;
+
+  for (const candidate of [
+    services.readService,
+    services.publicService,
+    services.writeService,
+    services.commitService,
+    services.refService,
+    services,
+  ]) {
+    const readRef = bindMethod(candidate, 'readRef');
+    if (readRef) return { readRef: (name) => readRef(name) };
+  }
+
+  return null;
+}
+
+function getAttachedVersionServices(ctx: DocumentContext): AttachedVersionServices | null {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  return isRecord(services) ? services : null;
+}
+
+function bindMethod(value: unknown, name: string): BoundMethod | null {
+  if (!isRecord(value)) return null;
+  const method = value[name];
+  if (typeof method !== 'function') return null;
+  return (...args) => Reflect.apply(method, value, args) as MaybePromise<unknown>;
+}
+
+async function validateRevertTargetRefCas(
+  ctx: DocumentContext,
+  input: VersionRevertInput,
+): Promise<RevertTargetRefCasResult> {
+  if (!input.targetRef || !input.expectedTargetHead) return { ok: true, checked: false };
+
+  const targetRef = mapPublicTargetRef(input.targetRef);
+  const expectedTargetHead = mapPublicExpectedTargetHead(input.expectedTargetHead);
+  if (!targetRef || !expectedTargetHead) {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidOptionDiagnostic(
+          !targetRef ? 'targetRef' : 'expectedTargetHead',
+          !targetRef
+            ? 'targetRef must name a public-safe version branch.'
+            : 'expectedTargetHead must be a valid expected head record.',
+        ),
+      ],
+    };
+  }
+
+  const readService = getAttachedReadRefService(ctx);
+  if (!readService) return { ok: true, checked: false };
+
+  try {
+    const read = await readService.readRef(targetRef);
+    const current = mapReadRefResult(read);
+    if (!current) {
+      return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+    }
+
+    if (
+      current.commitId === expectedTargetHead.commitId &&
+      revisionsEqual(current.revision, expectedTargetHead.revision)
+    ) {
+      return { ok: true, checked: true };
+    }
+
+    return {
+      ok: false,
+      diagnostics: [
+        revertDiagnostic(
+          VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
+          'Version-control revert is rejected because the target head is stale or cannot be proven current.',
+          {
+            reason: 'staleTargetHead',
+            refName: targetRef,
+            expectedCommitId: expectedTargetHead.commitId,
+            actualCommitId: current.commitId,
+            expectedRevisionKind: expectedTargetHead.revision.kind,
+            expectedRevision: expectedTargetHead.revision.value,
+            actualRevisionKind: current.revision.kind,
+            actualRevision: current.revision.value,
+          },
+          'retry',
+          'ref-not-mutated',
+        ),
+      ],
+    };
+  } catch {
+    return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+  }
+}
+
+function mapReadRefResult(
+  value: unknown,
+): { readonly commitId: WorkbookCommitId; readonly revision: VersionRecordRevision } | null {
+  const ref = unwrapRecordPayload(value, 'ref') ?? unwrapRecordPayload(value, 'value') ?? value;
+  if (!isRecord(ref)) return null;
+  const commitId = mapCommitId(ref.commitId ?? ref.id ?? ref.targetCommitId);
+  const revision = mapPublicRevision(ref.revision ?? ref.refRevision);
+  return commitId && revision ? { commitId, revision } : null;
 }
 
 function validateRevertRequest(input: unknown, options: unknown): ValidationResult {
@@ -138,21 +328,24 @@ function validateTarget(value: unknown, diagnostics: VersionStoreDiagnostic[]): 
       break;
     default:
       validateKnownKeys(value, REVERT_TARGET_KEYS, diagnostics, 'target');
-      diagnostics.push(invalidOptionDiagnostic('target.kind', 'revert target kind is unsupported.'));
+      diagnostics.push(
+        invalidOptionDiagnostic('target.kind', 'revert target kind is unsupported.'),
+      );
   }
 }
 
-function validatePreflight(
-  value: unknown,
-  diagnostics: VersionStoreDiagnostic[],
-): void {
+function validatePreflight(value: unknown, diagnostics: VersionStoreDiagnostic[]): void {
   if (value === undefined) return;
   if (!isRecord(value) || Array.isArray(value)) {
     diagnostics.push(invalidOptionDiagnostic('preflight', 'preflight must be an object.'));
     return;
   }
   validateKnownKeys(value, PREFLIGHT_KEYS, diagnostics, 'preflight');
-  validateDomainAdmissionList(value.unsupportedDomains, 'preflight.unsupportedDomains', diagnostics);
+  validateDomainAdmissionList(
+    value.unsupportedDomains,
+    'preflight.unsupportedDomains',
+    diagnostics,
+  );
   validateDomainAdmissionList(value.opaqueDomains, 'preflight.opaqueDomains', diagnostics);
   validateStaleHead(value.staleHead, diagnostics);
   validateHistoryGapList(value.gaps, diagnostics);
@@ -186,7 +379,9 @@ function validateDomainAdmissionList(
 function validateStaleHead(value: unknown, diagnostics: VersionStoreDiagnostic[]): void {
   if (value === undefined) return;
   if (!isRecord(value) || Array.isArray(value)) {
-    diagnostics.push(invalidOptionDiagnostic('preflight.staleHead', 'staleHead must be an object.'));
+    diagnostics.push(
+      invalidOptionDiagnostic('preflight.staleHead', 'staleHead must be an object.'),
+    );
     return;
   }
   validateKnownKeys(value, STALE_HEAD_KEYS, diagnostics, 'preflight.staleHead');
@@ -234,7 +429,10 @@ function validateReviewInvalidationList(
   if (value === undefined) return;
   if (!Array.isArray(value)) {
     diagnostics.push(
-      invalidOptionDiagnostic('preflight.reviewInvalidation', 'reviewInvalidation must be an array.'),
+      invalidOptionDiagnostic(
+        'preflight.reviewInvalidation',
+        'reviewInvalidation must be an array.',
+      ),
     );
     return;
   }
@@ -260,6 +458,106 @@ function validateOptions(value: unknown, diagnostics: VersionStoreDiagnostic[]):
   validateKnownKeys(value, REVERT_OPTIONS_KEYS, diagnostics, 'options');
   validateOptionalBoolean(value, 'dryRun', diagnostics, 'options');
   validateOptionalBoolean(value, 'includeDiagnostics', diagnostics, 'options');
+}
+
+function revertPreflightDiagnostics(input: VersionRevertInput): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+
+  for (const entry of input.preflight?.unsupportedDomains ?? []) {
+    diagnostics.push(domainDiagnostic(VERSION_REVERT_UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODE, entry));
+  }
+  for (const entry of input.preflight?.opaqueDomains ?? []) {
+    diagnostics.push(domainDiagnostic(VERSION_REVERT_OPAQUE_DOMAIN_DIAGNOSTIC_CODE, entry));
+  }
+  if (input.preflight?.staleHead) {
+    diagnostics.push(
+      revertDiagnostic(
+        VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
+        'Version-control revert is rejected because the target head is stale or cannot be proven current.',
+        {
+          refName: input.preflight.staleHead.refName ?? null,
+          expectedCommitId: input.preflight.staleHead.expectedCommitId,
+          actualCommitId: input.preflight.staleHead.actualCommitId ?? null,
+        },
+      ),
+    );
+  }
+  for (const entry of input.preflight?.gaps ?? []) diagnostics.push(historyGapDiagnostic(entry));
+  if (input.preflight?.cas) {
+    diagnostics.push(
+      revertDiagnostic(
+        VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE,
+        'Version-control revert is rejected because required CAS preconditions cannot be proven.',
+        {
+          refName: input.preflight.cas.refName ?? input.targetRef ?? null,
+          reason: input.preflight.cas.reason ?? 'target-ref-cas',
+          expectedHeadProvided: input.expectedTargetHead ? true : false,
+        },
+        'retry',
+      ),
+    );
+  }
+  for (const entry of input.preflight?.reviewInvalidation ?? []) {
+    diagnostics.push(reviewInvalidationDiagnostic(entry));
+  }
+
+  return diagnostics;
+}
+
+function revertAdmissionDiagnostic(
+  block: VersionCheckoutAdmissionBlock,
+  input: VersionRevertInput,
+): VersionStoreDiagnostic {
+  const payload = revertAdmissionPayload(block, input);
+  if (block.reason === 'pendingProviderWrites' || block.reason === 'syncBatchStatusBlocked') {
+    return revertDiagnostic(
+      VERSION_REVERT_PENDING_PROVIDER_WRITES_DIAGNOSTIC_CODE,
+      'Version-control revert is blocked while remote sync changes are waiting to be promoted into version history.',
+      payload,
+      'retry',
+    );
+  }
+
+  return revertDiagnostic(
+    VERSION_REVERT_WRITE_FENCE_UNAVAILABLE_DIAGNOSTIC_CODE,
+    'Version-control revert is blocked until the workbook is safe for provider writes.',
+    payload,
+    'retry',
+  );
+}
+
+function revertAdmissionPayload(
+  block: VersionCheckoutAdmissionBlock,
+  input: VersionRevertInput,
+): VersionDiagnosticPublicPayload {
+  const payload: Record<string, string | number | boolean | null> = {
+    operation: 'revert',
+    targetKind: input.target.kind,
+    reason: block.reason,
+  };
+
+  for (const key of [
+    'pendingRemoteSegmentCount',
+    'remoteSyncApplyActiveCount',
+    'pendingRemotePromotionActiveCount',
+    'pendingRemotePromotionQueuedCount',
+    'syncBatchStatusPendingCount',
+    'syncBatchStatusBlockedCount',
+    'syncBatchStatusTerminalCount',
+    'syncBatchStatusFailedAfterMutationCount',
+    'syncBatchStatusDroppedCount',
+    'syncBatchStatusRejectedCount',
+    'syncBatchStatusReadFailedCount',
+    'syncBatchStatusFirstState',
+    'syncBatchStatusFirstReason',
+    'syncBatchStatusFirstSegmentId',
+    'syncBatchStatusFirstBatchStatusId',
+  ] as const) {
+    const value = block[key as keyof VersionCheckoutAdmissionBlock];
+    if (isPayloadPrimitive(value)) payload[key] = value;
+  }
+
+  return payload;
 }
 
 function revertDisabledDiagnostics(
@@ -332,7 +630,10 @@ function targetRejectedDiagnostic(target: VersionRevertTarget): VersionStoreDiag
   );
 }
 
-function domainDiagnostic(issueCode: string, entry: VersionRevertDomainAdmission): VersionStoreDiagnostic {
+function domainDiagnostic(
+  issueCode: string,
+  entry: VersionRevertDomainAdmission,
+): VersionStoreDiagnostic {
   return revertDiagnostic(
     issueCode,
     issueCode === VERSION_REVERT_OPAQUE_DOMAIN_DIAGNOSTIC_CODE
@@ -410,6 +711,7 @@ function revertDiagnostic(
   safeMessage: string,
   payload: VersionDiagnosticPublicPayload = {},
   recoverability: VersionStoreDiagnostic['recoverability'] = 'unsupported',
+  mutationGuarantee: VersionStoreDiagnostic['mutationGuarantee'] = 'no-write-attempted',
 ): VersionStoreDiagnostic {
   return {
     issueCode,
@@ -417,10 +719,26 @@ function revertDiagnostic(
     recoverability,
     messageTemplateId: `version.revert.${issueCode}`,
     safeMessage,
-    payload: { operation: 'revert', ...payload },
+    payload: sanitizeRevertPayload({ operation: 'revert', ...payload }),
     redacted: true,
-    mutationGuarantee: 'no-write-attempted',
+    ...(mutationGuarantee ? { mutationGuarantee } : {}),
   };
+}
+
+function sanitizeRevertPayload(
+  payload: VersionDiagnosticPublicPayload,
+): VersionDiagnosticPublicPayload {
+  const sanitized: Record<string, string | number | boolean | null> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (!isPayloadPrimitive(value)) continue;
+    sanitized[key] =
+      typeof value === 'string' && isUnsafeRevertPayloadText(value) ? 'redacted' : value;
+  }
+  return sanitized;
+}
+
+function isUnsafeRevertPayloadText(value: string): boolean {
+  return /(?:preimage|merge-result:|secret|token)/i.test(value);
 }
 
 function validateKnownKeys(
@@ -545,6 +863,26 @@ function validateOptionalPositiveInteger(
   validatePositiveInteger(input[key], option, diagnostics);
 }
 
+function unwrapRecordPayload(
+  value: unknown,
+  key: string,
+): Readonly<Record<string, unknown>> | null {
+  return isRecord(value) && isRecord(value[key]) ? value[key] : null;
+}
+
+function revisionsEqual(left: VersionRecordRevision, right: VersionRecordRevision): boolean {
+  return left.kind === right.kind && left.value === right.value;
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function isPayloadPrimitive(value: unknown): value is string | number | boolean | null {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isFinite(value))
+  );
 }

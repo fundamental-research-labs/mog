@@ -1,11 +1,12 @@
 import { jest } from '@jest/globals';
-import type { VersionRevertInput } from '@mog-sdk/contracts/api';
+import type { VersionRevertInput, VersionRevertResult } from '@mog-sdk/contracts/api';
 
 import { WorkbookVersionImpl } from '../version';
 import {
   VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE,
   VERSION_REVERT_HISTORY_GAP_DIAGNOSTIC_CODE,
   VERSION_REVERT_OPAQUE_DOMAIN_DIAGNOSTIC_CODE,
+  VERSION_REVERT_PENDING_PROVIDER_WRITES_DIAGNOSTIC_CODE,
   VERSION_REVERT_REVIEW_INVALIDATION_DIAGNOSTIC_CODE,
   VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
   VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE,
@@ -16,8 +17,10 @@ import {
 const COMMIT_A = `commit:sha256:${'a'.repeat(64)}` as const;
 const COMMIT_B = `commit:sha256:${'b'.repeat(64)}` as const;
 const COMMIT_C = `commit:sha256:${'c'.repeat(64)}` as const;
+const COMMIT_D = `commit:sha256:${'d'.repeat(64)}` as const;
 const MAIN_REF = 'refs/heads/main' as const;
 const MAIN_REVISION = { kind: 'counter', value: '7' } as const;
+const STALE_MAIN_REVISION = { kind: 'counter', value: '8' } as const;
 
 describe('WorkbookVersion VC-07/00 revert semantics', () => {
   it.each([
@@ -47,45 +50,51 @@ describe('WorkbookVersion VC-07/00 revert semantics', () => {
       } satisfies VersionRevertInput,
       payload: { targetKind: 'mergeCommit', mainlineParent: 2 },
     },
-  ])('admits $label target semantics before the disabled revert boundary', async ({ input, payload }) => {
-    const { version, mutationGuards } = versionWithMutationGuards();
+  ])(
+    'admits $label target semantics before the disabled revert boundary',
+    async ({ input, payload }) => {
+      const { version, mutationGuards } = versionWithMutationGuards(
+        {},
+        { attachRevertService: false },
+      );
 
-    const result = await version.revert(input, { dryRun: true, includeDiagnostics: true });
+      const result = await version.revert(input, { dryRun: true, includeDiagnostics: true });
 
-    expect(result).toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        target: 'workbook.version.revert',
-        diagnostics: expect.arrayContaining([
-          expect.objectContaining({
-            code: VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                operation: 'revert',
-                dependency: 'upstreamRevertContract',
-                targetKind: payload.targetKind,
-                dryRun: true,
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.revert',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  operation: 'revert',
+                  dependency: 'upstreamRevertContract',
+                  targetKind: payload.targetKind,
+                  dryRun: true,
+                }),
               }),
             }),
-          }),
-          expect.objectContaining({
-            code: VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE,
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                operation: 'revert',
-                ...payload,
+            expect.objectContaining({
+              code: VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  operation: 'revert',
+                  ...payload,
+                }),
               }),
             }),
-          }),
-        ]),
-      },
-    });
-    expect(expectDiagnosticCodes(result)).not.toContain('VERSION_INVALID_OPTIONS');
-    expectFailureDiagnosticsRedactedNoWrite(result, mutationGuards);
-  });
+          ]),
+        },
+      });
+      expect(expectDiagnosticCodes(result)).not.toContain('VERSION_INVALID_OPTIONS');
+      expectFailureDiagnosticsRedactedNoWrite(result, mutationGuards);
+    },
+  );
 
   it.each([
     {
@@ -174,7 +183,10 @@ describe('WorkbookVersion VC-07/00 revert semantics', () => {
   });
 
   it('rejects stale target refs without attempting revert, commit, or ref mutation', async () => {
-    const { version, mutationGuards } = versionWithMutationGuards();
+    const { version, mutationGuards } = versionWithMutationGuards(
+      {},
+      { attachRevertService: false },
+    );
 
     const result = await version.revert(
       {
@@ -230,6 +242,184 @@ describe('WorkbookVersion VC-07/00 revert semantics', () => {
   });
 });
 
+describe('WorkbookVersion revert provider recovery semantics', () => {
+  it('delegates merge commit revert with the selected mainline parent', async () => {
+    const input = {
+      target: { kind: 'mergeCommit', commitId: COMMIT_C, mainlineParent: 2 },
+      targetRef: MAIN_REF,
+      expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
+      reason: 'undo-merge',
+    } satisfies VersionRevertInput;
+    const providerResult: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'applied',
+      target: input.target,
+      commitRef: {
+        id: COMMIT_D,
+        refName: MAIN_REF,
+        refRevision: STALE_MAIN_REVISION,
+      },
+      reviewInvalidationIds: ['review-merge-2'],
+      diagnostics: [],
+      mutationGuarantee: 'revert-commit-created',
+    };
+    const revert = jest.fn(async () => providerResult);
+    const readRef = jest.fn(async () => ({
+      ref: { name: MAIN_REF, commitId: COMMIT_B, revision: MAIN_REVISION },
+    }));
+    const version = workbookVersionWithRevertService(revert, { readService: { readRef } });
+
+    await expect(version.revert(input, { includeDiagnostics: true })).resolves.toStrictEqual({
+      ok: true,
+      value: providerResult,
+    });
+    expect(readRef).toHaveBeenCalledWith(MAIN_REF);
+    expect(revert).toHaveBeenCalledWith(input, { includeDiagnostics: true });
+  });
+
+  it('preserves range revert conflict diagnostics returned by the provider', async () => {
+    const input = {
+      target: { kind: 'range', baseCommitId: COMMIT_A, headCommitId: COMMIT_C },
+    } satisfies VersionRevertInput;
+    const revert = jest.fn(async () => ({
+      schemaVersion: 1,
+      status: 'requires-review',
+      target: input.target,
+      diagnostics: [
+        {
+          issueCode: 'VERSION_REVERT_CONFLICT',
+          severity: 'error',
+          recoverability: 'retry',
+          messageTemplateId: 'version.revert.VERSION_REVERT_CONFLICT',
+          safeMessage: 'Range revert requires conflict review.',
+          payload: {
+            operation: 'revert',
+            conflictKind: 'same-property',
+            rangeConflictCount: 2,
+            secret: 'do-not-leak',
+          },
+          redacted: true,
+          mutationGuarantee: 'ref-not-mutated',
+        },
+      ],
+      mutationGuarantee: 'ref-not-mutated',
+    }));
+    const version = workbookVersionWithRevertService(revert);
+
+    const result = await version.revert(input, { dryRun: true });
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        status: 'requires-review',
+        target: input.target,
+        diagnostics: [
+          expect.objectContaining({
+            issueCode: 'VERSION_REVERT_CONFLICT',
+            recoverability: 'retry',
+            safeMessage: 'Range revert requires conflict review.',
+            payload: expect.objectContaining({
+              operation: 'revert',
+              targetKind: 'range',
+              conflictKind: 'same-property',
+              rangeConflictCount: 2,
+            }),
+            mutationGuarantee: 'ref-not-mutated',
+          }),
+        ],
+        mutationGuarantee: 'ref-not-mutated',
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('do-not-leak');
+    expect(revert).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks apply when the target ref moved after a dry-run preview', async () => {
+    const input = {
+      target: { kind: 'commit', commitId: COMMIT_A },
+      targetRef: MAIN_REF,
+      expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
+    } satisfies VersionRevertInput;
+    const preview: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'planned',
+      target: input.target,
+      diagnostics: [],
+      mutationGuarantee: 'no-write-attempted',
+    };
+    const revert = jest.fn(async () => preview);
+    const readRef = jest.fn(async () => ({
+      ref: { name: MAIN_REF, commitId: COMMIT_C, revision: STALE_MAIN_REVISION },
+    }));
+    const version = workbookVersionWithRevertService(revert, { readService: { readRef } });
+
+    await expect(version.revert(input, { dryRun: true })).resolves.toStrictEqual({
+      ok: true,
+      value: preview,
+    });
+    const stale = await version.revert(input, { includeDiagnostics: true });
+
+    expect(stale).toMatchObject({
+      ok: false,
+      error: {
+        target: 'workbook.version.revert',
+        diagnostics: [
+          expect.objectContaining({
+            code: VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
+            data: expect.objectContaining({
+              mutationGuarantee: 'ref-not-mutated',
+              payload: expect.objectContaining({
+                operation: 'revert',
+                reason: 'staleTargetHead',
+                refName: MAIN_REF,
+                expectedCommitId: COMMIT_B,
+                actualCommitId: COMMIT_C,
+                expectedRevision: MAIN_REVISION.value,
+                actualRevision: STALE_MAIN_REVISION.value,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(revert).toHaveBeenCalledTimes(1);
+    expect(readRef).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks provider revert while pending remote writes are waiting for promotion', async () => {
+    const revert = jest.fn(async () => ({
+      schemaVersion: 1,
+      status: 'planned',
+      target: singleCommitInput().target,
+      diagnostics: [],
+      mutationGuarantee: 'no-write-attempted',
+    }));
+    const version = workbookVersionWithRevertService(revert, {
+      surfaceStatusService: { readDirtyStatus: pendingProviderWritesDirtyStatus },
+    });
+
+    await expect(version.revert(singleCommitInput())).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: VERSION_REVERT_PENDING_PROVIDER_WRITES_DIAGNOSTIC_CODE,
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'revert',
+                reason: 'pendingProviderWrites',
+                pendingRemoteSegmentCount: 2,
+                remoteSyncApplyActiveCount: 1,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(revert).not.toHaveBeenCalled();
+  });
+});
+
 describe('WorkbookVersion revert facade disabled admission', () => {
   it.each([
     {
@@ -244,36 +434,39 @@ describe('WorkbookVersion revert facade disabled admission', () => {
       message: 'Workbook editing is disabled by host feature gates.',
       reason: 'editingDisabled',
     },
-  ])('blocks revert before provider access when disabled by $label', async ({ ctx, message, reason }) => {
-    const revert = jest.fn();
-    const version = new WorkbookVersionImpl({
-      ...ctx,
-      versioning: { revertService: { revert } },
-    } as any);
+  ])(
+    'blocks revert before provider access when disabled by $label',
+    async ({ ctx, message, reason }) => {
+      const revert = jest.fn();
+      const version = new WorkbookVersionImpl({
+        ...ctx,
+        versioning: { revertService: { revert } },
+      } as any);
 
-    await expect(version.revert(singleCommitInput())).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        target: 'workbook.version.revert',
-        diagnostics: [
-          expect.objectContaining({
-            code: 'VERSION_CAPABILITY_DISABLED',
-            message,
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                operation: 'revert',
-                capability: 'version:revert',
-                reason,
+      await expect(version.revert(singleCommitInput())).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.revert',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CAPABILITY_DISABLED',
+              message,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  operation: 'revert',
+                  capability: 'version:revert',
+                  reason,
+                }),
               }),
             }),
-          }),
-        ],
-      },
-    });
-    expect(revert).not.toHaveBeenCalled();
-  });
+          ],
+        },
+      });
+      expect(revert).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects host-disabled revert capability before provider access or ref mutation', async () => {
     const { version, mutationGuards } = versionWithMutationGuards({
@@ -352,7 +545,10 @@ describe('WorkbookVersion revert facade disabled admission', () => {
   });
 
   it('redacts failure diagnostics and omits caller-only revert details while leaving refs untouched', async () => {
-    const { version, mutationGuards } = versionWithMutationGuards();
+    const { version, mutationGuards } = versionWithMutationGuards(
+      {},
+      { attachRevertService: false },
+    );
     const callerOnlyRequestId = 'client-request-secret-123';
     const callerOnlyReason = 'sensitive revert narrative';
     const privateTargetRef = 'refs/heads/review/private-revert-subject';
@@ -485,44 +681,49 @@ describe('WorkbookVersion revert facade disabled admission', () => {
       code: VERSION_REVERT_REVIEW_INVALIDATION_DIAGNOSTIC_CODE,
       payload: { reviewId: 'review-1', expectedRevision: 3, reason: 'reverted-subject' },
     },
-  ])('rejects $label with stable diagnostics while revert is unavailable', async ({ input, code, payload }) => {
-    const revert = jest.fn();
-    const version = new WorkbookVersionImpl({
-      versioning: { revertService: { revert } },
-    } as any);
+  ])(
+    'rejects $label with stable diagnostics while revert is unavailable',
+    async ({ input, code, payload }) => {
+      const revert = jest.fn();
+      const version = new WorkbookVersionImpl({
+        versioning: {},
+      } as any);
 
-    await expect(version.revert(input, { dryRun: true, includeDiagnostics: true })).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        target: 'workbook.version.revert',
-        diagnostics: expect.arrayContaining([
-          expect.objectContaining({
-            code: VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                operation: 'revert',
-                dependency: 'upstreamRevertContract',
-                dryRun: true,
+      await expect(
+        version.revert(input, { dryRun: true, includeDiagnostics: true }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.revert',
+          diagnostics: expect.arrayContaining([
+            expect.objectContaining({
+              code: VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  operation: 'revert',
+                  dependency: 'upstreamRevertContract',
+                  dryRun: true,
+                }),
               }),
             }),
-          }),
-          expect.objectContaining({
-            code,
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                operation: 'revert',
-                ...payload,
+            expect.objectContaining({
+              code,
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  operation: 'revert',
+                  ...payload,
+                }),
               }),
             }),
-          }),
-        ]),
-      },
-    });
-    expect(revert).not.toHaveBeenCalled();
-  });
+          ]),
+        },
+      });
+      expect(revert).not.toHaveBeenCalled();
+    },
+  );
 });
 
 function singleCommitInput(): VersionRevertInput {
@@ -531,7 +732,50 @@ function singleCommitInput(): VersionRevertInput {
   };
 }
 
-function versionWithMutationGuards(ctx: Record<string, unknown> = {}) {
+function workbookVersionWithRevertService(
+  revert: ReturnType<typeof jest.fn>,
+  versioning: Record<string, unknown> = {},
+): WorkbookVersionImpl {
+  return new WorkbookVersionImpl({
+    versioning: {
+      ...versioning,
+      revertService: { revert },
+    },
+  } as any);
+}
+
+function pendingProviderWritesDirtyStatus() {
+  return {
+    statusRevision: 'dirty:pending-remote:2',
+    checkoutPreflightToken: 'preflight:pending-remote:2',
+    hasUncommittedLocalChanges: false,
+    commitEligibleChanges: false,
+    unsupportedDirtyDomains: [],
+    pendingProviderWrites: true,
+    pendingRecalc: false,
+    checkoutSafe: false,
+    unsafeReasons: [
+      {
+        code: 'version.surfaceStatus.pendingProviderWrites',
+        severity: 'error',
+        message: 'Pending provider writes are waiting for promotion.',
+        data: {
+          pendingRemoteSegmentCount: 2,
+          remoteSyncApplyActiveCount: 1,
+          pendingRemotePromotionActiveCount: 0,
+          pendingRemotePromotionQueuedCount: 0,
+        },
+      },
+    ],
+    source: 'VC-05',
+    diagnostics: [],
+  };
+}
+
+function versionWithMutationGuards(
+  ctx: Record<string, unknown> = {},
+  options: { readonly attachRevertService?: boolean } = {},
+) {
   const mutationGuards = {
     revert: jest.fn(),
     commit: jest.fn(),
@@ -546,7 +790,9 @@ function versionWithMutationGuards(ctx: Record<string, unknown> = {}) {
   const version = new WorkbookVersionImpl({
     ...ctx,
     versioning: {
-      revertService: { revert: mutationGuards.revert },
+      ...(options.attachRevertService === false
+        ? {}
+        : { revertService: { revert: mutationGuards.revert } }),
       writeService: { commit: mutationGuards.commit },
       branchService: {
         createBranch: mutationGuards.createBranch,

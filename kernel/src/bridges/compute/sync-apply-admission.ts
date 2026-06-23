@@ -125,6 +125,10 @@ function createSyncOperationContext(
       : capturePolicy === 'derivedOnly'
         ? 'shadowOnly'
         : 'captureDisabledNoHistory';
+  const validationBlock = validationBlockForDiagnostics(validationDiagnostics);
+  const exclusionReason = validationBlock.exclusionReason ?? provenance.exclusionDiagnostic?.reason;
+  const exclusionSubreason =
+    validationBlock.exclusionSubreason ?? provenance.exclusionDiagnostic?.subreason;
   const operationId = [
     'sync',
     provenance.sourceKind,
@@ -162,14 +166,10 @@ function createSyncOperationContext(
       ...(provenance.causationIds?.length ? { causationIds: [...provenance.causationIds] } : {}),
       replay: provenance.replay,
       system: provenance.system,
-      commitGrouping: commitGroupingForProvenance(provenance, validationDiagnostics),
+      commitGrouping: commitGroupingForProvenance(provenance, validationBlock),
       validationDiagnosticCount: validationDiagnostics.length,
-      ...(provenance.exclusionDiagnostic?.reason
-        ? { exclusionReason: provenance.exclusionDiagnostic.reason }
-        : {}),
-      ...(provenance.exclusionDiagnostic?.subreason
-        ? { exclusionSubreason: provenance.exclusionDiagnostic.subreason }
-        : {}),
+      ...(exclusionReason ? { exclusionReason } : {}),
+      ...(exclusionSubreason ? { exclusionSubreason } : {}),
     },
   };
 }
@@ -223,15 +223,136 @@ function versionAuthorForProvenance(provenance: SyncUpdateProvenance): {
   }
 }
 
+interface SyncValidationBlock {
+  readonly commitGrouping: VersionSyncCommitGrouping | undefined;
+  readonly exclusionReason: string | undefined;
+  readonly exclusionSubreason: string | undefined;
+}
+
+const BATCH_FAILURE_DIAGNOSTIC_REASONS = new Set([
+  'batchHashMismatch',
+  'batchOrderMismatch',
+  'orderedSubUpdateValidationFailed',
+  'subUpdateValidationFailed',
+  'syncBatchStatusConflict',
+  'syncBatchStatusReservationFailed',
+  'syncBatchStatusFailedAfterMutation',
+  'syncBatchStatusTerminalRejected',
+]);
+
+const BATCH_FAILURE_DIAGNOSTIC_SUBREASONS = new Set([
+  'blockedBatchFailure',
+  'batchHashMismatch',
+  'batchOrderMismatch',
+  'failedAfterMutation',
+  'orderedSubUpdatePayloadHashMismatch',
+  'subUpdateApplyFailed',
+  'subUpdateCountMismatch',
+  'subUpdateProofFailed',
+  'subUpdateReservationFailed',
+  'sync-batch-status-conflict',
+  'sync-batch-status-failed-after-mutation',
+  'sync-batch-status-reservation-failed',
+  'sync-batch-status-terminal-rejected',
+  'syncBatchStatusConflict',
+  'syncBatchStatusFailedAfterMutation',
+  'syncBatchStatusReservationFailed',
+  'syncBatchStatusTerminalRejected',
+]);
+
+const REDACTION_SAFE_VALIDATION_REASONS = new Set([
+  'payloadHashMismatch',
+  'missingProof',
+  'partialCoverage',
+  'invalidProofContract',
+  'provenancePayloadHashMismatch',
+  'missingStableOrigin',
+  'unverifiedProvenance',
+  'unknownAuthor',
+  'mixedAuthors',
+  'missingRedactionKey',
+  'invalidCapturePolicy',
+  ...BATCH_FAILURE_DIAGNOSTIC_REASONS,
+]);
+
+const REDACTION_SAFE_VALIDATION_SUBREASONS = new Set([
+  'payloadHashMismatch',
+  'missingProof',
+  'partialCoverage',
+  'missingProofAudience',
+  'canonicalPayloadHashMismatch',
+  'canonicalPayloadCoverageMismatch',
+  'unsupportedCanonicalPayload',
+  'provenancePayloadHashMismatch',
+  'stableOriginMismatch',
+  'unverifiedTrust',
+  'unknownAuthor',
+  'mixedAuthors',
+  'missingRedactionKey',
+  'localAuthorInferenceNotAllowed',
+  ...BATCH_FAILURE_DIAGNOSTIC_SUBREASONS,
+]);
+
+function validationBlockForDiagnostics(
+  validationDiagnostics: readonly SyncUpdateValidationDiagnostic[],
+): SyncValidationBlock {
+  for (const diagnostic of validationDiagnostics) {
+    if (!isBatchFailureDiagnostic(diagnostic)) continue;
+    return {
+      commitGrouping: 'blockedBatchFailure',
+      exclusionReason: redactionSafeValidationReason(diagnostic.reason),
+      exclusionSubreason:
+        redactionSafeValidationSubreason(diagnostic.subreason) ?? 'blockedBatchFailure',
+    };
+  }
+
+  for (const diagnostic of validationDiagnostics) {
+    if (diagnostic.reason !== 'missingRedactionKey') continue;
+    return {
+      commitGrouping: 'blockedMissingRedactionKey',
+      exclusionReason: 'missingRedactionKey',
+      exclusionSubreason: redactionSafeValidationSubreason(diagnostic.subreason),
+    };
+  }
+
+  return {
+    commitGrouping: undefined,
+    exclusionReason: undefined,
+    exclusionSubreason: undefined,
+  };
+}
+
+function isBatchFailureDiagnostic(diagnostic: SyncUpdateValidationDiagnostic): boolean {
+  const reason = String(diagnostic.reason);
+  const subreason = diagnostic.subreason === undefined ? undefined : String(diagnostic.subreason);
+  return (
+    BATCH_FAILURE_DIAGNOSTIC_REASONS.has(reason) ||
+    (subreason !== undefined && BATCH_FAILURE_DIAGNOSTIC_SUBREASONS.has(subreason))
+  );
+}
+
+function redactionSafeValidationReason(reason: SyncUpdateValidationDiagnostic['reason']): string {
+  const value = String(reason);
+  return REDACTION_SAFE_VALIDATION_REASONS.has(value) ? value : 'invalidCapturePolicy';
+}
+
+function redactionSafeValidationSubreason(
+  subreason: SyncUpdateValidationDiagnostic['subreason'] | undefined,
+): string | undefined {
+  if (subreason === undefined) return undefined;
+  const value = String(subreason);
+  return REDACTION_SAFE_VALIDATION_SUBREASONS.has(value) ? value : undefined;
+}
+
 function commitGroupingForProvenance(
   provenance: SyncUpdateProvenance,
-  validationDiagnostics: readonly SyncUpdateValidationDiagnostic[],
+  validationBlock: SyncValidationBlock,
 ): VersionSyncCommitGrouping {
   if (provenance.capturePolicy !== 'commitEligible') {
     return 'excludedLifecycle';
   }
-  if (validationDiagnostics.some((diagnostic) => diagnostic.reason === 'missingRedactionKey')) {
-    return 'blockedMissingRedactionKey';
+  if (validationBlock.commitGrouping !== undefined) {
+    return validationBlock.commitGrouping;
   }
   if (provenance.trust.status !== 'verified') {
     return 'blockedUnverified';

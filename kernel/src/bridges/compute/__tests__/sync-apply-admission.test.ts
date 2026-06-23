@@ -163,6 +163,15 @@ function makeVerifiedProviderContext(
   });
 }
 
+function forwardCompatibleValidationDiagnostic(input: {
+  readonly reason: string;
+  readonly subreason?: string;
+  readonly field?: string;
+  readonly message: string;
+}): SyncUpdateValidationDiagnostic {
+  return input as SyncUpdateValidationDiagnostic;
+}
+
 describe('sync apply admission', () => {
   it('rejects raw sync mutations without admitted provenance context before transport', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
@@ -454,6 +463,87 @@ describe('sync apply admission', () => {
       validationDiagnosticCount: 1,
     });
     expect(richResult).toEqual(syncApplyWithMetadataResult(metadata));
+  });
+
+  it('maps ordered batch validation failures before the generic mixed-author bucket', async () => {
+    const diagnostics: MutationAdmissionDiagnostic[] = [];
+    const mutation = mutationResult();
+    const payloadHash = '8'.repeat(64);
+    const baseContext = makeVerifiedProviderContext(payloadHash);
+    const syncApplyContext = createAdmittedSyncApplyContext({
+      source: baseContext.source,
+      docId: baseContext.docId,
+      envelopeVersion: baseContext.envelopeVersion,
+      providerRefId: baseContext.providerRefId,
+      providerEpoch: baseContext.providerEpoch,
+      updateId: baseContext.updateId,
+      payloadHash: baseContext.payloadHash,
+      provenance: {
+        ...baseContext.provenance,
+        author: {
+          kind: 'mixedRemote',
+          participantCount: 2,
+          reason: 'multipleProvenAuthors',
+        },
+      },
+      validationDiagnostics: [
+        forwardCompatibleValidationDiagnostic({
+          reason: 'mixedAuthors',
+          subreason: 'blockedBatchFailure',
+          field: 'author',
+          message:
+            'Provider batch raw-batch-id:123 included private@example.com in a later sub-update.',
+        }),
+      ],
+    });
+    const metadata = syncMutationMetadata(mutation, syncApplyContext);
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), metadata]),
+    };
+    const core = createStartedCore(makeMockContext(diagnostics), transport);
+
+    const richResult = await core.syncApplyWithMetadata(new Uint8Array([8]), syncApplyContext);
+    const collaboration =
+      richResult.metadata.provenanceReport.appliedContext.operationContext.collaboration;
+
+    expect(syncApplyContext.operationContext.collaboration).toMatchObject({
+      authorState: 'mixedRemote',
+      commitGrouping: 'blockedBatchFailure',
+      validationDiagnosticCount: 1,
+      exclusionReason: 'mixedAuthors',
+      exclusionSubreason: 'blockedBatchFailure',
+    });
+    expect(collaboration).toMatchObject({
+      authorState: 'mixedRemote',
+      commitGrouping: 'blockedBatchFailure',
+      validationDiagnosticCount: 1,
+      exclusionReason: 'mixedAuthors',
+      exclusionSubreason: 'blockedBatchFailure',
+    });
+    const serialized = JSON.stringify(collaboration);
+    expect(serialized).not.toContain('raw-batch-id');
+    expect(serialized).not.toContain('private@example.com');
+  });
+
+  it('redacts forward-compatible batch failure subreasons from the wire context', () => {
+    const payloadHash = '9'.repeat(64);
+    const syncApplyContext = makeVerifiedProviderContext(payloadHash, [
+      forwardCompatibleValidationDiagnostic({
+        reason: 'orderedSubUpdateValidationFailed',
+        subreason: 'provider-batch:secret-raw-id',
+        field: 'batch',
+        message: 'Sub-update proof failed for provider-batch:secret-raw-id.',
+      }),
+    ]);
+    const wireContext = toSyncApplyOperationContextWire(syncApplyContext);
+
+    expect(wireContext.operationContext.collaboration).toMatchObject({
+      commitGrouping: 'blockedBatchFailure',
+      validationDiagnosticCount: 1,
+      exclusionReason: 'orderedSubUpdateValidationFailed',
+      exclusionSubreason: 'blockedBatchFailure',
+    });
+    expect(JSON.stringify(wireContext)).not.toContain('provider-batch:secret-raw-id');
   });
 
   it('records verified live sync mutation results for pending remote capture', async () => {

@@ -1,0 +1,58 @@
+# Highest intended visibility for serializable types in `versioning/mod.rs`.
+# Generation does not consume this manifest yet; the validator keeps it complete.
+
+public_api = [
+  "CapturePolicyWire",
+  "ObjectDigest",
+  "VersionActorKindWire",
+  "VersionAuthorWire",
+  "VersionCaptureDiagnosticsSinkRecordKindWire",
+  "VersionCaptureFailureCodeWire",
+  "VersionCaptureFailureSinkRecordWire",
+  "VersionCaptureFailureStageWire",
+  "VersionDiagnosticSeverityWire",
+  "VersionDomainCapabilityState",
+  "VersionDomainClass",
+  "VersionObjectDigestAlgorithm",
+  "VersionOperationContextWire",
+  "VersionOperationKindWire",
+  "VersionRedactionKeySubjectWire",
+  "VersionRedactionKeyWire",
+  "VersionRedactionPolicyWire",
+  "VersionSyncAuthorStateWire",
+  "VersionSyncCommitGroupingWire",
+  "VersionSyncOperationContextWire",
+  "VersionSyncOriginKindWire",
+  "VersionSyncSourceKindWire",
+  "VersionSyncTrustStatusWire",
+  "VersionWriteAdmissionModeWire",
+]
+
+kernel_bridge = [
+  "CanonicalCellValue",
+  "CanonicalDirectFormat",
+  "CanonicalFormula",
+  "CanonicalFormulaRef",
+  "SemanticCellState",
+  "SemanticChange",
+  "SemanticChangeKind",
+  "SemanticColumnState",
+  "SemanticCompletenessDiagnostic",
+  "SemanticDiagnosticSeverity",
+  "SemanticDomainCoverage",
+  "SemanticDomainCoverageStatus",
+  "SemanticDomainState",
+  "SemanticObjectDigest",
+  "SemanticObjectKind",
+  "SemanticRowState",
+  "SemanticSheetState",
+  "SemanticWorkbookDiff",
+  "SemanticWorkbookState",
+  "SemanticWorkbookStateEnvelope",
+  "SyncApplyMutationMetadataWire",
+  "SyncApplyOperationContextWire",
+  "SyncProvenanceApplyEvaluationStatus",
+  "SyncProvenanceApplyReport",
+]
+
+rust_only = []

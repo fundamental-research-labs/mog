@@ -27,3 +27,5 @@ thiserror = { workspace = true }
 [dev-dependencies]
 # Drives the `tests/no_bare_f64_at_boundary.rs` build-time gate.
 finite-at-boundary-walker = { path = "../finite-at-boundary-walker" }
+syn = { version = "2", features = ["full"] }
+toml = "1"

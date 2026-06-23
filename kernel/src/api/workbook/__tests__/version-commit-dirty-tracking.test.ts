@@ -303,6 +303,44 @@ describe('WorkbookVersion dirty tracking around commit', () => {
     });
   });
 
+  it('rejects zero-parent service summaries as empty normal commits', async () => {
+    const commit = jest.fn(async () => ({
+      status: 'success',
+      commit: {
+        id: commitId('child'),
+        parents: [],
+        createdAt: CREATED_AT,
+        author: VERSION_AUTHOR,
+      },
+    }));
+    const wb = createWorkbook({
+      versioning: {
+        writeService: { commit } as any,
+      },
+    });
+
+    const result = await wb.version.commit();
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MISSING_CHANGE_SET',
+            data: expect.objectContaining({
+              mutationGuarantee: 'unknown-after-crash',
+              payload: expect.objectContaining({
+                operation: 'commitGraphWrite',
+                reason: 'empty-normal-commit',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps workbook dirty when the commit save head token is stale at baseline update time', async () => {
     const eventBus = createMockEventBus();
     const commit = jest.fn(async () => ({

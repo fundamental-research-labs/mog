@@ -25,90 +25,36 @@ const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
-const VERSION_COMMIT_OPTION_KEYS = new Set([
-  'message',
-  'targetRef',
-  'redactionPolicy',
-  'expectedHead',
-  'mode',
-]);
+const VERSION_COMMIT_OPTION_KEYS = new Set(['message', 'targetRef', 'redactionPolicy', 'expectedHead', 'mode']);
 const VERSION_COMMIT_EXPECTED_HEAD_KEYS = new Set(['commitId', 'revision', 'symbolicHeadRevision']);
 const VERSION_COMMIT_MODE_KEYS = new Set(['kind']);
-const REDACTION_POLICY_KEYS = new Set([
-  'mode',
-  'redactSecrets',
-  'redactExternalLinks',
-  'redactAgentTrace',
-]);
+const REDACTION_POLICY_KEYS = new Set(['mode', 'redactSecrets', 'redactExternalLinks', 'redactAgentTrace']);
 const REDACTION_POLICY_MODES = new Set(['default', 'strict', 'clean']);
 const REF_MUTATION_FIELDS = new Set(['ref', 'branch']);
-const AUTHOR_SPOOFING_FIELDS = new Set([
-  'author',
-  'committer',
-  'principal',
-  'principalScope',
-  'updatedBy',
-]);
+const AUTHOR_SPOOFING_FIELDS = new Set(['author', 'committer', 'principal', 'principalScope', 'updatedBy']);
 const PARENT_OVERRIDE_FIELDS = new Set(['parents', 'parentCommitIds', 'parentIds', 'baseCommitId']);
-const DIRECT_SEGMENT_FIELDS = new Set([
-  'segmentIds',
-  'segments',
-  'mutationSegments',
-  'changeSet',
-  'semanticChangeSet',
-  'semanticChanges',
-  'operations',
-  'captureFrontier',
-  'frontier',
-]);
-const ROOT_IMPORT_PROVENANCE_FIELDS = new Set([
-  'expectedRegistryRevision',
-  'root',
-  'rootEvidence',
-  'importRootEvidence',
-  'provenance',
-  'trustRoots',
-]);
+const DIRECT_SEGMENT_FIELDS = new Set(['segmentIds', 'segments', 'mutationSegments', 'changeSet', 'semanticChangeSet', 'semanticChanges', 'operations', 'captureFrontier', 'frontier']);
+const ROOT_IMPORT_PROVENANCE_FIELDS = new Set(['expectedRegistryRevision', 'root', 'rootEvidence', 'importRootEvidence', 'provenance', 'trustRoots']);
+const ANNOTATION_BINDING_FIELDS = new Set(['annotation', 'annotationDigest', 'annotationRecord', 'annotationRevision', 'tags', 'title']);
+const OBJECT_BINDING_FIELDS = new Set(['authorizationSnapshot', 'authorizationSnapshotDigest', 'commitId', 'commitRecord', 'objectRecords', 'redactionPolicyDigest', 'redactionSummary', 'redactionSummaryDigest', 'semanticChangeSetDigest', 'snapshotRoot', 'snapshotRootDigest', 'snapshotRootRecord', 'verificationSummary', 'verificationSummaryDigest']);
+const OBJECT_KIND_BY_TYPE: Record<string, string> = { 'workbook.snapshotRoot.v1': 'snapshot-root', 'workbook.semanticChangeSet.v1': 'semantic-change-set', 'workbook.mutationSegment.v1': 'mutation-segment', 'workbook.redactionSummary.v1': 'redaction-summary', 'workbook.verificationSummary.v1': 'verification-summary', 'workbook.authorizationSnapshot.v1': 'authorization-snapshot' };
+const SAFE_MESSAGES: Record<string, string> = { VERSION_GRAPH_UNINITIALIZED: 'The workbook version graph is not initialized for this document.', VERSION_INVALID_OPTIONS: 'The version commit options are invalid for this method.', VERSION_PERMISSION_DENIED: 'The requested version commit option is not authorized in this public slice.', VERSION_REF_WRITE_UNAVAILABLE: 'Public version commits cannot target or mutate arbitrary refs in this slice.', VERSION_STORE_READ_ONLY: 'The attached version store is read-only for this document.', VERSION_REF_CONFLICT: 'The version ref changed while the commit was in progress.', VERSION_MISSING_CHANGE_SET: 'The version commit has no eligible captured change set.', VERSION_MISSING_SNAPSHOT_ROOT: 'The version commit is missing its materializable snapshot root.', VERSION_MISSING_MUTATION_SEGMENT: 'The version commit is missing a captured mutation segment.', VERSION_DIGEST_MISMATCH: 'A version commit object digest does not match its canonical bytes.', VERSION_WRONG_OBJECT_KIND: 'A version commit dependency has the wrong object kind.', VERSION_UNSUPPORTED_SCHEMA: 'A version commit dependency uses an unsupported schema.', VERSION_REDACTION_VIOLATION: 'The version commit could not prove required redaction before storage.', VERSION_ANNOTATION_WRITE_FAILED: 'The version commit annotation could not be written durably.', VERSION_UNMATERIALIZABLE_COMMIT: 'The version commit is not materializable by the attached service.', VERSION_INVALID_COMMIT_PAYLOAD: 'The version write service returned an invalid public commit payload.' };
+const REPAIR_ISSUES = new Set(['VERSION_DANGLING_REF', 'VERSION_MISSING_OBJECT', 'VERSION_MISSING_SNAPSHOT_ROOT', 'VERSION_MISSING_CHANGE_SET', 'VERSION_MISSING_MUTATION_SEGMENT', 'VERSION_DIGEST_MISMATCH', 'VERSION_WRONG_OBJECT_KIND', 'VERSION_OBJECT_STORE_FAILURE', 'VERSION_INVALID_COMMIT_PAYLOAD', 'VERSION_UNMATERIALIZABLE_COMMIT']);
+const UNSUPPORTED_ISSUES = new Set(['VERSION_GRAPH_UNINITIALIZED', 'VERSION_PERMISSION_DENIED', 'VERSION_REF_WRITE_UNAVAILABLE', 'VERSION_STORE_READ_ONLY']);
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 
-type AttachedVersionWriteService = {
-  commit?: (options?: VersionCommitOptions) => MaybePromise<unknown>;
-};
-
-type NormalCommitCaptureAdmissionState = {
-  readonly pendingCapturedNormalMutationCount: number;
-  readonly pendingUncapturedNormalMutationCount: number;
-};
-
-type VersionSurfaceDirtyAdmissionState = {
-  readonly hasUncommittedLocalChanges: boolean;
-};
+type AttachedVersionWriteService = { commit?: (options?: VersionCommitOptions) => MaybePromise<unknown> };
+type NormalCommitCaptureAdmissionState = { readonly pendingCapturedNormalMutationCount: number; readonly pendingUncapturedNormalMutationCount: number };
+type VersionSurfaceDirtyAdmissionState = { readonly hasUncommittedLocalChanges: boolean };
 
 type MaybeVersionRuntimeContext = DocumentContext & {
-  readonly versioning?: unknown;
-  readonly versionStore?: unknown;
-  readonly version?: unknown;
+  readonly versioning?: unknown; readonly versionStore?: unknown; readonly version?: unknown;
 };
 
-type CommitValidationResult =
-  | {
-      readonly ok: true;
-      readonly options: VersionCommitOptions;
-    }
-  | {
-      readonly ok: false;
-      readonly diagnostics: readonly VersionStoreDiagnostic[];
-    };
-
-type NormalizedCommitOptions = {
-  message?: string;
-  targetRef?: VersionMainRefName | VersionRefName;
-  redactionPolicy?: RedactionPolicy;
-  expectedHead?: VersionCommitOptions['expectedHead'];
-  mode?: { kind: 'normal' };
-};
+type CommitValidationResult = { readonly ok: true; readonly options: VersionCommitOptions } | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+type NormalizedCommitOptions = { message?: string; targetRef?: VersionMainRefName | VersionRefName; redactionPolicy?: RedactionPolicy; expectedHead?: VersionCommitOptions['expectedHead']; mode?: { kind: 'normal' } };
 
 export function hasAttachedVersionWriteService(ctx: DocumentContext): boolean {
   return Boolean(getAttachedVersionWriteService(ctx)?.commit);
@@ -136,14 +82,10 @@ export async function commitWorkbookVersion(
   }
 
   const writeService = getAttachedVersionWriteService(ctx);
-  if (!writeService?.commit) {
-    return versionFailureFromStoreDiagnostics('commit', [serviceUnavailableDiagnostic()]);
-  }
+  if (!writeService?.commit) return versionFailureFromStoreDiagnostics('commit', [serviceUnavailableDiagnostic()]);
 
   const admissionDiagnostics = await normalCommitCaptureAdmissionDiagnostics(ctx);
-  if (admissionDiagnostics.length > 0) {
-    return versionFailureFromStoreDiagnostics('commit', admissionDiagnostics);
-  }
+  if (admissionDiagnostics.length > 0) return versionFailureFromStoreDiagnostics('commit', admissionDiagnostics);
 
   let result: unknown;
   try {
@@ -181,13 +123,9 @@ function getAttachedVersionServices(ctx: DocumentContext): unknown {
 
 function toWriteService(value: unknown): AttachedVersionWriteService | null {
   if (isRawGraphStore(value)) return null;
-
   const commit = bindMethod(value, 'commit') ?? bindMethod(value, 'commitVersion');
   if (!commit) return null;
-
-  return {
-    commit: (options) => commit(options),
-  };
+  return { commit: (options) => commit(options) };
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {
@@ -214,9 +152,7 @@ async function normalCommitCaptureAdmissionDiagnostics(
 
   const hasUncapturedNormalMutations = captureState.pendingUncapturedNormalMutationCount > 0;
   const dirtyState = await readSurfaceDirtyAdmissionState(ctx);
-  if (!hasUncapturedNormalMutations && dirtyState?.hasUncommittedLocalChanges !== true) {
-    return [];
-  }
+  if (!hasUncapturedNormalMutations && dirtyState?.hasUncommittedLocalChanges !== true) return [];
 
   return [missingChangeSetDiagnostic(captureState, dirtyState)];
 }
@@ -321,13 +257,8 @@ function validateCommitOptions(input: VersionCommitOptions): CommitValidationRes
   }
 
   if ('message' in input) {
-    if (typeof input.message !== 'string') {
-      diagnostics.push(
-        invalidCommitOptionDiagnostic('message', 'commit message must be a string.'),
-      );
-    } else {
-      options.message = input.message;
-    }
+    const message = validateCommitMessage(input.message, diagnostics);
+    if (message !== undefined) options.message = message;
   }
 
   if ('redactionPolicy' in input) {
@@ -491,9 +422,7 @@ function validateRedactionPolicy(
 
   rejectUnknownNestedKeys(value, REDACTION_POLICY_KEYS, 'redactionPolicy', diagnostics);
   if (!REDACTION_POLICY_MODES.has(String(value.mode))) {
-    diagnostics.push(
-      invalidCommitOptionDiagnostic('redactionPolicy.mode', 'redactionPolicy.mode is unsupported.'),
-    );
+      diagnostics.push(invalidCommitOptionDiagnostic('redactionPolicy.mode', 'redactionPolicy.mode is unsupported.'));
   }
 
   for (const key of ['redactSecrets', 'redactExternalLinks', 'redactAgentTrace'] as const) {
@@ -513,12 +442,7 @@ function validateRedactionPolicy(
     return undefined;
   }
 
-  return {
-    mode: value.mode as RedactionPolicy['mode'],
-    redactSecrets: value.redactSecrets,
-    redactExternalLinks: value.redactExternalLinks,
-    redactAgentTrace: value.redactAgentTrace,
-  };
+  return { mode: value.mode as RedactionPolicy['mode'], redactSecrets: value.redactSecrets, redactExternalLinks: value.redactExternalLinks, redactAgentTrace: value.redactAgentTrace };
 }
 
 function rejectUnknownNestedKeys(
@@ -564,33 +488,59 @@ function diagnosticForRejectedCommitField(field: string): VersionStoreDiagnostic
       rejectedCommitFieldOptions(field),
     );
   }
+  if (ANNOTATION_BINDING_FIELDS.has(field)) {
+    return publicDiagnostic(
+      'VERSION_INVALID_OPTIONS',
+      'Public version commits bind annotations through sanitized message text only.',
+      rejectedCommitFieldOptions(field),
+    );
+  }
+  if (OBJECT_BINDING_FIELDS.has(field)) {
+    return publicDiagnostic(
+      'VERSION_INVALID_OPTIONS',
+      'Public version commits derive immutable object digests from captured materializable state.',
+      rejectedCommitFieldOptions(field),
+    );
+  }
   return invalidCommitOptionDiagnostic(field, `Unknown commit option "${field}".`);
 }
 
 function rejectedCommitFieldOptions(field: string): Parameters<typeof publicDiagnostic>[2] {
-  return {
-    severity: 'error',
-    recoverability: 'unsupported',
-    payload: { option: field },
-    mutationGuarantee: 'no-write-attempted',
-  };
+  return { severity: 'error', recoverability: 'unsupported', payload: { option: field }, mutationGuarantee: 'no-write-attempted' };
 }
 
 function invalidCommitOptionDiagnostic(
   option: string,
   safeMessage: string,
 ): VersionStoreDiagnostic {
-  return publicDiagnostic('VERSION_INVALID_OPTIONS', safeMessage, {
-    severity: 'error',
-    recoverability: 'none',
-    payload: { option },
-    mutationGuarantee: 'no-write-attempted',
-  });
+  return publicDiagnostic('VERSION_INVALID_OPTIONS', safeMessage, { severity: 'error', recoverability: 'none', payload: { option }, mutationGuarantee: 'no-write-attempted' });
+}
+
+function validateCommitMessage(
+  value: unknown,
+  diagnostics: VersionStoreDiagnostic[],
+): string | undefined {
+  if (typeof value !== 'string') {
+    diagnostics.push(invalidCommitOptionDiagnostic('message', 'commit message must be a string.'));
+    return undefined;
+  }
+  const message = value.normalize('NFC').replace(/[ \t\n]+$/u, '');
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/u.test(message)) {
+    diagnostics.push(
+      invalidCommitOptionDiagnostic('message', 'commit message contains unsupported control characters.'),
+    );
+    return undefined;
+  }
+  if ([...message].length > 4096) {
+    diagnostics.push(invalidCommitOptionDiagnostic('message', 'commit message is too long.'));
+    return undefined;
+  }
+  return message;
 }
 
 function mapCommitWriteResult(value: unknown): VersionResult<WorkbookCommitSummary> {
   const directSummary = mapCommitSummary(value);
-  if (directSummary) return { ok: true, value: directSummary };
+  if (directSummary) return commitSummaryResult(directSummary);
 
   if (!isRecord(value)) {
     return versionFailureFromStoreDiagnostics('commit', [providerErrorDiagnostic()]);
@@ -610,22 +560,21 @@ function mapCommitWriteResult(value: unknown): VersionResult<WorkbookCommitSumma
     mapCommitSummary(value.rootCommit);
 
   if (summary) {
-    return {
-      ok: true,
-      value: withResultDiagnostics(summary, mapOptionalServiceDiagnostics(value.diagnostics)),
-    };
+    return commitSummaryResult(withResultDiagnostics(summary, mapOptionalServiceDiagnostics(value.diagnostics)));
   }
 
   return versionFailureFromStoreDiagnostics('commit', [
-    publicDiagnostic(
-      'VERSION_INVALID_COMMIT_PAYLOAD',
-      'The version write service did not return a valid public commit summary.',
-      {
-        severity: 'error',
-        recoverability: 'repair',
-        mutationGuarantee: 'unknown-after-crash',
-      },
-    ),
+    publicDiagnostic('VERSION_INVALID_COMMIT_PAYLOAD', safeMessageForIssue('VERSION_INVALID_COMMIT_PAYLOAD'), { severity: 'error', recoverability: 'repair', mutationGuarantee: 'unknown-after-crash' }),
+  ]);
+}
+
+function commitSummaryResult(summary: WorkbookCommitSummary): VersionResult<WorkbookCommitSummary> {
+  if (summary.parents.length > 0) return { ok: true, value: summary };
+  return versionFailureFromStoreDiagnostics('commit', [
+    publicDiagnostic('VERSION_MISSING_CHANGE_SET', safeMessageForIssue('VERSION_MISSING_CHANGE_SET'), {
+      payload: { operation: 'commitGraphWrite', reason: 'empty-normal-commit' },
+      mutationGuarantee: 'unknown-after-crash',
+    }),
   ]);
 }
 
@@ -657,14 +606,7 @@ function mapCommitSummary(value: unknown): WorkbookCommitSummary | null {
     ...mapCommitCompletenessDiagnostics(payload?.completenessDiagnostics),
   ];
 
-  return {
-    id,
-    parents: parents as WorkbookCommitId[],
-    createdAt,
-    author,
-    ...(annotation ? { annotation } : {}),
-    ...(diagnostics.length > 0 ? { diagnostics } : {}),
-  };
+  return { id, parents: parents as WorkbookCommitId[], createdAt, author, ...(annotation ? { annotation } : {}), ...(diagnostics.length > 0 ? { diagnostics } : {}) };
 }
 
 function withResultDiagnostics(
@@ -672,10 +614,7 @@ function withResultDiagnostics(
   diagnostics: readonly VersionStoreDiagnostic[],
 ): WorkbookCommitSummary {
   if (diagnostics.length === 0) return summary;
-  return {
-    ...summary,
-    diagnostics: [...(summary.diagnostics ?? []), ...diagnostics],
-  };
+  return { ...summary, diagnostics: [...(summary.diagnostics ?? []), ...diagnostics] };
 }
 
 function mapRedactedAuthor(value: unknown): RedactedVersionAuthor | null {
@@ -695,11 +634,7 @@ function mapCommitAnnotation(value: unknown): WorkbookCommitAnnotationSummary | 
     ? value.tags.map(mapAnnotationText).filter((tag): tag is VersionAnnotationText => Boolean(tag))
     : undefined;
   if (!message && !title && (!tags || tags.length === 0)) return undefined;
-  return {
-    ...(message ? { message } : {}),
-    ...(title ? { title } : {}),
-    ...(tags && tags.length > 0 ? { tags } : {}),
-  };
+  return { ...(message ? { message } : {}), ...(title ? { title } : {}), ...(tags && tags.length > 0 ? { tags } : {}) };
 }
 
 function mapAnnotationText(value: unknown): VersionAnnotationText | undefined {
@@ -722,11 +657,7 @@ function serviceUnavailableDiagnostic(): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_GRAPH_UNINITIALIZED',
     'No document-scoped version write service is attached; no commit was fabricated.',
-    {
-      severity: 'error',
-      recoverability: 'unsupported',
-      mutationGuarantee: 'no-write-attempted',
-    },
+    { severity: 'error', recoverability: 'unsupported', mutationGuarantee: 'no-write-attempted' },
   );
 }
 
@@ -736,12 +667,7 @@ function providerErrorDiagnostic(
   return publicDiagnostic(
     'VERSION_PROVIDER_ERROR',
     'The version write service failed before returning a usable public commit ref.',
-    {
-      severity: 'error',
-      recoverability: 'retry',
-      payload,
-      mutationGuarantee: 'unknown-after-crash',
-    },
+    { severity: 'error', recoverability: 'retry', payload, mutationGuarantee: 'unknown-after-crash' },
   );
 }
 
@@ -805,23 +731,36 @@ function mapOptionalServiceDiagnostics(value: unknown): readonly VersionStoreDia
 function mapServiceDiagnostic(value: unknown): VersionStoreDiagnostic {
   if (!isRecord(value)) return providerErrorDiagnostic();
 
+  const issueCode = publicIssueCodeFromDiagnostic(value);
+  const severity = value.severity === 'corruption' ? 'error' : value.severity;
+
+  return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
+    severity:
+      severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal' ? severity : 'error',
+    recoverability: recoverabilityForIssue(issueCode),
+    payload: sanitizeDiagnosticPayload(value, issueCode),
+    mutationGuarantee: toMutationGuarantee(value.mutationGuarantee),
+  });
+}
+
+function publicIssueCodeFromDiagnostic(value: Readonly<Record<string, unknown>>): string {
   const issueCode =
     typeof value.issueCode === 'string'
       ? value.issueCode
       : typeof value.code === 'string'
         ? value.code
         : 'VERSION_PROVIDER_ERROR';
-  const severity = value.severity === 'corruption' ? 'error' : value.severity;
-
-  return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
-    severity:
-      severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
-        ? severity
-        : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
-    payload: sanitizeDiagnosticPayload(value),
-    mutationGuarantee: toMutationGuarantee(value.mutationGuarantee),
-  });
+  if (issueCode !== 'VERSION_MISSING_DEPENDENCY') return issueCode;
+  switch (objectKindFromDiagnostic(value)) {
+    case 'snapshot-root':
+      return 'VERSION_MISSING_SNAPSHOT_ROOT';
+    case 'semantic-change-set':
+      return 'VERSION_MISSING_CHANGE_SET';
+    case 'mutation-segment':
+      return 'VERSION_MISSING_MUTATION_SEGMENT';
+    default:
+      return issueCode;
+  }
 }
 
 function mapCommitCompletenessDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
@@ -833,28 +772,17 @@ function mapCommitCompletenessDiagnostic(value: unknown): VersionStoreDiagnostic
   if (!isRecord(value)) return providerErrorDiagnostic();
   const issueCode = typeof value.code === 'string' ? value.code : 'VERSION_PROVIDER_ERROR';
   const severity = value.severity;
-  return publicDiagnostic(
-    issueCode,
-    typeof value.message === 'string'
-      ? value.message
-      : 'The version commit includes a completeness diagnostic.',
-    {
-      severity:
-        severity === 'info' || severity === 'warning' || severity === 'error'
-          ? severity
-          : 'error',
-      recoverability: recoverabilityForIssue(issueCode),
-      payload: sanitizeCompletenessDiagnosticPayload(value),
-    },
-  );
+  return publicDiagnostic(issueCode, typeof value.message === 'string' ? value.message : 'The version commit includes a completeness diagnostic.', {
+    severity: severity === 'info' || severity === 'warning' || severity === 'error' ? severity : 'error',
+    recoverability: recoverabilityForIssue(issueCode),
+    payload: sanitizeCompletenessDiagnosticPayload(value),
+  });
 }
 
 function sanitizeCompletenessDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
 ): VersionDiagnosticPublicPayload {
-  const payload: Record<string, string | number | boolean | null> = {
-    operation: 'commit',
-  };
+  const payload: Record<string, string | number | boolean | null> = { operation: 'commit' };
   if (typeof value.path === 'string') payload.path = value.path;
   const details = isRecord(value.details) ? value.details : null;
   if (details) {
@@ -867,10 +795,9 @@ function sanitizeCompletenessDiagnosticPayload(
 
 function sanitizeDiagnosticPayload(
   value: Readonly<Record<string, unknown>>,
+  issueCode?: string,
 ): VersionDiagnosticPublicPayload {
-  const payload: Record<string, string | number | boolean | null> = {
-    operation: 'commit',
-  };
+  const payload: Record<string, string | number | boolean | null> = { operation: 'commit' };
 
   if (typeof value.operation === 'string') payload.operation = value.operation;
   if (typeof value.option === 'string') payload.option = value.option;
@@ -886,51 +813,44 @@ function sanitizeDiagnosticPayload(
       if (isPayloadPrimitive(detailValue)) payload[key] = detailValue;
     }
   }
+  const objectKind = objectKindFromDiagnostic(value);
+  if (objectKind) payload.objectKind = objectKind;
+  if (issueCode === 'VERSION_MISSING_SNAPSHOT_ROOT') payload.operation = 'validateCommitClosure';
 
   return payload;
 }
 
-function safeMessageForIssue(issueCode: string): string {
-  switch (issueCode) {
-    case 'VERSION_GRAPH_UNINITIALIZED':
-      return 'The workbook version graph is not initialized for this document.';
-    case 'VERSION_INVALID_OPTIONS':
-      return 'The version commit options are invalid for this method.';
-    case 'VERSION_PERMISSION_DENIED':
-      return 'The requested version commit option is not authorized in this public slice.';
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'Public version commits cannot target or mutate arbitrary refs in this slice.';
-    case 'VERSION_STORE_READ_ONLY':
-      return 'The attached version store is read-only for this document.';
-    case 'VERSION_REF_CONFLICT':
-      return 'The version ref changed while the commit was in progress.';
-    case 'VERSION_MISSING_CHANGE_SET':
-      return 'The version commit has no eligible captured change set.';
-    case 'VERSION_INVALID_COMMIT_PAYLOAD':
-      return 'The version write service returned an invalid public commit payload.';
-    default:
-      return 'The version graph could not complete commit.';
+function objectKindFromDiagnostic(value: unknown, depth = 0): string | undefined {
+  if (!isRecord(value) || depth > 4) return undefined;
+  const direct = objectKindForObjectType(value.objectType);
+  if (direct) return direct;
+  const dependency = isRecord(value.dependency) ? value.dependency : null;
+  const dependencyKind = objectKindForObjectType(dependency?.objectType);
+  if (dependencyKind) return dependencyKind;
+  for (const key of ['sourceDiagnostics', 'diagnostics'] as const) {
+    const sources = value[key];
+    if (!Array.isArray(sources)) continue;
+    for (const source of sources) {
+      const nested = objectKindFromDiagnostic(source, depth + 1);
+      if (nested) return nested;
+    }
   }
+  return undefined;
+}
+
+function objectKindForObjectType(value: unknown): string | undefined {
+  return typeof value === 'string' ? OBJECT_KIND_BY_TYPE[value] : undefined;
+}
+
+function safeMessageForIssue(issueCode: string): string {
+  return SAFE_MESSAGES[issueCode] ?? 'The version graph could not complete commit.';
 }
 
 function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
-  switch (issueCode) {
-    case 'VERSION_REF_CONFLICT':
-      return 'retry';
-    case 'VERSION_DANGLING_REF':
-    case 'VERSION_MISSING_OBJECT':
-    case 'VERSION_MISSING_CHANGE_SET':
-    case 'VERSION_OBJECT_STORE_FAILURE':
-    case 'VERSION_INVALID_COMMIT_PAYLOAD':
-      return 'repair';
-    case 'VERSION_GRAPH_UNINITIALIZED':
-    case 'VERSION_PERMISSION_DENIED':
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-    case 'VERSION_STORE_READ_ONLY':
-      return 'unsupported';
-    default:
-      return 'none';
-  }
+  if (issueCode === 'VERSION_REF_CONFLICT') return 'retry';
+  if (REPAIR_ISSUES.has(issueCode)) return 'repair';
+  if (UNSUPPORTED_ISSUES.has(issueCode)) return 'unsupported';
+  return 'none';
 }
 
 function diagnosticsFromThrownError(error: unknown): readonly VersionStoreDiagnostic[] {

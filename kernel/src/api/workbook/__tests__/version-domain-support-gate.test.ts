@@ -301,13 +301,49 @@ describe('WorkbookVersion domain support manifest gate', () => {
             capabilityState: 'contracted',
           }),
         }),
+      ]),
+    );
+    expect(diagnostics).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            diagnosticCode: 'required-matrix-row-missing',
+            matrixRowId: 'cells.formats.direct',
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('does not let caller options downgrade export-required row checks', async () => {
+    const diagnostics = await validateVersionDomainSupportManifestGate(
+      {
+        versioning: {
+          domainSupportManifest: freshManifest({
+            domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.filter((id) => id !== 'cells.formulas').map(
+              (id) => domainRow(id),
+            ),
+          }),
+          domainSupportManifestOptions: {
+            now: NOW,
+            maxAgeMs: TEN_MINUTES_MS,
+            requiredCapabilityKeys: [],
+            requiredMatrixRowIds: [],
+          },
+        },
+      } as any,
+      'export',
+    );
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
           mutationGuarantee: 'no-write-attempted',
           payload: expect.objectContaining({
             operation: 'export',
             diagnosticCode: 'required-matrix-row-missing',
-            matrixRowId: 'cells.formats.direct',
+            matrixRowId: 'cells.formulas',
           }),
         }),
       ]),

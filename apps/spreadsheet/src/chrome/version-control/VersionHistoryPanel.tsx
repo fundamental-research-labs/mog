@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GitBranch, GitCommit, GitCompare, History, RefreshCw, X } from 'lucide-react';
 import type {
   AgentProposalSummary,
@@ -10,7 +10,6 @@ import type {
   VersionHead,
   VersionRef,
   VersionResult,
-  VersionSemanticDiffPage,
   VersionSurfaceStatus,
   WorkbookCommitId,
   WorkbookCommitSummary,
@@ -30,12 +29,16 @@ import {
   safeDomId,
 } from './version-action-availability';
 import { ActionStatus } from './VersionActionStatus';
-import { ReviewProposalSurface } from './ReviewProposalSurface';
+import { VersionHistoryDiffPreview, type VersionDiffPreview } from './VersionHistoryDiffPreview';
+import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
+import { ReviewProposalSurface, type ReviewProposalDiffTarget } from './ReviewProposalSurface';
+import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
+import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
+import { shortCommitId } from './version-history-format';
 
 const COMMIT_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 5;
 const PROPOSAL_PAGE_SIZE = 5;
-const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const CAPABILITY_ROWS: readonly VersionCapability[] = [
   'version:read',
@@ -118,12 +121,6 @@ type VersionActionState =
   | { readonly status: 'success'; readonly message: string }
   | { readonly status: 'error'; readonly diagnostic: VersionPanelDiagnostic };
 
-type VersionDiffPreview = {
-  readonly base: WorkbookCommitId;
-  readonly target: WorkbookCommitId;
-  readonly page: VersionSemanticDiffPage;
-};
-
 export function VersionHistoryPanel({ onClose }: VersionHistoryPanelProps): React.JSX.Element {
   const workbook = useWorkbook();
   return <VersionHistoryPanelContent workbook={workbook} onClose={onClose} />;
@@ -139,6 +136,8 @@ export function VersionHistoryPanelContent({
   const [selectedCommitId, setSelectedCommitId] = useState<WorkbookCommitId | undefined>();
   const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
   const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
+  const panelRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const load = useCallback(async () => {
     setLoadState((current) => ({
@@ -219,6 +218,12 @@ export function VersionHistoryPanelContent({
     void load();
   }, [load]);
 
+  useEffect(() => {
+    closeButtonRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  useVersionPanelFocusTrap(panelRef);
+
   const data =
     loadState.status === 'ready'
       ? loadState.data
@@ -280,7 +285,12 @@ export function VersionHistoryPanelContent({
   const handleCreateBranch = useCallback(async () => {
     if (!data || !canCreateBranch || !selectedOrHeadCommitId) return;
 
-    const name = branchName.trim() as Parameters<WorkbookVersion['createBranch']>[0]['name'];
+    const normalizedBranch = normalizeVersionBranchNameInput(branchName);
+    if (!normalizedBranch.ok) return;
+
+    const name = normalizedBranch.branch.refName as Parameters<
+      WorkbookVersion['createBranch']
+    >[0]['name'];
     setActionState({ status: 'running', label: 'Creating branch' });
     const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
       workbook.version.createBranch({
@@ -352,8 +362,36 @@ export function VersionHistoryPanelContent({
     [canDiff, workbook],
   );
 
+  const handleReviewProposalDiff = useCallback(
+    async (target: ReviewProposalDiffTarget) => {
+      if (!canDiff) return;
+
+      const label = target.recordKind === 'review' ? 'review' : 'proposal';
+      setActionState({ status: 'running', label: `Loading ${label} diff` });
+      const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+        workbook.version.diff(target.baseCommitId, target.targetCommitId, {
+          pageSize: 50,
+          includeDiagnostics: true,
+        }),
+      );
+      if (!result.ok) {
+        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
+
+      setDiffPreview({
+        base: target.baseCommitId,
+        target: target.targetCommitId,
+        page: result.value,
+      });
+      setActionState({ status: 'success', message: `Loaded ${label} diff` });
+    },
+    [canDiff, workbook],
+  );
+
   return (
     <aside
+      ref={panelRef}
       data-testid="panel-version-history"
       role="complementary"
       aria-label="Version control"
@@ -382,6 +420,7 @@ export function VersionHistoryPanelContent({
             <RefreshCw size={15} strokeWidth={1.75} aria-hidden="true" />
           </button>
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={onClose}
             data-testid="panel-version-history-close"
@@ -438,6 +477,9 @@ export function VersionHistoryPanelContent({
               proposals={data.proposals}
               reviewDiagnostic={data.reviewDiagnostic}
               proposalDiagnostic={data.proposalDiagnostic}
+              diffEnabled={canDiff}
+              diffDisabledReason={diffAvailability.disabledReason}
+              onOpenDiff={handleReviewProposalDiff}
             />
             <CommitList
               commits={data.commits}
@@ -447,7 +489,7 @@ export function VersionHistoryPanelContent({
               onSelectCommit={setSelectedCommitId}
               onDiffCommit={handleDiffCommit}
             />
-            <DiffPreview diffPreview={diffPreview} />
+            <VersionHistoryDiffPreview diffPreview={diffPreview} />
             {diagnostics.length > 0 ? <DiagnosticsBlock diagnostics={diagnostics} /> : null}
           </div>
         ) : null}
@@ -594,6 +636,7 @@ function VersionStatusSummary({ data }: { readonly data: VersionHistoryData }): 
         <span className="text-ss-text-secondary">Workspace</span>
         <span className="text-ss-text">{dirtyLabel}</span>
       </div>
+      <VersionCurrentStaleStatus surface={data.surface} />
     </section>
   );
 }
@@ -810,47 +853,6 @@ function CommitList({
   );
 }
 
-function DiffPreview({
-  diffPreview,
-}: {
-  readonly diffPreview?: VersionDiffPreview;
-}): React.JSX.Element | null {
-  if (!diffPreview) return null;
-  const count = diffPreview.page.items.length;
-
-  return (
-    <section
-      className="flex flex-col gap-2 border border-ss-border rounded-sm p-2 bg-ss-surface-secondary"
-      aria-label="Parent diff"
-      data-testid="version-history-parent-diff"
-    >
-      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
-        <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
-        <span>Parent Diff</span>
-      </div>
-      <div className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1 text-[11px]">
-        <span className="text-ss-text-secondary">Base</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.base)}</span>
-        <span className="text-ss-text-secondary">Target</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.target)}</span>
-        <span className="text-ss-text-secondary">Changes</span>
-        <span className="text-ss-text">{count}</span>
-      </div>
-      {count === 0 ? (
-        <div className="text-body-sm text-ss-text-secondary">No semantic changes</div>
-      ) : (
-        <ol className="flex flex-col gap-1 m-0 p-0 list-none">
-          {diffPreview.page.items.map((entry, index) => (
-            <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-              {diffEntryLabel(entry)}
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
-  );
-}
-
 function DiagnosticsBlock({
   diagnostics,
   emptyMessage,
@@ -966,20 +968,6 @@ function diagnosticFromError(code: string, error: VersionError): VersionPanelDia
 
 function annotationText(value: VersionAnnotationText | undefined): string | undefined {
   return value ? (value.kind === 'text' ? value.value : 'Redacted') : undefined;
-}
-
-function shortCommitId(id: string): string {
-  return id.startsWith('commit:sha256:') ? id.slice('commit:sha256:'.length, 'commit:sha256:'.length + 12) : id;
-}
-
-function displayBranchName(name: string): string {
-  return name.startsWith(VERSION_BRANCH_REF_PREFIX) ? name.slice(VERSION_BRANCH_REF_PREFIX.length) : name;
-}
-
-function diffEntryLabel(entry: VersionSemanticDiffPage['items'][number]): string {
-  if (entry.structural.kind !== 'metadata') return 'Redacted change';
-  const path = entry.structural.propertyPath.join('.');
-  return path ? `${entry.structural.domain} ${path}` : entry.structural.domain;
 }
 
 function formatCommitTime(value: string): string {

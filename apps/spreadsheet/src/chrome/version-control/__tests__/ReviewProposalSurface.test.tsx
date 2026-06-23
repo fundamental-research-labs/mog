@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 
+import { jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type {
   AgentProposalSummary,
   VersionCapability,
@@ -86,6 +88,85 @@ describe('ReviewProposalSurface', () => {
     expect(proposalRow).toHaveTextContent(`Base ${shortCommitId(BASE_COMMIT_ID)}`);
     expect(proposalRow).toHaveTextContent(`Target ${shortCommitId(HEAD_COMMIT_ID)}`);
     expect(proposalRow).toHaveTextContent(`Proposal ${shortCommitId(PROPOSAL_COMMIT_ID)}`);
+  });
+
+  it('makes diff-backed rows keyboard focusable and activates them with commit handles', async () => {
+    const user = userEvent.setup();
+    const onOpenDiff = jest.fn();
+
+    render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[createReview()]}
+        proposals={[createProposal()]}
+        onOpenDiff={onOpenDiff}
+      />,
+    );
+
+    const reviewRow = screen.getByRole('button', {
+      name: 'Open review diff for Forecast review approved',
+    });
+    const proposalRow = screen.getByRole('button', {
+      name: 'Open proposal diff for Budget scenario ready_for_review',
+    });
+
+    expect(reviewRow).toHaveAttribute('data-actionable', 'true');
+    expect(reviewRow).toHaveAttribute('data-diff-base-commit-id', BASE_COMMIT_ID);
+    expect(reviewRow).toHaveAttribute('data-diff-target-commit-id', HEAD_COMMIT_ID);
+    expect(proposalRow).toHaveAttribute('data-actionable', 'true');
+    expect(proposalRow).toHaveAttribute('data-diff-base-commit-id', BASE_COMMIT_ID);
+    expect(proposalRow).toHaveAttribute('data-diff-target-commit-id', PROPOSAL_COMMIT_ID);
+
+    await user.tab();
+    expect(reviewRow).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    await user.tab();
+    expect(proposalRow).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(onOpenDiff).toHaveBeenNthCalledWith(1, {
+      recordKind: 'review',
+      recordId: 'review-1',
+      baseCommitId: BASE_COMMIT_ID,
+      targetCommitId: HEAD_COMMIT_ID,
+    });
+    expect(onOpenDiff).toHaveBeenNthCalledWith(2, {
+      recordKind: 'proposal',
+      recordId: 'proposal-1',
+      baseCommitId: BASE_COMMIT_ID,
+      targetCommitId: PROPOSAL_COMMIT_ID,
+    });
+  });
+
+  it('keeps diff-backed rows focusable but inert with an accessible reason when diff is disabled', async () => {
+    const user = userEvent.setup();
+    const onOpenDiff = jest.fn();
+
+    render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[createReview()]}
+        proposals={[]}
+        diffEnabled={false}
+        diffDisabledReason="Diff service is unavailable."
+        onOpenDiff={onOpenDiff}
+      />,
+    );
+
+    const reviewRow = screen.getByRole('button', {
+      name: 'Open review diff for Forecast review approved',
+    });
+
+    expect(reviewRow).toHaveAttribute('aria-disabled', 'true');
+    expect(reviewRow).toHaveAttribute('data-actionable', 'false');
+    expect(reviewRow).toHaveAccessibleDescription('Diff service is unavailable.');
+
+    await user.tab();
+    expect(reviewRow).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(onOpenDiff).not.toHaveBeenCalled();
   });
 
   it('shows disabled and unavailable reasons with stable selectors', () => {

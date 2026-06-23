@@ -10,6 +10,7 @@
  */
 
 import type { IEventBus } from '@mog-sdk/contracts/events';
+import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { WorkbookStateProvider } from '@mog-sdk/contracts/api';
 import type { CodeExecutionOptions, CodeExecutionResult, SheetId } from '@mog-sdk/contracts/core';
@@ -113,8 +114,12 @@ export interface WorkbookConfig {
    * UI state provider (active sheet, selection, active objects).
    * Optional — when omitted, the workbook creates a default headless provider
    * that tracks activeSheetId internally and returns null for all UI queries.
-   */
+  */
   stateProvider?: WorkbookStateProvider;
+  /** Document-scoped host feature gates visible to version surface admission. */
+  featureGates?: FeatureGates;
+  /** Dynamic document-scoped host feature gates visible to version surface admission. */
+  readFeatureGates?: () => FeatureGates;
   /** Event bus for subscribing to and emitting events */
   eventBus: IEventBus;
   /** Optional factory for creating a code executor (injected by engine layer) */
@@ -218,4 +223,8 @@ export interface CreateWorkbookOptions {
    * receives its concrete versioning services.
    */
   versioning?: DocumentWorkbookVersioningLifecycleConfig;
+  /** Document-scoped host feature gates visible to version surface admission. */
+  featureGates?: FeatureGates;
+  /** Dynamic document-scoped host feature gates visible to version surface admission. */
+  readFeatureGates?: () => FeatureGates;
 }

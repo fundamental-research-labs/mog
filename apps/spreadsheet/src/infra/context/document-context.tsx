@@ -22,7 +22,7 @@
  * ```
  */
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useStore, type StoreApi } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -31,6 +31,7 @@ import type { WorkbookInternal, WorksheetWithInternals } from '@mog-sdk/contract
 import type { IEventBus } from '@mog-sdk/contracts/events';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import { PivotExpansionManager } from '../../pivot/pivot-expansion-manager';
+import { FeatureGatesProvider } from './feature-gates-context';
 import {
   type ImportDurabilityGate,
   resolveInitialActiveSheetId,
@@ -45,6 +46,8 @@ import { installChartImageExporter } from '../services';
 // =============================================================================
 // Context Types
 // =============================================================================
+
+const EMPTY_FEATURE_GATES: FeatureGates = Object.freeze({}) as FeatureGates;
 
 /**
  * Value provided by DocumentContext.
@@ -316,10 +319,12 @@ export function DocumentProvider({
   errorFallback,
   readOnly = false,
   hideRibbon = false,
-  featureGates = {},
+  featureGates = EMPTY_FEATURE_GATES,
 }: DocumentProviderProps): React.JSX.Element {
   const [state, setState] = useState<ProviderState>({ status: 'loading' });
   const [retryCount, setRetryCount] = useState(0);
+  const configRef = useRef({ readOnly, hideRibbon, featureGates });
+  configRef.current = { readOnly, hideRibbon, featureGates };
 
   useEffect(() => {
     let cancelled = false;
@@ -352,6 +357,7 @@ export function DocumentProvider({
         // Create unified Workbook instance — THE single API for all data/compute operations.
         // Created after UIStore so getActiveSheetId/setActiveSheetId can wire through.
         const workbook = (await handle.workbook({
+          readOnly: configRef.current.readOnly,
           stateProvider: {
             getActiveSheetId: () => uiStore.getState().activeSheetId,
             setActiveSheetId: (id: string) => uiStore.getState().setActiveSheet(id),
@@ -360,6 +366,11 @@ export function DocumentProvider({
             getActiveObjectId: () => null,
             getActiveObjectType: () => null,
           },
+          readFeatureGates: () =>
+            effectiveWorkbookFeatureGates(
+              configRef.current.readOnly,
+              configRef.current.featureGates,
+            ),
         })) as WorkbookInternal;
 
         if (cancelled) {
@@ -391,9 +402,9 @@ export function DocumentProvider({
             uiStore,
             eventBus: handle.eventBus,
             importDurability: handle,
-            readOnly: false,
-            hideRibbon: false,
-            featureGates: {},
+            readOnly: configRef.current.readOnly,
+            hideRibbon: configRef.current.hideRibbon,
+            featureGates: configRef.current.featureGates,
           },
         });
       } catch (err) {
@@ -417,6 +428,28 @@ export function DocumentProvider({
     };
   }, [docId, retryCount]); // Re-run on docId change or retry
 
+  useEffect(() => {
+    setState((current) => {
+      if (current.status !== 'ready') return current;
+      if (
+        current.value.readOnly === readOnly &&
+        current.value.hideRibbon === hideRibbon &&
+        current.value.featureGates === featureGates
+      ) {
+        return current;
+      }
+      return {
+        status: 'ready',
+        value: {
+          ...current.value,
+          readOnly,
+          hideRibbon,
+          featureGates,
+        },
+      };
+    });
+  }, [readOnly, hideRibbon, featureGates]);
+
   const handleRetry = () => {
     setRetryCount((c) => c + 1);
   };
@@ -433,6 +466,14 @@ export function DocumentProvider({
       return <DefaultErrorFallback error={state.error} onRetry={handleRetry} />;
 
     case 'ready':
-      return <DocumentContext.Provider value={state.value}>{children}</DocumentContext.Provider>;
+      return (
+        <DocumentContext.Provider value={state.value}>
+          <FeatureGatesProvider gates={state.value.featureGates}>{children}</FeatureGatesProvider>
+        </DocumentContext.Provider>
+      );
   }
+}
+
+function effectiveWorkbookFeatureGates(readOnly: boolean, featureGates: FeatureGates): FeatureGates {
+  return readOnly ? { ...featureGates, editing: false } : featureGates;
 }

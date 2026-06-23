@@ -18,6 +18,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { validateVersionOperationGate } from './version-operation-gate';
 import { versionFailureFromStoreDiagnostics } from './version-result';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
@@ -134,6 +135,15 @@ export async function createWorkbookVersionReview(
 ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
   const normalized = normalizeCreateReviewInput(input);
   if (!normalized.ok) return reviewFailure('createReview', normalized.diagnostics);
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'createReview',
+    'version:reviewWrite',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return reviewFailure('createReview', operationGateDiagnostics);
+  }
   const subjectMatch = validateExplicitSubjectHeads(normalized.input);
   if (!subjectMatch.ok) return subjectMatch.result;
   return callReviewService(ctx, 'createReview', normalized.input);
@@ -145,6 +155,15 @@ export async function appendWorkbookVersionReviewDecision(
 ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
   const normalized = normalizeAppendReviewDecisionInput(input);
   if (!normalized.ok) return reviewFailure('appendReviewDecision', normalized.diagnostics);
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'appendReviewDecision',
+    'version:reviewWrite',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return reviewFailure('appendReviewDecision', operationGateDiagnostics);
+  }
   return callReviewService(ctx, 'appendReviewDecision', normalized.input);
 }
 
@@ -154,6 +173,15 @@ export async function updateWorkbookVersionReviewStatus(
 ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
   const normalized = normalizeUpdateReviewStatusInput(input);
   if (!normalized.ok) return reviewFailure('updateReviewStatus', normalized.diagnostics);
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'updateReviewStatus',
+    'version:reviewWrite',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return reviewFailure('updateReviewStatus', operationGateDiagnostics);
+  }
   return callReviewService(ctx, 'updateReviewStatus', normalized.input);
 }
 

@@ -1,5 +1,6 @@
 import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
 import {
+  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
   type DomainSupportManifest,
 } from '@mog-sdk/contracts/versioning';
@@ -19,15 +20,6 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
 } as const satisfies NonNullable<
   NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
 >;
-
-const DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS = Object.freeze([
-  'workbook-metadata',
-  'sheets',
-  'rows-columns',
-  'cells.values',
-  'cells.formulas',
-  'recalc-caches',
-] as const);
 
 export function decorateNormalLocalHandleWithDefaultVersioning(
   handle: DocumentHandle,
@@ -62,7 +54,7 @@ function createDefaultDomainSupportManifest(documentId: string): DomainSupportMa
     schemaVersion: 'domain-support-manifest.v2',
     generatedAt: new Date().toISOString(),
     workbookId: documentId,
-    domains: DEFAULT_VERSION_DOMAIN_MATRIX_ROW_IDS.map((matrixRowId) => {
+    domains: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS.map((matrixRowId) => {
       const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
         (domain) => domain.matrixRowId === matrixRowId,
       );

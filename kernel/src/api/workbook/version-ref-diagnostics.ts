@@ -30,6 +30,67 @@ export function branchDiagnosticMutationGuarantee(
   return NO_WRITE_ATTEMPTED_BRANCH_DIAGNOSTIC_CODES.has(code) ? 'no-write-attempted' : undefined;
 }
 
+export function issueCodeForBranchDiagnostic(code: string): string {
+  switch (code) {
+    case 'casConflict':
+    case 'expectedHeadMismatch':
+    case 'expectedRefVersionMismatch':
+    case 'refAlreadyExists':
+      return 'VERSION_REF_CONFLICT';
+    case 'refNotFound':
+    case 'refTombstoned':
+      return 'VERSION_DANGLING_REF';
+    case 'invalidCommitId':
+      return 'VERSION_INVALID_COMMIT_ID';
+    case 'protectedRef':
+    case 'reservedNamespace':
+    case 'unsupportedDetachedHead':
+      return 'VERSION_PERMISSION_DENIED';
+    case 'unsupportedRefOption':
+    case 'unsupportedRefMetadataMutation':
+    case 'versionCapabilityDisabled':
+    case 'lastLiveRef':
+      return 'VERSION_REF_WRITE_UNAVAILABLE';
+    default:
+      return 'VERSION_INVALID_OPTIONS';
+  }
+}
+
+export function safeMessageForBranchIssue(issueCode: string, operation: string): string {
+  switch (issueCode) {
+    case 'VERSION_REF_CONFLICT':
+      return 'The public ref changed while the lifecycle operation was in progress.';
+    case 'VERSION_DANGLING_REF':
+      return 'The requested public ref does not resolve to a live branch.';
+    case 'VERSION_INVALID_OPTIONS':
+      return 'The version ref lifecycle options are invalid for this method.';
+    case 'VERSION_INVALID_COMMIT_ID':
+      return 'The supplied commit id is invalid.';
+    case 'VERSION_PERMISSION_DENIED':
+      return 'The requested ref lifecycle operation is not authorized in this public slice.';
+    case 'VERSION_REF_WRITE_UNAVAILABLE':
+      return 'The requested ref lifecycle mutation is not supported by the attached public service.';
+    default:
+      return `The version ref lifecycle service could not complete ${operation}.`;
+  }
+}
+
+export function recoverabilityForBranchIssue(
+  issueCode: string,
+): VersionStoreDiagnostic['recoverability'] {
+  switch (issueCode) {
+    case 'VERSION_REF_CONFLICT':
+      return 'retry';
+    case 'VERSION_DANGLING_REF':
+    case 'VERSION_GRAPH_UNINITIALIZED':
+    case 'VERSION_PERMISSION_DENIED':
+    case 'VERSION_REF_WRITE_UNAVAILABLE':
+      return 'unsupported';
+    default:
+      return 'none';
+  }
+}
+
 function toPublicMutationGuarantee(
   value: unknown,
 ): VersionStoreDiagnostic['mutationGuarantee'] | undefined {

@@ -1,11 +1,12 @@
 import type {
   VersionCapability,
   VersionDiagnostic,
+  VersionRef,
   VersionSurfaceStatus,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
+import { displayBranchName, validateVersionBranchCreationName } from './version-branch-name';
 
 const ACTION_CAPABILITY_LABELS: Partial<Record<VersionCapability, string>> = {
   'version:read': 'Read',
@@ -24,6 +25,7 @@ export type VersionActionAvailability = {
 
 type VersionActionSurfaceData = {
   readonly surface?: VersionSurfaceStatus;
+  readonly refs?: readonly Pick<VersionRef, 'name'>[];
 };
 
 export function getCommitAvailability(
@@ -45,7 +47,7 @@ export function getCommitAvailability(
   const dirtyReason = commitDirtyDisabledReason(surface);
   if (dirtyReason) return disabledAction(dirtyReason);
 
-  const staleReason = currentStaleDisabledReason(surface);
+  const staleReason = currentStaleDisabledReason(surface, 'commit');
   if (staleReason) return disabledAction(staleReason);
 
   if (commitMessage.trim().length === 0) return disabledAction('Enter a commit message.');
@@ -68,7 +70,8 @@ export function getBranchAvailability(
   if (surfaceReason) return disabledAction(surfaceReason);
 
   if (!targetCommitId) return disabledAction('Select a commit target first.');
-  if (branchName.trim().length === 0) return disabledAction('Enter a branch name.');
+  const branchNameValidation = validateVersionBranchCreationName(branchName, data.refs ?? []);
+  if (!branchNameValidation.ok) return disabledAction(branchNameValidation.reason);
   return enabledAction();
 }
 
@@ -89,6 +92,9 @@ export function getCheckoutAvailability(
 
   const checkoutReason = checkoutUnsafeDisabledReason(surface);
   if (checkoutReason) return disabledAction(checkoutReason);
+
+  const staleReason = currentStaleDisabledReason(surface, 'checkout');
+  if (staleReason) return disabledAction(staleReason);
   return enabledAction();
 }
 
@@ -179,7 +185,10 @@ function commitDirtyDisabledReason(surface: VersionSurfaceStatus): string | unde
   );
 }
 
-function currentStaleDisabledReason(surface: VersionSurfaceStatus): string | undefined {
+function currentStaleDisabledReason(
+  surface: VersionSurfaceStatus,
+  action: 'commit' | 'checkout',
+): string | undefined {
   const current = surface.current;
   if (!current.stale) return undefined;
 
@@ -192,7 +201,11 @@ function currentStaleDisabledReason(surface: VersionSurfaceStatus): string | und
       : current.staleReason === 'activeSessionBehind'
         ? 'the active checkout session is behind the branch head'
         : 'the current head could not be verified';
-  return `${branchLabel} is stale because ${reason}. Refresh before committing.`;
+  const suffix =
+    action === 'commit'
+      ? 'Refresh before committing.'
+      : 'Checkout is blocked until the active checkout session is refreshed.';
+  return `${branchLabel} is stale because ${reason}. ${suffix}`;
 }
 
 function checkoutUnsafeDisabledReason(surface: VersionSurfaceStatus): string | undefined {
@@ -260,10 +273,4 @@ function enabledAction(): VersionActionAvailability {
 
 function disabledAction(disabledReason: string): VersionActionAvailability {
   return { enabled: false, disabledReason };
-}
-
-function displayBranchName(name: string): string {
-  return name.startsWith(VERSION_BRANCH_REF_PREFIX)
-    ? name.slice(VERSION_BRANCH_REF_PREFIX.length)
-    : name;
 }

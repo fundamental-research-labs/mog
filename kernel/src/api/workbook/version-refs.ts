@@ -28,8 +28,14 @@ import {
   validateRefName,
   type RefNamespace,
 } from '../../document/version-store/ref-name';
+import { validateVersionOperationGate } from './version-operation-gate';
 import { deleteWorkbookVersionBranchRef } from './version-refs-delete';
-import { branchDiagnosticMutationGuarantee } from './version-ref-diagnostics';
+import {
+  branchDiagnosticMutationGuarantee,
+  issueCodeForBranchDiagnostic,
+  recoverabilityForBranchIssue,
+  safeMessageForBranchIssue,
+} from './version-ref-diagnostics';
 
 const VERSION_HEAD_REF = 'HEAD';
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -97,6 +103,16 @@ export async function createWorkbookVersionBranch(
 
   if (validated.branchName === 'main') {
     return degradedMutation(null, [protectedMainDiagnostic('createBranch')]);
+  }
+
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'createBranch',
+    'version:branch',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return degradedMutation(null, operationGateDiagnostics);
   }
 
   const service = getAttachedVersionRefLifecycleService(ctx);
@@ -207,6 +223,16 @@ export async function fastForwardWorkbookVersionBranch(
     return degradedMutation(null, [protectedMainDiagnostic('fastForwardBranch')]);
   }
 
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'fastForwardBranch',
+    'version:branch',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return degradedMutation(null, operationGateDiagnostics);
+  }
+
   const service = getAttachedVersionRefLifecycleService(ctx);
   if (!service?.fastForwardBranch) {
     return degradedMutation(null, [writeUnavailableDiagnostic('fastForwardBranch')]);
@@ -239,6 +265,16 @@ export async function deleteWorkbookVersionBranch(
   ctx: DocumentContext,
   options: VersionDeleteRefOptions,
 ): Promise<VersionRefMutationResult> {
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'deleteBranch',
+    'version:branch',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return degradedMutation(null, operationGateDiagnostics);
+  }
+
   return deleteWorkbookVersionBranchRef({
     ctx,
     options,
@@ -251,6 +287,16 @@ export async function deleteWorkbookVersionRef(
   ctx: DocumentContext,
   options: VersionDeleteRefOptions,
 ): Promise<VersionRefMutationResult> {
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'deleteRef',
+    'version:branch',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) {
+    return degradedMutation(null, operationGateDiagnostics);
+  }
+
   return deleteWorkbookVersionBranchRef({
     ctx,
     options,
@@ -687,9 +733,9 @@ function mapBranchDiagnostic(
   if (!isRecord(value)) return providerErrorDiagnostic(operation);
   const code = typeof value.code === 'string' ? value.code : 'versionCapabilityDisabled';
   const issueCode = issueCodeForBranchDiagnostic(code);
-  return publicDiagnostic(issueCode, operation, safeMessageForIssue(issueCode, operation), {
+  return publicDiagnostic(issueCode, operation, safeMessageForBranchIssue(issueCode, operation), {
     severity: value.severity === 'warning' || value.severity === 'info' ? value.severity : 'error',
-    recoverability: recoverabilityForIssue(issueCode),
+    recoverability: recoverabilityForBranchIssue(issueCode),
     payload: sanitizeBranchDiagnosticPayload(value, operation),
     ...(isRefMutationOperation(operation)
       ? { mutationGuarantee: branchDiagnosticMutationGuarantee(code, value.details) }
@@ -889,39 +935,13 @@ function publicDiagnostic(
   return {
     issueCode,
     severity: options.severity ?? 'error',
-    recoverability: options.recoverability ?? recoverabilityForIssue(issueCode),
+    recoverability: options.recoverability ?? recoverabilityForBranchIssue(issueCode),
     messageTemplateId: `version.${operation}.${issueCode}`,
     safeMessage,
     ...(options.payload ? { payload: options.payload } : {}),
     redacted: true,
     ...(options.mutationGuarantee ? { mutationGuarantee: options.mutationGuarantee } : {}),
   };
-}
-
-function issueCodeForBranchDiagnostic(code: string): string {
-  switch (code) {
-    case 'casConflict':
-    case 'expectedHeadMismatch':
-    case 'expectedRefVersionMismatch':
-    case 'refAlreadyExists':
-      return 'VERSION_REF_CONFLICT';
-    case 'refNotFound':
-    case 'refTombstoned':
-      return 'VERSION_DANGLING_REF';
-    case 'invalidCommitId':
-      return 'VERSION_INVALID_COMMIT_ID';
-    case 'protectedRef':
-    case 'reservedNamespace':
-    case 'unsupportedDetachedHead':
-      return 'VERSION_PERMISSION_DENIED';
-    case 'unsupportedRefOption':
-    case 'unsupportedRefMetadataMutation':
-    case 'versionCapabilityDisabled':
-    case 'lastLiveRef':
-      return 'VERSION_REF_WRITE_UNAVAILABLE';
-    default:
-      return 'VERSION_INVALID_OPTIONS';
-  }
 }
 
 function isRefMutationOperation(operation: VersionRefOperation): boolean {
@@ -938,39 +958,6 @@ function noWriteAttemptedForMutation(
   operation: VersionRefOperation,
 ): { readonly mutationGuarantee: 'no-write-attempted' } | Record<string, never> {
   return isRefMutationOperation(operation) ? { mutationGuarantee: 'no-write-attempted' } : {};
-}
-
-function safeMessageForIssue(issueCode: string, operation: VersionRefOperation): string {
-  switch (issueCode) {
-    case 'VERSION_REF_CONFLICT':
-      return 'The public ref changed while the lifecycle operation was in progress.';
-    case 'VERSION_DANGLING_REF':
-      return 'The requested public ref does not resolve to a live branch.';
-    case 'VERSION_INVALID_OPTIONS':
-      return 'The version ref lifecycle options are invalid for this method.';
-    case 'VERSION_INVALID_COMMIT_ID':
-      return 'The supplied commit id is invalid.';
-    case 'VERSION_PERMISSION_DENIED':
-      return 'The requested ref lifecycle operation is not authorized in this public slice.';
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'The requested ref lifecycle mutation is not supported by the attached public service.';
-    default:
-      return `The version ref lifecycle service could not complete ${operation}.`;
-  }
-}
-
-function recoverabilityForIssue(issueCode: string): VersionStoreDiagnostic['recoverability'] {
-  switch (issueCode) {
-    case 'VERSION_REF_CONFLICT':
-      return 'retry';
-    case 'VERSION_DANGLING_REF':
-    case 'VERSION_GRAPH_UNINITIALIZED':
-    case 'VERSION_PERMISSION_DENIED':
-    case 'VERSION_REF_WRITE_UNAVAILABLE':
-      return 'unsupported';
-    default:
-      return 'none';
-  }
 }
 
 function degradedList(

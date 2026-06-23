@@ -14,6 +14,7 @@ import type {
   Paged,
   VersionBranchName,
   VersionBranchRefReadResult,
+  VersionCapability,
   VersionApplyMergeInput,
   VersionApplyMergeOptions,
   VersionApplyMergeResult,
@@ -132,6 +133,7 @@ import {
   versionResultFromApplyMerge,
   versionResultFromCheckout,
   versionResultFromDiffPage,
+  versionFailureFromStoreDiagnostics,
   versionResultFromHead,
   versionResultFromMerge,
   versionResultFromRefList,
@@ -139,6 +141,7 @@ import {
   versionResultFromRefRead,
 } from './version-result';
 import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
+import { validateVersionOperationGate } from './version-operation-gate';
 import {
   createWorkbookVersionBranch,
   deleteWorkbookVersionBranch,
@@ -473,6 +476,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async getHead(): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions): Promise<VersionResult<VersionHead>>;
   async getHead(_options: VersionGetHeadOptions = {}): Promise<VersionResult<VersionHead>> {
+    const gateDiagnostics = this.readGate('getHead', 'version:read');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getHead', gateDiagnostics);
+
     const failHead = (diagnostics: readonly VersionStoreDiagnostic[]) =>
       versionResultFromHead(degradedHead(diagnostics));
     const readService = getAttachedVersionReadService(this.ctx);
@@ -494,6 +500,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async listCommits(
     options: VersionListCommitsOptions = {},
   ): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
+    const gateDiagnostics = this.readGate('listCommits', 'version:read');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listCommits', gateDiagnostics);
     return listWorkbookVersionCommits(this.ctx, options);
   }
   async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> {
@@ -547,11 +555,15 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async listReviews(
     input: VersionListReviewsInput = {},
   ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
+    const gateDiagnostics = this.readGate('listReviews', 'version:reviewRead');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listReviews', gateDiagnostics);
     return listWorkbookVersionReviews(this.ctx, input);
   }
   async getReview(
     input: VersionGetReviewInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    const gateDiagnostics = this.readGate('getReview', 'version:reviewRead');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getReview', gateDiagnostics);
     return getWorkbookVersionReview(this.ctx, input);
   }
   async createReview(
@@ -572,6 +584,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async getReviewDiff(
     input: VersionGetReviewDiffInput,
   ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
+    const gateDiagnostics = this.readGate('getReviewDiff', 'version:reviewRead');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getReviewDiff', gateDiagnostics);
     return getWorkbookVersionReviewDiff(this.ctx, input);
   }
   async createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
@@ -636,6 +650,8 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     target: VersionCommitish,
     options: VersionDiffOptions = {},
   ): Promise<VersionResult<VersionSemanticDiffPage>> {
+    const gateDiagnostics = this.readGate('diff', 'version:diff');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('diff', gateDiagnostics);
     return versionResultFromDiffPage(
       await diffWorkbookVersion(this.ctx, base, target, options),
       options.pageSize ?? 50,
@@ -651,6 +667,9 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async readRef(
     name: VersionRefSelector | VersionBranchName,
   ): Promise<VersionResult<VersionRefReadResult>> {
+    const gateDiagnostics = this.readGate('readRef', 'version:read');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('readRef', gateDiagnostics);
+
     if (name !== VERSION_HEAD_REF && name !== VERSION_MAIN_REF) {
       return versionResultFromRefRead('readRef', await readWorkbookVersionRef(this.ctx, name));
     }
@@ -687,10 +706,14 @@ export class WorkbookVersionImpl implements WorkbookVersion {
   async getRef(
     name: VersionRefSelector | VersionBranchName,
   ): Promise<VersionResult<VersionRefReadResult>> {
+    const gateDiagnostics = this.readGate('getRef', 'version:read');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getRef', gateDiagnostics);
     return versionResultFromRefRead('getRef', await getWorkbookVersionRef(this.ctx, name));
   }
 
   async listRefs(options: VersionListRefsOptions = {}): Promise<VersionResult<Paged<VersionRef>>> {
+    const gateDiagnostics = this.readGate('listRefs', 'version:read');
+    if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listRefs', gateDiagnostics);
     return versionResultFromRefList(
       await listWorkbookVersionRefs(this.ctx, options),
       VERSION_LIST_REFS_DEFAULT_PAGE_SIZE,
@@ -732,6 +755,16 @@ export class WorkbookVersionImpl implements WorkbookVersion {
       'deleteRef',
       await deleteWorkbookVersionRef(this.ctx, options),
     );
+  }
+
+  private readGate(
+    operation: string,
+    capability: VersionCapability,
+  ): readonly VersionStoreDiagnostic[] | null {
+    const diagnostics = validateVersionOperationGate(this.ctx, operation, capability, {
+      mutates: false,
+    });
+    return diagnostics.length > 0 ? diagnostics : null;
   }
 }
 

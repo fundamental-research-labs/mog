@@ -886,6 +886,8 @@ function createDocumentHandle(
           ctx: context,
           eventBus: context.eventBus,
           stateProvider: config.stateProvider,
+          featureGates: config.featureGates,
+          readFeatureGates: config.readFeatureGates,
           previouslySaved: config.previouslySaved,
           name: config.name,
           readOnly: config.readOnly,

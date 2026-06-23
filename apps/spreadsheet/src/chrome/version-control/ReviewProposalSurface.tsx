@@ -2,6 +2,7 @@ import type {
   AgentProposalSummary,
   VersionDiagnostic,
   VersionSurfaceStatus,
+  WorkbookCommitId,
   WorkbookVersionReviewRecordSummary,
 } from '@mog-sdk/contracts/api';
 
@@ -33,12 +34,22 @@ type SummaryRowDataAttributes = {
   readonly proposalCommitId?: string;
 };
 
+export type ReviewProposalDiffTarget = {
+  readonly recordKind: 'review' | 'proposal';
+  readonly recordId: string;
+  readonly baseCommitId: WorkbookCommitId;
+  readonly targetCommitId: WorkbookCommitId;
+};
+
 export interface ReviewProposalSurfaceProps {
   readonly surface?: VersionSurfaceStatus;
   readonly reviews: readonly WorkbookVersionReviewRecordSummary[];
   readonly proposals: readonly AgentProposalSummary[];
   readonly reviewDiagnostic?: VersionPanelDiagnostic;
   readonly proposalDiagnostic?: VersionPanelDiagnostic;
+  readonly diffEnabled?: boolean;
+  readonly diffDisabledReason?: string;
+  readonly onOpenDiff?: (target: ReviewProposalDiffTarget) => void;
 }
 
 export function ReviewProposalSurface({
@@ -47,6 +58,9 @@ export function ReviewProposalSurface({
   proposals,
   reviewDiagnostic,
   proposalDiagnostic,
+  diffEnabled = true,
+  diffDisabledReason,
+  onOpenDiff,
 }: ReviewProposalSurfaceProps): React.JSX.Element | null {
   const reviewState = surface?.capabilities['version:reviewRead'];
   const proposalState = surface?.capabilities['version:proposal'];
@@ -62,6 +76,11 @@ export function ReviewProposalSurface({
   );
 
   if (!hasUnavailableState && !hasContent) return null;
+
+  const diffDisabledReasonId =
+    onOpenDiff && !diffEnabled && diffDisabledReason
+      ? 'version-review-proposal-diff-disabled-reason'
+      : undefined;
 
   return (
     <section
@@ -95,16 +114,33 @@ export function ReviewProposalSurface({
           diagnostic={proposalDiagnostic}
         />
         {surface ? <DiffPersistenceEvidence surface={surface} diffState={diffState} /> : null}
+        {diffDisabledReasonId ? (
+          <div
+            id={diffDisabledReasonId}
+            className="text-[11px] leading-snug text-ss-text-secondary"
+            data-testid={diffDisabledReasonId}
+          >
+            {diffDisabledReason}
+          </div>
+        ) : null}
         {reviews.map((review) => (
           <ReviewSummaryRow
             key={review.id}
             review={review}
+            diffEnabled={diffEnabled}
+            diffDisabledReason={diffDisabledReason}
+            diffDisabledReasonId={diffDisabledReasonId}
+            onOpenDiff={onOpenDiff}
           />
         ))}
         {proposals.map((proposal) => (
           <ProposalSummaryRow
             key={proposal.id}
             proposal={proposal}
+            diffEnabled={diffEnabled}
+            diffDisabledReason={diffDisabledReason}
+            diffDisabledReasonId={diffDisabledReasonId}
+            onOpenDiff={onOpenDiff}
           />
         ))}
       </div>
@@ -221,10 +257,34 @@ function DiffPersistenceEvidence({
 
 function ReviewSummaryRow({
   review,
+  diffEnabled,
+  diffDisabledReason,
+  diffDisabledReasonId,
+  onOpenDiff,
 }: {
   readonly review: WorkbookVersionReviewRecordSummary;
+  readonly diffEnabled: boolean;
+  readonly diffDisabledReason?: string;
+  readonly diffDisabledReasonId?: string;
+  readonly onOpenDiff?: (target: ReviewProposalDiffTarget) => void;
 }): React.JSX.Element {
   const target = reviewTargetEvidence(review);
+  const activation =
+    onOpenDiff && target.baseCommitId && target.headCommitId
+      ? {
+          target: {
+            recordKind: 'review' as const,
+            recordId: review.id,
+            baseCommitId: target.baseCommitId,
+            targetCommitId: target.headCommitId,
+          },
+          enabled: diffEnabled,
+          disabledReason: diffDisabledReason,
+          disabledReasonId: diffDisabledReasonId,
+          onOpenDiff,
+        }
+      : undefined;
+
   return (
     <SummaryRow
       title={review.title ?? review.id}
@@ -232,6 +292,7 @@ function ReviewSummaryRow({
       evidence={target.label}
       testId="version-review-record-row"
       ariaLabel={`Review ${review.title ?? review.id} ${review.status}`}
+      activation={activation}
       data={{
         recordKind: 'review',
         recordId: review.id,
@@ -250,10 +311,34 @@ function ReviewSummaryRow({
 
 function ProposalSummaryRow({
   proposal,
+  diffEnabled,
+  diffDisabledReason,
+  diffDisabledReasonId,
+  onOpenDiff,
 }: {
   readonly proposal: AgentProposalSummary;
+  readonly diffEnabled: boolean;
+  readonly diffDisabledReason?: string;
+  readonly diffDisabledReasonId?: string;
+  readonly onOpenDiff?: (target: ReviewProposalDiffTarget) => void;
 }): React.JSX.Element {
   const target = proposalTargetEvidence(proposal);
+  const activation =
+    onOpenDiff && proposal.proposalCommitId
+      ? {
+          target: {
+            recordKind: 'proposal' as const,
+            recordId: proposal.id,
+            baseCommitId: proposal.baseCommitId,
+            targetCommitId: proposal.proposalCommitId,
+          },
+          enabled: diffEnabled,
+          disabledReason: diffDisabledReason,
+          disabledReasonId: diffDisabledReasonId,
+          onOpenDiff,
+        }
+      : undefined;
+
   return (
     <SummaryRow
       title={proposal.title}
@@ -261,6 +346,7 @@ function ProposalSummaryRow({
       evidence={target}
       testId="version-proposal-record-row"
       ariaLabel={`Proposal ${proposal.title} ${proposal.status}`}
+      activation={activation}
       data={{
         recordKind: 'proposal',
         recordId: proposal.id,
@@ -284,6 +370,7 @@ function SummaryRow({
   evidence,
   testId,
   ariaLabel,
+  activation,
   data,
 }: {
   readonly title: string;
@@ -291,30 +378,41 @@ function SummaryRow({
   readonly evidence?: string;
   readonly testId: string;
   readonly ariaLabel: string;
+  readonly activation?: {
+    readonly target: ReviewProposalDiffTarget;
+    readonly enabled: boolean;
+    readonly disabledReason?: string;
+    readonly disabledReasonId?: string;
+    readonly onOpenDiff: (target: ReviewProposalDiffTarget) => void;
+  };
   readonly data: SummaryRowDataAttributes;
 }): React.JSX.Element {
-  return (
-    <div
-      className="min-w-0 border border-ss-border rounded-sm bg-ss-surface px-2 py-1.5"
-      aria-label={ariaLabel}
-      data-testid={testId}
-      data-record-kind={data.recordKind}
-      data-record-id={data.recordId}
-      data-status={data.status}
-      data-revision={data.revision}
-      data-review-id={data.reviewId}
-      data-review-status={data.reviewStatus}
-      data-review-revision={data.reviewRevision}
-      data-review-subject={data.reviewSubject}
-      data-proposal-id={data.proposalId}
-      data-proposal-status={data.proposalStatus}
-      data-proposal-revision={data.proposalRevision}
-      data-target-ref={data.targetRef}
-      data-base-commit-id={data.baseCommitId}
-      data-head-commit-id={data.headCommitId}
-      data-target-head-id={data.targetHeadId}
-      data-proposal-commit-id={data.proposalCommitId}
-    >
+  const rowDataAttributes = {
+    'data-testid': testId,
+    'data-record-kind': data.recordKind,
+    'data-record-id': data.recordId,
+    'data-status': data.status,
+    'data-revision': data.revision,
+    'data-review-id': data.reviewId,
+    'data-review-status': data.reviewStatus,
+    'data-review-revision': data.reviewRevision,
+    'data-review-subject': data.reviewSubject,
+    'data-proposal-id': data.proposalId,
+    'data-proposal-status': data.proposalStatus,
+    'data-proposal-revision': data.proposalRevision,
+    'data-target-ref': data.targetRef,
+    'data-base-commit-id': data.baseCommitId,
+    'data-head-commit-id': data.headCommitId,
+    'data-target-head-id': data.targetHeadId,
+    'data-proposal-commit-id': data.proposalCommitId,
+    'data-actionable': activation ? String(activation.enabled) : 'false',
+    'data-diff-base-commit-id': activation?.target.baseCommitId,
+    'data-diff-target-commit-id': activation?.target.targetCommitId,
+  };
+  const rowClassName =
+    'min-w-0 w-full border border-ss-border rounded-sm bg-ss-surface px-2 py-1.5';
+  const content = (
+    <>
       <div className="truncate text-body-sm font-medium text-ss-text">{title}</div>
       <div className="mt-0.5 truncate text-[11px] text-ss-text-secondary">{detail}</div>
       {evidence ? (
@@ -322,14 +420,44 @@ function SummaryRow({
           {evidence}
         </div>
       ) : null}
-    </div>
+    </>
+  );
+
+  if (!activation) {
+    return (
+      <div className={rowClassName} aria-label={ariaLabel} {...rowDataAttributes}>
+        {content}
+      </div>
+    );
+  }
+
+  const disabled = !activation.enabled;
+
+  return (
+    <button
+      type="button"
+      className={`${rowClassName} text-left transition-colors hover:bg-ss-surface-hover focus:outline-none focus:ring-1 focus:ring-ss-primary ${
+        disabled ? 'opacity-60 hover:bg-ss-surface' : ''
+      }`}
+      aria-label={`Open ${data.recordKind} diff for ${title} ${data.status}`}
+      aria-disabled={disabled}
+      aria-describedby={disabled ? activation.disabledReasonId : undefined}
+      title={disabled ? activation.disabledReason : undefined}
+      onClick={() => {
+        if (!activation.enabled) return;
+        activation.onOpenDiff(activation.target);
+      }}
+      {...rowDataAttributes}
+    >
+      {content}
+    </button>
   );
 }
 
 function reviewTargetEvidence(review: WorkbookVersionReviewRecordSummary): {
   readonly label: string;
-  readonly baseCommitId?: string;
-  readonly headCommitId?: string;
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly headCommitId?: WorkbookCommitId;
 } {
   const baseCommitId = review.baseCommitId ?? subjectBaseCommitId(review);
   const headCommitId = review.headCommitId ?? subjectHeadCommitId(review);
@@ -381,14 +509,18 @@ function proposalTargetEvidence(proposal: AgentProposalSummary): string {
   return parts.join(' · ');
 }
 
-function subjectBaseCommitId(review: WorkbookVersionReviewRecordSummary): string | undefined {
+function subjectBaseCommitId(
+  review: WorkbookVersionReviewRecordSummary,
+): WorkbookCommitId | undefined {
   if (review.subject.kind === 'commitRange' || review.subject.kind === 'proposal') {
     return review.subject.baseCommitId;
   }
   return undefined;
 }
 
-function subjectHeadCommitId(review: WorkbookVersionReviewRecordSummary): string | undefined {
+function subjectHeadCommitId(
+  review: WorkbookVersionReviewRecordSummary,
+): WorkbookCommitId | undefined {
   if (review.subject.kind === 'commitRange' || review.subject.kind === 'proposal') {
     return review.subject.headCommitId;
   }

@@ -3,7 +3,10 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 import {
+  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
+  type DomainCapabilityPolicyManifest,
   type VersionDomainCapabilityKey,
 } from '@mog-sdk/contracts/versioning';
 
@@ -52,14 +55,6 @@ const REQUIRED_MANIFEST_CAPABILITY_KEYS_BY_OPERATION = Object.freeze({
 const EVAL_ONLY_EXPECTED_FAILING_STATE = 'expected-failing';
 const PUBLIC_DIAGNOSTIC_VALUE_RE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 const MAX_PUBLIC_DIAGNOSTIC_VALUE_LENGTH = 128;
-const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freeze(
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.matrixRowId),
-);
-const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS =
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.every(
-    (row) => row.capabilityStates.export === 'supported',
-  );
-
 export async function validateVersionDomainSupportManifestGate(
   ctx: DocumentContext,
   operation: VersionDomainSupportManifestGateOperation,
@@ -139,17 +134,24 @@ function requiredValidationOptionsForOperation(
 function publicExportRegistryUnsupportedDiagnostics(
   operation: VersionDomainSupportManifestGateOperation,
 ): readonly VersionStoreDiagnostic[] {
-  if (operation !== 'export' || PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS) {
+  if (
+    operation !== 'export' ||
+    PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS
+  ) {
     return [];
   }
 
   return PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains
-    .filter((row) => row.capabilityStates.export !== 'supported')
+    .filter(isRequiredPublicExportRow)
+    .filter(
+      (row) =>
+        row.capabilityStates.export !== 'supported' && row.capabilityStates.export !== 'derived',
+    )
     .map((row) =>
       publicDiagnostic(
         operation,
         'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
-        'The public version domain policy registry does not yet support export for every domain row.',
+        'The public version domain policy registry does not yet support export for every required domain row.',
         {
           diagnosticCode: 'public-export-registry-not-supported',
           matrixRowId: row.matrixRowId,
@@ -161,6 +163,12 @@ function publicExportRegistryUnsupportedDiagnostics(
         },
       ),
     );
+}
+
+function isRequiredPublicExportRow(row: DomainCapabilityPolicyManifest): boolean {
+  return (PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS as readonly string[]).includes(
+    row.matrixRowId,
+  );
 }
 
 function getAttachedDomainSupportManifestGate(

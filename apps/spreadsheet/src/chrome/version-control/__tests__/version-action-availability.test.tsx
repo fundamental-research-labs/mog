@@ -3,6 +3,7 @@ import type {
   VersionCapabilityDependency,
   VersionCapabilityState,
   VersionDiagnostic,
+  VersionRef,
   VersionSurfaceStatus,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -17,6 +18,7 @@ import {
 
 const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const TARGET_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
+const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
 const STORAGE_UNAVAILABLE_REASON = 'Version storage is not ready for this workbook.';
 const READ_UNAVAILABLE_REASON = 'Version graph read services are not attached.';
 const VERSIONING_DISABLED_REASON = 'Versioning is disabled for this workbook.';
@@ -46,6 +48,7 @@ type ActionAvailabilityOptions = {
   readonly loading?: boolean;
   readonly commitMessage?: string;
   readonly branchName?: string;
+  readonly refs?: readonly Pick<VersionRef, 'name'>[];
   readonly targetCommitId?: WorkbookCommitId;
 };
 
@@ -70,32 +73,26 @@ const ACTION_CASES: readonly ActionCase[] = [
   },
   {
     capability: 'version:branch',
-    availability: (surface, options = {}) =>
-      getBranchAvailability(
-        { surface },
+    availability: (surface, options = {}) => {
+      const data = options.refs ? { surface, refs: options.refs } : { surface };
+      return getBranchAvailability(
+        data,
         options.actionBusy ?? false,
         options.loading ?? false,
-        options.branchName ?? 'refs/heads/review',
+        options.branchName ?? 'scenario/review',
         options.targetCommitId ?? TARGET_COMMIT_ID,
-      ),
+      );
+    },
   },
   {
     capability: 'version:checkout',
     availability: (surface, options = {}) =>
-      getCheckoutAvailability(
-        { surface },
-        options.actionBusy ?? false,
-        options.loading ?? false,
-      ),
+      getCheckoutAvailability({ surface }, options.actionBusy ?? false, options.loading ?? false),
   },
   {
     capability: 'version:diff',
     availability: (surface, options = {}) =>
-      getDiffAvailability(
-        { surface },
-        options.actionBusy ?? false,
-        options.loading ?? false,
-      ),
+      getDiffAvailability({ surface }, options.actionBusy ?? false, options.loading ?? false),
   },
 ];
 
@@ -106,7 +103,7 @@ describe('version action availability', () => {
       'Version status is unavailable.',
     );
     expectDisabled(
-      getBranchAvailability(undefined, false, false, 'refs/heads/review', TARGET_COMMIT_ID),
+      getBranchAvailability(undefined, false, false, 'scenario/review', TARGET_COMMIT_ID),
       'Version status is unavailable.',
     );
     expectDisabled(
@@ -134,7 +131,7 @@ describe('version action availability', () => {
       'Version surface status is unavailable.',
     );
     expectDisabled(
-      getBranchAvailability({}, false, false, 'refs/heads/review', TARGET_COMMIT_ID),
+      getBranchAvailability({}, false, false, 'scenario/review', TARGET_COMMIT_ID),
       'Version surface status is unavailable.',
     );
     expectDisabled(
@@ -202,7 +199,7 @@ describe('version action availability', () => {
       'Wait for provider writes to settle before checking out.',
     );
     expect(
-      getBranchAvailability({ surface }, false, false, 'refs/heads/review', TARGET_COMMIT_ID),
+      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
@@ -274,13 +271,63 @@ describe('version action availability', () => {
       'Enter a commit message.',
     );
     expectDisabled(
-      getBranchAvailability({ surface }, false, false, 'refs/heads/review', undefined),
+      getBranchAvailability({ surface }, false, false, 'scenario/review', undefined),
       'Select a commit target first.',
     );
     expectDisabled(
       getBranchAvailability({ surface }, false, false, '   ', TARGET_COMMIT_ID),
       'Enter a branch name.',
     );
+  });
+
+  it('validates branch creation names against public refs, protected main, and loaded refs', () => {
+    const surface = createSurfaceStatus();
+    const refs = [
+      ref('refs/heads/main'),
+      ref('refs/heads/scenario/budget'),
+      ref('refs/heads/review/model-a'),
+    ];
+
+    expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'main', TARGET_COMMIT_ID),
+      'main is protected and cannot be created from the version panel.',
+    );
+    expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'refs/heads/main', TARGET_COMMIT_ID),
+      'main is protected and cannot be created from the version panel.',
+    );
+    expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'HEAD', TARGET_COMMIT_ID),
+      'HEAD is symbolic and cannot be created as a branch.',
+    );
+    expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'refs/tags/review', TARGET_COMMIT_ID),
+      'Branch refs must use refs/heads/<branch>.',
+    );
+    expectDisabled(
+      getBranchAvailability(
+        { surface, refs },
+        false,
+        false,
+        'refs/heads/scenario/budget',
+        TARGET_COMMIT_ID,
+      ),
+      'Branch scenario/budget already exists.',
+    );
+    expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'review', TARGET_COMMIT_ID),
+      'Branch names must start with scenario/, agent/, import/, or review/.',
+    );
+
+    expect(
+      getBranchAvailability(
+        { surface, refs },
+        false,
+        false,
+        'refs/heads/scenario/forecast-q1',
+        TARGET_COMMIT_ID,
+      ),
+    ).toEqual({ enabled: true });
   });
 
   it('does not let local prerequisites hide disabled surface capabilities', () => {
@@ -359,6 +406,36 @@ describe('version action availability', () => {
       ),
       actionCapabilityReasons['version:diff'],
     );
+  });
+
+  it('disables commit and checkout when the current checkout session is stale', () => {
+    const surface = createSurfaceStatus({
+      current: {
+        checkedOutCommitId: HEAD_COMMIT_ID,
+        refHeadAtMaterialization: HEAD_COMMIT_ID,
+        currentRefHeadId: LATEST_COMMIT_ID,
+        stale: true,
+        staleReason: 'refMoved',
+      },
+      dirty: {
+        hasUncommittedLocalChanges: false,
+        commitEligibleChanges: true,
+        checkoutSafe: true,
+      },
+    });
+
+    expectDisabled(
+      getCommitAvailability({ surface }, false, false, 'Checkpoint'),
+      'main is stale because the branch head moved. Refresh before committing.',
+    );
+    expectDisabled(
+      getCheckoutAvailability({ surface }, false, false),
+      'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
+    );
+    expect(
+      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+    ).toEqual({ enabled: true });
+    expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
 
   it('enables actions when surface capabilities and local prerequisites pass', () => {
@@ -452,6 +529,10 @@ function disabledCapability(
   retryable = true,
 ): VersionCapabilityState {
   return { enabled: false, dependency, reason, retryable };
+}
+
+function ref(name: string): Pick<VersionRef, 'name'> {
+  return { name: name as VersionRef['name'] };
 }
 
 function diagnostic(

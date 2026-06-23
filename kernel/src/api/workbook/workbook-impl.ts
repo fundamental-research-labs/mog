@@ -53,6 +53,7 @@ import type {
   WorksheetWithInternals,
 } from '@mog-sdk/contracts/api';
 import type { CultureInfo } from '@mog-sdk/contracts/culture';
+import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import type { IChartBridge, IInkRecognitionBridge, IPivotBridge } from '@mog-sdk/contracts/bridges';
 import { type CellValuePrimitive, type SheetId, sheetId } from '@mog-sdk/contracts/core';
 import { toRowId as toSpreadsheetRowId } from '@mog-sdk/contracts/cell-identity';
@@ -192,6 +193,7 @@ import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
+import { bindWorkbookFeatureGates } from './workbook-feature-gates-context';
 import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
 import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 
@@ -250,6 +252,8 @@ export class WorkbookImpl implements WorkbookInternal {
   private readonly contextBinding: WorkbookContextBinding;
   private readonly stateProvider: WorkbookStateProvider;
   private readonly eventBus: IEventBus;
+  private readonly initialFeatureGates?: FeatureGates;
+  private readonly readFeatureGates?: () => FeatureGates;
   private checkpointManager: ICheckpointManager;
   private readonly _disposables = new DisposableStore();
 
@@ -334,7 +338,11 @@ export class WorkbookImpl implements WorkbookInternal {
 
   constructor(config: WorkbookConfig) {
     // Cast to DocumentContext — WorkbookImpl is internal kernel code and knows the runtime type
-    this.contextBinding = createWorkbookContextBinding(config.ctx as DocumentContext);
+    this.initialFeatureGates = config.featureGates;
+    this.readFeatureGates = config.readFeatureGates;
+    this.contextBinding = createWorkbookContextBinding(
+      this.withWorkbookFeatureGates(config.ctx as DocumentContext),
+    );
     this.ctx = this.contextBinding.context;
     const versioning = this.versioningWithDefaultCheckoutMaterializer(config.versioning);
     if (versioning) {
@@ -404,6 +412,14 @@ export class WorkbookImpl implements WorkbookInternal {
     if (unsub) {
       this._disposables.track(toDisposable(unsub));
     }
+  }
+
+  private withWorkbookFeatureGates(ctx: DocumentContext): DocumentContext {
+    if (!this.initialFeatureGates && !this.readFeatureGates) return ctx;
+    return bindWorkbookFeatureGates(
+      ctx,
+      () => this.readFeatureGates?.() ?? this.initialFeatureGates,
+    );
   }
 
   private versioningWithDefaultCheckoutMaterializer(
@@ -532,7 +548,7 @@ export class WorkbookImpl implements WorkbookInternal {
     attachWorkbookVersioning(nextContext, nextVersioning);
     attachWorkbookVersionSurfaceStatusService(nextContext, this.versionSurfaceStatusService);
 
-    this.contextBinding.publish(nextContext);
+    this.contextBinding.publish(this.withWorkbookFeatureGates(nextContext));
     this.versionSurfaceStatusService.recordCheckoutMaterialization(input);
     this._checkoutMaterializations.add(materialization);
     this.resetRuntimeCachesAfterCheckoutPublish();

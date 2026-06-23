@@ -504,10 +504,28 @@ export const PUBLIC_VERSION_DOMAIN_POLICY_IDS = Object.freeze(
 );
 export const PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT =
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.length;
-export const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freeze(
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.matrixRowId),
+
+export const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freeze([
+  'workbook-metadata',
+  'sheets',
+  'rows-columns',
+  'cells.values',
+  'cells.formulas',
+  'recalc-caches',
+] as const);
+
+const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_ID_SET = new Set<string>(
+  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
 );
+
 export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS =
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.every(
     (row) => row.capabilityStates.export === 'supported',
   );
+export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS =
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains
+    .filter((row) => PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_ID_SET.has(row.matrixRowId))
+    .every(
+      (row) =>
+        row.capabilityStates.export === 'supported' || row.capabilityStates.export === 'derived',
+    );

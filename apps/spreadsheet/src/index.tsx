@@ -94,7 +94,10 @@ import { ensureMetricCompatibleFontsLoaded } from './infra/styles/fonts';
 import { installChartImageExporter } from './infra/services';
 import { installImportedPivotRuntime } from './pivot/imported-pivot-runtime';
 
-type DocumentRuntime = Pick<DocumentContextValue, 'workbook' | 'uiStore' | 'eventBus'>;
+type WorkbookFeatureGatesRef = { current: FeatureGates };
+type DocumentRuntime = Pick<DocumentContextValue, 'workbook' | 'uiStore' | 'eventBus'> & {
+  readonly featureGatesRef: WorkbookFeatureGatesRef;
+};
 type SpreadsheetAppAppearanceMode = AppAppearanceMode & SpreadsheetDisplayMode;
 
 const RIBBON_VISIBILITY_PROFILE_ENV = 'MOG_RIBBON_VISIBILITY_PROFILE';
@@ -107,17 +110,29 @@ const VITE_RIBBON_VISIBILITY_CONFIG_JSON_ENV = 'VITE_MOG_RIBBON_VISIBILITY_CONFI
 // selection chrome, or other document-scoped UI state.
 const documentRuntimeCache = new WeakMap<DocumentHandle, Promise<DocumentRuntime>>();
 
-async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<DocumentRuntime> {
+async function getOrCreateDocumentRuntime(
+  handle: DocumentHandle,
+  readOnly: boolean,
+  featureGates: FeatureGates,
+): Promise<DocumentRuntime> {
   const cached = documentRuntimeCache.get(handle);
-  if (cached) return cached;
+  if (cached) {
+    const runtime = await cached;
+    runtime.featureGatesRef.current = effectiveWorkbookFeatureGates(readOnly, featureGates);
+    return runtime;
+  }
 
   const runtimePromise = (async () => {
     const uiStore: UIStoreApi = createShellUIStore(handle.initialSheetId, handle.undoService);
+    const featureGatesRef: WorkbookFeatureGatesRef = {
+      current: effectiveWorkbookFeatureGates(readOnly, featureGates),
+    };
 
     installChartImageExporter(handle);
 
     performance.mark('spreadsheetApp:createWorkbook:start');
     const workbook = await handle.workbook({
+      readOnly,
       stateProvider: {
         getActiveSheetId: () => uiStore.getState().activeSheetId,
         setActiveSheetId: (id: string) => uiStore.getState().setActiveSheet(toSheetId(id)),
@@ -126,6 +141,7 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
         getActiveObjectId: () => null,
         getActiveObjectType: () => null,
       },
+      readFeatureGates: () => featureGatesRef.current,
     });
     installImportedPivotRuntime(workbook as WorkbookInternal, getImportedPivotMetadata(handle));
     try {
@@ -151,6 +167,7 @@ async function getOrCreateDocumentRuntime(handle: DocumentHandle): Promise<Docum
       workbook: workbook as WorkbookInternal,
       uiStore,
       eventBus: handle.eventBus,
+      featureGatesRef,
     };
   })();
 
@@ -290,6 +307,7 @@ export default function SpreadsheetApp({
   const [contextValue, setContextValue] = useState<DocumentContextValue | null>(null);
   const contextHandleRef = useRef<DocumentHandle | null>(null);
   const contextValueRef = useRef<DocumentContextValue | null>(contextValue);
+  const kernelFeatureGatesRef = useRef<WorkbookFeatureGatesRef | null>(null);
   contextValueRef.current = contextValue;
 
   // Ref for latest config values — used by init effect to read current values
@@ -303,6 +321,7 @@ export default function SpreadsheetApp({
   useEffect(() => {
     if (!handle) {
       contextHandleRef.current = null;
+      kernelFeatureGatesRef.current = null;
       setContextValue((prev) => (prev === null ? prev : null));
       return;
     }
@@ -325,8 +344,17 @@ export default function SpreadsheetApp({
       performance.mark('spreadsheetApp:init:start');
       performance.mark('spreadsheetApp:metricFonts:start');
       const metricFontsReady = ensureMetricCompatibleFontsLoaded();
-      const runtime = await getOrCreateDocumentRuntime(handle!);
+      const runtime = await getOrCreateDocumentRuntime(
+        handle!,
+        configRef.current.readOnly,
+        configRef.current.featureGates,
+      );
       if (cancelled) return;
+      kernelFeatureGatesRef.current = runtime.featureGatesRef;
+      runtime.featureGatesRef.current = effectiveWorkbookFeatureGates(
+        configRef.current.readOnly,
+        configRef.current.featureGates,
+      );
 
       await metricFontsReady;
       performance.mark('spreadsheetApp:metricFonts:end');
@@ -363,7 +391,9 @@ export default function SpreadsheetApp({
       for (const m of appMeasures) performance.clearMeasures(m.name);
 
       setContextValue({
-        ...runtime,
+        workbook: runtime.workbook,
+        uiStore: runtime.uiStore,
+        eventBus: runtime.eventBus,
         importDurability: handle!,
         ...configRef.current,
       });
@@ -396,6 +426,9 @@ export default function SpreadsheetApp({
   // WITHOUT unmounting SpreadsheetContent. This prevents the resize oscillation
   // that occurred when config changes triggered full unmount/remount cycles.
   useEffect(() => {
+    if (kernelFeatureGatesRef.current) {
+      kernelFeatureGatesRef.current.current = effectiveWorkbookFeatureGates(readOnly, featureGates);
+    }
     setContextValue((prev) => {
       if (!prev) return prev;
       if (
@@ -477,6 +510,10 @@ export default function SpreadsheetApp({
       </FeatureGatesProvider>
     </DocumentContext.Provider>
   );
+}
+
+function effectiveWorkbookFeatureGates(readOnly: boolean, featureGates: FeatureGates): FeatureGates {
+  return readOnly ? { ...featureGates, editing: false } : featureGates;
 }
 
 function resolveFeatureGatesWithRibbonVisibilityProfile(

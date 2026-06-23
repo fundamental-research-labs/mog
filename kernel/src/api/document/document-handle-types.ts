@@ -3,6 +3,7 @@ import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import type { DocumentImportWarning } from '@mog-sdk/contracts/document';
 import type { IEventBus } from '@mog-sdk/contracts/events';
+import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
 import type { ISpreadsheetKernelContext } from '@mog-sdk/contracts/kernel';
 import type { PivotExpansionStateProvider } from '@mog-sdk/contracts/pivot';
 import type { DocumentSecurityConfig } from '@mog-sdk/contracts/security';
@@ -25,6 +26,8 @@ export interface DocumentHandleTrapRecovery {
 
 export interface DocumentHandleWorkbookConfig {
   stateProvider?: WorkbookStateProvider;
+  featureGates?: FeatureGates;
+  readFeatureGates?: () => FeatureGates;
   previouslySaved?: boolean;
   name?: string;
   readOnly?: boolean;

@@ -9,6 +9,7 @@ import {
 import {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_ALL_ROWS,
+  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS,
 } from '../domain-policy-registry';
 
 const INTERNAL_ONLY_FIELDS = Object.freeze([
@@ -32,9 +33,14 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     expect(PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT).toBe(44);
     expect(PUBLIC_VERSION_DOMAIN_POLICY_IDS).toHaveLength(44);
     expect(new Set(PUBLIC_VERSION_DOMAIN_POLICY_IDS).size).toBe(44);
-    expect(PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS).toEqual(
-      PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => row.matrixRowId),
-    );
+    expect(PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS).toEqual([
+      'workbook-metadata',
+      'sheets',
+      'rows-columns',
+      'cells.values',
+      'cells.formulas',
+      'recalc-caches',
+    ]);
 
     const idPattern = new RegExp(VERSION_DOMAIN_POLICY_ID_PATTERN);
     for (const row of PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains) {
@@ -88,7 +94,19 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     });
   });
 
-  it('keeps public export support fail-closed until every registry row is export-supported', () => {
+  it('keeps the required public export floor supported', () => {
+    const rows = new Map(
+      PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.matrixRowId, row]),
+    );
+
+    expect(PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS).toBe(true);
+    for (const matrixRowId of PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS) {
+      const exportState = rows.get(matrixRowId)?.capabilityStates.export;
+      expect(exportState === 'supported' || exportState === 'derived').toBe(true);
+    }
+  });
+
+  it('reports when the full public registry still contains rows outside the export floor', () => {
     const unsupportedRows = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.filter(
       (row) => row.capabilityStates.export !== 'supported',
     );

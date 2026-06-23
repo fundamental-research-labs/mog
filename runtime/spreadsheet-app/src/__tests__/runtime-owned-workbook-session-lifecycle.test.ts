@@ -19,6 +19,7 @@ import {
   decorateRuntimeOwnedHandleWithDefaultVersioning,
   type RegisteredSpreadsheetAppBridge,
 } from '../runtime-types';
+import { loadDocumentForSource } from '../shell-documents';
 
 type WorkbookConfig = DocumentHandleWorkbookConfig;
 
@@ -117,6 +118,29 @@ test('runtime attachment default versioning decorates document handle workbook c
   );
 });
 
+test('runtime attachment default versioning opens provider read-only when document handle is read-only', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  let readOnly = false;
+  const handle = {
+    documentId: 'runtime-default-versioning-readonly-doc',
+    get isReadOnly() {
+      return readOnly;
+    },
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  } as DocumentHandle;
+
+  decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  readOnly = true;
+  await handle.workbook({ name: 'Runtime default versioning read-only' });
+
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.kind, 'indexeddb');
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.requireDurablePersistence, true);
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.readOnly, true);
+});
+
 test('runtime attachment default versioning preserves caller versioning overrides', async () => {
   const capturedConfigs: WorkbookConfig[] = [];
   const handle = {
@@ -147,6 +171,52 @@ test('runtime attachment default versioning preserves caller versioning override
     capturedConfigs[0].versioning?.domainSupportManifest?.workbookId,
     'runtime-default-versioning-overrides-doc',
   );
+});
+
+test('spreadsheet app shell document loading propagates read-only handles to default versioning', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  let readOnly = false;
+  const handle = {
+    documentId: 'runtime-shell-default-versioning-readonly-doc',
+    eventBus: {
+      onAll() {
+        return undefined;
+      },
+    },
+    registerChartImageExporter() {
+      // Test handle only records that the runtime installs the exporter.
+    },
+    dispose() {
+      return undefined;
+    },
+    get isReadOnly() {
+      return readOnly;
+    },
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  };
+  const shell = {
+    documentManager: {
+      async createDocument() {
+        return handle;
+      },
+    },
+  } as never;
+
+  const loaded = await loadDocumentForSource(
+    shell,
+    'runtime-shell-default-versioning-readonly-doc',
+    { kind: 'blank' },
+  );
+
+  readOnly = true;
+  await loaded.handle.workbook();
+
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.kind, 'indexeddb');
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.requireDurablePersistence, true);
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.readOnly, true);
 });
 
 test('runtime version feature gates fail closed until default versioning is attached', () => {

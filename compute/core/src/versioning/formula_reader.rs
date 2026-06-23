@@ -127,11 +127,11 @@ pub(super) fn record_unrepresented_persisted_formula(
     Ok(())
 }
 
-struct FormulaRefUnsupported {
-    code: &'static str,
+pub(super) struct FormulaRefUnsupported {
+    pub(super) code: &'static str,
 }
 
-fn canonical_formula_ref(
+pub(super) fn canonical_formula_ref(
     engine: &YrsComputeEngine,
     sheet_keys: &[(cell_types::SheetId, String)],
     formula_ref: &IdentityFormulaRef,
@@ -360,7 +360,7 @@ fn canonical_sheet_key_for(
         })
 }
 
-fn canonical_formula_ref_object_ids(formula_ref: &CanonicalFormulaRef) -> Vec<String> {
+pub(super) fn canonical_formula_ref_object_ids(formula_ref: &CanonicalFormulaRef) -> Vec<String> {
     match formula_ref {
         CanonicalFormulaRef::Cell { object_id, .. }
         | CanonicalFormulaRef::FullRow { object_id, .. }

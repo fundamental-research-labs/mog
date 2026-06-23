@@ -1271,12 +1271,15 @@ export class DocumentLifecycleSystem {
       //   `providers[]` path is the headless branch.
       // - `internal: true` is forwarded from CreateDocumentOptions so the
       //   shell's fallback doc opts out of `touchDoc`.
+      // - `skipLocalPersistence: true`: no local Provider replay/load; the
+      //   host or caller owns persistence for this lifecycle.
       markPerformance('dls:createEngine:rustDoc:start');
       const rustDocument = new RustDocumentClass({
         docId: input.docId,
         computeBridge,
         skipDefaultSheet: input.options.skipDefaultSheet,
-        skipPersistenceLoad: this.environment === 'headless',
+        skipPersistenceLoad:
+          this.environment === 'headless' || input.options.skipLocalPersistence === true,
         initialSnapshot: input.options.initialSnapshot,
         yrsState: input.options.yrsState,
         internal: input.options.internal,
@@ -1351,7 +1354,8 @@ export class DocumentLifecycleSystem {
    *   2. Headless / Node — no Provider attached.
    *   3. Tauri runtime (`window.__TAURI__`) — no Provider attached yet;
    *      Tauri keeps native XLSX I/O for save.
-   *   4. Browser (default, no Tauri) — IndexedDBProvider attached, with
+   *   4. `skipLocalPersistence: true` — no Provider attached and no local replay.
+   *   5. Browser (default, no Tauri) — IndexedDBProvider attached, with
    *      the compaction ProviderDoc factory wired.
    */
   private async executeAttachProviders(
@@ -1661,6 +1665,7 @@ export class DocumentLifecycleSystem {
 
     // Provider selection precedence:
     //   - internal/fallback docs (per-app placeholder, os-fallback) opt out;
+    //   - skipLocalPersistence opts out of local replay and Provider attach;
     //   - headless mode has no Provider;
     //   - Tauri keeps native XLSX I/O for save;
     //   - jsdom-style envs without `indexedDB` skip silently;
@@ -1668,6 +1673,7 @@ export class DocumentLifecycleSystem {
     let providerAttached = false;
     if (
       !input.internal &&
+      !input.skipLocalPersistence &&
       input.environment !== 'headless' &&
       typeof (globalThis as { window?: { __TAURI__?: unknown } }).window?.__TAURI__ ===
         'undefined' &&

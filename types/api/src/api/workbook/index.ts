@@ -67,6 +67,7 @@ export type {
   VersionCommitPage,
   VersionCreateBranchOptions,
   VersionCreateReviewInput,
+  VersionCounterRecordRevision,
   VersionDegradedHeadResult,
   VersionDeleteRefOptions,
   VersionDiffDisplay,

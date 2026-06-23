@@ -31,7 +31,10 @@ export function ActionStatus({
 
   return (
     <div
+      role="status"
       aria-live="polite"
+      aria-atomic="true"
+      aria-busy={actionState.status === 'running'}
       className="rounded-sm border border-ss-border bg-ss-surface-secondary px-3 py-2 text-body-sm text-ss-text-secondary"
     >
       {actionState.status === 'running' ? actionState.label : actionState.message}

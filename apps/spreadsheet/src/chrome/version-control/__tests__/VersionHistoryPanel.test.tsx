@@ -40,6 +40,12 @@ describe('VersionHistoryPanelContent', () => {
 
     render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
 
+    const loadingStatus = screen.getByTestId('version-history-loading');
+    expect(loadingStatus).toHaveAttribute('role', 'status');
+    expect(loadingStatus).toHaveAttribute('aria-live', 'polite');
+    expect(loadingStatus).toHaveAttribute('aria-atomic', 'true');
+    expect(loadingStatus).toHaveTextContent('Loading version history');
+
     expect(await screen.findByText('Initial import')).toBeInTheDocument();
     expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
     expect(screen.getByText('scenario/budget')).toBeInTheDocument();
@@ -56,6 +62,35 @@ describe('VersionHistoryPanelContent', () => {
 
     await user.click(screen.getByTestId('panel-version-history-refresh'));
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
+  });
+
+  it('announces refresh loading while preserving existing version history content', async () => {
+    const refreshSurface = createDeferred<VersionSurfaceStatus>();
+    let surfaceReadCount = 0;
+    const workbook = createWorkbook({
+      getSurfaceStatus: jest.fn(async () => {
+        surfaceReadCount += 1;
+        return surfaceReadCount === 1 ? createSurfaceStatus() : refreshSurface.promise;
+      }),
+    });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    expect(await screen.findByText('Calculated forecast')).toBeInTheDocument();
+    await user.click(screen.getByTestId('panel-version-history-refresh'));
+
+    const refreshStatus = screen.getByTestId('version-history-loading-status');
+    expect(refreshStatus).toHaveAttribute('role', 'status');
+    expect(refreshStatus).toHaveAttribute('aria-live', 'polite');
+    expect(refreshStatus).toHaveAttribute('aria-atomic', 'true');
+    expect(refreshStatus).toHaveTextContent('Refreshing version history');
+    expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
+
+    refreshSurface.resolve(createSurfaceStatus());
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-loading-status')).not.toBeInTheDocument(),
+    );
   });
 
   it('shows partial version diagnostics without dropping available commit history', async () => {
@@ -146,6 +181,9 @@ describe('VersionHistoryPanelContent', () => {
       `version-diff-disabled-${safeDomId(PARENT_COMMIT_ID)}`,
       'Root commits do not have a parent diff.',
     );
+    expect(screen.getByTestId('version-history-capability-version-read')).toHaveAccessibleName(
+      'Read enabled',
+    );
   });
 
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {
@@ -189,6 +227,13 @@ describe('VersionHistoryPanelContent', () => {
     expect(diffButton).toHaveAccessibleDescription('version:diff is not available.');
     expect(screen.getByTestId('version-diff-unavailable-reason')).toHaveTextContent(
       'version:diff is not available.',
+    );
+    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAccessibleName(
+      'Diff unavailable: version:diff is not available.',
+    );
+    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAttribute(
+      'data-state',
+      'unavailable',
     );
   });
 
@@ -478,6 +523,45 @@ describe('VersionHistoryPanelContent', () => {
     await expectActionResult('Created review/version-panel', 'success');
   });
 
+  it('announces running and successful action states through a status live region', async () => {
+    const commitResult = createDeferred<
+      Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>
+    >();
+    const workbook = createWorkbook({
+      commit: jest.fn(async () => commitResult.promise),
+    });
+    const user = userEvent.setup();
+
+    render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
+    await user.click(screen.getByTestId('version-history-commit-button'));
+
+    const runningStatus = within(await screen.findByTestId('version-history-action-result')).getByRole(
+      'status',
+    );
+    expect(runningStatus).toHaveAttribute('aria-live', 'polite');
+    expect(runningStatus).toHaveAttribute('aria-atomic', 'true');
+    expect(runningStatus).toHaveAttribute('aria-busy', 'true');
+    expect(runningStatus).toHaveTextContent('Committing changes');
+
+    commitResult.resolve({
+      ok: true,
+      value: {
+        id: HEAD_COMMIT_ID,
+        parents: [PARENT_COMMIT_ID],
+        createdAt: '2026-06-22T10:15:00.000Z',
+        author: { redacted: false, displayName: 'Reviewer' },
+        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
+      },
+    });
+    await expectActionResult('Committed changes', 'success');
+    expect(
+      within(screen.getByTestId('version-history-action-result')).getByRole('status'),
+    ).toHaveTextContent('Committed changes');
+  });
+
   it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {
     const workbook = createWorkbook();
     const user = userEvent.setup();
@@ -544,8 +628,15 @@ describe('VersionHistoryPanelContent', () => {
       }),
     );
     await expectActionResult('Loaded parent diff', 'success');
-    expect(await screen.findByTestId('version-history-parent-diff')).toHaveTextContent(
-      'cells value',
+    const parentDiff = await screen.findByTestId('version-history-parent-diff');
+    expect(parentDiff).toHaveTextContent('cells value');
+    const diffStatus = within(parentDiff).getByRole('status');
+    expect(diffStatus).toHaveAttribute('aria-live', 'polite');
+    expect(diffStatus).toHaveAttribute('aria-atomic', 'true');
+    expect(diffStatus).toHaveTextContent(
+      `Parent Diff Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
+        HEAD_COMMIT_ID,
+      )} Changes 1`,
     );
   });
 
@@ -802,6 +893,17 @@ function hostDeniedCapabilityState(capability: VersionCapability): VersionCapabi
     reason: `Host policy denies ${capability}.`,
     retryable: false,
   };
+}
+
+function createDeferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+} {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 async function expectActionResult(message: string, status: 'success' | 'error'): Promise<void> {

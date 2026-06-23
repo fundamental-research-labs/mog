@@ -291,6 +291,8 @@ export interface AttachProvidersInput {
   rustDocument: RustDocument;
   /** True for the per-app placeholder kernel — skip Provider attach entirely. */
   internal: boolean;
+  /** True when local browser persistence should be skipped entirely. */
+  skipLocalPersistence: boolean;
   /** 'browser' / 'app' attaches IndexedDB; 'headless' attaches none. */
   environment: 'browser' | 'headless' | undefined;
   /**
@@ -787,6 +789,7 @@ export const documentLifecycleMachine = setup({
           computeBridge: context.computeBridge!,
           rustDocument: context.rustDocument!,
           internal: context.options?.internal ?? false,
+          skipLocalPersistence: context.options?.skipLocalPersistence === true,
           environment: undefined as 'browser' | 'headless' | undefined,
           // XLSX-import already populated the sheet set in
           // `hydrateXlsx`; skip default-sheet creation. All other paths

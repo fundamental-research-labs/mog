@@ -22,11 +22,15 @@ import { LegacyOptionRejectedError } from '../../errors/document';
 // ---------------------------------------------------------------------------
 
 // Mock DocumentLifecycleSystem to prevent actual engine boot
+const lifecycleCreateMock = jest.fn();
+const lifecycleCreateFromXlsxMock = jest.fn();
+const lifecycleCreateFromCsvMock = jest.fn();
+
 jest.unstable_mockModule('../../document', () => ({
   DocumentLifecycleSystem: jest.fn().mockImplementation(() => ({
-    create: jest.fn(),
-    createFromXlsx: jest.fn(),
-    createFromCsv: jest.fn(),
+    create: lifecycleCreateMock,
+    createFromXlsx: lifecycleCreateFromXlsxMock,
+    createFromCsv: lifecycleCreateFromCsvMock,
     waitForReady: jest.fn().mockResolvedValue(undefined),
     awaitImportDurability: jest.fn().mockResolvedValue(undefined),
     dispose: jest.fn().mockResolvedValue(undefined),
@@ -61,6 +65,12 @@ beforeAll(() => {
     jest.spyOn(performance, 'clearMeasures').mockImplementation(() => {});
     jest.spyOn(performance, 'clearMarks').mockImplementation(() => {});
   }
+});
+
+beforeEach(() => {
+  lifecycleCreateMock.mockClear();
+  lifecycleCreateFromXlsxMock.mockClear();
+  lifecycleCreateFromCsvMock.mockClear();
 });
 
 const { DocumentFactory } = await import('../../api/document/document-factory');
@@ -111,6 +121,26 @@ describe('CreateDocumentOptions.providers', () => {
   it('allows empty providers array (no-op)', async () => {
     // Empty array is not a bypass — it's the absence of providers.
     await expect(DocumentFactory.create({ providers: [] })).resolves.toBeDefined();
+  });
+
+  it('passes skipLocalPersistence into CSV lifecycle creation', async () => {
+    const source = { type: 'bytes' as const, data: new Uint8Array([0x41, 0x2c, 0x42]) };
+
+    const result = await DocumentFactory.createFromCsv(source, {
+      documentId: 'csv-ephemeral-doc',
+      skipLocalPersistence: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(lifecycleCreateFromCsvMock).toHaveBeenCalledWith(
+      'csv-ephemeral-doc',
+      {
+        skipDefaultSheet: true,
+        skipLocalPersistence: true,
+      },
+      source,
+      null,
+    );
   });
 });
 
@@ -199,9 +229,10 @@ describe('production facade audit', () => {
     expect(true).toBe(true);
   });
 
-  it('shell loadDocument only passes documentId', () => {
-    // Shell's loadDocument() calls DocumentFactory.createFromXlsx({ documentId })
-    // — no legacy options. Same code-review contract as above.
+  it('shell loadDocument only passes lifecycle-safe import options', () => {
+    // Shell's legacy CSV import path passes documentId plus import-scoped
+    // options such as csvOptions and skipLocalPersistence — no providers,
+    // yrsState, or initialSnapshot. Same code-review contract as above.
     expect(true).toBe(true);
   });
 

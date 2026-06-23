@@ -2,6 +2,7 @@ import type {
   ControlPlaneCompareAndSwapRequest,
   ControlPlaneDryRunRequest,
 } from '../control-plane';
+import { MOG_WORKBOOK_VERSION_XLSX_METADATA_PART } from './xlsx-interop';
 import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
@@ -32,6 +33,15 @@ import type {
   VersionProposalVerificationSummary,
   VersionRedactionSummary,
 } from './index';
+import type {
+  MogWorkbookVersionXlsxCommitId,
+  MogWorkbookVersionXlsxImportRootProvenance,
+  MogWorkbookVersionXlsxMetadata,
+  MogWorkbookVersionXlsxMetadataExpectedHead,
+  MogWorkbookVersionXlsxMetadataTrustResult,
+  MogWorkbookVersionXlsxMetadataTrustSummary,
+  MogWorkbookVersionXlsxObjectDigest,
+} from './xlsx-interop';
 
 type Assert<T extends true> = T;
 type IsNever<T> = [T] extends [never] ? true : false;
@@ -389,6 +399,72 @@ const mergePreviewRecord: VersionMergePreviewRecord = Object.freeze({
   diagnostics: Object.freeze([metadataDiagnostic]),
 });
 
+const xlsxSemanticChangeSetDigest: MogWorkbookVersionXlsxObjectDigest = Object.freeze({
+  algorithm: 'sha256',
+  digest: '1'.repeat(64),
+});
+const xlsxSnapshotRootDigest: MogWorkbookVersionXlsxObjectDigest = Object.freeze({
+  algorithm: 'sha256',
+  digest: '2'.repeat(64),
+});
+const xlsxExpectedHead: MogWorkbookVersionXlsxMetadataExpectedHead = Object.freeze({
+  commitId: `commit:sha256:${'a'.repeat(64)}` as MogWorkbookVersionXlsxCommitId,
+  refName: 'refs/heads/main',
+  resolvedFrom: 'HEAD',
+  refRevision: Object.freeze({
+    kind: 'counter',
+    value: '1',
+  }),
+  semanticChangeSetDigest: xlsxSemanticChangeSetDigest,
+  snapshotRootDigest: xlsxSnapshotRootDigest,
+});
+const xlsxMetadata: MogWorkbookVersionXlsxMetadata = Object.freeze({
+  schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1',
+  exportedAt: '2026-06-22T00:00:00.000Z',
+  documentId: 'vc10-xlsx-public-contract-fixture',
+  head: xlsxExpectedHead,
+  diagnostics: Object.freeze([
+    Object.freeze({
+      code: 'VERSION_XLSX_METADATA_PUBLIC_CONTRACT_FIXTURE',
+      severity: 'info',
+      message: 'Public VC10 XLSX metadata contract fixture.',
+    }),
+  ]),
+  redaction: Object.freeze({
+    policy: 'commit-document-and-object-digests-only',
+    omitted: Object.freeze([
+      'authors',
+      'agentTraces',
+      'rawWorkbookBytes',
+      'credentials',
+      'externalDataSecrets',
+      'objectStoreNamespace',
+      'workspaceId',
+      'principalScope',
+    ]),
+  }),
+});
+const xlsxTrustedMetadataTrust: MogWorkbookVersionXlsxMetadataTrustSummary = Object.freeze({
+  status: 'trusted',
+  sidecarPart: MOG_WORKBOOK_VERSION_XLSX_METADATA_PART,
+  redacted: true,
+});
+const xlsxTrustResult: MogWorkbookVersionXlsxMetadataTrustResult = Object.freeze({
+  status: 'trusted',
+  metadata: xlsxMetadata,
+  trust: xlsxTrustedMetadataTrust,
+  diagnostics: Object.freeze([]),
+});
+const xlsxImportRootProvenance: MogWorkbookVersionXlsxImportRootProvenance = Object.freeze({
+  kind: 'xlsx',
+  source: Object.freeze({
+    sourceType: 'bytes',
+    byteLength: 4096,
+  }),
+  diagnostics: Object.freeze([]),
+  versionMetadataTrust: xlsxTrustedMetadataTrust,
+});
+
 export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   digest,
   historyReadModes,
@@ -404,4 +480,7 @@ export const VERSIONING_CONTRACT_FIXTURES = Object.freeze({
   agentProposalAcceptedEvent,
   appendAgentProposalEventInput,
   mergePreviewRecord,
+  xlsxMetadata,
+  xlsxTrustResult,
+  xlsxImportRootProvenance,
 });

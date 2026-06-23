@@ -6,17 +6,21 @@ use formula_types::{
     StructureChange,
 };
 use snapshot_types::versioning::{
-    CanonicalFormulaRef, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticChangeKind,
+    semantic_workbook_state_digest, CanonicalFormulaRef, SemanticChangeKind,
     SemanticDiagnosticSeverity, SemanticDomainCoverageStatus, SemanticObjectKind,
-    VersionDomainCapabilityState, semantic_workbook_state_digest,
+    VersionDomainCapabilityState, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION,
 };
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 use crate::storage::engine::YrsComputeEngine;
 use crate::versioning::{
-    SemanticWorkbookStateReader, coverage_for_states, diff_semantic_workbook_states,
+    coverage_for_states, diff_semantic_workbook_states, SemanticWorkbookStateReader,
+    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN,
+    SHEETS_DOMAIN,
 };
+
+mod named_ranges;
 
 fn workbook(cells: Vec<CellData>) -> WorkbookSnapshot {
     WorkbookSnapshot {
@@ -92,7 +96,7 @@ fn identity_formula(template: &str, refs: Vec<IdentityFormulaRef>) -> IdentityFo
 }
 
 #[test]
-fn engine_semantic_reader_reads_ordered_authored_cells() {
+fn engine_semantic_reader_reads_ordered_cell_values() {
     let (engine, _) = YrsComputeEngine::from_snapshot(workbook(vec![
         cell(2, 1, 1, CellValue::from("beta")),
         cell(1, 0, 0, CellValue::number(42.0)),
@@ -137,6 +141,33 @@ fn engine_semantic_reader_returns_digest_envelope() {
     assert_eq!(
         envelope.state_digest,
         semantic_workbook_state_digest(&envelope.state).expect("state digest")
+    );
+}
+
+#[test]
+fn engine_semantic_reader_registers_public_first_slice_domain_rows_for_supported_semantics() {
+    let (engine, _) =
+        YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
+            .expect("engine");
+
+    let state = engine.read_semantic_workbook_state().expect("state");
+
+    for domain_id in [
+        SHEETS_DOMAIN,
+        ROWS_COLUMNS_DOMAIN,
+        CELL_VALUES_DOMAIN,
+        CELL_FORMULAS_DOMAIN,
+        NAMED_RANGES_DOMAIN,
+    ] {
+        assert_eq!(
+            state.domains[domain_id].capability_state,
+            VersionDomainCapabilityState::Supported,
+            "{domain_id} should be represented by its public first-slice row"
+        );
+    }
+    assert!(
+        !state.domains.contains_key("authored-grid"),
+        "semantic reader should not emit the old broad authored-grid alias"
     );
 }
 
@@ -313,7 +344,7 @@ fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
         }
     ));
     assert_eq!(
-        after_state.domains[super::CELL_FORMULAS_DOMAIN].capability_state,
+        after_state.domains[CELL_FORMULAS_DOMAIN].capability_state,
         VersionDomainCapabilityState::Supported
     );
 
@@ -321,7 +352,7 @@ fn engine_semantic_reader_reads_formula_domain_objects_and_refs() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Added
             && change.object_kind == SemanticObjectKind::CellFormula
-            && change.domain_id == super::CELL_FORMULAS_DOMAIN
+            && change.domain_id == CELL_FORMULAS_DOMAIN
             && change.object_id == "formula:cell:sheet#0:r2:c2"
     }));
 }
@@ -378,12 +409,10 @@ fn engine_semantic_reader_marks_legacy_formula_without_identity_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(
-        unsupported
-            .objects
-            .keys()
-            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
-    );
+    assert!(unsupported
+        .objects
+        .keys()
+        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
     assert_eq!(
         coverage_for_states(&state, &state)
             .iter()
@@ -492,12 +521,10 @@ fn engine_semantic_reader_marks_unrepresented_persisted_formula_opaque_blocking(
         unsupported.capability_state,
         VersionDomainCapabilityState::OpaqueBlocking
     );
-    assert!(
-        unsupported
-            .objects
-            .keys()
-            .any(|object_id| object_id.ends_with(":legacy-without-identity"))
-    );
+    assert!(unsupported
+        .objects
+        .keys()
+        .any(|object_id| object_id.ends_with(":legacy-without-identity")));
 }
 
 #[test]
@@ -530,7 +557,7 @@ fn engine_semantic_reader_digest_changes_for_formula_edit() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Updated
             && change.object_kind == SemanticObjectKind::CellFormula
-            && change.domain_id == super::CELL_FORMULAS_DOMAIN
+            && change.domain_id == CELL_FORMULAS_DOMAIN
             && change.object_id == "formula:cell:sheet#0:r0:c0"
     }));
 }
@@ -586,11 +613,13 @@ fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Added
             && change.object_kind == SemanticObjectKind::Row
+            && change.domain_id == ROWS_COLUMNS_DOMAIN
             && change.object_id == "row:sheet#0:r2"
     }));
     assert!(diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Added
             && change.object_kind == SemanticObjectKind::Column
+            && change.domain_id == ROWS_COLUMNS_DOMAIN
             && change.object_id == "column:sheet#0:c3"
     }));
 }
@@ -626,12 +655,13 @@ fn engine_semantic_reader_digest_changes_for_row_insert() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Updated
             && change.object_kind == SemanticObjectKind::Sheet
+            && change.domain_id == SHEETS_DOMAIN
             && change.object_id == "sheet:sheet#0"
     }));
 }
 
 #[test]
-fn engine_semantic_reader_digest_changes_for_authored_cell_edit() {
+fn engine_semantic_reader_digest_changes_for_cell_value_edit() {
     let (before, _) =
         YrsComputeEngine::from_snapshot(workbook(vec![cell(1, 0, 0, CellValue::from("alpha"))]))
             .expect("before");
@@ -649,6 +679,7 @@ fn engine_semantic_reader_digest_changes_for_authored_cell_edit() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
             && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+            && change.domain_id == CELL_VALUES_DOMAIN
     }));
 }
 
@@ -677,11 +708,9 @@ fn engine_semantic_reader_reads_direct_cell_format() {
     let before_state = before.read_semantic_workbook_state().expect("before state");
     let after_state = after.read_semantic_workbook_state().expect("after state");
     let cell_key = "cell:sheet#0:r0:c0";
-    assert!(
-        before_state.sheets["sheet#0"].cells[cell_key]
-            .direct_format
-            .is_none()
-    );
+    assert!(before_state.sheets["sheet#0"].cells[cell_key]
+        .direct_format
+        .is_none());
     let direct_format = after_state.sheets["sheet#0"].cells[cell_key]
         .direct_format
         .as_ref()
@@ -699,6 +728,7 @@ fn engine_semantic_reader_reads_direct_cell_format() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == snapshot_types::versioning::SemanticChangeKind::Updated
             && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+            && change.domain_id == CELL_VALUES_DOMAIN
             && change.object_id == cell_key
     }));
 }
@@ -749,6 +779,7 @@ fn engine_semantic_reader_reads_format_only_cell() {
     assert!(diff.changes.iter().any(|change| {
         change.kind == snapshot_types::versioning::SemanticChangeKind::Added
             && change.object_kind == snapshot_types::versioning::SemanticObjectKind::Cell
+            && change.domain_id == CELL_VALUES_DOMAIN
             && change.object_id == cell_key
     }));
 }

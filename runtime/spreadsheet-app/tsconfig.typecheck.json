@@ -5,7 +5,7 @@
     "jsx": "react-jsx",
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "type-tests/**/*.ts"],
   "exclude": [
     "node_modules",
     "dist",

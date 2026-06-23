@@ -915,6 +915,7 @@ export interface VersionReviewRecord {
   readonly diagnostics?: readonly VersionMetadataDiagnostic[];
 }
 
+export * from './xlsx-interop';
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
 export {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,

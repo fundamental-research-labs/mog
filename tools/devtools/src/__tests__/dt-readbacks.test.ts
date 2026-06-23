@@ -664,6 +664,30 @@ describe('__dt rendered-state readbacks (app-eval / app-eval rendered-state read
     expect(runtime.api.getRenderedViewportStartRow('main')).toBe(11);
   });
 
+  test('getRenderedViewportStartRow uses the rendered viewport start column', () => {
+    runtime = setupRuntime({
+      drawings: [],
+      rowHeights: { 25: 24, 26: 24 },
+      colWidths: { 2: 100 },
+    });
+
+    const coordinator = (globalThis as any).window.__COORDINATOR__;
+    const renderer = coordinator.renderer.getRenderer();
+    coordinator.renderer.getRenderer = () => ({
+      ...renderer,
+      getViewportLayout: () => ({
+        viewports: [
+          {
+            id: 'main:sheet-1',
+            cellRange: { startRow: 25, endRow: 26, startCol: 2, endCol: 2 },
+          },
+        ],
+      }),
+    });
+
+    expect(runtime.api.getRenderedViewportStartRow('main')).toBe(25);
+  });
+
   test('getRenderedColWidth reports the canvas-drawn column width', async () => {
     runtime = setupRuntime({
       drawings: [],

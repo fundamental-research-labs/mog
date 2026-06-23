@@ -16,20 +16,31 @@ export function VersionHistoryDiffPreview({
 }): React.JSX.Element | null {
   if (!diffPreview) return null;
   const count = diffPreview.page.items.length;
+  const summaryId = 'version-history-parent-diff-summary';
+  const summary = `Parent Diff Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
+    diffPreview.target,
+  )} Changes ${count}`;
 
   return (
     <section
       className="flex flex-col gap-2 border border-ss-border rounded-sm p-2 bg-ss-surface-secondary"
       aria-label="Parent diff"
+      aria-describedby={summaryId}
       data-testid="version-history-parent-diff"
     >
       <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
         <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
         <span>Parent Diff</span>
       </div>
-      <p className="sr-only">
-        Parent Diff Base {shortCommitId(diffPreview.base)} Target {shortCommitId(diffPreview.target)} Changes{' '}
-        {count}
+      <p
+        id={summaryId}
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="version-history-parent-diff-status"
+      >
+        {summary}
       </p>
       <div className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1 text-[11px]">
         <span className="text-ss-text-secondary">Base</span>

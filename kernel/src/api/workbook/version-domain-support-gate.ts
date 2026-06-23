@@ -91,6 +91,7 @@ export async function validateVersionDomainSupportManifestGate(
     domainPolicyRegistry: PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
     now: gate.options?.now instanceof Date ? gate.options.now : new Date(),
     operation,
+    requiredCapabilityKeys: requiredManifestCapabilityKeys(operation),
     ...requiredValidationOptionsForOperation(operation),
   };
   const validation = validateDomainSupportManifest(manifest, options);

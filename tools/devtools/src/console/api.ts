@@ -8,6 +8,8 @@ import type {
   BridgeCallEvent,
   DevToolsConsoleAPI,
   DevToolsStatus,
+  DevToolsWorkbookVersionReadFacade,
+  DevToolsVersionControlReadbacks,
   InvariantsRunOutput,
   ProgrammaticError,
   ProgrammaticFlow,
@@ -666,6 +668,75 @@ export function createConsoleAPI(
     }
   }
 
+  async function getActiveWorkbookFromShell(): Promise<unknown | null> {
+    try {
+      const shell = (window as any).__SHELL__;
+      if (!shell) return null;
+
+      const state = shell.store?.getState?.();
+      const fileId = state?.activeFileId;
+      if (!fileId) return null;
+
+      const handle = shell.documentManager?.getDocument?.(fileId);
+      if (!handle) return null;
+
+      if (typeof handle.workbook === 'function') {
+        return (await handle.workbook()) ?? null;
+      }
+      return handle.workbook ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  function getWorkbookVersionReadFacade(workbook: unknown): DevToolsWorkbookVersionReadFacade | null {
+    const version = (workbook as { version?: unknown } | null | undefined)?.version as
+      | Partial<DevToolsWorkbookVersionReadFacade>
+      | null
+      | undefined;
+    if (!version || typeof version !== 'object') return null;
+    return version as DevToolsWorkbookVersionReadFacade;
+  }
+
+  async function getActiveWorkbookVersionReadFacade(): Promise<DevToolsWorkbookVersionReadFacade | null> {
+    try {
+      const coordWorkbook = (window as any).__COORDINATOR__?.workbook;
+      const coordFacade = getWorkbookVersionReadFacade(coordWorkbook);
+      if (coordFacade) return coordFacade;
+
+      const shellWorkbook = await getActiveWorkbookFromShell();
+      return getWorkbookVersionReadFacade(shellWorkbook);
+    } catch {
+      return null;
+    }
+  }
+
+  const versionControl: DevToolsVersionControlReadbacks = {
+    async getSurfaceStatus() {
+      const version = await getActiveWorkbookVersionReadFacade();
+      if (typeof version?.getSurfaceStatus !== 'function') return null;
+      return await version.getSurfaceStatus();
+    },
+
+    async getHead(options) {
+      const version = await getActiveWorkbookVersionReadFacade();
+      if (typeof version?.getHead !== 'function') return null;
+      return await version.getHead(options);
+    },
+
+    async listCommits(options) {
+      const version = await getActiveWorkbookVersionReadFacade();
+      if (typeof version?.listCommits !== 'function') return null;
+      return await version.listCommits(options);
+    },
+
+    async listRefs(options) {
+      const version = await getActiveWorkbookVersionReadFacade();
+      if (typeof version?.listRefs !== 'function') return null;
+      return await version.listRefs(options);
+    },
+  };
+
   /**
    * Read the current selection ranges.
    * Primary path: __COORDINATOR__.grid selection snapshot (sync, reliable).
@@ -729,6 +800,8 @@ export function createConsoleAPI(
   );
 
   const api: DevToolsConsoleAPI = {
+    versionControl,
+
     last(n = 10) {
       const entries = store.last(n);
       printEntries(entries);
@@ -2184,8 +2257,9 @@ export function createConsoleAPI(
         const range = matchingViewport?.cellRange ?? geometry.getVisibleRange();
         if (!range) return null;
 
+        const probeCol = range.startCol ?? 0;
         for (let row = range.startRow; row <= range.endRow; row++) {
-          const bounds = geometry.getCellPageRect({ row, col: 0 });
+          const bounds = geometry.getCellPageRect({ row, col: probeCol });
           if (bounds && Number.isFinite(bounds.height) && bounds.height > 0) {
             return row;
           }

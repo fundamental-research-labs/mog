@@ -157,7 +157,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('fails closed before clean XLSX export while public registry export is contracted', async () => {
+  it('allows clean XLSX export when the manifest proves required export coverage', async () => {
     const xlsxBytes = await createSourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: xlsxBytes },
@@ -185,7 +185,15 @@ describe('WorkbookVersion XLSX import root', () => {
 
       await expect(wb.version.getHead()).resolves.toMatchObject({ ok: true });
 
-      await expectContractedXlsxExportBlocked(wb.toXlsx({ contextStripped: true }));
+      const exported = await wb.toXlsx({ contextStripped: true });
+      expect(exported.byteLength).toBeGreaterThan(100);
+      expect(
+        readAndValidateMogVersionMetadataFromXlsx(exported, {
+          expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
+        }),
+      ).toMatchObject({
+        status: 'absent',
+      });
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});
@@ -233,7 +241,7 @@ describe('WorkbookVersion XLSX import root', () => {
     }
   });
 
-  it('fails closed before redacted Mog version metadata sidecar export while export is contracted', async () => {
+  it('exports trusted Mog version metadata sidecar when explicitly requested', async () => {
     const xlsxBytes = await createSourceXlsx();
     const imported = await DocumentFactory.createFromXlsx(
       { type: 'bytes', data: xlsxBytes },
@@ -262,10 +270,29 @@ describe('WorkbookVersion XLSX import root', () => {
       const head = await wb.version.getHead();
       expect(head).toMatchObject({ ok: true });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+      const commitPayload = await readRootCommitPayload(head.value.id, METADATA_EXPORT_DOCUMENT_ID);
 
-      await expectContractedXlsxExportBlocked(
-        wb.toXlsx({ contextStripped: true, versionMetadata: 'include' }),
-      );
+      const exported = await wb.toXlsx({ contextStripped: true, versionMetadata: 'include' });
+      const metadata = readAndValidateMogVersionMetadataFromXlsx(exported, {
+        expectedDocumentId: METADATA_EXPORT_DOCUMENT_ID,
+        expectedHead: {
+          commitId: head.value.id,
+          ...(head.value.refName ? { refName: head.value.refName } : {}),
+          ...(head.value.resolvedFrom ? { resolvedFrom: head.value.resolvedFrom } : {}),
+          ...(head.value.refRevision ? { refRevision: head.value.refRevision } : {}),
+          semanticChangeSetDigest: commitPayload.semanticChangeSetDigest as ObjectDigest,
+          snapshotRootDigest: commitPayload.snapshotRootDigest as ObjectDigest,
+        },
+      });
+      expect(metadata).toMatchObject({
+        status: 'trusted',
+        metadata: {
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          head: {
+            commitId: head.value.id,
+          },
+        },
+      });
     } finally {
       await wb?.close('skipSave').catch(() => {});
       await imported.handle.dispose().catch(() => {});

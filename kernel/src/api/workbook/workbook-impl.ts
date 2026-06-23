@@ -165,7 +165,10 @@ import type {
   WorkbookViewport,
 } from '@mog-sdk/contracts/api';
 import { WorkbookHistoryImpl } from './history';
-import { WorkbookVersionWithDirtyTracking } from './workbook-version-dirty-tracking';
+import {
+  WorkbookVersionWithDirtyTracking,
+  type WorkbookVersionDirtyTrackingState,
+} from './workbook-version-dirty-tracking';
 import {
   checkoutDirtyWorkingStateDiagnostic,
   checkoutWriteFenceUnavailableDiagnostic,
@@ -630,6 +633,10 @@ export class WorkbookImpl implements WorkbookInternal {
   }
 
   private markDirty(): void {
+    if (this._dirty) {
+      this._dirtyStatusSequence += 1;
+      return;
+    }
     this.setDirtyState(true);
   }
 
@@ -641,6 +648,16 @@ export class WorkbookImpl implements WorkbookInternal {
 
   markClean(): void {
     this.setDirtyState(false);
+  }
+
+  private readVersionDirtyTrackingState(): WorkbookVersionDirtyTrackingState {
+    return { isDirty: this._dirty, revision: this._dirtyStatusSequence };
+  }
+
+  private markCleanIfDirtyRevisionUnchanged(revision: number): boolean {
+    if (!this._dirty || this._dirtyStatusSequence !== revision) return false;
+    this.markClean();
+    return true;
   }
 
   get previouslySaved(): boolean {
@@ -2137,7 +2154,8 @@ export class WorkbookImpl implements WorkbookInternal {
   get version(): WorkbookVersion {
     return (this._version ??= new WorkbookVersionWithDirtyTracking(this.ctx, {
       checkoutTransactionGuard: this.checkoutTransactionGuard,
-      markClean: () => this.markClean(),
+      readState: () => this.readVersionDirtyTrackingState(),
+      markCleanIfRevisionUnchanged: (revision) => this.markCleanIfDirtyRevisionUnchanged(revision),
     }));
   }
 

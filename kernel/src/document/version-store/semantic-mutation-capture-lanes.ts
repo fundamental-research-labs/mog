@@ -25,6 +25,17 @@ export function classifySemanticMutationCaptureLane(
   return 'skip';
 }
 
+export function isUncapturedNormalDirtyMutation(
+  context: VersionOperationContext | undefined,
+): boolean {
+  if (!context) return false;
+  if (context.kind === 'sync-import') return false;
+  if (context.capturePolicy === 'rootCreation') return false;
+  if (context.writeAdmissionMode === 'block') return false;
+  if (context.collaboration?.replay || context.collaboration?.system) return false;
+  return true;
+}
+
 function isCommitEligibleCapture(context: VersionOperationContext): boolean {
   return context.capturePolicy === 'commitEligible' && context.writeAdmissionMode === 'capture';
 }

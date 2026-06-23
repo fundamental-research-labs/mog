@@ -286,6 +286,10 @@ for (const name of [
   'SpreadsheetOpenWorkbookRequest',
   'SpreadsheetAttachmentState',
   'SpreadsheetMarkSavedInput',
+  'SpreadsheetBuiltInFeatureGateCapability',
+  'SpreadsheetFeatureGateCapabilities',
+  'SpreadsheetFeatureGateCapability',
+  'SpreadsheetVersionControlFeatureGateCapability',
 ]) {
   assert.equal(names.includes(name), true, `root export is missing public contract ${name}`);
 }
@@ -295,6 +299,9 @@ for (const required of [
   /export interface SpreadsheetWorkbookSession\b/,
   /export interface SpreadsheetAppAttachmentHandle\b/,
   /export interface MogSpreadsheetAppProps extends MogSpreadsheetAttachmentEvents\b/,
+  /export type SpreadsheetVersionControlFeatureGateCapability\b/,
+  /export interface SpreadsheetFeatureGateCapabilities\b/,
+  /readonly capabilities\?: SpreadsheetFeatureGateCapabilities;/,
   /readonly runtime: SpreadsheetRuntime;/,
   /readonly workbook: SpreadsheetWorkbookSession;/,
 ]) {

@@ -30,7 +30,10 @@ import {
   capturePendingRemoteSemanticMutations,
   type VersionPendingRemoteCapture,
 } from './pending-remote-capture-service';
-import { classifySemanticMutationCaptureLane } from './semantic-mutation-capture-lanes';
+import {
+  classifySemanticMutationCaptureLane,
+  isUncapturedNormalDirtyMutation,
+} from './semantic-mutation-capture-lanes';
 import {
   isDirectCellFormatOperation,
   mapDirectCellFormatChanges,
@@ -61,6 +64,7 @@ export interface SemanticMutationCaptureServices {
   readonly mutationCapture: VersionMutationCaptureSink;
   readonly captureNormalCommit: VersionNormalCommitCapture;
   readonly capturePendingRemoteSegment: VersionPendingRemoteCapture;
+  readNormalCommitCaptureState(): SemanticMutationCaptureNormalState;
   resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void;
 }
 
@@ -72,6 +76,14 @@ export interface SemanticMutationCaptureOptions {
   readonly author?: VersionAuthor;
   readonly now?: () => Date;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+}
+
+export interface SemanticMutationCaptureNormalState {
+  readonly revision: number;
+  readonly pendingCapturedNormalMutationCount: number;
+  readonly pendingUncapturedNormalMutationCount: number;
+  readonly hasPendingNormalMutations: boolean;
+  readonly hasUncapturedNormalMutations: boolean;
 }
 
 type VersionSemanticChangeRecord = {
@@ -107,6 +119,14 @@ type PendingSemanticMutation = {
   readonly directEdits: readonly DirectEditPosition[];
   readonly directEditRanges: readonly DirectEditRange[];
   readonly changes: readonly VersionSemanticChangeRecord[];
+};
+
+type PendingUncapturedNormalMutation = {
+  readonly sequence: number;
+  readonly operation: string;
+  readonly capturedAt: string;
+  readonly reason: 'captureLaneSkipped' | 'emptySemanticChangeSet';
+  readonly operationContext?: VersionOperationContext;
 };
 
 const DEFAULT_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
@@ -156,6 +176,7 @@ export function createSemanticMutationCapture(
     mutationCapture: buffer,
     captureNormalCommit: (input) => buffer.captureNormalCommit(input),
     capturePendingRemoteSegment: (input) => buffer.capturePendingRemoteSegment(input),
+    readNormalCommitCaptureState: () => buffer.readNormalCommitCaptureState(),
     resetNormalCaptureForCheckout: (input) => buffer.resetNormalCaptureForCheckout(input),
   };
 }
@@ -167,7 +188,9 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private nextNormalSequence = 1;
   private nextPendingRemoteSequence = 1;
   private pendingNormal: PendingSemanticMutation[] = [];
+  private pendingUncapturedNormal: PendingUncapturedNormalMutation[] = [];
   private pendingRemote: PendingSemanticMutation[] = [];
+  private normalCaptureRevision = 0;
   private beforeNormalSemanticState?: SemanticWorkbookStateEnvelope;
   private semanticStateCaptureFailure?: string;
 
@@ -182,7 +205,8 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       !this.semanticStateReader ||
       classifySemanticMutationCaptureLane(input.operationContext) !== 'normalLocal' ||
       this.beforeNormalSemanticState ||
-      this.pendingNormal.length > 0
+      this.pendingNormal.length > 0 ||
+      this.pendingUncapturedNormal.length > 0
     ) {
       return;
     }
@@ -198,7 +222,12 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
 
   recordMutationResult(input: VersionMutationCaptureRecordInput): void {
     const lane = classifySemanticMutationCaptureLane(input.operationContext);
-    if (lane === 'skip') return;
+    if (lane === 'skip') {
+      if (isUncapturedNormalDirtyMutation(input.operationContext)) {
+        this.recordUncapturedNormalMutation(input, 'captureLaneSkipped');
+      }
+      return;
+    }
 
     const sequence =
       lane === 'normalLocal' ? this.nextNormalSequence : this.nextPendingRemoteSequence;
@@ -206,7 +235,15 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     const directEdits = input.directEdits ? [...input.directEdits] : [];
     const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
     const changes = mapMutationResultToSemanticChanges(input, sequence);
-    if (changes.length === 0) return;
+    if (changes.length === 0) {
+      if (lane === 'normalLocal') {
+        this.recordUncapturedNormalMutation(input, 'emptySemanticChangeSet', {
+          sequence,
+          capturedAt,
+        });
+      }
+      return;
+    }
 
     const record = {
       sequence,
@@ -221,6 +258,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (lane === 'normalLocal') {
       this.nextNormalSequence++;
       this.pendingNormal.push(record);
+      this.bumpNormalCaptureRevision();
     } else {
       this.nextPendingRemoteSequence++;
       this.pendingRemote.push(record);
@@ -230,6 +268,8 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void {
     this.nextNormalSequence = 1;
     this.pendingNormal = [];
+    this.pendingUncapturedNormal = [];
+    this.bumpNormalCaptureRevision();
     this.beforeNormalSemanticState = undefined;
     this.semanticStateCaptureFailure = undefined;
     if (input.semanticStateReader) {
@@ -296,9 +336,45 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     return [...this.pendingRemote];
   }
 
+  readNormalCommitCaptureState(): SemanticMutationCaptureNormalState {
+    const pendingCapturedNormalMutationCount = this.pendingNormal.length;
+    const pendingUncapturedNormalMutationCount = this.pendingUncapturedNormal.length;
+    return {
+      revision: this.normalCaptureRevision,
+      pendingCapturedNormalMutationCount,
+      pendingUncapturedNormalMutationCount,
+      hasPendingNormalMutations:
+        pendingCapturedNormalMutationCount > 0 || pendingUncapturedNormalMutationCount > 0,
+      hasUncapturedNormalMutations: pendingUncapturedNormalMutationCount > 0,
+    };
+  }
+
+  private recordUncapturedNormalMutation(
+    input: VersionMutationCaptureRecordInput,
+    reason: PendingUncapturedNormalMutation['reason'],
+    options: { readonly sequence?: number; readonly capturedAt?: string } = {},
+  ): void {
+    const sequence = options.sequence ?? this.nextNormalSequence;
+    const capturedAt =
+      options.capturedAt ?? input.operationContext?.createdAt ?? this.now().toISOString();
+    this.nextNormalSequence = Math.max(this.nextNormalSequence, sequence + 1);
+    this.pendingUncapturedNormal.push({
+      sequence,
+      operation: input.operation,
+      capturedAt,
+      reason,
+      ...(input.operationContext ? { operationContext: input.operationContext } : {}),
+    });
+    this.bumpNormalCaptureRevision();
+  }
+
   private drainNormalThrough(sequence: number): void {
     if (sequence <= 0) return;
+    const beforeLength = this.pendingNormal.length;
     this.pendingNormal = this.pendingNormal.filter((record) => record.sequence > sequence);
+    if (this.pendingNormal.length !== beforeLength) {
+      this.bumpNormalCaptureRevision();
+    }
     if (this.pendingNormal.length === 0) {
       this.beforeNormalSemanticState = undefined;
       this.semanticStateCaptureFailure = undefined;
@@ -309,6 +385,10 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (sequences.length === 0) return;
     const drained = new Set(sequences);
     this.pendingRemote = this.pendingRemote.filter((record) => !drained.has(record.sequence));
+  }
+
+  private bumpNormalCaptureRevision(): void {
+    this.normalCaptureRevision += 1;
   }
 }
 

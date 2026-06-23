@@ -433,13 +433,16 @@ export function VersionHistoryPanelContent({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {loadState.status === 'loading' && !data ? (
+      <div className="flex-1 overflow-y-auto" aria-busy={loading}>
+        {loadState.status === 'loading' ? (
           <div
-            className="px-4 py-5 text-body-sm text-ss-text-secondary"
-            data-testid="version-history-loading"
+            className={data ? 'sr-only' : 'px-4 py-5 text-body-sm text-ss-text-secondary'}
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-testid={data ? 'version-history-loading-status' : 'version-history-loading'}
           >
-            Loading version history
+            {data ? 'Refreshing version history' : 'Loading version history'}
           </div>
         ) : null}
 
@@ -659,21 +662,25 @@ function CapabilitySummary({
     <section className="flex flex-wrap gap-1.5" aria-label="Version capabilities">
       {rows.map(({ capability, state }) => {
         const enabled = state?.enabled === true;
+        const reason = state?.enabled === false ? state.reason : 'Unavailable';
+        const description = enabled
+          ? `${CAPABILITY_LABELS[capability]} enabled`
+          : `${CAPABILITY_LABELS[capability]} unavailable: ${reason}`;
         return (
           <span
             key={capability}
+            data-testid={`version-history-capability-${safeDomId(capability)}`}
+            data-state={enabled ? 'enabled' : 'unavailable'}
+            aria-label={description}
             className={`px-2 py-1 rounded-sm text-[11px] leading-none border ${
               enabled
                 ? 'border-ss-success/40 text-ss-success bg-ss-success/10'
                 : 'border-ss-border text-ss-text-secondary bg-ss-surface-secondary'
             }`}
-            title={
-              enabled
-                ? `${CAPABILITY_LABELS[capability]} enabled`
-                : (state?.reason ?? 'Unavailable')
-            }
+            title={description}
           >
             {CAPABILITY_LABELS[capability]}
+            <span className="sr-only">{enabled ? ' enabled' : ` unavailable: ${reason}`}</span>
           </span>
         );
       })}

@@ -41,6 +41,7 @@ import {
   type WireContextInput,
   type WireContextOutput,
 } from '../document-lifecycle-machine';
+import { DocumentLifecycleSystem } from '../document-lifecycle-system';
 
 import type { CreateDocumentOptions, ProviderConfig } from '@mog-sdk/contracts/document';
 
@@ -409,15 +410,15 @@ describe('Legacy bypass guards', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 4. Provider selection is environment-driven, not option-driven
+  // 4. Provider selection inputs
   // -------------------------------------------------------------------------
-  describe('provider selection by environment', () => {
-    it('the attachProviders actor receives environment from DLS, not from options', async () => {
+  describe('provider selection inputs', () => {
+    it('the attachProviders actor receives environment from DLS, skipLocalPersistence from options, and ignores providers', async () => {
       // This is the core of the the storage provider lifecycle bypass guard: provider selection
-      // is driven by the DLS's environment property, not by anything the
-      // caller passes in CreateDocumentOptions. The machine's attaching
-      // state passes `environment: undefined` in its input — the DLS
-      // overrides it with its own environment.
+      // is driven by the DLS's environment plus explicit safe lifecycle
+      // flags, not by caller-supplied provider arrays. The machine's
+      // attaching state passes `environment: undefined` in its input —
+      // the DLS overrides it with its own environment.
       let capturedInput: AttachProvidersInput | null = null;
 
       const machine = documentLifecycleMachine.provide({
@@ -463,6 +464,7 @@ describe('Legacy bypass guards', () => {
         options: {
           documentId: 'test-env-selection',
           providers: [{ type: 'websocket', url: 'wss://ignored.com' }],
+          skipLocalPersistence: true,
         },
       });
 
@@ -472,6 +474,7 @@ describe('Legacy bypass guards', () => {
       // The DLS's provide() override replaces it with the real environment.
       expect(capturedInput).not.toBeNull();
       expect(capturedInput!.environment).toBeUndefined();
+      expect(capturedInput!.skipLocalPersistence).toBe(true);
 
       // The captured input has no reference to the options.providers array.
       // Provider selection is entirely the DLS's responsibility.
@@ -533,6 +536,52 @@ describe('Legacy bypass guards', () => {
 
       actor.send({ type: 'DISPOSE' });
       await waitForState(actor, 'disposed');
+    });
+
+    it('skipLocalPersistence skips legacy browser provider attachment', async () => {
+      const indexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'indexedDB');
+      Object.defineProperty(globalThis, 'indexedDB', {
+        configurable: true,
+        value: {},
+      });
+
+      try {
+        const harness = Object.create(DocumentLifecycleSystem.prototype) as {
+          executeAttachProviders(input: AttachProvidersInput): Promise<AttachProvidersOutput>;
+        };
+        const computeBridge = {
+          getAllSheetIds: jest.fn(async () => ['sheet-1']),
+          createDefaultSheet: jest.fn(),
+          settleForMirror: jest.fn(),
+          core: { forceRefreshAllViewports: jest.fn() },
+        } as unknown as AttachProvidersInput['computeBridge'];
+        const rustDocument = {
+          attachProvider: jest.fn(),
+          captureInitialProviderBaseline: jest.fn(),
+        } as unknown as AttachProvidersInput['rustDocument'];
+
+        const result = await harness.executeAttachProviders({
+          docId: 'csv-ephemeral-doc',
+          computeBridge,
+          rustDocument,
+          internal: false,
+          skipLocalPersistence: true,
+          environment: 'browser',
+          skipDefaultSheet: true,
+          importInitialize: true,
+          createFresh: false,
+        });
+
+        expect(result).toEqual({ sheetIds: ['sheet-1'] });
+        expect(rustDocument.attachProvider).not.toHaveBeenCalled();
+        expect(rustDocument.captureInitialProviderBaseline).not.toHaveBeenCalled();
+      } finally {
+        if (indexedDbDescriptor) {
+          Object.defineProperty(globalThis, 'indexedDB', indexedDbDescriptor);
+        } else {
+          delete (globalThis as { indexedDB?: unknown }).indexedDB;
+        }
+      }
     });
   });
 

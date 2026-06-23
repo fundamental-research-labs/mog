@@ -12,6 +12,62 @@ export type ObjectDigest = {
   readonly byteLength?: number;
 };
 
+export type WorkbookVersionDiagnosticCode =
+  | 'version.objectStore.foundationPresent'
+  | 'version.objectStore.serviceUnavailable'
+  | 'version.refLifecycle.foundationPresent'
+  | 'version.refLifecycle.serviceUnavailable'
+  | 'version.commitApi.pending'
+  | 'version.commitApi.serviceAttached'
+  | 'version.checkout.pending'
+  | 'version.checkout.serviceAttached'
+  | 'version.merge.pending'
+  | 'version.merge.serviceAttached'
+  | 'version.provenanceAdmission.present'
+  | 'version.provenanceAdmission.unavailable'
+  | 'version.provenanceAdmission.vc09TruthUnavailable'
+  | 'version.provenanceAdmission.mutationAdmissionFoundationPresent'
+  | 'version.provenanceAdmission.mutationAdmissionFoundationUnavailable'
+  | 'version.provenancePromotion.serviceAttached'
+  | 'version.head.serviceUnavailable';
+
+export type VersionSurfaceDiagnosticCode =
+  | 'version.surfaceStatus.featureGateDefaultEnabled'
+  | 'version.surfaceStatus.featureGateDisabled'
+  | 'version.surfaceStatus.editingDisabled'
+  | 'version.surfaceStatus.hostCapabilityDenied'
+  | 'version.surfaceStatus.storageUnavailable'
+  | 'version.surfaceStatus.storageReady'
+  | 'version.surfaceStatus.storageBackendUnknown'
+  | 'version.surfaceStatus.readUnavailable'
+  | 'version.surfaceStatus.currentReadFailed'
+  | 'version.surfaceStatus.currentRefHeadUnavailable'
+  | 'version.surfaceStatus.dirtyTokenUnavailable'
+  | 'version.surfaceStatus.dirtyStatusInvalid'
+  | 'version.surfaceStatus.dirtyStatusFailed'
+  | 'version.surfaceStatus.checkoutSessionInvalid'
+  | 'version.surfaceStatus.checkoutSessionReadFailed'
+  | 'version.surfaceStatus.dirtyWorkingState'
+  | 'version.surfaceStatus.pendingRecalc'
+  | 'version.surfaceStatus.checkoutInProgress'
+  | 'version.surfaceStatus.pendingProviderWrites'
+  | 'version.surfaceStatus.pendingProviderWritesReadFailed'
+  | 'version.surfaceStatus.liveCollaborationActive'
+  | 'version.surfaceStatus.liveCollaborationUnknown'
+  | 'version.surfaceStatus.diffUnavailable'
+  | 'version.surfaceStatus.commitUnavailable'
+  | 'version.surfaceStatus.branchUnavailable'
+  | 'version.surfaceStatus.checkoutUnavailable'
+  | 'version.surfaceStatus.reviewUnavailable'
+  | 'version.surfaceStatus.proposalUnavailable'
+  | 'version.surfaceStatus.mergeCapabilityDisabled'
+  | 'version.surfaceStatus.mergeKillSwitchActive'
+  | 'version.surfaceStatus.mergePreviewUnavailable'
+  | 'version.surfaceStatus.mergeApplyUnavailable'
+  | 'version.surfaceStatus.revertUnavailable'
+  | 'version.surfaceStatus.provenanceUnavailable'
+  | (string & {});
+
 export type VersionCapability =
   | 'version:read'
   | 'version:diff'
@@ -47,7 +103,10 @@ export type VersionAuthor = {
 export type VersionDiagnosticSeverity = 'info' | 'warning' | 'error';
 
 export interface VersionDiagnostic {
-  readonly code: string;
+  readonly code:
+    | VersionSurfaceDiagnosticCode
+    | WorkbookVersionDiagnosticCode
+    | (string & {});
   readonly severity: VersionDiagnosticSeverity;
   readonly message: string;
   readonly owner?: string;

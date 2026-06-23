@@ -54,11 +54,17 @@ function makeHandle(
   documentId: string,
   dispose?: () => Promise<void> | void,
   workbook: jest.Mock = jest.fn(async () => ({})),
+  options: { readonly isReadOnly?: boolean | (() => boolean) } = {},
 ): DocumentHandle {
+  const readIsReadOnly = () =>
+    typeof options.isReadOnly === 'function' ? options.isReadOnly() : options.isReadOnly === true;
   return {
     documentId,
     dispose: jest.fn(dispose ?? (() => undefined)),
     workbook,
+    get isReadOnly() {
+      return readIsReadOnly();
+    },
   } as unknown as DocumentHandle;
 }
 
@@ -121,6 +127,31 @@ describe('createDocumentManager import identity', () => {
     await returnedHandle.workbook();
 
     expectDefaultIndexedDbProviderSelection(originalWorkbook);
+  });
+
+  it('opens default IndexedDB versioning read-only when the local document provider is read-only', async () => {
+    const originalWorkbook = jest.fn(async () => ({}));
+    let readOnly = false;
+    const handle = makeHandle('file-readonly', undefined, originalWorkbook, {
+      isReadOnly: () => readOnly,
+    });
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-readonly');
+
+    readOnly = true;
+    await returnedHandle.workbook();
+
+    expect(capturedWorkbookConfig(originalWorkbook)?.versioning?.providerSelection).toMatchObject({
+      kind: 'indexeddb',
+      requireDurablePersistence: true,
+      readOnly: true,
+    });
   });
 
   it('injects IndexedDB providerSelection into XLSX import workbooks by default', async () => {
@@ -217,9 +248,7 @@ describe('createDocumentManager import identity', () => {
       requireDomainSupportManifest: true,
     });
     expect(calledConfig?.versioning?.providerSelection).toBe(providerSelection);
-    expect(calledConfig?.versioning?.readLiveCollaborationStatus).toBe(
-      readLiveCollaborationStatus,
-    );
+    expect(calledConfig?.versioning?.readLiveCollaborationStatus).toBe(readLiveCollaborationStatus);
   });
 
   it('binds XLSX byte import documentId through the standalone browser host', async () => {
@@ -326,6 +355,33 @@ describe('createDocumentManager import identity', () => {
       csvOptions,
     });
     expect(manager.getDocument('file-csv')).toBe(handle);
+  });
+
+  it('passes skipLocalPersistence through CSV import', async () => {
+    const handle = makeHandle('file-csv');
+    jest.mocked(DocumentFactory.createFromCsv).mockResolvedValue({
+      success: true,
+      sheetIds: [],
+      handle,
+      warnings: [],
+    });
+
+    const manager = createDocumentManager();
+    const source = { type: 'bytes', data: new Uint8Array([97, 44, 98]) } as const;
+
+    await expect(
+      manager.loadDocument('file-csv', source, { kind: 'csv', skipLocalPersistence: true }),
+    ).resolves.toBe(handle);
+
+    expect(DocumentFactory.createFromCsv).toHaveBeenCalledWith(source, {
+      documentId: 'file-csv',
+      skipLocalPersistence: true,
+    });
+    expect(manager.getDocumentMode('file-csv')).toEqual({
+      kind: 'normal',
+      documentId: 'file-csv',
+      skipLocalPersistence: true,
+    });
   });
 
   it('rejects and does not cache a host-backed import whose handle id differs', async () => {

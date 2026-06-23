@@ -12,6 +12,8 @@ import type {
   VersionCapability,
   VersionCapabilityDependency,
   VersionDiagnostic,
+  VersionSurfaceDiagnosticCode,
+  WorkbookVersionDiagnosticCode,
 } from './version-shared';
 
 export type {
@@ -29,6 +31,8 @@ export type {
   VersionDiagnosticSeverity,
   VersionError,
   VersionResult,
+  VersionSurfaceDiagnosticCode,
+  WorkbookVersionDiagnosticCode,
 } from './version-shared';
 
 export type { WorkbookVersion } from './version-workbook';
@@ -50,21 +54,6 @@ export type WorkbookVersionCapabilityStage = 'present' | 'pending' | 'unavailabl
 export type WorkbookVersionDependency = 'VC-02' | 'VC-04' | 'VC-05' | 'VC-07' | 'version-service';
 
 export type WorkbookVersionDiagnosticSeverity = 'info' | 'warning' | 'error';
-
-export type WorkbookVersionDiagnosticCode =
-  | 'version.objectStore.foundationPresent'
-  | 'version.objectStore.serviceUnavailable'
-  | 'version.refLifecycle.foundationPresent'
-  | 'version.refLifecycle.serviceUnavailable'
-  | 'version.commitApi.pending'
-  | 'version.commitApi.serviceAttached'
-  | 'version.checkout.pending'
-  | 'version.checkout.serviceAttached'
-  | 'version.merge.pending'
-  | 'version.merge.serviceAttached'
-  | 'version.provenanceAdmission.present'
-  | 'version.provenanceAdmission.unavailable'
-  | 'version.head.serviceUnavailable';
 
 export interface WorkbookVersionDiagnostic {
   readonly code: WorkbookVersionDiagnosticCode | (string & {});
@@ -113,31 +102,6 @@ export type VersionCapabilityState =
     };
 
 export type VersionSurfaceDiagnosticSeverity = 'info' | 'warning' | 'error';
-
-export type VersionSurfaceDiagnosticCode =
-  | 'version.surfaceStatus.featureGateDefaultEnabled'
-  | 'version.surfaceStatus.featureGateDisabled'
-  | 'version.surfaceStatus.editingDisabled'
-  | 'version.surfaceStatus.hostCapabilityDenied'
-  | 'version.surfaceStatus.storageUnavailable'
-  | 'version.surfaceStatus.storageReady'
-  | 'version.surfaceStatus.storageBackendUnknown'
-  | 'version.surfaceStatus.readUnavailable'
-  | 'version.surfaceStatus.currentReadFailed'
-  | 'version.surfaceStatus.dirtyTokenUnavailable'
-  | 'version.surfaceStatus.liveCollaborationActive'
-  | 'version.surfaceStatus.liveCollaborationUnknown'
-  | 'version.surfaceStatus.diffUnavailable'
-  | 'version.surfaceStatus.commitUnavailable'
-  | 'version.surfaceStatus.branchUnavailable'
-  | 'version.surfaceStatus.checkoutUnavailable'
-  | 'version.surfaceStatus.reviewUnavailable'
-  | 'version.surfaceStatus.proposalUnavailable'
-  | 'version.surfaceStatus.mergePreviewUnavailable'
-  | 'version.surfaceStatus.mergeApplyUnavailable'
-  | 'version.surfaceStatus.revertUnavailable'
-  | 'version.surfaceStatus.provenanceUnavailable'
-  | (string & {});
 
 export type VersionLiveCollaborationState = 'absent' | 'disabled' | 'idle' | 'active' | 'unknown';
 
@@ -206,11 +170,13 @@ export type WorkbookCommitId = `commit:sha256:${string}` & {
   readonly __brand?: 'WorkbookCommitId';
 };
 
+export type VersionCounterRecordRevision = {
+  readonly kind: 'counter';
+  readonly value: string;
+};
+
 export type VersionRecordRevision =
-  | {
-      readonly kind: 'counter';
-      readonly value: string;
-    }
+  | VersionCounterRecordRevision
   | {
       readonly kind: 'opaque';
       readonly value: string;
@@ -915,7 +881,7 @@ export interface VersionFastForwardBranchOptions {
   readonly name: VersionBranchName | VersionRefName;
   readonly nextCommitId: WorkbookCommitId;
   readonly expectedHead: WorkbookCommitId;
-  readonly expectedRefRevision: VersionRecordRevision;
+  readonly expectedRefRevision: VersionCounterRecordRevision;
 }
 
 export type VersionUpdateBranchOptions = VersionFastForwardBranchOptions;
@@ -923,7 +889,7 @@ export type VersionUpdateBranchOptions = VersionFastForwardBranchOptions;
 export interface VersionDeleteRefOptions {
   readonly name: VersionBranchName | VersionRefName;
   readonly expectedHead?: WorkbookCommitId;
-  readonly expectedRefRevision?: VersionRecordRevision;
+  readonly expectedRefRevision: VersionCounterRecordRevision;
 }
 
 export type VersionSymbolicRefReadResult =

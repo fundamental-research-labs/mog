@@ -95,6 +95,59 @@ export interface ProviderStateSnapshot {
   readonly readOnly: boolean;
 }
 
+export interface DevToolsVersionGetHeadOptions {
+  readonly includeDiagnostics?: boolean;
+}
+
+export interface DevToolsVersionListCommitsOptions {
+  readonly ref?: string;
+  readonly from?: string;
+  readonly pageSize?: number;
+  readonly pageToken?: string;
+  readonly includeOrphans?: boolean;
+  readonly includeDiagnostics?: boolean;
+}
+
+export interface DevToolsVersionListRefsOptions {
+  readonly prefix?: string;
+  readonly includeDiagnostics?: boolean;
+}
+
+export type DevToolsMaybePromise<T> = T | Promise<T>;
+export type DevToolsVersionFacadePayload = unknown;
+
+/**
+ * Minimal public workbook.version read facade consumed by DevTools.
+ *
+ * This mirrors only public facade methods. DevTools must not inspect private
+ * graph/object/ref stores to satisfy these readbacks.
+ */
+export interface DevToolsWorkbookVersionReadFacade {
+  getSurfaceStatus(): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  getHead(
+    options?: DevToolsVersionGetHeadOptions,
+  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  listCommits(
+    options?: DevToolsVersionListCommitsOptions,
+  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  listRefs(
+    options?: DevToolsVersionListRefsOptions,
+  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+}
+
+export interface DevToolsVersionControlReadbacks {
+  /** Public facade read: `workbook.version.getSurfaceStatus()`. */
+  getSurfaceStatus(): Promise<DevToolsVersionFacadePayload | null>;
+  /** Public facade read: `workbook.version.getHead(options)`. */
+  getHead(options?: DevToolsVersionGetHeadOptions): Promise<DevToolsVersionFacadePayload | null>;
+  /** Public facade read: `workbook.version.listCommits(options)`. */
+  listCommits(
+    options?: DevToolsVersionListCommitsOptions,
+  ): Promise<DevToolsVersionFacadePayload | null>;
+  /** Public facade read: `workbook.version.listRefs(options)`. */
+  listRefs(options?: DevToolsVersionListRefsOptions): Promise<DevToolsVersionFacadePayload | null>;
+}
+
 export type RuntimeEvent =
   | ActorEvent
   | EventBusEvent
@@ -391,6 +444,9 @@ export interface DevToolsConsoleAPI {
 
   // Status (lightweight, for UI)
   getStatus(): DevToolsStatus;
+
+  // Workbook version-control readbacks (public workbook.version facade only)
+  readonly versionControl: DevToolsVersionControlReadbacks;
 
   // Subscribe to changes. Returns unsubscribe function.
   subscribe(listener: () => void): () => void;

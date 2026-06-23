@@ -432,7 +432,10 @@ export const DocumentFactory = {
       });
       lifecycle.createFromCsv(
         options?.documentId ?? generateDocumentId(),
-        { skipDefaultSheet: true },
+        {
+          skipDefaultSheet: true,
+          ...(options?.skipLocalPersistence === true ? { skipLocalPersistence: true } : {}),
+        },
         source,
         options?.csvOptions ?? null,
       );

@@ -144,6 +144,15 @@ export interface CreateDocumentOptions {
    *
    */
   internal?: boolean;
+
+  /**
+   * Skip local persistence for this document lifecycle. Browser legacy paths
+   * avoid IndexedDB/Web Locks and do not replay locally persisted state.
+   *
+   * Use when the host owns persistence or the document is intentionally
+   * ephemeral.
+   */
+  skipLocalPersistence?: boolean;
 }
 
 // =============================================================================

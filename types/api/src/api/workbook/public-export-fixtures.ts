@@ -21,8 +21,11 @@ import type {
   VersionCommitExpectedHead as ApiRootCommitExpectedHead,
   VersionCommitMode as ApiRootCommitMode,
   VersionCommitOptions as ApiRootCommitOptions,
+  VersionCounterRecordRevision as ApiRootCounterRecordRevision,
   VersionCreateBranchOptions as ApiRootCreateBranchOptions,
+  VersionDeleteRefOptions as ApiRootDeleteRefOptions,
   VersionDiffEntry as ApiRootDiffEntry,
+  VersionFastForwardBranchOptions as ApiRootFastForwardBranchOptions,
   VersionMergeAttemptKind as ApiRootMergeAttemptKind,
   VersionMergeAttemptMetadata as ApiRootMergeAttemptMetadata,
   VersionMergeAttemptPersistence as ApiRootMergeAttemptPersistence,
@@ -49,8 +52,11 @@ import type {
   VersionSemanticValue as ApiRootSemanticValue,
   VersionSealedResolutionPayloadRef as ApiRootSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ApiRootStoreDiagnostic,
+  VersionSurfaceDiagnosticCode as ApiRootSurfaceDiagnosticCode,
+  VersionUpdateBranchOptions as ApiRootUpdateBranchOptions,
   WorkbookDiffPage as ApiRootDiffPage,
   WorkbookVersion as ApiRootWorkbookVersion,
+  WorkbookVersionDiagnosticCode as ApiRootWorkbookVersionDiagnosticCode,
   WorkbookVersionStatus as ApiRootWorkbookVersionStatus,
 } from '../index';
 import type {
@@ -76,8 +82,11 @@ import type {
   VersionCommitExpectedHead as PackageApiCommitExpectedHead,
   VersionCommitMode as PackageApiCommitMode,
   VersionCommitOptions as PackageApiCommitOptions,
+  VersionCounterRecordRevision as PackageApiCounterRecordRevision,
   VersionCreateBranchOptions as PackageApiCreateBranchOptions,
+  VersionDeleteRefOptions as PackageApiDeleteRefOptions,
   VersionDiffEntry as PackageApiDiffEntry,
+  VersionFastForwardBranchOptions as PackageApiFastForwardBranchOptions,
   VersionMergeAttemptKind as PackageApiMergeAttemptKind,
   VersionMergeAttemptMetadata as PackageApiMergeAttemptMetadata,
   VersionMergeAttemptPersistence as PackageApiMergeAttemptPersistence,
@@ -104,8 +113,11 @@ import type {
   VersionSemanticValue as PackageApiSemanticValue,
   VersionSealedResolutionPayloadRef as PackageApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageApiStoreDiagnostic,
+  VersionSurfaceDiagnosticCode as PackageApiSurfaceDiagnosticCode,
+  VersionUpdateBranchOptions as PackageApiUpdateBranchOptions,
   WorkbookDiffPage as PackageApiDiffPage,
   WorkbookVersion as PackageApiWorkbookVersion,
+  WorkbookVersionDiagnosticCode as PackageApiWorkbookVersionDiagnosticCode,
   WorkbookVersionStatus as PackageApiWorkbookVersionStatus,
 } from '@mog/types-api/api';
 import type {
@@ -131,8 +143,11 @@ import type {
   VersionCommitExpectedHead as PackageWorkbookCommitExpectedHead,
   VersionCommitMode as PackageWorkbookCommitMode,
   VersionCommitOptions as PackageWorkbookCommitOptions,
+  VersionCounterRecordRevision as PackageWorkbookCounterRecordRevision,
   VersionCreateBranchOptions as PackageWorkbookCreateBranchOptions,
+  VersionDeleteRefOptions as PackageWorkbookDeleteRefOptions,
   VersionDiffEntry as PackageWorkbookDiffEntry,
+  VersionFastForwardBranchOptions as PackageWorkbookFastForwardBranchOptions,
   VersionMergeAttemptKind as PackageWorkbookMergeAttemptKind,
   VersionMergeAttemptMetadata as PackageWorkbookMergeAttemptMetadata,
   VersionMergeAttemptPersistence as PackageWorkbookMergeAttemptPersistence,
@@ -159,8 +174,11 @@ import type {
   VersionSemanticValue as PackageWorkbookSemanticValue,
   VersionSealedResolutionPayloadRef as PackageWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageWorkbookStoreDiagnostic,
+  VersionSurfaceDiagnosticCode as PackageWorkbookSurfaceDiagnosticCode,
+  VersionUpdateBranchOptions as PackageWorkbookUpdateBranchOptions,
   WorkbookDiffPage as PackageWorkbookDiffPage,
   WorkbookVersion as PackageWorkbookVersion,
+  WorkbookVersionDiagnosticCode as PackageWorkbookVersionDiagnosticCode,
   WorkbookVersionStatus as PackageWorkbookVersionStatus,
 } from '@mog/types-api/api/workbook';
 import type {
@@ -186,8 +204,11 @@ import type {
   VersionCommitExpectedHead as WorkbookNamespaceCommitExpectedHead,
   VersionCommitMode as WorkbookNamespaceCommitMode,
   VersionCommitOptions as WorkbookNamespaceCommitOptions,
+  VersionCounterRecordRevision as WorkbookNamespaceCounterRecordRevision,
   VersionCreateBranchOptions as WorkbookNamespaceCreateBranchOptions,
+  VersionDeleteRefOptions as WorkbookNamespaceDeleteRefOptions,
   VersionDiffEntry as WorkbookNamespaceDiffEntry,
+  VersionFastForwardBranchOptions as WorkbookNamespaceFastForwardBranchOptions,
   VersionMergeAttemptKind as WorkbookNamespaceMergeAttemptKind,
   VersionMergeAttemptMetadata as WorkbookNamespaceMergeAttemptMetadata,
   VersionMergeAttemptPersistence as WorkbookNamespaceMergeAttemptPersistence,
@@ -214,14 +235,96 @@ import type {
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
   VersionSealedResolutionPayloadRef as WorkbookNamespaceSealedResolutionPayloadRef,
   VersionStoreDiagnostic as WorkbookNamespaceStoreDiagnostic,
+  VersionSurfaceDiagnosticCode as WorkbookNamespaceSurfaceDiagnosticCode,
+  VersionUpdateBranchOptions as WorkbookNamespaceUpdateBranchOptions,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
   WorkbookVersion as WorkbookNamespaceVersion,
+  WorkbookVersionDiagnosticCode as WorkbookNamespaceVersionDiagnosticCode,
   WorkbookVersionStatus as WorkbookNamespaceVersionStatus,
 } from './index';
 
 type Assert<T extends true> = T;
 type IsEqual<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type IsAssignable<A, B> = [A] extends [B] ? true : false;
+type KnownStringLiteral<T> = T extends string ? (string extends T ? never : T) : never;
+type OpaqueRecordRevision = { readonly kind: 'opaque'; readonly value: string };
+
+type KernelSurfaceStatusDiagnosticCode =
+  | 'version.surfaceStatus.featureGateDefaultEnabled'
+  | 'version.surfaceStatus.featureGateDisabled'
+  | 'version.surfaceStatus.editingDisabled'
+  | 'version.surfaceStatus.hostCapabilityDenied'
+  | 'version.surfaceStatus.storageUnavailable'
+  | 'version.surfaceStatus.storageReady'
+  | 'version.surfaceStatus.storageBackendUnknown'
+  | 'version.surfaceStatus.readUnavailable'
+  | 'version.surfaceStatus.currentReadFailed'
+  | 'version.surfaceStatus.currentRefHeadUnavailable'
+  | 'version.surfaceStatus.dirtyTokenUnavailable'
+  | 'version.surfaceStatus.dirtyStatusInvalid'
+  | 'version.surfaceStatus.dirtyStatusFailed'
+  | 'version.surfaceStatus.checkoutSessionInvalid'
+  | 'version.surfaceStatus.checkoutSessionReadFailed'
+  | 'version.surfaceStatus.dirtyWorkingState'
+  | 'version.surfaceStatus.pendingRecalc'
+  | 'version.surfaceStatus.checkoutInProgress'
+  | 'version.surfaceStatus.pendingProviderWrites'
+  | 'version.surfaceStatus.pendingProviderWritesReadFailed'
+  | 'version.surfaceStatus.liveCollaborationActive'
+  | 'version.surfaceStatus.liveCollaborationUnknown'
+  | 'version.surfaceStatus.diffUnavailable'
+  | 'version.surfaceStatus.commitUnavailable'
+  | 'version.surfaceStatus.branchUnavailable'
+  | 'version.surfaceStatus.checkoutUnavailable'
+  | 'version.surfaceStatus.reviewUnavailable'
+  | 'version.surfaceStatus.proposalUnavailable'
+  | 'version.surfaceStatus.mergeCapabilityDisabled'
+  | 'version.surfaceStatus.mergeKillSwitchActive'
+  | 'version.surfaceStatus.mergePreviewUnavailable'
+  | 'version.surfaceStatus.mergeApplyUnavailable'
+  | 'version.surfaceStatus.revertUnavailable'
+  | 'version.surfaceStatus.provenanceUnavailable';
+
+type KernelWorkbookVersionStatusDiagnosticCode =
+  | 'version.objectStore.foundationPresent'
+  | 'version.objectStore.serviceUnavailable'
+  | 'version.refLifecycle.foundationPresent'
+  | 'version.refLifecycle.serviceUnavailable'
+  | 'version.commitApi.pending'
+  | 'version.commitApi.serviceAttached'
+  | 'version.checkout.pending'
+  | 'version.checkout.serviceAttached'
+  | 'version.merge.pending'
+  | 'version.merge.serviceAttached'
+  | 'version.provenanceAdmission.present'
+  | 'version.provenanceAdmission.vc09TruthUnavailable'
+  | 'version.provenanceAdmission.mutationAdmissionFoundationPresent'
+  | 'version.provenanceAdmission.mutationAdmissionFoundationUnavailable'
+  | 'version.provenancePromotion.serviceAttached'
+  | 'version.head.serviceUnavailable';
+
+type _SurfaceDiagnosticCodesCoverKernelStatus = Assert<
+  IsEqual<
+    Exclude<
+      KernelSurfaceStatusDiagnosticCode,
+      KnownStringLiteral<PackageWorkbookSurfaceDiagnosticCode>
+    >,
+    never
+  >
+>;
+type _WorkbookDiagnosticCodesCoverKernelStatus = Assert<
+  IsEqual<
+    Exclude<
+      KernelWorkbookVersionStatusDiagnosticCode,
+      KnownStringLiteral<PackageWorkbookVersionDiagnosticCode>
+    >,
+    never
+  >
+>;
+type _SurfaceDiagnosticCodeAllowsExtensions = Assert<
+  IsAssignable<'version.surfaceStatus.futureCode', PackageWorkbookSurfaceDiagnosticCode>
+>;
 
 type _WorkbookNamespaceExportsVersionApi = Assert<
   IsEqual<WorkbookNamespaceVersion, PackageWorkbookVersion>
@@ -352,6 +455,39 @@ type _WorkbookNamespaceExportsCheckoutGuarantee = Assert<
 type _WorkbookNamespaceExportsBranchCreateOptions = Assert<
   IsEqual<WorkbookNamespaceCreateBranchOptions, PackageWorkbookCreateBranchOptions>
 >;
+type _WorkbookNamespaceExportsCounterRecordRevision = Assert<
+  IsEqual<WorkbookNamespaceCounterRecordRevision, PackageWorkbookCounterRecordRevision>
+>;
+type _WorkbookNamespaceExportsBranchFastForwardOptions = Assert<
+  IsEqual<WorkbookNamespaceFastForwardBranchOptions, PackageWorkbookFastForwardBranchOptions>
+>;
+type _WorkbookNamespaceExportsBranchUpdateOptions = Assert<
+  IsEqual<WorkbookNamespaceUpdateBranchOptions, PackageWorkbookUpdateBranchOptions>
+>;
+type _WorkbookNamespaceExportsBranchDeleteOptions = Assert<
+  IsEqual<WorkbookNamespaceDeleteRefOptions, PackageWorkbookDeleteRefOptions>
+>;
+type _WorkbookNamespaceFastForwardExpectedRefRevisionIsCounter = Assert<
+  IsEqual<
+    WorkbookNamespaceFastForwardBranchOptions['expectedRefRevision'],
+    WorkbookNamespaceCounterRecordRevision
+  >
+>;
+type _WorkbookNamespaceUpdateExpectedRefRevisionIsCounter = Assert<
+  IsEqual<
+    WorkbookNamespaceUpdateBranchOptions['expectedRefRevision'],
+    WorkbookNamespaceCounterRecordRevision
+  >
+>;
+type _WorkbookNamespaceDeleteExpectedRefRevisionIsRequired = Assert<
+  IsEqual<undefined extends WorkbookNamespaceDeleteRefOptions['expectedRefRevision'] ? true : false, false>
+>;
+type _WorkbookNamespaceDeleteExpectedRefRevisionRejectsOpaque = Assert<
+  IsEqual<
+    IsAssignable<OpaqueRecordRevision, WorkbookNamespaceDeleteRefOptions['expectedRefRevision']>,
+    false
+  >
+>;
 type _WorkbookNamespaceExportsBranchRead = Assert<
   IsEqual<WorkbookNamespaceBranchRefReadResult, PackageWorkbookBranchRefReadResult>
 >;
@@ -360,6 +496,12 @@ type _WorkbookNamespaceExportsBranchMutation = Assert<
 >;
 type _WorkbookNamespaceExportsStoreDiagnostic = Assert<
   IsEqual<WorkbookNamespaceStoreDiagnostic, PackageWorkbookStoreDiagnostic>
+>;
+type _WorkbookNamespaceExportsSurfaceDiagnosticCode = Assert<
+  IsEqual<WorkbookNamespaceSurfaceDiagnosticCode, PackageWorkbookSurfaceDiagnosticCode>
+>;
+type _WorkbookNamespaceExportsWorkbookVersionDiagnosticCode = Assert<
+  IsEqual<WorkbookNamespaceVersionDiagnosticCode, PackageWorkbookVersionDiagnosticCode>
 >;
 type _WorkbookNamespaceExportsSemanticValue = Assert<
   IsEqual<WorkbookNamespaceSemanticValue, PackageWorkbookSemanticValue>
@@ -509,6 +651,27 @@ type _ApiRootExportsCheckoutGuarantee = Assert<
 type _ApiRootExportsBranchCreateOptions = Assert<
   IsEqual<ApiRootCreateBranchOptions, PackageApiCreateBranchOptions>
 >;
+type _ApiRootExportsCounterRecordRevision = Assert<
+  IsEqual<ApiRootCounterRecordRevision, PackageApiCounterRecordRevision>
+>;
+type _ApiRootExportsBranchFastForwardOptions = Assert<
+  IsEqual<ApiRootFastForwardBranchOptions, PackageApiFastForwardBranchOptions>
+>;
+type _ApiRootExportsBranchUpdateOptions = Assert<
+  IsEqual<ApiRootUpdateBranchOptions, PackageApiUpdateBranchOptions>
+>;
+type _ApiRootExportsBranchDeleteOptions = Assert<
+  IsEqual<ApiRootDeleteRefOptions, PackageApiDeleteRefOptions>
+>;
+type _ApiRootFastForwardExpectedRefRevisionIsCounter = Assert<
+  IsEqual<ApiRootFastForwardBranchOptions['expectedRefRevision'], ApiRootCounterRecordRevision>
+>;
+type _ApiRootDeleteExpectedRefRevisionIsRequired = Assert<
+  IsEqual<undefined extends ApiRootDeleteRefOptions['expectedRefRevision'] ? true : false, false>
+>;
+type _ApiRootDeleteExpectedRefRevisionRejectsOpaque = Assert<
+  IsEqual<IsAssignable<OpaqueRecordRevision, ApiRootDeleteRefOptions['expectedRefRevision']>, false>
+>;
 type _ApiRootExportsBranchRead = Assert<
   IsEqual<ApiRootBranchRefReadResult, PackageApiBranchRefReadResult>
 >;
@@ -517,6 +680,12 @@ type _ApiRootExportsBranchMutation = Assert<
 >;
 type _ApiRootExportsStoreDiagnostic = Assert<
   IsEqual<ApiRootStoreDiagnostic, PackageApiStoreDiagnostic>
+>;
+type _ApiRootExportsSurfaceDiagnosticCode = Assert<
+  IsEqual<ApiRootSurfaceDiagnosticCode, PackageApiSurfaceDiagnosticCode>
+>;
+type _ApiRootExportsWorkbookVersionDiagnosticCode = Assert<
+  IsEqual<ApiRootWorkbookVersionDiagnosticCode, PackageApiWorkbookVersionDiagnosticCode>
 >;
 type _ApiRootExportsSemanticValue = Assert<
   IsEqual<ApiRootSemanticValue, PackageApiSemanticValue>

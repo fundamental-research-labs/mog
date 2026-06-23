@@ -327,6 +327,7 @@ export function createDocumentManager(options: DocumentManagerOptions = {}): Doc
       const result = await DocumentFactory.createFromCsv(source, {
         documentId: fileId,
         csvOptions: options?.csvOptions,
+        ...(options?.skipLocalPersistence === true ? { skipLocalPersistence: true } : {}),
       });
       if (!result.success || !result.handle) {
         throw result.error ?? new Error('Failed to import CSV document');

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use compute_document::hex::{id_to_hex, parse_cell_id};
 use serde_json::{Number, Value};
@@ -10,19 +10,22 @@ use snapshot_types::versioning::{
 };
 use value_types::CellValue;
 
-use crate::storage::{engine::YrsComputeEngine, properties, sheet::dimensions};
+use crate::storage::{
+    engine::YrsComputeEngine, properties, sheet::dimensions, workbook::named_ranges,
+};
 
 use super::formula_reader::{
-    canonical_formula, record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
+    canonical_formula, canonical_formula_ref, canonical_formula_ref_object_ids,
+    record_unrepresented_persisted_formula, UNSUPPORTED_CELL_FORMULAS_DOMAIN,
 };
 use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
-use super::{SemanticStateReadError, SemanticWorkbookStateReader};
+use super::{
+    SemanticStateReadError, SemanticWorkbookStateReader, CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN,
+    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN,
+};
 
-const AUTHORED_GRID_DOMAIN: &str = "authored-grid";
-const CELL_FORMULAS_DOMAIN: &str = "cells.formulas";
-const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";
 const UNSUPPORTED_CELL_VALUES_DOMAIN: &str = "unsupported-cell-values";
 
 impl SemanticWorkbookStateReader for YrsComputeEngine {
@@ -37,33 +40,23 @@ pub fn read_engine_semantic_workbook_state(
     engine: &YrsComputeEngine,
 ) -> Result<SemanticWorkbookState, SemanticStateReadError> {
     let mut state = SemanticWorkbookState::default();
-    state.domains.insert(
-        AUTHORED_GRID_DOMAIN.to_string(),
-        SemanticDomainState {
-            domain_id: AUTHORED_GRID_DOMAIN.to_string(),
-            domain_class: VersionDomainClass::Authored,
-            capability_state: VersionDomainCapabilityState::Supported,
-            objects: BTreeMap::new(),
-        },
-    );
-    state.domains.insert(
-        ROWS_COLUMNS_DOMAIN.to_string(),
-        SemanticDomainState {
-            domain_id: ROWS_COLUMNS_DOMAIN.to_string(),
-            domain_class: VersionDomainClass::Authored,
-            capability_state: VersionDomainCapabilityState::Supported,
-            objects: BTreeMap::new(),
-        },
-    );
-    state.domains.insert(
-        CELL_FORMULAS_DOMAIN.to_string(),
-        SemanticDomainState {
-            domain_id: CELL_FORMULAS_DOMAIN.to_string(),
-            domain_class: VersionDomainClass::Authored,
-            capability_state: VersionDomainCapabilityState::Supported,
-            objects: BTreeMap::new(),
-        },
-    );
+    for domain_id in [
+        SHEETS_DOMAIN,
+        ROWS_COLUMNS_DOMAIN,
+        CELL_VALUES_DOMAIN,
+        CELL_FORMULAS_DOMAIN,
+        NAMED_RANGES_DOMAIN,
+    ] {
+        state.domains.insert(
+            domain_id.to_string(),
+            SemanticDomainState {
+                domain_id: domain_id.to_string(),
+                domain_class: VersionDomainClass::Authored,
+                capability_state: VersionDomainCapabilityState::Supported,
+                objects: BTreeMap::new(),
+            },
+        );
+    }
 
     let mut unsupported_values = BTreeMap::new();
     let mut unsupported_formulas = BTreeMap::new();
@@ -227,6 +220,10 @@ pub fn read_engine_semantic_workbook_state(
         state.sheets.insert(sheet_key, sheet_state);
     }
 
+    if let Some(domain) = state.domains.get_mut(NAMED_RANGES_DOMAIN) {
+        domain.objects = canonical_named_ranges(engine, &sheet_keys)?;
+    }
+
     if !unsupported_values.is_empty() {
         state.domains.insert(
             UNSUPPORTED_CELL_VALUES_DOMAIN.to_string(),
@@ -251,6 +248,199 @@ pub fn read_engine_semantic_workbook_state(
     }
 
     Ok(state)
+}
+
+fn canonical_named_ranges(
+    engine: &YrsComputeEngine,
+    sheet_keys: &[(cell_types::SheetId, String)],
+) -> Result<BTreeMap<String, SemanticObjectDigest>, SemanticStateReadError> {
+    let mut objects = BTreeMap::new();
+    for defined_name in
+        named_ranges::get_all_named_ranges(engine.storage().doc(), engine.storage().workbook_map())
+    {
+        let object_id = canonical_named_range_key(&defined_name, sheet_keys);
+        let payload = canonical_named_range_payload(engine, sheet_keys, &defined_name);
+        objects.insert(
+            object_id.clone(),
+            SemanticObjectDigest {
+                object_id,
+                object_kind: SemanticObjectKind::DomainAttachment,
+                domain_id: NAMED_RANGES_DOMAIN.to_string(),
+                digest: canonical_digest(&payload)?,
+            },
+        );
+    }
+    Ok(objects)
+}
+
+fn canonical_named_range_key(
+    defined_name: &domain_types::DefinedName,
+    sheet_keys: &[(cell_types::SheetId, String)],
+) -> String {
+    format!(
+        "named-range:{}:{}",
+        canonical_named_range_scope(defined_name.scope.as_deref(), sheet_keys),
+        defined_name.name.to_uppercase()
+    )
+}
+
+fn canonical_named_range_scope(
+    scope: Option<&str>,
+    sheet_keys: &[(cell_types::SheetId, String)],
+) -> String {
+    let Some(scope) = scope else {
+        return "workbook".to_string();
+    };
+    if let Some(sheet_key) = cell_types::SheetId::from_uuid_str(scope)
+        .ok()
+        .and_then(|sheet_id| {
+            sheet_keys
+                .iter()
+                .find(|(candidate_sheet_id, _)| candidate_sheet_id == &sheet_id)
+                .map(|(_, sheet_key)| sheet_key.clone())
+        })
+    {
+        return sheet_key;
+    }
+    format!("unresolved-sheet:{scope}")
+}
+
+fn canonical_named_range_payload(
+    engine: &YrsComputeEngine,
+    sheet_keys: &[(cell_types::SheetId, String)],
+    defined_name: &domain_types::DefinedName,
+) -> Value {
+    let mut payload = serde_json::Map::new();
+    payload.insert("name".to_string(), Value::String(defined_name.name.clone()));
+    payload.insert(
+        "normalizedName".to_string(),
+        Value::String(defined_name.name.to_uppercase()),
+    );
+    payload.insert(
+        "scope".to_string(),
+        Value::String(canonical_named_range_scope(
+            defined_name.scope.as_deref(),
+            sheet_keys,
+        )),
+    );
+    payload.insert(
+        "refersTo".to_string(),
+        canonical_named_range_refers_to(engine, sheet_keys, defined_name),
+    );
+    insert_optional_string(&mut payload, "rawRefersTo", &defined_name.raw_refers_to);
+    insert_optional_string(&mut payload, "comment", &defined_name.comment);
+    insert_optional_string(&mut payload, "customMenu", &defined_name.custom_menu);
+    insert_optional_string(&mut payload, "description", &defined_name.description);
+    insert_optional_string(&mut payload, "help", &defined_name.help);
+    insert_optional_string(&mut payload, "statusBar", &defined_name.status_bar);
+    payload.insert("visible".to_string(), Value::Bool(defined_name.visible));
+    payload.insert("xlm".to_string(), Value::Bool(defined_name.xlm));
+    payload.insert("function".to_string(), Value::Bool(defined_name.function));
+    payload.insert(
+        "vbProcedure".to_string(),
+        Value::Bool(defined_name.vb_procedure),
+    );
+    payload.insert(
+        "publishToServer".to_string(),
+        Value::Bool(defined_name.publish_to_server),
+    );
+    payload.insert(
+        "workbookParameter".to_string(),
+        Value::Bool(defined_name.workbook_parameter),
+    );
+    payload.insert(
+        "xmlSpacePreserve".to_string(),
+        Value::Bool(defined_name.xml_space_preserve),
+    );
+    if let Some(order) = defined_name.order {
+        payload.insert("order".to_string(), Value::Number(Number::from(order)));
+    }
+
+    canonicalize_json_value(Value::Object(payload))
+}
+
+fn canonical_named_range_refers_to(
+    engine: &YrsComputeEngine,
+    sheet_keys: &[(cell_types::SheetId, String)],
+    defined_name: &domain_types::DefinedName,
+) -> Value {
+    let Ok(identity_formula) =
+        serde_json::from_str::<formula_types::IdentityFormula>(&defined_name.refers_to)
+    else {
+        return canonicalize_json_value(serde_json::json!({
+            "kind": "raw",
+            "formula": defined_name.refers_to,
+        }));
+    };
+
+    let mut refs = Vec::with_capacity(identity_formula.refs.len());
+    let mut dependency_object_ids = BTreeSet::new();
+    let mut unsupported_refs = Vec::new();
+    for (index, formula_ref) in identity_formula.refs.iter().enumerate() {
+        match canonical_formula_ref(engine, sheet_keys, formula_ref) {
+            Ok(canonical_ref) => {
+                dependency_object_ids.extend(canonical_formula_ref_object_ids(&canonical_ref));
+                refs.push(canonical_ref);
+            }
+            Err(reason) => unsupported_refs.push(serde_json::json!({
+                "index": index,
+                "reason": reason.code,
+            })),
+        }
+    }
+
+    let mut refers_to = serde_json::Map::new();
+    refers_to.insert(
+        "kind".to_string(),
+        Value::String("identity-formula".to_string()),
+    );
+    refers_to.insert(
+        "normalizedFormula".to_string(),
+        Value::String(identity_formula.template),
+    );
+    refers_to.insert(
+        "dependencyObjectIds".to_string(),
+        Value::Array(
+            dependency_object_ids
+                .into_iter()
+                .map(Value::String)
+                .collect(),
+        ),
+    );
+    refers_to.insert(
+        "refs".to_string(),
+        serde_json::to_value(refs).unwrap_or_else(|_| Value::Array(Vec::new())),
+    );
+    refers_to.insert(
+        "dynamicArray".to_string(),
+        Value::Bool(identity_formula.is_dynamic_array),
+    );
+    refers_to.insert(
+        "volatile".to_string(),
+        Value::Bool(identity_formula.is_volatile),
+    );
+    refers_to.insert(
+        "aggregate".to_string(),
+        Value::Bool(identity_formula.is_aggregate),
+    );
+    if !unsupported_refs.is_empty() {
+        refers_to.insert(
+            "unsupportedRefs".to_string(),
+            Value::Array(unsupported_refs),
+        );
+    }
+
+    canonicalize_json_value(Value::Object(refers_to))
+}
+
+fn insert_optional_string(
+    payload: &mut serde_json::Map<String, Value>,
+    key: &str,
+    value: &Option<String>,
+) {
+    if let Some(value) = value {
+        payload.insert(key.to_string(), Value::String(value.clone()));
+    }
 }
 
 fn canonical_rows(

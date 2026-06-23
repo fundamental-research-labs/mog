@@ -20,6 +20,9 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
 } as const satisfies NonNullable<
   NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
 >;
+type DefaultVersionProviderSelection = NonNullable<
+  NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
+>;
 
 export function decorateNormalLocalHandleWithDefaultVersioning(
   handle: DocumentHandle,
@@ -41,12 +44,21 @@ export function decorateHandleWithDefaultIndexedDbVersioning(
     originalWorkbook({
       ...config,
       versioning: {
-        providerSelection: DEFAULT_VERSION_PROVIDER_SELECTION,
+        providerSelection: createDefaultVersionProviderSelection(handle),
         domainSupportManifest: createDefaultDomainSupportManifest(handle.documentId),
         ...config?.versioning,
       },
     })) as DocumentHandle['workbook'];
   return handle;
+}
+
+function createDefaultVersionProviderSelection(
+  handle: DocumentHandle,
+): DefaultVersionProviderSelection {
+  if (handle.isReadOnly === true) {
+    return { ...DEFAULT_VERSION_PROVIDER_SELECTION, readOnly: true };
+  }
+  return DEFAULT_VERSION_PROVIDER_SELECTION;
 }
 
 function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {

@@ -47,6 +47,7 @@ type SpreadsheetAppChartImageExporterRegistrationTarget = {
 
 export type SpreadsheetAppDocumentHandle = SpreadsheetAppChartImageExporterRegistrationTarget & {
   readonly isImportDurabilityPending?: boolean;
+  readonly isReadOnly?: boolean;
   readonly eventBus: {
     onAll(handler: (event: unknown) => void): (() => void) | undefined;
   };
@@ -72,6 +73,9 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
   kind: 'indexeddb',
   requireDurablePersistence: true,
 } as const satisfies NonNullable<
+  NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
+>;
+type DefaultVersionProviderSelection = NonNullable<
   NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
 >;
 type RuntimeDefaultVersioningDocumentHandle = DocumentHandle & {
@@ -108,7 +112,7 @@ export function decorateRuntimeOwnedHandleWithDefaultVersioning(
     originalWorkbook({
       ...config,
       versioning: {
-        providerSelection: DEFAULT_VERSION_PROVIDER_SELECTION,
+        providerSelection: createDefaultVersionProviderSelection(handle),
         domainSupportManifest: createDefaultDomainSupportManifest(handle.documentId),
         ...config?.versioning,
       },
@@ -119,6 +123,15 @@ export function decorateRuntimeOwnedHandleWithDefaultVersioning(
     value: true,
   });
   return handle;
+}
+
+function createDefaultVersionProviderSelection(
+  handle: Pick<DocumentHandle, 'isReadOnly'>,
+): DefaultVersionProviderSelection {
+  if (handle.isReadOnly === true) {
+    return { ...DEFAULT_VERSION_PROVIDER_SELECTION, readOnly: true };
+  }
+  return DEFAULT_VERSION_PROVIDER_SELECTION;
 }
 
 export function attachRuntimeDefaultVersioning(environment: {

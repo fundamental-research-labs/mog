@@ -4,7 +4,7 @@ use super::super::*;
 use super::helpers::*;
 use super::sync_helpers::*;
 use cell_types::CellId;
-use domain_types::domain::comment::CommentType;
+use domain_types::{domain::comment::CommentType, CellFormat};
 use snapshot_types::{Axis, ChangeKind, MutationResult, SheetChangeField, StructureChangeType};
 use value_types::CellValue;
 
@@ -33,6 +33,18 @@ fn find_authored_change<'a>(
     let cell_id = cell_id.to_uuid_string();
     result
         .authored_cell_changes
+        .iter()
+        .find(|change| change.cell_id == cell_id)
+}
+
+fn find_recalc_change<'a>(
+    result: &'a MutationResult,
+    cell_id: CellId,
+) -> Option<&'a snapshot_types::CellChange> {
+    let cell_id = cell_id.to_uuid_string();
+    result
+        .recalc
+        .changed_cells
         .iter()
         .find(|change| change.cell_id == cell_id)
 }
@@ -209,6 +221,155 @@ fn sync_authored_cell_changes_exclude_dependent_formula_recalculation() {
     assert!(
         find_authored_change(&result, b1).is_none(),
         "dependent formula recalculation must not be authored; got {:?}",
+        result.authored_cell_changes,
+    );
+    assert!(
+        find_recalc_change(&result, b1).is_some(),
+        "dependent formula recalculation must remain in recalc.changed_cells; got {:?}",
+        result.recalc.changed_cells,
+    );
+}
+
+#[test]
+fn sync_authored_cell_changes_exclude_structural_position_shift() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "9".into() },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .structure_change(
+            &sheet_id,
+            &formula_types::StructureChange::InsertRows {
+                at: 0,
+                count: 1,
+                new_row_ids: vec![],
+            },
+        )
+        .unwrap();
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+
+    assert_eq!(
+        engine_b.get_cell_value(&sheet_id, 1, 0),
+        num(9.0),
+        "sync should shift the authored cell down without rewriting its content"
+    );
+    assert!(
+        result.authored_cell_changes.is_empty(),
+        "row insertion shifts viewport/cell positions but must not be an authored cell edit; got {:?}",
+        result.authored_cell_changes,
+    );
+    assert!(
+        result.structure_changes.iter().any(|change| {
+            change.sheet_id == sheet_id.to_uuid_string()
+                && matches!(&change.change_type, StructureChangeType::InsertRows)
+                && change.count == 1
+        }),
+        "structural sync result should still report the row insert; got {:?}",
+        result.structure_changes,
+    );
+}
+
+#[test]
+fn sync_authored_cell_changes_exclude_vacated_position_patch() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "17".into() },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .relocate_cells_yrs(&sheet_id, 0, 0, 0, 0, &sheet_id, 0, 2)
+        .expect("relocate A1 to C1");
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+
+    assert_eq!(
+        engine_b.get_cell_value(&sheet_id, 0, 0),
+        CellValue::Null,
+        "source position should be vacated after sync"
+    );
+    assert_eq!(
+        engine_b.get_cell_value(&sheet_id, 0, 2),
+        num(17.0),
+        "destination position should receive the moved authored cell"
+    );
+    assert!(
+        result.authored_cell_changes.is_empty(),
+        "relocation may produce viewport clear/set patches, but must not report synthetic authored cell edits; got {:?}",
+        result.authored_cell_changes,
+    );
+}
+
+#[test]
+fn sync_authored_cell_changes_exclude_format_only_viewport_patch() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let mut baseline = fork_engine_from_state(&room_state);
+    let a1 = authored_test_cell_id(1);
+
+    baseline
+        .set_cell(
+            &sheet_id,
+            a1,
+            0,
+            0,
+            crate::bridge_types::CellInput::Parse { text: "11".into() },
+        )
+        .unwrap();
+
+    let baseline_state = compute_collab::encode_full_state(baseline.storage().doc());
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&baseline_state);
+
+    engine_a
+        .set_format_for_ranges(
+            &sheet_id,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let result = sync_a_to_b_diff(&engine_a, &mut engine_b);
+
+    assert_eq!(
+        engine_b.get_cell_value(&sheet_id, 0, 0),
+        num(11.0),
+        "format-only sync should preserve the cell value"
+    );
+    assert_eq!(
+        engine_b.get_resolved_format(&sheet_id, 0, 0).bold,
+        Some(true),
+        "format-only sync should still apply the visual format"
+    );
+    assert!(
+        result.authored_cell_changes.is_empty(),
+        "format-only viewport updates must not be authored cell edits; got {:?}",
         result.authored_cell_changes,
     );
 }

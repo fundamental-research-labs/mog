@@ -48,6 +48,9 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
   kind: 'indexeddb',
   requireDurablePersistence: true,
 } as const satisfies SpreadsheetRuntimeDocumentVersioningProviderSelection;
+type DefaultVersionProviderSelection = NonNullable<
+  NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
+>;
 
 export function createDefaultDocumentVersioningReadiness(
   documentId: string,
@@ -197,7 +200,7 @@ function decorateHandleWithDefaultIndexedDbVersioning(
     originalWorkbook({
       ...config,
       versioning: {
-        providerSelection: DEFAULT_VERSION_PROVIDER_SELECTION,
+        providerSelection: createDefaultVersionProviderSelection(handle),
         domainSupportManifest: createDefaultDomainSupportManifest(documentId),
         ...config?.versioning,
       },
@@ -208,6 +211,15 @@ function decorateHandleWithDefaultIndexedDbVersioning(
     value: true,
   });
   return handle;
+}
+
+function createDefaultVersionProviderSelection(
+  handle: Pick<SpreadsheetAppDocumentHandle, 'isReadOnly'>,
+): DefaultVersionProviderSelection {
+  if (handle.isReadOnly === true) {
+    return { ...DEFAULT_VERSION_PROVIDER_SELECTION, readOnly: true };
+  }
+  return DEFAULT_VERSION_PROVIDER_SELECTION;
 }
 
 type VersionSurfaceStatus = {

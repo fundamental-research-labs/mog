@@ -11,6 +11,12 @@ mod formula_reader;
 mod semantic_ids;
 mod semantic_reader;
 
+const SHEETS_DOMAIN: &str = "sheets";
+const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";
+const CELL_VALUES_DOMAIN: &str = "cells.values";
+const CELL_FORMULAS_DOMAIN: &str = "cells.formulas";
+const NAMED_RANGES_DOMAIN: &str = "named-ranges";
+
 #[derive(Debug, thiserror::Error)]
 pub enum SemanticStateReadError {
     #[error("semantic workbook state reader is not implemented for {reader}")]
@@ -220,7 +226,7 @@ fn semantic_objects(
             SemanticObjectDigest {
                 object_id: format!("sheet:{sheet_id}"),
                 object_kind: SemanticObjectKind::Sheet,
-                domain_id: "authored-grid".to_string(),
+                domain_id: SHEETS_DOMAIN.to_string(),
                 digest,
             },
         );
@@ -235,7 +241,7 @@ fn semantic_objects(
                 SemanticObjectDigest {
                     object_id: row_id.clone(),
                     object_kind: SemanticObjectKind::Row,
-                    domain_id: "rows-columns".to_string(),
+                    domain_id: ROWS_COLUMNS_DOMAIN.to_string(),
                     digest,
                 },
             );
@@ -251,7 +257,7 @@ fn semantic_objects(
                 SemanticObjectDigest {
                     object_id: column_id.clone(),
                     object_kind: SemanticObjectKind::Column,
-                    domain_id: "rows-columns".to_string(),
+                    domain_id: ROWS_COLUMNS_DOMAIN.to_string(),
                     digest,
                 },
             );
@@ -267,7 +273,7 @@ fn semantic_objects(
                 SemanticObjectDigest {
                     object_id: cell_id.clone(),
                     object_kind: SemanticObjectKind::Cell,
-                    domain_id: "authored-grid".to_string(),
+                    domain_id: CELL_VALUES_DOMAIN.to_string(),
                     digest,
                 },
             );
@@ -283,7 +289,7 @@ fn semantic_objects(
                     SemanticObjectDigest {
                         object_id,
                         object_kind: SemanticObjectKind::CellFormula,
-                        domain_id: "cells.formulas".to_string(),
+                        domain_id: CELL_FORMULAS_DOMAIN.to_string(),
                         digest,
                     },
                 );
@@ -345,9 +351,12 @@ mod tests {
 
     use super::*;
 
-    fn authored_domain(capability_state: VersionDomainCapabilityState) -> SemanticDomainState {
+    fn authored_domain(
+        domain_id: &str,
+        capability_state: VersionDomainCapabilityState,
+    ) -> SemanticDomainState {
         SemanticDomainState {
-            domain_id: "authored-grid".to_string(),
+            domain_id: domain_id.to_string(),
             domain_class: VersionDomainClass::Authored,
             capability_state,
             objects: BTreeMap::new(),
@@ -388,15 +397,19 @@ mod tests {
             sheets: BTreeMap::new(),
         };
         state.domains.insert(
-            "authored-grid".to_string(),
-            authored_domain(VersionDomainCapabilityState::Supported),
+            SHEETS_DOMAIN.to_string(),
+            authored_domain(SHEETS_DOMAIN, VersionDomainCapabilityState::Supported),
+        );
+        state.domains.insert(
+            CELL_VALUES_DOMAIN.to_string(),
+            authored_domain(CELL_VALUES_DOMAIN, VersionDomainCapabilityState::Supported),
         );
         state.sheets.insert(sheet.sheet_id.clone(), sheet);
         state
     }
 
     #[test]
-    fn versioning_diff_reports_deterministic_authored_cell_update() {
+    fn versioning_diff_reports_deterministic_cell_value_update() {
         let before = workbook_with_cell("alpha");
         let after = workbook_with_cell("beta");
 
@@ -408,7 +421,7 @@ mod tests {
         assert_eq!(first.changes.len(), 2);
         assert_eq!(first.changes[0].change_id, "updated:cell:sheet-1:1:1");
         assert_eq!(first.changes[0].kind, SemanticChangeKind::Updated);
-        assert_eq!(first.changes[0].domain_id, "authored-grid");
+        assert_eq!(first.changes[0].domain_id, CELL_VALUES_DOMAIN);
         assert_eq!(first.diagnostics, Vec::new());
     }
 
@@ -429,6 +442,8 @@ mod tests {
             change_ids,
             vec!["removed:cell:sheet-1:1:1", "removed:sheet:sheet-1"]
         );
+        assert_eq!(diff.changes[0].domain_id, CELL_VALUES_DOMAIN);
+        assert_eq!(diff.changes[1].domain_id, SHEETS_DOMAIN);
     }
 
     #[test]

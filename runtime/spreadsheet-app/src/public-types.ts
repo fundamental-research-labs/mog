@@ -26,6 +26,49 @@ export type SemanticWorkbookId = string;
 export type MogSpreadsheetColorScheme = 'light' | 'dark' | 'system';
 export type MogSpreadsheetResolvedColorScheme = 'light' | 'dark';
 
+export type SpreadsheetVersionControlFeatureGateCapability =
+  | 'versionControl'
+  | 'versionControlMerge'
+  | 'versionControl.merge';
+export type SpreadsheetBuiltInFeatureGateCapability =
+  | 'undo'
+  | 'redo'
+  | 'save'
+  | 'fileMenu'
+  | 'print'
+  | 'export'
+  | 'formulaBar'
+  | 'sheetTabs'
+  | 'contextMenu'
+  | 'freezePanes'
+  | 'dataValidation'
+  | 'datePicker'
+  | 'conditionalFormatting'
+  | SpreadsheetVersionControlFeatureGateCapability;
+export type SpreadsheetFeatureGateCapability =
+  | SpreadsheetBuiltInFeatureGateCapability
+  | (string & {});
+
+export interface SpreadsheetFeatureGateCapabilities {
+  readonly undo?: boolean;
+  readonly redo?: boolean;
+  readonly save?: boolean;
+  readonly fileMenu?: boolean;
+  readonly print?: boolean;
+  readonly export?: boolean;
+  readonly formulaBar?: boolean;
+  readonly sheetTabs?: boolean;
+  readonly contextMenu?: boolean;
+  readonly freezePanes?: boolean;
+  readonly dataValidation?: boolean;
+  readonly datePicker?: boolean;
+  readonly conditionalFormatting?: boolean;
+  readonly versionControl?: boolean;
+  readonly versionControlMerge?: boolean;
+  readonly 'versionControl.merge'?: boolean;
+  readonly [capability: string]: boolean | undefined;
+}
+
 export type SpreadsheetReadCapability = 'workbook:read' | 'workbook:export' | 'workbook:screenshot';
 export type SpreadsheetWriteCapability =
   | 'workbook:write'
@@ -497,7 +540,7 @@ export interface MogSpreadsheetFeaturePolicy {
   readonly ribbonVisibility?: RibbonVisibilityConfig;
   readonly tabs?: Partial<Record<CommandBarTabId, boolean>>;
   readonly groups?: Record<string, boolean>;
-  readonly capabilities?: Record<string, boolean>;
+  readonly capabilities?: SpreadsheetFeatureGateCapabilities;
 }
 
 export interface SpreadsheetWorkbookFacade extends Workbook {

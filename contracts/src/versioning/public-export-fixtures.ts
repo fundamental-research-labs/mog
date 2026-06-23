@@ -130,6 +130,23 @@ import type {
   VersionMergePreviewRecord,
   VersionMergePreviewRecordStatus,
   VersionMetadataDiagnostic,
+  MogWorkbookVersionXlsxCommitId,
+  MogWorkbookVersionXlsxDiagnosticPublicPayload,
+  MogWorkbookVersionXlsxImportRootProvenance,
+  MogWorkbookVersionXlsxImportRootSource,
+  MogWorkbookVersionXlsxMetadata,
+  MogWorkbookVersionXlsxMetadataExpectedHead,
+  MogWorkbookVersionXlsxMetadataHead,
+  MogWorkbookVersionXlsxMetadataPart,
+  MogWorkbookVersionXlsxMetadataRedactionPolicy,
+  MogWorkbookVersionXlsxMetadataSchemaVersion,
+  MogWorkbookVersionXlsxMetadataTrustContext,
+  MogWorkbookVersionXlsxMetadataTrustReason,
+  MogWorkbookVersionXlsxMetadataTrustResult,
+  MogWorkbookVersionXlsxMetadataTrustStatus,
+  MogWorkbookVersionXlsxMetadataTrustSummary,
+  MogWorkbookVersionXlsxObjectDigest,
+  MogWorkbookVersionXlsxRefRevision,
   VersionMutationSegment,
   VersionObjectHeader,
   VersionObjectKind,
@@ -414,6 +431,23 @@ type PublicVersioningMetadataSurface = {
   readonly appendAgentProposalEventInput: VersionAppendAgentProposalEventInput;
   readonly mergePreviewRecordStatus: VersionMergePreviewRecordStatus;
   readonly mergePreviewRecord: VersionMergePreviewRecord;
+  readonly xlsxMetadataSchemaVersion: MogWorkbookVersionXlsxMetadataSchemaVersion;
+  readonly xlsxMetadataPart: MogWorkbookVersionXlsxMetadataPart;
+  readonly xlsxCommitId: MogWorkbookVersionXlsxCommitId;
+  readonly xlsxObjectDigest: MogWorkbookVersionXlsxObjectDigest;
+  readonly xlsxRefRevision: MogWorkbookVersionXlsxRefRevision;
+  readonly xlsxDiagnosticPublicPayload: MogWorkbookVersionXlsxDiagnosticPublicPayload;
+  readonly xlsxMetadataHead: MogWorkbookVersionXlsxMetadataHead;
+  readonly xlsxMetadata: MogWorkbookVersionXlsxMetadata;
+  readonly xlsxRedactionPolicy: MogWorkbookVersionXlsxMetadataRedactionPolicy;
+  readonly xlsxTrustStatus: MogWorkbookVersionXlsxMetadataTrustStatus;
+  readonly xlsxTrustReason: MogWorkbookVersionXlsxMetadataTrustReason;
+  readonly xlsxTrustSummary: MogWorkbookVersionXlsxMetadataTrustSummary;
+  readonly xlsxExpectedHead: MogWorkbookVersionXlsxMetadataExpectedHead;
+  readonly xlsxTrustContext: MogWorkbookVersionXlsxMetadataTrustContext;
+  readonly xlsxTrustResult: MogWorkbookVersionXlsxMetadataTrustResult;
+  readonly xlsxImportRootSource: MogWorkbookVersionXlsxImportRootSource;
+  readonly xlsxImportRootProvenance: MogWorkbookVersionXlsxImportRootProvenance;
 };
 
 const vc03ExportSurfaceDomainIds = Object.freeze([

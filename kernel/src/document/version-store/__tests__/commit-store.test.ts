@@ -189,6 +189,46 @@ describe('InMemoryWorkbookCommitStore root commits', () => {
     ]);
   });
 
+  it('rejects malformed authored metadata before writing commit objects', async () => {
+    class CapturingObjectStore extends InMemoryVersionObjectStore {
+      putCount = 0;
+
+      override async putObjects(
+        batch: readonly VersionObjectRecord<unknown>[],
+      ): Promise<VersionObjectPutBatchResult> {
+        this.putCount += 1;
+        return super.putObjects(batch);
+      }
+    }
+
+    const objectStore = new CapturingObjectStore(NAMESPACE);
+    const commitStore = createInMemoryWorkbookCommitStore(objectStore);
+    const snapshotRoot = await objectRecord('workbook.snapshotRoot.v1', { sheets: [] });
+    const semanticChangeSet = await objectRecord('workbook.semanticChangeSet.v1', {
+      changes: [],
+    });
+
+    const result = await commitStore.createWorkbookCommit({
+      ...baseInput(snapshotRoot, semanticChangeSet),
+      author: { ...AUTHOR, actorKind: 'bot' } as unknown as VersionAuthor,
+      createdAt: 123 as unknown as string,
+    });
+
+    expectCreateFailed(result);
+    expect(result.mutationGuarantee).toBe('no-objects-written');
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+        details: { path: 'author.actorKind' },
+      }),
+      expect.objectContaining({
+        code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+        details: { path: 'createdAt' },
+      }),
+    ]);
+    expect(objectStore.putCount).toBe(0);
+  });
+
   it('writes the dependency records and commit object in one object-store batch', async () => {
     class CapturingObjectStore extends InMemoryVersionObjectStore {
       readonly batches: readonly VersionObjectRecord<unknown>[][] = [];

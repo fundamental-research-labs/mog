@@ -72,6 +72,8 @@ describe('WorkbookVersion provider-backed diff completeness diagnostics', () => 
     async (category, completenessDiagnostic) => {
       const expectedCategory =
         category === 'omitted-unsupported-domain' ? 'unsupported' : category;
+      const expectedRedactedCategory =
+        category === 'subset-hidden' ? 'redacted' : expectedCategory;
       const context = await createCommittedDiffWorkbook({
         commitLabel: 'child',
         changes: defaultSemanticChanges('child'),
@@ -90,13 +92,14 @@ describe('WorkbookVersion provider-backed diff completeness diagnostics', () => 
               data: expect.objectContaining({
                 operation: 'diff',
                 recoverability: expectedCategory === 'stale' ? 'retry' : 'unsupported',
+                redacted: true,
                 payload: expect.objectContaining({
                   operation: 'diff',
                   selector: 'target',
-                  category: expectedCategory,
+                  category: expectedRedactedCategory,
                   completenessCode: completenessDiagnostic.code,
                   completenessSeverity: completenessDiagnostic.severity,
-                  path: completenessDiagnostic.path,
+                  path: 'redacted',
                 }),
               }),
             }),
@@ -108,6 +111,7 @@ describe('WorkbookVersion provider-backed diff completeness diagnostics', () => 
       expect(JSON.stringify(result)).not.toContain('principal-secret');
       expect(JSON.stringify(result)).not.toContain('deniedPrincipal');
       expect(JSON.stringify(result)).not.toContain('omittedDomains');
+      expect(JSON.stringify(result)).not.toContain(completenessDiagnostic.path);
       expect(result).not.toHaveProperty('value');
     },
   );

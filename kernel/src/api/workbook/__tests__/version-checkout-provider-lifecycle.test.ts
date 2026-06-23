@@ -104,7 +104,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   reason: 'pendingProviderWrites',
                   targetKind: 'head',
-                  refName: 'HEAD',
+                  refName: 'redacted',
                   pendingRemoteSegmentCount: 1,
                 }),
               }),
@@ -159,7 +159,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   reason: 'pendingProviderWrites',
                   targetKind: 'commit',
-                  commitId: initialized.rootCommit.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
@@ -272,11 +272,11 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                   reason: 'staleWorkspaceHead',
                   staleReason: 'refMoved',
                   targetKind: 'ref',
-                  refName: 'refs/heads/scenario/provider-admission',
-                  branchName: 'scenario/provider-admission',
-                  checkedOutCommitId: branchBase.id,
-                  currentRefHeadId: moved.id,
-                  refHeadAtMaterialization: branchBase.id,
+                  refName: 'redacted',
+                  branchName: 'redacted',
+                  checkedOutCommitId: 'redacted',
+                  currentRefHeadId: 'redacted',
+                  refHeadAtMaterialization: 'redacted',
                 }),
               }),
             }),
@@ -349,20 +349,20 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
         error: {
           diagnostics: [
             expect.objectContaining({
-              code: 'VERSION_CHECKOUT_PROVIDER_ERROR',
+              code: 'VERSION_CHECKOUT_PENDING_PROVIDER_WRITES',
               data: expect.objectContaining({
                 redacted: true,
                 payload: expect.objectContaining({
-                  operation: 'checkout',
+                  reason: 'pendingProviderWrites',
                   targetKind: 'commit',
-                  commitId: committed.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
           ],
         },
       });
-      expect(stale.openGraphCalls()).toBe(1);
+      expect(stale.openGraphCalls()).toBe(0);
       await expect(checkoutWb.activeSheet.getCell('A1')).resolves.toMatchObject({
         value: 'active-before-stale-registry-checkout',
       });
@@ -427,7 +427,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
               data: expect.objectContaining({
                 redacted: true,
                 payload: expect.objectContaining({
-                  commitId: committed.id,
+                  commitId: 'redacted',
                   cause: 'VersionCheckoutRebindProviderIdentityError',
                   identityFenceReason: 'providerDocumentMismatch',
                   providerIdentityClass: 'document',
@@ -523,7 +523,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   reason: 'dirtyWorkingState',
                   targetKind: 'commit',
-                  commitId: committed.id,
+                  commitId: 'redacted',
                 }),
               }),
             }),
@@ -554,7 +554,7 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 payload: expect.objectContaining({
                   operation: 'checkout',
                   targetKind: 'commit',
-                  commitId: committed.id,
+                  commitId: 'redacted',
                   cause: 'VersionCheckoutRebindProviderIdentityError',
                   identityFenceReason: 'providerDocumentMismatch',
                   providerIdentityClass: 'document',
@@ -640,10 +640,11 @@ describe('WorkbookVersion provider-backed checkout lifecycle admission', () => {
                 data: expect.objectContaining({
                   redacted: true,
                   payload: expect.objectContaining({
-                    commitId: committed.id,
+                    commitId: 'redacted',
                     cause: 'VersionCheckoutRebindMaterializationIdentityError',
                     identityFenceReason: 'materializationIdentityStale',
-                    providerIdentityClass,
+                    providerIdentityClass:
+                      providerIdentityClass === 'principal' ? 'redacted' : providerIdentityClass,
                     mutationGuarantee: 'unknown-after-partial-mutation',
                     rollbackSafe: false,
                     partialSnapshot: true,

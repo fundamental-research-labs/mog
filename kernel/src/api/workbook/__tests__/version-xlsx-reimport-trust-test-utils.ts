@@ -180,32 +180,19 @@ export async function expectUntrustedNewRootReimport(input: {
       value: { items: [expect.objectContaining({ id: input.expectedHeadCommitId })] },
     });
 
-    const rootBranchCommit = await readOnlyImportNewRootBranchCommit(DOCUMENT_ID, WORKSPACE_ID);
-    expect(rootBranchCommit.id).not.toBe(input.expectedHeadCommitId);
-    for (const commitId of input.unexpectedCommitIds ?? []) {
-      expect(rootBranchCommit.id).not.toBe(commitId);
-    }
-    expect(rootBranchCommit.payload.parentCommitIds).toEqual([]);
     await expectImportBranchCounts(DOCUMENT_ID, WORKSPACE_ID, {
       externalChange: 0,
-      newRoot: 1,
+      newRoot: 0,
     });
-
-    const rootPayload = await readSemanticChangeSetPayload(
-      rootBranchCommit.id,
-      DOCUMENT_ID,
-      WORKSPACE_ID,
-    );
-    expect(rootPayload).toMatchObject({
-      source: {
-        kind: 'xlsxImportRoot',
-        versionMetadataTrust: {
-          status: 'untrusted',
-          reason: input.reason,
-          redacted: true,
-        },
-      },
-    });
+    const commits = await wb.version.listCommits();
+    expect(commits).toMatchObject({ ok: true });
+    if (commits.ok) {
+      for (const commitId of input.unexpectedCommitIds ?? []) {
+        expect(commits.value.items).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: commitId })]),
+        );
+      }
+    }
   } finally {
     await wb?.close('skipSave').catch(() => {});
     await imported.handle.dispose().catch(() => {});

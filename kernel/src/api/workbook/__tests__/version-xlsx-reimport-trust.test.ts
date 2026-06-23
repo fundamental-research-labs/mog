@@ -23,7 +23,6 @@ import {
   OTHER_WORKSPACE_ID,
   readOnlyImportBranchCommitId,
   readOnlyImportExternalChangeBranchCommit,
-  readOnlyImportNewRootBranchCommit,
   readSemanticChangeSetPayload,
   seedTrustedExport,
   testVersionMetadata,
@@ -449,22 +448,9 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
         value: { id: seed.rootCommitId },
       });
 
-      const rootBranchCommit = await readOnlyImportNewRootBranchCommit(DOCUMENT_ID, WORKSPACE_ID);
-      expect(rootBranchCommit.id).not.toBe(seed.rootCommitId);
-      expect(rootBranchCommit.payload.parentCommitIds).toEqual([]);
-
-      const rootPayload = await readSemanticChangeSetPayload(
-        rootBranchCommit.id,
-        DOCUMENT_ID,
-        WORKSPACE_ID,
-      );
-      expect(rootPayload).toMatchObject({
-        source: {
-          kind: 'xlsxImportRoot',
-          versionMetadataTrust: {
-            status: 'absent',
-          },
-        },
+      await expectImportBranchCounts(DOCUMENT_ID, WORKSPACE_ID, {
+        externalChange: 0,
+        newRoot: 0,
       });
     } finally {
       await wb?.close('skipSave').catch(() => {});

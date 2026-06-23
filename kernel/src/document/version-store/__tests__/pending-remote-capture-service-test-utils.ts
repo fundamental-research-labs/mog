@@ -18,6 +18,7 @@ import {
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionGraphRegistry,
   type VersionGraphStore,
 } from '../provider';
 
@@ -33,7 +34,20 @@ const AUTHOR: VersionAuthor = {
   displayName: 'Remote User One',
 };
 
-export async function createPendingRemoteCaptureFixture() {
+type PendingRemoteCaptureProvider = ReturnType<typeof createInMemoryVersionStoreProvider>;
+
+type PendingRemoteCaptureFixture = {
+  readonly provider: PendingRemoteCaptureProvider;
+  readonly namespace: VersionGraphNamespace;
+  readonly graph: VersionGraphStore;
+  readonly registry: VersionGraphRegistry;
+};
+
+type PendingRemoteCaptureFixtureWithSegmentStore = PendingRemoteCaptureFixture & {
+  readonly pendingRemoteSegmentStore: PendingRemoteSegmentStore;
+};
+
+export async function createPendingRemoteCaptureFixture(): Promise<PendingRemoteCaptureFixture> {
   const provider = createInMemoryVersionStoreProvider({
     documentScope: DOCUMENT_SCOPE,
     backend: new InMemoryVersionDocumentProviderBackend(),
@@ -52,7 +66,9 @@ export async function createPendingRemoteCaptureFixture() {
   };
 }
 
-export async function createPendingRemoteCaptureFixtureWithPendingStore() {
+export async function createPendingRemoteCaptureFixtureWithSegmentStore(): Promise<
+  PendingRemoteCaptureFixtureWithSegmentStore
+> {
   const fixture = await createPendingRemoteCaptureFixture();
   const pendingRemoteSegmentStore = await fixture.provider.openPendingRemoteSegmentStore(
     fixture.namespace,

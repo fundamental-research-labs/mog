@@ -1,7 +1,7 @@
 import { capturePendingRemoteSemanticMutations } from '../pending-remote-capture-service';
 import {
   createPendingRemoteCaptureFixture,
-  createPendingRemoteCaptureFixtureWithPendingStore,
+  createPendingRemoteCaptureFixtureWithSegmentStore,
   expectHistorySuspensionMutationSegment,
   expectNoRawProviderIdentity,
   failingReservePendingRemoteSegmentStore,
@@ -12,7 +12,7 @@ import {
 describe('pending remote capture service history suspension', () => {
   it('persists a verified history-suspension marker when no matching semantic mutations exist', async () => {
     const { provider, namespace, graph, registry, pendingRemoteSegmentStore } =
-      await createPendingRemoteCaptureFixtureWithPendingStore();
+      await createPendingRemoteCaptureFixtureWithSegmentStore();
     const operationContext = pendingRemoteOperationContext({
       operationId: 'operation-history-suspension',
       collaboration: {
@@ -75,7 +75,7 @@ describe('pending remote capture service history suspension', () => {
 
   it('fails closed with redacted diagnostics when verified marker object writes fail', async () => {
     const { provider, namespace, graph, registry, pendingRemoteSegmentStore } =
-      await createPendingRemoteCaptureFixtureWithPendingStore();
+      await createPendingRemoteCaptureFixtureWithSegmentStore();
 
     const result = await capturePendingRemoteSemanticMutations({
       capture: {

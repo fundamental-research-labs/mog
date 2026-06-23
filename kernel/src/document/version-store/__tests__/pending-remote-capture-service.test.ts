@@ -4,7 +4,7 @@ import {
 } from '../pending-remote-capture-service';
 import {
   createPendingRemoteCaptureFixture,
-  createPendingRemoteCaptureFixtureWithPendingStore,
+  createPendingRemoteCaptureFixtureWithSegmentStore,
   expectMutationSegmentHasNoRawProviderIdentity,
   expectNoRawProviderIdentity,
   failingReadPendingRemoteSegmentStore,
@@ -15,7 +15,7 @@ import {
 describe('pending remote capture service', () => {
   it('captures by sanitized stable remote identity across raw provider local echoes', async () => {
     const { provider, namespace, graph, registry, pendingRemoteSegmentStore } =
-      await createPendingRemoteCaptureFixtureWithPendingStore();
+      await createPendingRemoteCaptureFixtureWithSegmentStore();
 
     const recordedContext = pendingRemoteOperationContext({
       operationId: 'operation-recorded',

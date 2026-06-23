@@ -873,8 +873,20 @@ describe('Compute mutation admission', () => {
       }),
     };
     const bridge = createStartedBridge(ctx, transport);
+    const operationContext = {
+      operationId: 'operation-delete-sheet',
+      kind: 'mutation',
+      author: { authorId: 'user-1', actorKind: 'user' },
+      createdAt: '2026-06-20T00:00:00.000Z',
+      sheetIds: ['sheet-delete'],
+      domainIds: ['sheets'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    };
 
-    const promise = bridge.removeSheet(sheetId('sheet-delete'));
+    const promise = bridge.removeSheet(sheetId('sheet-delete'), {
+      operationContext: operationContext as any,
+    });
     await Promise.resolve();
 
     expect(awaitMaterialized).toHaveBeenCalledWith('allSheets');

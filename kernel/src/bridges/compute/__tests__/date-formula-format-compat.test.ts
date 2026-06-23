@@ -5,6 +5,7 @@ import { jest } from '@jest/globals';
 import type { BridgeTransport } from '@rust-bridge/client';
 import { sheetId } from '@mog-sdk/contracts/core';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import { ComputeBridge } from '../compute-bridge';
 import type { MutationResult } from '../compute-types.gen';
@@ -38,6 +39,19 @@ function createStartedBridge(transport: BridgeTransport & { call: jest.Mock }): 
   return bridge;
 }
 
+function operationContext(operationId: string): VersionOperationContext {
+  return {
+    operationId,
+    kind: 'mutation',
+    author: { authorId: 'user-1', actorKind: 'user' },
+    createdAt: '2026-06-20T00:00:00.000Z',
+    sheetIds: ['sheet-1'],
+    domainIds: ['cells'],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+  };
+}
+
 describe('ComputeBridge DATE formula format compatibility', () => {
   it('applies M/d/yyyy only when stale WASM leaves a numeric DATE formula General', async () => {
     const primary = mutationResult();
@@ -69,9 +83,11 @@ describe('ComputeBridge DATE formula format compatibility', () => {
     };
     const bridge = createStartedBridge(transport);
 
-    const result = await bridge.setCellsByPosition(sheetId('sheet-1'), [
-      { row: 0, col: 0, input: { kind: 'parse', text: '=DATE(2026,1,2)' } },
-    ]);
+    const result = await bridge.setCellsByPosition(
+      sheetId('sheet-1'),
+      [{ row: 0, col: 0, input: { kind: 'parse', text: '=DATE(2026,1,2)' } }],
+      { operationContext: operationContext('operation-date-format') },
+    );
 
     expect(transport.call).toHaveBeenCalledWith(
       'compute_set_format_for_ranges',
@@ -118,7 +134,9 @@ describe('ComputeBridge DATE formula format compatibility', () => {
     };
     const bridge = createStartedBridge(transport);
 
-    await bridge.setCellsByPosition(sheetId('sheet-1'), [{ row: 0, col: 0, input: input as any }]);
+    await bridge.setCellsByPosition(sheetId('sheet-1'), [{ row: 0, col: 0, input: input as any }], {
+      operationContext: operationContext(`operation-${_name}`),
+    });
 
     expect(transport.call).not.toHaveBeenCalledWith(
       'compute_set_format_for_ranges',

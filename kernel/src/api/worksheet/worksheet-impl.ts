@@ -113,7 +113,10 @@ import { ERROR_DISPLAY_MAP, isCellError } from '@mog/spreadsheet-utils/errors';
 import { resolveCell, resolveRange, resolveRangeToA1 } from '../internal/address-resolver';
 import { parseCellAddress, parseCellRange, toA1 } from '../internal/utils';
 import { classifyRangeValueType, normalizeCellValue } from '../internal/value-conversions';
-import { createVersionOperationContext } from '../internal/version-operation-context';
+import {
+  createVersionMutationAdmissionOptions,
+  createVersionOperationContext,
+} from '../workbook/version-operation-context';
 import { renameSheet } from '../workbook/operations/sheet-crud-operations';
 import { calendarPartsInTz, parseIsoDate } from './operations/calendar-tz';
 import * as CellOps from './operations/cell-operations';
@@ -786,13 +789,18 @@ export class WorksheetImpl implements Worksheet {
     }
 
     this._invalidateActiveCellEditSourceForCell(row, col);
-    await CellOps.setCell(this.ctx, this.sheetId, row, col, value as CellValuePrimitive, {
-      operationContext: createVersionOperationContext(this.ctx, {
+    await CellOps.setCell(
+      this.ctx,
+      this.sheetId,
+      row,
+      col,
+      value as CellValuePrimitive,
+      createVersionMutationAdmissionOptions(this.ctx, {
         operationIdPrefix: 'worksheet.setCell',
         sheetIds: [this.sheetId],
         domainIds: ['cells'],
       }),
-    });
+    );
   }
 
   async setValue(
@@ -1339,13 +1347,18 @@ export class WorksheetImpl implements Worksheet {
       endRow: startRow + values.length - 1,
       endCol: startCol + (values[0]?.length ?? 1) - 1,
     });
-    await RangeOps.setRange(this.ctx, this.sheetId, startRow, startCol, values, {
-      operationContext: createVersionOperationContext(this.ctx, {
+    await RangeOps.setRange(
+      this.ctx,
+      this.sheetId,
+      startRow,
+      startCol,
+      values,
+      createVersionMutationAdmissionOptions(this.ctx, {
         operationIdPrefix: 'worksheet.setRange',
         sheetIds: [this.sheetId],
         domainIds: ['cells'],
       }),
-    });
+    );
   }
 
   /**
@@ -2553,13 +2566,16 @@ export class WorksheetImpl implements Worksheet {
         addrStr !== undefined ? resolveCell(addrStr) : (cell as { row: number; col: number });
       this._invalidateActiveCellEditSourceForCell(row, col);
     }
-    return CellOps.setCells(this.ctx, this.sheetId, normalizedCells, {
-      operationContext: createVersionOperationContext(this.ctx, {
+    return CellOps.setCells(
+      this.ctx,
+      this.sheetId,
+      normalizedCells,
+      createVersionMutationAdmissionOptions(this.ctx, {
         operationIdPrefix: 'worksheet.setCells',
         sheetIds: [this.sheetId],
         domainIds: ['cells'],
       }),
-    });
+    );
   }
 
   private normalizeSetCellsEntries(cells: SetCellsEntry[]): NormalizedSetCellsEntry[] {

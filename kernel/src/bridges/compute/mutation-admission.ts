@@ -91,6 +91,15 @@ interface VersionMutationCaptureContext {
   };
 }
 
+const REQUIRED_VERSION_CONTEXT_PUBLIC_MUTATION_COMMANDS = new Set([
+  'compute_batch_set_cells_by_position',
+  'compute_create_sheet_with_default_col_width',
+  'compute_delete_sheet',
+  'compute_rename_compute_sheet',
+  'compute_set_date_value',
+  'compute_set_time_value',
+]);
+
 export function recordMutationAdmissionDiagnostic(
   ctx: IKernelContext,
   diagnostic: MutationAdmissionDiagnostic,
@@ -179,13 +188,21 @@ export function observeMutationAdmission(
   }
 
   if (!options.operationContext) {
+    const requiredContext = requiresCaptureVersionOperationContext(classification);
     recordMutationAdmissionDiagnostic(ctx, {
       code: 'versioning.admission.missing-context',
-      severity: 'warning',
+      severity: requiredContext ? 'error' : 'warning',
       command: operation,
       classification,
-      message: `No VersionOperationContext supplied for '${operation}'.`,
+      message: requiredContext
+        ? `No VersionOperationContext supplied for capture-required public mutation '${operation}'.`
+        : `No VersionOperationContext supplied for '${operation}'.`,
     });
+    if (requiredContext) {
+      throw new Error(
+        `VersionOperationContext is required for capture-required public mutation '${operation}'.`,
+      );
+    }
   }
 
   if (operation === 'compute_apply_sync_update') {
@@ -211,6 +228,17 @@ export function observeMutationAdmission(
   }
 
   return classification;
+}
+
+function requiresCaptureVersionOperationContext(
+  classification: OperationAdmissionClassification,
+): boolean {
+  return (
+    REQUIRED_VERSION_CONTEXT_PUBLIC_MUTATION_COMMANDS.has(classification.command) &&
+    classification.invocation === 'public-mutation' &&
+    classification.capturePolicy === 'commitEligible' &&
+    classification.writeAdmissionMode === 'capture'
+  );
 }
 
 export async function admitPublicMutation(

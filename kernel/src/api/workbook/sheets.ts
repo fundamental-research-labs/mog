@@ -19,20 +19,19 @@ import type {
   Worksheet,
 } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
-import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/disposable';
 import { KernelError, toMogSdkError } from '../../errors';
 import { protectedWorkbook } from '../../errors/api';
 
 import type { ProtectedWorkbookOperation } from '@mog-sdk/contracts/protection';
 import type { DocumentContext } from '../../context';
-import type { MutationAdmissionOptions } from '../../bridges/compute';
 import { getOrder } from '../../domain/sheets/sheet-meta';
 import * as WorkbookDomain from '../../domain/workbook/workbook';
 import {
-  createVersionOperationContext,
+  createVersionMutationAdmissionOptions,
   type CreateVersionOperationContextInput,
-} from '../internal/version-operation-context';
+  type VersionedMutationAdmissionOptions,
+} from './version-operation-context';
 
 import {
   copySheet,
@@ -44,9 +43,7 @@ import {
 } from './operations/sheet-crud-operations';
 import { EVENT_TO_INTERNAL } from './event-mapping';
 
-type SheetCrudMutationOptions = MutationAdmissionOptions & {
-  readonly operationContext: VersionOperationContext;
-};
+type SheetCrudMutationOptions = VersionedMutationAdmissionOptions;
 
 /**
  * Dependencies injected from WorkbookImpl.
@@ -242,13 +239,16 @@ export class WorkbookSheetsImpl implements WorkbookSheets {
     // Validate: no other sheet may have this name (case-insensitive, Excel semantics)
     await assertNameNotTaken(ctx, newName, sheetId);
 
-    await renameSheet(ctx, sheetId, newName, {
-      operationContext: createVersionOperationContext(ctx, {
+    await renameSheet(
+      ctx,
+      sheetId,
+      newName,
+      createSheetCrudMutationOptions(ctx, {
         operationIdPrefix: 'workbook.sheets.rename',
         sheetIds: [sheetId],
         domainIds: ['sheets'],
       }),
-    });
+    );
     // Sync cached worksheet metadata so getName() reflects the new name
     await (workbook as WorkbookInternal).refreshSheetMetadata();
     return { kind: 'sheetRename', oldName, newName };
@@ -432,9 +432,7 @@ function createSheetCrudMutationOptions(
   ctx: DocumentContext,
   input: CreateVersionOperationContextInput,
 ): SheetCrudMutationOptions {
-  return {
-    operationContext: createVersionOperationContext(ctx, input),
-  };
+  return createVersionMutationAdmissionOptions(ctx, input);
 }
 
 function createGroupedSheetCrudMutationOptions(

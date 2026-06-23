@@ -1,10 +1,8 @@
 import 'fake-indexeddb/auto';
 
-import type { ObjectDigest, VersionHead, Workbook, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import type { ObjectDigest, VersionHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { DocumentFactory } from '../../document/document-factory';
 import { createWorkbook } from '../create-workbook';
-import { withVersionManifest } from './version-domain-support-test-utils';
 import {
   addMogVersionMetadataToXlsx,
   maybeAddMogVersionMetadataToXlsx,
@@ -16,12 +14,13 @@ import type {
   MogVersionMetadataExportSink,
   MogVersionMetadataExportSinkAuthorization,
 } from '../version-xlsx-metadata-export-gate';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 
 const SOURCE_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-source';
 const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-clean';
 const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate';
+const STALE_IMPORTED_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-stale-imported';
+const COPIED_METADATA_DOCUMENT_ID = 'vc10-xlsx-metadata-export-gate-copied';
 const OLD_METADATA_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const OTHER_METADATA_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 const SEMANTIC_CHANGE_SET_DIGEST = objectDigest('1');
@@ -38,48 +37,70 @@ afterEach(async () => {
 });
 
 describe('VC-10 XLSX metadata export gating', () => {
+  it('omits Mog version metadata by default on clean XLSX export', async () => {
+    await expectCleanExportOmitsImportedMetadata(undefined);
+  });
+
   it('omits Mog version metadata when clean XLSX export explicitly requests omit', async () => {
-    const xlsxBytes = addMogVersionMetadataToXlsx(
-      await createSourceXlsx(),
-      testVersionMetadata({
-        documentId: 'stale-imported-document',
-        commitId: OLD_METADATA_COMMIT_ID,
+    await expectCleanExportOmitsImportedMetadata({ versionMetadata: 'omit' });
+  });
+
+  it('writes trusted Mog version metadata sidecar when export explicitly opts in', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        provider: metadataExportAuthorityProvider({
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          head: currentHead,
+        }),
       }),
+      { getHead: async () => ({ ok: true, value: currentHead }) } as Parameters<
+        typeof maybeAddMogVersionMetadataToXlsx
+      >[1],
+      await createSourceXlsx(),
+      { versionMetadata: 'include' },
     );
-    const imported = await DocumentFactory.createFromXlsx(
-      { type: 'bytes', data: xlsxBytes },
-      {
-        documentId: CLEAN_EXPORT_DOCUMENT_ID,
-        environment: 'headless',
-        userTimezone: 'UTC',
+
+    const metadata = readAndValidateMogVersionMetadataFromXlsx(exported, {
+      expectedDocumentId: METADATA_EXPORT_DOCUMENT_ID,
+      expectedHead: expectedMetadataHead(currentHead),
+      currentHead: expectedMetadataHead(currentHead),
+    });
+    expect(metadata).toMatchObject({
+      status: 'trusted',
+      metadata: {
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        diagnostics: [],
+        head: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+        redaction: {
+          policy: 'commit-document-and-object-digests-only',
+          omitted: expect.arrayContaining([
+            'authors',
+            'agentTraces',
+            'rawWorkbookBytes',
+            'credentials',
+            'externalDataSecrets',
+            'objectStoreNamespace',
+            'principalScope',
+          ]),
+        },
       },
-    );
-    expect(imported.success).toBe(true);
-    if (!imported.success || !imported.handle) {
-      throw new Error(`expected XLSX import success: ${imported.error?.message}`);
-    }
-
-    let wb: Workbook | undefined;
-    try {
-      wb = await imported.handle.workbook({
-        versioning: withVersionManifest({
-          providerSelection: {
-            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-            requireDurablePersistence: true,
-          },
-        }),
-      });
-
-      const exported = await wb.toXlsx({ contextStripped: true, versionMetadata: 'omit' });
-      expect(
-        readAndValidateMogVersionMetadataFromXlsx(exported, {
-          expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
-        }),
-      ).toMatchObject({ status: 'absent' });
-    } finally {
-      await wb?.close('skipSave').catch(() => {});
-      await imported.handle.dispose().catch(() => {});
-    }
+      trust: {
+        status: 'trusted',
+        sidecarPart: MOG_VERSION_METADATA_PART,
+        redacted: true,
+      },
+      diagnostics: [],
+    });
   });
 
   it('blocks Mog version metadata sidecar export when current head authority is stale', async () => {
@@ -110,6 +131,54 @@ describe('VC-10 XLSX metadata export gating', () => {
       ),
       'stale-head',
     );
+  });
+
+  it('replaces a stale imported Mog version metadata sidecar when opt-in export is authorized', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: STALE_IMPORTED_DOCUMENT_ID,
+        commitId: OTHER_METADATA_COMMIT_ID,
+      }),
+    );
+
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        provider: metadataExportAuthorityProvider({
+          documentId: METADATA_EXPORT_DOCUMENT_ID,
+          head: currentHead,
+        }),
+      }),
+      { getHead: async () => ({ ok: true, value: currentHead }) } as Parameters<
+        typeof maybeAddMogVersionMetadataToXlsx
+      >[1],
+      xlsxBytes,
+      { versionMetadata: 'include' },
+    );
+
+    const metadata = readAndValidateMogVersionMetadataFromXlsx(exported, {
+      expectedDocumentId: METADATA_EXPORT_DOCUMENT_ID,
+      expectedHead: expectedMetadataHead(currentHead),
+      currentHead: expectedMetadataHead(currentHead),
+    });
+    expect(metadata).toMatchObject({
+      status: 'trusted',
+      metadata: {
+        documentId: METADATA_EXPORT_DOCUMENT_ID,
+        head: {
+          commitId: OLD_METADATA_COMMIT_ID,
+          semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+          snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
+        },
+      },
+    });
+    expect(JSON.stringify(metadata)).not.toContain(STALE_IMPORTED_DOCUMENT_ID);
+    expect(JSON.stringify(metadata)).not.toContain(OTHER_METADATA_COMMIT_ID);
   });
 
   it('authorizes the metadata sink only after redaction and object-store authority preflight', async () => {
@@ -180,6 +249,52 @@ describe('VC-10 XLSX metadata export gating', () => {
     });
   });
 
+  it('rejects imported Mog version metadata sidecars that name the wrong document', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: COPIED_METADATA_DOCUMENT_ID,
+        commitId: OLD_METADATA_COMMIT_ID,
+      }),
+    );
+
+    const metadata = readAndValidateMogVersionMetadataFromXlsx(xlsxBytes, {
+      expectedDocumentId: METADATA_EXPORT_DOCUMENT_ID,
+      expectedHead: expectedMetadataHead(currentHead),
+      currentHead: expectedMetadataHead(currentHead),
+    });
+
+    expect(metadata).toMatchObject({
+      status: 'untrusted',
+      reason: 'wrong-document',
+      metadata: {
+        documentId: COPIED_METADATA_DOCUMENT_ID,
+      },
+      trust: {
+        status: 'untrusted',
+        sidecarPart: MOG_VERSION_METADATA_PART,
+        reason: 'wrong-document',
+        redacted: true,
+      },
+      diagnostics: [
+        expect.objectContaining({
+          code: 'mogVersionMetadataUntrusted',
+          reason: 'wrong-document',
+          details: expect.objectContaining({
+            reason: 'wrong-document',
+            sidecarPart: MOG_VERSION_METADATA_PART,
+            trusted: false,
+            redacted: true,
+          }),
+        }),
+      ],
+    });
+  });
+
   it('blocks Mog version metadata sidecar export when stale-head revision proof is missing', async () => {
     const unprovenHead = versionHead({ id: OLD_METADATA_COMMIT_ID });
 
@@ -239,10 +354,57 @@ describe('VC-10 XLSX metadata export gating', () => {
         details: expect.objectContaining({ metadataIssue: 'redaction-failed' }),
       });
       expect(JSON.stringify(error)).not.toContain(leakSentinel);
+      expect(JSON.stringify(error)).not.toContain('VERSION_TEST_HEAD_FAILURE');
+      expect(JSON.stringify(error)).not.toContain('target_unavailable');
+      expect(error).toMatchObject({
+        details: {
+          diagnostics: [
+            expect.objectContaining({
+              issueCode: 'VERSION_XLSX_METADATA_EXPORT_BLOCKED',
+              safeMessage:
+                'Mog version metadata export is blocked because the sidecar cannot be proven current and redacted.',
+              redacted: true,
+              payload: expect.objectContaining({
+                reason: 'redaction-failed',
+                redacted: true,
+              }),
+            }),
+          ],
+        },
+      });
     }
     expect(sinkWrites.count).toBe(0);
   });
 });
+
+async function expectCleanExportOmitsImportedMetadata(
+  options: Parameters<typeof maybeAddMogVersionMetadataToXlsx>[3],
+): Promise<void> {
+  const xlsxBytes = addMogVersionMetadataToXlsx(
+    await createSourceXlsx(),
+    testVersionMetadata({
+      documentId: STALE_IMPORTED_DOCUMENT_ID,
+      commitId: OLD_METADATA_COMMIT_ID,
+    }),
+  );
+
+  const exported = await maybeAddMogVersionMetadataToXlsx(
+    metadataExportContext({ documentId: CLEAN_EXPORT_DOCUMENT_ID }),
+    {
+      getHead: async () => {
+        throw new Error('clean metadata export must not read the version head without opt-in');
+      },
+    } as Parameters<typeof maybeAddMogVersionMetadataToXlsx>[1],
+    xlsxBytes,
+    options,
+    blockedMetadataSink(),
+  );
+  expect(
+    readAndValidateMogVersionMetadataFromXlsx(exported, {
+      expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
+    }),
+  ).toMatchObject({ status: 'absent' });
+}
 
 async function createSourceXlsx(): Promise<Uint8Array> {
   const wb = await createWorkbook({ documentId: SOURCE_DOCUMENT_ID, userTimezone: 'UTC' });
@@ -400,6 +562,17 @@ function versionHead(input: {
     refName: 'refs/heads/main',
     resolvedFrom: 'HEAD',
     ...(input.refRevision ? { refRevision: input.refRevision } : {}),
+  };
+}
+
+function expectedMetadataHead(head: VersionHead) {
+  return {
+    commitId: head.id,
+    ...(head.refName ? { refName: head.refName } : {}),
+    ...(head.resolvedFrom ? { resolvedFrom: head.resolvedFrom } : {}),
+    ...(head.refRevision ? { refRevision: head.refRevision } : {}),
+    semanticChangeSetDigest: SEMANTIC_CHANGE_SET_DIGEST,
+    snapshotRootDigest: SNAPSHOT_ROOT_DIGEST,
   };
 }
 

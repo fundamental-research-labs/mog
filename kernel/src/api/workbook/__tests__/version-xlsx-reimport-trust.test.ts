@@ -175,16 +175,16 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
         ),
     },
     {
-      name: 'forged',
-      reason: 'object-digest-mismatch' as const,
+      name: 'wrong-root',
+      reason: 'snapshot-root-mismatch' as const,
       xlsx: async (seed: TrustedExportSeed) =>
         addMogVersionMetadataToXlsx(
-          await createSourceXlsx('Forged metadata'),
+          await createSourceXlsx('Wrong root metadata'),
           testVersionMetadata({
             ...seed.metadata,
             head: {
               ...seed.metadata.head,
-              semanticChangeSetDigest: objectDigest('f'),
+              snapshotRootDigest: objectDigest('f'),
             },
           }),
         ),
@@ -210,6 +210,18 @@ describe('VC-10 XLSX trusted reimport matrix', () => {
           testVersionMetadata({
             ...seed.metadata,
             documentId: WRONG_DOCUMENT_ID,
+          }),
+        ),
+    },
+    {
+      name: 'malformed-ref-revision',
+      reason: 'invalid-schema' as const,
+      xlsx: async (seed: TrustedExportSeed) =>
+        addMogVersionMetadataToXlsx(
+          await createSourceXlsx('Malformed ref revision metadata'),
+          testVersionMetadata({
+            ...seed.metadata,
+            head: { ...seed.metadata.head!, refRevision: { kind: 'counter', value: '01' } },
           }),
         ),
     },
@@ -616,6 +628,10 @@ async function expectUntrustedNewRootReimport(input: {
     throw new Error(`expected untrusted reimport success: ${imported.error?.message}`);
   }
   expectMetadataWarning(imported.warnings, input.reason);
+  const warningsJson = JSON.stringify(imported.warnings);
+  expect(warningsJson).not.toContain('commit:sha256:');
+  expect(warningsJson).not.toContain(DOCUMENT_ID);
+  expect(warningsJson).not.toContain(WORKSPACE_ID);
 
   let wb: Workbook | undefined;
   try {

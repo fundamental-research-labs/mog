@@ -228,8 +228,7 @@ function documentScopeMatchesWorkbookContext(
   return (
     contextScope !== null &&
     providerScope.documentId === contextScope.documentId &&
-    (contextScope.workspaceId === undefined ||
-      providerScope.workspaceId === contextScope.workspaceId)
+    optionalStringMatches(providerScope.workspaceId, contextScope.workspaceId)
   );
 }
 

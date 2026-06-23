@@ -22,6 +22,7 @@ export const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
 const MOG_VERSION_METADATA_MAX_BYTES = 64 * 1024;
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const OBJECT_DIGEST_RE = /^[0-9a-f]{64}$/;
+const REF_REVISION_COUNTER_RE = /^(0|[1-9][0-9]*)$/;
 
 export interface MogWorkbookVersionXlsxMetadata {
   readonly schemaVersion: 'mog.workbookVersion.xlsxMetadata.v1';
@@ -512,11 +513,10 @@ function isObjectDigest(value: unknown): value is ObjectDigest {
 }
 
 function isVersionRecordRevision(value: unknown): value is NonNullable<VersionHead['refRevision']> {
-  return (
-    isRecord(value) &&
-    (value.kind === 'counter' || value.kind === 'opaque') &&
-    typeof value.value === 'string'
-  );
+  if (!isRecord(value) || typeof value.value !== 'string') return false;
+  if (value.kind === 'counter') return REF_REVISION_COUNTER_RE.test(value.value);
+  if (value.kind === 'opaque') return value.value.length > 0;
+  return false;
 }
 
 function isVersionDiagnosticPublicPayload(value: unknown): value is VersionDiagnosticPublicPayload {

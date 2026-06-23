@@ -15,7 +15,12 @@ type VersionPanelDiagnostic = {
 type CapabilityState =
   VersionSurfaceStatus['capabilities'][keyof VersionSurfaceStatus['capabilities']];
 
-export type ReviewProposalAccessProjectionState = 'visible' | 'partial' | 'denied' | 'stale';
+export type ReviewProposalAccessProjectionState =
+  | 'visible'
+  | 'partial'
+  | 'denied'
+  | 'stale'
+  | 'unavailable';
 
 export type ReviewProposalAccessProjectionDiagnostic = {
   readonly state: ReviewProposalAccessProjectionState;
@@ -103,6 +108,7 @@ export function ReviewProposalSurface({
   const proposalState = surface?.capabilities['version:proposal'];
   const diffState = surface?.capabilities['version:diff'];
   const acceptState = surface?.capabilities['version:mergeApply'];
+  const proposalSurfaceAvailable = proposalState?.enabled === true && !proposalDiagnostic;
   const hasUnavailableState =
     (reviewState && !reviewState.enabled) ||
     (proposalState && !proposalState.enabled) ||
@@ -120,8 +126,12 @@ export function ReviewProposalSurface({
 
   if (!hasUnavailableState && !hasContent) return null;
 
+  const safeDiffDisabledReason = sanitizeVersionStatusText(
+    diffDisabledReason,
+    'Diff service is unavailable.',
+  );
   const diffDisabledReasonId =
-    onOpenDiff && !diffEnabled && diffDisabledReason
+    onOpenDiff && !diffEnabled && safeDiffDisabledReason
       ? 'version-review-proposal-diff-disabled-reason'
       : undefined;
 
@@ -156,6 +166,14 @@ export function ReviewProposalSurface({
           state={proposalState}
           diagnostic={proposalDiagnostic}
         />
+        {onAcceptProposal && acceptState && !acceptState.enabled ? (
+          <CapabilityStatusRow
+            kind="merge-apply"
+            label="Merge apply"
+            capability="version:mergeApply"
+            state={acceptState}
+          />
+        ) : null}
         {surface ? <DiffPersistenceEvidence surface={surface} diffState={diffState} /> : null}
         {diffDisabledReasonId ? (
           <div
@@ -163,7 +181,7 @@ export function ReviewProposalSurface({
             className="text-[11px] leading-snug text-ss-text-secondary"
             data-testid={diffDisabledReasonId}
           >
-            {diffDisabledReason}
+            {safeDiffDisabledReason}
           </div>
         ) : null}
         {reviews.map((review) => (
@@ -171,7 +189,7 @@ export function ReviewProposalSurface({
             key={review.id}
             review={review}
             diffEnabled={diffEnabled}
-            diffDisabledReason={diffDisabledReason}
+            diffDisabledReason={safeDiffDisabledReason}
             diffDisabledReasonId={diffDisabledReasonId}
             onOpenDiff={onOpenDiff}
             accessDiagnostic={accessDiagnostics?.reviews?.[review.id]}
@@ -182,11 +200,12 @@ export function ReviewProposalSurface({
             key={proposal.id}
             proposal={proposal}
             diffEnabled={diffEnabled}
-            diffDisabledReason={diffDisabledReason}
+            diffDisabledReason={safeDiffDisabledReason}
             diffDisabledReasonId={diffDisabledReasonId}
             onOpenDiff={onOpenDiff}
             acceptState={acceptState}
             onAcceptProposal={onAcceptProposal}
+            proposalSurfaceAvailable={proposalSurfaceAvailable}
             accessDiagnostic={accessDiagnostics?.proposals?.[proposal.id]}
           />
         ))}
@@ -202,16 +221,20 @@ function CapabilityStatusRow({
   state,
   diagnostic,
 }: {
-  readonly kind: 'review' | 'proposal';
+  readonly kind: 'review' | 'proposal' | 'merge-apply';
   readonly label: string;
-  readonly capability: 'version:reviewRead' | 'version:proposal';
+  readonly capability: keyof VersionSurfaceStatus['capabilities'];
   readonly state?: CapabilityState;
   readonly diagnostic?: VersionPanelDiagnostic;
 }): React.JSX.Element | null {
   if (!state && !diagnostic) return null;
 
   const enabled = state?.enabled === true && !diagnostic;
-  const message = diagnostic?.message ?? (!state?.enabled ? state?.reason : undefined);
+  const fallbackMessage = capabilityFallbackMessage(label);
+  const message = sanitizeVersionStatusText(
+    diagnostic?.message ?? (!state?.enabled ? state?.reason : undefined),
+    fallbackMessage,
+  );
   const stateLabel = enabled ? 'Available' : 'Unavailable';
 
   return (
@@ -240,6 +263,10 @@ function CapabilityStatusRow({
   );
 }
 
+function capabilityFallbackMessage(label: string): string {
+  return label === 'Merge apply' ? 'Merge apply is unavailable.' : `${label} are unavailable.`;
+}
+
 function DiffPersistenceEvidence({
   surface,
   diffState,
@@ -252,9 +279,14 @@ function DiffPersistenceEvidence({
     surface.storage.ready ? 'ready' : 'unavailable'
   }`;
   const storageReason = !surface.storage.ready
-    ? firstDiagnosticMessage(surface.storage.diagnostics)
+    ? sanitizeVersionStatusText(
+        firstDiagnosticMessage(surface.storage.diagnostics),
+        'Version storage is unavailable.',
+      )
     : undefined;
-  const diffReason = !diffEnabled ? diffState?.reason : undefined;
+  const diffReason = !diffEnabled
+    ? sanitizeVersionStatusText(diffState?.reason, 'Diff service is unavailable.')
+    : undefined;
 
   return (
     <div
@@ -324,9 +356,8 @@ function ReviewSummaryRow({
   const accessDiagnosticMessageId = accessDiagnosticId
     ? `${accessDiagnosticId}-message`
     : undefined;
-  const accessDeniedReason =
-    accessDiagnostic?.state === 'denied' ? accessDiagnostic.message : undefined;
-  const activationEnabled = diffEnabled && !accessDeniedReason;
+  const accessBlockedReason = accessDiffBlockedReason('review', accessDiagnostic);
+  const activationEnabled = diffEnabled && !accessBlockedReason;
   const activation =
     onOpenDiff && target.baseCommitId && target.headCommitId
       ? {
@@ -337,8 +368,8 @@ function ReviewSummaryRow({
             targetCommitId: target.headCommitId,
           },
           enabled: activationEnabled,
-          disabledReason: accessDeniedReason ?? diffDisabledReason,
-          disabledReasonId: accessDeniedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
+          disabledReason: accessBlockedReason ?? diffDisabledReason,
+          disabledReasonId: accessBlockedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
           describedById: accessDiagnosticMessageId,
           onOpenDiff,
         }
@@ -380,6 +411,7 @@ function ProposalSummaryRow({
   onOpenDiff,
   acceptState,
   onAcceptProposal,
+  proposalSurfaceAvailable,
   accessDiagnostic,
 }: {
   readonly proposal: AgentProposalSummary;
@@ -389,6 +421,7 @@ function ProposalSummaryRow({
   readonly onOpenDiff?: (target: ReviewProposalDiffTarget) => void;
   readonly acceptState?: CapabilityState;
   readonly onAcceptProposal?: (target: ReviewProposalAcceptTarget) => void;
+  readonly proposalSurfaceAvailable: boolean;
   readonly accessDiagnostic?: ReviewProposalAccessProjectionDiagnostic;
 }): React.JSX.Element {
   const target = proposalTargetEvidence(proposal);
@@ -398,9 +431,8 @@ function ProposalSummaryRow({
   const accessDiagnosticMessageId = accessDiagnosticId
     ? `${accessDiagnosticId}-message`
     : undefined;
-  const accessDeniedReason =
-    accessDiagnostic?.state === 'denied' ? accessDiagnostic.message : undefined;
-  const activationEnabled = diffEnabled && !accessDeniedReason;
+  const accessBlockedReason = accessDiffBlockedReason('proposal', accessDiagnostic);
+  const activationEnabled = diffEnabled && !accessBlockedReason;
   const activation =
     onOpenDiff && proposal.proposalCommitId
       ? {
@@ -411,8 +443,8 @@ function ProposalSummaryRow({
             targetCommitId: proposal.proposalCommitId,
           },
           enabled: activationEnabled,
-          disabledReason: accessDeniedReason ?? diffDisabledReason,
-          disabledReasonId: accessDeniedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
+          disabledReason: accessBlockedReason ?? diffDisabledReason,
+          disabledReasonId: accessBlockedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
           describedById: accessDiagnosticMessageId,
           onOpenDiff,
         }
@@ -449,6 +481,7 @@ function ProposalSummaryRow({
         proposal={proposal}
         acceptState={acceptState}
         onAcceptProposal={onAcceptProposal}
+        proposalSurfaceAvailable={proposalSurfaceAvailable}
         accessDiagnostic={accessDiagnostic}
       />
     </div>
@@ -580,6 +613,11 @@ function AccessProjectionDiagnosticBlock({
   if (!diagnostic || diagnostic.state === 'visible') return null;
 
   const factText = accessProjectionFactText(diagnostic);
+  const message = sanitizeVersionStatusText(
+    diagnostic.message,
+    accessProjectionFallbackMessage(kind, diagnostic.state),
+  );
+  const reason = sanitizeDiagnosticDataText(diagnostic.reason);
 
   return (
     <div
@@ -589,7 +627,7 @@ function AccessProjectionDiagnosticBlock({
       data-access-projection={diagnostic.state}
       data-diagnostic-code={diagnostic.code}
       data-diagnostic-severity={diagnostic.severity}
-      data-redaction-reason={diagnostic.reason}
+      data-redaction-reason={reason}
       data-hidden-change-count={countDataAttribute(diagnostic.hiddenChangeCount)}
       data-redacted-change-count={countDataAttribute(diagnostic.redactedChangeCount)}
       data-omitted-domain-count={countDataAttribute(diagnostic.omittedDomainCount)}
@@ -597,7 +635,7 @@ function AccessProjectionDiagnosticBlock({
       <div className="font-medium text-ss-text">
         {accessProjectionStateLabel(kind, diagnostic.state)}
       </div>
-      <div id={messageId}>{diagnostic.message}</div>
+      <div id={messageId}>{message}</div>
       {factText ? <div className="mt-0.5 text-ss-text-tertiary">{factText}</div> : null}
     </div>
   );
@@ -607,58 +645,45 @@ function ProposalAcceptControl({
   proposal,
   acceptState,
   onAcceptProposal,
+  proposalSurfaceAvailable,
   accessDiagnostic,
 }: {
   readonly proposal: AgentProposalSummary;
   readonly acceptState?: CapabilityState;
   readonly onAcceptProposal?: (target: ReviewProposalAcceptTarget) => void;
+  readonly proposalSurfaceAvailable: boolean;
   readonly accessDiagnostic?: ReviewProposalAccessProjectionDiagnostic;
 }): React.JSX.Element | null {
   if (!onAcceptProposal) return null;
-
-  const disabledReason = proposalAcceptDisabledReason(proposal, acceptState, accessDiagnostic);
-  const disabled = Boolean(disabledReason);
-  const reasonId = `version-proposal-${safeRecordDomId(proposal.id)}-accept-disabled-reason`;
+  if (!proposalAcceptAvailable(proposal, acceptState, proposalSurfaceAvailable, accessDiagnostic)) {
+    return null;
+  }
 
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        className="self-start rounded-sm border border-ss-border bg-ss-surface px-2 py-1 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover focus:outline-none focus:ring-1 focus:ring-ss-primary disabled:opacity-60 disabled:hover:bg-ss-surface"
-        aria-label={`Accept proposal ${proposal.title}`}
-        aria-describedby={disabled ? reasonId : undefined}
-        disabled={disabled}
-        title={disabledReason}
-        data-testid="version-proposal-accept-control"
-        data-capability="version:mergeApply"
-        data-state={disabled ? 'unavailable' : 'available'}
-        data-proposal-id={proposal.id}
-        data-proposal-revision={proposal.revision}
-        data-target-head-id={proposal.targetHeadIdAtCreation}
-        data-proposal-commit-id={proposal.proposalCommitId}
-        onClick={() => {
-          if (disabled || !proposal.proposalCommitId) return;
-          onAcceptProposal({
-            proposalId: proposal.id,
-            expectedRevision: proposal.revision,
-            expectedTargetHeadId: proposal.targetHeadIdAtCreation,
-            proposalCommitId: proposal.proposalCommitId,
-            targetRef: proposal.targetRef,
-          });
-        }}
-      >
-        Accept
-      </button>
-      {disabledReason ? (
-        <div
-          id={reasonId}
-          className="text-[11px] leading-snug text-ss-text-secondary"
-          data-testid="version-proposal-accept-disabled-reason"
-        >
-          {disabledReason}
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      className="self-start rounded-sm border border-ss-border bg-ss-surface px-2 py-1 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover focus:outline-none focus:ring-1 focus:ring-ss-primary"
+      aria-label={`Accept proposal ${proposal.title}`}
+      data-testid="version-proposal-accept-control"
+      data-capability="version:mergeApply"
+      data-state="available"
+      data-proposal-id={proposal.id}
+      data-proposal-revision={proposal.revision}
+      data-target-head-id={proposal.targetHeadIdAtCreation}
+      data-proposal-commit-id={proposal.proposalCommitId}
+      onClick={() => {
+        if (!proposal.proposalCommitId) return;
+        onAcceptProposal({
+          proposalId: proposal.id,
+          expectedRevision: proposal.revision,
+          expectedTargetHeadId: proposal.targetHeadIdAtCreation,
+          proposalCommitId: proposal.proposalCommitId,
+          targetRef: proposal.targetRef,
+        });
+      }}
+    >
+      Accept
+    </button>
   );
 }
 
@@ -761,16 +786,35 @@ function accessDiagnosticData(
   };
 }
 
-function proposalAcceptDisabledReason(
-  proposal: AgentProposalSummary,
-  acceptState: CapabilityState | undefined,
+function accessDiffBlockedReason(
+  kind: 'review' | 'proposal',
   accessDiagnostic: ReviewProposalAccessProjectionDiagnostic | undefined,
 ): string | undefined {
-  if (!acceptState?.enabled) return acceptState?.reason ?? 'Merge apply is unavailable.';
-  if (accessDiagnostic && accessDiagnostic.state !== 'visible') return accessDiagnostic.message;
-  if (!proposal.proposalCommitId) return 'Proposal commit is unavailable.';
-  if (proposal.status !== 'ready_for_review') return `Proposal is ${proposal.status}.`;
-  return undefined;
+  if (
+    !accessDiagnostic ||
+    (accessDiagnostic.state !== 'denied' && accessDiagnostic.state !== 'unavailable')
+  ) {
+    return undefined;
+  }
+  return sanitizeVersionStatusText(
+    accessDiagnostic.message,
+    accessProjectionFallbackMessage(kind, accessDiagnostic.state),
+  );
+}
+
+function proposalAcceptAvailable(
+  proposal: AgentProposalSummary,
+  acceptState: CapabilityState | undefined,
+  proposalSurfaceAvailable: boolean,
+  accessDiagnostic: ReviewProposalAccessProjectionDiagnostic | undefined,
+): boolean {
+  return (
+    proposalSurfaceAvailable &&
+    acceptState?.enabled === true &&
+    (!accessDiagnostic || accessDiagnostic.state === 'visible') &&
+    Boolean(proposal.proposalCommitId) &&
+    proposal.status === 'ready_for_review'
+  );
 }
 
 function accessProjectionStateLabel(
@@ -780,6 +824,8 @@ function accessProjectionStateLabel(
   if (state === 'denied') return 'Diff denied';
   if (state === 'partial') return 'Diff partially hidden';
   if (state === 'stale') return kind === 'review' ? 'Review stale' : 'Proposal stale';
+  if (state === 'unavailable')
+    return kind === 'review' ? 'Review unavailable' : 'Proposal unavailable';
   return 'Diff visible';
 }
 
@@ -792,9 +838,36 @@ function accessProjectionFactText(
     countLabel('Domains', diagnostic.omittedDomainCount),
   ].filter((fact): fact is string => Boolean(fact));
   if (diagnostic.domains && diagnostic.domains.length > 0) {
-    facts.push(`Scope ${diagnostic.domains.join(', ')}`);
+    const domains = diagnostic.domains
+      .map((domain) => sanitizeVersionStatusText(domain, '[redacted]'))
+      .filter((domain): domain is string => Boolean(domain));
+    if (domains.length > 0) facts.push(`Scope ${domains.join(', ')}`);
   }
   return facts.length > 0 ? facts.join(' · ') : undefined;
+}
+
+function accessProjectionFallbackMessage(
+  kind: 'review' | 'proposal',
+  state: ReviewProposalAccessProjectionState,
+): string {
+  if (state === 'denied') {
+    return kind === 'review'
+      ? 'Review details are not available for the current caller.'
+      : 'Proposal details are not available for the current caller.';
+  }
+  if (state === 'stale') {
+    return kind === 'review'
+      ? 'Review is stale; create a new review before applying changes.'
+      : 'Proposal is stale. Review remains read-only until a new proposal or merge is created.';
+  }
+  if (state === 'unavailable') {
+    return kind === 'review'
+      ? 'Review details are temporarily unavailable.'
+      : 'Proposal details are temporarily unavailable.';
+  }
+  return kind === 'review'
+    ? 'Review diff is partially hidden.'
+    : 'Proposal diff is partially hidden.';
 }
 
 function shouldDescribeAccessDiagnostic(
@@ -817,6 +890,46 @@ function accessDiagnosticDomId(kind: 'review' | 'proposal', id: string): string 
 
 function safeRecordDomId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]+/g, '-');
+}
+
+const REDACTED_VERSION_REF = '[version ref]';
+const REDACTED_PRINCIPAL = '[principal]';
+const REDACTED_COMMIT = '[commit]';
+const REDACTED_PENDING_REMOTE_SEGMENT = '[pending remote segment]';
+const REDACTED_SYNC_BATCH = '[sync batch]';
+
+function sanitizeVersionStatusText(
+  value: string | undefined,
+  fallback: string,
+): string | undefined {
+  const message = value?.trim() ?? '';
+  if (message.length === 0) return undefined;
+  const redacted = redactSensitiveVersionDiagnosticText(message).replace(/\s+/g, ' ').trim();
+  return redacted.length > 0 ? redacted : fallback;
+}
+
+function sanitizeDiagnosticDataText(value: string | undefined): string | undefined {
+  return sanitizeVersionStatusText(value, 'redacted');
+}
+
+function redactSensitiveVersionDiagnosticText(message: string): string {
+  return message
+    .replace(
+      /["']?\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b["']?\s*:\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal(?:Id|Ids|Ref|Scope|Tag|Tags|_tags)?\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(
+      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+|[^\s,;)}]+)/gi,
+      `principal ${REDACTED_PRINCIPAL}`,
+    )
+    .replace(/\brefs\/[^\s"'`<>),;]+/g, REDACTED_VERSION_REF)
+    .replace(/\bcommit:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_COMMIT)
+    .replace(/\bpending-remote-segment:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_PENDING_REMOTE_SEGMENT)
+    .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH);
 }
 
 function shortCommitId(id: string): string {

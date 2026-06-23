@@ -32,7 +32,11 @@ export function reviewProposalAccessDiagnosticsFromSummaries({
     : undefined;
 }
 
-type AccessDiagnosticKind = 'access-denied' | 'review-not-found' | 'proposal-not-found';
+type AccessDiagnosticKind =
+  | 'access-denied'
+  | 'provider-unavailable'
+  | 'review-not-found'
+  | 'proposal-not-found';
 
 type DiagnosticLike = {
   readonly code: string;
@@ -102,6 +106,24 @@ function accessDiagnosticForKind(
     };
   }
 
+  if (diagnosticKind === 'provider-unavailable') {
+    return kind === 'review'
+      ? {
+          state: 'unavailable',
+          code: 'VERSION_REVIEW_PROVIDER_UNAVAILABLE',
+          severity: 'warning',
+          reason: 'provider-unavailable',
+          message: 'Review details are temporarily unavailable.',
+        }
+      : {
+          state: 'unavailable',
+          code: 'VERSION_PROPOSAL_PROVIDER_UNAVAILABLE',
+          severity: 'warning',
+          reason: 'provider-unavailable',
+          message: 'Proposal details are temporarily unavailable.',
+        };
+  }
+
   return {
     state: 'denied',
     code: 'VERSION_PROPOSAL_NOT_FOUND',
@@ -169,6 +191,7 @@ function classifyProviderDiagnostic(
     return 'proposal-not-found';
   }
   if (tokens.some(isAccessDeniedToken)) return 'access-denied';
+  if (tokens.some(isProviderUnavailableToken)) return 'provider-unavailable';
   return undefined;
 }
 
@@ -242,6 +265,19 @@ function isAccessDeniedToken(token: string): boolean {
     token.includes('not-authorized') ||
     token.includes('unauthorized') ||
     token.includes('forbidden')
+  );
+}
+
+function isProviderUnavailableToken(token: string): boolean {
+  return (
+    token.includes('unavailable') &&
+    (token.includes('provider') ||
+      token.includes('service') ||
+      token.includes('method') ||
+      token.includes('store') ||
+      token.includes('workspace') ||
+      token.includes('review') ||
+      token.includes('proposal'))
   );
 }
 

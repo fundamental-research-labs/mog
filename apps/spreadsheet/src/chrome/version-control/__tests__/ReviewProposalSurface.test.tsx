@@ -7,12 +7,14 @@ import type {
   AgentProposalSummary,
   VersionCapability,
   VersionCapabilityState,
+  VersionDiagnostic,
   VersionSurfaceStatus,
   WorkbookCommitId,
   WorkbookVersionReviewRecordSummary,
 } from '@mog-sdk/contracts/api';
 
 import { ReviewProposalSurface } from '../ReviewProposalSurface';
+import { reviewProposalAccessDiagnosticsFromSummaries } from '../review-proposal-access-diagnostics';
 
 const BASE_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 const HEAD_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
@@ -261,21 +263,20 @@ describe('ReviewProposalSurface', () => {
       targetCommitId: PROPOSAL_COMMIT_ID,
     });
 
-    const acceptButton = screen.getByRole('button', {
-      name: 'Accept proposal Budget scenario',
-    });
-    expect(acceptButton).toHaveAccessibleName('Accept proposal Budget scenario');
-    expect(acceptButton).toBeDisabled();
-    expect(acceptButton).toHaveAccessibleDescription(proposalPartialMessage);
-    await user.click(acceptButton);
+    expect(
+      screen.queryByRole('button', {
+        name: 'Accept proposal Budget scenario',
+      }),
+    ).not.toBeInTheDocument();
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
-  it('gates proposal accept controls with merge apply capability and projection visibility', async () => {
+  it('renders proposal accept controls only for mergeable visible proposals', async () => {
     const user = userEvent.setup();
     const onAcceptProposal = jest.fn();
     const proposalPartialMessage = 'Proposal diff hides redacted workbook changes.';
     const proposalDeniedMessage = 'Proposal diff is hidden by workbook access policy.';
+    const privateCommitId = `commit:sha256:${'d'.repeat(64)}`;
     const { rerender } = render(
       <ReviewProposalSurface
         surface={createSurfaceStatus()}
@@ -307,7 +308,9 @@ describe('ReviewProposalSurface', () => {
       <ReviewProposalSurface
         surface={createSurfaceStatus({
           capabilityOverrides: {
-            'version:mergeApply': disabledCapability('Merge apply is unavailable.'),
+            'version:mergeApply': disabledCapability(
+              `Merge apply is unavailable for principal principal-secret on refs/heads/private at ${privateCommitId}.`,
+            ),
           },
         })}
         reviews={[]}
@@ -316,13 +319,53 @@ describe('ReviewProposalSurface', () => {
       />,
     );
 
-    const capabilityBlockedButton = screen.getByRole('button', {
-      name: 'Accept proposal Budget scenario',
-    });
-    expect(capabilityBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
-    expect(capabilityBlockedButton).toBeDisabled();
-    expect(capabilityBlockedButton).toHaveAttribute('data-state', 'unavailable');
-    expect(capabilityBlockedButton).toHaveAccessibleDescription('Merge apply is unavailable.');
+    expectAcceptControlAbsent();
+    expect(screen.getByTestId('version-merge-apply-status-row')).toHaveAttribute(
+      'data-state',
+      'unavailable',
+    );
+    expect(screen.getByTestId('version-merge-apply-unavailable-reason')).toHaveTextContent(
+      'Merge apply is unavailable for principal [principal] on [version ref] at [commit].',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'principal-secret',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'refs/heads/private',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      privateCommitId,
+    );
+
+    rerender(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus({
+          capabilityOverrides: {
+            'version:proposal': disabledCapability(
+              `Proposal surface disabled for principal principal-secret on refs/heads/private at ${privateCommitId}.`,
+            ),
+          },
+        })}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onAcceptProposal={onAcceptProposal}
+      />,
+    );
+
+    expectAcceptControlAbsent();
+    expect(screen.getByTestId('version-proposal-status-row')).toHaveAttribute(
+      'data-state',
+      'unavailable',
+    );
+    expect(screen.getByTestId('version-proposal-unavailable-reason')).toHaveTextContent(
+      'Proposal surface disabled for principal [principal] on [version ref] at [commit].',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'principal-secret',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'refs/heads/private',
+    );
 
     rerender(
       <ReviewProposalSurface
@@ -343,13 +386,10 @@ describe('ReviewProposalSurface', () => {
       />,
     );
 
-    const redactionBlockedButton = screen.getByRole('button', {
-      name: 'Accept proposal Budget scenario',
-    });
-    expect(redactionBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
-    expect(redactionBlockedButton).toBeDisabled();
-    expect(redactionBlockedButton).toHaveAccessibleDescription(proposalPartialMessage);
-    await user.click(redactionBlockedButton);
+    expectAcceptControlAbsent();
+    expect(screen.getByTestId('version-proposal-record-access-diagnostic')).toHaveTextContent(
+      proposalPartialMessage,
+    );
     expect(onAcceptProposal).not.toHaveBeenCalled();
 
     rerender(
@@ -371,13 +411,74 @@ describe('ReviewProposalSurface', () => {
       />,
     );
 
-    const accessBlockedButton = screen.getByRole('button', {
-      name: 'Accept proposal Budget scenario',
+    expectAcceptControlAbsent();
+    expect(screen.getByTestId('version-proposal-record-access-diagnostic')).toHaveTextContent(
+      proposalDeniedMessage,
+    );
+    expect(onAcceptProposal).not.toHaveBeenCalled();
+  });
+
+  it('redacts provider-unavailable projection diagnostics and suppresses proposal actions', async () => {
+    const user = userEvent.setup();
+    const onOpenDiff = jest.fn();
+    const onAcceptProposal = jest.fn();
+    const privateCommitId = `commit:sha256:${'e'.repeat(64)}`;
+    const accessDiagnostics = reviewProposalAccessDiagnosticsFromSummaries({
+      reviews: [],
+      proposals: [
+        withDiagnostics(createProposal(), [
+          {
+            code: 'VERSION_PROPOSAL_SERVICE_UNAVAILABLE',
+            severity: 'error',
+            message: `Proposal provider failed for principal principal-secret on refs/heads/private at ${privateCommitId}.`,
+            data: {
+              reason: 'provider-unavailable',
+              principalId: 'principal-secret',
+              targetRef: 'refs/heads/private',
+              commitId: privateCommitId,
+            },
+          },
+        ]),
+      ],
     });
-    expect(accessBlockedButton).toHaveAccessibleName('Accept proposal Budget scenario');
-    expect(accessBlockedButton).toBeDisabled();
-    expect(accessBlockedButton).toHaveAccessibleDescription(proposalDeniedMessage);
-    await user.click(accessBlockedButton);
+
+    render(
+      <ReviewProposalSurface
+        surface={createSurfaceStatus()}
+        reviews={[]}
+        proposals={[createProposal()]}
+        onOpenDiff={onOpenDiff}
+        onAcceptProposal={onAcceptProposal}
+        accessDiagnostics={accessDiagnostics}
+      />,
+    );
+
+    const proposalRow = screen.getByRole('button', {
+      name: 'Open proposal diff for Budget scenario ready_for_review',
+    });
+    const diagnostic = screen.getByTestId('version-proposal-record-access-diagnostic');
+    expect(proposalRow).toHaveAttribute('aria-disabled', 'true');
+    expect(proposalRow).toHaveAttribute('data-actionable', 'false');
+    expect(proposalRow).toHaveAttribute('data-access-projection', 'unavailable');
+    expect(proposalRow).toHaveAttribute(
+      'data-access-diagnostic-code',
+      'VERSION_PROPOSAL_PROVIDER_UNAVAILABLE',
+    );
+    expect(diagnostic).toHaveTextContent('Proposal unavailable');
+    expect(diagnostic).toHaveTextContent('Proposal details are temporarily unavailable.');
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'principal-secret',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      'refs/heads/private',
+    );
+    expect(screen.getByTestId('version-review-proposal-surface')).not.toHaveTextContent(
+      privateCommitId,
+    );
+    expectAcceptControlAbsent();
+
+    await user.click(proposalRow);
+    expect(onOpenDiff).not.toHaveBeenCalled();
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
@@ -455,13 +556,7 @@ describe('ReviewProposalSurface', () => {
       targetCommitId: PROPOSAL_COMMIT_ID,
     });
 
-    const acceptButton = screen.getByRole('button', {
-      name: 'Accept proposal Budget scenario',
-    });
-    expect(acceptButton).toHaveAccessibleName('Accept proposal Budget scenario');
-    expect(acceptButton).toBeDisabled();
-    expect(acceptButton).toHaveAccessibleDescription(proposalStaleMessage);
-    await user.click(acceptButton);
+    expectAcceptControlAbsent();
     expect(onAcceptProposal).not.toHaveBeenCalled();
   });
 
@@ -607,6 +702,13 @@ function createProposal(overrides: Partial<AgentProposalSummary> = {}): AgentPro
   };
 }
 
+function withDiagnostics<T extends object>(
+  summary: T,
+  diagnostics: readonly VersionDiagnostic[],
+): T {
+  return { ...summary, diagnostics };
+}
+
 function disabledCapability(reason: string): VersionCapabilityState {
   return {
     enabled: false,
@@ -614,6 +716,14 @@ function disabledCapability(reason: string): VersionCapabilityState {
     reason,
     retryable: false,
   };
+}
+
+function expectAcceptControlAbsent(): void {
+  expect(
+    screen.queryByRole('button', {
+      name: 'Accept proposal Budget scenario',
+    }),
+  ).not.toBeInTheDocument();
 }
 
 function shortCommitId(id: string): string {

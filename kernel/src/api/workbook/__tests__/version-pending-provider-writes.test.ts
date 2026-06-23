@@ -3,8 +3,20 @@ import { jest } from '@jest/globals';
 import { checkoutWorkbookVersion } from '../version-checkout';
 import { readVersionPendingProviderWrites } from '../version-pending-provider-writes';
 import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
+import {
+  pendingRemoteSegmentKeyMaterialForOperationContext,
+  type PendingRemoteSegmentRecord,
+} from '../../../document/version-store/pending-remote-segment-store';
+import { versionGraphNamespaceKey } from '../../../document/version-store/object-store';
+import {
+  namespaceForRegistry,
+  versionDocumentScopeKey,
+} from '../../../document/version-store/registry';
 
 const ROOT_COMMIT_ID = `commit:sha256:${'0'.repeat(64)}`;
+const RAW_CURSOR = 'mog-pending-remote-v1.pending.cursor-secret';
+const RAW_BATCH_STATUS_ID = `sync-batch-status:sha256:${'9'.repeat(64)}`;
+const RAW_SEGMENT_ID = `pending-remote-segment:sha256:${'8'.repeat(64)}`;
 const GRAPH_REGISTRY = Object.freeze({
   schemaVersion: 1,
   documentId: 'document-1',
@@ -34,6 +46,66 @@ function cleanSurfaceDirtyStatus(overrides: Record<string, unknown> = {}) {
     source: 'VC-05' as const,
     diagnostics: [],
     ...overrides,
+  };
+}
+
+function createProviderWithPendingListResult(listResult: unknown) {
+  const pendingStore = {
+    listByState: jest.fn(async () => listResult),
+  };
+  const provider = {
+    readGraphRegistry: jest.fn(async () => ({
+      status: 'ok',
+      registry: GRAPH_REGISTRY,
+      diagnostics: [],
+    })),
+    openGraph: jest.fn(),
+    openPendingRemoteSegmentStore: jest.fn(async () => pendingStore),
+  };
+  return { provider, pendingStore };
+}
+
+async function pendingRemoteSegmentRecord(): Promise<PendingRemoteSegmentRecord> {
+  const operationContext = {
+    operationId: 'operation-1',
+    kind: 'remoteSyncApply',
+    author: { actorKind: 'user', displayName: 'User One', redacted: true },
+    createdAt: '2026-06-22T00:00:01.000Z',
+    domainIds: [],
+    capturePolicy: 'semantic',
+    writeAdmissionMode: 'provider',
+    collaboration: {
+      sourceKind: 'provider',
+      originKind: 'remote',
+      stableOriginId: 'stable-origin-1',
+      providerId: 'provider-1',
+      authorityRef: 'authority-1',
+      roomId: 'room-1',
+      epoch: 'epoch-1',
+      updateId: 'update-1',
+      sequence: 'sequence-1',
+      payloadHash: 'payload-hash-1',
+    },
+  } as any;
+  const keyMaterial = await pendingRemoteSegmentKeyMaterialForOperationContext(
+    operationContext,
+  );
+  return {
+    schemaVersion: 1,
+    recordKind: 'pendingRemoteSegment',
+    pendingRemoteSegmentId: keyMaterial.pendingRemoteSegmentId,
+    idempotencyKey: keyMaterial.idempotencyKey,
+    namespaceKey: versionGraphNamespaceKey(namespaceForRegistry(GRAPH_REGISTRY as any)),
+    documentScopeKey: versionDocumentScopeKey({ documentId: 'document-1' }),
+    syncIdentity: keyMaterial.syncIdentity,
+    operationContext,
+    mutationSegmentDigest: {
+      algorithm: 'sha256',
+      digest: '2'.repeat(64),
+    },
+    state: 'pending',
+    createdAt: '2026-06-22T00:00:01.000Z',
+    updatedAt: '2026-06-22T00:00:01.000Z',
   };
 }
 
@@ -75,10 +147,11 @@ describe('version pending provider writes status', () => {
   });
 
   it('reports persisted pending remote segments from an attached provider', async () => {
+    const pendingRecord = await pendingRemoteSegmentRecord();
     const pendingStore = {
       listByState: jest.fn(async () => ({
         status: 'success',
-        records: [{}],
+        records: [pendingRecord],
         diagnostics: [],
       })),
     };
@@ -116,12 +189,129 @@ describe('version pending provider writes status', () => {
     expect(pendingStore.listByState).toHaveBeenCalledWith('pending');
   });
 
+  it('fails closed when provider-write activity is missing settled-state evidence', async () => {
+    const tracker = {
+      readActivity: jest.fn(() => ({
+        statusRevision: 'revision:missing-counts',
+      })),
+      trackRemoteSyncApply: jest.fn(),
+      runExclusivePendingRemotePromotion: jest.fn(),
+    };
+
+    const status = await readVersionPendingProviderWrites(
+      createCtx({
+        pendingRemotePromotionService: {
+          providerWriteActivityTracker: tracker,
+          promotePendingRemoteSegments: jest.fn(),
+        },
+      }),
+    );
+
+    expect(status).toMatchObject({
+      pendingProviderWrites: true,
+      statusRevision: 'providerActivity:unknown|provider:none',
+      unsafeReasons: [
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          data: expect.objectContaining({
+            redacted: true,
+            providerPayload: 'activitySnapshot',
+            payloadIssue: 'invalidCounts',
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('fails closed when pending remote records carry stale write identifiers', async () => {
+    const staleRecord = {
+      ...(await pendingRemoteSegmentRecord()),
+      pendingRemoteSegmentId: `pending-remote-segment:sha256:${'9'.repeat(64)}`,
+    };
+    const { provider } = createProviderWithPendingListResult({
+      status: 'success',
+      records: [staleRecord],
+      diagnostics: [],
+    });
+
+    const status = await readVersionPendingProviderWrites(createCtx({ provider }));
+
+    expect(status).toMatchObject({
+      pendingProviderWrites: true,
+      statusRevision: 'pendingRemote:unknown',
+      unsafeReasons: [
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          data: expect.objectContaining({
+            redacted: true,
+            providerPayload: 'pendingRemoteSegmentList',
+            payloadIssue: 'staleWriteIdentifier',
+            recordIndex: 0,
+          }),
+        }),
+      ],
+    });
+    expect(status.unsafeReasons[0]?.data).not.toHaveProperty('pendingRemoteSegmentCount');
+  });
+
+  it('redacts unsafe provider diagnostic payloads on pending remote read failures', async () => {
+    const { provider } = createProviderWithPendingListResult({
+      status: 'failed',
+      records: [],
+      diagnostics: [
+        {
+          code: 'VERSION_PROVIDER_FAILED',
+          message: `Provider failed with ${RAW_CURSOR}`,
+          recoverability: 'retry',
+          details: {
+            cursor: RAW_CURSOR,
+            batchStatusId: RAW_BATCH_STATUS_ID,
+            segmentId: RAW_SEGMENT_ID,
+            providerId: 'provider-secret',
+            safeCount: 2,
+            nested: { secret: 'not-public' },
+          },
+        },
+      ],
+    });
+
+    const status = await readVersionPendingProviderWrites(createCtx({ provider }));
+    const serialized = JSON.stringify(status);
+
+    expect(status).toMatchObject({
+      pendingProviderWrites: true,
+      statusRevision: 'pendingRemote:unknown',
+      unsafeReasons: [
+        expect.objectContaining({
+          code: 'version.surfaceStatus.pendingProviderWritesReadFailed',
+          data: expect.objectContaining({
+            redacted: true,
+            providerDiagnosticCount: 1,
+            providerDiagnosticCode: 'VERSION_PROVIDER_FAILED',
+            providerDiagnosticRecoverability: 'retry',
+            cursor: 'redacted',
+            batchStatusId: 'redacted',
+            segmentId: 'redacted',
+            providerId: 'redacted',
+            safeCount: 2,
+          }),
+        }),
+      ],
+    });
+    expect(serialized).not.toContain(RAW_CURSOR);
+    expect(serialized).not.toContain(RAW_BATCH_STATUS_ID);
+    expect(serialized).not.toContain(RAW_SEGMENT_ID);
+    expect(serialized).not.toContain('provider-secret');
+    expect(serialized).not.toContain('not-public');
+  });
+
   it('blocks checkout through the structured admission diagnostic when provider writes are pending', async () => {
     const checkout = jest.fn();
+    const pendingRecord = await pendingRemoteSegmentRecord();
     const pendingStore = {
       listByState: jest.fn(async () => ({
         status: 'success',
-        records: [{}],
+        records: [pendingRecord],
         diagnostics: [],
       })),
     };

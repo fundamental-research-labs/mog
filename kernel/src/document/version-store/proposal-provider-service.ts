@@ -43,7 +43,6 @@ import {
   publicProposal,
   publicProposalSummary,
 } from './proposal-provider-service-utils';
-import { acceptProviderBackedAgentProposal } from './proposal-provider-accept-service';
 import {
   isProposalBranchService,
   isProposalGraphProvider,
@@ -58,6 +57,7 @@ import {
   getProviderBackedProposalWorkspace,
 } from './proposal-provider-workspace-access-service';
 import {
+  acceptProviderBackedAgentProposalWithStaleRecovery,
   isProposalWorkspaceLifecycleService,
   type ProposalWorkspaceLifecycleService,
 } from './proposal-workspace-lifecycle-service';
@@ -488,7 +488,7 @@ export class ProviderBackedAgentProposalService {
   async acceptProposal(
     input: AcceptAgentProposalInput,
   ): Promise<VersionResult<AgentProposalAcceptResult>> {
-    return acceptProviderBackedAgentProposal({
+    return acceptProviderBackedAgentProposalWithStaleRecovery({
       input,
       openStore: this.openStore,
       ...(this.graphProvider ? { graphProvider: this.graphProvider } : {}),

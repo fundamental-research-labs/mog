@@ -1,5 +1,7 @@
 import type {
+  AcceptAgentProposalInput,
   AgentProposal,
+  AgentProposalAcceptResult,
   AgentProposalWorkspaceHandle,
   CommitProposalWorkspaceInput,
   DisposeProposalWorkspaceInput,
@@ -10,9 +12,17 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { AgentProposalRecord } from './proposal-store';
+import { acceptProviderBackedAgentProposal } from './proposal-provider-accept-service';
+import type {
+  AgentProposalMetadataStore,
+  AgentProposalRecord,
+  UpdateAgentProposalStoreInput,
+} from './proposal-store';
 
 type MaybePromise<T> = T | Promise<T>;
+type AcceptProviderBackedAgentProposalOptions = Parameters<
+  typeof acceptProviderBackedAgentProposal
+>[0];
 
 export type ProviderBackedProposalWorkspaceInput = {
   readonly proposal: AgentProposal;
@@ -60,6 +70,28 @@ export function isProposalWorkspaceLifecycleService(
   );
 }
 
+export async function acceptProviderBackedAgentProposalWithStaleRecovery(
+  options: AcceptProviderBackedAgentProposalOptions,
+): Promise<VersionResult<AgentProposalAcceptResult>> {
+  let store: AgentProposalMetadataStore;
+  try {
+    store = await options.openStore();
+  } catch {
+    return acceptProviderBackedAgentProposal(options);
+  }
+
+  const proposal = await store.getProposal(options.input.proposalId);
+  if (proposal.ok) {
+    const retry = staleAcceptRetryResult(options.input, proposal.value);
+    if (retry) return retry;
+  }
+
+  return acceptProviderBackedAgentProposal({
+    ...options,
+    openStore: async () => staleAcceptRecoveryStore(store, options.input),
+  });
+}
+
 export function proposalWorkspaceStaleHeadResult<T>(input: {
   readonly operation: 'commitProposalWorkspace';
   readonly proposalId: string;
@@ -99,6 +131,118 @@ export function proposalWorkspaceStaleHeadDiagnostic(input: {
       actualProposalBranchHeadId: input.actualProposalBranchHeadId,
     },
   );
+}
+
+function staleAcceptRecoveryStore(
+  store: AgentProposalMetadataStore,
+  input: AcceptAgentProposalInput,
+): AgentProposalMetadataStore {
+  return {
+    documentScope: store.documentScope,
+    createProposal: (createInput) => store.createProposal(createInput),
+    getProposal: (proposalId) => store.getProposal(proposalId),
+    getProposalByWorkspaceId: (workspaceId) => store.getProposalByWorkspaceId(workspaceId),
+    listProposals: (listInput) => store.listProposals(listInput),
+    updateProposal: (updateInput) =>
+      store.updateProposal(annotateStaleAcceptRetryUpdate(input, updateInput)),
+  };
+}
+
+function annotateStaleAcceptRetryUpdate(
+  input: AcceptAgentProposalInput,
+  updateInput: UpdateAgentProposalStoreInput,
+): UpdateAgentProposalStoreInput {
+  if (
+    updateInput.status !== 'stale' ||
+    updateInput.proposalId !== input.proposalId ||
+    updateInput.clientRequestId !== input.clientRequestId ||
+    updateInput.expectedRevision !== input.expectedRevision
+  ) {
+    return updateInput;
+  }
+
+  return {
+    ...updateInput,
+    diagnostics: staleAcceptRetryDiagnostics(input, updateInput.diagnostics ?? []),
+  };
+}
+
+function staleAcceptRetryDiagnostics(
+  input: AcceptAgentProposalInput,
+  diagnostics: readonly VersionDiagnostic[],
+): readonly VersionDiagnostic[] {
+  const actualTargetHeadId =
+    actualTargetHeadIdFromDiagnostics(diagnostics) ?? input.expectedTargetHeadId;
+  const retryData = {
+    operation: 'acceptProposal',
+    acceptClientRequestId: input.clientRequestId,
+    expectedTargetHeadId: input.expectedTargetHeadId,
+    actualTargetHeadId,
+  } as const;
+
+  if (diagnostics.length === 0) {
+    return [
+      diagnostic(
+        'proposal_accept_stale_retry',
+        'warning',
+        'Proposal acceptance reached a durable stale result.',
+        retryData,
+      ),
+    ];
+  }
+
+  return diagnostics.map((item) => ({
+    code: item.code,
+    severity: item.severity,
+    message: item.message,
+    ...(item.owner === undefined ? {} : { owner: item.owner }),
+    ...(item.dependency === undefined ? {} : { dependency: item.dependency }),
+    data: {
+      ...(item.data ?? {}),
+      ...retryData,
+    },
+  }));
+}
+
+function staleAcceptRetryResult(
+  input: AcceptAgentProposalInput,
+  proposal: AgentProposalRecord,
+): VersionResult<AgentProposalAcceptResult> | null {
+  if (proposal.status !== 'stale') return null;
+  for (const item of proposal.diagnostics) {
+    const data = item.data;
+    if (
+      data?.operation !== 'acceptProposal' ||
+      data.acceptClientRequestId !== input.clientRequestId ||
+      data.expectedTargetHeadId !== input.expectedTargetHeadId ||
+      typeof data.actualTargetHeadId !== 'string'
+    ) {
+      continue;
+    }
+
+    return {
+      ok: true,
+      value: {
+        status: 'stale',
+        proposalId: proposal.id,
+        expectedTargetHeadId: input.expectedTargetHeadId,
+        actualTargetHeadId: data.actualTargetHeadId as WorkbookCommitId,
+      },
+    };
+  }
+  return null;
+}
+
+function actualTargetHeadIdFromDiagnostics(
+  diagnostics: readonly VersionDiagnostic[],
+): WorkbookCommitId | undefined {
+  for (const item of diagnostics) {
+    const actualTargetHeadId = item.data?.actualTargetHeadId;
+    if (typeof actualTargetHeadId === 'string') return actualTargetHeadId as WorkbookCommitId;
+    const actualHead = item.data?.actualHead;
+    if (typeof actualHead === 'string') return actualHead as WorkbookCommitId;
+  }
+  return undefined;
 }
 
 function diagnostic(

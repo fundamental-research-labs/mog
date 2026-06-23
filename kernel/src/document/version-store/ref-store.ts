@@ -222,6 +222,8 @@ export class InMemoryRefStore {
   private readonly versionDocumentId: string;
   private readonly nowFn: () => Date | string;
   private nextGeneratedId = 0;
+  // In-memory summary-row equivalent; durable backends need equivalent CAS before enabling delete.
+  private liveRefCount = 0;
 
   constructor(options: InMemoryRefStoreOptions) {
     this.versionDocumentId = options.versionDocumentId;
@@ -238,6 +240,9 @@ export class InMemoryRefStore {
           record.state === 'live' ? cloneLiveRefRecord(record) : cloneTombstoneRefRecord(record),
         );
       }
+      this.liveRefCount = [...this.records.values()].filter(
+        (record) => record.state === 'live',
+      ).length;
       this.nextGeneratedId = options.snapshot.nextGeneratedId;
     }
   }
@@ -252,6 +257,7 @@ export class InMemoryRefStore {
           ),
       ),
       nextGeneratedId: this.nextGeneratedId,
+      liveRefCount: this.liveRefCount,
     });
   }
 
@@ -295,6 +301,7 @@ export class InMemoryRefStore {
     });
 
     this.records.set(name, ref);
+    this.liveRefCount += 1;
     return { ok: true, ref: cloneLiveRefRecord(ref), diagnostics: [] };
   }
 
@@ -360,6 +367,7 @@ export class InMemoryRefStore {
     });
 
     this.records.set(parsedName.name, ref);
+    this.liveRefCount += 1;
     return { ok: true, ref: cloneLiveRefRecord(ref), attached: false, diagnostics: [] };
   }
 
@@ -511,7 +519,7 @@ export class InMemoryRefStore {
     if (record.protected) {
       return protectedRef(record.name, 'delete');
     }
-    if (!this.hasAnotherLiveRef(record.name)) {
+    if (this.liveRefCount <= 1) {
       const diagnostics = [
         diagnostic('lastLiveRef', 'Deleting the last live ref is not supported.', record.name),
       ];
@@ -541,6 +549,7 @@ export class InMemoryRefStore {
     });
 
     this.records.set(record.name, tombstone);
+    this.liveRefCount -= 1;
     return { ok: true, ref: cloneTombstoneRefRecord(tombstone), diagnostics: [] };
   }
 
@@ -551,15 +560,6 @@ export class InMemoryRefStore {
   private generateId(prefix: string): string {
     this.nextGeneratedId += 1;
     return `${prefix}:${this.versionDocumentId}:${this.nextGeneratedId}`;
-  }
-
-  private hasAnotherLiveRef(name: RefName): boolean {
-    for (const record of this.records.values()) {
-      if (record.state === 'live' && record.name !== name) {
-        return true;
-      }
-    }
-    return false;
   }
 }
 

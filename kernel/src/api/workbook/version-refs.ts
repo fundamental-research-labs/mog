@@ -15,6 +15,7 @@ import type {
   VersionRefReadResult,
   VersionRefSelector,
   VersionStoreDiagnostic,
+  VersionSymbolicRef,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
   WorkbookCommitId,
@@ -319,14 +320,8 @@ async function getSymbolicHead(ctx: DocumentContext): Promise<VersionSymbolicRef
   if (service.getHead) {
     try {
       const result = await service.getHead();
-      const revision = mapHeadRevision(result);
-      if (revision) {
-        return {
-          status: 'success',
-          ref: { name: VERSION_HEAD_REF, target: VERSION_MAIN_REF, revision },
-          diagnostics: [],
-        };
-      }
+      const mapped = mapSymbolicHeadResult(result);
+      if (mapped) return mapped;
       return degradedRef(null, [
         invalidPayloadDiagnostic('readRef'),
       ]) as VersionSymbolicRefReadResult;
@@ -352,11 +347,36 @@ async function getSymbolicHead(ctx: DocumentContext): Promise<VersionSymbolicRef
   }
 }
 
-function mapHeadRevision(value: unknown): VersionRecordRevision | undefined {
-  if (!isRecord(value)) return undefined;
-  if (value.ok === false) return undefined;
-  const head = isRecord(value.head) ? value.head : value;
-  return toRevision(head.refVersion) ?? toRevision(head.revision);
+function mapSymbolicHeadResult(value: unknown): VersionSymbolicRefReadResult | null {
+  if (!isRecord(value)) return null;
+  if (value.ok === false) {
+    return degradedRef(
+      null,
+      mapBranchFailureDiagnostics(value.diagnostics, 'readRef'),
+    ) as VersionSymbolicRefReadResult;
+  }
+  const ref = mapSymbolicHeadRecord('head' in value ? value.head : value);
+  if (!ref) return null;
+  const diagnostics = mapOptionalBranchDiagnostics(value.diagnostics, 'readRef');
+  return diagnostics.length > 0
+    ? ({ status: 'degraded', ref, diagnostics } as VersionSymbolicRefReadResult)
+    : { status: 'success', ref, diagnostics: [] };
+}
+
+function mapSymbolicHeadRecord(value: unknown): VersionSymbolicRef | null {
+  if (!isRecord(value)) return null;
+  const targetName =
+    typeof value.branchName === 'string'
+      ? value.branchName
+      : typeof value.refName === 'string'
+        ? value.refName
+        : typeof value.target === 'string'
+          ? value.target
+          : undefined;
+  const parsed = parsePublicBranchName(targetName, 'readRef');
+  const revision = toRevision(value.refVersion) ?? toRevision(value.revision);
+  if (!parsed.ok || !revision) return null;
+  return { name: VERSION_HEAD_REF, target: parsed.refName, revision };
 }
 
 function validateCreateBranchOptions(options: VersionCreateBranchOptions):
@@ -685,6 +705,11 @@ function sanitizeBranchDiagnosticPayload(
   const details = isRecord(value.details) ? value.details : null;
   if (details && typeof details.issue === 'string') payload.issue = details.issue;
   if (details && typeof details.missingField === 'string') payload.option = details.missingField;
+  if (details && typeof details.cause === 'string') payload.conflict = details.cause;
+  const actualHead = toCommitId(value.commitId);
+  const actualRevision = toCounterRevision(value.refVersion);
+  if (actualHead) payload.actualHead = actualHead;
+  if (actualRevision) payload.actualRefRevision = `rv:n:${actualRevision.value}`;
   if (value.refName === 'main' || value.refName === VERSION_MAIN_REF) {
     payload.refName = VERSION_MAIN_REF;
   }

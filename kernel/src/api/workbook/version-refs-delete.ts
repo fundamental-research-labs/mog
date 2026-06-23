@@ -306,6 +306,11 @@ function sanitizeBranchDiagnosticPayload(
   const details = isRecord(value.details) ? value.details : null;
   if (details && typeof details.issue === 'string') payload.issue = details.issue;
   if (details && typeof details.missingField === 'string') payload.option = details.missingField;
+  if (details && typeof details.cause === 'string') payload.conflict = details.cause;
+  const actualHead = toCommitId(value.commitId);
+  const actualRevision = toCounterRevision(value.refVersion);
+  if (actualHead) payload.actualHead = actualHead;
+  if (actualRevision) payload.actualRefRevision = `rv:n:${actualRevision.value}`;
   if (value.refName === 'main' || value.refName === VERSION_MAIN_REF) {
     payload.refName = VERSION_MAIN_REF;
   }

@@ -95,6 +95,7 @@ describe('InMemoryRefStore main initialization', () => {
     expect(duplicateMain.ok).toBe(false);
     if (duplicateMain.ok) throw new Error('expected protected main create to fail');
     expect(duplicateMain.error.code).toBe('protectedRef');
+    expect(duplicateMain.conflict).toBeUndefined();
 
     const updateMain = store.updateRef({
       name: 'main',
@@ -174,6 +175,7 @@ describe('InMemoryRefStore delete invariants', () => {
       protected: false,
     });
     expectMutationOk(main);
+    expect(store.exportSnapshot().liveRefCount).toBe(1);
 
     const deleteMain = store.deleteRef({
       name: 'main',
@@ -184,6 +186,7 @@ describe('InMemoryRefStore delete invariants', () => {
     expect(deleteMain.ok).toBe(false);
     if (deleteMain.ok) throw new Error('expected last live ref delete to fail');
     expect(deleteMain.error.code).toBe('lastLiveRef');
+    expect(store.exportSnapshot().liveRefCount).toBe(1);
 
     const branch = store.createBranch({
       name: 'scenario/last-delete',
@@ -192,6 +195,7 @@ describe('InMemoryRefStore delete invariants', () => {
       createdBy: AUTHOR,
     });
     expectCreateOk(branch);
+    expect(store.exportSnapshot().liveRefCount).toBe(2);
 
     expectDeleteOk(
       store.deleteRef({
@@ -201,6 +205,7 @@ describe('InMemoryRefStore delete invariants', () => {
         deletedBy: AUTHOR,
       }),
     );
+    expect(store.exportSnapshot().liveRefCount).toBe(1);
 
     const deleteBranch = store.deleteRef({
       name: 'scenario/last-delete',
@@ -211,6 +216,7 @@ describe('InMemoryRefStore delete invariants', () => {
     expect(deleteBranch.ok).toBe(false);
     if (deleteBranch.ok) throw new Error('expected last remaining branch delete to fail');
     expect(deleteBranch.error.code).toBe('lastLiveRef');
+    expect(store.exportSnapshot().liveRefCount).toBe(1);
   });
 });
 

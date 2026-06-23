@@ -27,7 +27,7 @@ function refVersion(value: string): RefVersion {
   return { kind: 'counter', value };
 }
 
-function createWorkbookVersionWithBranchService() {
+function createWorkbookVersionWithBranchService(headRefName?: string | null) {
   const refStore = createInMemoryRefStore({
     versionDocumentId: 'version-doc-1',
     now: () => '2026-06-20T00:00:00.000Z',
@@ -36,7 +36,10 @@ function createWorkbookVersionWithBranchService() {
   expect(main.ok).toBe(true);
   if (!main.ok) throw new Error(`expected main initialization: ${main.error.code}`);
 
-  const branchService = createInMemoryBranchService({ refStore });
+  const branchService = createInMemoryBranchService({
+    refStore,
+    ...(headRefName !== undefined ? { headRefName } : {}),
+  });
   const version = new WorkbookVersionImpl({
     versioning: { branchService },
   } as any);
@@ -160,6 +163,24 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       ok: true,
       branch: {
         name: 'scenario/budget',
+      },
+    });
+  });
+
+  it('reports symbolic HEAD from the attached branch service target', async () => {
+    const { version } = createWorkbookVersionWithBranchService('scenario/attached');
+    await version.createBranch({ name: 'scenario/attached' as any, targetCommitId: COMMIT_A });
+
+    await expect(version.getRef('HEAD')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/scenario/attached',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
       },
     });
   });
@@ -353,7 +374,15 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
       expect.arrayContaining([
         expect.objectContaining({
           code: 'VERSION_REF_CONFLICT',
-          data: expect.objectContaining({ recoverability: 'retry' }),
+          data: expect.objectContaining({
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              actualHead: COMMIT_C,
+              actualRefRevision: 'rv:n:2',
+              conflict: 'expectedHeadMismatch',
+            }),
+            recoverability: 'retry',
+          }),
         }),
       ]),
     );
@@ -372,6 +401,29 @@ describe('WorkbookVersion public ref lifecycle facade', () => {
   it('deletes public branch refs through the attached service', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
     await version.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
+
+    const staleDelete = await version.deleteRef({
+      name: 'scenario/delete-me' as any,
+      expectedHead: COMMIT_B,
+      expectedRefRevision: refVersion('0'),
+    });
+    expect(staleDelete.ok).toBe(false);
+    if (staleDelete.ok) throw new Error('expected stale deleteRef to fail');
+    expect(staleDelete.error.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'VERSION_REF_CONFLICT',
+          data: expect.objectContaining({
+            mutationGuarantee: 'no-write-attempted',
+            payload: expect.objectContaining({
+              actualHead: COMMIT_A,
+              actualRefRevision: 'rv:n:0',
+              conflict: 'expectedHeadMismatch',
+            }),
+          }),
+        }),
+      ]),
+    );
 
     await expect(
       version.deleteBranch({

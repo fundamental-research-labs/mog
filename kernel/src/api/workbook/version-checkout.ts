@@ -28,6 +28,7 @@ import {
   type VersionCheckoutAdmissionBlock,
 } from './version-checkout-admission';
 import {
+  checkoutSyncBatchStatusBlockedDiagnostic,
   recoverabilityForCheckoutIssue,
   safeMessageForCheckoutIssue,
 } from './version-checkout-diagnostics';
@@ -707,6 +708,8 @@ function checkoutAdmissionDiagnostic(
           ? {}
           : { pendingRemotePromotionQueuedCount: block.pendingRemotePromotionQueuedCount }),
       });
+    case 'syncBatchStatusBlocked':
+      return checkoutSyncBatchStatusBlockedDiagnostic(block, payload);
     case 'pendingRecalc':
       return checkoutPendingRecalcDiagnostic({ ...payload, reason: block.reason });
     case 'liveCollaborationActive':

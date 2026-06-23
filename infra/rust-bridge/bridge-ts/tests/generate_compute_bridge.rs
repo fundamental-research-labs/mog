@@ -4,8 +4,8 @@
 //! Output: kernel/src/bridges/compute/compute-bridge.gen.ts
 
 use bridge_ts::{
-    collect_named_from_api, emit_bridge, emit_kind_manifest, merge_blocks, parse_source,
-    BridgeConfig,
+    BridgeConfig, collect_named_from_api, emit_bridge, emit_kind_manifest, merge_blocks,
+    parse_source,
 };
 use bridge_ts::{ImportConfig, ImportGroup, TypeImport};
 

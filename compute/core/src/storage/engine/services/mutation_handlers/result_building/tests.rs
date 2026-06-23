@@ -42,7 +42,9 @@ fn build_collab_pair() -> (YrsComputeEngine, YrsComputeEngine) {
 fn ship_delta(a: &mut YrsComputeEngine, b: &mut YrsComputeEngine) -> MutationResult {
     let b_sv = b.encode_state_vector();
     let delta = a.encode_diff(&b_sv).expect("A encode_diff(B.sv)");
-    let (_patches, result) = b.apply_sync_update_legacy(&delta).expect("B apply_sync_update");
+    let (_patches, result) = b
+        .apply_sync_update_legacy(&delta)
+        .expect("B apply_sync_update");
     result
 }
 

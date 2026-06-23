@@ -159,19 +159,18 @@ fn undo_redo_restores_bulk_dimension_growth() {
 
 #[test]
 fn undo_redo_restores_single_axis_col_growth_on_pre_sized_sheet() {
-    let (mut engine, _) =
-        YrsComputeEngine::from_snapshot(crate::snapshot::WorkbookSnapshot {
-            sheets: vec![crate::snapshot::SheetSnapshot {
-                id: sheet_id().to_uuid_string(),
-                name: "Sheet1".to_string(),
-                rows: 1_335,
-                cols: 18,
-                cells: vec![],
-                ranges: vec![],
-            }],
-            ..Default::default()
-        })
-        .unwrap();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(crate::snapshot::WorkbookSnapshot {
+        sheets: vec![crate::snapshot::SheetSnapshot {
+            id: sheet_id().to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 1_335,
+            cols: 18,
+            cells: vec![],
+            ranges: vec![],
+        }],
+        ..Default::default()
+    })
+    .unwrap();
     let sid = sheet_id();
     assert_eq!(engine.grid_index(&sid).unwrap().row_count(), 1_335);
     assert_eq!(engine.grid_index(&sid).unwrap().col_count(), 18);

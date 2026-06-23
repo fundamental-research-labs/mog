@@ -2,12 +2,12 @@
 
 use super::helpers::engine_from_parse_output_normal;
 use domain_types::{
+    AuthoredStyleRun, CellFormat, ColDimension, DocumentFormat, ParseOutput, RowDimension,
+    SheetData, SheetDimensions,
     domain::workbook::{
         CalcMode as WorkbookCalcMode, RefMode, UpdateLinks, WorkbookProperties, WorkbookView,
         WorkbookViewVisibility,
     },
-    AuthoredStyleRun, CellFormat, ColDimension, DocumentFormat, ParseOutput, RowDimension,
-    SheetData, SheetDimensions,
 };
 use std::sync::Arc;
 use value_types::{CellError, CellValue, FiniteF64};

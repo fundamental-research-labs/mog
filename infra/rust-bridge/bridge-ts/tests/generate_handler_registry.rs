@@ -7,8 +7,8 @@
 //! Output: runtime/src-tauri/src/handlers.gen.rs
 
 use bridge_ts::{
-    collect_tauri_handler_names, emit_command_metadata, emit_handler_registry, merge_blocks,
-    parse_source, HandlerRegistryConfig, TsApi,
+    HandlerRegistryConfig, TsApi, collect_tauri_handler_names, emit_command_metadata,
+    emit_handler_registry, merge_blocks, parse_source,
 };
 
 /// Service → Tauri command module path mappings.

@@ -328,7 +328,9 @@ fn provider_refresh_replay_does_not_require_empty_session_baseline_before_later_
         .apply_sync_update_legacy(&session_a_snapshot)
         .expect("replay snapshot");
     for update in &session_a_updates {
-        replayed.apply_sync_update_legacy(update).expect("replay seed");
+        replayed
+            .apply_sync_update_legacy(update)
+            .expect("replay seed");
     }
     for update in &edit_updates {
         replayed

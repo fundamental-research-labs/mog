@@ -3,12 +3,12 @@
 use super::super::*;
 use super::helpers::*;
 use domain_types::{
+    ParseOutput, SheetData,
     domain::validation::{
         EnforcementLevel, ErrorMessage, ErrorStyle, IdentityRangeSchemaRef, ImeMode, InputMessage,
         RangeSchema, RangeSchemaDefinition, RangeSchemaUi, SchemaConstraints, SchemaType,
         ValidationOperator, ValidationRule, ValidationSpec,
     },
-    ParseOutput, SheetData,
 };
 
 fn range_ref(start_id: &str, end_id: &str) -> IdentityRangeSchemaRef {

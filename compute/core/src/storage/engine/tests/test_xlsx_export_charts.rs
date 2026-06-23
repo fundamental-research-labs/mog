@@ -79,8 +79,10 @@ fn assert_sdk_authored_chart_color_style_export(
         .expect("chart color style should exist");
 
     assert!(content_types.contains("/xl/charts/colors1.xml"));
-    assert!(chart_rels
-        .contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle"));
+    assert!(
+        chart_rels
+            .contains("http://schemas.microsoft.com/office/2011/relationships/chartColorStyle")
+    );
     assert!(chart_rels.contains(r#"Target="colors1.xml""#));
     assert!(color_style.contains(expected_scheme));
     if let Some(expected_color) = expected_color {
@@ -127,22 +129,30 @@ fn imported_standard_chart_metadata_survives_yrs_without_auxiliary_package_repla
             .and_then(|authority| authority.package_owner.as_deref()),
         Some("xl/charts/chart2.xml")
     );
-    assert!(chart
-        .chart_relationships
-        .iter()
-        .any(|relationship| relationship.target.as_deref() == Some("style2.xml")));
-    assert!(chart
-        .chart_relationships
-        .iter()
-        .any(|relationship| relationship.target.as_deref() == Some("colors2.xml")));
-    assert!(chart
-        .chart_auxiliary_files
-        .iter()
-        .any(|(path, _)| path == "xl/charts/style2.xml"));
-    assert!(chart
-        .chart_auxiliary_files
-        .iter()
-        .any(|(path, _)| path == "xl/charts/colors2.xml"));
+    assert!(
+        chart
+            .chart_relationships
+            .iter()
+            .any(|relationship| relationship.target.as_deref() == Some("style2.xml"))
+    );
+    assert!(
+        chart
+            .chart_relationships
+            .iter()
+            .any(|relationship| relationship.target.as_deref() == Some("colors2.xml"))
+    );
+    assert!(
+        chart
+            .chart_auxiliary_files
+            .iter()
+            .any(|(path, _)| path == "xl/charts/style2.xml")
+    );
+    assert!(
+        chart
+            .chart_auxiliary_files
+            .iter()
+            .any(|(path, _)| path == "xl/charts/colors2.xml")
+    );
 
     let exported_bytes = engine.export_to_xlsx_bytes().expect("export xlsx bytes");
     let archive =

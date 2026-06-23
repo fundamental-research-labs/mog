@@ -4,7 +4,7 @@ use super::super::*;
 use super::helpers::*;
 use super::sync_helpers::*;
 use cell_types::CellId;
-use domain_types::{domain::comment::CommentType, CellFormat};
+use domain_types::{CellFormat, domain::comment::CommentType};
 use snapshot_types::{Axis, ChangeKind, MutationResult, SheetChangeField, StructureChangeType};
 use value_types::CellValue;
 

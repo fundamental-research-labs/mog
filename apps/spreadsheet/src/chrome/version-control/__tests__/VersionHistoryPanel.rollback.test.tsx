@@ -105,6 +105,64 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     expect(workbook.version.revert).not.toHaveBeenCalled();
   });
 
+  it.each([
+    {
+      label: 'provider writes are pending',
+      surface: createSurfaceStatus({
+        revertEnabled: true,
+        dirty: { pendingProviderWrites: true },
+      }),
+      checkoutReason: 'Wait for provider writes to settle before checking out.',
+      rollbackReason: 'Wait for provider writes to settle before staging rollback.',
+    },
+    {
+      label: 'access is denied',
+      surface: createSurfaceStatus({
+        capabilityOverrides: {
+          'version:checkout': disabledCapabilityState(
+            'Host policy denies destructive version actions.',
+            'hostCapability',
+            false,
+          ),
+          'version:revert': disabledCapabilityState(
+            'Host policy denies destructive version actions.',
+            'hostCapability',
+            false,
+          ),
+        },
+      }),
+      checkoutReason: 'Host policy denies destructive version actions.',
+      rollbackReason: 'Host policy denies destructive version actions.',
+    },
+    {
+      label: 'versioning is disabled',
+      surface: createSurfaceStatus({ featureGateEnabled: false, revertEnabled: true }),
+      checkoutReason: 'Versioning is disabled for this workbook.',
+      rollbackReason: 'Versioning is disabled for this workbook.',
+    },
+  ])(
+    'disables checkout and rollback with explicit status text when $label',
+    async ({ surface, checkoutReason, rollbackReason }) => {
+      const workbook = createWorkbook({ surface });
+      const user = userEvent.setup();
+
+      render(<VersionHistoryPanelContent workbook={workbook} onClose={jest.fn()} />);
+
+      await screen.findByText('Calculated forecast');
+      await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
+
+      const checkoutButton = screen.getByRole('button', { name: 'Checkout main' });
+      const rollbackButton = screen.getByRole('button', { name: 'Stage rollback' });
+      expectDisabledButtonReason(checkoutButton, checkoutReason);
+      expectDisabledButtonReason(rollbackButton, rollbackReason);
+
+      await user.click(checkoutButton);
+      await user.click(rollbackButton);
+      expect(workbook.version.checkout).not.toHaveBeenCalled();
+      expect(workbook.version.revert).not.toHaveBeenCalled();
+    },
+  );
+
   it('stages rollback dry-run for the selected commit through workbook.version.revert', async () => {
     const workbook = createWorkbook({ surface: createSurfaceStatus({ revertEnabled: true }) });
     const user = userEvent.setup();
@@ -248,7 +306,7 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     await expectActionResult('Rollback is blocked while the target ref is stale.', 'error');
   });
 
-  it('disables rollback staging when the current checkout session is stale', async () => {
+  it('disables checkout and rollback staging when the current checkout session is stale', async () => {
     const workbook = createWorkbook({
       surface: createSurfaceStatus({
         revertEnabled: true,
@@ -268,10 +326,19 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
 
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout main' });
+    const rollbackButton = screen.getByRole('button', { name: 'Stage rollback' });
     expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Stage rollback' }),
+      checkoutButton,
+      'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
+    );
+    expectDisabledButtonReason(
+      rollbackButton,
       'main is stale because the branch head moved. Refresh before staging rollback.',
     );
+    await user.click(checkoutButton);
+    await user.click(rollbackButton);
+    expect(workbook.version.checkout).not.toHaveBeenCalled();
     expect(workbook.version.revert).not.toHaveBeenCalled();
   });
 });
@@ -354,18 +421,22 @@ function createWorkbook({
 
 function createSurfaceStatus({
   revertEnabled = false,
+  featureGateEnabled = true,
   current = {},
+  dirty = {},
   capabilityOverrides = {},
 }: {
   readonly revertEnabled?: boolean;
+  readonly featureGateEnabled?: boolean;
   readonly current?: Partial<VersionSurfaceStatus['current']>;
+  readonly dirty?: Partial<VersionSurfaceStatus['dirty']>;
   readonly capabilityOverrides?: Partial<Record<VersionCapability, VersionCapabilityState>>;
 } = {}): VersionSurfaceStatus {
   return {
     schemaVersion: 1,
     documentId: 'document-1',
     stage: 'authoring',
-    featureGateEnabled: true,
+    featureGateEnabled,
     storage: { ready: true, backend: 'memory', diagnostics: [] },
     current: {
       headCommitId: HEAD_COMMIT_ID,
@@ -386,6 +457,7 @@ function createSurfaceStatus({
       unsafeReasons: [],
       source: 'VC-05',
       diagnostics: [],
+      ...dirty,
     },
     capabilities: Object.fromEntries(
       ALL_CAPABILITIES.map((capability) => {

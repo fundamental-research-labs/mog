@@ -41,10 +41,7 @@ import {
 } from './VersionActionStatus';
 import { VersionHistoryDiffPreview, type VersionDiffPreview } from './VersionHistoryDiffPreview';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
-import {
-  ReviewProposalSurface,
-  type ReviewProposalDiffTarget,
-} from './ReviewProposalSurface';
+import { ReviewProposalSurface, type ReviewProposalDiffTarget } from './ReviewProposalSurface';
 import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
 import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
@@ -685,6 +682,7 @@ function RefList({
   readonly onCheckoutRef: (ref: VersionRef) => void;
 }): React.JSX.Element {
   const checkoutReasonId = 'version-checkout-disabled-reason';
+  const checkoutStatus = checkoutDisabledReason?.trim() || 'Checkout is unavailable.';
 
   return (
     <section className="flex flex-col gap-2" aria-label="Branches">
@@ -694,7 +692,7 @@ function RefList({
       </div>
       <DisabledReason
         id={checkoutReasonId}
-        reason={!checkoutEnabled ? checkoutDisabledReason : undefined}
+        reason={!checkoutEnabled ? checkoutStatus : undefined}
       />
       {refs.length === 0 ? (
         <div className="text-body-sm text-ss-text-secondary py-2">No branches available</div>
@@ -719,10 +717,8 @@ function RefList({
                     onClick={() => onCheckoutRef(ref)}
                     disabled={!checkoutEnabled}
                     aria-label={`Checkout ${branchLabel}`}
-                    aria-describedby={
-                      !checkoutEnabled && checkoutDisabledReason ? checkoutReasonId : undefined
-                    }
-                    title={!checkoutEnabled ? checkoutDisabledReason : undefined}
+                    aria-describedby={!checkoutEnabled ? checkoutReasonId : undefined}
+                    title={!checkoutEnabled ? checkoutStatus : undefined}
                     className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
                   >
                     Checkout

@@ -182,6 +182,10 @@ export function getCheckoutAvailability(
   const staleReason = currentStaleDisabledReason(surface, 'checkout');
   if (staleReason) return disabledAction(staleReason);
 
+  const providerWriteReason =
+    providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, 'checking out');
+  if (providerWriteReason) return disabledAction(providerWriteReason);
+
   const checkoutReason = checkoutUnsafeDisabledReason(surface);
   if (checkoutReason) return disabledAction(checkoutReason);
 
@@ -611,10 +615,6 @@ function checkoutUnsafeDisabledReason(
 ): DisabledActionReason | undefined {
   const dirty = surface.dirty;
   if (dirty.checkoutSafe) return undefined;
-
-  const providerWriteReason =
-    providerWritesDiagnosticReason(surface) ?? providerWritesDisabledReason(surface, 'checking out');
-  if (providerWriteReason) return providerWriteReason;
 
   const dirtyDomainReason = unsupportedDirtyDomainsDisabledReason(surface, 'checkout');
   if (dirtyDomainReason) return dirtyDomainReason;

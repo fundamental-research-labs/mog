@@ -5,7 +5,10 @@ use serde_json::Value;
 
 use crate::MutationResult;
 
+mod public_contracts;
 mod sha256;
+
+pub use public_contracts::*;
 
 pub const SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION: &str = "semantic-workbook-state.v1";
 
@@ -163,18 +166,6 @@ pub enum VersionDiagnosticSeverityWire {
     Error,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionMetadataDiagnosticWire {
-    pub severity: VersionDiagnosticSeverityWire,
-    pub code: String,
-    pub message: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub domain_id: Option<String>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub data: BTreeMap<String, Value>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum VersionCaptureDiagnosticsSinkRecordKindWire {
@@ -228,14 +219,6 @@ pub struct VersionAuthorWire {
     pub client_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_id: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionRuntimeOperationActorSummaryWire {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub actor_kind: Option<VersionActorKindWire>,
-    pub redacted_author_class: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,54 +338,6 @@ pub struct VersionOperationContextWire {
     pub client_request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub collaboration: Option<VersionSyncOperationContextWire>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionRuntimeOperationContextWire {
-    pub runtime_context_id: String,
-    pub operation_context: VersionOperationContextWire,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub entrypoint_ids: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub command: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub runtime_kind: Option<String>,
-    pub redaction_policy: VersionRedactionPolicyWire,
-    pub actor: VersionRuntimeOperationActorSummaryWire,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub diagnostics: Vec<VersionMetadataDiagnosticWire>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpaqueDomainAttachmentWire {
-    pub attachment_id: String,
-    pub domain_id: String,
-    pub media_type: String,
-    pub digest: ObjectDigest,
-    pub redaction_policy: VersionRedactionPolicyWire,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub storage_ref: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VersionMutationSegmentWire {
-    pub segment_id: String,
-    pub domain_id: String,
-    pub domain_class: VersionDomainClass,
-    pub capability_state: VersionDomainCapabilityState,
-    pub operation_kind: VersionOperationKindWire,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub object_ids: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub before_digest: Option<ObjectDigest>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub after_digest: Option<ObjectDigest>,
-    pub redaction_policy: VersionRedactionPolicyWire,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub attachment: Option<OpaqueDomainAttachmentWire>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

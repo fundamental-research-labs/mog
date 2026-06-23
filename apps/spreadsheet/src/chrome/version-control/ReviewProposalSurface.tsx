@@ -321,6 +321,9 @@ function ReviewSummaryRow({
   const accessDiagnosticId = shouldDescribeAccessDiagnostic(accessDiagnostic)
     ? accessDiagnosticDomId('review', review.id)
     : undefined;
+  const accessDiagnosticMessageId = accessDiagnosticId
+    ? `${accessDiagnosticId}-message`
+    : undefined;
   const accessDeniedReason =
     accessDiagnostic?.state === 'denied' ? accessDiagnostic.message : undefined;
   const activationEnabled = diffEnabled && !accessDeniedReason;
@@ -335,8 +338,8 @@ function ReviewSummaryRow({
           },
           enabled: activationEnabled,
           disabledReason: accessDeniedReason ?? diffDisabledReason,
-          disabledReasonId: accessDeniedReason ? accessDiagnosticId : diffDisabledReasonId,
-          describedById: accessDiagnosticId,
+          disabledReasonId: accessDeniedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
+          describedById: accessDiagnosticMessageId,
           onOpenDiff,
         }
       : undefined;
@@ -351,6 +354,7 @@ function ReviewSummaryRow({
       activation={activation}
       accessDiagnostic={accessDiagnostic}
       accessDiagnosticId={accessDiagnosticId}
+      accessDiagnosticMessageId={accessDiagnosticMessageId}
       data={{
         recordKind: 'review',
         recordId: review.id,
@@ -391,6 +395,9 @@ function ProposalSummaryRow({
   const accessDiagnosticId = shouldDescribeAccessDiagnostic(accessDiagnostic)
     ? accessDiagnosticDomId('proposal', proposal.id)
     : undefined;
+  const accessDiagnosticMessageId = accessDiagnosticId
+    ? `${accessDiagnosticId}-message`
+    : undefined;
   const accessDeniedReason =
     accessDiagnostic?.state === 'denied' ? accessDiagnostic.message : undefined;
   const activationEnabled = diffEnabled && !accessDeniedReason;
@@ -405,8 +412,8 @@ function ProposalSummaryRow({
           },
           enabled: activationEnabled,
           disabledReason: accessDeniedReason ?? diffDisabledReason,
-          disabledReasonId: accessDeniedReason ? accessDiagnosticId : diffDisabledReasonId,
-          describedById: accessDiagnosticId,
+          disabledReasonId: accessDeniedReason ? accessDiagnosticMessageId : diffDisabledReasonId,
+          describedById: accessDiagnosticMessageId,
           onOpenDiff,
         }
       : undefined;
@@ -422,6 +429,7 @@ function ProposalSummaryRow({
         activation={activation}
         accessDiagnostic={accessDiagnostic}
         accessDiagnosticId={accessDiagnosticId}
+        accessDiagnosticMessageId={accessDiagnosticMessageId}
         data={{
           recordKind: 'proposal',
           recordId: proposal.id,
@@ -456,6 +464,7 @@ function SummaryRow({
   activation,
   accessDiagnostic,
   accessDiagnosticId,
+  accessDiagnosticMessageId,
   data,
 }: {
   readonly title: string;
@@ -473,6 +482,7 @@ function SummaryRow({
   };
   readonly accessDiagnostic?: ReviewProposalAccessProjectionDiagnostic;
   readonly accessDiagnosticId?: string;
+  readonly accessDiagnosticMessageId?: string;
   readonly data: SummaryRowDataAttributes;
 }): React.JSX.Element {
   const rowDataAttributes = {
@@ -518,6 +528,7 @@ function SummaryRow({
         kind={data.recordKind}
         diagnostic={accessDiagnostic}
         diagnosticId={accessDiagnosticId}
+        messageId={accessDiagnosticMessageId}
       />
     </>
   );
@@ -559,10 +570,12 @@ function AccessProjectionDiagnosticBlock({
   kind,
   diagnostic,
   diagnosticId,
+  messageId,
 }: {
   readonly kind: 'review' | 'proposal';
   readonly diagnostic?: ReviewProposalAccessProjectionDiagnostic;
   readonly diagnosticId?: string;
+  readonly messageId?: string;
 }): React.JSX.Element | null {
   if (!diagnostic || diagnostic.state === 'visible') return null;
 
@@ -584,7 +597,7 @@ function AccessProjectionDiagnosticBlock({
       <div className="font-medium text-ss-text">
         {accessProjectionStateLabel(kind, diagnostic.state)}
       </div>
-      <div>{diagnostic.message}</div>
+      <div id={messageId}>{diagnostic.message}</div>
       {factText ? <div className="mt-0.5 text-ss-text-tertiary">{factText}</div> : null}
     </div>
   );

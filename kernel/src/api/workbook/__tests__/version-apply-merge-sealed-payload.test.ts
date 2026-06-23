@@ -13,7 +13,11 @@ import type {
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { withVersionManifest } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnHandles,
+  installVersionDomainDetectorNoopsOnWorkbook,
+  withVersionManifest,
+} from './version-domain-support-test-utils';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
@@ -342,6 +346,7 @@ async function withPersistedConflictPreview(
     environment: 'headless',
     userTimezone: 'UTC',
   });
+  installVersionDomainDetectorNoopsOnHandles(sourceHandle, branchHandle);
   let sourceWb: Workbook | undefined;
   let branchWb: Workbook | undefined;
 
@@ -349,6 +354,7 @@ async function withPersistedConflictPreview(
     sourceWb = await sourceHandle.workbook({
       versioning: withVersionManifest({ provider, ...versioning }),
     });
+    installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
     for (const cell of conflictCells) {
       await sourceWb.activeSheet.setCell(cell, 'base');
     }
@@ -384,10 +390,12 @@ async function withPersistedConflictPreview(
     const oursHead = await expectHead(sourceWb);
 
     branchWb = await branchHandle.workbook({ versioning: withVersionManifest({ provider }) });
+    installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     const checkoutBase = await branchWb.version.checkout({ kind: 'commit', id: baseCommit.id });
     if (!checkoutBase.ok) {
       throw new Error(`expected branch workbook checkout success: ${checkoutBase.error.code}`);
     }
+    installVersionDomainDetectorNoopsOnWorkbook(branchWb);
     for (const cell of conflictCells) {
       await branchWb.activeSheet.setCell(cell, 'theirs');
     }
@@ -484,7 +492,9 @@ async function expectCommit(
   resultPromise: ReturnType<Workbook['version']['commit']>,
 ): Promise<WorkbookCommitSummary> {
   const result = await resultPromise;
-  if (!result.ok) throw new Error(`expected commit success: ${result.error.code}`);
+  if (!result.ok) {
+    throw new Error(`expected commit success: ${result.error.code}: ${JSON.stringify(result.error)}`);
+  }
   return result.value;
 }
 

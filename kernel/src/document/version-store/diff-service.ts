@@ -91,16 +91,26 @@ type ParsedDiffOptions = {
 type ParsedPageToken =
   | {
       readonly ok: true;
-      readonly offset: number;
+      readonly cursor: SemanticDiffPageCursor;
     }
   | {
       readonly ok: false;
       readonly diagnostics: readonly DiffServiceDiagnostic[];
     };
 
+type SemanticDiffPageCursor =
+  | { readonly kind: 'offset'; readonly offset: number }
+  | { readonly kind: 'orderKey'; readonly orderKey: SemanticDiffOrderKey };
+
 type PublicCursorCacheEntry = {
   readonly internalToken: string;
 };
+
+type MappedSemanticDiffEntry = {
+  readonly entry: VersionDiffEntry; readonly orderKey: SemanticDiffOrderKey; readonly hasExplicitOrderKey: boolean;
+};
+
+type SemanticDiffOrderKey = string;
 
 const PUBLIC_DIFF_CURSOR_CACHE = new Map<string, PublicCursorCacheEntry>();
 let publicDiffCursorSequence = 0;
@@ -212,12 +222,20 @@ export class WorkbookVersionDiffService {
     const entries = mapSemanticChangeSet(semanticRecord.payload);
     if (!entries.ok) return degradedDiffPage(entries.diagnostics);
 
-    const offset = pageToken.offset;
-    const pageItems = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
-    const nextOffset = offset + pageItems.length;
+    const offset = pageStartOffset(entries.items, pageToken.cursor);
+    const pageEntries = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
+    const pageItems = pageEntries.map((item) => item.entry);
+    const nextOffset = offset + pageEntries.length;
+    const shouldUseOrderKeyCursor = entries.items.some((entry) => entry.hasExplicitOrderKey);
     const internalNextPageToken =
       nextOffset < entries.items.length
-        ? internalPageTokenFor(resolvedBase.commitId, resolvedTarget.commitId, nextOffset)
+        ? shouldUseOrderKeyCursor && pageEntries.length > 0
+          ? internalPageTokenForOrderKey(
+              resolvedBase.commitId,
+              resolvedTarget.commitId,
+              pageEntries[pageEntries.length - 1]!.orderKey,
+            )
+          : internalPageTokenForOffset(resolvedBase.commitId, resolvedTarget.commitId, nextOffset)
         : undefined;
     const nextPageToken = internalNextPageToken
       ? publicPageTokenFor(internalNextPageToken)
@@ -380,7 +398,7 @@ function parsePageToken(
   baseCommitId: WorkbookCommitId,
   targetCommitId: WorkbookCommitId,
 ): ParsedPageToken {
-  if (token === undefined) return { ok: true, offset: 0 };
+  if (token === undefined) return { ok: true, cursor: { kind: 'offset', offset: 0 } };
 
   const publicCursor = resolvePublicPageToken(token);
   if (!publicCursor.ok) {
@@ -396,21 +414,22 @@ function parsePageToken(
   }
 
   const parts = publicCursor.internalToken.split(':');
-  const offsetValue = parts.at(-1);
+  const cursorValue = parts.at(-1);
   const targetDigest = parts.at(-2);
   const targetPrefix = parts.at(-4);
   const baseDigest = parts.at(-5);
   const basePrefix = parts.at(-7);
   if (
     parts.length !== 8 ||
-    parts[0] !== VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX ||
+    (parts[0] !== VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX &&
+      parts[0] !== `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}k`) ||
     basePrefix !== 'commit' ||
     parts.at(-6) !== 'sha256' ||
     targetPrefix !== 'commit' ||
     parts.at(-3) !== 'sha256' ||
     `${basePrefix}:sha256:${baseDigest}` !== baseCommitId ||
     `${targetPrefix}:sha256:${targetDigest}` !== targetCommitId ||
-    offsetValue === undefined
+    cursorValue === undefined
   ) {
     return {
       ok: false,
@@ -420,7 +439,20 @@ function parsePageToken(
     };
   }
 
-  const offset = Number(offsetValue);
+  if (parts[0] === `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}k`) {
+    const orderKey = parseEncodedSemanticDiffOrderKey(cursorValue);
+    if (!orderKey) {
+      return {
+        ok: false,
+        diagnostics: [
+          diagnostic('VERSION_STALE_PAGE_CURSOR', 'diff pageToken carries an invalid order key.'),
+        ],
+      };
+    }
+    return { ok: true, cursor: { kind: 'orderKey', orderKey } };
+  }
+
+  const offset = Number(cursorValue);
   if (!Number.isSafeInteger(offset) || offset < 0) {
     return {
       ok: false,
@@ -429,7 +461,7 @@ function parsePageToken(
       ],
     };
   }
-  return { ok: true, offset };
+  return { ok: true, cursor: { kind: 'offset', offset } };
 }
 
 function diffCompletenessDiagnostics(
@@ -548,7 +580,7 @@ async function readSemanticChangeSet(
 function mapSemanticChangeSet(
   payload: unknown,
 ):
-  | { readonly ok: true; readonly items: readonly VersionDiffEntry[] }
+  | { readonly ok: true; readonly items: readonly MappedSemanticDiffEntry[] }
   | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] } {
   if (!isRecord(payload) || payload.schemaVersion !== 1) {
     return {
@@ -579,7 +611,7 @@ function mapSemanticChangeSet(
     };
   }
 
-  const entries: VersionDiffEntry[] = [];
+  const entries: { readonly entry: VersionDiffEntry; readonly source: unknown }[] = [];
   for (let index = 0; index < reviewChanges.length; index++) {
     const entry = mapSemanticChange(reviewChanges[index]);
     if (!entry) {
@@ -596,10 +628,24 @@ function mapSemanticChangeSet(
         ],
       };
     }
-    entries.push(entry);
+    entries.push({ entry, source: reviewChanges[index] });
   }
 
-  return { ok: true, items: entries };
+  const uniqueEntries = withUniqueChangeIds(entries);
+  const mapped = uniqueEntries.map(({ entry, source }) => {
+    const explicitKey = explicitOrderKey(source, entry);
+    return {
+      entry,
+      orderKey: explicitKey ?? fallbackOrderKey(entry),
+      hasExplicitOrderKey: explicitKey !== null,
+    };
+  });
+  return {
+    ok: true,
+    items: mapped.some((entry) => entry.hasExplicitOrderKey)
+      ? [...mapped].sort((a, b) => compareOrderKeys(a.orderKey, b.orderKey))
+      : mapped,
+  };
 }
 
 function mapSemanticChange(value: unknown): VersionDiffEntry | null {
@@ -619,6 +665,55 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
     after,
     ...(display ? { display } : {}),
   };
+}
+
+function pageStartOffset(entries: readonly MappedSemanticDiffEntry[], cursor: SemanticDiffPageCursor): number {
+  if (cursor.kind === 'offset') return cursor.offset;
+  const index = entries.findIndex((entry) => compareOrderKeys(entry.orderKey, cursor.orderKey) > 0);
+  return index < 0 ? entries.length : index;
+}
+
+function withUniqueChangeIds(entries: readonly { readonly entry: VersionDiffEntry; readonly source: unknown }[]) {
+  const counts = new Map<string, number>();
+  for (const { entry } of entries) if (entry.structural.kind === 'metadata') {
+    counts.set(entry.structural.changeId, (counts.get(entry.structural.changeId) ?? 0) + 1);
+  }
+  if (![...counts.values()].some((count) => count > 1)) return entries;
+  return entries.map(({ entry, source }) => {
+    const structural = entry.structural;
+    if (structural.kind !== 'metadata' || counts.get(structural.changeId) === 1) return { entry, source };
+    const suffix = encodeURIComponent(JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]));
+    return { source, entry: { ...entry, structural: { ...structural, changeId: `${structural.changeId}~${suffix}` } } };
+  });
+}
+
+function explicitOrderKey(source: unknown, entry: VersionDiffEntry): SemanticDiffOrderKey | null {
+  const key = isRecord(source) && isRecord(source.pageCursorOrderKey) ? source.pageCursorOrderKey : null;
+  const domainOrder = key ? Number(key.domainOrder) : NaN;
+  if (entry.structural.kind !== 'metadata' || !Number.isSafeInteger(domainOrder) || typeof key?.hashPropertyPath !== 'string') return null;
+  return orderKeyString(
+    domainOrder,
+    key.hashPropertyPath,
+    typeof key.canonicalEventKey === 'string' ? key.canonicalEventKey : undefined,
+    typeof key.hashIdentity === 'string' ? key.hashIdentity : undefined,
+    typeof key.valueClass === 'string' ? key.valueClass : 'authored',
+    entry.structural.changeId,
+  );
+}
+
+function fallbackOrderKey(entry: VersionDiffEntry): SemanticDiffOrderKey {
+  const structural = entry.structural;
+  return structural.kind === 'metadata'
+    ? orderKeyString(90, structural.propertyPath.join('/'), undefined, structural.entityId, 'authored', structural.changeId)
+    : orderKeyString(100, '', undefined, undefined, 'diagnosticOnly', '');
+}
+
+function compareOrderKeys(a: SemanticDiffOrderKey, b: SemanticDiffOrderKey): number {
+  return a.localeCompare(b);
+}
+
+function orderKeyString(domainOrder: number, hashPropertyPath: string, canonicalEventKey: string | undefined, hashIdentity: string | undefined, valueClass: string, changeId: string): string {
+  return JSON.stringify([domainOrder.toString().padStart(5, '0'), hashPropertyPath, canonicalEventKey ?? null, hashIdentity ?? null, valueClass, changeId]);
 }
 
 function mapReviewAccessDiffValue(
@@ -774,12 +869,29 @@ function mapSemanticValues(
     : (mapped as readonly VersionSemanticValue[]);
 }
 
-function internalPageTokenFor(
+function internalPageTokenForOffset(
   baseCommitId: WorkbookCommitId,
   targetCommitId: WorkbookCommitId,
   offset: number,
 ): VersionPageToken {
   return `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}:${baseCommitId}:${targetCommitId}:${offset}` as VersionPageToken;
+}
+
+function internalPageTokenForOrderKey(
+  baseCommitId: WorkbookCommitId,
+  targetCommitId: WorkbookCommitId,
+  orderKey: SemanticDiffOrderKey,
+): VersionPageToken {
+  return `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}k:${baseCommitId}:${targetCommitId}:${encodeURIComponent(JSON.stringify(orderKey))}` as VersionPageToken;
+}
+
+function parseEncodedSemanticDiffOrderKey(value: string): SemanticDiffOrderKey | null {
+  try {
+    const key = JSON.parse(decodeURIComponent(value));
+    return typeof key === 'string' && key ? key : null;
+  } catch {
+    return null;
+  }
 }
 
 function publicPageTokenFor(internalToken: VersionPageToken): VersionPageToken {

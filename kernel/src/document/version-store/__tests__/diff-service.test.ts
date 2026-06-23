@@ -212,6 +212,103 @@ describe('WorkbookVersionDiffService', () => {
     });
   });
 
+  it('paginates by stable semantic order keys when equal pre-change order replays differently', async () => {
+    const tiedCursorKey = {
+      domainOrder: 50,
+      hashPropertyPath: '/sheets/sheet-1/cells/value',
+      valueClass: 'authored',
+    };
+    const changes = [
+      semanticRecord({
+        changeId: 'pre-change-order-tie',
+        domain: 'cell',
+        entityId: 'sheet-1!C1',
+        propertyPath: ['value'],
+        before: null,
+        after: 'C',
+        display: addressDisplay('C1'),
+        pageCursorOrderKey: tiedCursorKey,
+      }),
+      semanticRecord({
+        changeId: 'pre-change-order-tie',
+        domain: 'cell',
+        entityId: 'sheet-1!A1',
+        propertyPath: ['value'],
+        before: null,
+        after: 'A',
+        display: addressDisplay('A1'),
+        pageCursorOrderKey: tiedCursorKey,
+      }),
+      semanticRecord({
+        changeId: 'pre-change-order-tie',
+        domain: 'cell',
+        entityId: 'sheet-1!B1',
+        propertyPath: ['value'],
+        before: null,
+        after: 'B',
+        display: addressDisplay('B1'),
+        pageCursorOrderKey: tiedCursorKey,
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: validSemanticPayload('child', changes),
+    });
+    const service = createWorkbookVersionDiffService({
+      provider: providerWithPermutedSemanticReads(provider, [
+        [2, 0, 1],
+        [1, 2, 0],
+        [0, 1, 2],
+        [2, 1, 0],
+      ]),
+    });
+
+    const replay = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { pageSize: 10 },
+    );
+    if (replay.status !== 'success') {
+      throw new Error(`expected replay diff success: ${replay.diagnostics[0]?.issueCode}`);
+    }
+    const replayIds = replay.items.map((item) =>
+      item.structural.kind === 'metadata' ? item.structural.changeId : item.structural.kind,
+    );
+    expect(replayIds).toHaveLength(3);
+    expect(new Set(replayIds).size).toBe(3);
+    expect(replayIds).toEqual([...replayIds].sort());
+
+    const firstPage = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { pageSize: 1 },
+    );
+    if (firstPage.status !== 'success' || !firstPage.nextPageToken) {
+      throw new Error('expected first diff page and cursor');
+    }
+    const secondPage = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { pageSize: 1, pageToken: firstPage.nextPageToken },
+    );
+    if (secondPage.status !== 'success' || !secondPage.nextPageToken) {
+      throw new Error('expected second diff page and cursor');
+    }
+    const thirdPage = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { pageSize: 1, pageToken: secondPage.nextPageToken },
+    );
+    if (thirdPage.status !== 'success') {
+      throw new Error(`expected third diff page success: ${thirdPage.diagnostics[0]?.issueCode}`);
+    }
+
+    const pagedIds = [...firstPage.items, ...secondPage.items, ...thirdPage.items].map((item) =>
+      item.structural.kind === 'metadata' ? item.structural.changeId : item.structural.kind,
+    );
+    expect(pagedIds).toEqual(replayIds);
+    expect(thirdPage).not.toHaveProperty('nextPageToken');
+  });
+
   it('fails closed without leaking unsupported VC-06 raw payload fields', async () => {
     const rawSecret = 'Sheet1!$B$2:$B$20';
     const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
@@ -426,6 +523,61 @@ async function graphWithRootAndChild(options: { readonly semanticPayload: unknow
     rootCommitId: initialized.rootCommit.id,
     childCommitId: appended.childCommitId,
   };
+}
+
+function providerWithPermutedSemanticReads(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  permutations: readonly (readonly number[])[],
+): ReturnType<typeof createInMemoryVersionStoreProvider> {
+  let readCount = 0;
+  return {
+    documentScope: provider.documentScope,
+    accessContext: provider.accessContext,
+    capabilities: provider.capabilities,
+    readGraphRegistry: () => provider.readGraphRegistry(),
+    initializeGraph: (input) => provider.initializeGraph(input),
+    scanDocumentIntegrity: (options) => provider.scanDocumentIntegrity(options),
+    close: (reason) => provider.close(reason),
+    dispose: (reason) => provider.dispose(reason),
+    openGraph: async (namespace, accessContext) => {
+      const graph = await provider.openGraph(namespace, accessContext);
+      return new Proxy(graph, {
+        get(target, property, receiver) {
+          if (property === 'getObjectRecord') {
+            return async <TPayload,>(ref: Parameters<typeof graph.getObjectRecord<TPayload>>[0]) => {
+              const record = await graph.getObjectRecord<TPayload>(ref);
+              if (record.preimage.objectType !== 'workbook.semanticChangeSet.v1') return record;
+              const payload = record.preimage.payload;
+              if (!isRecord(payload)) return record;
+              const permutation = permutations[readCount++ % permutations.length] ?? [];
+              return {
+                ...record,
+                preimage: {
+                  ...record.preimage,
+                  payload: {
+                    ...payload,
+                    ...(Array.isArray(payload.changes)
+                      ? { changes: permute(payload.changes, permutation) }
+                      : {}),
+                    ...(Array.isArray(payload.reviewChanges)
+                      ? { reviewChanges: permute(payload.reviewChanges, permutation) }
+                      : {}),
+                  } as TPayload,
+                },
+              };
+            };
+          }
+          const value = Reflect.get(target, property, receiver);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    },
+  };
+}
+
+function permute<T>(values: readonly T[], permutation: readonly number[]): readonly T[] {
+  if (permutation.length !== values.length) return values;
+  return permutation.map((index) => values[index]).filter((value) => value !== undefined);
 }
 
 async function appendChild(
@@ -725,8 +877,10 @@ function semanticRecord(input: {
   readonly before: unknown;
   readonly after: unknown;
   readonly display: unknown;
+  readonly pageCursorOrderKey?: unknown;
 }) {
   return {
+    ...(input.pageCursorOrderKey ? { pageCursorOrderKey: input.pageCursorOrderKey } : {}),
     structural: {
       kind: 'metadata',
       changeId: input.changeId,
@@ -738,6 +892,10 @@ function semanticRecord(input: {
     after: { kind: 'value', value: input.after },
     display: input.display,
   };
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }
 
 function semanticObject(fields: readonly { readonly key: string; readonly value: unknown }[]) {

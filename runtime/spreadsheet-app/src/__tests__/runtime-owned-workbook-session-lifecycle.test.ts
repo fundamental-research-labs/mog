@@ -476,6 +476,7 @@ test('version surface status remains available without version read grant', asyn
       'version:mergeApply',
       'version:revert',
       'version:provenance',
+      'version:remotePromote',
     ]);
     runtime = await createSpreadsheetRuntime(
       runtimeOptionsWithDeniedCapabilities(

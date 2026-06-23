@@ -63,6 +63,7 @@ const CAPABILITY_LABELS: Record<VersionCapability, string> = {
   'version:mergeApply': 'Merge apply',
   'version:revert': 'Revert',
   'version:provenance': 'Provenance',
+  'version:remotePromote': 'Remote promote',
 };
 
 export interface VersionHistoryPanelProps {

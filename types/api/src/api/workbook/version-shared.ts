@@ -66,6 +66,7 @@ export type VersionSurfaceDiagnosticCode =
   | 'version.surfaceStatus.mergeApplyUnavailable'
   | 'version.surfaceStatus.revertUnavailable'
   | 'version.surfaceStatus.provenanceUnavailable'
+  | 'version.surfaceStatus.remotePromoteUnavailable'
   | (string & {});
 
 export type VersionCapability =
@@ -80,7 +81,8 @@ export type VersionCapability =
   | 'version:mergePreview'
   | 'version:mergeApply'
   | 'version:revert'
-  | 'version:provenance';
+  | 'version:provenance'
+  | 'version:remotePromote';
 
 export type VersionCapabilityDependency =
   | 'VC-04'

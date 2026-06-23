@@ -89,6 +89,49 @@ describe('PendingRemotePromotionService', () => {
     );
   });
 
+  it.each([
+    ['unknown', { authorityRef: null }, 'provider-authority-unknown'],
+    ['stale', { epoch: null }, 'provider-authority-stale'],
+  ] as const)('skips %s provider authority before creating a graph commit', async (_label, options, reason) => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const namespace = await initializeProvider(provider, `graph-${reason}`);
+    const graph = await provider.openGraph(namespace);
+    const store = await provider.openPendingRemoteSegmentStore(namespace);
+    const fixture = await pendingSegmentFixture(namespace, options);
+    await persistAndReservePendingSegment(graph, store, fixture);
+    const headBefore = await expectReadHeadSuccess(graph);
+
+    const result = await createPendingRemotePromotionService({
+      provider,
+      now: () => PROMOTION_NOW,
+    }).promotePendingRemoteSegments();
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      promotedSegmentIds: [],
+      commitIds: [],
+      skipped: [
+        {
+          segmentId: fixture.input.pendingRemoteSegmentId,
+          reason,
+        },
+      ],
+      diagnostics: [
+        expect.objectContaining({
+          code: 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
+          reason,
+        }),
+      ],
+    });
+    await expectGraphHead(graph, headBefore);
+    await expect(store.readBySegmentId(fixture.input.pendingRemoteSegmentId)).resolves.toMatchObject(
+      {
+        status: 'found',
+        record: { state: 'pending' },
+      },
+    );
+  });
+
   it('promotes explicit grouped segments together with deterministic metadata', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const namespace = await initializeProvider(provider);
@@ -515,6 +558,8 @@ async function pendingSegmentFixture(
   namespace: VersionGraphNamespace,
   options: {
     readonly createdAt?: string;
+    readonly authorityRef?: string | null;
+    readonly epoch?: string | null;
     readonly groupId?: string;
     readonly includeSnapshotRoot?: boolean;
     readonly mutationSegmentId?: string;
@@ -571,6 +616,8 @@ async function pendingSegmentFixture(
 function syncOperationContext(
   options: {
     readonly createdAt?: string;
+    readonly authorityRef?: string | null;
+    readonly epoch?: string | null;
     readonly groupId?: string;
     readonly payloadHash?: string;
     readonly sequence?: string;
@@ -598,8 +645,11 @@ function syncOperationContext(
       originKind: 'provider',
       stableOriginId: 'provider-stable-1',
       providerId: 'provider-1',
+      ...(options.authorityRef === null
+        ? {}
+        : { authorityRef: options.authorityRef ?? 'authority-1' }),
       roomId: 'room-1',
-      epoch: 'epoch-1',
+      ...(options.epoch === null ? {} : { epoch: options.epoch ?? 'epoch-1' }),
       updateId,
       sequence: options.sequence ?? '7',
       payloadHash,

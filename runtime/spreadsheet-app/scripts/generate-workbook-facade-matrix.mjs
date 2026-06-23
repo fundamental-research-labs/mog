@@ -47,7 +47,7 @@ const VERSION_METHOD_REQUIREMENTS = {
   readRef: ['version:read'],
   getRef: ['version:read'],
   listRefs: ['version:read'],
-  promotePendingRemote: ['version:provenance'],
+  promotePendingRemote: ['version:remotePromote', 'version:provenance'],
   diff: ['version:diff'],
   commit: ['version:commit'],
   checkout: ['version:checkout'],

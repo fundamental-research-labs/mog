@@ -75,6 +75,21 @@ const VERSION_AUTHOR: VersionAuthor = {
   actorKind: 'user',
   displayName: 'User One',
 };
+const PROMOTION_POLICY = {
+  decisions: [
+    { capability: 'version:remotePromote', decision: 'allowed' },
+    { capability: 'version:provenance', decision: 'allowed' },
+  ],
+} as const;
+const PROVENANCE_TRUTH_SERVICE = {
+  vc09ProvenanceTruthComplete: true,
+  vc09ProvenanceTruth: {
+    schemaVersion: 1,
+    source: 'provider-backed-sync-provenance',
+    vc09ProvenanceTruthComplete: true,
+    requirements: [],
+  },
+} as const;
 type InMemoryProvider = ReturnType<typeof createInMemoryVersionStoreProvider>;
 
 describe('WorkbookVersion pending remote promotion provider facade', () => {
@@ -107,7 +122,7 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
     const store = await provider.openPendingRemoteSegmentStore(namespace);
     const fixture = await pendingSegmentFixture(namespace);
     await persistAndReservePendingSegment(graph, store, fixture);
-    const wb = createWorkbook({ versioning: { provider } });
+    const wb = createPromotionAuthorizedWorkbook({ provider });
 
     const result = await wb.version.promotePendingRemote();
 
@@ -146,7 +161,10 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
   });
 
   it('returns a failed VersionResult when no promotion service is attached', async () => {
-    const wb = createWorkbook();
+    const wb = createWorkbook({
+      ctx: createPromotionAuthorizedCtx(),
+      versioning: { provenanceTruthService: PROVENANCE_TRUTH_SERVICE },
+    });
 
     await expect(wb.version.promotePendingRemote()).resolves.toMatchObject({
       ok: false,
@@ -175,7 +193,7 @@ describe('WorkbookVersion pending remote promotion provider facade', () => {
     await persistAndReservePendingSegment(graph, store, fixture);
     await markSyncBatchFailed(provider, fixture.input.operationContext);
     const headBefore = await expectReadHeadSuccess(graph);
-    const wb = createWorkbook({ versioning: { provider } });
+    const wb = createPromotionAuthorizedWorkbook({ provider });
 
     const result = await wb.version.promotePendingRemote();
 
@@ -235,6 +253,10 @@ function createMockCtx(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
+function createPromotionAuthorizedCtx(overrides: Record<string, unknown> = {}) {
+  return createMockCtx({ policySnapshot: PROMOTION_POLICY, ...overrides });
+}
+
 function createWorkbook(overrides?: Partial<WorkbookConfig>) {
   createCheckpointManagerMock.mockReturnValue({
     create: jest.fn(),
@@ -250,6 +272,16 @@ function createWorkbook(overrides?: Partial<WorkbookConfig>) {
     ctx: createMockCtx(),
     eventBus: createMockEventBus(),
     ...overrides,
+  });
+}
+
+function createPromotionAuthorizedWorkbook(versioning: NonNullable<WorkbookConfig['versioning']>) {
+  return createWorkbook({
+    ctx: createPromotionAuthorizedCtx(),
+    versioning: {
+      provenanceTruthService: PROVENANCE_TRUTH_SERVICE,
+      ...versioning,
+    },
   });
 }
 
@@ -326,6 +358,7 @@ function syncOperationContext(
       originKind: 'provider',
       stableOriginId: 'provider-stable-1',
       providerId: 'provider-1',
+      authorityRef: 'authority-1',
       roomId: 'room-1',
       epoch: 'epoch-1',
       updateId,

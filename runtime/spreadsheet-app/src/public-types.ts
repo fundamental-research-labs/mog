@@ -87,7 +87,8 @@ export type SpreadsheetVersionCapability =
   | 'version:mergePreview'
   | 'version:mergeApply'
   | 'version:revert'
-  | 'version:provenance';
+  | 'version:provenance'
+  | 'version:remotePromote';
 export type SpreadsheetCapability =
   | SpreadsheetReadCapability
   | SpreadsheetWriteCapability

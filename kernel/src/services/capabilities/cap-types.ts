@@ -89,7 +89,8 @@ export type Tier2Capability =
   | 'version:mergePreview'
   | 'version:mergeApply'
   | 'version:revert'
-  | 'version:provenance';
+  | 'version:provenance'
+  | 'version:remotePromote';
 
 /**
  * Tier 3: Platform
@@ -424,6 +425,12 @@ export const CAPABILITY_REGISTRY: Readonly<Record<CapabilityType, CapabilityInfo
     description: 'Display redacted provenance and attribution for version history',
     tier: 2,
     riskLevel: 'medium',
+  },
+  'version:remotePromote': {
+    name: 'Promote Remote Version Changes',
+    description: 'Promote verified pending remote version changes into authored commits',
+    tier: 2,
+    riskLevel: 'high',
   },
 
   // =========================================================================

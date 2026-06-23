@@ -617,12 +617,15 @@ export const VERSION_PENDING_REMOTE_PROMOTION_SKIP_REASONS = Object.freeze([
   'missing-required-object',
   'missing-semantic-change-set',
   'missing-snapshot-root',
+  'provider-authority-stale',
+  'provider-authority-unknown',
   'provider-read-failed',
 ] as const);
 export type VersionPendingRemotePromotionSkipReason =
   (typeof VERSION_PENDING_REMOTE_PROMOTION_SKIP_REASONS)[number];
 
 export const VERSION_PENDING_REMOTE_PROMOTION_DIAGNOSTIC_CODES = Object.freeze([
+  'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
   'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED',
   'VERSION_PENDING_REMOTE_PROMOTION_COMPLETION_FAILED',
   'VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED',

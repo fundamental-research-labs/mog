@@ -37,6 +37,7 @@ export type PendingRemoteSegmentSyncIdentity = {
   readonly originKind: VersionSyncOperationContext['originKind'];
   readonly stableOriginId?: string;
   readonly providerId?: string;
+  readonly authorityRef?: string;
   readonly roomId?: string;
   readonly epoch?: string;
   readonly updateId?: string;
@@ -431,6 +432,9 @@ export function pendingRemoteSegmentIdentityForOperationContext(
       ? {}
       : { stableOriginId: collaboration.stableOriginId }),
     ...(collaboration.providerId === undefined ? {} : { providerId: collaboration.providerId }),
+    ...(collaboration.authorityRef === undefined
+      ? {}
+      : { authorityRef: collaboration.authorityRef }),
     ...(collaboration.roomId === undefined ? {} : { roomId: collaboration.roomId }),
     ...(collaboration.epoch === undefined ? {} : { epoch: collaboration.epoch }),
     ...(collaboration.updateId === undefined ? {} : { updateId: collaboration.updateId }),
@@ -799,6 +803,7 @@ function isPendingRemoteSyncIdentity(value: unknown): value is PendingRemoteSegm
     typeof value.originKind === 'string' &&
     optionalString(value.stableOriginId) &&
     optionalString(value.providerId) &&
+    optionalString(value.authorityRef) &&
     optionalString(value.roomId) &&
     optionalString(value.epoch) &&
     optionalString(value.updateId) &&

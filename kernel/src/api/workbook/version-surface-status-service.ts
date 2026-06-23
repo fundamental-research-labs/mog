@@ -18,7 +18,7 @@ type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
-export type SurfaceOnlyVersionCapability = 'version:refAdmin' | 'version:remotePromote';
+export type SurfaceOnlyVersionCapability = 'version:refAdmin';
 export type SurfaceVersionCapability = VersionCapability | SurfaceOnlyVersionCapability;
 export type SurfaceCapabilityStates = Record<SurfaceVersionCapability, VersionCapabilityState>;
 export type SurfaceHostCapabilityDecisions = Partial<

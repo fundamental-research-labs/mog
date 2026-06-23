@@ -23,9 +23,12 @@ export type VersionPromotePendingRemoteSkipReason =
   | 'missing-required-object'
   | 'missing-semantic-change-set'
   | 'missing-snapshot-root'
+  | 'provider-authority-stale'
+  | 'provider-authority-unknown'
   | 'provider-read-failed';
 
 export type VersionPromotePendingRemoteDiagnosticCode =
+  | 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_COMPLETION_FAILED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED'

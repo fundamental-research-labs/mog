@@ -29,6 +29,7 @@ export const VERSION_CAPABILITY_KEYS = [
   'version:mergeApply',
   'version:revert',
   'version:provenance',
+  'version:remotePromote',
 ] as const satisfies readonly VersionCapability[];
 
 export type VersionMergeCapabilityDisabledReason =

@@ -8,8 +8,25 @@ import {
 const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}`;
 const SEGMENT_ID = `pending-remote-segment:sha256:${'b'.repeat(64)}`;
 
-function createCtx(versioning: Record<string, unknown>) {
-  return { versioning } as any;
+function createCtx(versioning: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+  return { versioning, ...overrides } as any;
+}
+
+function authorizedCtx(versioning: Record<string, unknown>) {
+  return createCtx(
+    {
+      provenanceTruthService: { vc09ProvenanceTruthComplete: true },
+      ...versioning,
+    },
+    {
+      policySnapshot: {
+        decisions: [
+          { capability: 'version:remotePromote', decision: 'allowed' },
+          { capability: 'version:provenance', decision: 'allowed' },
+        ],
+      },
+    },
+  );
 }
 
 describe('version pending remote promotion runtime helper', () => {
@@ -44,7 +61,7 @@ describe('version pending remote promotion runtime helper', () => {
         },
       ],
     }));
-    const ctx = createCtx({ promotePendingRemoteSegments });
+    const ctx = authorizedCtx({ promotePendingRemoteSegments });
 
     expect(hasAttachedPendingRemotePromotionService(ctx)).toBe(true);
     await expect(promotePendingRemoteWorkbookVersion(ctx)).resolves.toEqual({
@@ -83,7 +100,7 @@ describe('version pending remote promotion runtime helper', () => {
   });
 
   it('returns a redacted failed result when no promotion service is attached', async () => {
-    const result = await promotePendingRemoteWorkbookVersion(createCtx({}));
+    const result = await promotePendingRemoteWorkbookVersion(authorizedCtx({}));
 
     expect(result).toMatchObject({
       ok: false,
@@ -119,7 +136,7 @@ describe('version pending remote promotion runtime helper', () => {
     }));
 
     const result = await promotePendingRemoteWorkbookVersion(
-      createCtx({
+      authorizedCtx({
         pendingRemotePromotionService: {
           promotePendingRemoteSegments,
         },
@@ -139,5 +156,68 @@ describe('version pending remote promotion runtime helper', () => {
       },
     });
     expect(promotePendingRemoteSegments).toHaveBeenCalledTimes(1);
+  });
+
+  it('is default-disabled without an explicit remote promotion host grant', async () => {
+    const promotePendingRemoteSegments = jest.fn();
+
+    const result = await promotePendingRemoteWorkbookVersion(
+      createCtx({
+        provenanceTruthService: { vc09ProvenanceTruthComplete: true },
+        promotePendingRemoteSegments,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.promotePendingRemote',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CAPABILITY_DISABLED',
+            message:
+              'Pending remote promotion requires host policy to explicitly allow version:remotePromote.',
+          }),
+          expect.objectContaining({
+            code: 'VERSION_CAPABILITY_DISABLED',
+            message:
+              'Pending remote promotion requires host policy to explicitly allow version:provenance.',
+          }),
+        ],
+      },
+    });
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
+  });
+
+  it('requires complete provenance truth before invoking the promotion service', async () => {
+    const promotePendingRemoteSegments = jest.fn();
+
+    const result = await promotePendingRemoteWorkbookVersion(
+      createCtx(
+        { promotePendingRemoteSegments },
+        {
+          policySnapshot: {
+            decisions: [
+              { capability: 'version:remotePromote', decision: 'allowed' },
+              { capability: 'version:provenance', decision: 'allowed' },
+            ],
+          },
+        },
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PENDING_REMOTE_PROMOTION_PROVENANCE_UNAVAILABLE',
+            message: 'Pending remote promotion requires complete VC-09 provenance truth.',
+          }),
+        ],
+      },
+    });
+    expect(promotePendingRemoteSegments).not.toHaveBeenCalled();
   });
 });

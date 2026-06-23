@@ -1,4 +1,5 @@
 import type {
+  VersionCapability,
   VersionDiagnosticPublicPayload,
   VersionPromotePendingRemoteDiagnostic,
   VersionPromotePendingRemoteOptions,
@@ -12,11 +13,17 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
+import { getVersionHostCapabilityDecisions } from './version-merge-capability';
+import { validateVersionOperationGate } from './version-operation-gate';
 import { versionFailureFromStoreDiagnostics } from './version-result';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const PENDING_REMOTE_SEGMENT_ID_RE = /^pending-remote-segment:sha256:[0-9a-f]{64}$/;
 const OPTION_KEYS = new Set(['includeDiagnostics']);
+const REQUIRED_PROMOTION_CAPABILITIES = [
+  'version:remotePromote',
+  'version:provenance',
+] as const satisfies readonly VersionCapability[];
 const SKIP_REASONS = new Set<VersionPromotePendingRemoteSkipReason>([
   'batch-status-read-failed',
   'batch-status-terminal',
@@ -30,6 +37,8 @@ const SKIP_REASONS = new Set<VersionPromotePendingRemoteSkipReason>([
   'missing-required-object',
   'missing-semantic-change-set',
   'missing-snapshot-root',
+  'provider-authority-stale',
+  'provider-authority-unknown',
   'provider-read-failed',
 ]);
 
@@ -59,6 +68,11 @@ export async function promotePendingRemoteWorkbookVersion(
     return versionFailureFromStoreDiagnostics('promotePendingRemote', optionDiagnostics);
   }
 
+  const gateDiagnostics = validatePendingRemotePromotionApiGate(ctx);
+  if (gateDiagnostics.length > 0) {
+    return versionFailureFromStoreDiagnostics('promotePendingRemote', gateDiagnostics);
+  }
+
   const service = getAttachedPendingRemotePromotionService(ctx);
   if (!service) {
     return versionFailureFromStoreDiagnostics('promotePendingRemote', [
@@ -83,6 +97,78 @@ export async function promotePendingRemoteWorkbookVersion(
       ),
     ]);
   }
+}
+
+function validatePendingRemotePromotionApiGate(
+  ctx: DocumentContext,
+): readonly VersionStoreDiagnostic[] {
+  const operationGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'promotePendingRemote',
+    'version:remotePromote',
+    { mutates: true },
+  );
+  if (operationGateDiagnostics.length > 0) return operationGateDiagnostics;
+
+  const hostDecisions = getVersionHostCapabilityDecisions(ctx);
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  for (const capability of REQUIRED_PROMOTION_CAPABILITIES) {
+    if (hostDecisions[capability] !== 'allowed') {
+      diagnostics.push(requiredCapabilityDiagnostic(capability));
+    }
+  }
+  if (!hasCompleteVc09ProvenanceTruth(ctx)) {
+    diagnostics.push(
+      noWriteDiagnostic(
+        'VERSION_PENDING_REMOTE_PROMOTION_PROVENANCE_UNAVAILABLE',
+        'Pending remote promotion requires complete VC-09 provenance truth.',
+        'none',
+        {
+          operation: 'promotePendingRemote',
+          capability: 'version:remotePromote',
+          requiredCapability: 'version:provenance',
+          reason: 'provenanceUnavailable',
+        },
+      ),
+    );
+  }
+  return diagnostics;
+}
+
+function hasCompleteVc09ProvenanceTruth(ctx: DocumentContext): boolean {
+  const runtime = ctx as MaybeVersionRuntimeContext;
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return false;
+  return [
+    services.provenanceAdmissionService,
+    services.provenanceTruthService,
+    services.provenanceStatusService,
+    services,
+  ].some(hasExplicitCompleteVc09ProvenanceTruth);
+}
+
+function hasExplicitCompleteVc09ProvenanceTruth(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    value.vc09ProvenanceTruthComplete === true ||
+    value.completeVc09ProvenanceAdmission === true ||
+    hasExplicitCompleteVc09ProvenanceTruth(value.vc09ProvenanceTruth) ||
+    hasExplicitCompleteVc09ProvenanceTruth(value.provenanceAdmissionTruth)
+  );
+}
+
+function requiredCapabilityDiagnostic(capability: VersionCapability): VersionStoreDiagnostic {
+  return noWriteDiagnostic(
+    'VERSION_CAPABILITY_DISABLED',
+    `Pending remote promotion requires host policy to explicitly allow ${capability}.`,
+    'none',
+    {
+      operation: 'promotePendingRemote',
+      capability: 'version:remotePromote',
+      requiredCapability: capability,
+      reason: 'hostCapabilityExplicitGrantRequired',
+    },
+  );
 }
 
 function getAttachedPendingRemotePromotionService(
@@ -282,6 +368,18 @@ function invalidOptionsDiagnostic(message: string, option?: string): VersionStor
     operation: 'promotePendingRemote',
     ...(option ? { option } : {}),
   });
+}
+
+function noWriteDiagnostic(
+  issueCode: string,
+  safeMessage: string,
+  recoverability: VersionStoreDiagnostic['recoverability'],
+  payload: VersionDiagnosticPublicPayload,
+): VersionStoreDiagnostic {
+  return {
+    ...publicDiagnostic(issueCode, safeMessage, 'error', recoverability, payload),
+    mutationGuarantee: 'no-write-attempted',
+  };
 }
 
 function publicDiagnostic(

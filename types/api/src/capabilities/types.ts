@@ -91,7 +91,8 @@ export type Tier2Capability =
   | 'version:mergePreview'
   | 'version:mergeApply'
   | 'version:revert'
-  | 'version:provenance';
+  | 'version:provenance'
+  | 'version:remotePromote';
 
 /**
  * Tier 3: Platform

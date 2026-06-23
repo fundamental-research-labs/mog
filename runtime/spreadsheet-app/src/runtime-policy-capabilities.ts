@@ -19,4 +19,5 @@ export const RUNTIME_POLICY_SNAPSHOT_CAPABILITIES: readonly SpreadsheetCapabilit
   'version:mergeApply',
   'version:revert',
   'version:provenance',
+  'version:remotePromote',
 ];

@@ -9,6 +9,7 @@ import type { WorkbookCommit } from './commit-store';
 import type { ObjectDigest, VersionObjectType, WorkbookCommitId } from './object-digest';
 import type { VersionObjectRecord } from './object-store';
 import { objectDigestFor } from './merge-apply-intent-store';
+import { validatePendingRemoteProviderAuthority } from './pending-remote-authority-gate';
 import {
   hasPendingRemoteSegmentStoreProvider,
   type PendingRemoteSegmentId,
@@ -48,9 +49,12 @@ export type PendingRemotePromotionSkipReason =
   | 'missing-required-object'
   | 'missing-semantic-change-set'
   | 'missing-snapshot-root'
+  | 'provider-authority-stale'
+  | 'provider-authority-unknown'
   | 'provider-read-failed';
 
 export type PendingRemotePromotionDiagnosticCode =
+  | 'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_BATCH_BLOCKED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_COMPLETION_FAILED'
   | 'VERSION_PENDING_REMOTE_PROMOTION_GRAPH_WRITE_FAILED'
@@ -848,6 +852,16 @@ function validateRecordEligibility(
       'Pending remote segment does not represent a pending remote sync import.',
     );
   }
+  const authority = validatePendingRemoteProviderAuthority(record);
+  if (authority.status === 'blocked') {
+    return ineligibleRecord(
+      record,
+      authority.reason,
+      authority.message,
+      'VERSION_PENDING_REMOTE_PROMOTION_AUTHORITY_BLOCKED',
+      authority.details,
+    );
+  }
   if (record.snapshotRootDigest === undefined) {
     return ineligibleRecord(
       record,
@@ -869,18 +883,21 @@ function ineligibleRecord(
   record: PendingRemoteSegmentRecord,
   reason: PendingRemotePromotionSkipReason,
   message: string,
+  code: PendingRemotePromotionDiagnosticCode = 'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+  details?: PendingRemotePromotionDiagnostic['details'],
 ): Extract<RecordEligibilityResult, { status: 'skipped' }> {
   return {
     status: 'skipped',
     reason,
     message,
     diagnostic: diagnostic(
-      'VERSION_PENDING_REMOTE_PROMOTION_INELIGIBLE',
+      code,
       'warning',
       message,
       {
         reason,
         segmentId: record.pendingRemoteSegmentId,
+        ...(details === undefined ? {} : { details }),
       },
     ),
   };

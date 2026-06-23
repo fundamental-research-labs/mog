@@ -31,6 +31,7 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:mergeApply',
   'version:revert',
   'version:provenance',
+  'version:remotePromote',
 ];
 
 describe('ReviewProposalSurface', () => {

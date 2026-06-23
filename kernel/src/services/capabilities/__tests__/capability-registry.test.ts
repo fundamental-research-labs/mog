@@ -159,6 +159,7 @@ describe('CapabilityRegistry', () => {
         'version:mergeApply',
         'version:revert',
         'version:provenance',
+        'version:remotePromote',
       ] as const;
 
       for (const capability of versionCapabilities) {
@@ -172,6 +173,7 @@ describe('CapabilityRegistry', () => {
       expect(getCapabilityInfo('version:commit').riskLevel).toBe('high');
       expect(getCapabilityInfo('version:checkout').riskLevel).toBe('high');
       expect(getCapabilityInfo('version:mergeApply').riskLevel).toBe('high');
+      expect(getCapabilityInfo('version:remotePromote').riskLevel).toBe('high');
 
       expect(capabilityImplies('version:proposal', 'version:reviewRead')).toBe(false);
       expect(capabilityImplies('version:checkout', 'version:read')).toBe(false);

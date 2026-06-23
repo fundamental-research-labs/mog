@@ -3803,7 +3803,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
     promotePendingRemote: {
       decision: 'allow',
-      capabilities: ['version:provenance'],
+      capabilities: ['version:remotePromote', 'version:provenance'],
     },
     putMergeResolutionPayload: {
       decision: 'allow',

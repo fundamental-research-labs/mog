@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
+import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { BridgeTransport } from '@rust-bridge/client';
 
 import { ComputeBridge } from '../../../bridges/compute/compute-bridge';
@@ -9,6 +10,7 @@ import type { MutationResult } from '../../../bridges/compute/compute-types.gen'
 import type { MutationAdmissionDiagnostic } from '../../../bridges/compute/mutation-admission';
 import { WorksheetImpl } from '../../worksheet/worksheet-impl';
 import { WorkbookSheetsImpl, type WorkbookSheetsDeps } from '../sheets';
+import { createVersionMutationAdmissionOptions } from '../version-operation-context';
 
 const DOCUMENT_ID = 'version-operation-context-test-doc';
 const SHEET_ID = toSheetId('sheet-1');
@@ -36,9 +38,14 @@ function createTransport(): BridgeTransport & { call: jest.Mock } {
           return [new Uint8Array(), mutationResult()];
         case 'compute_create_sheet_with_default_col_width':
           return ['sheet-created', mutationResult()];
+        case 'compute_copy_sheet':
+          return ['sheet-copied', mutationResult()];
         case 'compute_rename_compute_sheet':
         case 'compute_delete_sheet':
+        case 'compute_move_sheet':
           return [new Uint8Array(), mutationResult()];
+        case 'compute_full_recalc':
+          return mutationResult().recalc;
         case 'compute_begin_undo_group':
         case 'compute_end_undo_group':
           return undefined;
@@ -163,6 +170,38 @@ function expectCapturedContext(
   );
 }
 
+function capturedPreMutationInputs(capture: {
+  recordPreMutation: jest.Mock;
+}): Array<{ operation: string; operationContext: VersionOperationContext }> {
+  return capture.recordPreMutation.mock.calls.map(([input]) => input) as Array<{
+    operation: string;
+    operationContext: VersionOperationContext;
+  }>;
+}
+
+function expectGroupedCommandIdentity(
+  inputs: readonly { operation: string; operationContext: VersionOperationContext }[],
+  expected: {
+    readonly operations: readonly string[];
+    readonly operationIdPrefix: string;
+    readonly rejectedOperationIdPrefix: string;
+  },
+): void {
+  expect(inputs.map((input) => input.operation)).toEqual(expected.operations);
+  const [outer, nested] = inputs.map((input) => input.operationContext);
+  expect(outer?.groupId).toBe(outer?.operationId);
+  expect(nested?.groupId).toBe(outer?.groupId);
+  expect(outer?.operationId).toMatch(
+    new RegExp(`^${escapeRegExp(expected.operationIdPrefix)}:`),
+  );
+  expect(nested?.operationId).toMatch(
+    new RegExp(`^${escapeRegExp(expected.operationIdPrefix)}:`),
+  );
+  expect(nested?.operationId).not.toMatch(
+    new RegExp(`^${escapeRegExp(expected.rejectedOperationIdPrefix)}:`),
+  );
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -252,6 +291,35 @@ describe('VersionOperationContext propagation for public sheet writes', () => {
     });
   });
 
+  it('sheet add with index preserves outer command identity for nested move', async () => {
+    const { capture, sheets } = createSheetsFixture();
+
+    await sheets.add('Revenue', 0);
+
+    expectGroupedCommandIdentity(capturedPreMutationInputs(capture), {
+      operations: ['compute_create_sheet_with_default_col_width', 'compute_move_sheet'],
+      operationIdPrefix: 'workbook.sheets.add',
+      rejectedOperationIdPrefix: 'workbook.sheets.add.move',
+    });
+  });
+
+  it('sheet copy with index preserves outer command identity for nested move', async () => {
+    const { bridge, capture, sheets } = createSheetsFixture();
+    bridge.getAllSheetIds = jest.fn(async () => [
+      SHEET_ID,
+      toSheetId('sheet-copied'),
+      SECOND_SHEET_ID,
+    ]) as any;
+
+    await sheets.copy('Sheet1', 'Sheet1 Copy', 0);
+
+    expectGroupedCommandIdentity(capturedPreMutationInputs(capture), {
+      operations: ['compute_copy_sheet', 'compute_move_sheet'],
+      operationIdPrefix: 'workbook.sheets.copy',
+      rejectedOperationIdPrefix: 'workbook.sheets.copy.move',
+    });
+  });
+
   it('sheet rename carries context into version capture', async () => {
     const { capture, sheets } = createSheetsFixture();
 
@@ -276,6 +344,76 @@ describe('VersionOperationContext propagation for public sheet writes', () => {
       sheetIds: [SHEET_ID],
       domainIds: ['sheets'],
     });
+  });
+});
+
+describe('VersionOperationContext grouped-command identity validation', () => {
+  it('rejects grouped contexts whose group id cannot identify an outer command', () => {
+    const { ctx, diagnostics } = createBridgeFixture();
+
+    expect(() =>
+      createVersionMutationAdmissionOptions(ctx as any, {
+        operationIdPrefix: 'workbook.sheets.add.move',
+        domainIds: ['sheets'],
+        groupId: 'not-a-version-operation-id',
+      }),
+    ).toThrow(
+      "Grouped VersionOperationContext for 'workbook.sheets.add.move' requires groupId to be a VersionOperationContext operationId; received 'not-a-version-operation-id'.",
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'versioning.admission.missing-context',
+        severity: 'error',
+        command: 'workbook.sheets.add.move',
+        message:
+          "Grouped VersionOperationContext for 'workbook.sheets.add.move' requires groupId to be a VersionOperationContext operationId; received 'not-a-version-operation-id'.",
+      }),
+    ]);
+  });
+
+  it('rejects grouped contexts whose command is not nested under the group command', () => {
+    const { ctx, diagnostics } = createBridgeFixture();
+
+    expect(() =>
+      createVersionMutationAdmissionOptions(ctx as any, {
+        operationIdPrefix: 'workbook.sheets.add.move',
+        domainIds: ['sheets'],
+        groupId: `workbook.sheets.copy:${CREATED_AT_MS}:1`,
+      }),
+    ).toThrow(
+      "Grouped VersionOperationContext for 'workbook.sheets.add.move' is not nested under operation group 'workbook.sheets.copy'.",
+    );
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'versioning.admission.missing-context',
+        severity: 'error',
+        command: 'workbook.sheets.add.move',
+        message:
+          "Grouped VersionOperationContext for 'workbook.sheets.add.move' is not nested under operation group 'workbook.sheets.copy'.",
+      }),
+    ]);
+  });
+
+  it('rejects empty command identity before fabricating an operation id', () => {
+    const { ctx, diagnostics } = createBridgeFixture();
+
+    expect(() =>
+      createVersionMutationAdmissionOptions(ctx as any, {
+        operationIdPrefix: '',
+        domainIds: ['sheets'],
+      }),
+    ).toThrow('VersionOperationContext requires a non-empty operationIdPrefix.');
+
+    expect(diagnostics).toEqual([
+      expect.objectContaining({
+        code: 'versioning.admission.missing-context',
+        severity: 'error',
+        command: '<missing-operation-id-prefix>',
+        message: 'VersionOperationContext requires a non-empty operationIdPrefix.',
+      }),
+    ]);
   });
 });
 

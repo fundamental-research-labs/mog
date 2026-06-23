@@ -127,10 +127,7 @@ export async function readVersionCheckoutAdmissionBlock(
   if (!surfaceStatusService) return null;
 
   const surfaceDiagnostics: VersionDiagnostic[] = [];
-  const dirtyStatus = await readVersionSurfaceDirtyStatus(
-    surfaceStatusService,
-    surfaceDiagnostics,
-  );
+  const dirtyStatus = await readVersionSurfaceDirtyStatus(surfaceStatusService, surfaceDiagnostics);
   const syncBatchBlock = await readSyncBatchStatusAdmissionBlock(services);
   const dirtyBlock = checkoutAdmissionBlockForDirtyStatus(dirtyStatus);
   if (syncBatchBlock) return syncBatchBlock;
@@ -213,7 +210,7 @@ function getAttachedCheckoutAdmissionReadService(
     const readService = toCheckoutAdmissionReadService(candidate);
     if (readService) return readService;
   }
-  return null;
+  return providerCheckoutAdmissionReadService(getAttachedVersionStoreProvider(services));
 }
 
 function toCheckoutAdmissionReadService(
@@ -221,6 +218,23 @@ function toCheckoutAdmissionReadService(
 ): AttachedCheckoutAdmissionReadService | null {
   const readRef = bindMethod(value, 'readRef');
   return readRef ? { readRef: (name) => readRef(name) } : null;
+}
+
+function providerCheckoutAdmissionReadService(
+  provider: VersionStoreProvider | null,
+): AttachedCheckoutAdmissionReadService | null {
+  if (!provider) return null;
+  return {
+    readRef: async (name) => {
+      const registry = await provider.readGraphRegistry();
+      if (registry.status !== 'ok') return null;
+      const graph = await provider.openGraph(
+        namespaceForRegistry(registry.registry),
+        provider.accessContext,
+      );
+      return graph.readRef(name);
+    },
+  };
 }
 
 function unsafeReasonCode(
@@ -234,7 +248,7 @@ function pendingProviderWritePayload(
   unsafeReasons: readonly VersionDiagnostic[],
 ): Pick<
   Extract<VersionCheckoutAdmissionBlock, { reason: 'pendingProviderWrites' }>,
-  'pendingRemoteSegmentCount'
+  | 'pendingRemoteSegmentCount'
   | 'remoteSyncApplyActiveCount'
   | 'pendingRemotePromotionActiveCount'
   | 'pendingRemotePromotionQueuedCount'

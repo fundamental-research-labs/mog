@@ -253,6 +253,130 @@ describe('WorkbookVersion checkout preconditions', () => {
       await wb.close('skipSave');
     }
   });
+
+  it('rejects stale target ref admission before checkout service entry and leaves state unchanged', async () => {
+    const graphId = 'graph-stale-target-ref-precondition';
+    const { provider, initialized } = await initializeVersionGraph(graphId);
+    const moved = await appendHeadCommit(provider, graphId, initialized, 'head-after-stale-ref');
+    const checkoutSnapshotMaterializer = failingMaterializer();
+    const wb = createWorkbook({
+      provider,
+      checkoutSnapshotMaterializer,
+    });
+    const runtime = versioningRuntimeForWorkbook(wb);
+    const checkoutSpy = spyOnCheckoutService(runtime);
+
+    try {
+      await wb.activeSheet.setCell('A1', 'active-before-stale-ref');
+      wb.markClean();
+      const beforeProviderHead = await expectProviderHead(provider, graphId);
+      delete runtime.readService;
+      delete runtime.writeService;
+      delete runtime.commitService;
+      delete runtime.versionReadService;
+      delete runtime.publicService;
+      setSurfaceStatusService(wb, {
+        readDirtyStatus: async () => cleanDirtyStatus('stale-ref-clean'),
+        readActiveCheckoutSession: () => ({
+          checkedOutCommitId: initialized.rootCommit.id,
+          branchName: 'main',
+          refHeadAtMaterialization: initialized.rootCommit.id,
+          detached: false,
+        }),
+      });
+
+      const result = await wb.version.checkout({
+        kind: 'ref',
+        name: 'refs/heads/main' as any,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+              data: expect.objectContaining({
+                recoverability: 'retry',
+                redacted: true,
+                payload: expect.objectContaining({
+                  reason: 'staleWorkspaceHead',
+                  staleReason: 'refMoved',
+                  targetKind: 'ref',
+                  refName: 'refs/heads/main',
+                  branchName: 'main',
+                  checkedOutCommitId: initialized.rootCommit.id,
+                  refHeadAtMaterialization: initialized.rootCommit.id,
+                  currentRefHeadId: moved.commit.id,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(checkoutSpy).not.toHaveBeenCalled();
+      expect(checkoutSnapshotMaterializer.applySnapshot).not.toHaveBeenCalled();
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-stale-ref',
+      });
+      await expectProviderHeadUnchanged(provider, graphId, beforeProviderHead);
+    } finally {
+      await wb.close('skipSave');
+    }
+  });
+
+  it('rejects generic checkout admission denial before materialization and leaves active state unchanged', async () => {
+    const graphId = 'graph-generic-admission-denial';
+    const { provider, initialized } = await initializeVersionGraph(graphId);
+    await appendHeadCommit(provider, graphId, initialized, 'head-before-admission-denial');
+    const checkoutSnapshotMaterializer = failingMaterializer();
+    const wb = createWorkbook({
+      provider,
+      checkoutSnapshotMaterializer,
+    });
+
+    try {
+      await wb.activeSheet.setCell('A1', 'active-before-admission-denial');
+      wb.markClean();
+      const beforeHead = await expectHead(wb);
+      setSurfaceStatusService(wb, {
+        readDirtyStatus: async () => unsafeAdmissionDirtyStatus(),
+        readActiveCheckoutSession: () => null,
+      });
+
+      const result = await wb.version.checkout({
+        kind: 'commit',
+        id: initialized.rootCommit.id,
+      });
+
+      expect(result).toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE',
+              data: expect.objectContaining({
+                recoverability: 'retry',
+                redacted: true,
+                payload: expect.objectContaining({
+                  reason: 'checkoutPreflightUnsafe',
+                  targetKind: 'commit',
+                  commitId: initialized.rootCommit.id,
+                }),
+              }),
+            }),
+          ],
+        },
+      });
+      expect(checkoutSnapshotMaterializer.applySnapshot).not.toHaveBeenCalled();
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'active-before-admission-denial',
+      });
+      await expectHeadUnchanged(wb, beforeHead);
+    } finally {
+      await wb.close('skipSave');
+    }
+  });
 });
 
 function createWorkbook(input: {
@@ -366,6 +490,103 @@ function headProjection(head: VersionHead) {
     resolvedFrom: head.resolvedFrom,
     refRevision: head.refRevision,
   };
+}
+
+type ProviderHeadProjection = {
+  readonly id: string;
+  readonly refName: string;
+  readonly resolvedFrom: string;
+  readonly refRevision?: unknown;
+};
+
+async function expectProviderHead(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  graphId: string,
+): Promise<ProviderHeadProjection> {
+  const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, graphId));
+  const result = await graph.readHead();
+  expect(result.status).toBe('success');
+  if (result.status !== 'success') {
+    throw new Error(`expected graph head read success: ${result.diagnostics[0]?.code}`);
+  }
+  return {
+    id: result.head.id,
+    refName: result.head.refName,
+    resolvedFrom: result.head.resolvedFrom,
+    refRevision: result.head.refRevision,
+  };
+}
+
+async function expectProviderHeadUnchanged(
+  provider: ReturnType<typeof createInMemoryVersionStoreProvider>,
+  graphId: string,
+  before: ProviderHeadProjection,
+): Promise<void> {
+  await expect(expectProviderHead(provider, graphId)).resolves.toEqual(before);
+}
+
+function versioningRuntimeForWorkbook(wb: Workbook): Record<string, unknown> {
+  const version = wb.version as unknown as {
+    readonly ctx?: { readonly versioning?: unknown };
+    readonly versionContext?: { readonly versioning?: unknown };
+  };
+  const versioning = version.ctx?.versioning ?? version.versionContext?.versioning;
+  if (!isMutableRecord(versioning)) throw new Error('expected attached versioning runtime');
+  return versioning;
+}
+
+function setSurfaceStatusService(
+  wb: Workbook,
+  service: {
+    readonly readDirtyStatus: () => unknown;
+    readonly readActiveCheckoutSession: () => unknown;
+  },
+): void {
+  const runtime = versioningRuntimeForWorkbook(wb);
+  runtime.surfaceStatusService = service;
+  runtime.versionSurfaceStatusService = service;
+}
+
+function spyOnCheckoutService(runtime: Record<string, unknown>) {
+  const checkoutService = runtime.checkoutService;
+  if (!isMutableRecord(checkoutService) || typeof checkoutService.checkout !== 'function') {
+    throw new Error('expected attached checkout service');
+  }
+  return jest.spyOn(checkoutService as { checkout: (...args: unknown[]) => unknown }, 'checkout');
+}
+
+function cleanDirtyStatus(statusRevision: string) {
+  return {
+    statusRevision,
+    checkoutPreflightToken: `token:${statusRevision}`,
+    hasUncommittedLocalChanges: false,
+    commitEligibleChanges: false,
+    unsupportedDirtyDomains: [],
+    pendingProviderWrites: false,
+    pendingRecalc: false,
+    checkoutSafe: true,
+    unsafeReasons: [],
+    source: 'VC-05',
+    diagnostics: [],
+  };
+}
+
+function unsafeAdmissionDirtyStatus() {
+  const reason = {
+    code: 'version.surfaceStatus.checkoutAdmissionDenied',
+    severity: 'warning',
+    message: 'Injected checkout admission denial.',
+  };
+  return {
+    ...cleanDirtyStatus('generic-admission-denied'),
+    checkoutSafe: false,
+    unsafeReasons: [reason],
+    diagnostics: [reason],
+  };
+}
+
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function expectInitializeSuccess(

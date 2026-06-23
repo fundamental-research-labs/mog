@@ -35,6 +35,17 @@ describe('WorksheetViewImpl freeze panes API', () => {
     expect(ctx.computeBridge.setFrozenPanes).toHaveBeenCalledWith(SHEET_ID, 3, 2);
   });
 
+  it('setFrozenPanes aliases freezePanes for route-name compatibility', async () => {
+    const ctx = makeCtx();
+    const view = new WorksheetViewImpl(ctx, SHEET_ID);
+
+    await view.setFrozenPanes(3, 2);
+
+    expect(ctx.writeGate.assertWritable).toHaveBeenCalledWith('view.setFrozenPanes');
+    expect(ctx.computeBridge.getFrozenPanesQuery).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.setFrozenPanes).toHaveBeenCalledWith(SHEET_ID, 3, 2);
+  });
+
   it('freezePanes rejects negative row or column counts before mutating', async () => {
     const ctx = makeCtx();
     const view = new WorksheetViewImpl(ctx, SHEET_ID);

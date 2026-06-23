@@ -42,7 +42,19 @@ export class WorksheetViewImpl implements WorksheetView {
   }
 
   async freezePanes(rows: number, cols: number): Promise<void> {
-    this._ensureWritable('view.freezePanes');
+    await this.setFrozenPanesForOperation(rows, cols, 'view.freezePanes');
+  }
+
+  async setFrozenPanes(rows: number, cols: number): Promise<void> {
+    await this.setFrozenPanesForOperation(rows, cols, 'view.setFrozenPanes');
+  }
+
+  private async setFrozenPanesForOperation(
+    rows: number,
+    cols: number,
+    operation: string,
+  ): Promise<void> {
+    this._ensureWritable(operation);
     if (rows < 0 || cols < 0) {
       throw new KernelError('COMPUTE_ERROR', 'Frozen row and column counts cannot be negative');
     }

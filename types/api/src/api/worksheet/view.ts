@@ -35,6 +35,17 @@ export interface WorksheetView {
   freezePanes(rows: number, cols: number): Promise<void>;
 
   /**
+   * Compatibility alias for freezePanes(rows, cols).
+   *
+   * Agent-discovered API workflows may refer to this operation by the storage
+   * route name. Prefer freezePanes for new code.
+   *
+   * @param rows - Number of top rows to freeze (0 to freeze no rows)
+   * @param cols - Number of left columns to freeze (0 to freeze no columns)
+   */
+  setFrozenPanes(rows: number, cols: number): Promise<void>;
+
+  /**
    * Remove all frozen panes (both rows and columns).
    */
   unfreeze(): Promise<void>;

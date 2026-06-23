@@ -1,9 +1,14 @@
+import { jest } from '@jest/globals';
+
 import type { VersionMergeInput } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { createInMemoryWorkbookCommitStore } from '../../../document/version-store/commit-store';
 import { createWorkbookVersionMergeService } from '../../../document/version-store/merge-service';
-import type { VersionObjectType, WorkbookCommitId } from '../../../document/version-store/object-digest';
+import type {
+  VersionObjectType,
+  WorkbookCommitId,
+} from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
@@ -15,8 +20,11 @@ import {
   type VersionDocumentScope,
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
+  type VersionStoreProvider,
 } from '../../../document/version-store/provider';
 import { mapApplyMergeWriteResult } from '../version-apply-merge-write-result';
+import { WorkbookVersionImpl } from '../version';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 const DOCUMENT_SCOPE: VersionDocumentScope = {
   workspaceId: 'workspace-vc07',
@@ -31,6 +39,113 @@ const AUTHOR: VersionAuthor = {
 };
 
 describe('WorkbookVersion VC-07 merge-base gate', () => {
+  it('blocks public no-base histories before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-no-merge-base');
+    const unrelatedRoot = await createCommit(graph, {
+      label: 'unrelated-root',
+      parentCommitIds: [],
+    });
+    const ours = await createCommit(graph, {
+      label: 'ours-related-to-main-root',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const theirs = await createCommit(graph, {
+      label: 'theirs-related-to-unrelated-root',
+      parentCommitIds: [unrelatedRoot],
+    });
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({ base: graph.rootCommitId, ours, theirs });
+
+    expectPublicSafeMergeFailure(result, 'VERSION_MERGE_UNRELATED_HISTORIES', {
+      diagnosticCode: 'unrelatedHistories',
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('blocks public multiple-base histories before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-ambiguous-merge-base');
+    const baseA = await createCommit(graph, {
+      label: 'base-a',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const baseB = await createCommit(graph, {
+      label: 'base-b',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const ours = await createCommit(graph, {
+      label: 'ours-criss-cross',
+      parentCommitIds: [baseA, baseB],
+    });
+    const theirs = await createCommit(graph, {
+      label: 'theirs-criss-cross',
+      parentCommitIds: [baseB, baseA],
+    });
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({ base: baseA, ours, theirs });
+
+    expectPublicSafeMergeFailure(result, 'VERSION_MERGE_BASE_AMBIGUOUS', {
+      diagnosticCode: 'mergeBaseAmbiguous',
+      lowestCommonAncestorCount: 2,
+    });
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('blocks public missing base objects before invoking the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-missing-base-object');
+    const ours = await createCommit(graph, {
+      label: 'ours-related-to-main-root',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const theirs = await createCommit(graph, {
+      label: 'theirs-related-to-main-root',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const merge = mergeServiceMustNotRun();
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    const result = await version.merge({ base: commitId('f'), ours, theirs });
+
+    expectPublicSafeMergeFailure(result, 'VERSION_MISSING_OBJECT');
+    expect(merge).not.toHaveBeenCalled();
+  });
+
+  it('allows public already-merged ancestor previews to reach the merge service', async () => {
+    const graph = await graphWithRoot('graph-public-already-merged-ancestor');
+    const theirs = await createCommit(graph, {
+      label: 'theirs-ancestor',
+      parentCommitIds: [graph.rootCommitId],
+    });
+    const ours = await createCommit(graph, {
+      label: 'ours-descendant',
+      parentCommitIds: [theirs],
+    });
+    const service = createWorkbookVersionMergeService({ provider: graph.provider });
+    const merge = jest.fn(
+      (input: VersionMergeInput, options?: Parameters<typeof service.merge>[1]) =>
+        service.merge(input, options),
+    );
+    const version = publicWorkbookVersion(graph.provider, merge);
+
+    await expect(version.merge({ base: graph.rootCommitId, ours, theirs })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'alreadyMerged',
+        base: graph.rootCommitId,
+        ours,
+        theirs,
+        changes: [],
+        conflicts: [],
+        diagnostics: [],
+        mutationGuarantee: 'preview-only',
+      },
+    });
+    expect(merge).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks criss-cross histories with ambiguous lowest common merge bases', async () => {
     const graph = await graphWithRoot('graph-ambiguous-merge-base');
     const baseA = await createCommit(graph, {
@@ -173,6 +288,57 @@ function expectInitializeSuccess(
   if (result.status !== 'success') {
     throw new Error(`expected initialize success: ${result.diagnostics[0]?.code}`);
   }
+}
+
+function publicWorkbookVersion(provider: VersionStoreProvider, merge: unknown) {
+  return new WorkbookVersionImpl({
+    versioning: {
+      provider,
+      mergeService: { merge },
+      ...versionDomainSupportManifestRuntime(),
+    },
+  } as any);
+}
+
+function mergeServiceMustNotRun() {
+  return jest.fn(async () => {
+    throw new Error('merge service should not be invoked after merge-base resolution fails');
+  });
+}
+
+function expectPublicSafeMergeFailure(
+  result: Awaited<ReturnType<WorkbookVersionImpl['merge']>>,
+  code: string,
+  payload: Readonly<Record<string, string | number | boolean | null>> = {},
+) {
+  expect(result).toMatchObject({
+    ok: false,
+    error: {
+      code: 'target_unavailable',
+      target: 'workbook.version.merge',
+      diagnostics: [
+        expect.objectContaining({
+          code,
+          owner: 'version-store',
+          data: expect.objectContaining({
+            operation: 'merge',
+            redacted: true,
+            payload: expect.objectContaining({
+              operation: 'merge',
+              ...payload,
+            }),
+          }),
+        }),
+      ],
+    },
+  });
+  if (result.ok) {
+    throw new Error('expected public merge failure');
+  }
+
+  const diagnostic = result.error.diagnostics.find((item) => item.code === code);
+  expect(diagnostic).toBeDefined();
+  expect(JSON.stringify(diagnostic)).not.toContain('commit:sha256:');
 }
 
 async function createCommit(

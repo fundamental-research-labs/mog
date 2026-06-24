@@ -117,6 +117,7 @@ export function createEditableTestWorkbook(config: TestWorkbookConfig = {}): Wor
     },
     layout: {
       getHiddenRowsBitmap: async () => hiddenRows,
+      getFilterHiddenRowsBitmap: async () => new Set<number>(),
       getHiddenColumnsBitmap: async () => hiddenCols,
       isRowHidden: (row: number) => hiddenRows.has(row),
       isColumnHidden: (col: number) => hiddenCols.has(col),

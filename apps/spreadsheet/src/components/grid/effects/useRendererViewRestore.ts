@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { WorkbookInternal } from '@mog-sdk/contracts/api';
 import type { SheetId } from '@mog-sdk/contracts/core';
@@ -17,12 +17,60 @@ interface UseRendererViewRestoreOptions {
   wb: WorkbookInternal;
 }
 
+interface RestorableSessionViewState {
+  readonly activeCell?: { readonly row: number; readonly col: number };
+  readonly ranges?: ReadonlyArray<{
+    readonly startRow: number;
+    readonly startCol: number;
+    readonly endRow: number;
+    readonly endCol: number;
+  }>;
+}
+
 function normalizeRestoredCellIndex(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 function isFinitePixel(value: number): boolean {
   return Number.isFinite(value) && value >= 0;
+}
+
+function isDefaultA1SessionViewState(sessionViewState: RestorableSessionViewState | undefined) {
+  if (!sessionViewState) return false;
+  const activeCell = sessionViewState.activeCell;
+  if (!activeCell || activeCell.row !== 0 || activeCell.col !== 0) {
+    return false;
+  }
+
+  return (
+    sessionViewState.ranges?.length === 1 &&
+    sessionViewState.ranges[0]?.startRow === 0 &&
+    sessionViewState.ranges[0]?.startCol === 0 &&
+    sessionViewState.ranges[0]?.endRow === 0 &&
+    sessionViewState.ranges[0]?.endCol === 0
+  );
+}
+
+export function shouldRestoreImportedSelection(options: {
+  readonly sessionViewState: RestorableSessionViewState | undefined;
+  readonly restoredImportedSelection: boolean;
+  readonly savedSelectionIsValid: boolean;
+}): boolean {
+  const { sessionViewState, restoredImportedSelection, savedSelectionIsValid } = options;
+  return (
+    (!sessionViewState || isDefaultA1SessionViewState(sessionViewState)) &&
+    !restoredImportedSelection &&
+    savedSelectionIsValid
+  );
+}
+
+export function isActiveSheetViewSelectionChange(event: unknown, activeSheetId: SheetId): boolean {
+  return (
+    event !== null &&
+    typeof event === 'object' &&
+    'sheetId' in event &&
+    (event as { readonly sheetId?: unknown }).sheetId === activeSheetId
+  );
 }
 
 async function resolvePersistedCellScrollPosition(
@@ -75,10 +123,19 @@ export function useRendererViewRestore({
   wb,
 }: UseRendererViewRestoreOptions): void {
   const restoredImportedSelectionSheetsRef = useRef<Set<string>>(new Set());
+  const [viewSelectionVersion, setViewSelectionVersion] = useState(0);
 
   useEffect(() => {
     restoredImportedSelectionSheetsRef.current.clear();
   }, [wb]);
+
+  useEffect(() => {
+    return wb.on('view:selection-changed', (event: unknown) => {
+      if (isActiveSheetViewSelectionChange(event, activeSheetId)) {
+        setViewSelectionVersion((version) => version + 1);
+      }
+    });
+  }, [activeSheetId, wb]);
 
   useEffect(() => {
     if (!isReady || rendererSheetId !== activeSheetId) return;
@@ -90,22 +147,27 @@ export function useRendererViewRestore({
     const frozenPanes = wb.mirror.getFrozenPanes(activeSheetId);
     const sessionViewState = uiStoreApi.getState().getSheetViewState(activeSheetId);
     const savedSelection = wb.mirror.getViewSelection(activeSheetId);
+    const restorableSelection =
+      savedSelection != null && isValidRestoredSelection(savedSelection) ? savedSelection : null;
     const activeCell = coordinator.grid.access.accessors.selection.getActiveCell();
     const hasPersistedScrollPosition = scrollPos.topRow > 0 || scrollPos.leftCol > 0;
     const restoredImportedSelection = restoredImportedSelectionSheetsRef.current.has(activeSheetId);
-    const savedSelectionIsValid =
-      savedSelection != null && isValidRestoredSelection(savedSelection);
+    const savedSelectionIsValid = restorableSelection != null;
     const savedSelectionAlreadyActive =
-      savedSelectionIsValid &&
-      activeCell?.row === savedSelection.activeCell.row &&
-      activeCell?.col === savedSelection.activeCell.col;
-    const shouldRestoreSavedSelection =
-      !sessionViewState && !restoredImportedSelection && savedSelectionIsValid;
+      restorableSelection != null &&
+      activeCell?.row === restorableSelection.activeCell.row &&
+      activeCell?.col === restorableSelection.activeCell.col;
+    const sessionStateIsOnlyInitialDefault = isDefaultA1SessionViewState(sessionViewState);
+    const shouldRestoreSavedSelection = shouldRestoreImportedSelection({
+      sessionViewState,
+      restoredImportedSelection,
+      savedSelectionIsValid,
+    });
     const shouldAlignSavedSelectionViewport =
       !restoredImportedSelection &&
       !hasPersistedScrollPosition &&
       savedSelectionIsValid &&
-      (!sessionViewState || savedSelectionAlreadyActive);
+      (!sessionViewState || sessionStateIsOnlyInitialDefault || savedSelectionAlreadyActive);
     const shouldRestorePersistedCellScroll =
       !sessionViewState && hasPersistedScrollPosition && !shouldAlignSavedSelectionViewport;
 
@@ -149,8 +211,8 @@ export function useRendererViewRestore({
       restoredImportedSelectionSheetsRef.current.add(activeSheetId);
       coordinator.grid.access.actors.selection.send({
         type: 'SET_SELECTION',
-        ranges: savedSelection.ranges,
-        activeCell: savedSelection.activeCell,
+        ranges: restorableSelection!.ranges,
+        activeCell: restorableSelection!.activeCell,
         anchor: null,
         anchorCol: null,
         anchorRow: null,
@@ -158,12 +220,13 @@ export function useRendererViewRestore({
       });
     }
 
-    if (shouldAlignSavedSelectionViewport) {
+    if (shouldAlignSavedSelectionViewport && restorableSelection) {
       restoredImportedSelectionSheetsRef.current.add(activeSheetId);
+      const selectionToAlign = restorableSelection;
       const alignViewport = () => {
         const scrollTarget = coordinator.renderer
           .getSheetView()
-          ?.viewport.getScrollToCell(savedSelection.activeCell);
+          ?.viewport.getScrollToCell(selectionToAlign.activeCell);
         if (scrollTarget) {
           coordinator.renderer.setScrollPosition(scrollTarget);
           coordinator.input.inputCoordinator.resetScrollPosition(scrollTarget.x, scrollTarget.y);
@@ -179,7 +242,7 @@ export function useRendererViewRestore({
         window.cancelAnimationFrame(restoreFrame);
       }
     };
-  }, [activeSheetId, coordinator, isReady, rendererSheetId, uiStoreApi, wb]);
+  }, [activeSheetId, coordinator, isReady, rendererSheetId, uiStoreApi, viewSelectionVersion, wb]);
 
   useEffect(() => {
     if (!isReady || rendererSheetId !== activeSheetId) return;

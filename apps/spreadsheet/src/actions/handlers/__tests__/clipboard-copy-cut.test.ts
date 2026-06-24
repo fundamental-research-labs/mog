@@ -32,33 +32,43 @@ function resetClipboardCaptureGlobal(): void {
 function createDeps({
   hiddenRows = [],
   hiddenCols = [],
+  filterHiddenRows = [],
+  selectionRange = { startRow: 10, startCol: 0, endRow: 10, endCol: 2 },
+  rangeData = [
+    [
+      { value: 'Alpha', formatted: 'Alpha' },
+      { value: 'Beta', formatted: 'Beta' },
+      { value: 'Gamma', formatted: 'Gamma' },
+    ],
+  ],
+  mergedRegions = [],
+  formatByCell = new Map<string, unknown>(),
 }: {
   hiddenRows?: number[];
   hiddenCols?: number[];
+  filterHiddenRows?: number[];
+  selectionRange?: { startRow: number; startCol: number; endRow: number; endCol: number };
+  rangeData?: Array<Array<{ value?: unknown; formatted?: string; formula?: string } | undefined>>;
+  mergedRegions?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  formatByCell?: Map<string, unknown>;
 } = {}) {
   const clipboardCommands = {
     copy: jest.fn(),
     cut: jest.fn(),
   };
-  const selectionRange = { startRow: 10, startCol: 0, endRow: 10, endCol: 2 };
   const ws = {
     getUsedRange: jest.fn().mockResolvedValue(selectionRange),
-    getRange: jest.fn().mockResolvedValue([
-      [
-        { value: 'Alpha', formatted: 'Alpha' },
-        { value: 'Beta', formatted: 'Beta' },
-        { value: 'Gamma', formatted: 'Gamma' },
-      ],
-    ]),
+    getRange: jest.fn().mockResolvedValue(rangeData),
     structure: {
-      getMergedRegions: jest.fn().mockResolvedValue([]),
+      getMergedRegions: jest.fn().mockResolvedValue(mergedRegions),
     },
     layout: {
       isRowHidden: jest.fn(async (row: number) => hiddenRows.includes(row)),
       isColumnHidden: jest.fn(async (col: number) => hiddenCols.includes(col)),
+      getFilterHiddenRowsBitmap: jest.fn(async () => new Set(filterHiddenRows)),
     },
     formats: {
-      get: jest.fn().mockResolvedValue(undefined),
+      get: jest.fn(async (row: number, col: number) => formatByCell.get(`${row},${col}`)),
     },
     _internal: {
       getRangeSchemas: jest.fn().mockResolvedValue([]),
@@ -96,6 +106,32 @@ function createDeps({
   } as unknown as ActionDependencies;
 
   return { deps, clipboardCommands };
+}
+
+async function readSystemClipboardPayload(): Promise<{ text: string; html: string }> {
+  const writeMock = navigator.clipboard.write as jest.Mock;
+  expect(writeMock).toHaveBeenCalledTimes(1);
+  const item = writeMock.mock.calls[0][0][0] as ClipboardItem;
+  const [textBlob, htmlBlob] = await Promise.all([
+    item.getType('text/plain'),
+    item.getType('text/html'),
+  ]);
+  return {
+    text: await blobToText(textBlob),
+    html: await blobToText(htmlBlob),
+  };
+}
+
+function blobToText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') {
+    return blob.text();
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
 }
 
 async function runClipboardAction(
@@ -147,6 +183,92 @@ describe('clipboard copy/cut actions', () => {
 
       expect(data.textSignature).toBe('Alpha\tBeta\tGamma');
       expect(Object.keys(data.cells)).toEqual(['0,0', '0,1', '0,2']);
+    });
+
+    it('skips rows hidden by active filters while preserving manual hidden copy semantics', async () => {
+      const { deps, clipboardCommands } = createDeps({
+        selectionRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+        hiddenRows: [1],
+        filterHiddenRows: [2, 4],
+        rangeData: [
+          [
+            { value: 'Name', formatted: 'Name' },
+            { value: 'Status', formatted: 'Status' },
+          ],
+          [
+            { value: 'Manual', formatted: 'Manual' },
+            { value: 'hidden but selected', formatted: 'hidden but selected' },
+          ],
+          [
+            { value: 'Filtered', formatted: 'Filtered' },
+            { value: 'hide', formatted: 'hide' },
+          ],
+          [
+            { value: 'Visible', formatted: 'Visible' },
+            { value: 'keep', formatted: 'keep' },
+          ],
+          [
+            { value: 'Filtered 2', formatted: 'Filtered 2' },
+            { value: 'hide', formatted: 'hide' },
+          ],
+        ],
+      });
+
+      const data = await runClipboardAction(action, command, deps, clipboardCommands);
+      const systemClipboard = await readSystemClipboardPayload();
+
+      expect(systemClipboard.text).toBe('Name\tStatus\nManual\thidden but selected\nVisible\tkeep');
+      expect(data.textSignature).toBe(systemClipboard.text);
+      expect(Object.values(data.cells).map((cell) => cell.raw)).toEqual([
+        'Name',
+        'Status',
+        'Manual',
+        'hidden but selected',
+        'Visible',
+        'keep',
+      ]);
+    });
+
+    it('serializes merged covered cells as blank TSV fields', async () => {
+      const { deps, clipboardCommands } = createDeps({
+        selectionRange: { startRow: 0, startCol: 0, endRow: 0, endCol: 1 },
+        rangeData: [
+          [
+            { value: 'Merged', formatted: 'Merged' },
+            { value: 'Merged', formatted: 'Merged' },
+          ],
+        ],
+        mergedRegions: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 1 }],
+      });
+
+      const data = await runClipboardAction(action, command, deps, clipboardCommands);
+      const systemClipboard = await readSystemClipboardPayload();
+
+      expect(systemClipboard.text).toBe('Merged\t');
+      expect(data.textSignature).toBe('Merged\t');
+      expect(systemClipboard.html).toContain('colspan="2"');
+    });
+
+    it('serializes fetched cell formats into rich HTML', async () => {
+      const { deps, clipboardCommands } = createDeps({
+        selectionRange: { startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
+        rangeData: [[{ value: 'Styled', formatted: 'Styled' }]],
+        formatByCell: new Map([
+          ['0,0', { bold: true, backgroundColor: '#ffff00', fontColor: '#ff0000' }],
+        ]),
+      });
+
+      const data = await runClipboardAction(action, command, deps, clipboardCommands);
+      const systemClipboard = await readSystemClipboardPayload();
+
+      expect(systemClipboard.html).toContain('font-weight:bold');
+      expect(systemClipboard.html).toContain('background-color:#ffff00');
+      expect(systemClipboard.html).toContain('color:#ff0000');
+      expect(data.cells['0,0']?.format).toEqual({
+        bold: true,
+        backgroundColor: '#ffff00',
+        fontColor: '#ff0000',
+      });
     });
   });
 });

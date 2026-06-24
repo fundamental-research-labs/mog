@@ -201,6 +201,13 @@ pub(in crate::storage::engine) fn get_hidden_rows(
     services::queries::get_hidden_rows(&engine.stores, sheet_id)
 }
 
+pub(in crate::storage::engine) fn get_filter_hidden_rows(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+) -> Vec<u32> {
+    services::queries::get_filter_hidden_rows(&engine.stores, sheet_id)
+}
+
 pub(in crate::storage::engine) fn get_hidden_columns(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,

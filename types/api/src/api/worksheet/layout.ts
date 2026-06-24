@@ -211,6 +211,16 @@ export interface WorksheetLayout {
   getHiddenRowsBitmap(): Promise<Set<number>>;
 
   /**
+   * Get the set of row indices hidden by active filters.
+   *
+   * This excludes rows hidden only by manual row visibility or structural
+   * grouping, and is used by visible-cell copy/export paths.
+   *
+   * @returns Set of filter-hidden row indices
+   */
+  getFilterHiddenRowsBitmap(): Promise<Set<number>>;
+
+  /**
    * Get the set of all hidden column indices.
    *
    * @returns Set of hidden column indices

@@ -31,7 +31,13 @@ import type {
 import type { Comment } from '@mog-sdk/contracts/api';
 import type { ClipboardData } from '@mog-sdk/contracts/actors';
 import { cellId } from '@mog-sdk/contracts/cell-identity';
-import type { CellRange, CellRawValue, CellValue, SheetId } from '@mog-sdk/contracts/core';
+import type {
+  CellFormat,
+  CellRange,
+  CellRawValue,
+  CellValue,
+  SheetId,
+} from '@mog-sdk/contracts/core';
 import { ensureFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 // Cell/merge reads and row/col visibility migrated to Worksheet API.
 import {
@@ -156,6 +162,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     allMerges,
     hiddenRowsMap,
     hiddenColsMap,
+    filterHiddenRows,
     fetchedFormats,
     rangeSchemas,
     conditionalFormats,
@@ -175,6 +182,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         ws.layout.isColumnHidden(minCol + i).then((h) => [minCol + i, h] as [number, boolean]),
       ),
     ).then((entries) => new Map(entries)),
+    ws.layout.getFilterHiddenRowsBitmap().catch(() => new Set<number>()),
     formatPromise,
     // Validation: full RangeSchema list, used by clipboard capture to
     // carry validation rules along with copied cells.
@@ -269,11 +277,28 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
       };
     },
   );
+  if (filterHiddenRows.size > 0) {
+    systemClipboardExportOptions.isRowHidden = (_sid, row) => filterHiddenRows.has(row);
+  }
+
+  const filteredCopyStoreReader: ClipboardStoreReader =
+    filterHiddenRows.size > 0
+      ? {
+          ...storeReader,
+          isRowHidden: (_sid, row) => filterHiddenRows.has(row),
+          isColHidden: undefined,
+        }
+      : storeReader;
 
   return {
     commands: deps.commands.clipboard,
     buildData: (clipRanges: CellRange[]): ClipboardData => {
-      const data = buildClipboardData(captureRanges, sheetId, storeReader);
+      const data = buildClipboardData(
+        captureRanges,
+        sheetId,
+        filteredCopyStoreReader,
+        filterHiddenRows.size > 0 ? { skipHidden: true } : undefined,
+      );
       data.sourceRanges = clipRanges;
       return data;
     },
@@ -292,7 +317,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         sheetId,
         range,
         (_sid, row, col) => displayLookup.get(`${row},${col}`) ?? '',
-        (_sid, _row, _col) => undefined, // Format embedded in display
+        (_sid, row, col) => formatLookup.get(`${row},${col}`) as CellFormat | undefined,
         undefined, // getHyperlink - not used here
         systemClipboardExportOptions,
       );

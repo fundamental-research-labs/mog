@@ -131,6 +131,13 @@ impl SheetLayout {
         self.dispatch.query_engine(move |e| e.get_hidden_rows(&sid))
     }
 
+    /// Get row indices hidden by filters for this sheet (sorted).
+    pub fn get_filter_hidden_rows(&self) -> Result<Vec<u32>, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .query_engine(move |e| e.get_filter_hidden_rows(&sid))
+    }
+
     /// Get all hidden column indices for this sheet (sorted).
     pub fn get_hidden_columns(&self) -> Result<Vec<u32>, ComputeApiError> {
         let sid = self.sheet_id;

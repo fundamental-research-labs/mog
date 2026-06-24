@@ -219,6 +219,7 @@ export interface GeneratedBridgeMethods {
   isRowHiddenQuery(sheetId: SheetId, row: number): Promise<boolean>;
   isColHiddenQuery(sheetId: SheetId, col: number): Promise<boolean>;
   getHiddenRows(sheetId: SheetId): Promise<number[]>;
+  getFilterHiddenRows(sheetId: SheetId): Promise<number[]>;
   getHiddenColumns(sheetId: SheetId): Promise<number[]>;
   getSheetIndex(sheetId: SheetId): Promise<number | null>;
   getFrozenPanesQuery(sheetId: SheetId): Promise<FrozenPanes>;
@@ -1486,6 +1487,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   getHiddenRows(sheetId: SheetId): Promise<number[]> {
     return this.core.query(this.core.transport.call<number[]>('compute_get_hidden_rows', { docId: this.core.docId, sheetId }));
+  }
+
+  getFilterHiddenRows(sheetId: SheetId): Promise<number[]> {
+    return this.core.query(this.core.transport.call<number[]>('compute_get_filter_hidden_rows', { docId: this.core.docId, sheetId }));
   }
 
   getHiddenColumns(sheetId: SheetId): Promise<number[]> {

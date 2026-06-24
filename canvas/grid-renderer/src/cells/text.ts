@@ -362,7 +362,9 @@ export function renderNormalText(
   let effectiveX = x;
 
   if (options.overflowResult?.isClipped) {
-    const availableWidth = width - paddingX * 2;
+    effectiveX = options.overflowResult.renderX;
+    effectiveWidth = options.overflowResult.renderWidth;
+    const availableWidth = effectiveWidth - paddingX * 2;
     const ellipsis = '\u2026';
     const ellipsisWidth = textMeasurer.measureText(ellipsis, font).width;
     renderText =

@@ -42,6 +42,24 @@ pub(in crate::storage::engine) fn get_hidden_rows(
     hidden
 }
 
+pub(in crate::storage::engine) fn get_filter_hidden_rows(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+) -> Vec<u32> {
+    let doc = stores.storage.doc();
+    let sheets = stores.storage.sheets();
+    let grid = stores.grid_indexes.get(sheet_id);
+    let mut hidden: Vec<u32> = sheet_dimensions::get_hidden_rows(doc, sheets, sheet_id)
+        .into_iter()
+        .filter(|row| {
+            sheet_dimensions::is_row_hidden_by_any_filter(doc, sheets, sheet_id, *row, grid)
+        })
+        .collect();
+    hidden.sort_unstable();
+    hidden.dedup();
+    hidden
+}
+
 pub(in crate::storage::engine) fn get_hidden_columns(
     stores: &EngineStores,
     sheet_id: &SheetId,

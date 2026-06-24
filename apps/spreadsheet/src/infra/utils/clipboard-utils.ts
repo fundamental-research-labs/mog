@@ -413,7 +413,27 @@ export function rangeToTSV(
   options?: RangeExportOptions,
 ): string {
   const lines: string[] = [];
-  const { isRowHidden, isColHidden } = options ?? {};
+  const { isRowHidden, isColHidden, getMergeInfo } = options ?? {};
+  const coveredMergeCells = new Set<string>();
+
+  if (getMergeInfo) {
+    for (let row = range.startRow; row <= range.endRow; row++) {
+      if (isRowHidden?.(sheetId, row)) continue;
+      for (let col = range.startCol; col <= range.endCol; col++) {
+        if (isColHidden?.(sheetId, col)) continue;
+        const mergeInfo = getMergeInfo(sheetId, row, col);
+        if (mergeInfo && mergeInfo.startRow === row && mergeInfo.startCol === col) {
+          for (let r = row; r < row + mergeInfo.rowSpan; r++) {
+            for (let c = col; c < col + mergeInfo.colSpan; c++) {
+              if (r !== row || c !== col) {
+                coveredMergeCells.add(`${r},${c}`);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
   for (let row = range.startRow; row <= range.endRow; row++) {
     // Skip hidden rows when copying from filtered table
@@ -428,7 +448,9 @@ export function rangeToTSV(
         continue;
       }
 
-      const value = getCellDisplayValue(sheetId, row, col);
+      const value = coveredMergeCells.has(`${row},${col}`)
+        ? ''
+        : getCellDisplayValue(sheetId, row, col);
       // Use proper quoting instead of replacing special characters
       const escaped = escapeTSVValue(value);
       cells.push(escaped);

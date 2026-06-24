@@ -145,6 +145,27 @@ describe('cell text clipping contract', () => {
     expect(paints.find((op) => op.kind === 'fillText')?.clips).toContainEqual(clips[0]);
   });
 
+  it('normal text clips over the computed overflow span when adjacent blanks run out', () => {
+    const { ctx, clips, paints } = createRecordingContext();
+
+    renderNormalText(ctx, cell(), undefined, textMeasurer, {
+      ...baseOptions,
+      overflowResult: { renderX: 40, renderWidth: 160, isClipped: true },
+    });
+
+    const fill = paints.find((op) => op.kind === 'fillText');
+    expect(fill).toBeDefined();
+    expect(fill?.x).toBe(44);
+    expect(fill?.text).toMatch(/\u2026$/u);
+    expect(clips).toHaveLength(1);
+    expect(clips[0]).toEqual({
+      x: -15_960,
+      y: 60,
+      width: 32_160,
+      height: 18,
+    });
+  });
+
   it('normal text resolves default black as automatic renderer text color', () => {
     const { ctx } = createRecordingContext();
     const format: CellFormat = { fontColor: '#000000' };

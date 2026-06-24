@@ -29,8 +29,13 @@ import { getUsedRange } from '../../../infra/utils';
 
 import type { Workbook, Worksheet } from '@mog-sdk/contracts/api';
 
-import { getCellCanvasFont, getThemedCellStyle } from '@mog/grid-canvas';
-import { OFFICE_THEME } from '../../../infra/styles/built-in-themes';
+import {
+  createCanvasTextMeasurer,
+  createPrintMergeIndex,
+  createPrintPositionIndex,
+  drawPrintCell,
+  type PrintCellRenderContext,
+} from './print-preview-cell-rendering';
 import { useSpreadsheetDisplayMode } from '../../../hooks/view/use-display-mode';
 
 // =============================================================================
@@ -636,13 +641,56 @@ async function drawPageContent(
     drawGridlines(ctx2d, startRow, endRow, startCol, endCol, colWidthMap, rowHeightMap);
   }
 
+  const [hiddenColumns, mergedRegions] = await Promise.all([
+    ws.layout.getHiddenColumnsBitmap().catch(() => new Set<number>()),
+    ws.structure.getMergedRegions().catch(() => []),
+  ]);
+  const positionIndex = createPrintPositionIndex(
+    startRow,
+    endRow,
+    startCol,
+    endCol,
+    rowHeightMap,
+    colWidthMap,
+    hiddenColumns,
+  );
+  const mergeIndex = createPrintMergeIndex(mergedRegions);
+
+  const rawEntries = await Promise.all(
+    Array.from({ length: (endRow - startRow + 1) * (endCol - startCol + 1) }, async (_, idx) => {
+      const row = startRow + Math.floor(idx / (endCol - startCol + 1));
+      const col = startCol + (idx % (endCol - startCol + 1));
+      return [`${row},${col}`, row, col, await ws.getRawCellData(row, col)] as const;
+    }),
+  );
+  const rawDataMap = new Map(rawEntries.map(([key, _row, _col, rawData]) => [key, rawData]));
+  const isCellEmpty = (row: number, col: number) => {
+    const rawData = rawDataMap.get(`${row},${col}`);
+    return (
+      !rawData || rawData.value === null || rawData.value === undefined || rawData.value === ''
+    );
+  };
+  const textMeasurer = createCanvasTextMeasurer(ctx2d);
+  const renderContext: PrintCellRenderContext = {
+    positionIndex,
+    mergeIndex,
+    isCellEmpty,
+    maxCol: endCol,
+    textMeasurer,
+  };
+
   // Pre-compute formatted values via Rust
   const formatEntries: Array<{ value: { type: string; value?: unknown }; formatCode: string }> = [];
   const cellKeys: string[] = [];
   for (let row = startRow; row <= endRow; row++) {
     for (let col = startCol; col <= endCol; col++) {
-      const rawData = await ws.getRawCellData(row, col);
-      if (rawData.value !== null && rawData.value !== undefined && rawData.value !== '') {
+      const rawData = rawDataMap.get(`${row},${col}`);
+      if (
+        rawData &&
+        rawData.value !== null &&
+        rawData.value !== undefined &&
+        rawData.value !== ''
+      ) {
         formatEntries.push({
           value: toFormatValue(rawData.value),
           formatCode: rawData.format?.numberFormat || 'General',
@@ -665,19 +713,29 @@ async function drawPageContent(
       const colWidth = colWidthMap.get(col) ?? 64;
 
       // Get cell data via unified Worksheet API
-      const rawData = await ws.getRawCellData(row, col);
+      const rawData = rawDataMap.get(`${row},${col}`);
 
-      if (rawData.value !== null && rawData.value !== undefined && rawData.value !== '') {
+      if (
+        rawData &&
+        rawData.value !== null &&
+        rawData.value !== undefined &&
+        rawData.value !== ''
+      ) {
         const preFormatted = formattedMap.get(`${row},${col}`);
-        drawCell(
+        drawPrintCell(
           ctx2d,
-          rawData.value,
-          rawData.format,
-          currentX,
-          currentY,
-          colWidth,
-          rowHeight,
-          preFormatted,
+          {
+            row,
+            col,
+            value: rawData.value,
+            format: rawData.format,
+            x: currentX,
+            y: currentY,
+            width: colWidth,
+            height: rowHeight,
+            preFormatted,
+          },
+          renderContext,
         );
       }
 
@@ -756,82 +814,6 @@ function drawGridlines(
   ctx2d.restore();
 }
 
-/**
- * Draw a single cell with its content and formatting
- */
-function drawCell(
-  ctx2d: CanvasRenderingContext2D,
-  value: unknown,
-  format: CellFormat | undefined,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  preFormatted?: string,
-): void {
-  ctx2d.save();
-
-  // Get resolved style
-  const style = getThemedCellStyle(format, OFFICE_THEME);
-  const padding = style.paddingX;
-
-  // Draw background if specified
-  if (format?.backgroundColor) {
-    ctx2d.fillStyle = format.backgroundColor;
-    ctx2d.fillRect(x, y, width, height);
-  }
-
-  // Set font
-  ctx2d.font = getCellCanvasFont(format, OFFICE_THEME);
-  ctx2d.fillStyle = style.color;
-
-  // Format value
-  const text = preFormatted ?? formatCellValue(value);
-
-  // Calculate alignment
-  const horizontalAlign = format?.horizontalAlign ?? getDefaultAlignment(value);
-  const verticalAlign = style.verticalAlign;
-
-  // Calculate text position
-  let textX: number;
-  ctx2d.textAlign =
-    horizontalAlign === 'center' ? 'center' : horizontalAlign === 'right' ? 'right' : 'left';
-
-  switch (horizontalAlign) {
-    case 'center':
-      textX = x + width / 2;
-      break;
-    case 'right':
-      textX = x + width - padding;
-      break;
-    default:
-      textX = x + padding;
-  }
-
-  let textY: number;
-  ctx2d.textBaseline =
-    verticalAlign === 'middle' ? 'middle' : verticalAlign === 'bottom' ? 'bottom' : 'top';
-
-  switch (verticalAlign) {
-    case 'middle':
-      textY = y + height / 2;
-      break;
-    case 'bottom':
-      textY = y + height - padding;
-      break;
-    default:
-      textY = y + padding;
-  }
-
-  // Draw text (clipped to cell bounds)
-  ctx2d.beginPath();
-  ctx2d.rect(x, y, width, height);
-  ctx2d.clip();
-  ctx2d.fillText(text, textX, textY);
-
-  ctx2d.restore();
-}
-
 /** Convert a JS value to the Rust CellValue wire format */
 function toFormatValue(value: unknown): { type: string; value?: unknown } {
   if (value === null || value === undefined) return { type: 'Null' };
@@ -839,23 +821,6 @@ function toFormatValue(value: unknown): { type: string; value?: unknown } {
   if (typeof value === 'boolean') return { type: 'Boolean', value };
   if (typeof value === 'string') return { type: 'Text', value };
   return { type: 'Text', value: String(value) };
-}
-
-/**
- * Format cell value for display (fallback when pre-formatted value is unavailable)
- */
-function formatCellValue(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
-  return String(value);
-}
-
-/**
- * Get default alignment based on value type
- */
-function getDefaultAlignment(value: unknown): 'left' | 'center' | 'right' {
-  if (typeof value === 'number') return 'right';
-  return 'left';
 }
 
 /**

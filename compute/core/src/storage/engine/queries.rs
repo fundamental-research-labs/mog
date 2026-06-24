@@ -136,6 +136,11 @@ impl YrsComputeEngine {
     }
 
     #[bridge::read(scope = "sheet")]
+    pub fn get_filter_hidden_rows(&self, sheet_id: &SheetId) -> Vec<u32> {
+        document_sheets::get_filter_hidden_rows(self, sheet_id)
+    }
+
+    #[bridge::read(scope = "sheet")]
     pub fn get_hidden_columns(&self, sheet_id: &SheetId) -> Vec<u32> {
         document_sheets::get_hidden_columns(self, sheet_id)
     }

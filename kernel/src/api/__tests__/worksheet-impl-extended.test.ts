@@ -337,6 +337,7 @@ function createMockCtx(): any {
       getSplitConfig: jest.fn().mockResolvedValue(null),
       setSplitConfig: jest.fn().mockResolvedValue(undefined),
       getHiddenRows: jest.fn().mockResolvedValue([]),
+      getFilterHiddenRows: jest.fn().mockResolvedValue([]),
       getHiddenColumns: jest.fn().mockResolvedValue([]),
       getRowHeightQuery: jest.fn().mockResolvedValue(20),
       setRowHeight: jest.fn().mockResolvedValue(undefined),
@@ -446,6 +447,15 @@ describe('WorksheetImpl Extended Methods', () => {
 
       expect(ctx.computeBridge.isColHiddenQuery).toHaveBeenCalledWith(SHEET_ID, 3);
       expect(result).toBe(false);
+    });
+
+    it('getFilterHiddenRowsBitmap delegates to computeBridge.getFilterHiddenRows', async () => {
+      ctx.computeBridge.getFilterHiddenRows.mockResolvedValue([2, 4]);
+
+      const result = await ws.layout.getFilterHiddenRowsBitmap();
+
+      expect(ctx.computeBridge.getFilterHiddenRows).toHaveBeenCalledWith(SHEET_ID);
+      expect(result).toEqual(new Set([2, 4]));
     });
 
     it('getTabColor delegates to computeBridge.getTabColorQuery', async () => {

@@ -331,6 +331,15 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
+  async getFilterHiddenRowsBitmap(): Promise<Set<number>> {
+    try {
+      const rows = await this.ctx.computeBridge.getFilterHiddenRows(this.sheetId);
+      return new Set(rows);
+    } catch {
+      return new Set();
+    }
+  }
+
   async getHiddenColumnsBitmap(): Promise<Set<number>> {
     try {
       const cols = await this.ctx.computeBridge.getHiddenColumns(this.sheetId);

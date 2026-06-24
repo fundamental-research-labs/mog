@@ -33,10 +33,10 @@ import type {
   HostSpreadsheetCommand,
 } from '@mog-sdk/contracts/actions';
 import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { TraceArrow } from '@mog-sdk/contracts/trace-arrows';
 
-import { parseA1 } from '@mog/spreadsheet-utils/a1';
+import { cellRangeToA1, parseA1, toA1 } from '@mog/spreadsheet-utils/a1';
 
 import type { BackstagePanelType } from '../../../ui-store/slices/ribbon/backstage';
 import { getTracePrecedentSources } from '../../../utils/formula-auditing';
@@ -77,6 +77,57 @@ function getActiveFileBaseName(deps: ActionDependencies): string {
     return raw.replace(/\.[^.]+$/, '') || 'Untitled';
   }
   return 'Untitled';
+}
+
+function selectionSqrefForExport(ranges: CellRange[], activeCellA1: string): string {
+  const sqref = ranges.map(cellRangeToA1).filter(Boolean).join(' ');
+  return sqref || activeCellA1;
+}
+
+interface SelectionSnapshotForXlsxExport {
+  readonly activeCell?: { readonly row: number; readonly col: number } | null;
+  readonly ranges?: CellRange[];
+}
+
+function isCellPosition(value: unknown): value is { readonly row: number; readonly col: number } {
+  if (value == null || typeof value !== 'object') return false;
+  const candidate = value as { readonly row?: unknown; readonly col?: unknown };
+  return Number.isInteger(candidate.row) && Number.isInteger(candidate.col);
+}
+
+function getSelectionForXlsxExport(deps: ActionDependencies): {
+  readonly activeCell: { readonly row: number; readonly col: number };
+  readonly ranges: CellRange[];
+} | null {
+  const snapshot = deps.getSelection?.() as SelectionSnapshotForXlsxExport | undefined;
+  const snapshotActiveCell = snapshot?.activeCell;
+  const activeCell = isCellPosition(snapshotActiveCell)
+    ? snapshotActiveCell
+    : deps.accessors?.selection?.getActiveCell?.();
+
+  if (!activeCell) return null;
+
+  return {
+    activeCell,
+    ranges: snapshot?.ranges ?? deps.accessors?.selection?.getRanges?.() ?? [],
+  };
+}
+
+async function persistActiveSheetSelectionForXlsxExport(deps: ActionDependencies): Promise<void> {
+  const selection = getSelectionForXlsxExport(deps);
+  if (!selection) return;
+
+  const activeSheetId = deps.getActiveSheetId();
+  const activeCellA1 = toA1(selection.activeCell.row, selection.activeCell.col);
+  const ws = deps.workbook.getSheetById(activeSheetId);
+  const settings = ws.settings as unknown as {
+    set(key: 'activeCell' | 'sqref', value: string): Promise<void>;
+  };
+
+  await Promise.all([
+    settings.set('activeCell', activeCellA1),
+    settings.set('sqref', selectionSqrefForExport(selection.ranges, activeCellA1)),
+  ]);
 }
 
 /**
@@ -134,6 +185,7 @@ function isFileMenuDisabled(deps: ActionDependencies): boolean {
  * `dialogs.showSaveDialog` and persists the returned handle.
  */
 export const SAVE: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  await persistActiveSheetSelectionForXlsxExport(deps);
   const hostResult = await routeHostCommand(deps, 'save', { source: 'file-menu' });
   if (hostResult) return hostResult;
 
@@ -198,6 +250,7 @@ export const NEW_WORKBOOK: AsyncActionHandler = async (deps): Promise<ActionResu
  * Persists the new handle so the next SAVE writes through it.
  */
 export const EXPORT_FILE: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  await persistActiveSheetSelectionForXlsxExport(deps);
   const hostResult = await routeHostCommand(deps, 'export', {
     format: 'xlsx',
     source: 'file-menu',
@@ -621,6 +674,7 @@ export const SET_BACKSTAGE_PANEL: ActionHandler = (
  * download event fires on the web fallback.
  */
 export const EXPORT_AS_XLSX: AsyncActionHandler = async (deps): Promise<ActionResult> => {
+  await persistActiveSheetSelectionForXlsxExport(deps);
   const hostResult = await routeHostCommand(deps, 'export', {
     format: 'xlsx',
     source: 'file-menu',

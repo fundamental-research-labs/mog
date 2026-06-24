@@ -27,6 +27,13 @@ interface DepsOverrides {
   shellService?: ReturnType<typeof createMockShellService>;
   workbookXlsxBytes?: Uint8Array;
   worksheetCsv?: string;
+  activeCell?: { row: number; col: number } | null;
+  selectionRanges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  selectionSnapshot?: {
+    activeCell?: { row: number; col: number } | null;
+    ranges?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  };
+  hostCommands?: ActionDependencies['hostCommands'];
 }
 
 function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
@@ -34,6 +41,12 @@ function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
   const shellService = overrides.shellService ?? createMockShellService();
   const xlsxBytes = overrides.workbookXlsxBytes ?? new Uint8Array([1, 2, 3, 4]);
   const csv = overrides.worksheetCsv ?? 'a,b\n1,2\n';
+  const worksheet = {
+    toCSV: jest.fn(async () => csv),
+    settings: {
+      set: jest.fn(async () => undefined),
+    },
+  };
 
   const workbook = {
     toXlsx: jest.fn(async () => xlsxBytes),
@@ -41,9 +54,7 @@ function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
     notifications: {
       info: jest.fn(),
     },
-    getSheetById: jest.fn(() => ({
-      toCSV: jest.fn(async () => csv),
-    })),
+    getSheetById: jest.fn(() => worksheet),
   };
 
   const uiStore = {
@@ -59,9 +70,13 @@ function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
     workbook,
     uiStore,
     getActiveSheetId: () => SHEET_ID,
+    getSelection: overrides.selectionSnapshot ? () => overrides.selectionSnapshot : undefined,
     accessors: {
       editor: { isEditing: () => false },
-      selection: { getActiveCell: () => null, getRanges: () => [] },
+      selection: {
+        getActiveCell: () => overrides.activeCell ?? null,
+        getRanges: () => overrides.selectionRanges ?? [],
+      },
     },
     commands: {
       editor: { cancel: jest.fn() },
@@ -72,6 +87,7 @@ function createMockDeps(overrides: DepsOverrides = {}): ActionDependencies {
     },
     platform,
     shellService,
+    hostCommands: overrides.hostCommands,
   } as unknown as ActionDependencies;
 }
 
@@ -242,6 +258,91 @@ describe('file handler migrations', () => {
         expect.objectContaining({ defaultPath: 'doc.xlsx' }),
       );
       expect(handle.write).toHaveBeenCalledWith(xlsxBytes);
+    });
+
+    it('persists current active-sheet selection before serialising XLSX bytes', async () => {
+      const platform = createMockPlatform();
+      const handle = createMockFileHandle({ name: 'doc.xlsx' });
+      (platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(handle);
+      const shellService = createMockShellService();
+      (shellService.getDocumentState as jest.Mock).mockReturnValue({
+        activeFileId: 'f',
+        openFileIds: ['f'],
+        files: { f: { id: 'f', displayName: 'doc.xlsx' } },
+      });
+      const deps = createMockDeps({
+        platform,
+        shellService,
+        activeCell: { row: 3, col: 2 },
+        selectionRanges: [{ startRow: 3, startCol: 2, endRow: 3, endCol: 2 }],
+      });
+
+      await FileHandlers.EXPORT_AS_XLSX(deps);
+
+      const worksheet = (deps.workbook.getSheetById as jest.Mock).mock.results[0]!.value as {
+        settings: { set: jest.Mock };
+      };
+      expect(worksheet.settings.set).toHaveBeenCalledWith('activeCell', 'C4');
+      expect(worksheet.settings.set).toHaveBeenCalledWith('sqref', 'C4');
+      expect(worksheet.settings.set.mock.invocationCallOrder[0]).toBeLessThan(
+        (deps.workbook.toXlsx as jest.Mock).mock.invocationCallOrder[0],
+      );
+    });
+
+    it('persists current active-sheet selection before delegating XLSX export to host', async () => {
+      const hostCommands = {
+        getOwner: jest.fn(() => 'host' as const),
+        request: jest.fn(async () => ({ status: 'handled' as const })),
+      };
+      const deps = createMockDeps({
+        hostCommands,
+        activeCell: { row: 3, col: 2 },
+        selectionRanges: [{ startRow: 3, startCol: 2, endRow: 3, endCol: 2 }],
+      });
+
+      const result = await FileHandlers.EXPORT_AS_XLSX(deps);
+
+      const worksheet = (deps.workbook.getSheetById as jest.Mock).mock.results[0]!.value as {
+        settings: { set: jest.Mock };
+      };
+      expect(result.handled).toBe(true);
+      expect(worksheet.settings.set).toHaveBeenCalledWith('activeCell', 'C4');
+      expect(worksheet.settings.set).toHaveBeenCalledWith('sqref', 'C4');
+      expect(worksheet.settings.set.mock.invocationCallOrder[0]).toBeLessThan(
+        hostCommands.request.mock.invocationCallOrder[0],
+      );
+      expect(deps.platform.dialogs.showSaveDialog).not.toHaveBeenCalled();
+      expect(deps.workbook.toXlsx).not.toHaveBeenCalled();
+    });
+
+    it('prefers the live selection snapshot over stale selection accessors', async () => {
+      const platform = createMockPlatform();
+      const handle = createMockFileHandle({ name: 'doc.xlsx' });
+      (platform.dialogs.showSaveDialog as jest.Mock).mockResolvedValueOnce(handle);
+      const shellService = createMockShellService();
+      (shellService.getDocumentState as jest.Mock).mockReturnValue({
+        activeFileId: 'f',
+        openFileIds: ['f'],
+        files: { f: { id: 'f', displayName: 'doc.xlsx' } },
+      });
+      const deps = createMockDeps({
+        platform,
+        shellService,
+        activeCell: { row: 0, col: 0 },
+        selectionRanges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+        selectionSnapshot: {
+          activeCell: { row: 3, col: 2 },
+          ranges: [{ startRow: 3, startCol: 2, endRow: 3, endCol: 2 }],
+        },
+      });
+
+      await FileHandlers.EXPORT_AS_XLSX(deps);
+
+      const worksheet = (deps.workbook.getSheetById as jest.Mock).mock.results[0]!.value as {
+        settings: { set: jest.Mock };
+      };
+      expect(worksheet.settings.set).toHaveBeenCalledWith('activeCell', 'C4');
+      expect(worksheet.settings.set).toHaveBeenCalledWith('sqref', 'C4');
     });
   });
 

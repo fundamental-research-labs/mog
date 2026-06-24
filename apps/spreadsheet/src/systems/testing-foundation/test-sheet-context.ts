@@ -314,6 +314,7 @@ export function createTestSheetContext(config: TestSheetConfig = {}): TestSheetC
     },
     layout: {
       getHiddenRowsBitmap: async () => new Set(hiddenRowsArr),
+      getFilterHiddenRowsBitmap: async () => new Set<number>(),
       getHiddenColumnsBitmap: async () => new Set(hiddenColsArr),
       isRowHidden: async (row: number) => hiddenRowsArr.includes(row),
       isColumnHidden: async (col: number) => hiddenColsArr.includes(col),

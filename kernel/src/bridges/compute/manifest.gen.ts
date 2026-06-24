@@ -211,6 +211,7 @@ export const BRIDGE_METHOD_KIND: Readonly<Record<string, BridgeMethodKind>> = Ob
   isRowHiddenQuery: 'read',
   isColHiddenQuery: 'read',
   getHiddenRows: 'read',
+  getFilterHiddenRows: 'read',
   getHiddenColumns: 'read',
   getSheetIndex: 'read',
   getFrozenPanesQuery: 'read',

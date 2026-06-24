@@ -256,6 +256,12 @@ fn color_filter_matches_conditional_format_fill() {
     assert!(engine.is_row_hidden_query(&sheet_id, 3), "Carol hidden");
     assert!(engine.is_row_hidden_query(&sheet_id, 4), "Dave hidden");
     assert!(!engine.is_row_hidden_query(&sheet_id, 5), "Eve visible");
+
+    engine
+        .hide_rows(&sheet_id, &[1])
+        .expect("hide visible row manually");
+    assert_eq!(engine.get_hidden_rows(&sheet_id), vec![1, 2, 3, 4]);
+    assert_eq!(engine.get_filter_hidden_rows(&sheet_id), vec![2, 3, 4]);
 }
 
 #[test]

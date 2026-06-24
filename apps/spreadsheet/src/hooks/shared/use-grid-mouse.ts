@@ -2019,7 +2019,22 @@ export function useGridMouse(options: UseGridMouseOptions): UseGridMouseReturn {
     };
 
     const handlePointerUp = (e: PointerEvent) => {
-      if ((e.target as HTMLElement | null)?.closest?.('[data-no-grid-pointer]')) return;
+      const targetIsNoGridPointer = (e.target as HTMLElement | null)?.closest?.(
+        '[data-no-grid-pointer]',
+      );
+      const hasActivePointerOperation =
+        isObjectInteractionOwningPointer(coordinator) ||
+        formulaRangeDrag.isFormulaRangeDragging() ||
+        selection.isResizingHeader ||
+        selection.isResizingTable ||
+        selection.isSelecting ||
+        selection.isDraggingFillHandle ||
+        selection.isSelectingColumn ||
+        selection.isSelectingRow ||
+        selection.snapshot.isDraggingCells ||
+        selection.snapshot.isRightDraggingFillHandle;
+
+      if (targetIsNoGridPointer && !hasActivePointerOperation) return;
 
       // Reset page break dragging state
       isPageBreakDraggingRef.current = false;

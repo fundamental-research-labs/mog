@@ -74,7 +74,7 @@ pub fn diff_semantic_workbook_states(
         }
     }
 
-    let coverage = coverage_for_states(before, after);
+    let coverage = coverage_for_diff_states(before, after, &changes);
     let diagnostics = coverage
         .iter()
         .flat_map(|coverage| coverage.diagnostics.iter().cloned())
@@ -112,6 +112,89 @@ pub fn coverage_for_states(
             ))
         })
         .collect()
+}
+
+fn coverage_for_diff_states(
+    before: &SemanticWorkbookState,
+    after: &SemanticWorkbookState,
+    changes: &[SemanticChange],
+) -> Vec<SemanticDomainCoverage> {
+    let changed_object_ids_by_domain = changed_object_ids_by_domain(changes);
+
+    let mut domain_ids = BTreeSet::new();
+    domain_ids.extend(before.domains.keys().cloned());
+    domain_ids.extend(after.domains.keys().cloned());
+
+    domain_ids
+        .into_iter()
+        .filter_map(|domain_id| {
+            let domain = after
+                .domains
+                .get(&domain_id)
+                .or_else(|| before.domains.get(&domain_id))?;
+            let status = domain_coverage_status(&domain.domain_class, &domain.capability_state);
+            let all_object_ids = domain.objects.keys().cloned().collect::<Vec<_>>();
+
+            let diagnostic_object_ids =
+                if matches!(status, SemanticDomainCoverageStatus::OpaqueBlocking) {
+                    let changed_ids = changed_object_ids_by_domain
+                        .get(&domain_id)
+                        .map(|ids| ids.iter().cloned().collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    if !changed_ids.is_empty() {
+                        changed_ids
+                    } else if semantic_domain_identity_changed(before, after, &domain_id) {
+                        all_object_ids
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    all_object_ids
+                };
+
+            let mut coverage = coverage_for_domain(
+                domain.domain_id.clone(),
+                domain.domain_class.clone(),
+                domain.capability_state.clone(),
+                diagnostic_object_ids,
+            );
+            if matches!(status, SemanticDomainCoverageStatus::OpaqueBlocking)
+                && coverage.diagnostics.first().is_some_and(|diagnostic| {
+                    diagnostic.object_ids.is_empty()
+                        && !semantic_domain_identity_changed(before, after, &domain_id)
+                })
+            {
+                coverage.diagnostics.clear();
+            }
+            Some(coverage)
+        })
+        .collect()
+}
+
+fn changed_object_ids_by_domain(changes: &[SemanticChange]) -> BTreeMap<String, BTreeSet<String>> {
+    let mut changed = BTreeMap::new();
+    for change in changes {
+        changed
+            .entry(change.domain_id.clone())
+            .or_insert_with(BTreeSet::new)
+            .insert(change.object_id.clone());
+    }
+    changed
+}
+
+fn semantic_domain_identity_changed(
+    before: &SemanticWorkbookState,
+    after: &SemanticWorkbookState,
+    domain_id: &str,
+) -> bool {
+    match (before.domains.get(domain_id), after.domains.get(domain_id)) {
+        (Some(before_domain), Some(after_domain)) => {
+            before_domain.domain_class != after_domain.domain_class
+                || before_domain.capability_state != after_domain.capability_state
+        }
+        (None, None) => false,
+        _ => true,
+    }
 }
 
 pub fn coverage_for_domain(
@@ -367,6 +450,29 @@ mod tests {
         }
     }
 
+    fn opaque_blocking_domain(
+        domain_id: &str,
+        object_id: &str,
+        value: &str,
+    ) -> SemanticDomainState {
+        let mut objects = BTreeMap::new();
+        objects.insert(
+            object_id.to_string(),
+            SemanticObjectDigest {
+                object_id: object_id.to_string(),
+                object_kind: SemanticObjectKind::DomainAttachment,
+                domain_id: domain_id.to_string(),
+                digest: canonical_digest(&Value::String(value.to_string())).expect("digest"),
+            },
+        );
+        SemanticDomainState {
+            domain_id: domain_id.to_string(),
+            domain_class: VersionDomainClass::Authored,
+            capability_state: VersionDomainCapabilityState::OpaqueBlocking,
+            objects,
+        }
+    }
+
     fn workbook_with_cell(value: &str) -> SemanticWorkbookState {
         let cell = SemanticCellState {
             object_id: "cell:sheet-1:1:1".to_string(),
@@ -448,6 +554,81 @@ mod tests {
         );
         assert_eq!(diff.changes[0].domain_id, CELL_VALUES_DOMAIN);
         assert_eq!(diff.changes[1].domain_id, SHEETS_DOMAIN);
+    }
+
+    #[test]
+    fn versioning_diff_preserves_unchanged_opaque_blocking_domain_without_blocking_diagnostic() {
+        let domain = opaque_blocking_domain(
+            "unsupported-cell-values",
+            "cell:sheet#0:r1:c1:unsupported",
+            "preserved",
+        );
+        let mut before = workbook_with_cell("alpha");
+        let mut after = workbook_with_cell("beta");
+        before
+            .domains
+            .insert(domain.domain_id.clone(), domain.clone());
+        after.domains.insert(domain.domain_id.clone(), domain);
+
+        let diff = diff_semantic_workbook_states(&before, &after).expect("diff");
+        assert!(
+            diff.changes
+                .iter()
+                .any(|change| change.domain_id == CELL_VALUES_DOMAIN)
+        );
+        assert!(
+            diff.diagnostics
+                .iter()
+                .all(|diagnostic| diagnostic.code != "VERSIONING_OPAQUE_BLOCKING_DOMAIN")
+        );
+        let opaque_coverage = diff
+            .coverage
+            .iter()
+            .find(|coverage| coverage.domain_id == "unsupported-cell-values")
+            .expect("opaque coverage");
+        assert_eq!(
+            opaque_coverage.status,
+            SemanticDomainCoverageStatus::OpaqueBlocking
+        );
+        assert_eq!(opaque_coverage.diagnostics, Vec::new());
+    }
+
+    #[test]
+    fn versioning_diff_reports_changed_opaque_blocking_domain_as_blocking() {
+        let mut before = workbook_with_cell("alpha");
+        let mut after = workbook_with_cell("alpha");
+        before.domains.insert(
+            "unsupported-cell-values".to_string(),
+            opaque_blocking_domain(
+                "unsupported-cell-values",
+                "cell:sheet#0:r1:c1:unsupported",
+                "before",
+            ),
+        );
+        after.domains.insert(
+            "unsupported-cell-values".to_string(),
+            opaque_blocking_domain(
+                "unsupported-cell-values",
+                "cell:sheet#0:r1:c1:unsupported",
+                "after",
+            ),
+        );
+
+        let diff = diff_semantic_workbook_states(&before, &after).expect("diff");
+        assert!(
+            diff.changes
+                .iter()
+                .any(|change| change.domain_id == "unsupported-cell-values")
+        );
+        assert_eq!(diff.diagnostics.len(), 1);
+        assert_eq!(
+            diff.diagnostics[0].code,
+            "VERSIONING_OPAQUE_BLOCKING_DOMAIN"
+        );
+        assert_eq!(
+            diff.diagnostics[0].object_ids,
+            vec!["cell:sheet#0:r1:c1:unsupported".to_string()]
+        );
     }
 
     #[test]

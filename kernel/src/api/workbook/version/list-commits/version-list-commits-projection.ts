@@ -215,7 +215,7 @@ function validateDeterministicParentTieBreaks(
     if (visibleParents.length < 2) continue;
 
     const expected = [...visibleParents].sort((left, right) =>
-      compareCommitSummariesForPageOrder(left.parent, right.parent),
+      compareVisibleMergeParentsForPageOrder(left.parent, right.parent, itemByCommitId),
     );
     for (let index = 1; index < expected.length; index += 1) {
       const previous = expected[index - 1]!;
@@ -240,6 +240,35 @@ function validateDeterministicParentTieBreaks(
   }
 
   return [];
+}
+
+function compareVisibleMergeParentsForPageOrder(
+  left: WorkbookCommitSummary,
+  right: WorkbookCommitSummary,
+  itemByCommitId: ReadonlyMap<WorkbookCommitId, WorkbookCommitSummary>,
+): number {
+  if (isCommitReachableFrom(left.id, right.id, itemByCommitId)) return 1;
+  if (isCommitReachableFrom(right.id, left.id, itemByCommitId)) return -1;
+  return compareCommitSummariesForPageOrder(left, right);
+}
+
+function isCommitReachableFrom(
+  targetId: WorkbookCommitId,
+  sourceId: WorkbookCommitId,
+  itemByCommitId: ReadonlyMap<WorkbookCommitId, WorkbookCommitSummary>,
+): boolean {
+  const pending = [...(itemByCommitId.get(sourceId)?.parents ?? [])];
+  const visited = new Set<WorkbookCommitId>();
+
+  while (pending.length > 0) {
+    const commitId = pending.pop()!;
+    if (commitId === targetId) return true;
+    if (visited.has(commitId)) continue;
+    visited.add(commitId);
+    pending.push(...(itemByCommitId.get(commitId)?.parents ?? []));
+  }
+
+  return false;
 }
 
 function compareCommitSummariesForPageOrder(

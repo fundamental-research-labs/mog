@@ -246,50 +246,67 @@ function MergeConflictResolutions({
   readonly selections: VersionMergeResolutionSelections;
   readonly onResolutionChange: (conflictId: string, optionId: string) => void;
 }): React.JSX.Element {
+  const conflictListLabel =
+    conflicts.length === 1
+      ? '1 merge conflict requiring resolution'
+      : `${conflicts.length} merge conflicts requiring resolution`;
+
   return (
-    <div className="mt-2 flex max-h-52 flex-col gap-2 overflow-y-auto pr-1">
-      {conflicts.map((conflict, index) => (
-        <fieldset
-          key={conflict.conflictId}
-          className="m-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5"
-        >
-          <legend className="px-1 text-[11px] font-medium text-ss-text">
-            {conflictLabel(conflict, index)}
-          </legend>
-          <div className="flex flex-col gap-1">
-            {conflict.resolutionOptions.length === 0 ? (
-              <p className="m-0 text-[11px] text-ss-warning">
-                {conflictResolutionUnavailableMessage(conflict)}
-              </p>
-            ) : (
-              conflict.resolutionOptions.map((option) => (
-                <MergeConflictResolutionOptionRow
-                  key={option.optionId}
-                  option={option}
-                  checked={selections[conflict.conflictId] === option.optionId}
-                  onChange={() => onResolutionChange(conflict.conflictId, option.optionId)}
-                />
-              ))
-            )}
-          </div>
-        </fieldset>
-      ))}
+    <div
+      role="region"
+      aria-label={conflictListLabel}
+      data-testid="version-merge-conflict-list"
+      className="mt-2 flex max-h-52 flex-col gap-2 overflow-y-auto pr-1"
+    >
+      {conflicts.map((conflict, index) => {
+        const label = conflictLabel(conflict, index);
+        return (
+          <fieldset
+            key={conflict.conflictId}
+            data-testid={`version-merge-conflict-${safeDomId(conflict.conflictId)}`}
+            className="m-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5"
+          >
+            <legend className="px-1 text-[11px] font-medium text-ss-text">{label}</legend>
+            <div className="flex flex-col gap-1">
+              {conflict.resolutionOptions.length === 0 ? (
+                <p className="m-0 text-[11px] text-ss-warning">
+                  {conflictResolutionUnavailableMessage(conflict)}
+                </p>
+              ) : (
+                conflict.resolutionOptions.map((option) => (
+                  <MergeConflictResolutionOptionRow
+                    key={option.optionId}
+                    option={option}
+                    conflictLabel={label}
+                    checked={selections[conflict.conflictId] === option.optionId}
+                    onChange={() => onResolutionChange(conflict.conflictId, option.optionId)}
+                  />
+                ))
+              )}
+            </div>
+          </fieldset>
+        );
+      })}
     </div>
   );
 }
 
 function MergeConflictResolutionOptionRow({
   option,
+  conflictLabel,
   checked,
   onChange,
 }: {
   readonly option: VersionMergeConflictResolutionOption;
+  readonly conflictLabel: string;
   readonly checked: boolean;
   readonly onChange: () => void;
 }): React.JSX.Element {
   const id = `version-merge-resolution-${safeDomId(option.conflictId)}-${safeDomId(
     option.optionId,
   )}`;
+  const label = resolutionOptionLabel(option.kind);
+  const formattedValue = formatDiffValue(option.value);
 
   return (
     <label htmlFor={id} className="flex items-start gap-2 text-[11px] text-ss-text-secondary">
@@ -297,14 +314,18 @@ function MergeConflictResolutionOptionRow({
         id={id}
         type="radio"
         name={`version-merge-resolution-${safeDomId(option.conflictId)}`}
+        aria-label={`${conflictLabel}: ${label} - ${formattedValue}`}
+        data-testid={`version-merge-resolution-option-${safeDomId(option.conflictId)}-${safeDomId(
+          option.optionId,
+        )}`}
         checked={checked}
         onChange={onChange}
         className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-ss-primary"
       />
       <span className="min-w-0">
-        <span className="font-medium text-ss-text">{resolutionOptionLabel(option.kind)}</span>
+        <span className="font-medium text-ss-text">{label}</span>
         <span className="mx-1 text-ss-text-tertiary">-</span>
-        <span className="break-words">{formatDiffValue(option.value)}</span>
+        <span className="break-words">{formattedValue}</span>
       </span>
     </label>
   );

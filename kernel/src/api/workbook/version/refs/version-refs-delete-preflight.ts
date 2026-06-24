@@ -20,6 +20,7 @@ import {
   isRecord,
   revisionsEqual,
   toCommitId,
+  VERSION_BRANCH_REF_PREFIX,
   VERSION_HEAD_REF,
   type ActiveRefProjection,
   type DeleteCapableVersionRefLifecycleService,
@@ -207,12 +208,14 @@ function activeCheckoutSessionRefName(
   if (
     !isRecord(session.value) ||
     session.value.detached === true ||
-    typeof session.value.branchName !== 'string'
+    (!('branchName' in session.value) && !('refName' in session.value))
   ) {
     return { status: 'ok', refName: null };
   }
-  const parsed = parsePublicBranchName(session.value.branchName, 'readRef');
-  return { status: 'ok', refName: parsed.ok ? parsed.refName : null };
+  return {
+    status: 'ok',
+    refName: firstProviderRefName([session.value.branchName, session.value.refName]),
+  };
 }
 
 function currentHeadRefName(value: unknown, operation: DeleteRefOperation): ActiveRefProjection {
@@ -225,17 +228,36 @@ function currentHeadRefName(value: unknown, operation: DeleteRefOperation): Acti
       ? read.value.ref
       : read.value;
   if (head.mode === 'detached') return { status: 'ok', refName: null };
-  const candidate =
-    typeof head.refName === 'string'
-      ? head.refName
-      : typeof head.branchName === 'string'
-        ? head.branchName
-        : typeof head.target === 'string'
-          ? head.target
-          : undefined;
-  if (!candidate) return { status: 'ok', refName: null };
-  const parsed = parsePublicBranchName(candidate, 'readRef');
-  return { status: 'ok', refName: parsed.ok ? parsed.refName : null };
+  return {
+    status: 'ok',
+    refName: firstProviderRefName([head.branchName, head.refName, head.target]),
+  };
+}
+
+function firstProviderRefName(
+  values: readonly unknown[],
+): Extract<ActiveRefProjection, { readonly status: 'ok' }>['refName'] {
+  for (const value of values) {
+    const refName = providerRefName(value);
+    if (refName) return refName;
+  }
+  return null;
+}
+
+function providerRefName(
+  value: unknown,
+): Extract<ActiveRefProjection, { readonly status: 'ok' }>['refName'] {
+  if (typeof value !== 'string') return null;
+  const parsed = parsePublicBranchName(value, 'readRef');
+  if (parsed.ok) return parsed.refName;
+  if (!value.startsWith(VERSION_BRANCH_REF_PREFIX) || !value.includes('%')) return null;
+  try {
+    const decoded = decodeURIComponent(value.slice(VERSION_BRANCH_REF_PREFIX.length));
+    const decodedParsed = parsePublicBranchName(decoded, 'readRef');
+    return decodedParsed.ok ? decodedParsed.refName : null;
+  } catch {
+    return null;
+  }
 }
 
 function unwrapProviderReadValue(

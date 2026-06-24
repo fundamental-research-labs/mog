@@ -48,6 +48,7 @@ import type {
   VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult,
   VersionRef,
+  VersionRefMutationResult,
   VersionRefName,
   VersionRefReadResult,
   VersionRefSelector,
@@ -278,6 +279,8 @@ type WorkbookVersionBasicContractFixtureSurface = {
   readonly commitSummary: WorkbookCommitSummary;
   readonly branchCreateOptions: readonly VersionCreateBranchOptions[];
   readonly branchRef: VersionRef;
+  readonly refReadResults: readonly VersionRefReadResult[];
+  readonly refMutationResults: readonly VersionRefMutationResult[];
   readonly checkoutTargets: readonly VersionCheckoutTarget[];
   readonly checkoutOptions: VersionCheckoutOptions;
   readonly checkoutResults: readonly CheckoutVersionResult[];
@@ -287,12 +290,14 @@ type WorkbookVersionBasicContractFixtureSurface = {
   readonly applyMergeInputs: readonly VersionApplyMergeInput[];
   readonly applyMergeOptions: readonly VersionApplyMergeOptions[];
   readonly applyMergeResults: readonly VersionApplyMergeResult[];
+  readonly revertResults: readonly VersionRevertResult[];
 };
 
 const versionBaseCommitId = 'commit:sha256:version-contract-base' as WorkbookCommitId;
 const versionOursCommitId = 'commit:sha256:version-contract-ours' as WorkbookCommitId;
 const versionTheirsCommitId = 'commit:sha256:version-contract-theirs' as WorkbookCommitId;
 const versionMergeCommitId = 'commit:sha256:version-contract-merge' as WorkbookCommitId;
+const versionRevertCommitId = 'commit:sha256:version-contract-revert' as WorkbookCommitId;
 const versionMainRefName: VersionMainRefName = 'refs/heads/main';
 const versionScenarioBranchName = 'scenario/budget' as VersionBranchName;
 const versionScenarioRefName = 'refs/heads/scenario/budget' as VersionRefName;
@@ -338,6 +343,21 @@ const versionRefConflictDiagnosticFixture = {
     targetRef: versionMainRefName,
   },
   redacted: false,
+  mutationGuarantee: 'ref-not-mutated',
+} satisfies VersionStoreDiagnostic;
+
+const versionRevertConflictDiagnosticFixture = {
+  issueCode: 'VERSION_REVERT_CONFLICT',
+  severity: 'error',
+  recoverability: 'retry',
+  messageTemplateId: 'version.contract.fixture.revertConflict',
+  safeMessage: 'Version contract fixture revert requires review.',
+  payload: {
+    operation: 'revert',
+    targetKind: 'range',
+    rangeConflictCount: 1,
+  },
+  redacted: true,
   mutationGuarantee: 'ref-not-mutated',
 } satisfies VersionStoreDiagnostic;
 
@@ -421,6 +441,32 @@ const workbookVersionBranchRefFixture = {
   revision: versionCounterRevision,
   updatedAt: '2026-06-23T00:01:00.000Z',
 } satisfies VersionRef;
+
+const workbookVersionSymbolicHeadRefFixture = {
+  name: 'HEAD',
+  target: versionMainRefName,
+  revision: versionCounterRevision,
+} satisfies NonNullable<VersionSymbolicRefReadResult['ref']>;
+
+const workbookVersionRefReadResultFixtures = [
+  {
+    status: 'success',
+    ref: workbookVersionSymbolicHeadRefFixture,
+    diagnostics: [],
+  },
+  { status: 'success', ref: workbookVersionBranchRefFixture, diagnostics: [] },
+  {
+    status: 'degraded',
+    ref: workbookVersionSymbolicHeadRefFixture,
+    diagnostics: [versionStoreDiagnosticFixture],
+  },
+  { status: 'degraded', ref: null, diagnostics: [versionStoreDiagnosticFixture] },
+] satisfies readonly VersionRefReadResult[];
+
+const workbookVersionRefMutationResultFixtures = [
+  { status: 'success', ref: workbookVersionBranchRefFixture, diagnostics: [] },
+  { status: 'degraded', ref: null, diagnostics: [versionStoreDiagnosticFixture] },
+] satisfies readonly VersionRefMutationResult[];
 
 const workbookVersionCheckoutTargets = [
   {
@@ -783,13 +829,57 @@ const workbookVersionApplyMergeResultFixtures = [
     diagnostics: [versionRefConflictDiagnosticFixture],
     mutationGuarantee: 'ref-not-mutated',
   },
-] satisfies readonly VersionApplyMergeResult[];
+] as const satisfies readonly VersionApplyMergeResult[];
+
+const workbookVersionRevertResultFixtures = [
+  {
+    schemaVersion: 1,
+    status: 'planned',
+    target: { kind: 'commit', commitId: versionTheirsCommitId },
+    diagnostics: [],
+    mutationGuarantee: 'no-write-attempted',
+  },
+  {
+    schemaVersion: 1,
+    status: 'applied',
+    target: { kind: 'commit', commitId: versionTheirsCommitId },
+    commitRef: {
+      id: versionRevertCommitId,
+      refName: versionMainRefName,
+      resolvedFrom: versionMainRefName,
+      refRevision: versionCounterRevision,
+    },
+    diagnostics: [],
+    mutationGuarantee: 'revert-commit-created',
+  },
+  {
+    schemaVersion: 1,
+    status: 'rejected',
+    target: { kind: 'mergeCommit', commitId: versionMergeCommitId, mainlineParent: 1 },
+    diagnostics: [versionRefConflictDiagnosticFixture],
+    mutationGuarantee: 'ref-not-mutated',
+  },
+  {
+    schemaVersion: 1,
+    status: 'requires-review',
+    target: {
+      kind: 'range',
+      baseCommitId: versionBaseCommitId,
+      headCommitId: versionTheirsCommitId,
+    },
+    reviewInvalidationIds: ['review:version-contract-requires-review'],
+    diagnostics: [versionRevertConflictDiagnosticFixture],
+    mutationGuarantee: 'ref-not-mutated',
+  },
+] as const satisfies readonly VersionRevertResult[];
 
 const workbookVersionBasicContractFixtures = {
   commitOptions: workbookVersionCommitOptionFixtures,
   commitSummary: workbookCommitSummaryFixture,
   branchCreateOptions: workbookVersionBranchCreateFixtures,
   branchRef: workbookVersionBranchRefFixture,
+  refReadResults: workbookVersionRefReadResultFixtures,
+  refMutationResults: workbookVersionRefMutationResultFixtures,
   checkoutTargets: workbookVersionCheckoutTargets,
   checkoutOptions: workbookVersionCheckoutOptionsFixture,
   checkoutResults: workbookVersionCheckoutResultFixtures,
@@ -799,6 +889,7 @@ const workbookVersionBasicContractFixtures = {
   applyMergeInputs: workbookVersionApplyMergeInputFixtures,
   applyMergeOptions: workbookVersionApplyMergeOptionFixtures,
   applyMergeResults: workbookVersionApplyMergeResultFixtures,
+  revertResults: workbookVersionRevertResultFixtures,
 } satisfies WorkbookVersionBasicContractFixtureSurface;
 
 type _WorkbookVersionPublishesExpectedW8W9MethodSet = Assert<
@@ -827,6 +918,18 @@ type _WorkbookVersionTargetUnavailableUsesPublicDiagnostics = Assert<
 >;
 type _WorkbookVersionStoreDiagnosticsExposeUnsupportedRecoverability = Assert<
   IsEqual<Extract<VersionStoreDiagnostic['recoverability'], 'unsupported'>, 'unsupported'>
+>;
+type _WorkbookVersionApplyMergeFixturesCoverResultStatuses = Assert<
+  IsEqual<
+    (typeof workbookVersionApplyMergeResultFixtures)[number]['status'],
+    VersionApplyMergeResult['status']
+  >
+>;
+type _WorkbookVersionRevertFixturesCoverResultStatuses = Assert<
+  IsEqual<
+    (typeof workbookVersionRevertResultFixtures)[number]['status'],
+    VersionRevertResult['status']
+  >
 >;
 type _WorkbookVersionMergeEndpointsExposeDeniedStatuses = Assert<
   IsEqual<

@@ -4,6 +4,7 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
   'cell',
   'cells.values',
   'cells.formulas',
+  'cells.formats',
   'cells.formats.direct',
   'rows-columns',
   'sheet',

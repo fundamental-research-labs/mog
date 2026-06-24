@@ -30,7 +30,7 @@ export function mapCommitWriteResult(value: unknown): VersionResult<WorkbookComm
   }
 
   if (value.status === 'failed' || value.status === 'degraded') {
-    return versionFailureFromStoreDiagnostics('commit', mapServiceDiagnostics(value.diagnostics));
+    return versionFailureFromStoreDiagnostics('commit', mapCommitFailureDiagnostics(value));
   }
   if (value.status !== 'success') {
     return versionFailureFromStoreDiagnostics('commit', [providerErrorDiagnostic()]);
@@ -70,6 +70,17 @@ export function diagnosticsFromThrownError(error: unknown): readonly VersionStor
   }
 
   return [providerErrorDiagnostic()];
+}
+
+function mapCommitFailureDiagnostics(
+  value: Readonly<Record<string, unknown>>,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics = mapServiceDiagnostics(value.diagnostics);
+  const mutationGuarantee = toFailureMutationGuarantee(value.mutationGuarantee);
+  if (!mutationGuarantee) return diagnostics;
+  return diagnostics.map((diagnostic) =>
+    diagnostic.mutationGuarantee ? diagnostic : { ...diagnostic, mutationGuarantee },
+  );
 }
 
 function commitSummaryResult(
@@ -212,4 +223,15 @@ function sanitizeCompletenessDiagnosticPayload(
     }
   }
   return payload;
+}
+
+function toFailureMutationGuarantee(
+  value: unknown,
+): VersionStoreDiagnostic['mutationGuarantee'] | undefined {
+  return value === 'ref-not-mutated' ||
+    value === 'registry-not-visible' ||
+    value === 'no-write-attempted' ||
+    value === 'unknown-after-crash'
+    ? value
+    : undefined;
 }

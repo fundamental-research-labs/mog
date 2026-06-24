@@ -32,6 +32,7 @@ import {
 const CURRENT_REF = 'refs/heads/main';
 const INCOMING_REF = 'refs/heads/scenario/budget';
 const PRIVATE_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}`;
+const SOURCE_RESOLUTION_RADIO_NAME = 'cells.values value: Source - theirs';
 
 describe('VersionHistoryPanelContent direct merge controls', () => {
   beforeEach(() => {
@@ -238,7 +239,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await user.click(applyButton);
     expect(workbook.version.applyMerge).not.toHaveBeenCalled();
 
-    await user.click(screen.getByLabelText(/^Source\s*-\s*theirs$/));
+    expect(screen.getByRole('region', { name: '1 merge conflict requiring resolution' }))
+      .toContainElement(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
+
+    await user.click(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
     await waitFor(() => expect(applyButton).toBeEnabled());
     await user.click(applyButton);
 
@@ -288,7 +292,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await screen.findByText('Calculated forecast');
     await firstRender.user.click(screen.getByTestId(mergePreviewButtonTestId()));
     await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
-    await firstRender.user.click(screen.getByLabelText(/^Source\s*-\s*theirs$/));
+    await firstRender.user.click(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
     await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
 
     firstRender.unmount();
@@ -302,7 +306,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         'conflicted',
       );
     });
-    expect(screen.getByLabelText(/^Source\s*-\s*theirs$/)).toBeChecked();
+    expect(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME })).toBeChecked();
     expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled();
   });
 

@@ -113,6 +113,22 @@ export function registerSnapshotRootCapturePayloadScenarios(): void {
       },
     ],
     [
+      'non-canonical one-byte padding bits',
+      {
+        ...createYrsFullStateSnapshotRootPayload(FULL_STATE_BYTES),
+        bytes: 'AB==',
+        byteLength: 1,
+      },
+    ],
+    [
+      'non-canonical two-byte padding bits',
+      {
+        ...createYrsFullStateSnapshotRootPayload(FULL_STATE_BYTES),
+        bytes: 'AAB=',
+        byteLength: 2,
+      },
+    ],
+    [
       'byte-length mismatch',
       {
         ...createYrsFullStateSnapshotRootPayload(FULL_STATE_BYTES),

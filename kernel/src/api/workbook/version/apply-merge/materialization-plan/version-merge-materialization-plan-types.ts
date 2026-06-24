@@ -15,6 +15,7 @@ export type ParsedCellMergeChange = {
   readonly itemIndex: number;
   readonly change: VersionMergeChange;
   readonly structural: MaterializableMergeStructural;
+  readonly write: boolean;
   readonly sheetId: string;
   readonly address: string;
   readonly row: number;
@@ -27,6 +28,7 @@ export type ParsedDirectFormatMergeChange = {
   readonly itemIndex: number;
   readonly change: VersionMergeChange;
   readonly structural: MaterializableMergeStructural;
+  readonly write: boolean;
   readonly sheetId: string;
   readonly address: string;
   readonly row: number;
@@ -50,6 +52,7 @@ export type ParsedSheetMetadataMergeChange = {
   readonly itemIndex: number;
   readonly change: VersionMergeChange;
   readonly structural: MaterializableMergeStructural;
+  readonly write: boolean;
   readonly sheetId: string;
   readonly property: SheetMetadataProperty;
   readonly merged: SheetMetadataMergeValue;

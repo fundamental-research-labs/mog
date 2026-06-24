@@ -160,6 +160,26 @@ export function normalizeGetMergeConflictDetailInput(
   if (input.kind !== undefined && !kind) {
     diagnostics.push(invalidInputDiagnostic(operation, 'kind', 'resolution kind is invalid.'));
   }
+  const hasSavedResolutionSelection =
+    resolutionSetDigest !== undefined || resolvedAttemptDigest !== undefined;
+  if (valueRole && valueRole !== 'resolved' && (optionId || kind || hasSavedResolutionSelection)) {
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'valueRole',
+        'optionId, kind, resolutionSetDigest, and resolvedAttemptDigest are only valid for resolved conflict detail values.',
+      ),
+    );
+  }
+  if (valueRole === 'resolved' && !hasSavedResolutionSelection && (!optionId || !kind)) {
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'optionId',
+        'optionId and kind are required for direct resolved conflict detail values.',
+      ),
+    );
+  }
   const targetRef = input.targetRef === undefined ? undefined : mapPublicTargetRef(input.targetRef);
   if (input.targetRef !== undefined && !targetRef) {
     diagnostics.push(invalidInputDiagnostic(operation, 'targetRef', 'targetRef is invalid.'));

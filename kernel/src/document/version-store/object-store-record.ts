@@ -1,8 +1,6 @@
 import { parseObjectDigest, type ObjectDigest, type VersionDependencyRef } from './object-digest';
 import { cloneVersionObjectCompatibilityHeader, type VersionObjectPreimage } from './object-header';
 import {
-  bytesToHex,
-  canonicalJsonStringify,
   clonePayload,
   isPlainRecord,
   sha256ObjectDigest,
@@ -147,7 +145,13 @@ export function versionObjectRecordsMatch(
   right: VersionObjectRecord<unknown>,
 ): boolean {
   try {
-    return versionObjectRecordIdentity(left) === versionObjectRecordIdentity(right);
+    return (
+      versionGraphNamespaceKey(left.namespace) === versionGraphNamespaceKey(right.namespace) &&
+      objectDigestsEqual(left.digest, right.digest) &&
+      left.payloadByteLength === right.payloadByteLength &&
+      left.preimageByteLength === right.preimageByteLength &&
+      preimageBytesMatch(left.preimage, right.preimage)
+    );
   } catch {
     return false;
   }
@@ -174,26 +178,25 @@ export function cloneVersionObjectRecord<TPayload>(
   });
 }
 
-function versionObjectRecordIdentity(record: VersionObjectRecord<unknown>): string {
-  const encoded = encodeVersionObjectPreimage(record.preimage);
-  return canonicalJsonStringify({
-    namespace: versionGraphNamespaceKey(record.namespace),
-    digest: record.digest,
-    objectType: encoded.preimage.objectType,
-    schemaVersion: encoded.preimage.schemaVersion,
-    minReaderVersion: encoded.preimage.minReaderVersion,
-    minWriterVersion: encoded.preimage.minWriterVersion,
-    payloadEncoding: encoded.preimage.payloadEncoding,
-    dependencies: encoded.dependencies,
-    payloadByteLength: record.payloadByteLength,
-    preimageByteLength: record.preimageByteLength,
-    payloadBytesHex: bytesToHex(encoded.payloadBytes),
-    preimageBytesHex: bytesToHex(encoded.preimageBytes),
-  });
-}
-
 function objectDigestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
   return left.algorithm === right.algorithm && left.digest === right.digest;
+}
+
+function preimageBytesMatch(
+  left: VersionObjectPreimage<unknown>,
+  right: VersionObjectPreimage<unknown>,
+): boolean {
+  const leftEncoded = encodeVersionObjectPreimage(left);
+  const rightEncoded = encodeVersionObjectPreimage(right);
+  return bytesEqual(leftEncoded.preimageBytes, rightEncoded.preimageBytes);
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index++) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function cloneDependencyRef(dependency: VersionDependencyRef): VersionDependencyRef {

@@ -36,6 +36,7 @@ export async function applyMergeChanges(
 
   for (const change of changes) {
     if (change.kind === 'rowColumnOrder') continue;
+    if (!change.write) continue;
     const operationContext = mergeOperationContext(input, change, createdAt);
     const sheet = toSheetId(change.sheetId);
     if (change.kind === 'sheetMetadata') {

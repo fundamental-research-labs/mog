@@ -15,6 +15,9 @@ import {
 } from './version-merge-materialization-plan-structural';
 import type { ParsedMergeChange } from './version-merge-materialization-plan-types';
 import {
+  isNoopCellMergeChange,
+  isNoopDirectFormatMergeChange,
+  isNoopSheetMetadataMergeChange,
   parseCellMergeValue,
   parseDirectFormatMergeValue,
   parseRowColumnTransition,
@@ -77,6 +80,7 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
         itemIndex: index,
         change,
         structural,
+        write: !isNoopDirectFormatMergeChange(change, merged),
         sheetId: target.sheetId,
         address: target.address,
         row: target.row,
@@ -129,6 +133,7 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
         itemIndex: index,
         change,
         structural,
+        write: !isNoopSheetMetadataMergeChange(change, property, merged),
         sheetId,
         property,
         merged,
@@ -152,6 +157,7 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
       itemIndex: index,
       change,
       structural,
+      write: !isNoopCellMergeChange(change, structural.domain, merged),
       sheetId: target.sheetId,
       address: target.address,
       row: target.row,

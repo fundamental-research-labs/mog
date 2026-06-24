@@ -1,12 +1,10 @@
 import type { VersionGraphInitializeInput } from '../provider';
 import { createVersionObjectRecord, type VersionGraphNamespace } from '../object-store';
-import {
-  captureWorkbookSnapshotRootRecord,
-  type SnapshotRootByteSyncPort,
-} from '../snapshot-root-capture';
+import type { SnapshotRootByteSyncPort } from '../snapshot-root-capture';
 import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
 import { XLSX_IMPORT_ROOT_AUTHOR } from './constants';
 import type { XlsxVersionImportRootProvenance } from './provenance';
+import { captureXlsxImportSnapshotRootRecord } from './snapshot-root';
 
 export async function buildXlsxVersionImportRootWrite(input: {
   readonly namespace: VersionGraphNamespace;
@@ -16,7 +14,7 @@ export async function buildXlsxVersionImportRootWrite(input: {
   readonly createdAt: string;
 }): Promise<VersionGraphInitializeInput['rootWrite']> {
   const [snapshotRootRecord, semanticState] = await Promise.all([
-    captureWorkbookSnapshotRootRecord(input.namespace, input.snapshotRootByteSyncPort),
+    captureXlsxImportSnapshotRootRecord(input.namespace, input.snapshotRootByteSyncPort),
     input.semanticStateReader.readCurrentSemanticState(),
   ]);
   const semanticChangeSetRecord = await createVersionObjectRecord(input.namespace, {

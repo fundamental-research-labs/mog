@@ -117,6 +117,18 @@ export async function resolveSavedConflictDetailSelection(
     return { ok: false, diagnostics: payloadRefDiagnostics };
   }
 
+  if (input.valueRole !== 'resolved') {
+    return {
+      ok: true,
+      selection: {
+        valueRole: input.valueRole,
+        purpose: input.purpose,
+        ...(input.optionId ? { optionId: input.optionId } : {}),
+        ...(input.kind ? { kind: input.kind } : {}),
+      },
+    };
+  }
+
   const resolution = resolutionValidation.resolutions.find(
     (candidate) => candidate.conflictId === conflict.conflictId,
   );

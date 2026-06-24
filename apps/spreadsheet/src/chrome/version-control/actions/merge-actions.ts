@@ -185,6 +185,10 @@ export function mergeApplyBlockedMessage(result: VersionApplyMergeResult): strin
   return 'Merge apply was blocked.';
 }
 
+export function mergeApplyConflictedMessage(): string {
+  return 'Merge still has unresolved conflicts. Refresh the preview and resolve again.';
+}
+
 export function diagnosticFromMergeApplyResult(
   code: string,
   result: VersionApplyMergeResult,

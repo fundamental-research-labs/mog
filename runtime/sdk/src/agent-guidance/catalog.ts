@@ -146,15 +146,24 @@ if (checkoutResult.value.materialization !== "applied") {
   throw new Error("Checkout planned but did not materialize workbook state");
 }`;
 
-const versionMergePreviewSnippet = `const previewResult = await wb.version.merge(
-  { base: baseCommitId, ours: mainCommitId, theirs: branchCommitId },
-  {
-    mode: "preview",
-    targetRef: "refs/heads/main",
-    expectedTargetHead,
-    persistReviewRecord: true,
-  },
-);
+const versionMergePreviewSnippet = `const mainRefResult = await wb.version.readRef("refs/heads/main");
+if (!mainRefResult.ok || mainRefResult.value.status !== "success") {
+  throw new Error(
+    mainRefResult.ok
+      ? mainRefResult.value.diagnostics[0]?.safeMessage ?? "Main ref unavailable"
+      : mainRefResult.error.reason,
+  );
+}
+const expectedTargetHead = {
+  commitId: mainRefResult.value.ref.commitId,
+  revision: mainRefResult.value.ref.revision,
+};
+const mergeInput = {
+  base: baseCommitId,
+  ours: expectedTargetHead.commitId,
+  theirs: branchCommitId,
+};
+const previewResult = await wb.version.merge(mergeInput);
 if (!previewResult.ok) {
   throw new Error(previewResult.error.reason);
 }
@@ -179,17 +188,29 @@ const resolutions = preview.status === "conflicted"
     })
   : [];`;
 
-const versionApplyMergeSnippet = `const applyResult = await wb.version.applyMerge(
+const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.readRef("refs/heads/main");
+if (!applyTargetRefResult.ok || applyTargetRefResult.value.status !== "success") {
+  throw new Error(
+    applyTargetRefResult.ok
+      ? applyTargetRefResult.value.diagnostics[0]?.safeMessage ?? "Main ref unavailable"
+      : applyTargetRefResult.error.reason,
+  );
+}
+const applyExpectedTargetHead = {
+  commitId: applyTargetRefResult.value.ref.commitId,
+  revision: applyTargetRefResult.value.ref.revision,
+};
+const applyResult = await wb.version.applyMerge(
   {
     base: baseCommitId,
-    ours: expectedTargetHead.commitId,
+    ours: applyExpectedTargetHead.commitId,
     theirs: branchCommitId,
     resolutions,
   },
   {
     mode: "apply",
     targetRef: "refs/heads/main",
-    expectedTargetHead,
+    expectedTargetHead: applyExpectedTargetHead,
   },
 );
 if (!applyResult.ok) {
@@ -571,7 +592,7 @@ export const apiGuidanceCatalog = [
       {
         path: 'wb.version.merge',
         snippet: versionMergePreviewSnippet,
-        note: 'Merge is preview-only; inspect blocked/conflicted/clean/fast-forward statuses before applying.',
+        note: 'Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying.',
       },
       {
         path: 'wb.version.applyMerge',

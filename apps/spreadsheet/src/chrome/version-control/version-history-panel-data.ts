@@ -23,6 +23,7 @@ const COMMIT_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 5;
 const PROPOSAL_PAGE_SIZE = 5;
 const VERSION_HISTORY_REFRESH_DELAY_MS = 40;
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS = [
   'workbook:version-dirty-status-changed',
   'workbook:version-checkout-materialized',
@@ -132,10 +133,14 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     if (!reviews.ok) diagnostics.push(reviews.diagnostic);
     if (!proposals.ok) diagnostics.push(proposals.diagnostic);
 
+    const surfaceValue = surface.ok ? surface.value : undefined;
+    const headValue = head.ok ? head.value : undefined;
+    const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
+
     const data: VersionHistoryData = {
-      ...(surface.ok ? { surface: surface.value } : {}),
+      ...(surfaceValue ? { surface: surfaceValue } : {}),
       ...(rollout.ok ? { rollout: rollout.value } : {}),
-      ...(head.ok ? { head: head.value } : {}),
+      ...(projectedHead ? { head: projectedHead } : {}),
       commits: commits.ok ? commits.value.items : [],
       refs: refs.ok ? refs.value.items : [],
       reviews: reviews.ok ? reviews.value.items : [],
@@ -297,8 +302,41 @@ export function resolveSelectedOrHeadCommitId(
   selectedCommitId: WorkbookCommitId | undefined,
 ): WorkbookCommitId | undefined {
   if (selectedCommitId) return selectedCommitId;
-  if (data.head?.id) return data.head.id;
-  return data.surface?.current.headCommitId as WorkbookCommitId | undefined;
+  return (data.surface?.current.headCommitId as WorkbookCommitId | undefined) ?? data.head?.id;
+}
+
+function projectVersionHistoryHead(
+  head: VersionHead | undefined,
+  surface: VersionSurfaceStatus | undefined,
+): VersionHead | undefined {
+  const current = surface?.current;
+  if (!current) return head;
+
+  const currentHeadId = current.headCommitId as WorkbookCommitId | undefined;
+  if (!currentHeadId) return head;
+
+  const currentRefName = current.detached
+    ? undefined
+    : refNameFromSurfaceBranchName(current.branchName);
+  const headMatchesCurrent =
+    head?.id === currentHeadId &&
+    (currentRefName ? head.refName === currentRefName : head.refName === undefined);
+
+  if (headMatchesCurrent) return head;
+
+  return {
+    id: currentHeadId,
+    ...(currentRefName ? { refName: currentRefName } : {}),
+  };
+}
+
+function refNameFromSurfaceBranchName(
+  branchName: string | undefined,
+): NonNullable<VersionHead['refName']> | undefined {
+  if (!branchName) return undefined;
+  return (branchName.startsWith(VERSION_BRANCH_REF_PREFIX)
+    ? branchName
+    : `${VERSION_BRANCH_REF_PREFIX}${branchName}`) as NonNullable<VersionHead['refName']>;
 }
 
 export function rollbackActionMessage(

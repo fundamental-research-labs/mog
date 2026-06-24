@@ -25,6 +25,7 @@ import type { DocumentContext } from '../../context';
 import { applyMergeWorkbookVersion } from './version-apply-merge';
 import { mergeWorkbookVersion } from './version-merge';
 import {
+  type ActiveCheckoutWriteContext,
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
   expectedHeadFromActiveCheckout,
@@ -34,6 +35,7 @@ import {
 import {
   invalidApplyMergeOptionDiagnostic,
 } from './version/apply-merge/version-apply-merge-results';
+import { mapPublicApplyTargetRef } from './version/apply-merge/target-ref/version-apply-merge-target-ref';
 import {
   getMergeConflictDetailWorkbookVersion,
   putMergeResolutionPayloadWorkbookVersion,
@@ -158,7 +160,17 @@ async function applyMergeInputForActiveCheckout(
   if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
-  if (hasExplicitTargetRef(options)) return { ok: true, input, options };
+  if (hasExplicitTargetRef(options)) {
+    return {
+      ok: true,
+      input,
+      options,
+      activeCheckoutRefName: activeCheckoutRefNameForExplicitApplyMergeTarget(
+        activeCheckout,
+        options,
+      ),
+    };
+  }
   if (activeCheckout.status === 'detached') {
     return {
       ok: false,
@@ -232,6 +244,16 @@ async function revertInputForActiveCheckout(
 
 function hasExplicitTargetRef(input: VersionRevertInput | VersionApplyMergeOptions): boolean {
   return Object.prototype.hasOwnProperty.call(input, 'targetRef');
+}
+
+function activeCheckoutRefNameForExplicitApplyMergeTarget(
+  activeCheckout: ActiveCheckoutWriteContext,
+  options: VersionApplyMergeOptions,
+): ActiveCheckoutWriteRefName | undefined {
+  if (activeCheckout.status !== 'attached') return undefined;
+  return mapPublicApplyTargetRef(options.targetRef) === activeCheckout.refName
+    ? activeCheckout.refName
+    : undefined;
 }
 
 function isMergeCommitApplyInput(

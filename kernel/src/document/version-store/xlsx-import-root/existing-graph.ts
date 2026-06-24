@@ -2,7 +2,6 @@ import type { CommitVersionGraphInput } from '../graph';
 import { createInMemoryVersionGraphStore } from '../graph';
 import { createVersionObjectRecord } from '../object-store';
 import { mapGraphDiagnostics, versionStoreDiagnostic } from '../provider';
-import { captureWorkbookSnapshotRootRecord } from '../snapshot-root-capture';
 import { evaluateVersionHistoryRootPolicy } from '../version-history-root-policy';
 import {
   createOrReadExternalChangeBranch,
@@ -22,6 +21,7 @@ import type {
   XlsxVersionExistingGraphImportResult,
 } from './results';
 import { readCommitSemanticState, semanticDigestKey } from './semantic-state';
+import { captureXlsxImportSnapshotRootRecord } from './snapshot-root';
 import { readTrustedBaseCommit } from './trusted-base';
 import { buildXlsxVersionImportRootWrite } from './write';
 
@@ -96,7 +96,7 @@ export async function applyXlsxVersionImportChangeToExistingGraph(
   });
   if (targetBranch.status !== 'success') return targetBranch;
 
-  const snapshotRootRecord = await captureWorkbookSnapshotRootRecord(
+  const snapshotRootRecord = await captureXlsxImportSnapshotRootRecord(
     input.namespace,
     input.snapshotRootByteSyncPort,
   );

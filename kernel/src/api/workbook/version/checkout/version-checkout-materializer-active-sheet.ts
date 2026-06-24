@@ -24,14 +24,18 @@ export async function reconcileCheckoutActiveSheet(input: {
   const activeId = active ? sheetId(active) : null;
   const hiddenBySheetId = await readHiddenBySheetId(input.ctx, order);
   const visibleOrder = order.filter((id) => !hiddenBySheetId.get(id));
-  if (activeId && order.includes(activeId) && !hiddenBySheetId.get(activeId)) return;
-
-  const nextActive = visibleOrder[0] ?? order[0];
+  const nextActive =
+    activeId && order.includes(activeId) && !hiddenBySheetId.get(activeId)
+      ? activeId
+      : (visibleOrder[0] ?? order[0]);
+  const nextActiveId = String(nextActive);
   input.stateProvider.reconcileSheetRuntimeState?.({
-    activeSheetId: String(nextActive),
+    activeSheetId: nextActiveId,
     visibleSheetIds: visibleOrder.map(String),
   });
-  input.stateProvider.setActiveSheetId(String(nextActive));
+  if (active !== nextActiveId) {
+    input.stateProvider.setActiveSheetId(nextActiveId);
+  }
 }
 
 async function readHiddenBySheetId(

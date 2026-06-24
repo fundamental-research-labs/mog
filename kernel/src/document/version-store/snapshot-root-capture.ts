@@ -116,8 +116,8 @@ export function validateYrsFullStateSnapshotRootPayload(
     );
   }
 
-  const decoded = decodeBase64Strict(payload.bytes, `${path}.bytes`);
-  if (decoded.byteLength !== byteLength) {
+  const decodedByteLength = canonicalBase64DecodedByteLength(payload.bytes, `${path}.bytes`);
+  if (decodedByteLength !== byteLength) {
     throw invalidPayload('Snapshot root payload byteLength does not match decoded bytes.', path);
   }
 
@@ -132,7 +132,12 @@ export function validateYrsFullStateSnapshotRootPayload(
 }
 
 export function decodeYrsFullStateSnapshotRootPayload(payload: unknown): Uint8Array {
-  return decodeBase64Strict(validateYrsFullStateSnapshotRootPayload(payload).bytes);
+  const validated = validateYrsFullStateSnapshotRootPayload(payload);
+  return decodeCanonicalBase64Bytes(
+    validated.bytes,
+    validated.byteLength,
+    'snapshotRoot.bytes',
+  );
 }
 
 export async function createWorkbookSnapshotRootRecord(
@@ -189,8 +194,11 @@ export function validateWorkbookSnapshotRootRecord(
 }
 
 export function decodeWorkbookSnapshotRootRecord(record: VersionObjectRecord<unknown>): Uint8Array {
-  return decodeYrsFullStateSnapshotRootPayload(
-    validateWorkbookSnapshotRootRecord(record).preimage.payload,
+  const validated = validateWorkbookSnapshotRootRecord(record);
+  return decodeCanonicalBase64Bytes(
+    validated.preimage.payload.bytes,
+    validated.preimage.payload.byteLength,
+    'record.preimage.payload.bytes',
   );
 }
 
@@ -229,40 +237,131 @@ function assertExactKeys(
   }
 }
 
-const BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const BASE64_ENCODE_CHUNK_BYTE_LENGTH = 0x3000;
 
 function bytesToBase64(bytes: Uint8Array): string {
-  let binary = '';
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) {
-    const chunk = bytes.subarray(offset, offset + chunkSize);
-    binary += String.fromCharCode(...chunk);
+  const chunks: string[] = [];
+  for (
+    let offset = 0;
+    offset < bytes.byteLength;
+    offset += BASE64_ENCODE_CHUNK_BYTE_LENGTH
+  ) {
+    chunks.push(
+      encodeBase64Chunk(
+        bytes,
+        offset,
+        Math.min(offset + BASE64_ENCODE_CHUNK_BYTE_LENGTH, bytes.byteLength),
+      ),
+    );
   }
-  return btoa(binary);
+  return chunks.join('');
 }
 
-function decodeBase64Strict(value: string, path = 'snapshotRoot.bytes'): Uint8Array {
-  if (value.length === 0 || value.length % 4 !== 0 || !BASE64_RE.test(value)) {
-    throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
-  }
+function decodeCanonicalBase64Bytes(
+  value: string,
+  byteLength: number,
+  path: string,
+): Uint8Array {
+  const bytes = new Uint8Array(byteLength);
+  let outputOffset = 0;
 
-  let binary: string;
-  try {
-    binary = atob(value);
-  } catch {
-    throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
-  }
+  for (let offset = 0; offset < value.length; offset += 4) {
+    const first = requiredBase64Value(value.charCodeAt(offset), path);
+    const second = requiredBase64Value(value.charCodeAt(offset + 1), path);
+    const thirdCode = value.charCodeAt(offset + 2);
+    const fourthCode = value.charCodeAt(offset + 3);
+    const third = thirdCode === 61 ? 0 : requiredBase64Value(thirdCode, path);
+    const fourth = fourthCode === 61 ? 0 : requiredBase64Value(fourthCode, path);
 
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index++) {
-    bytes[index] = binary.charCodeAt(index);
-  }
-
-  if (bytesToBase64(bytes) !== value) {
-    throw invalidPayload('Snapshot root payload bytes must use canonical base64 padding.', path);
+    bytes[outputOffset++] = (first << 2) | (second >> 4);
+    if (thirdCode !== 61) {
+      bytes[outputOffset++] = ((second & 0x0f) << 4) | (third >> 2);
+    }
+    if (fourthCode !== 61) {
+      bytes[outputOffset++] = ((third & 0x03) << 6) | fourth;
+    }
   }
 
   return bytes;
+}
+
+function encodeBase64Chunk(bytes: Uint8Array, start: number, end: number): string {
+  let output = '';
+  let index = start;
+  for (; index + 2 < end; index += 3) {
+    const combined = (bytes[index] << 16) | (bytes[index + 1] << 8) | bytes[index + 2];
+    output +=
+      BASE64_ALPHABET[(combined >> 18) & 0x3f] +
+      BASE64_ALPHABET[(combined >> 12) & 0x3f] +
+      BASE64_ALPHABET[(combined >> 6) & 0x3f] +
+      BASE64_ALPHABET[combined & 0x3f];
+  }
+
+  const remaining = end - index;
+  if (remaining === 1) {
+    const first = bytes[index];
+    output +=
+      BASE64_ALPHABET[first >> 2] + BASE64_ALPHABET[(first & 0x03) << 4] + '==';
+  } else if (remaining === 2) {
+    const combined = (bytes[index] << 8) | bytes[index + 1];
+    output +=
+      BASE64_ALPHABET[(combined >> 10) & 0x3f] +
+      BASE64_ALPHABET[(combined >> 4) & 0x3f] +
+      BASE64_ALPHABET[(combined & 0x0f) << 2] +
+      '=';
+  }
+
+  return output;
+}
+
+function canonicalBase64DecodedByteLength(value: string, path: string): number {
+  if (value.length === 0 || value.length % 4 !== 0) {
+    throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
+  }
+
+  let padding = 0;
+  const last = value.charCodeAt(value.length - 1);
+  const secondLast = value.charCodeAt(value.length - 2);
+  if (last === 61) padding++;
+  if (secondLast === 61) padding++;
+
+  const dataLength = value.length - padding;
+  for (let index = 0; index < dataLength; index++) {
+    if (base64Value(value.charCodeAt(index)) === null) {
+      throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
+    }
+  }
+  for (let index = dataLength; index < value.length; index++) {
+    if (value.charCodeAt(index) !== 61) {
+      throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
+    }
+  }
+  if (padding === 1 && (requiredBase64Value(value.charCodeAt(value.length - 2), path) & 0x03)) {
+    throw invalidPayload('Snapshot root payload bytes must use canonical base64 padding.', path);
+  }
+  if (padding === 2 && (requiredBase64Value(value.charCodeAt(value.length - 3), path) & 0x0f)) {
+    throw invalidPayload('Snapshot root payload bytes must use canonical base64 padding.', path);
+  }
+
+  return (value.length / 4) * 3 - padding;
+}
+
+function requiredBase64Value(charCode: number, path: string): number {
+  const value = base64Value(charCode);
+  if (value === null) {
+    throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
+  }
+  return value;
+}
+
+function base64Value(charCode: number): number | null {
+  if (charCode >= 65 && charCode <= 90) return charCode - 65;
+  if (charCode >= 97 && charCode <= 122) return charCode - 71;
+  if (charCode >= 48 && charCode <= 57) return charCode + 4;
+  if (charCode === 43) return 62;
+  if (charCode === 47) return 63;
+  return null;
 }
 
 function invalidPayload(message: string, path: string): SnapshotRootCaptureError {

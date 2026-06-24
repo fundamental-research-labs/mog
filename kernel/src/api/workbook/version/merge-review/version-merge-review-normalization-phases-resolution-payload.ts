@@ -141,6 +141,15 @@ export function normalizePutMergeResolutionPayloadInput(
   }
   if (!purpose)
     diagnostics.push(invalidInputDiagnostic(operation, 'purpose', 'purpose is invalid.'));
+  if (purpose === 'chooseValue' && domainPayloadSchema) {
+    diagnostics.push(
+      invalidInputDiagnostic(
+        operation,
+        'domainPayloadSchema',
+        'domainPayloadSchema is only valid for custom resolution payloads.',
+      ),
+    );
+  }
 
   return resultId &&
     resultDigest &&

@@ -21,12 +21,29 @@ export function parseCellMergeValue(value: VersionDiffValue, domain: string): Ce
   return parseSemanticCellValue(value.value);
 }
 
+export function isNoopCellMergeChange(
+  change: VersionMergeChange,
+  domain: string,
+  merged: CellMergeValue,
+): boolean {
+  const current = parseCellMergeValue(change.ours ?? change.base, domain);
+  return current ? cellMergeValuesEqual(current, merged) : false;
+}
+
 export function parseDirectFormatMergeValue(value: VersionDiffValue): DirectFormatMergeValue | null {
   if (value.kind !== 'value') return null;
   if (value.value === null) return { kind: 'clear' };
   const plain = semanticFormatJsonValue(value.value);
   if (!isMaterializableCellFormat(plain)) return null;
   return { kind: 'format', format: plain };
+}
+
+export function isNoopDirectFormatMergeChange(
+  change: VersionMergeChange,
+  merged: DirectFormatMergeValue,
+): boolean {
+  const current = parseDirectFormatMergeValue(change.ours ?? change.base);
+  return current ? directFormatMergeValuesEqual(current, merged) : false;
 }
 
 export function parseRowColumnTransition(
@@ -59,6 +76,15 @@ export function parseSheetMetadataMergeValue(
   return value.value === null || typeof value.value === 'string'
     ? { property, value: value.value }
     : null;
+}
+
+export function isNoopSheetMetadataMergeChange(
+  change: VersionMergeChange,
+  property: SheetMetadataProperty,
+  merged: SheetMetadataMergeValue,
+): boolean {
+  const current = parseSheetMetadataMergeValue(change.ours ?? change.base, property);
+  return current ? sheetMetadataMergeValuesEqual(current, merged) : false;
 }
 
 function parseSemanticCellValue(value: VersionSemanticValue): CellMergeValue | null {
@@ -109,6 +135,30 @@ function rowColumnValuesEqual(left: RowColumnMergeValue, right: RowColumnMergeVa
   return left.sheetId === right.sheetId && left.axis === right.axis && left.index === right.index;
 }
 
+function cellMergeValuesEqual(left: CellMergeValue, right: CellMergeValue): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'clear' || right.kind === 'clear') return true;
+  if (left.kind === 'formula' && right.kind === 'formula') return left.formula === right.formula;
+  if (left.kind === 'scalar' && right.kind === 'scalar') return left.value === right.value;
+  return false;
+}
+
+function directFormatMergeValuesEqual(
+  left: DirectFormatMergeValue,
+  right: DirectFormatMergeValue,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === 'clear' || right.kind === 'clear') return true;
+  return jsonValuesEqual(left.format, right.format);
+}
+
+function sheetMetadataMergeValuesEqual(
+  left: SheetMetadataMergeValue,
+  right: SheetMetadataMergeValue,
+): boolean {
+  return left.property === right.property && left.value === right.value;
+}
+
 function semanticFormatJsonValue(value: VersionSemanticValue, depth = 0): unknown {
   if (depth > 16) return undefined;
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
@@ -151,4 +201,21 @@ function semanticObjectFieldMap(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((entry, index) => jsonValuesEqual(entry, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(
+    (key, index) => key === rightKeys[index] && jsonValuesEqual(left[key], right[key]),
+  );
 }

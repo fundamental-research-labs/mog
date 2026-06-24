@@ -454,6 +454,7 @@ describe('VersionHistoryPanelContent', () => {
       getSurfaceStatus: jest.fn(async () =>
         createSurfaceStatus({
           current: {
+            branchName: 'main',
             checkedOutCommitId: HEAD_COMMIT_ID,
             refHeadAtMaterialization: HEAD_COMMIT_ID,
             currentRefHeadId: LATEST_COMMIT_ID,
@@ -467,6 +468,14 @@ describe('VersionHistoryPanelContent', () => {
           },
         }),
       ),
+      getHead: jest.fn(async () => ({
+        ok: true,
+        value: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: { kind: 'counter', value: '9' },
+        },
+      })),
     });
 
     const { user } = renderVersionHistoryPanel({ workbook });
@@ -479,6 +488,17 @@ describe('VersionHistoryPanelContent', () => {
     expect(staleStatus).toHaveTextContent('main is stale because the branch head moved.');
     expect(staleStatus).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
     expect(staleStatus).not.toHaveTextContent(shortCommitId(LATEST_COMMIT_ID));
+    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+      'data-version-commit-id',
+      HEAD_COMMIT_ID,
+    );
+    expect(screen.getByTestId('version-history-rollback-target-summary')).toHaveAttribute(
+      'data-version-commit-id',
+      HEAD_COMMIT_ID,
+    );
+    expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
+      shortCommitId(HEAD_COMMIT_ID),
+    );
 
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
 

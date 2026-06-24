@@ -306,11 +306,11 @@ export function FontSizePicker({
  ${
    error
      ? 'border-ss-error ring-1 ring-ss-error/20'
-   : isSmallFont
+     : isSmallFont
        ? 'border-ss-warning ring-1 ring-ss-warning/20 bg-ss-warning-bg'
-   : isOpen
-        ? 'border-ss-primary ring-1 ring-ss-primary/20'
-        : 'border-ss-border'
+       : isOpen
+         ? 'border-ss-primary ring-1 ring-ss-primary/20'
+         : 'border-ss-border'
  }
  `}
         title={

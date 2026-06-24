@@ -6,8 +6,7 @@
  * text orientation, and indent controls.
  *
  * Text formatting dispatch: every onClick routes through `useDispatch`
- * — the same hook form ArrangeGroup uses. The horizontal-alignment
- * three-button cluster is now a single `<SegmentedControl>` instance.
+ * — the same hook form ArrangeGroup uses.
  *
  * COLLAPSE SUPPORT (
  * - Passes ALIGNMENT_COLLAPSE_CONFIG to ToolbarGroup
@@ -51,6 +50,7 @@ import {
 } from '../primitives/HomeAlignmentIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
+import { SplitButton } from '../primitives/SplitButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { useRibbonVisibilityPathVisible } from '../visibility/RibbonVisibilityContext';
 import {
@@ -60,7 +60,6 @@ import {
   AlignMiddleIcon,
   AlignRightIcon,
   AlignTopIcon,
-  DropdownArrowIcon,
   MergeAcrossIcon,
   MergeAndCenterIcon,
   MergeCellsIcon,
@@ -98,12 +97,9 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   const dispatch = useDispatch();
 
   // ===========================================================================
-  // Derived alignment state — granular Zustand selectors. Horizontal alignment
-  // binds the SegmentedControl to the *raw* engine value: when raw is
-  // 'general'/'fill'/'centerContinuous'/'justify'/'distributed' (none of which
-  // map to a Row-1 segment), no segment is highlighted — matching Excel's
-  // unset-state visual. Vertical alignment still uses the mapped form because
-  // its three icon-only buttons are not yet a SegmentedControl.
+  // Derived alignment state. Horizontal alignment binds to the raw engine
+  // value so non-rendered values such as general/fill/centerContinuous leave
+  // the three icon buttons unhighlighted, matching Excel's unset state.
   // ===========================================================================
 
   const rawHAlign = useUIStore((s) => s.activeCellFormat?.horizontalAlign ?? 'general');
@@ -272,8 +268,6 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       label="Alignment"
       collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
       dropdownIcon={<AlignCenterIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' })}
-      dialogLaunchTitle="Alignment Settings"
     >
       <div className="flex items-center gap-2">
         <div className="grid grid-cols-3 gap-[var(--ribbon-button-inline-gap)]">
@@ -319,42 +313,42 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               />
             </Tooltip>
           )}
-            <Tooltip title="Align Top">
-              <RibbonButton
-                id="align-top"
-                layout="icon-only"
-                icon={<AlignTopIcon />}
-                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
-                isOpen={verticalAlign === 'top'}
-                disabled={!canFormatCells}
-                aria-label="Align top"
-                aria-pressed={verticalAlign === 'top'}
-              />
-            </Tooltip>
-            <Tooltip title="Align Middle">
-              <RibbonButton
-                id="align-middle"
-                layout="icon-only"
-                icon={<AlignMiddleIcon />}
-                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
-                isOpen={verticalAlign === 'middle'}
-                disabled={!canFormatCells}
-                aria-label="Align middle"
-                aria-pressed={verticalAlign === 'middle'}
-              />
-            </Tooltip>
-            <Tooltip title="Align Bottom">
-              <RibbonButton
-                id="align-bottom"
-                layout="icon-only"
-                icon={<AlignBottomIcon />}
-                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
-                isOpen={verticalAlign === 'bottom'}
-                disabled={!canFormatCells}
-                aria-label="Align bottom"
-                aria-pressed={verticalAlign === 'bottom'}
-              />
-            </Tooltip>
+          <Tooltip title="Align Top">
+            <RibbonButton
+              id="align-top"
+              layout="icon-only"
+              icon={<AlignTopIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
+              isOpen={verticalAlign === 'top'}
+              disabled={!canFormatCells}
+              aria-label="Align top"
+              aria-pressed={verticalAlign === 'top'}
+            />
+          </Tooltip>
+          <Tooltip title="Align Middle">
+            <RibbonButton
+              id="align-middle"
+              layout="icon-only"
+              icon={<AlignMiddleIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
+              isOpen={verticalAlign === 'middle'}
+              disabled={!canFormatCells}
+              aria-label="Align middle"
+              aria-pressed={verticalAlign === 'middle'}
+            />
+          </Tooltip>
+          <Tooltip title="Align Bottom">
+            <RibbonButton
+              id="align-bottom"
+              layout="icon-only"
+              icon={<AlignBottomIcon />}
+              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
+              isOpen={verticalAlign === 'bottom'}
+              disabled={!canFormatCells}
+              aria-label="Align bottom"
+              aria-pressed={verticalAlign === 'bottom'}
+            />
+          </Tooltip>
         </div>
 
         <div className="w-px h-11 bg-ss-surface-tertiary" />
@@ -373,27 +367,23 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             />
           </Tooltip>
 
-          {/* Merge Cells Split Button: direct-action + dropdown.
- Main button toggles merge & center vs unmerge (matches MERGE_AND_CENTER
- handler's internal toggle behavior). */}
+          {/* Merge Cells split button: direct action plus menu options. */}
           <div className="relative inline-flex">
             <Tooltip title="Merge & Center" shortcut="Ctrl+Shift+M">
-              <RibbonButton
+              <SplitButton
                 id="merge-center"
-                layout="icon-only"
-                icon={
-                  <span className="flex items-center gap-[var(--ribbon-button-icon-gap)]">
-                    <MergeCellsIcon />
-                    <DropdownArrowIcon />
-                  </span>
-                }
+                icon={<MergeCellsIcon />}
+                variant="small"
                 isOpen={isMerged || mergeDropdownOpen}
                 disabled={!canFormatCells || (!canMerge && !canUnmerge)}
                 visibilityKey="mergeCenter"
                 aria-label="Merge & Center"
-                onClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
-                aria-expanded={mergeDropdownOpen}
-                aria-haspopup="menu"
+                onMainClick={() => {
+                  setMergeDropdownOpen(false);
+                  dispatch('MERGE_AND_CENTER');
+                }}
+                onDropdownClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+                dropdownTestId="merge-dropdown-trigger"
               />
             </Tooltip>
             <RibbonDropdownPanel

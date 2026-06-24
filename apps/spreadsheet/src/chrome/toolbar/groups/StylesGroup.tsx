@@ -5,17 +5,13 @@
  * Excel layout: compact three-row command stack for Conditional Formatting,
  * Format as Table, and Cell Styles.
  *
- * Text formatting dispatch: clearFormat (the "Normal" quick-pick chip)
- * routes through `useDispatch()`/`dispatch('CLEAR_FORMATS')`. The
- * applyStyle / formatAsTable code paths still call non-dispatch helpers
- * (`useToolbarActions().handleApplyStyle` and `ws.tables.add` directly) —
- * those need APPLY_CELL_STYLE / FORMAT_AS_TABLE handlers which are out of
- * scope for text formatting. It does not add new ActionTypes here.
+ * Text formatting dispatch: Format as Table routes through INSERT_TABLE.
+ * Cell Styles still delegates named styles to the existing toolbar action
+ * helper until a typed APPLY_CELL_STYLE handler exists.
  *
  * Features:
  * - Conditional Formatting dropdown (Excel-like menu with quick rules, presets, and manager)
  * - Format as Table dropdown (creates table with selected style)
- * - Quick-pick style chips for one-click style application
  * - Cell Styles dropdown (applies built-in cell styles)
  *
  * COLLAPSE SUPPORT (
@@ -34,7 +30,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { useFeatureGate, useUIStore } from '../../../internal-api';
 
-import { Tooltip } from '@mog/shell';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
 import { STYLES_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { StyleGallery } from '../../../components/pickers/StyleGallery';
@@ -44,8 +39,9 @@ import { useToolbarActions } from '../../../hooks/toolbar/use-toolbar-actions';
 import { ConditionalFormattingMenu } from '../galleries/ConditionalFormattingMenu';
 import { keyTipRegistry } from '../keytips';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
+import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
-import { ConditionalFormatIcon, DropdownArrowIcon } from '../primitives/ToolbarIcons';
+import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
 
 // =============================================================================
 // Icons
@@ -84,32 +80,6 @@ function CellStylesIcon() {
   );
 }
 
-interface StyleStackButtonProps {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  isOpen: boolean;
-}
-
-function StyleStackButton({ icon, label, onClick, isOpen }: StyleStackButtonProps) {
-  return (
-    <Tooltip title={label}>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex h-5 min-w-[132px] items-center gap-1.5 rounded px-1.5 text-ribbon-compact leading-none text-ss-text-secondary transition-colors duration-ss-fast hover:bg-ss-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-ss-primary"
-        aria-label={label}
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-      >
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center">{icon}</span>
-        <span className="flex-1 whitespace-nowrap text-left">{label}</span>
-        <DropdownArrowIcon className={isOpen ? 'rotate-180' : ''} />
-      </button>
-    </Tooltip>
-  );
-}
-
 // =============================================================================
 // Component
 // =============================================================================
@@ -117,10 +87,10 @@ function StyleStackButton({ icon, label, onClick, isOpen }: StyleStackButtonProp
 /**
  * Styles toolbar group - self-sufficient, no props required.
  *
- * Layout matches Excel:
- * - Conditional Formatting (large button with dropdown)
- * - Format as Table (large button with gallery dropdown)
- * - Quick-pick style chips (2x2 grid: Normal, Bad, Good, Neutral) with Cell Styles dropdown
+ * Compact three-row command stack:
+ * - Conditional Formatting
+ * - Format as Table
+ * - Cell Styles
  *
  * Memoized to prevent re-renders when parent re-renders.
  */
@@ -216,14 +186,14 @@ export const StylesGroup = React.memo(function StylesGroup() {
       label="Styles"
       collapseConfig={STYLES_COLLAPSE_CONFIG}
       dropdownIcon={<ConditionalFormatIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
-      dialogLaunchTitle="Cell Styles Settings"
     >
       <div className="flex flex-col justify-center gap-0.5">
         <ConditionalFormattingMenu variant="stacked" />
 
         <div className="relative inline-flex">
-          <StyleStackButton
+          <StackedRibbonMenuButton
+            id="format-as-table"
+            testId="ribbon-dropdown-format-as-table"
             icon={<FormatAsTableIcon />}
             label="Format as Table"
             isOpen={tableStyleGalleryOpen}
@@ -247,7 +217,9 @@ export const StylesGroup = React.memo(function StylesGroup() {
         </div>
 
         <div className="relative inline-flex">
-          <StyleStackButton
+          <StackedRibbonMenuButton
+            id="cell-styles"
+            testId="ribbon-dropdown-cell-styles"
             icon={<CellStylesIcon />}
             label="Cell Styles"
             isOpen={styleGalleryOpen}

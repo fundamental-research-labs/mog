@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import nodePath from 'node:path';
 
-const RIBBON_TOP_BORDER_PX = 1;
 const APP_ROOT = process.cwd().endsWith(`${nodePath.sep}apps${nodePath.sep}spreadsheet`)
   ? process.cwd()
   : nodePath.resolve(process.cwd(), 'apps/spreadsheet');
@@ -36,6 +35,6 @@ describe('ribbon layout tokens', () => {
     const paddingY = readPxToken(css, 'ribbon-padding-y');
 
     expect(paddingY).toBeGreaterThan(0);
-    expect(ribbonHeight).toBe(contentHeight + labelHeight + paddingY * 2 + RIBBON_TOP_BORDER_PX);
+    expect(ribbonHeight).toBe(contentHeight + labelHeight + paddingY * 2);
   });
 });

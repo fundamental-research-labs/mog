@@ -38,17 +38,6 @@ export interface ToolbarGroupProps {
   isLast?: boolean;
   /** Group content - rendered when not collapsed to dropdown */
   children: ReactNode;
-  /**
-   * Optional callback when dialog launcher is clicked.
-   * When provided, renders a small diagonal arrow icon in the bottom-right
-   * corner that opens a related dialog (Excel-style dialog launcher).
-   */
-  onDialogLaunch?: () => void;
-  /**
-   * Tooltip text for the dialog launcher icon.
-   * Defaults to "{label} Settings" if not provided.
-   */
-  dialogLaunchTitle?: string;
 
   // === Collapse configuration (NEW) ===
 

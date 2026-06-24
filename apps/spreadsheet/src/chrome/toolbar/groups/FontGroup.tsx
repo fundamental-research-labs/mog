@@ -480,13 +480,7 @@ export const FontGroup = React.memo(function FontGroup() {
   if (!isEnabled) return null;
 
   return (
-    <ToolbarGroup
-      label="Font"
-      collapseConfig={FONT_COLLAPSE_CONFIG}
-      dropdownIcon={<FontIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'font' })}
-      dialogLaunchTitle="Font Settings"
-    >
+    <ToolbarGroup label="Font" collapseConfig={FONT_COLLAPSE_CONFIG} dropdownIcon={<FontIcon />}>
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Font family & size */}
         <div className="flex items-center gap-1">

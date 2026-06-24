@@ -42,7 +42,8 @@ import {
   RibbonDropdownItem,
   RibbonDropdownSubmenu,
 } from '../primitives/RibbonDropdown';
-import { ConditionalFormatIcon, DropdownArrowIcon } from '../primitives/ToolbarIcons';
+import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
+import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
 
 // =============================================================================
 // Types
@@ -105,11 +106,7 @@ function ConditionalFormattingStackIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <rect x="1.5" y="2" width="13" height="12" rx="1" fill="#ffffff" stroke="#6b7280" />
-      <path
-        d="M5.8 2v12M10.2 2v12M1.5 6.1h13M1.5 10.4h13"
-        stroke="#9ca3af"
-        strokeWidth="0.7"
-      />
+      <path d="M5.8 2v12M10.2 2v12M1.5 6.1h13M1.5 10.4h13" stroke="#9ca3af" strokeWidth="0.7" />
       <rect x="2.4" y="2.9" width="2.6" height="2.4" fill="#f7c7c7" />
       <rect x="6.7" y="2.9" width="2.6" height="2.4" fill="#b7d7f0" />
       <rect x="11" y="6.9" width="2.6" height="2.7" fill="#f7c7c7" />
@@ -226,26 +223,17 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
   // Get table at selection for conditional rendering
   const tableAtSelection = cf.getTableAtSelection();
 
-  // Trigger button - uses RibbonButton with vertical layout and full height
+  // Trigger button: vertical RibbonButton by default, compact stack row in Styles.
   const trigger =
     variant === 'stacked' ? (
-      <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
-        <button
-          type="button"
-          data-testid="ribbon-dropdown-conditional-formatting"
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex h-5 min-w-[132px] items-center gap-1.5 rounded px-1.5 text-ribbon-compact leading-none text-ss-text-secondary transition-colors duration-ss-fast hover:bg-ss-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-ss-primary"
-          aria-label="Conditional Formatting"
-          aria-expanded={isOpen}
-          aria-haspopup="menu"
-        >
-          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
-            <ConditionalFormattingStackIcon />
-          </span>
-          <span className="flex-1 whitespace-nowrap text-left">Conditional Formatting</span>
-          <DropdownArrowIcon className={isOpen ? 'rotate-180' : ''} />
-        </button>
-      </Tooltip>
+      <StackedRibbonMenuButton
+        id="conditional-formatting"
+        testId="ribbon-dropdown-conditional-formatting"
+        icon={<ConditionalFormattingStackIcon />}
+        label="Conditional Formatting"
+        isOpen={isOpen}
+        onClick={() => setIsOpen(!isOpen)}
+      />
     ) : (
       <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
         <RibbonButton

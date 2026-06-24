@@ -147,10 +147,9 @@
   --qat-gap: 2px;
   --qat-padding-x: 4px;
 
-  /* Ribbon structure - explicit heights for predictable layout */
-  /* Tightened to match Excel's vertical density (was 80px/66px) */
-  /* Note: 77px = 60px content + 14px label + 2px padding-y + 1px border-t */
-  --ribbon-height: 68px; /* total ribbon height (includes 1px border) */
+  /* Ribbon structure - explicit border-box heights for predictable layout */
+  /* 68px = 56px content + 0px footer label + 12px vertical padding */
+  --ribbon-height: 68px; /* total ribbon height */
   --ribbon-content-height: 56px; /* height of button/content area */
   --ribbon-label-height: 0px; /* group footer labels are hidden */
   --ribbon-padding-x: 6px;
@@ -185,9 +184,8 @@
     (var(--ribbon-content-height) - 2 * var(--ribbon-button-gap)) / 3
   );
 
-  /* Ribbon group separators & labels */
+  /* Ribbon group separators */
   --ribbon-group-separator-width: 1px;
-  --ribbon-group-label-letter-spacing: 0.03em;
 
   /* Tooltip timing */
   --tooltip-delay: 500ms;

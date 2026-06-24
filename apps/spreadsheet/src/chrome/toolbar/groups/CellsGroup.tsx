@@ -20,7 +20,6 @@ import React, { useCallback, useEffect } from 'react';
 import { useSelector } from '@xstate/react';
 import {
   dispatch,
-  useActionDependencies,
   useActiveSheetId,
   useCoordinator,
   useFeatureGate,
@@ -78,10 +77,9 @@ export const CellsGroup = React.memo(function CellsGroup() {
   const isEnabled = useFeatureGate('groups', 'cells');
 
   // ===========================================================================
-  // Action Dependencies for Dialog Launcher + dispatch hook
+  // Action dispatch and workbook state
   // ===========================================================================
 
-  const deps = useActionDependencies();
   const dispatchAction = useDispatch();
   const coordinator = useCoordinator();
   const activeSheetId = useActiveSheetId();
@@ -153,8 +151,6 @@ export const CellsGroup = React.memo(function CellsGroup() {
       label="Cells"
       collapseConfig={CELLS_COLLAPSE_CONFIG}
       dropdownIcon={<InsertCellsIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', deps)}
-      dialogLaunchTitle="Format Cells"
     >
       {/* Vertical stack of three dropdown rows - matches Excel's Cells group layout */}
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">

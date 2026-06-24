@@ -492,20 +492,16 @@ export class HeadersLayer extends BaseLayer implements OnceLayerWithChrome {
     ctx.lineTo(totalRowHeaderWidth, cornerBottomY);
     ctx.stroke();
 
-    // Small diagonal arrow icon in corner (select all indicator)
-    const centerX = totalRowHeaderWidth / 2;
-    const centerY = totalColHeaderHeight / 2;
-    const arrowSize = 5;
-
-    ctx.strokeStyle = this.config.textColor;
-    ctx.lineWidth = 1;
+    // Excel-style select-all corner mark: a right triangle scaled to the
+    // rectangular header corner rather than a square icon.
+    const inset = 5;
+    ctx.fillStyle = this.config.highlightBgColor;
     ctx.beginPath();
-    ctx.moveTo(centerX - arrowSize, centerY + arrowSize);
-    ctx.lineTo(centerX + arrowSize, centerY - arrowSize);
-    ctx.moveTo(centerX + arrowSize - 3, centerY - arrowSize);
-    ctx.lineTo(centerX + arrowSize, centerY - arrowSize);
-    ctx.lineTo(centerX + arrowSize, centerY - arrowSize + 3);
-    ctx.stroke();
+    ctx.moveTo(inset, totalColHeaderHeight - inset);
+    ctx.lineTo(totalRowHeaderWidth - inset, totalColHeaderHeight - inset);
+    ctx.lineTo(totalRowHeaderWidth - inset, inset);
+    ctx.closePath();
+    ctx.fill();
   }
 
   // ===========================================================================

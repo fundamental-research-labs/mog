@@ -42,7 +42,7 @@ import {
   RibbonDropdownItem,
   RibbonDropdownSubmenu,
 } from '../primitives/RibbonDropdown';
-import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
+import { ConditionalFormatIcon, DropdownArrowIcon } from '../primitives/ToolbarIcons';
 
 // =============================================================================
 // Types
@@ -51,6 +51,8 @@ import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
 interface ConditionalFormattingMenuProps {
   /** Callback when CF dialog should open (existing flow) */
   onOpenCFDialog?: () => void;
+  /** Compact three-row style used inside the Home ribbon Styles group. */
+  variant?: 'button' | 'stacked';
 }
 
 // =============================================================================
@@ -107,6 +109,7 @@ const TOP_BOTTOM_RULES: Array<{ label: string; type: QuickRuleDialogType; descri
  */
 export const ConditionalFormattingMenu = React.memo(function ConditionalFormattingMenu({
   onOpenCFDialog,
+  variant = 'button',
 }: ConditionalFormattingMenuProps) {
   // lifted into the ribbonDropdowns slice so the keytip chord
   // (Alt+H,J) can open the menu via OPEN_RIBBON_DROPDOWN.
@@ -203,21 +206,40 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
   const tableAtSelection = cf.getTableAtSelection();
 
   // Trigger button - uses RibbonButton with vertical layout and full height
-  const trigger = (
-    <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
-      <RibbonButton
-        layout="vertical"
-        height="full"
-        data-testid="ribbon-dropdown-conditional-formatting"
-        icon={<ConditionalFormatIcon />}
-        label={'Conditional\nFormatting'}
-        hasDropdown
-        dropdownPosition="inline"
-        isOpen={isOpen}
-        aria-label="Conditional Formatting"
-      />
-    </Tooltip>
-  );
+  const trigger =
+    variant === 'stacked' ? (
+      <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
+        <button
+          type="button"
+          data-testid="ribbon-dropdown-conditional-formatting"
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex h-5 min-w-[134px] items-center gap-1.5 rounded px-1.5 text-ribbon leading-none text-ss-text-secondary transition-colors duration-ss-fast hover:bg-ss-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-ss-primary"
+          aria-label="Conditional Formatting"
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+        >
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+            <ConditionalFormatIcon />
+          </span>
+          <span className="flex-1 whitespace-nowrap text-left">Conditional Formatting</span>
+          <DropdownArrowIcon className={isOpen ? 'rotate-180' : ''} />
+        </button>
+      </Tooltip>
+    ) : (
+      <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
+        <RibbonButton
+          layout="vertical"
+          height="full"
+          data-testid="ribbon-dropdown-conditional-formatting"
+          icon={<ConditionalFormatIcon />}
+          label={'Conditional\nFormatting'}
+          hasDropdown
+          dropdownPosition="inline"
+          isOpen={isOpen}
+          aria-label="Conditional Formatting"
+        />
+      </Tooltip>
+    );
 
   return (
     <div className="relative inline-flex">

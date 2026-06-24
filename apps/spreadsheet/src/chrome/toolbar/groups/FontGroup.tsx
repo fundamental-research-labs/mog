@@ -489,7 +489,7 @@ export const FontGroup = React.memo(function FontGroup() {
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Font family & size */}
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
           {/* Font Family Picker */}
           <RibbonVisibilityItem item="fontFamily">
             <div id="font-family-picker" className="relative inline-flex">

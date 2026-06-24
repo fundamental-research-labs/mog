@@ -303,9 +303,8 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' })}
       dialogLaunchTitle="Alignment Settings"
     >
-      <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
-        {/* Row 1: Horizontal alignment + Vertical alignment */}
-        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+      <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
           {/* Bind to the *raw* alignment, not the mapped textAlign: Radix
  RadioGroup suppresses onValueChange when clicking the already-
  selected segment (radios don't uncheck on re-click), so mapping
@@ -321,48 +320,49 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             options={horizontalAlignmentOptions}
           />
 
-          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
-
-          <Tooltip title="Align Top">
-            <RibbonButton
-              id="align-top"
-              layout="icon-only"
-              icon={<AlignTopIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
-              isOpen={verticalAlign === 'top'}
-              disabled={!canFormatCells}
-              aria-label="Align top"
-              aria-pressed={verticalAlign === 'top'}
-            />
-          </Tooltip>
-          <Tooltip title="Align Middle">
-            <RibbonButton
-              id="align-middle"
-              layout="icon-only"
-              icon={<AlignMiddleIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
-              isOpen={verticalAlign === 'middle'}
-              disabled={!canFormatCells}
-              aria-label="Align middle"
-              aria-pressed={verticalAlign === 'middle'}
-            />
-          </Tooltip>
-          <Tooltip title="Align Bottom">
-            <RibbonButton
-              id="align-bottom"
-              layout="icon-only"
-              icon={<AlignBottomIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
-              isOpen={verticalAlign === 'bottom'}
-              disabled={!canFormatCells}
-              aria-label="Align bottom"
-              aria-pressed={verticalAlign === 'bottom'}
-            />
-          </Tooltip>
+          <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+            <Tooltip title="Align Top">
+              <RibbonButton
+                id="align-top"
+                layout="icon-only"
+                icon={<AlignTopIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
+                isOpen={verticalAlign === 'top'}
+                disabled={!canFormatCells}
+                aria-label="Align top"
+                aria-pressed={verticalAlign === 'top'}
+              />
+            </Tooltip>
+            <Tooltip title="Align Middle">
+              <RibbonButton
+                id="align-middle"
+                layout="icon-only"
+                icon={<AlignMiddleIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
+                isOpen={verticalAlign === 'middle'}
+                disabled={!canFormatCells}
+                aria-label="Align middle"
+                aria-pressed={verticalAlign === 'middle'}
+              />
+            </Tooltip>
+            <Tooltip title="Align Bottom">
+              <RibbonButton
+                id="align-bottom"
+                layout="icon-only"
+                icon={<AlignBottomIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
+                isOpen={verticalAlign === 'bottom'}
+                disabled={!canFormatCells}
+                aria-label="Align bottom"
+                aria-pressed={verticalAlign === 'bottom'}
+              />
+            </Tooltip>
+          </div>
         </div>
 
-        {/* Row 2: Wrap + Merge + Orientation + Indent */}
-        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+        <div className="w-px h-11 bg-ss-surface-tertiary" />
+
+        <div className="grid grid-cols-3 items-center gap-x-1 gap-y-[var(--ribbon-button-gap)]">
           <Tooltip title="Word Wrap">
             <RibbonButton
               id="word-wrap"
@@ -673,8 +673,6 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
               </div>
             </RibbonDropdownPanel>
           </div>
-
-          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
 
           {/* Decrease Indent */}
           <Tooltip title="Decrease Indent">

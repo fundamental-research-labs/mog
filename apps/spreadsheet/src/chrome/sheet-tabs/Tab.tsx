@@ -399,7 +399,7 @@ export function Tab({
           <span>{name}</span>
           {/* Active underline is separate from the persisted tab color marker. */}
           <div
-            className="absolute bottom-0 left-0 right-0 rounded-b-sm"
+            className="absolute bottom-0 left-0 right-0"
             data-testid="active-tab-indicator"
             style={{
               backgroundColor: activeIndicatorColor,
@@ -408,7 +408,7 @@ export function Tab({
           />
           {/* `tab-color-indicator` reflects only the sheet tabColor. */}
           <div
-            className="absolute bottom-0 left-0 right-0 rounded-b-sm"
+            className="absolute bottom-0 left-0 right-0"
             data-testid="tab-color-indicator"
             style={{
               backgroundColor: tabColorIndicatorColor,

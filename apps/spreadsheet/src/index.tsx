@@ -866,12 +866,6 @@ function SpreadsheetContent(): React.JSX.Element {
  the panel detaches from the DOM. The panel root carries
  `data-testid="panel-status-bar"` for the chrome-symmetry
  contract. */}
-          {showStatusBar && (
-            <div data-testid="panel-status-bar" className="shrink-0 border-t border-ss-border">
-              <StatusBar />
-            </div>
-          )}
-
           {/* Sheet Tabs - app-owned chrome (gated by capabilities.sheetTabs) */}
           {showSheetTabs && (
             <div className="shrink-0">
@@ -890,6 +884,12 @@ function SpreadsheetContent(): React.JSX.Element {
                 hiddenSheets={hiddenSheets}
                 readOnly={readOnly}
               />
+            </div>
+          )}
+
+          {showStatusBar && (
+            <div data-testid="panel-status-bar" className="shrink-0 border-t border-ss-border">
+              <StatusBar />
             </div>
           )}
         </div>

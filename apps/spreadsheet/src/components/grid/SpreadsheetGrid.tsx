@@ -76,6 +76,7 @@ import { useRendererDependencies } from './effects/useRendererDependencies';
 import { useRendererLifecycle } from './effects/useRendererLifecycle';
 import { useRendererSync } from './effects/useRendererSync';
 import { useRendererViewRestore } from './effects/useRendererViewRestore';
+import { useSheetZoomState } from './effects/useSheetZoomState';
 import { useSparklineCFIntegration } from './effects/useSparklineCFIntegration';
 import { createLiveViewportReader } from './hooks/liveViewportReader';
 import { useCellDataCallbacks } from './hooks/useCellDataCallbacks';
@@ -173,10 +174,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     [wb],
   );
 
-  // PERFORMANCE: Subscribe only to active sheet's zoom level to prevent re-renders
-  // when other sheets' zoom levels change
-  const currentZoom = useUIStore((s) => s.zoomLevels[activeSheetId] ?? 1.0);
-  const setZoomLevel = useUIStore((s) => s.setZoomLevel);
+  const { currentZoom, setZoomLevel, persistZoomLevel } = useSheetZoomState(wb, activeSheetId);
   const openEditSparklineDialog = useUIStore((s) => s.openEditSparklineDialog);
 
   // Get UI Store API for per-sheet scroll position restoration
@@ -811,6 +809,7 @@ export const SpreadsheetGrid = memo(function SpreadsheetGrid({
     switchSheet: rendererActions.switchSheet,
     setZoom: rendererActions.setZoom,
     setZoomLevel,
+    persistZoomLevel,
     unmount: rendererActions.unmount,
   });
 

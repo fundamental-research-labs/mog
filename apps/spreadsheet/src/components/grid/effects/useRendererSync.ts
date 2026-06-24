@@ -52,6 +52,8 @@ export interface UseRendererSyncOptions {
   setZoom: (zoom: number) => void;
   /** Persist zoom for a sheet in the UI store */
   setZoomLevel: (sheetId: string, level: number) => void;
+  /** Persist zoom for a sheet in the workbook model */
+  persistZoomLevel?: (sheetId: string, level: number) => void;
   /** Unmount callback from renderer hook */
   unmount: () => void;
 }
@@ -89,16 +91,18 @@ export interface PersistInputZoomOptions {
   zoom: number;
   currentZoom: number;
   setZoomLevel: (sheetId: string, level: number) => void;
+  persistZoomLevel?: (sheetId: string, level: number) => void;
 }
 
 export function persistInputZoomForSheet(options: PersistInputZoomOptions): void {
-  const { activeSheetId, zoom, currentZoom, setZoomLevel } = options;
+  const { activeSheetId, zoom, currentZoom, setZoomLevel, persistZoomLevel } = options;
   if (!Number.isFinite(zoom)) return;
 
   const clampedZoom = clampZoom(zoom);
   if (Math.abs(clampedZoom - currentZoom) < 0.0001) return;
 
   setZoomLevel(activeSheetId, clampedZoom);
+  persistZoomLevel?.(activeSheetId, clampedZoom);
 }
 
 /**
@@ -131,6 +135,7 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
     switchSheet,
     setZoom,
     setZoomLevel,
+    persistZoomLevel,
     unmount,
   } = options;
 
@@ -188,13 +193,7 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
     if (rect.width > 0 && rect.height > 0) {
       resize(rect.width, rect.height);
     }
-  }, [
-    showHorizontalScrollbar,
-    showVerticalScrollbar,
-    isReady,
-    resize,
-    containerRef,
-  ]);
+  }, [showHorizontalScrollbar, showVerticalScrollbar, isReady, resize, containerRef]);
 
   // Visibility change effect
   // Note: Capture suspend/resume functions at mount to avoid re-attaching listener on every render
@@ -242,9 +241,15 @@ export function useRendererSync(options: UseRendererSyncOptions): void {
     if (!isReady) return;
 
     return coordinator.input.onZoomChange((zoom) => {
-      persistInputZoomForSheet({ activeSheetId, zoom, currentZoom, setZoomLevel });
+      persistInputZoomForSheet({
+        activeSheetId,
+        zoom,
+        currentZoom,
+        setZoomLevel,
+        persistZoomLevel,
+      });
     });
-  }, [isReady, coordinator, activeSheetId, currentZoom, setZoomLevel]);
+  }, [isReady, coordinator, activeSheetId, currentZoom, setZoomLevel, persistZoomLevel]);
 
   // Input dependencies effect
   // Sets up InputCoordinator dependencies when renderer is ready.

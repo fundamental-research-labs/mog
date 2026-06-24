@@ -4,13 +4,16 @@ import { sheetId } from '@mog-sdk/contracts/core';
 import {
   setupSheetSwitchCoordination,
   type OnSheetSwitchCallback,
+  type SheetViewState,
   type SheetSwitchCoordinationConfig,
 } from '../../subscriptions/sheet-switch-coordination';
 
 type SheetSwitchListener = Parameters<OnSheetSwitchCallback>[0];
 type WorkbookListener = (event?: any) => void;
+type RendererListener = (state: { value: string }) => void;
 
 function createActorStubs(options?: { currentSheetId?: string | null }) {
+  let rendererListener: RendererListener | null = null;
   const selectionSnapshot = {
     context: {
       activeCell: { row: 0, col: 0 },
@@ -33,7 +36,10 @@ function createActorStubs(options?: { currentSheetId?: string | null }) {
     },
     clipboardActor: {},
     rendererActor: {
-      subscribe: jest.fn(() => ({ unsubscribe: jest.fn() })),
+      subscribe: jest.fn((listener: RendererListener) => {
+        rendererListener = listener;
+        return { unsubscribe: jest.fn() };
+      }),
       getSnapshot: () => ({
         context: {
           currentSheetId: options?.currentSheetId ?? 'sheet-1',
@@ -45,22 +51,37 @@ function createActorStubs(options?: { currentSheetId?: string | null }) {
       getSnapshot: () => selectionSnapshot,
       send: jest.fn(),
     },
+    emitRendererState: (state: { value: string }) => rendererListener?.(state),
   } as Pick<
     SheetSwitchCoordinationConfig,
     'editorActor' | 'clipboardActor' | 'rendererActor' | 'selectionActor'
-  >;
+  > & { emitRendererState: (state: { value: string }) => void };
 }
 
 function createHarness(options?: {
   durabilityPromise?: Promise<void>;
   topLeftCells?: Array<{ row: number; col: number }>;
+  importedSelections?: Record<
+    string,
+    {
+      activeCell: { row: number; col: number };
+      ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+    }
+  >;
+  sheetViewStates?: Record<string, SheetViewState>;
 }) {
   const setScrollPosition = jest.fn(async () => undefined);
+  const getViewSelection = jest.fn(
+    (targetSheetId: string) => options?.importedSelections?.[targetSheetId] ?? null,
+  );
   const workbookListeners = new Map<string, WorkbookListener[]>();
   const workbook = {
     getSheetById: jest.fn(() => ({
       view: { setScrollPosition },
     })),
+    mirror: {
+      getViewSelection,
+    },
     on: jest.fn((event: string, handler: WorkbookListener) => {
       const listeners = workbookListeners.get(event) ?? [];
       listeners.push(handler);
@@ -93,6 +114,7 @@ function createHarness(options?: {
       return jest.fn();
     },
     getEditingSheetId: () => null,
+    getSheetViewState: jest.fn((targetSheetId) => options?.sheetViewStates?.[targetSheetId]),
     saveSheetViewState,
     getScrollPosition: () => ({ x: 100, y: 200 }),
     getTopLeftCell: () => topLeftCells.shift() ?? { row: 0, col: 0 },
@@ -111,6 +133,8 @@ function createHarness(options?: {
       }
     },
     actors,
+    emitRendererState: actors.emitRendererState,
+    getViewSelection,
     setScrollPosition,
     saveSheetViewState,
     refreshLayoutCallbacks,
@@ -167,6 +191,71 @@ describe('setupSheetSwitchCoordination import durability', () => {
 
     expect(harness.setScrollPosition).toHaveBeenCalledTimes(1);
     expect(harness.setScrollPosition).toHaveBeenCalledWith(8, 9);
+    harness.cleanup();
+  });
+
+  it('restores imported mirror selection on first visit to a sheet', () => {
+    const importedSelection = {
+      activeCell: { row: 3, col: 2 },
+      ranges: [{ startRow: 3, startCol: 2, endRow: 3, endCol: 2 }],
+    };
+    const harness = createHarness({
+      importedSelections: {
+        'sheet-2': importedSelection,
+      },
+    });
+
+    harness.listener(sheetId('sheet-2'), sheetId('sheet-1'));
+    harness.emitRendererState({ value: 'ready' });
+
+    expect(harness.getViewSelection).toHaveBeenCalledWith(sheetId('sheet-2'));
+    expect(harness.actors.selectionActor.send).toHaveBeenCalledWith({
+      type: 'SET_SELECTION',
+      ranges: importedSelection.ranges,
+      activeCell: importedSelection.activeCell,
+      anchor: null,
+      anchorCol: null,
+      anchorRow: null,
+      source: 'restore',
+    });
+    harness.cleanup();
+  });
+
+  it('prefers imported mirror selection over an untouched default A1 sheet state', () => {
+    const importedSelection = {
+      activeCell: { row: 3, col: 2 },
+      ranges: [{ startRow: 3, startCol: 2, endRow: 3, endCol: 2 }],
+    };
+    const defaultA1State: SheetViewState = {
+      activeCell: { row: 0, col: 0 },
+      ranges: [{ startRow: 0, startCol: 0, endRow: 0, endCol: 0 }],
+      anchor: null,
+      anchorCol: null,
+      anchorRow: null,
+      scrollTop: 0,
+      scrollLeft: 0,
+    };
+    const harness = createHarness({
+      importedSelections: {
+        'sheet-2': importedSelection,
+      },
+      sheetViewStates: {
+        'sheet-2': defaultA1State,
+      },
+    });
+
+    harness.listener(sheetId('sheet-2'), sheetId('sheet-1'));
+    harness.emitRendererState({ value: 'ready' });
+
+    expect(harness.actors.selectionActor.send).toHaveBeenCalledWith({
+      type: 'SET_SELECTION',
+      ranges: importedSelection.ranges,
+      activeCell: importedSelection.activeCell,
+      anchor: null,
+      anchorCol: null,
+      anchorRow: null,
+      source: 'restore',
+    });
     harness.cleanup();
   });
 

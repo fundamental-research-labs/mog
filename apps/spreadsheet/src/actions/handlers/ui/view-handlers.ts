@@ -22,7 +22,13 @@ import type {
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
 // G5: Zoom utilities
-import { clampZoom, getZoomLevel, zoomIn, zoomOut } from '../../../infra/utils/zoom-utils';
+import {
+  clampZoom,
+  zoomIn,
+  zoomLevelToScale,
+  zoomOut,
+  zoomScaleToLevel,
+} from '../../../infra/utils/zoom-utils';
 import { DEFAULT_ZOOM } from '@mog-sdk/contracts/rendering';
 import { resolveDataCommandTarget } from '../../data-command-target';
 import { getUIStore, handled, notHandled } from '../handler-utils';
@@ -204,19 +210,40 @@ export const DEACTIVATE_RIBBON_KEYTIPS: ActionHandler = (deps): ActionResult => 
 // Zoom Actions (G5: Zoom Slider)
 // =============================================================================
 
+function getCurrentZoomLevel(deps: ActionDependencies, sheetId: SheetId): number {
+  const uiStore = getUIStore(deps);
+  const uiZoom = uiStore.getState().zoomLevels[sheetId];
+  if (typeof uiZoom === 'number') {
+    return uiZoom;
+  }
+
+  const persistedZoom = zoomScaleToLevel(deps.workbook.mirror.getViewOptions(sheetId).zoomScale);
+  return persistedZoom ?? DEFAULT_ZOOM;
+}
+
+async function applyZoomLevel(
+  deps: ActionDependencies,
+  sheetId: SheetId,
+  level: number,
+): Promise<ActionResult> {
+  const clampedZoom = clampZoom(level);
+  await deps.workbook
+    .getSheetById(sheetId)
+    .settings.set('zoomScale', zoomLevelToScale(clampedZoom));
+  getUIStore(deps).getState().setZoomLevel(sheetId, clampedZoom);
+  return handled();
+}
+
 /**
  * Zoom In - increase zoom level by one step.
  *
  * G5: Excel parity - Zoom controls in status bar.
  */
-export const ZOOM_IN: ActionHandler = (deps): ActionResult => {
+export const ZOOM_IN: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const sheetId = deps.getActiveSheetId();
-
-  const uiStore = getUIStore(deps);
-  const currentZoom = getZoomLevel(uiStore.getState().zoomLevels, sheetId);
+  const currentZoom = getCurrentZoomLevel(deps, sheetId);
   const newZoom = zoomIn(currentZoom);
-  uiStore.getState().setZoomLevel(sheetId, newZoom);
-  return handled();
+  return applyZoomLevel(deps, sheetId, newZoom);
 };
 
 /**
@@ -224,14 +251,11 @@ export const ZOOM_IN: ActionHandler = (deps): ActionResult => {
  *
  * G5: Excel parity - Zoom controls in status bar.
  */
-export const ZOOM_OUT: ActionHandler = (deps): ActionResult => {
+export const ZOOM_OUT: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const sheetId = deps.getActiveSheetId();
-
-  const uiStore = getUIStore(deps);
-  const currentZoom = getZoomLevel(uiStore.getState().zoomLevels, sheetId);
+  const currentZoom = getCurrentZoomLevel(deps, sheetId);
   const newZoom = zoomOut(currentZoom);
-  uiStore.getState().setZoomLevel(sheetId, newZoom);
-  return handled();
+  return applyZoomLevel(deps, sheetId, newZoom);
 };
 
 /**
@@ -239,12 +263,9 @@ export const ZOOM_OUT: ActionHandler = (deps): ActionResult => {
  *
  * Keyboard shortcut: Ctrl+0
  */
-export const ZOOM_RESET: ActionHandler = (deps): ActionResult => {
+export const ZOOM_RESET: AsyncActionHandler = async (deps): Promise<ActionResult> => {
   const sheetId = deps.getActiveSheetId();
-
-  const uiStore = getUIStore(deps);
-  uiStore.getState().setZoomLevel(sheetId, DEFAULT_ZOOM);
-  return handled();
+  return applyZoomLevel(deps, sheetId, DEFAULT_ZOOM);
 };
 
 /**
@@ -255,17 +276,15 @@ export const ZOOM_RESET: ActionHandler = (deps): ActionResult => {
  * @param deps - Action dependencies
  * @param payload - { sheetId: SheetId, level: number }
  */
-export const SET_ZOOM: ActionHandler = (
+export const SET_ZOOM: AsyncActionHandler = async (
   deps,
   payload?: { sheetId: SheetId; level: number },
-): ActionResult => {
+): Promise<ActionResult> => {
   if (!payload?.sheetId || typeof payload?.level !== 'number') {
     return notHandled('disabled');
   }
 
-  const uiStore = getUIStore(deps);
-  uiStore.getState().setZoomLevel(payload.sheetId, clampZoom(payload.level));
-  return handled();
+  return applyZoomLevel(deps, payload.sheetId, payload.level);
 };
 
 // =============================================================================

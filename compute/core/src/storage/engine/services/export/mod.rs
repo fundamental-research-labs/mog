@@ -8,6 +8,7 @@ mod sheet_metadata;
 mod slicers;
 mod table_totals;
 mod workbook;
+mod workbook_views;
 pub(in crate::storage::engine) use cells::{
     export_authored_style_runs_for_sheet, export_cells_for_sheet,
     export_col_style_ranges_for_sheet, export_row_col_styles_for_sheet,
@@ -34,8 +35,7 @@ use super::objects::get_all_comments;
 use super::queries;
 use crate::mirror::CellMirror;
 use crate::storage::engine::stores::EngineStores;
-use crate::storage::sheet::get_meta_for_export;
-use crate::storage::sheet::{dimensions as dims_mod, merges, print};
+use crate::storage::sheet::{dimensions as dims_mod, get_meta_for_export, merges, print};
 use cell_types::SheetId;
 use compute_document::schema::{KEY_COLS, KEY_ROWS};
 use domain_types::{
@@ -53,12 +53,9 @@ use workbook::{
     export_calculation_properties, export_custom_workbook_views_xml, export_document_properties,
     export_external_links, export_file_sharing, export_file_version, export_shared_string_hints,
     export_workbook_properties, export_workbook_style_palette, export_workbook_stylesheet,
-    export_workbook_table_styles, export_workbook_views,
+    export_workbook_table_styles,
 };
-
-// -------------------------------------------------------------------
-// Style palette dedup — O(1) lookup via HashMap
-// -------------------------------------------------------------------
+use workbook_views::export_workbook_views_for_sheets;
 
 pub(crate) trait PaletteOps {
     fn get_or_insert(&self, fmt: DocumentFormat) -> u32;
@@ -933,6 +930,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
     }
     let data_table_regions = export_data_table_regions(stores, &sheet_ids);
     let connections = workbook::export_workbook_connections(stores);
+    let workbook_views = export_workbook_views_for_sheets(stores, &sheet_ids, &mut output_sheets);
 
     let persons = export_workbook_threaded_comment_persons(stores);
     let has_persons_part = !persons.is_empty()
@@ -972,7 +970,7 @@ pub(in crate::storage::engine) fn build_parse_output_from_yrs(
         calculation: export_calculation_properties(stores),
         calc_id_provenance: Default::default(),
         metadata: workbook::export_xlsx_metadata(stores),
-        workbook_views: export_workbook_views(stores),
+        workbook_views,
         custom_workbook_views_xml: export_custom_workbook_views_xml(stores),
         workbook_properties: export_workbook_properties(stores),
         file_version: export_file_version(stores),

@@ -38,6 +38,23 @@ export function getZoomLevel(zoomLevels: Record<string, number>, sheetId: string
 }
 
 /**
+ * Convert the app's decimal zoom level to the percent value stored in sheet settings.
+ */
+export function zoomLevelToScale(level: number): number {
+  return Math.round(clampZoom(level) * 100);
+}
+
+/**
+ * Convert a persisted sheet zoom percent to the app's decimal zoom level.
+ */
+export function zoomScaleToLevel(scale: number | null | undefined): number | null {
+  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) {
+    return null;
+  }
+  return clampZoom(scale / 100);
+}
+
+/**
  * Format zoom level as percentage string (e.g., "100%")
  */
 export function formatZoomPercent(level: number): string {

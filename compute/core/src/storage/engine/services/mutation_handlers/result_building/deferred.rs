@@ -14,6 +14,40 @@ use domain_types::units::{
     CharWidth, Points, char_width_to_pixels, platform_mdw, points_to_pixels,
 };
 
+fn workbook_settings_for_deferred(
+    data: &crate::storage::engine::construction::DeferredHydrationData,
+) -> WorkbookSettings {
+    let mut settings = WorkbookSettings::default();
+    settings.selected_sheet_ids = selected_sheet_ids_for_deferred(data);
+    settings
+}
+
+fn selected_sheet_ids_for_deferred(
+    data: &crate::storage::engine::construction::DeferredHydrationData,
+) -> Option<Vec<String>> {
+    if let Some(active_sheet_id) = data
+        .parse_output
+        .workbook_views
+        .first()
+        .and_then(|view| data.workbook_snap.sheets.get(view.active_tab as usize))
+        .map(|sheet| sheet.id.clone())
+    {
+        return Some(vec![active_sheet_id]);
+    }
+
+    let selected_sheet_ids = data
+        .parse_output
+        .sheets
+        .iter()
+        .enumerate()
+        .filter(|(_, sheet)| sheet.view.tab_selected)
+        .filter_map(|(index, _)| data.workbook_snap.sheets.get(index))
+        .map(|sheet| sheet.id.clone())
+        .collect::<Vec<_>>();
+
+    (!selected_sheet_ids.is_empty()).then_some(selected_sheet_ids)
+}
+
 /// Build a minimal [`MutationResult`] for deferred-hydration mode.
 ///
 /// In deferred mode, Yrs is empty. We read sheet metadata from the stored
@@ -247,9 +281,9 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
     }
 
     // Emit workbook settings. Deferred hydration has no populated Yrs
-    // workbook settings map yet, so emit Rust's canonical defaults as the
-    // full snapshot rather than an empty object.
-    let workbook_settings_value = serde_json::to_value(WorkbookSettings::default())
+    // workbook settings map yet, so project workbook-level parse metadata that
+    // the first-paint UI contract needs onto the canonical defaults.
+    let workbook_settings_value = serde_json::to_value(workbook_settings_for_deferred(data))
         .expect("WorkbookSettings defaults must serialize to JSON");
     let changed_keys = match &workbook_settings_value {
         serde_json::Value::Object(map) => map.keys().cloned().collect::<Vec<_>>(),

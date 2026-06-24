@@ -76,8 +76,10 @@ export {
   getZoomLevel,
   nearestPreset,
   parseZoomPercent,
+  zoomLevelToScale,
   zoomIn,
   zoomOut,
+  zoomScaleToLevel,
 } from './zoom-utils';
 
 export {

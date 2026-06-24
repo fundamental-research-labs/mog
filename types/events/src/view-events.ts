@@ -29,6 +29,14 @@ export interface ViewOptionsChangedEvent extends BaseEvent {
   source: StructureChangeSource;
 }
 
+export interface ViewSelectionChangedEvent extends BaseEvent {
+  type: 'view:selection-changed';
+  sheetId: string;
+  activeCell: { row: number; col: number };
+  ranges: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
+  source: CellChangeSource;
+}
+
 export interface SplitCreatedEvent extends BaseEvent {
   type: 'split:created';
   sheetId: string;
@@ -85,6 +93,7 @@ export interface ViewportResizedEvent extends BaseEvent {
 export type ViewEvent =
   | FreezeChangedEvent
   | ViewOptionsChangedEvent
+  | ViewSelectionChangedEvent
   | SplitCreatedEvent
   | SplitRemovedEvent
   | SplitPositionChangedEvent

@@ -14,9 +14,7 @@ use domain_types::{
     domain::external_link::ExternalLink,
     domain::pivot::ParsedPivotTable,
     domain::theme::ThemeData,
-    domain::workbook::{
-        CalculationProperties, RefMode, WorkbookProtection, WorkbookView, WorkbookWebPublishing,
-    },
+    domain::workbook::{CalculationProperties, RefMode, WorkbookProtection, WorkbookWebPublishing},
     yrs_schema,
 };
 use yrs::{Any, Map, Out, Transact};
@@ -560,24 +558,6 @@ pub(super) fn export_workbook_root_namespaces(
     };
 
     serde_json::from_str::<domain_types::XmlNamespaceDeclarations>(&json).unwrap_or_default()
-}
-
-/// Export workbook views from the `workbookSettings` Y.Map.
-pub(super) fn export_workbook_views(stores: &EngineStores) -> Vec<WorkbookView> {
-    let doc = stores.storage.doc();
-    let txn = doc.transact();
-    let workbook = stores.storage.workbook_map();
-
-    let settings_map = match workbook.get(&txn, KEY_WORKBOOK_SETTINGS) {
-        Some(Out::YMap(m)) => m,
-        _ => return Vec::new(),
-    };
-
-    let Some(Out::Any(Any::String(json))) = settings_map.get(&txn, "workbookViews") else {
-        return Vec::new();
-    };
-
-    serde_json::from_str::<Vec<WorkbookView>>(&json).unwrap_or_default()
 }
 
 pub(super) fn export_custom_workbook_views_xml(stores: &EngineStores) -> Option<Vec<u8>> {

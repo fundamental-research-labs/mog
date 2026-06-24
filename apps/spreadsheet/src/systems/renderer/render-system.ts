@@ -61,6 +61,7 @@ import {
 } from './coordination/viewport-follow-coordination';
 import { getSelectionSnapshot } from '../grid-editing/machines/selection/derived-state';
 import { calculateZoomToSelection } from '../../infra/utils/zoom-to-selection';
+import { zoomLevelToScale } from '../../infra/utils/zoom-utils';
 import { lifecycleDebug } from './debug/debug-lifecycle';
 import type { PageBreakDragState } from './execution/render-context-coordination';
 import {
@@ -453,6 +454,12 @@ export class RenderSystem implements IRenderSystem {
       this.config.sheetSwitchDeps?.uiStoreApi
         .getState()
         .setZoomLevel?.(toSheetId(sheetId), target.zoom);
+      void this.config.workbook
+        ?.getSheetById(toSheetId(sheetId))
+        .settings.set('zoomScale', zoomLevelToScale(target.zoom))
+        .catch((error) => {
+          console.warn('[RenderSystem] Failed to persist zoom-to-selection:', error);
+        });
     }
     const targetScroll = viewport.clampScrollPosition({ x: target.scrollX, y: target.scrollY });
     this.rendererExecution?.setScrollPosition(targetScroll);

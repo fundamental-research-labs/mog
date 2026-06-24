@@ -95,6 +95,7 @@ import type {
   FloatingObjectChangeKind,
   SerializedFloatingObjectGroup as WireFloatingObjectGroup,
 } from './compute/compute-types.gen';
+import { emitViewSelectionChanges } from './mutation-result-view-selection-events';
 
 function toEventFilterKind(value: string | undefined): FilterKind | undefined {
   if (value === 'autoFilter' || value === 'tableFilter' || value === 'advancedFilter') {
@@ -537,6 +538,9 @@ export class MutationResultHandler {
     }
     if (result.scrollPositionChanges?.length) {
       this.handleScrollPositionChanges(result.scrollPositionChanges, source);
+    }
+    if (result.viewSelectionChanges?.length) {
+      emitViewSelectionChanges(this.eventBus, result.viewSelectionChanges, source);
     }
     if (result.workbookSettingsChanges?.length) {
       this.handleWorkbookSettingsChanges(result.workbookSettingsChanges, source);

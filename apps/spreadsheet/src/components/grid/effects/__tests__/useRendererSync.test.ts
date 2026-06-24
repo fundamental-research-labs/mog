@@ -73,15 +73,18 @@ describe('syncRendererZoom', () => {
 describe('persistInputZoomForSheet', () => {
   it('persists clamped input zoom for the active sheet', () => {
     const setZoomLevel = jest.fn();
+    const persistZoomLevel = jest.fn();
 
     persistInputZoomForSheet({
       activeSheetId: 'sheet-1',
       zoom: 5,
       currentZoom: 1,
       setZoomLevel,
+      persistZoomLevel,
     });
 
     expect(setZoomLevel).toHaveBeenCalledWith('sheet-1', 4);
+    expect(persistZoomLevel).toHaveBeenCalledWith('sheet-1', 4);
   });
 
   it('skips non-finite and unchanged zoom values', () => {

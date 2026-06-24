@@ -13,15 +13,37 @@ import * as ViewHandlers from '../view-handlers';
 import { createMockPlatform, createMockShellService } from '../../__tests__/test-helpers';
 
 function createMockDeps(): ActionDependencies {
+  const setZoomLevel = jest.fn();
+  const setSheetSetting = jest.fn(() => Promise.resolve());
   return {
     platform: createMockPlatform(),
     shellService: createMockShellService(),
-    uiStore: { getState: () => ({}) },
-    workbook: {} as any,
+    uiStore: {
+      getState: () => ({
+        zoomLevels: {},
+        setZoomLevel,
+      }),
+    },
+    workbook: {
+      mirror: {
+        getViewOptions: () => ({}),
+      },
+      getSheetById: () => ({
+        settings: {
+          set: setSheetSetting,
+        },
+      }),
+    } as any,
     getActiveSheetId: () => 'sheet1' as any,
     accessors: {} as any,
     commands: {} as any,
-  } as unknown as ActionDependencies;
+    __test: { setZoomLevel, setSheetSetting },
+  } as unknown as ActionDependencies & {
+    __test: {
+      setZoomLevel: jest.Mock;
+      setSheetSetting: jest.Mock<Promise<void>, [string, number]>;
+    };
+  };
 }
 
 describe('view handler migrations', () => {
@@ -62,6 +84,26 @@ describe('view handler migrations', () => {
       expect(result.handled).toBe(true);
       expect(exitSpy).toHaveBeenCalled();
       expect(requestSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SET_ZOOM', () => {
+    it('persists zoomScale through worksheet settings', async () => {
+      const deps = createMockDeps() as ActionDependencies & {
+        __test: {
+          setZoomLevel: jest.Mock;
+          setSheetSetting: jest.Mock<Promise<void>, [string, number]>;
+        };
+      };
+
+      const result = await ViewHandlers.SET_ZOOM(deps, {
+        sheetId: 'sheet1' as any,
+        level: 1.25,
+      });
+
+      expect(result.handled).toBe(true);
+      expect(deps.__test.setZoomLevel).toHaveBeenCalledWith('sheet1', 1.25);
+      expect(deps.__test.setSheetSetting).toHaveBeenCalledWith('zoomScale', 125);
     });
   });
 });

@@ -1612,6 +1612,8 @@ export interface ViewOptions {
   showRowHeaders: boolean;
   /** Whether column headers are shown */
   showColumnHeaders: boolean;
+  /** Sheet zoom scale as a percentage, e.g. 125 for 125% */
+  zoomScale?: number;
 }
 
 /** Scroll position (cell-level, not pixel-level). */
@@ -2266,6 +2268,8 @@ export interface SheetSettingsInfo {
   isProtected: boolean;
   /** Whether the sheet uses right-to-left layout */
   rightToLeft: boolean;
+  /** Sheet zoom scale as a percentage, e.g. 125 for 125% */
+  zoomScale?: number;
 }
 
 // Outline Settings (1i: Outline Settings for domain module elimination)

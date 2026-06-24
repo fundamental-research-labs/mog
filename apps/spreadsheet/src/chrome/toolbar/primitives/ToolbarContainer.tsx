@@ -29,7 +29,7 @@ import { useCommandRegistration } from '../../../hooks/toolbar/use-command-regis
 import { useToolbarActions } from '../../../hooks/toolbar/use-toolbar-actions';
 import { useFrozenPanes } from '../../../hooks/view/use-frozen-panes';
 import { useSheetViewOptions } from '../../../hooks/view/use-sheet-view-options';
-import { clampZoom, getZoomLevel, zoomIn, zoomOut } from '../../../infra/utils';
+import { clampZoom, getZoomLevel, zoomIn, zoomLevelToScale, zoomOut } from '../../../infra/utils';
 import { TabbedToolbar } from './TabbedToolbar';
 
 // =============================================================================
@@ -180,10 +180,16 @@ export const ToolbarContainer = React.memo(function ToolbarContainer({
       const clampedZoom = clampZoom(newZoom);
       // Update UIStore (persists zoom per sheet)
       setZoomLevel(activeSheetId, clampedZoom);
+      void wb
+        .getSheetById(activeSheetId)
+        .settings.set('zoomScale', zoomLevelToScale(clampedZoom))
+        .catch((error) => {
+          console.warn('[ToolbarContainer] Failed to persist sheet zoom:', error);
+        });
       // Update renderer immediately
       setZoom(clampedZoom);
     },
-    [activeSheetId, setZoomLevel, setZoom],
+    [activeSheetId, setZoomLevel, setZoom, wb],
   );
 
   const handleZoomIn = useCallback(() => {

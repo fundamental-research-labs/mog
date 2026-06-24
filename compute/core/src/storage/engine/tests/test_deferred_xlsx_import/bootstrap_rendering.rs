@@ -1,6 +1,6 @@
 use super::support::*;
 use super::*;
-use crate::snapshot::{RuntimeDiagnosticsOptions, RuntimeOperationDiagnostic};
+use crate::snapshot::{RuntimeDiagnosticsOptions, RuntimeOperationDiagnostic, WorkbookSettings};
 use value_types::CellValue;
 
 #[test]
@@ -359,6 +359,45 @@ fn deferred_xlsx_import_emits_saved_view_before_full_hydration() {
     assert_eq!(selection.ranges[0].start_col, 35);
     assert_eq!(selection.ranges[0].end_row, 453);
     assert_eq!(selection.ranges[0].end_col, 35);
+}
+
+#[test]
+fn deferred_xlsx_import_emits_active_second_sheet_view_state_before_full_hydration() {
+    let bytes = active_second_saved_view_deferred_fixture_xlsx();
+
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+    let (_, import_result) = engine
+        .import_from_xlsx_bytes_deferred(&bytes)
+        .expect("deferred XLSX import should succeed");
+
+    let sheet_ids = engine.get_all_sheet_ids();
+    assert_eq!(sheet_ids.len(), 2, "fixture should import two sheets");
+    let second_sheet_id = &sheet_ids[1];
+
+    let workbook_settings_change = import_result
+        .workbook_settings_changes
+        .first()
+        .expect("deferred first-paint result should emit workbook settings");
+    let workbook_settings: WorkbookSettings =
+        serde_json::from_value(workbook_settings_change.settings.clone())
+            .expect("workbook settings change should carry a valid settings snapshot");
+    assert_eq!(
+        workbook_settings.selected_sheet_ids,
+        Some(vec![second_sheet_id.clone()])
+    );
+
+    let selection = import_result
+        .view_selection_changes
+        .iter()
+        .find(|change| &change.sheet_id == second_sheet_id)
+        .expect("deferred first-paint result should emit second sheet selection");
+    assert_eq!(selection.active_cell.row, 3);
+    assert_eq!(selection.active_cell.col, 2);
+    assert_eq!(selection.ranges.len(), 1);
+    assert_eq!(selection.ranges[0].start_row, 3);
+    assert_eq!(selection.ranges[0].start_col, 2);
+    assert_eq!(selection.ranges[0].end_row, 3);
+    assert_eq!(selection.ranges[0].end_col, 2);
 }
 
 #[test]

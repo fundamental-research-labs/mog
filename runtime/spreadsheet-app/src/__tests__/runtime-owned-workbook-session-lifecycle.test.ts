@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS } from '@mog-sdk/contracts/versioning';
 import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
 
 import { mergeFeatureGates } from '../feature-gates';
@@ -114,7 +115,7 @@ test('runtime attachment default versioning decorates document handle workbook c
   assert.equal(config.versioning?.domainSupportManifest?.workbookId, handle.documentId);
   assert.deepEqual(
     config.versioning?.domainSupportManifest?.domains.map((domain) => domain.matrixRowId),
-    ['workbook-metadata', 'sheets', 'rows-columns', 'cells.values', 'cells.formulas', 'recalc-caches'],
+    [...PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS],
   );
 });
 

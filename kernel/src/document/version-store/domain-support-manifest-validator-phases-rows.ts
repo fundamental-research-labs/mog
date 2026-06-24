@@ -3,6 +3,7 @@ import {
   type VersionDomainCapabilityKey,
 } from '@mog-sdk/contracts/versioning';
 
+import { REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS } from './domain-support-manifest-validator-constants';
 import {
   validateDomainPolicyId,
   validateRegistryMatch,
@@ -52,6 +53,8 @@ export function validateManifestDomainRows(
     return { presentMatrixRowIds, presentDomainIds };
   }
 
+  const capabilityEnforcedMatrixRows = requiredCapabilityMatrixRows(options);
+  const capabilityEnforcedDomains = requiredCapabilityDomainIds(options);
   const seenMatrixRows = new Set<string>();
   const seenDomainPolicies = new Set<string>();
   const seenDomains = new Set<string>();
@@ -139,7 +142,10 @@ export function validateManifestDomainRows(
       diagnostics,
     );
     validateCapabilityStates(matrixRowId, domainId, typed.capabilityStates, diagnostics);
-    if (isVersionDomainClass(domainClass)) {
+    if (
+      isVersionDomainClass(domainClass) &&
+      (capabilityEnforcedMatrixRows.has(matrixRowId) || capabilityEnforcedDomains.has(domainId))
+    ) {
       validateRequiredCapabilityState(
         matrixRowId,
         domainId,
@@ -168,4 +174,24 @@ export function validateManifestDomainRows(
   validateDetectorCoverage(seenMatrixRows, seenDomains, options, diagnostics);
 
   return { presentMatrixRowIds, presentDomainIds };
+}
+
+function requiredCapabilityMatrixRows(
+  options: DomainSupportManifestValidationOptions,
+): ReadonlySet<string> {
+  const rows = new Set(options.requiredMatrixRowIds ?? REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS);
+  for (const detector of options.detectorRows ?? []) {
+    if (detector.present && detector.matrixRowId) rows.add(detector.matrixRowId);
+  }
+  return rows;
+}
+
+function requiredCapabilityDomainIds(
+  options: DomainSupportManifestValidationOptions,
+): ReadonlySet<string> {
+  const domains = new Set(options.requiredDomainIds ?? []);
+  for (const detector of options.detectorRows ?? []) {
+    if (detector.present && !detector.matrixRowId) domains.add(detector.domainId);
+  }
+  return domains;
 }

@@ -1,4 +1,5 @@
 import { jest } from '@jest/globals';
+import { PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS } from '@mog-sdk/contracts/versioning';
 import {
   DocumentFactory,
   type DocumentHandle,
@@ -78,6 +79,7 @@ function capturedWorkbookConfig(workbook: jest.Mock): DocumentHandleWorkbookConf
 }
 
 function expectDefaultIndexedDbProviderSelection(workbook: jest.Mock): void {
+  const config = capturedWorkbookConfig(workbook);
   expect(capturedWorkbookConfig(workbook)).toMatchObject({
     versioning: {
       providerSelection: DEFAULT_INDEXEDDB_PROVIDER_SELECTION,
@@ -92,6 +94,9 @@ function expectDefaultIndexedDbProviderSelection(workbook: jest.Mock): void {
       },
     },
   });
+  expect(
+    config?.versioning?.domainSupportManifest?.domains.map((domain) => domain.matrixRowId),
+  ).toEqual([...PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS]);
 }
 
 function makeSidecar(options: { readonly status?: () => string } = {}) {

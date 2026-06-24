@@ -1,4 +1,6 @@
 import {
+  createPublicVersionDomainSupportManifest,
+  PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
   PUBLIC_VERSION_DOMAIN_POLICY_ROW_COUNT,
@@ -51,6 +53,19 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       'cells.values',
       'cells.formulas',
       'recalc-caches',
+    ]);
+    expect(PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS).toEqual([
+      'workbook-metadata',
+      'sheets',
+      'rows-columns',
+      'cells.values',
+      'cells.formulas',
+      'recalc-caches',
+      'tables',
+      'filters.auto-filter',
+      'named-ranges',
+      'data-validation',
+      'external-links',
     ]);
 
     const idPattern = new RegExp(VERSION_DOMAIN_POLICY_ID_PATTERN);
@@ -181,6 +196,45 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       const exportState = rows.get(matrixRowId)?.capabilityStates.export;
       expect(exportState === 'supported' || exportState === 'derived').toBe(true);
     }
+  });
+
+  it('creates default support manifests for export-visible public mutable domains', () => {
+    const manifest = createPublicVersionDomainSupportManifest({
+      workbookId: 'default-manifest-workbook',
+      generatedAt: '2026-06-21T00:00:00.000Z',
+    });
+
+    expect(manifest).toMatchObject({
+      schemaVersion: 'domain-support-manifest.v2',
+      generatedAt: '2026-06-21T00:00:00.000Z',
+      workbookId: 'default-manifest-workbook',
+    });
+    expect(manifest.domains.map((row) => row.matrixRowId)).toEqual(
+      PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS,
+    );
+    expect(
+      manifest.domains
+        .filter((row) =>
+          ['tables', 'filters.auto-filter', 'named-ranges', 'data-validation'].includes(
+            row.matrixRowId,
+          ),
+        )
+        .map((row) => [row.matrixRowId, row.capabilityStates]),
+    ).toEqual([
+      ['tables', expect.objectContaining({ capture: 'supported', export: 'supported' })],
+      [
+        'filters.auto-filter',
+        expect.objectContaining({ capture: 'supported', export: 'supported' }),
+      ],
+      ['named-ranges', expect.objectContaining({ capture: 'supported', export: 'supported' })],
+      ['data-validation', expect.objectContaining({ capture: 'supported', export: 'supported' })],
+    ]);
+    expect(
+      manifest.domains.find((row) => row.matrixRowId === 'external-links')?.capabilityStates,
+    ).toMatchObject({
+      capture: 'opaque-preserved',
+      export: 'opaque-blocking',
+    });
   });
 
   it('reports when the full public registry still contains rows outside the export floor', () => {

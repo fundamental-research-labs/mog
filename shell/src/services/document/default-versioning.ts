@@ -1,7 +1,6 @@
 import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
 import {
-  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
+  createPublicVersionDomainSupportManifest,
   type DomainSupportManifest,
 } from '@mog-sdk/contracts/versioning';
 
@@ -62,18 +61,5 @@ function createDefaultVersionProviderSelection(
 }
 
 function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {
-  return {
-    schemaVersion: 'domain-support-manifest.v2',
-    generatedAt: new Date().toISOString(),
-    workbookId: documentId,
-    domains: PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS.map((matrixRowId) => {
-      const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
-        (domain) => domain.matrixRowId === matrixRowId,
-      );
-      if (!row) {
-        throw new Error(`Missing public version domain policy row: ${matrixRowId}`);
-      }
-      return row;
-    }),
-  };
+  return createPublicVersionDomainSupportManifest({ workbookId: documentId });
 }

@@ -90,6 +90,55 @@ export function registerCapabilityOperationScenarios(): void {
     expect(result.ok).toBe(true);
   });
 
+  it('enforces extra manifest row capabilities only when the row is detector-present', () => {
+    const blockedNamedRangeRow = domainRow('named-ranges', {
+      capabilityStates: {
+        ...capabilityStates(),
+        capture: 'contracted',
+      },
+    });
+    const manifest = freshManifest({
+      domains: [
+        ...REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) => domainRow(id)),
+        blockedNamedRangeRow,
+      ],
+    });
+
+    expect(
+      validateDomainSupportManifest(manifest, {
+        now: NOW,
+        operation: 'commit',
+      }).ok,
+    ).toBe(true);
+
+    const result = validateDomainSupportManifest(manifest, {
+      now: NOW,
+      operation: 'commit',
+      detectorRows: [
+        {
+          matrixRowId: 'named-ranges',
+          domainId: 'named-ranges',
+          present: true,
+          detectorId: 'detector.named-ranges',
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'capability-state-blocked',
+            matrixRowId: 'named-ranges',
+            capabilityKey: 'capture',
+            capabilityState: 'contracted',
+          }),
+        ]),
+      );
+    }
+  });
+
   it('blocks opaque-preserved without preservation proof', () => {
     const manifest = freshManifest({
       domains: REQUIRED_FIRST_SLICE_DOMAIN_IDS.map((id) =>

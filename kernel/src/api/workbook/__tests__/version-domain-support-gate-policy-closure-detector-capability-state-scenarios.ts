@@ -45,42 +45,6 @@ export function registerPolicyClosureDetectorCapabilityStateScenarios(): void {
           payload: expect.objectContaining({
             operation: 'commit',
             diagnosticCode: 'capability-state-blocked',
-            matrixRowId: 'named-ranges',
-            domainId: 'named-ranges',
-            capabilityKey: 'capture',
-            capabilityState: 'contracted',
-          }),
-        }),
-        expect.objectContaining({
-          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
-          mutationGuarantee: 'no-write-attempted',
-          payload: expect.objectContaining({
-            operation: 'commit',
-            diagnosticCode: 'capability-state-blocked',
-            matrixRowId: 'tables',
-            domainId: 'tables',
-            capabilityKey: 'capture',
-            capabilityState: 'contracted',
-          }),
-        }),
-        expect.objectContaining({
-          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
-          mutationGuarantee: 'no-write-attempted',
-          payload: expect.objectContaining({
-            operation: 'commit',
-            diagnosticCode: 'capability-state-blocked',
-            matrixRowId: 'filters.auto-filter',
-            domainId: 'filters',
-            capabilityKey: 'capture',
-            capabilityState: 'contracted',
-          }),
-        }),
-        expect.objectContaining({
-          issueCode: 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID',
-          mutationGuarantee: 'no-write-attempted',
-          payload: expect.objectContaining({
-            operation: 'commit',
-            diagnosticCode: 'capability-state-blocked',
             matrixRowId: 'external-links',
             domainId: 'external-links',
             capabilityKey: 'capture',
@@ -93,13 +57,20 @@ export function registerPolicyClosureDetectorCapabilityStateScenarios(): void {
           payload: expect.objectContaining({
             operation: 'commit',
             diagnosticCode: 'capability-state-blocked',
-            matrixRowId: 'data-validation',
-            domainId: 'data-validation',
-            capabilityKey: 'capture',
-            capabilityState: 'contracted',
+            matrixRowId: 'external-links',
+            domainId: 'external-links',
+            capabilityKey: 'persistence',
+            capabilityState: 'opaque-preserved',
           }),
         }),
       ]),
     );
+    expect(
+      diagnostics.filter(
+        (diagnostic) =>
+          diagnostic.issueCode === 'VERSION_DOMAIN_SUPPORT_MANIFEST_INVALID' &&
+          diagnostic.payload.diagnosticCode === 'capability-state-blocked',
+      ),
+    ).toHaveLength(2);
   });
 }

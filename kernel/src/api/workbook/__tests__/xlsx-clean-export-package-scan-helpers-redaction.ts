@@ -9,6 +9,7 @@ export async function expectUnsafePackageScanRedacts(
   xlsxBytes: Uint8Array,
   expectedCodes: readonly XlsxCleanExportPackageDiagnostic['code'][],
   redactedTokens: readonly string[],
+  expectedPostScrubCodes: readonly XlsxCleanExportPackageDiagnostic['code'][] = expectedCodes,
 ): Promise<void> {
   const diagnostics = await scanXlsxCleanExportPackageDiagnostics(xlsxBytes);
   expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(expectedCodes);
@@ -23,9 +24,11 @@ export async function expectUnsafePackageScanRedacts(
   }
 
   expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
+  const postScrubDiagnostics = (error as XlsxCleanExportPackageError).diagnostics;
+  expect(postScrubDiagnostics.map((diagnostic) => diagnostic.code)).toEqual(expectedPostScrubCodes);
   expect(error).toMatchObject({
     code: 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE',
-    diagnostics,
+    diagnostics: postScrubDiagnostics,
   });
   expectRedactedPayload(error, redactedTokens);
 }

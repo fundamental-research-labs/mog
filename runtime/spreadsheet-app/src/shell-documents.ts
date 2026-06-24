@@ -1,9 +1,7 @@
 import { installChartImageExporter } from '@mog/app-spreadsheet/services';
 import type { DocumentHandle, DocumentHandleWorkbookConfig } from '@mog-sdk/kernel';
 import {
-  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
-  type DomainCapabilityPolicyManifest,
+  createPublicVersionDomainSupportManifest,
   type DomainSupportManifest,
 } from '@mog-sdk/contracts/versioning';
 import type { ShellBootstrapResult } from '@mog/shell/bootstrap';
@@ -43,11 +41,6 @@ export type ShellDocumentLoadResult = {
 export type ShellDocumentWorkbookResult = {
   readonly workbook: SpreadsheetAppWorkbook;
   readonly documentVersioning: SpreadsheetRuntimeDocumentVersioningReadiness;
-};
-
-type DefaultDomainSupportManifestPolicy = {
-  readonly manifest: DomainSupportManifest;
-  readonly missingMatrixRowIds: readonly string[];
 };
 
 const DEFAULT_VERSION_PROVIDER_SELECTION = {
@@ -93,7 +86,6 @@ export function createDefaultDocumentVersioningReadiness(
           requireDurablePersistence: DEFAULT_VERSION_PROVIDER_SELECTION.requireDurablePersistence,
         },
       },
-      ...createDefaultDomainSupportManifestDiagnostics(documentId),
     ],
   };
 }
@@ -312,56 +304,8 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
 
-function createDefaultDomainSupportManifestDiagnostics(
-  documentId: string,
-): readonly SpreadsheetRuntimeDocumentVersioningDiagnostic[] {
-  const { missingMatrixRowIds } = createDefaultDomainSupportManifestPolicy(documentId);
-  if (missingMatrixRowIds.length === 0) return [];
-
-  return [
-    {
-      code: 'spreadsheet_runtime.default_domain_support_manifest_policy_drift',
-      severity: 'warning',
-      message:
-        'Default workbook versioning omitted missing public domain policy rows; version capabilities will fail closed until the public policy registry is updated.',
-      details: {
-        documentId,
-        missingMatrixRowIds: missingMatrixRowIds.join(','),
-      },
-    },
-  ];
-}
-
 function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {
-  return createDefaultDomainSupportManifestPolicy(documentId).manifest;
-}
-
-function createDefaultDomainSupportManifestPolicy(
-  documentId: string,
-): DefaultDomainSupportManifestPolicy {
-  const domains: DomainCapabilityPolicyManifest[] = [];
-  const missingMatrixRowIds: string[] = [];
-
-  for (const matrixRowId of PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS) {
-    const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
-      (domain) => domain.matrixRowId === matrixRowId,
-    );
-    if (row) {
-      domains.push(row);
-    } else {
-      missingMatrixRowIds.push(matrixRowId);
-    }
-  }
-
-  return {
-    manifest: {
-      schemaVersion: 'domain-support-manifest.v2',
-      generatedAt: new Date().toISOString(),
-      workbookId: documentId,
-      domains,
-    },
-    missingMatrixRowIds,
-  };
+  return createPublicVersionDomainSupportManifest({ workbookId: documentId });
 }
 
 export function createPermissiveCapabilityRegistry(): SpreadsheetAppCapabilityRegistry {

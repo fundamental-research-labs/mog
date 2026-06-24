@@ -26,6 +26,7 @@ import {
   createLeakySourceXlsx,
   expectUnsafePackageScanRedacts,
   externalConnectionAndQueryTableVariantFixture,
+  inertCustomXmlPackageFixture,
   redactionCheckPayload,
   scanCleanExportPackage,
 } from './xlsx-clean-export-package-scan-test-utils';
@@ -124,6 +125,29 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
   });
 
+  it('scrubs inert customXml package inventory before clean export safety assertion', async () => {
+    const token = 'vc10-custom-xml-clean-export-redacted-target';
+    const customXmlPackage = inertCustomXmlPackageFixture(token);
+    expect(
+      (await scanXlsxCleanExportPackageDiagnostics(customXmlPackage)).map(
+        (diagnostic) => diagnostic.code,
+      ),
+    ).toEqual(['XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT']);
+
+    const cleaned = await removeMogVersionMetadataPackageInventoryFromXlsx(customXmlPackage);
+    const cleanExportScan = await scanCleanExportPackage(cleaned, [token]);
+
+    expect(cleanExportScan).toEqual({
+      duplicateZipEntries: [],
+      mogCustomXmlMetadataParts: [],
+      mogContentTypeEntries: [],
+      mogRelationshipEntries: [],
+      danglingCustomXmlInventory: [],
+      unsafePackageDiagnostics: [],
+      redactionLeaks: [],
+    });
+  });
+
   it('detects macro, embedded, external connection, and customXml package variants', async () => {
     await expectUnsafePackageScanRedacts(
       activePackageVariantFixture(),
@@ -137,6 +161,14 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
         'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
       ],
       [ACTIVE_CONTENT_SECRET],
+      [
+        'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
+        'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
+        'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
+        'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
+        'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT',
+        'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
+      ],
     );
   });
 

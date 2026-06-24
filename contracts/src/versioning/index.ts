@@ -939,6 +939,8 @@ export * from './sync-provenance-fixtures';
 export * from './xlsx-interop';
 export { VERSIONING_CONTRACT_FIXTURES } from './fixtures';
 export {
+  createPublicVersionDomainSupportManifest,
+  PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,

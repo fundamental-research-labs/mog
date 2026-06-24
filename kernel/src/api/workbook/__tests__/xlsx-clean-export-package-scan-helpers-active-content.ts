@@ -148,6 +148,52 @@ export function activePackageVariantFixture(): Uint8Array {
   ]);
 }
 
+export function inertCustomXmlPackageFixture(redactedToken: string): Uint8Array {
+  const contentTypes = [
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+    '<Default Extension="xml" ContentType="application/xml"/>',
+    '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+    `<Override PartName="/customXml/${redactedToken}-item1.xml" ContentType="application/xml"/>`,
+    `<Override PartName="/customXml/${redactedToken}-itemProps1.xml" ContentType="application/vnd.openxmlformats-officedocument.customXmlProperties+xml"/>`,
+    '<Override PartName="/xl/xmlMaps.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.xmlMaps+xml"/>',
+    '</Types>',
+  ].join('');
+  const rootRels = packageRelationshipsXml([
+    '<Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+    `<Relationship Id="rIdCustomXml" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml" Target="customXml/${redactedToken}-item1.xml"/>`,
+  ]);
+  const workbookRels = packageRelationshipsXml([
+    '<Relationship Id="rIdXmlMaps" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/xmlMaps" Target="xmlMaps.xml"/>',
+  ]);
+  const customXmlRels = packageRelationshipsXml([
+    `<Relationship Id="rIdCustomXmlProps" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps" Target="${redactedToken}-itemProps1.xml"/>`,
+  ]);
+
+  return writeStoredZip([
+    { name: '[Content_Types].xml', data: encodeUtf8(contentTypes) },
+    { name: '_rels/.rels', data: encodeUtf8(rootRels) },
+    { name: 'xl/workbook.xml', data: encodeUtf8('<workbook/>') },
+    { name: 'xl/_rels/workbook.xml.rels', data: encodeUtf8(workbookRels) },
+    {
+      name: `customXml/${redactedToken}-item1.xml`,
+      data: encodeUtf8(`<metadata>${redactedToken}</metadata>`),
+    },
+    {
+      name: `customXml/_rels/${redactedToken}-item1.xml.rels`,
+      data: encodeUtf8(customXmlRels),
+    },
+    {
+      name: `customXml/${redactedToken}-itemProps1.xml`,
+      data: encodeUtf8(
+        '<ds:datastoreItem ds:itemID="{33333333-3333-3333-3333-333333333333}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"/>',
+      ),
+    },
+    { name: 'xl/xmlMaps.xml', data: encodeUtf8('<xmlMaps/>') },
+  ]);
+}
+
 export function externalConnectionAndQueryTableVariantFixture(redactedToken: string): Uint8Array {
   return syntheticPackageFixture({
     contentTypeOverrides: [

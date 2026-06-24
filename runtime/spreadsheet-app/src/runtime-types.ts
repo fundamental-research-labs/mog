@@ -2,9 +2,7 @@ import type { ChartImageExporter, Workbook } from '@mog-sdk/contracts/api';
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
 import type { IChartBridge } from '@mog-sdk/contracts/bridges';
 import {
-  PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
-  PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
-  type DomainCapabilityPolicyManifest,
+  createPublicVersionDomainSupportManifest,
   type DomainSupportManifest,
 } from '@mog-sdk/contracts/versioning';
 import type {
@@ -88,21 +86,7 @@ type RuntimeDocumentVersioningReadinessLike = {
 };
 
 function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {
-  const domains: DomainCapabilityPolicyManifest[] = [];
-
-  for (const matrixRowId of PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS) {
-    const row = PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.find(
-      (domain) => domain.matrixRowId === matrixRowId,
-    );
-    if (row) domains.push(row);
-  }
-
-  return {
-    schemaVersion: 'domain-support-manifest.v2',
-    generatedAt: new Date().toISOString(),
-    workbookId: documentId,
-    domains,
-  };
+  return createPublicVersionDomainSupportManifest({ workbookId: documentId });
 }
 
 export function decorateRuntimeOwnedHandleWithDefaultVersioning(

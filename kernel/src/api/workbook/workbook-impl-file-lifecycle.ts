@@ -128,7 +128,7 @@ import {
   normalizeWorkbookSavePath,
 } from './save-errors';
 import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
-import { removeMogVersionMetadataPackageInventoryFromXlsx } from './xlsx-clean-export-package';
+import { removeCleanExportBlockedPackageInventoryFromXlsx } from './xlsx-clean-export-package';
 import { maybeAddMogVersionMetadataToXlsx } from './xlsx-version-metadata';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
@@ -323,7 +323,7 @@ export abstract class WorkbookImplFileLifecycle extends WorkbookImplOperations {
       return maybeAddMogVersionMetadataToXlsx(
         this.ctx,
         this.version,
-        await removeMogVersionMetadataPackageInventoryFromXlsx(bytes),
+        await removeCleanExportBlockedPackageInventoryFromXlsx(bytes),
         options,
       );
     }
@@ -331,7 +331,7 @@ export abstract class WorkbookImplFileLifecycle extends WorkbookImplOperations {
     return maybeAddMogVersionMetadataToXlsx(
       this.ctx,
       this.version,
-      await removeMogVersionMetadataPackageInventoryFromXlsx(bytes),
+      await removeCleanExportBlockedPackageInventoryFromXlsx(bytes),
       options,
     );
   }

@@ -1,6 +1,7 @@
 import type {
   CapturePolicy,
   DomainCapabilityPolicyManifest,
+  DomainSupportManifest,
   VersionDomainCapabilityState,
   VersionDomainCapabilityStateMap,
   VersionDomainClass,
@@ -74,6 +75,9 @@ const AUTHORED_GRID = capabilityStates('contracted', {
   merge: 'supported',
   persistence: 'supported',
   export: 'supported',
+});
+const STRUCTURED_AUTHORED_NO_MERGE = capabilityStates('supported', {
+  merge: 'contracted',
 });
 const OPAQUE_PRESERVED_PACKAGE = capabilityStates('opaque-preserved', {
   diff: 'opaque-blocking',
@@ -614,14 +618,14 @@ const DOMAINS = Object.freeze([
     domainId: 'named-ranges',
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
-    capabilityStates: CONTRACTED,
+    capabilityStates: STRUCTURED_AUTHORED_NO_MERGE,
   }),
   domainPolicy({
     matrixRowId: 'tables',
     domainId: 'tables',
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
-    capabilityStates: CONTRACTED,
+    capabilityStates: STRUCTURED_AUTHORED_NO_MERGE,
   }),
   domainPolicy({
     matrixRowId: 'pivots',
@@ -653,7 +657,7 @@ const DOMAINS = Object.freeze([
     domainId: 'data-validation',
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
-    capabilityStates: CONTRACTED,
+    capabilityStates: STRUCTURED_AUTHORED_NO_MERGE,
   }),
   domainPolicy({
     matrixRowId: 'conditional-formatting',
@@ -667,7 +671,7 @@ const DOMAINS = Object.freeze([
     domainId: 'filters',
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
-    capabilityStates: CONTRACTED,
+    capabilityStates: STRUCTURED_AUTHORED_NO_MERGE,
   }),
   domainPolicy({
     matrixRowId: 'sorts',
@@ -794,6 +798,15 @@ export const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS = Object.freez
   'recalc-caches',
 ] as const);
 
+export const PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS = Object.freeze([
+  ...PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
+  'tables',
+  'filters.auto-filter',
+  'named-ranges',
+  'data-validation',
+  'external-links',
+] as const);
+
 const PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_ID_SET = new Set<string>(
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
 );
@@ -809,3 +822,28 @@ export const PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY_EXPORT_SUPPORTS_REQUIRED_ROWS
       (row) =>
         row.capabilityStates.export === 'supported' || row.capabilityStates.export === 'derived',
     );
+
+type PublicDomainSupportManifestOptions = {
+  readonly workbookId?: string;
+  readonly generatedAt?: string;
+};
+
+export function createPublicVersionDomainSupportManifest(
+  options: PublicDomainSupportManifestOptions = {},
+): DomainSupportManifest {
+  const rowsByMatrixRowId = new Map(
+    PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.matrixRowId, row]),
+  );
+  const domains = PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS.map((matrixRowId) => {
+    const row = rowsByMatrixRowId.get(matrixRowId);
+    if (!row) throw new Error(`Missing public version domain policy row: ${matrixRowId}`);
+    return row;
+  });
+
+  return {
+    schemaVersion: 'domain-support-manifest.v2',
+    generatedAt: options.generatedAt ?? new Date().toISOString(),
+    ...(options.workbookId ? { workbookId: options.workbookId } : {}),
+    domains,
+  };
+}

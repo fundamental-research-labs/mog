@@ -68,7 +68,7 @@ export async function readWorkbookVersionFacadeRef(
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('readRef', gateDiagnostics);
 
   if (name === VERSION_HEAD_REF) {
-    const activeCheckoutHead = await readActiveCheckoutSymbolicHead(ctx);
+    const activeCheckoutHead = await readActiveCheckoutSymbolicHead(ctx, 'readRef');
     if (activeCheckoutHead) return versionResultFromRefRead('readRef', activeCheckoutHead);
   }
 
@@ -117,7 +117,7 @@ export async function getWorkbookVersionFacadeRef(
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'getRef', 'version:read');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getRef', gateDiagnostics);
   if (name === VERSION_HEAD_REF) {
-    const activeCheckoutHead = await readActiveCheckoutSymbolicHead(ctx);
+    const activeCheckoutHead = await readActiveCheckoutSymbolicHead(ctx, 'getRef');
     if (activeCheckoutHead) return versionResultFromRefRead('getRef', activeCheckoutHead);
   }
   return versionResultFromRefRead('getRef', await getWorkbookVersionRef(ctx, name));
@@ -187,6 +187,7 @@ export async function deleteWorkbookVersionFacadeRef(
 
 async function readActiveCheckoutSymbolicHead(
   ctx: DocumentContext,
+  operation: 'getRef' | 'readRef',
 ): Promise<VersionSymbolicRefReadResult | null> {
   const active = await readActiveCheckoutHead(ctx);
   if (active.status === 'absent') return null;
@@ -204,7 +205,7 @@ async function readActiveCheckoutSymbolicHead(
       status: 'degraded',
       ref: null,
       diagnostics: [
-        providerErrorDiagnostic('readRef', {
+        providerErrorDiagnostic(operation, {
           refName: VERSION_HEAD_REF,
           reason: 'detached-active-checkout',
         }),
@@ -217,7 +218,7 @@ async function readActiveCheckoutSymbolicHead(
       status: 'degraded',
       ref: null,
       diagnostics: [
-        providerErrorDiagnostic('readRef', {
+        providerErrorDiagnostic(operation, {
           refName: VERSION_HEAD_REF,
           reason: 'active-checkout-head-missing-ref',
         }),

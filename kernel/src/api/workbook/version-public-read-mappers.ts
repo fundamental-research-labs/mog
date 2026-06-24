@@ -18,7 +18,7 @@ export const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 
-type VersionPublicOperation = 'getHead' | 'readRef';
+type VersionPublicOperation = 'getHead' | 'getRef' | 'readRef';
 
 export function mapHeadResult(value: unknown): WorkbookCommitRef | VersionDegradedHeadResult {
   if (!isRecord(value)) {

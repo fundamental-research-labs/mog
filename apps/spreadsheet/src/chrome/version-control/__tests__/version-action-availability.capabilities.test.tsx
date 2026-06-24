@@ -119,6 +119,19 @@ describe('version action availability capability contract', () => {
     }
   });
 
+  it('uses the semantic-reader unavailable reason for commit capability denial', () => {
+    const reason = 'Normal provider-backed commits require a Rust semantic state reader.';
+    const surface = createSurfaceStatus({
+      capabilityOverrides: {
+        'version:commit': disabledCapability(reason, 'storage', true),
+      },
+    });
+
+    expectDisabled(getCommitAvailability({ surface }, false, false, 'Checkpoint'), reason);
+    expect(getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID))
+      .toEqual({ enabled: true });
+  });
+
   it('blocks sensitive actions when public diagnostics report incomplete history', () => {
     const historyDiagnostic = diagnostic(
       'The workbook version graph is not initialized for this document.',

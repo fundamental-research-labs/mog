@@ -1,4 +1,8 @@
-import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
+import type {
+  VersionAnnotationText,
+  VersionCommitOptions,
+  WorkbookCommitAnnotationSummary,
+} from '@mog-sdk/contracts/api';
 
 import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph';
 import {
@@ -210,6 +214,7 @@ export async function commitWorkbookVersion(
 
   const result = await opened.graph.commit({
     ...commitContent.input,
+    ...commitAnnotationInput(commitContent.input.annotation, commitOptions),
     targetRef: target.ref.name,
     expectedHeadCommitId: expectedHead.commitId,
     expectedTargetRefVersion: expectedHead.revision,
@@ -239,6 +244,26 @@ export async function commitWorkbookVersion(
     result.mutationGuarantee,
     isRetryableGraphWriteFailure(result.diagnostics),
   );
+}
+
+function commitAnnotationInput(
+  existing: WorkbookCommitAnnotationSummary | undefined,
+  options: VersionCommitOptions,
+): { readonly annotation?: WorkbookCommitAnnotationSummary } {
+  const message = options.message;
+  if (message === undefined) return existing ? { annotation: existing } : {};
+  const text = annotationTextFromMessage(message);
+  if (!text) return existing ? { annotation: existing } : {};
+  return {
+    annotation: {
+      ...(existing ?? {}),
+      message: text,
+    },
+  };
+}
+
+function annotationTextFromMessage(message: string): VersionAnnotationText | undefined {
+  return message.trim().length > 0 ? { kind: 'text', value: message } : undefined;
 }
 
 function finalizeNormalCommitCapture(

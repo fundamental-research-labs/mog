@@ -1,4 +1,5 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { WorkbookCommitAnnotationSummary } from '@mog-sdk/contracts/api';
 
 import type { ObjectDigest, VersionDependencyRef, WorkbookCommitId } from '../object-digest';
 import type { VersionObjectRecord, VersionObjectStoreDiagnostic } from '../object-store';
@@ -20,6 +21,7 @@ export type WorkbookCommitPayload = {
   readonly mutationSegmentDigests?: readonly ObjectDigest[];
   readonly author: VersionAuthor;
   readonly createdAt: string;
+  readonly annotation?: WorkbookCommitAnnotationSummary;
   readonly completenessDiagnostics: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryDigest?: ObjectDigest;
   readonly verificationSummaryDigest?: ObjectDigest;
@@ -62,6 +64,7 @@ export type CreateWorkbookCommitInput = {
   readonly mutationSegmentRecords?: readonly VersionObjectRecord<unknown>[];
   readonly author: VersionAuthor;
   readonly createdAt: string;
+  readonly annotation?: WorkbookCommitAnnotationSummary;
   readonly completenessDiagnostics?: readonly WorkbookCommitCompletenessDiagnostic[];
   readonly redactionSummaryRecord?: VersionObjectRecord<unknown>;
   readonly verificationSummaryRecord?: VersionObjectRecord<unknown>;

@@ -56,11 +56,13 @@ export function VersionHistoryPanelHeader({
   onClose,
   onRefresh,
   refreshDisabled,
+  refreshInProgress,
 }: {
   readonly closeButtonRef: RefObject<HTMLButtonElement | null>;
   readonly onClose: () => void;
   readonly onRefresh: () => Promise<void>;
   readonly refreshDisabled: boolean;
+  readonly refreshInProgress: boolean;
 }): React.JSX.Element {
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-ss-border bg-ss-surface-secondary shrink-0">
@@ -82,6 +84,7 @@ export function VersionHistoryPanelHeader({
           data-testid="panel-version-history-refresh"
           className="w-7 h-7 flex items-center justify-center rounded-full text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors disabled:opacity-50"
           aria-label="Refresh version history"
+          aria-busy={refreshInProgress}
           title="Refresh"
           disabled={refreshDisabled}
         >

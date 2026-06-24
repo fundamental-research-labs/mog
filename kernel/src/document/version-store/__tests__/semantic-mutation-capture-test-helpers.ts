@@ -50,6 +50,9 @@ export function createTestSemanticMutationCapture() {
 
 export function createRustBackedTestSemanticMutationCapture(
   options: SemanticMutationCaptureOptions = {},
+  testOptions: {
+    readonly diffChangeCount?: (pendingCapturedNormalMutationCount: number) => number;
+  } = {},
 ): SemanticMutationCaptureServices {
   let diffChangeCount = 0;
   let pendingBeforeCapture: Promise<void> | undefined;
@@ -98,7 +101,11 @@ export function createRustBackedTestSemanticMutationCapture(
     },
     captureNormalCommit: async (input) => {
       await pendingBeforeCapture;
-      diffChangeCount = capture.readNormalCommitCaptureState().pendingCapturedNormalMutationCount;
+      const pendingCapturedNormalMutationCount =
+        capture.readNormalCommitCaptureState().pendingCapturedNormalMutationCount;
+      diffChangeCount =
+        testOptions.diffChangeCount?.(pendingCapturedNormalMutationCount) ??
+        pendingCapturedNormalMutationCount;
       const result = await capture.captureNormalCommit(input);
       if (result.status !== 'success') return result;
       const finalize = result.finalize;

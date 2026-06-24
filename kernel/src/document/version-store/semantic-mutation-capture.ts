@@ -24,6 +24,7 @@ import {
 } from './semantic-mutation-capture-lanes';
 import {
   authorForRecords,
+  isDirectCellValueOperation,
   mapMutationResultToSemanticChanges,
   mutationSegmentPayload,
   type PendingSemanticMutation,
@@ -158,6 +159,20 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
     const changes = mapMutationResultToSemanticChanges(input, sequence);
     if (changes.length === 0) {
+      if (shouldDeferEmptySemanticChangeSetToRustDiff(input, lane)) {
+        this.pendingNormal.push({
+          sequence,
+          operation: input.operation,
+          capturedAt,
+          ...(input.operationContext ? { operationContext: input.operationContext } : {}),
+          directEdits,
+          directEditRanges,
+          changes,
+        });
+        this.nextNormalSequence++;
+        this.bumpNormalCaptureRevision();
+        return;
+      }
       if (lane === 'normalLocal') {
         this.recordUncapturedNormalMutation(input, 'emptySemanticChangeSet', {
           sequence,
@@ -332,4 +347,13 @@ function objectRecord(
     dependencies: [],
     payload,
   });
+}
+
+function shouldDeferEmptySemanticChangeSetToRustDiff(
+  input: VersionMutationCaptureRecordInput,
+  lane: ReturnType<typeof classifySemanticMutationCaptureLane>,
+): boolean {
+  if (lane !== 'normalLocal') return false;
+  if (!isDirectCellValueOperation(input.operation)) return false;
+  return (input.directEdits?.length ?? 0) > 0 || (input.directEditRanges?.length ?? 0) > 0;
 }

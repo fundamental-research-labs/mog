@@ -56,19 +56,28 @@ describe('VersionHistoryPanelContent', () => {
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
   });
 
-  it('announces refresh loading while preserving existing version history content', async () => {
-    const refreshSurface = createDeferred<VersionSurfaceStatus>();
+  it('queues manual refresh while preserving existing version history content', async () => {
+    const firstRefreshSurface = createDeferred<VersionSurfaceStatus>();
+    const secondRefreshSurface = createDeferred<VersionSurfaceStatus>();
+    const dirtySurface = createSurfaceStatus({
+      dirty: { hasUncommittedLocalChanges: true, checkoutSafe: false },
+    });
     let surfaceReadCount = 0;
     const workbook = createWorkbook({
       getSurfaceStatus: jest.fn(async () => {
         surfaceReadCount += 1;
-        return surfaceReadCount === 1 ? createSurfaceStatus() : refreshSurface.promise;
+        if (surfaceReadCount === 1) return dirtySurface;
+        if (surfaceReadCount === 2) return firstRefreshSurface.promise;
+        if (surfaceReadCount === 3) return secondRefreshSurface.promise;
+        return dirtySurface;
       }),
     });
 
     const { user } = renderVersionHistoryPanel({ workbook });
 
     expect(await screen.findByText('Calculated forecast')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    expect(screen.getByTestId('version-history-commit-button')).toBeEnabled();
     await user.click(screen.getByTestId('panel-version-history-refresh'));
 
     const refreshStatus = screen.getByTestId('version-history-loading-status');
@@ -77,8 +86,19 @@ describe('VersionHistoryPanelContent', () => {
     expect(refreshStatus).toHaveAttribute('aria-atomic', 'true');
     expect(refreshStatus).toHaveTextContent('Refreshing version history');
     expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
+    expect(screen.getByTestId('version-history-commit-button')).toBeEnabled();
 
-    refreshSurface.resolve(createSurfaceStatus());
+    const refreshButton = screen.getByTestId('panel-version-history-refresh');
+    expect(refreshButton).toBeEnabled();
+    expect(refreshButton).toHaveAttribute('aria-busy', 'true');
+
+    await user.click(refreshButton);
+    expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2);
+
+    firstRefreshSurface.resolve(createSurfaceStatus());
+    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
+
+    secondRefreshSurface.resolve(createSurfaceStatus());
     await waitFor(() =>
       expect(screen.queryByTestId('version-history-loading-status')).not.toBeInTheDocument(),
     );

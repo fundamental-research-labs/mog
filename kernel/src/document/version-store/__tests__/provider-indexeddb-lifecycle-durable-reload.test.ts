@@ -96,7 +96,12 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
       ok: true,
       value: {
         items: expect.arrayContaining([
-          expect.objectContaining({ id: committed.id }),
+          expect.objectContaining({
+            id: committed.id,
+            annotation: {
+              message: { kind: 'text', value: 'normal lifecycle commit' },
+            },
+          }),
           expect.objectContaining({ id: initialHead.id }),
         ]),
       },

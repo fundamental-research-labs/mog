@@ -41,10 +41,17 @@ export async function normalCommitCaptureAdmissionDiagnostics(
   ctx: DocumentContext,
 ): Promise<readonly VersionStoreDiagnostic[]> {
   const captureState = readNormalCommitCaptureAdmissionState(ctx);
-  if (!captureState || captureState.pendingCapturedNormalMutationCount > 0) return [];
+  if (!captureState) return [];
 
   const hasUncapturedNormalMutations = captureState.pendingUncapturedNormalMutationCount > 0;
+  const hasCapturedNormalMutations = captureState.pendingCapturedNormalMutationCount > 0;
   const dirtyState = await readSurfaceDirtyAdmissionState(ctx);
+  if (hasCapturedNormalMutations) {
+    if (!getAttachedVersionWriteService(ctx)?.capturesNormalCommit) {
+      return [missingChangeSetDiagnostic(captureState, dirtyState)];
+    }
+    return [];
+  }
   if (!hasUncapturedNormalMutations && dirtyState?.hasUncommittedLocalChanges !== true) return [];
 
   return [missingChangeSetDiagnostic(captureState, dirtyState)];
@@ -59,7 +66,15 @@ function toWriteService(value: unknown): AttachedVersionWriteService | null {
   if (isRawGraphStore(value)) return null;
   const commit = bindMethod(value, 'commit') ?? bindMethod(value, 'commitVersion');
   if (!commit) return null;
-  return { commit: (options) => commit(options) };
+  return {
+    commit: (options) => commit(options),
+    ...(capturesNormalCommit(value) ? { capturesNormalCommit: true } : {}),
+  };
+}
+
+function capturesNormalCommit(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return value.capturesNormalCommit === true || value.supportsNormalCommitCapture === true;
 }
 
 function bindMethod(value: unknown, name: string): BoundMethod | null {

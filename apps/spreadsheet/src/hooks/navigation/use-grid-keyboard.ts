@@ -18,7 +18,7 @@
  * @see engine/src/state/coordinator/keyboard-coordination.ts - Coordinator
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
@@ -74,6 +74,8 @@ export interface UseGridKeyboardReturn {
 export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboardReturn {
   const { activeSheetId } = options;
   const readOnly = useReadOnly();
+  const pendingTypeToEditRef = useRef<PendingTypeToEdit | null>(null);
+  const pendingTypeToEditSequenceRef = useRef(0);
 
   // Protection alert for blocked edits
   const showProtectionAlert = useUIStore((s) => s.showProtectionAlert);
@@ -133,6 +135,20 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
         return;
       }
 
+      const editorSnapshot = coordinator.grid.getEditorSnapshot();
+      if (
+        handlePendingTypeToEditKey(
+          e,
+          pendingTypeToEditRef,
+          editorSnapshot,
+          () => coordinator.grid.getEditorSnapshot(),
+          editorActions.input,
+          editorActions.commitWithKey,
+        )
+      ) {
+        return;
+      }
+
       if (keyboard.isReady) {
         keyboard.handleKeyDown(e);
         if (e.defaultPrevented) {
@@ -146,7 +162,6 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
 
       // If editing, let editor handle remaining keys (typing flows to text input)
       // Performance: On-demand read via coordinator instead of subscribing to editor state
-      const editorSnapshot = coordinator.grid.getEditorSnapshot();
       if (editorSnapshot.isEditing) {
         return;
       }
@@ -184,6 +199,8 @@ export function useGridKeyboard(options: UseGridKeyboardOptions): UseGridKeyboar
         editorActions.startEditing,
         toSheetId(currentActiveSheetId),
         showProtectionAlert,
+        pendingTypeToEditRef,
+        () => ++pendingTypeToEditSequenceRef.current,
       );
     },
     [
@@ -241,6 +258,8 @@ function handleTypeToEdit(
   ) => Promise<MutationResult>,
   activeSheetId: SheetId,
   showProtectionAlert?: (message?: string) => void,
+  pendingTypeToEditRef?: React.MutableRefObject<PendingTypeToEdit | null>,
+  nextPendingSequence?: () => number,
 ): void {
   // IME composition guard - prevent type-to-edit during IME composition
   // keyCode 229 is the "Process" key - indicates IME processing
@@ -257,6 +276,22 @@ function handleTypeToEdit(
   if (isPrintableChar) {
     e.preventDefault();
 
+    const pending = pendingTypeToEditRef?.current;
+    if (pending && samePendingTarget(pending, activeSheetId, activeCell)) {
+      pending.value += e.key;
+      return;
+    }
+
+    const sequence = nextPendingSequence?.() ?? 0;
+    if (pendingTypeToEditRef) {
+      pendingTypeToEditRef.current = {
+        cell: { ...activeCell },
+        sheetId: activeSheetId,
+        value: e.key,
+        sequence,
+      };
+    }
+
     // Start editing with the typed character as initial value
     // This replaces cell content (like Excel) rather than appending
     // Typing starts in Enter Mode (arrows commit and move)
@@ -266,7 +301,7 @@ function handleTypeToEdit(
     // in `__dt.recentErrors` as 'handler:EDIT_CELL' rather than dying silent
     // at the React boundary. Re-throw is fine — the global
     // `unhandledrejection` listener will then capture it too (no swallow).
-    void withHandlerErrors('EDIT_CELL', () =>
+    const editPromise = withHandlerErrors('EDIT_CELL', () =>
       startEditing(
         activeCell,
         activeSheetId,
@@ -277,7 +312,159 @@ function handleTypeToEdit(
         if (!result.success && result.reason?.includes('protected') && showProtectionAlert) {
           showProtectionAlert(result.reason);
         }
+        if (!pendingTypeToEditRef) return;
+        const current = pendingTypeToEditRef.current;
+        if (!current || current.sequence !== sequence) return;
+        if (!result.success) {
+          pendingTypeToEditRef.current = null;
+          return;
+        }
+        current.ready = true;
       }),
     );
+    if (pendingTypeToEditRef?.current?.sequence === sequence) {
+      pendingTypeToEditRef.current.startPromise = editPromise
+        .catch(() => undefined)
+        .then(() => undefined);
+    }
+    void editPromise;
   }
+}
+
+type GridEditorSnapshotForPending = {
+  readonly isEditing: boolean;
+  readonly editingCell: { readonly row: number; readonly col: number } | null;
+  readonly sheetId: string | null;
+};
+
+type PendingTypeToEdit = {
+  readonly cell: { readonly row: number; readonly col: number };
+  readonly sheetId: SheetId;
+  value: string;
+  readonly sequence: number;
+  ready?: boolean;
+  startPromise?: Promise<void>;
+};
+
+function handlePendingTypeToEditKey(
+  e: React.KeyboardEvent<HTMLElement>,
+  pendingTypeToEditRef: React.MutableRefObject<PendingTypeToEdit | null>,
+  snapshot: GridEditorSnapshotForPending,
+  readEditorSnapshot: () => GridEditorSnapshotForPending,
+  input: (value: string, cursorPosition: number) => void,
+  commitWithKey: (commitKey: 'enter' | 'shift-enter' | 'tab' | 'shift-tab') => void,
+): boolean {
+  const pending = pendingTypeToEditRef.current;
+  if (!pending) return false;
+
+  if (isSpreadsheetEditorEventTarget(e)) {
+    pendingTypeToEditRef.current = null;
+    return false;
+  }
+
+  if (pending.ready && !matchesPendingEditor(pending, snapshot)) {
+    pendingTypeToEditRef.current = null;
+    return false;
+  }
+
+  if (isPrintableTypeToEditKey(e)) {
+    e.preventDefault();
+    pending.value += e.key;
+    void (pending.startPromise ?? Promise.resolve()).then(() => {
+      mirrorPendingTypeToEdit(pendingTypeToEditRef, readEditorSnapshot(), input);
+    });
+    return true;
+  }
+
+  const commitKey = pendingCommitKey(e);
+  if (!commitKey) return false;
+
+  e.preventDefault();
+  void (pending.startPromise ?? Promise.resolve()).then(() => {
+    const snapshot = readEditorSnapshot();
+    if (flushPendingTypeToEdit(pendingTypeToEditRef, snapshot, input)) {
+      commitWithKey(commitKey);
+    }
+  });
+  return true;
+}
+
+function isPrintableTypeToEditKey(e: React.KeyboardEvent<HTMLElement>): boolean {
+  return (
+    e.key.length === 1 &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.altKey &&
+    !e.nativeEvent.isComposing &&
+    e.nativeEvent.keyCode !== 229
+  );
+}
+
+function isSpreadsheetEditorEventTarget(e: React.KeyboardEvent<HTMLElement>): boolean {
+  const target = e.target;
+  const targetWindow = e.currentTarget.ownerDocument.defaultView;
+  const elementCtor =
+    targetWindow?.HTMLElement ?? (typeof HTMLElement === 'undefined' ? undefined : HTMLElement);
+  if (!elementCtor || !(target instanceof elementCtor)) return false;
+  return Boolean(
+    target.closest('[data-testid="inline-cell-editor"], [data-testid="formula-bar-input"]'),
+  );
+}
+
+function pendingCommitKey(
+  e: React.KeyboardEvent<HTMLElement>,
+): 'enter' | 'shift-enter' | 'tab' | 'shift-tab' | null {
+  if (e.key === 'Enter') return e.shiftKey ? 'shift-enter' : 'enter';
+  if (e.key === 'Tab') return e.shiftKey ? 'shift-tab' : 'tab';
+  return null;
+}
+
+function flushPendingTypeToEdit(
+  pendingTypeToEditRef: React.MutableRefObject<PendingTypeToEdit | null>,
+  snapshot: GridEditorSnapshotForPending,
+  input: (value: string, cursorPosition: number) => void,
+): boolean {
+  const pending = pendingTypeToEditRef.current;
+  if (!pending) return false;
+  if (!matchesPendingEditor(pending, snapshot)) return false;
+
+  pendingTypeToEditRef.current = null;
+  input(pending.value, pending.value.length);
+  return true;
+}
+
+function mirrorPendingTypeToEdit(
+  pendingTypeToEditRef: React.MutableRefObject<PendingTypeToEdit | null>,
+  snapshot: GridEditorSnapshotForPending,
+  input: (value: string, cursorPosition: number) => void,
+): void {
+  const pending = pendingTypeToEditRef.current;
+  if (!pending) return;
+  if (!matchesPendingEditor(pending, snapshot)) return;
+
+  input(pending.value, pending.value.length);
+}
+
+function matchesPendingEditor(
+  pending: PendingTypeToEdit,
+  snapshot: GridEditorSnapshotForPending,
+): boolean {
+  return (
+    snapshot.isEditing &&
+    snapshot.sheetId === pending.sheetId &&
+    snapshot.editingCell?.row === pending.cell.row &&
+    snapshot.editingCell.col === pending.cell.col
+  );
+}
+
+function samePendingTarget(
+  pending: PendingTypeToEdit,
+  sheetId: SheetId,
+  cell: { readonly row: number; readonly col: number },
+): boolean {
+  return (
+    pending.sheetId === sheetId &&
+    pending.cell.row === cell.row &&
+    pending.cell.col === cell.col
+  );
 }

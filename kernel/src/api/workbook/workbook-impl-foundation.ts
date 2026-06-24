@@ -67,7 +67,6 @@ import { slog } from '../../lib/slog';
 import type {
   EventByType,
   IEventBus,
-  SpreadsheetEventType as InternalEventType,
   SpreadsheetEvent as InternalSpreadsheetEvent,
 } from '@mog-sdk/contracts/events';
 import { KernelError } from '../../errors';
@@ -190,6 +189,7 @@ import { createWorkbookContextBinding, type WorkbookContextBinding } from './con
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
 import { createWorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 import type { VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
+import { shouldTrackEventAsWorkbookDirty } from './workbook-dirty-event-filter';
 import {
   applyWorkbookReadOnlyMode,
   createWorkbookFeatureGateBinder,
@@ -237,7 +237,8 @@ export abstract class WorkbookImplFoundation {
   protected _formControlManager?: FormControlManager;
   protected _links?: WorkbookLinks;
   protected _diagnostics?: WorkbookDiagnosticsImpl;
-  protected readonly _checkoutMaterializations = new Set<SnapshotRootFreshLifecycleMaterialization>();
+  protected readonly _checkoutMaterializations =
+    new Set<SnapshotRootFreshLifecycleMaterialization>();
   protected _dirty = false;
   protected _dirtyStatusSequence = 0;
   protected readonly checkoutTransactions = createWorkbookCheckoutTransactionCoordinator({
@@ -978,15 +979,4 @@ export abstract class WorkbookImplFoundation {
   get mirror() {
     return this.ctx.mirror;
   }
-}
-
-const NON_MUTATING_WORKBOOK_EVENT_TYPES = new Set<InternalEventType>([
-  'workbook:version-checkout-materialized',
-  'workbook:version-dirty-status-changed',
-  'workbook:version-active-checkout-state-changed',
-  'security:policies-reloaded',
-]);
-
-function shouldTrackEventAsWorkbookDirty(event: InternalSpreadsheetEvent): boolean {
-  return !NON_MUTATING_WORKBOOK_EVENT_TYPES.has(event.type);
 }

@@ -61,7 +61,8 @@ export function VersionHistoryPanelContent({
         closeButtonRef={closeButtonRef}
         onClose={onClose}
         onRefresh={load}
-        refreshDisabled={loadState.status === 'loading'}
+        refreshDisabled={loadState.status === 'loading' && !data}
+        refreshInProgress={loadState.status === 'loading'}
       />
 
       <div className="flex-1 overflow-y-auto" aria-busy={loading}>

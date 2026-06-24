@@ -42,6 +42,8 @@ export type {
   VersionSemanticChangeRecord,
 } from './semantic-mutation-capture-projection-types';
 
+export { isDirectCellValueOperation } from './semantic-mutation-cell-write-projection';
+
 export function mapMutationResultToSemanticChanges(
   input: SemanticMutationCaptureProjectionInput,
   sequence: number,

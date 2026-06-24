@@ -71,6 +71,55 @@ describe('semantic mutation capture dirty state', () => {
       hasUncapturedNormalMutations: true,
     });
   });
+
+  it('defers empty direct cell write receipts to the Rust semantic diff', async () => {
+    const capture = createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext: {
+        operationId: 'worksheet.setCell:1',
+        kind: 'mutation',
+        author: AUTHOR,
+        createdAt: NOW.toISOString(),
+        sheetIds: ['sheet-1'],
+        domainIds: ['cells'],
+        capturePolicy: 'commitEligible',
+        writeAdmissionMode: 'capture',
+      },
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
+      result: mutationResult(),
+    });
+
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: true,
+      hasUncapturedNormalMutations: false,
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      source: { kind: 'rustSemanticDiff' },
+      changes: [expect.objectContaining({ changeId: 'test-rust-diff:cell:0' })],
+      reviewChanges: [],
+    });
+    expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      segmentId: 'mutation-1',
+      operation: 'compute_batch_set_cells_by_position',
+      changeIds: [],
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0, address: 'A1' }],
+    });
+
+    captured.finalize?.({ status: 'success', commitId: COMMIT_ID });
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 0,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: false,
+      hasUncapturedNormalMutations: false,
+    });
+  });
 });
 
 function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {

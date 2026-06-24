@@ -163,8 +163,12 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     commitSummary: WorkbookCommitSummary,
   ): Promise<boolean> {
     const afterCommit = this.dirtyTracking.readState();
-    if (!afterCommit.isDirty) return false;
-    if (afterCommit.revision !== beforeCommit.revision) return false;
+    if (!afterCommit.isDirty) {
+      return false;
+    }
+    if (afterCommit.revision !== beforeCommit.revision) {
+      return false;
+    }
 
     const captureState = readNormalCommitCaptureDirtyState(this.readVersionContext());
     if (captureState && !isNormalCommitCaptureDrained(captureState)) {

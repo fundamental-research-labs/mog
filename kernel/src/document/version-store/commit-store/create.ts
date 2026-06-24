@@ -5,6 +5,7 @@ import {
   dependenciesForPayload,
   diagnostic,
   parseCompletenessDiagnostics,
+  parseCommitAnnotation,
   parseString,
   parseVersionAuthor,
 } from './payload';
@@ -57,6 +58,7 @@ export async function createWorkbookCommitInObjectStore(
   const payloadDiagnostics: WorkbookCommitStoreDiagnostic[] = [];
   const author = parseVersionAuthor(input.author, 'author', payloadDiagnostics);
   const createdAt = parseString(input.createdAt, 'createdAt', payloadDiagnostics);
+  const annotation = parseCommitAnnotation(input.annotation, 'annotation', payloadDiagnostics);
   const completenessDiagnostics = parseCompletenessDiagnostics(
     input.completenessDiagnostics ?? [],
     'completenessDiagnostics',
@@ -86,6 +88,7 @@ export async function createWorkbookCommitInObjectStore(
         }),
     author,
     createdAt,
+    ...(annotation ? { annotation } : {}),
     completenessDiagnostics,
     ...(records.redactionSummaryRecord === undefined
       ? {}

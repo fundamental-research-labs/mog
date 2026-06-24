@@ -59,7 +59,10 @@ export function registerWriteServiceCommitDirtyTrackingScenarios(): void {
 
   it('rejects a semantic no-op dirty marker before a permissive write service can commit', async () => {
     const eventBus = createMockEventBus();
-    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture(
+      {},
+      { diffChangeCount: () => 0 },
+    );
     const commit = jest.fn(async () => ({
       status: 'success',
       commit: commitSummary('child'),
@@ -86,14 +89,28 @@ export function registerWriteServiceCommitDirtyTrackingScenarios(): void {
 
     const commitResult = await wb.version.commit();
 
-    expect(commitResult).toMatchObject(
-      missingChangeSetCommitResult('uncaptured-normal-mutations'),
-    );
+    expect(commitResult).toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_MISSING_CHANGE_SET',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                pendingCapturedNormalMutationCount: 1,
+                pendingUncapturedNormalMutationCount: 0,
+              }),
+            }),
+          }),
+        ],
+      },
+    });
     expect(commit).not.toHaveBeenCalled();
     expect(wb.isDirty).toBe(true);
     expect(semanticMutationCapture.readNormalCommitCaptureState()).toMatchObject({
-      pendingCapturedNormalMutationCount: 0,
-      pendingUncapturedNormalMutationCount: 1,
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
     });
   });
 

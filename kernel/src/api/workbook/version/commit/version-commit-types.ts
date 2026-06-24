@@ -13,6 +13,7 @@ export type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>
 
 export type AttachedVersionWriteService = {
   commit?: (options?: VersionCommitOptions) => MaybePromise<unknown>;
+  readonly capturesNormalCommit?: boolean;
 };
 
 export type NormalCommitCaptureAdmissionState = {

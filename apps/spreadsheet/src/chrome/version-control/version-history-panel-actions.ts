@@ -160,7 +160,7 @@ export function useVersionHistoryPanelActions({
   const commitAvailability = getCommitAvailability(
     data,
     actionBusy,
-    loading || commitDirtyStatusRefreshing,
+    commitDirtyStatusRefreshing,
     commitMessage,
   );
   const branchAvailability = getBranchAvailability(

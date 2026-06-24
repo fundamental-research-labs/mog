@@ -72,9 +72,9 @@ async function expectSettledCleanSurface(wb: Workbook): Promise<void> {
   let surface: Awaited<ReturnType<Workbook['version']['getSurfaceStatus']>> | null = null;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    wb.markClean();
     surface = await wb.version.getSurfaceStatus();
-    if (!surface.dirty.hasUncommittedLocalChanges && surface.dirty.checkoutSafe) {
+    if (!wb.isDirty && !surface.dirty.hasUncommittedLocalChanges && surface.dirty.checkoutSafe) {
+      expect(wb.isDirty).toBe(false);
       expect(surface).toMatchObject({
         dirty: {
           hasUncommittedLocalChanges: false,
@@ -86,6 +86,7 @@ async function expectSettledCleanSurface(wb: Workbook): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
+  expect(wb.isDirty).toBe(false);
   expect(surface).toMatchObject({
     dirty: {
       hasUncommittedLocalChanges: false,

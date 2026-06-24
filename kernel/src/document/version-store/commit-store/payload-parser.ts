@@ -1,6 +1,7 @@
 import { parseWorkbookCommitParentIds } from './parents';
 import type { WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './types';
 import { parseVersionAuthor } from './payload-author';
+import { parseCommitAnnotation } from './payload-annotation';
 import { parseCompletenessDiagnostics } from './payload-completeness';
 import { diagnostic, invalidPayloadDiagnostic } from './payload-diagnostics';
 import {
@@ -35,6 +36,7 @@ export function parseCommitPayload(
         'mutationSegmentDigests',
         'author',
         'createdAt',
+        'annotation',
         'completenessDiagnostics',
         'redactionSummaryDigest',
         'verificationSummaryDigest',
@@ -94,6 +96,7 @@ export function parseCommitPayload(
   );
   const author = parseVersionAuthor(payload.author, 'author', diagnostics);
   const createdAt = parseString(payload.createdAt, 'createdAt', diagnostics);
+  const annotation = parseCommitAnnotation(payload.annotation, 'annotation', diagnostics);
   const completenessDiagnostics = parseCompletenessDiagnostics(
     payload.completenessDiagnostics,
     'completenessDiagnostics',
@@ -130,6 +133,7 @@ export function parseCommitPayload(
       ...(mutationSegmentDigests.length === 0 ? {} : { mutationSegmentDigests }),
       author,
       createdAt,
+      ...(annotation ? { annotation } : {}),
       completenessDiagnostics,
       ...(redactionSummaryDigest === undefined ? {} : { redactionSummaryDigest }),
       ...(verificationSummaryDigest === undefined ? {} : { verificationSummaryDigest }),

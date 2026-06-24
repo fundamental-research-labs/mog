@@ -51,5 +51,6 @@ export function graphCommitSummary(commit: WorkbookCommit): VersionGraphCommitSu
     parents: [...commit.payload.parentCommitIds],
     createdAt: commit.payload.createdAt,
     author: { ...commit.payload.author },
+    ...(commit.payload.annotation ? { annotation: commit.payload.annotation } : {}),
   };
 }

@@ -1,4 +1,5 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
+import type { WorkbookCommitAnnotationSummary } from '@mog-sdk/contracts/api';
 
 import type {
   CreateWorkbookCommitInput,
@@ -89,6 +90,7 @@ export type VersionGraphCommitSummary = {
   readonly parents: readonly WorkbookCommitId[];
   readonly createdAt: string;
   readonly author: WorkbookCommit['payload']['author'];
+  readonly annotation?: WorkbookCommitAnnotationSummary;
 };
 
 export type VersionGraphReadHeadResult =

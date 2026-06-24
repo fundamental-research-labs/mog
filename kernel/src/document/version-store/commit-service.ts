@@ -56,6 +56,7 @@ export type {
 } from './commit-service-types';
 
 export class WorkbookVersionCommitService {
+  readonly capturesNormalCommit: boolean;
   private readonly provider: VersionStoreProvider;
   private readonly captureNormalCommit?: VersionNormalCommitCapture;
   private readonly captureMergeCommit?: VersionMergeCommitCapture;
@@ -67,6 +68,7 @@ export class WorkbookVersionCommitService {
   private initializationPromise: Promise<readonly VersionStoreDiagnostic[]> | null = null;
 
   constructor(options: WorkbookVersionCommitServiceOptions) {
+    this.capturesNormalCommit = Boolean(options.captureNormalCommit);
     this.provider = options.provider;
     this.captureNormalCommit = options.captureNormalCommit;
     this.captureMergeCommit = options.captureMergeCommit;

@@ -34,6 +34,10 @@ const INCOMING_REF = 'refs/heads/scenario/budget';
 const PRIVATE_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}`;
 
 describe('VersionHistoryPanelContent direct merge controls', () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+  });
+
   it('keeps direct merge controls disabled when merge capabilities are unavailable', async () => {
     const previewReason =
       'Merge preview denied for principal [principal] on [version ref] at [commit].';
@@ -267,6 +271,39 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
       },
       { includeDiagnostics: true },
     ]);
+  });
+
+  it('restores a conflicted direct merge preview and selected resolution after remount', async () => {
+    const conflict = sameCellMergeConflict();
+    const workbook = createDirectMergeWorkbook({
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
+        async (input) => ({
+          ok: true,
+          value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
+        }),
+      ),
+    });
+    const firstRender = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await firstRender.user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+    await firstRender.user.click(screen.getByLabelText(/^Source\s*-\s*theirs$/));
+    await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
+
+    firstRender.unmount();
+    renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.getByTestId('version-merge-preview-status')).toHaveAttribute(
+        'data-status',
+        'conflicted',
+      );
+    });
+    expect(screen.getByLabelText(/^Source\s*-\s*theirs$/)).toBeChecked();
+    expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled();
   });
 
   it('sanitizes direct merge status messages', async () => {

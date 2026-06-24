@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   VersionApplyMergeInput,
   VersionApplyMergeResolution,
@@ -46,6 +46,14 @@ import {
   mergeSourceRefs,
   resolveCurrentMergeTarget,
 } from './version-merge-planning';
+import {
+  clearMergeReviewDraft,
+  mergeReviewDraftMatches,
+  mergeReviewDraftStorageKey,
+  readMergeReviewDraft,
+  sanitizeMergeReviewDraftSelections,
+  writeMergeReviewDraft,
+} from './version-merge-review-draft-storage';
 
 type UseVersionHistoryPanelActionsInput = {
   readonly workbook: VersionHistoryWorkbook;
@@ -87,12 +95,16 @@ export function useVersionHistoryPanelActions({
   });
   const [mergeResolutionSelections, setMergeResolutionSelections] =
     useState<VersionMergeResolutionSelections>({});
+  const restoredMergeReviewDraftKeyRef = useRef<string | undefined>(undefined);
 
   const actionBusy = actionState.status === 'running';
   const selectedOrHeadCommitId = data
     ? resolveSelectedOrHeadCommitId(data, selectedCommitId)
     : undefined;
-  const currentMergeTarget = data ? resolveCurrentMergeTarget(data) : undefined;
+  const currentMergeTarget = useMemo(
+    () => (data ? resolveCurrentMergeTarget(data) : undefined),
+    [data],
+  );
   const mergeSources = useMemo(() => (data ? mergeSourceRefs(data) : []), [data]);
   const selectedMergeSource = mergeSources.find((ref) => ref.name === mergeSourceRefName);
   const commitAvailability = getCommitAvailability(data, actionBusy, loading, commitMessage);
@@ -163,7 +175,71 @@ export function useVersionHistoryPanelActions({
     setMergeSourceRefNameState(refName);
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});
+    restoredMergeReviewDraftKeyRef.current = undefined;
   }, []);
+
+  useEffect(() => {
+    if (
+      !data ||
+      loading ||
+      mergePreviewState.kind !== 'idle' ||
+      !currentMergeTarget ||
+      !selectedMergeSource
+    ) {
+      return;
+    }
+
+    const draftKey = mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource);
+    if (restoredMergeReviewDraftKeyRef.current === draftKey) return;
+    const draft = readMergeReviewDraft(draftKey);
+    if (!draft || !mergeReviewDraftMatches(draft, currentMergeTarget, selectedMergeSource)) {
+      return;
+    }
+
+    restoredMergeReviewDraftKeyRef.current = draftKey;
+    let cancelled = false;
+
+    const restore = async () => {
+      setActionState({ status: 'running', label: 'Restoring merge review' });
+      const result = await readVersionResult('VERSION_UI_MERGE_PREVIEW_RESTORE_FAILED', () =>
+        workbook.version.merge(draft.input, {
+          mode: 'preview',
+          includeDiagnostics: true,
+          ...(currentMergeTarget.refName ? { targetRef: currentMergeTarget.refName } : {}),
+          ...mergeExpectedTargetHead(data),
+        }),
+      );
+      if (cancelled) return;
+      if (!result.ok) {
+        clearMergeReviewDraft(draftKey);
+        setActionState({ status: 'idle' });
+        return;
+      }
+
+      setMergePreviewState({
+        kind: 'result',
+        input: draft.input,
+        result: result.value,
+        sourceRefName: selectedMergeSource.name,
+        ...(currentMergeTarget.refName ? { targetRefName: currentMergeTarget.refName } : {}),
+      });
+      setMergeResolutionSelections(sanitizeMergeReviewDraftSelections(result.value, draft));
+      setActionState({ status: 'success', message: mergePreviewActionMessage(result.value) });
+    };
+
+    void restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentMergeTarget,
+    data,
+    loading,
+    mergePreviewState.kind,
+    selectedMergeSource,
+    workbook,
+  ]);
 
   const handleCommit = useCallback(async () => {
     if (!data || !canCommit) return;
@@ -357,6 +433,10 @@ export function useVersionHistoryPanelActions({
       ...(currentMergeTarget.refName ? { targetRefName: currentMergeTarget.refName } : {}),
     });
     setMergeResolutionSelections({});
+    writeMergeReviewDraft(currentMergeTarget, selectedMergeSource, {
+      input,
+      selections: {},
+    });
     setActionState({ status: 'success', message: mergePreviewActionMessage(result.value) });
   }, [canPreviewMerge, currentMergeTarget, data, selectedMergeSource, workbook]);
 
@@ -425,6 +505,9 @@ export function useVersionHistoryPanelActions({
     } else {
       setSelectedCommitId(undefined);
     }
+    if (selectedMergeSource) {
+      clearMergeReviewDraft(mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource));
+    }
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});
     setActionState({ status: 'running', label: 'Refreshing version history' });
@@ -440,9 +523,25 @@ export function useVersionHistoryPanelActions({
     workbook,
   ]);
 
-  const handleMergeResolutionChange = useCallback((conflictId: string, optionId: string) => {
-    setMergeResolutionSelections((current) => ({ ...current, [conflictId]: optionId }));
-  }, []);
+  const handleMergeResolutionChange = useCallback(
+    (conflictId: string, optionId: string) => {
+      setMergeResolutionSelections((current) => {
+        const next = { ...current, [conflictId]: optionId };
+        if (
+          mergePreviewState.kind === 'result' &&
+          currentMergeTarget &&
+          selectedMergeSource
+        ) {
+          writeMergeReviewDraft(currentMergeTarget, selectedMergeSource, {
+            input: mergePreviewState.input,
+            selections: next,
+          });
+        }
+        return next;
+      });
+    },
+    [currentMergeTarget, mergePreviewState, selectedMergeSource],
+  );
 
   const handleCheckoutRef = useCallback(
     async (ref: VersionRef) => {

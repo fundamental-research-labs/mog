@@ -144,6 +144,60 @@ describe('createDocumentManager import identity', () => {
     expectDefaultIndexedDbProviderSelection(originalWorkbook);
   });
 
+  it('materializes the default version head once when opening a persisted normal document', async () => {
+    const checkout = jest.fn(async () => ({
+      ok: true,
+      value: {
+        plan: { commitId: 'commit:sha256:opened' },
+      },
+    }));
+    const originalWorkbook = jest.fn(async () => ({
+      version: { checkout },
+    }));
+    const handle = makeHandle('file-open', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-open', {
+      operation: 'open',
+    });
+
+    await returnedHandle.workbook();
+    await returnedHandle.workbook();
+
+    expect(checkout).toHaveBeenCalledTimes(1);
+    expect(checkout).toHaveBeenCalledWith({ kind: 'head' }, { includeDiagnostics: true });
+  });
+
+  it('does not materialize the default version head for newly created normal documents', async () => {
+    const checkout = jest.fn(async () => ({
+      ok: true,
+      value: {
+        plan: { commitId: 'commit:sha256:created' },
+      },
+    }));
+    const originalWorkbook = jest.fn(async () => ({
+      version: { checkout },
+    }));
+    const handle = makeHandle('file-created', undefined, originalWorkbook);
+    const hostResult = {
+      dispose: jest.fn(),
+    };
+    jest.mocked(createStandaloneBrowserShellHost).mockReturnValue(hostResult as never);
+    jest.mocked(createStandaloneBrowserHostBackedDocument).mockResolvedValue(handle);
+
+    const manager = createDocumentManager();
+    const returnedHandle = await manager.createDocument('file-created');
+
+    await returnedHandle.workbook();
+
+    expect(checkout).not.toHaveBeenCalled();
+  });
+
   it('opens default IndexedDB versioning read-only when the local document provider is read-only', async () => {
     const originalWorkbook = jest.fn(async () => ({}));
     let readOnly = false;

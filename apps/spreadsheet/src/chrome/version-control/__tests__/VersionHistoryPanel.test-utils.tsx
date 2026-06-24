@@ -61,9 +61,9 @@ export function renderVersionHistoryPanel({
 }: RenderVersionHistoryPanelOptions = {}) {
   const user = userEvent.setup();
 
-  render(<VersionHistoryPanelContent workbook={workbook} onClose={onClose} />);
+  const rendered = render(<VersionHistoryPanelContent workbook={workbook} onClose={onClose} />);
 
-  return { user, workbook, onClose };
+  return { user, workbook, onClose, ...rendered };
 }
 
 export function createWorkbook(

@@ -11,6 +11,7 @@ type MutableDocumentHandleWorkbook = {
 type DefaultVersioningDocumentOptions = {
   readonly skipLocalPersistence?: boolean;
   readonly internal?: boolean;
+  readonly operation?: 'create' | 'open';
 };
 
 const DEFAULT_VERSION_PROVIDER_SELECTION = {
@@ -22,6 +23,7 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
 type DefaultVersionProviderSelection = NonNullable<
   NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
 >;
+type DefaultVersionedWorkbook = Awaited<ReturnType<DocumentHandle['workbook']>>;
 
 export function decorateNormalLocalHandleWithDefaultVersioning(
   handle: DocumentHandle,
@@ -30,25 +32,60 @@ export function decorateNormalLocalHandleWithDefaultVersioning(
   if (options?.skipLocalPersistence === true || options?.internal === true) {
     return handle;
   }
-  return decorateHandleWithDefaultIndexedDbVersioning(handle);
+  return decorateHandleWithDefaultIndexedDbVersioning(handle, options);
 }
 
 export function decorateHandleWithDefaultIndexedDbVersioning(
   handle: DocumentHandle,
+  options: Pick<DefaultVersioningDocumentOptions, 'operation'> = {},
 ): DocumentHandle {
   const originalWorkbook = handle.workbook.bind(handle);
-  (handle as DocumentHandle & MutableDocumentHandleWorkbook).workbook = ((
+  const materializeHeadOnOpen = options.operation === 'open';
+  let materializedHead = false;
+
+  (handle as DocumentHandle & MutableDocumentHandleWorkbook).workbook = (async (
     config?: DocumentHandleWorkbookConfig,
-  ) =>
-    originalWorkbook({
+  ) => {
+    const workbook = await originalWorkbook({
       ...config,
       versioning: {
         providerSelection: createDefaultVersionProviderSelection(handle),
         domainSupportManifest: createDefaultDomainSupportManifest(handle.documentId),
         ...config?.versioning,
       },
-    })) as DocumentHandle['workbook'];
+    });
+
+    if (materializeHeadOnOpen && !materializedHead) {
+      materializedHead = true;
+      await materializeDefaultVersionHead(workbook, handle.documentId);
+    }
+
+    return workbook;
+  }) as DocumentHandle['workbook'];
   return handle;
+}
+
+async function materializeDefaultVersionHead(
+  workbook: DefaultVersionedWorkbook,
+  documentId: string,
+): Promise<void> {
+  try {
+    const result = await workbook.version.checkout(
+      { kind: 'head' },
+      { includeDiagnostics: true },
+    );
+    if (!result.ok) {
+      console.warn('[DocumentManager] default version head checkout failed:', {
+        documentId,
+        code: result.error.code,
+      });
+    }
+  } catch (error) {
+    console.warn('[DocumentManager] default version head checkout threw:', {
+      documentId,
+      error,
+    });
+  }
 }
 
 function createDefaultVersionProviderSelection(

@@ -9,7 +9,11 @@ import type {
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
-import { DisabledReason, safeDomId } from './version-action-availability';
+import {
+  DisabledReason,
+  safeDomId,
+  sanitizeVersionStatusText,
+} from './version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
 import { displayBranchName } from './version-branch-name';
@@ -150,7 +154,11 @@ export function CapabilitySummary({
     <section className="flex flex-wrap gap-1.5" aria-label="Version capabilities">
       {rows.map(({ capability, state }) => {
         const enabled = state?.enabled === true;
-        const reason = state?.enabled === false ? state.reason : 'Unavailable';
+        const reason =
+          sanitizeVersionStatusText(
+            state?.enabled === false ? state.reason : 'Unavailable',
+            'Unavailable',
+          ) ?? 'Unavailable';
         const description = enabled
           ? `${CAPABILITY_LABELS[capability]} enabled`
           : `${CAPABILITY_LABELS[capability]} unavailable: ${reason}`;

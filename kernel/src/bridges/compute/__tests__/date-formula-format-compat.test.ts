@@ -33,8 +33,11 @@ function makeMockContext(): IKernelContext {
   } as any;
 }
 
-function createStartedBridge(transport: BridgeTransport & { call: jest.Mock }): ComputeBridge {
-  const bridge = new ComputeBridge(makeMockContext(), 'test-doc', transport);
+function createStartedBridge(
+  transport: BridgeTransport & { call: jest.Mock },
+  ctx: IKernelContext = makeMockContext(),
+): ComputeBridge {
+  const bridge = new ComputeBridge(ctx, 'test-doc', transport);
   (bridge as any).core._phase = 'STARTED';
   return bridge;
 }
@@ -152,7 +155,15 @@ describe('ComputeBridge DATE formula format compatibility', () => {
 });
 
 describe('ComputeBridge table header writes', () => {
-  it('routes single-cell writes to visible table headers through table column rename', async () => {
+  it('routes single-cell writes to visible table headers through table column rename with version context', async () => {
+    const capture = {
+      recordPreMutation: jest.fn(async () => undefined),
+      recordMutationResult: jest.fn(),
+    };
+    const ctx = {
+      ...makeMockContext(),
+      versioning: { mutationCapture: capture },
+    } as any;
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async (command: string) => {
         if (command === 'compute_get_table_at_cell') {
@@ -186,11 +197,14 @@ describe('ComputeBridge table header writes', () => {
         throw new Error(`unexpected command: ${command}`);
       }),
     };
-    const bridge = createStartedBridge(transport);
+    const bridge = createStartedBridge(transport, ctx);
+    const options = { operationContext: operationContext('operation-table-header') };
 
-    await bridge.setCellsByPosition(sheetId('sheet-1'), [
-      { row: 0, col: 3, input: { kind: 'parse', text: 'Area' } },
-    ]);
+    await bridge.setCellsByPosition(
+      sheetId('sheet-1'),
+      [{ row: 0, col: 3, input: { kind: 'parse', text: 'Area' } }],
+      options,
+    );
 
     expect(transport.call).toHaveBeenCalledWith(
       'compute_rename_table_column',
@@ -198,6 +212,16 @@ describe('ComputeBridge table header writes', () => {
         tableName: 'Table2',
         columnIndex: 0,
         newColumnName: 'Area',
+      }),
+    );
+    expect(capture.recordPreMutation).toHaveBeenCalledWith({
+      operation: 'compute_rename_table_column',
+      operationContext: options.operationContext,
+    });
+    expect(capture.recordMutationResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operation: 'compute_rename_table_column',
+        operationContext: options.operationContext,
       }),
     );
   });

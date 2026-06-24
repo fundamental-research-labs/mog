@@ -364,13 +364,19 @@ async function applyTableHeaderWrite(
   sheetId: SheetId,
   write: TableHeaderWrite,
   alreadyMaterialized = false,
+  options?: MutationAdmissionOptions,
 ): Promise<boolean> {
   if (write.currentName === write.newName) return false;
   if (!alreadyMaterialized) {
     await awaitAllSheetsBeforeCellWrite(ctx);
   }
   await assertUnprotectedTableDefinition(ctx, sheetId, 'tables.renameColumn', write.tableName);
-  await ctx.computeBridge.renameTableColumn(write.tableName, write.columnIndex, write.newName);
+  await ctx.computeBridge.renameTableColumn(
+    write.tableName,
+    write.columnIndex,
+    write.newName,
+    options,
+  );
   return true;
 }
 
@@ -409,7 +415,7 @@ export async function setCell(
 
   const tableHeaderWrite = await resolveTableHeaderWrite(ctx, sheetId, row, col, value);
   if (tableHeaderWrite) {
-    if (await applyTableHeaderWrite(ctx, sheetId, tableHeaderWrite)) {
+    if (await applyTableHeaderWrite(ctx, sheetId, tableHeaderWrite, false, options)) {
       await reapplyActiveFiltersAfterWrite(ctx, sheetId);
     }
     return;
@@ -637,7 +643,8 @@ export async function setCells(
 
     let wroteHeader = false;
     for (const headerWrite of headerWrites) {
-      wroteHeader = (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true)) || wroteHeader;
+      wroteHeader =
+        (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true, options)) || wroteHeader;
     }
 
     // --- Use the mutation pipeline path for primitives ---

@@ -1766,7 +1766,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
       { row, col, input: { kind: 'parse', text: rawInput } },
     ]);
     await assertStrictValidationAdmission(this, sheetId, normalEdits);
-    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames, admissionOptions);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
     return super.setCellValueParsed(sheetId, row, col, rawInput, admissionOptions);
   }
@@ -1785,7 +1785,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
       edits,
     );
     await assertStrictValidationAdmission(this, sheetId, normalEdits);
-    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames, admissionOptions);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
     return super.setCellValuesParsed(
       sheetId,
@@ -1810,7 +1810,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
       { row, col, input: { kind: 'literal', text: value } },
     ]);
     await assertStrictValidationAdmission(this, sheetId, normalEdits);
-    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames, admissionOptions);
     if (normalEdits.length === 0) return headerResult ?? emptyMutationResult();
     return super.setCellValueAsText(sheetId, row, col, value, admissionOptions);
   }
@@ -1860,7 +1860,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     );
 
     await assertStrictValidationAdmission(this, sheetId, normalEdits);
-    const headerResult = await this.applyTableHeaderRenames(headerRenames);
+    const headerResult = await this.applyTableHeaderRenames(headerRenames, options);
 
     if (normalEdits.length === 0) {
       return headerResult ?? emptyMutationResult();
@@ -1870,7 +1870,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
       (e) => [sheetId, e.row, e.col, e.input] as [SheetId, number, number, CellInput],
     );
     const result = await this.batchSetCellsByPosition(tuples, true, options);
-    return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result);
+    return this.applyDateFormulaFormatCompatibility(sheetId, normalEdits, result, options);
   }
 
   async setDateValue(
@@ -1965,6 +1965,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
 
   private async applyTableHeaderRenames(
     headerRenames: TableHeaderRename[],
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult | null> {
     let headerResult: MutationResult | null = null;
     for (const rename of headerRenames) {
@@ -1972,6 +1973,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
         rename.tableName,
         rename.columnIndex,
         rename.newName,
+        options,
       );
     }
     return headerResult;
@@ -1981,6 +1983,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
     sheetId: SheetId,
     edits: PositionedCellInput[],
     result: MutationResult,
+    options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     const dateFormulaEdits = edits.filter((edit) => isParsedTopLevelDateFormula(edit.input));
     if (dateFormulaEdits.length === 0) return result;
@@ -2007,8 +2010,9 @@ export class ComputeBridge extends GeneratedBridgeBase {
           sheetId,
           ranges,
           format: { numberFormat: 'M/d/yyyy' },
-        }),
+      }),
       ranges.map(([row, col]) => ({ sheetId, row, col })),
+      options,
     );
     return appendPropertyChanges(result, formatResult);
   }

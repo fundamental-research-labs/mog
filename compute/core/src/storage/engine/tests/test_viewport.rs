@@ -305,6 +305,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
     let sid = sheet_id();
     let cell_id_c1 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440004").unwrap();
     let cell_id_b2 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440005").unwrap();
+    let cell_id_c2 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440006").unwrap();
     let snap = WorkbookSnapshot {
         sheets: vec![SheetSnapshot {
             id: sid.to_uuid_string(),
@@ -354,6 +355,17 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
                     col: 1,
                     value: CellValue::from(
                         "Selected Software Transactions (Target/Acquiror)\nFinancial Sponsor Acquirors",
+                    ),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_c2.to_uuid_string(),
+                    row: 1,
+                    col: 2,
+                    value: CellValue::from(
+                        "Total Actual and Extrapolated Unclaimed Property Due to DE",
                     ),
                     formula: None,
                     identity_formula: None,
@@ -529,6 +541,26 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
             ..Default::default()
         },
     );
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_c2,
+        &RichSharedString {
+            plain_text: "Total Actual and Extrapolated Unclaimed Property Due to DE".to_string(),
+            runs: vec![
+                RichTextRun {
+                    text: "Total Actual and Extrapolated Unclaimed Property Due to ".to_string(),
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: "DE".to_string(),
+                    color: Some("FFFF0000".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+    );
 
     let viewport = engine.build_viewport_render_data(&sid, 0, 0, 2, 3);
     let cell =
@@ -555,6 +587,7 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         format(1, 1).underline_type,
         Some(ooxml_types::styles::UnderlineStyle::SingleAccounting)
     );
+    assert_eq!(format(1, 2).font_color, None);
 }
 
 #[test]

@@ -149,6 +149,21 @@ fn rich_run_color(run: &domain_types::RichTextRun, theme_colors: &[String]) -> O
     })
 }
 
+fn common_explicit_rich_run_color(
+    runs: &[&domain_types::RichTextRun],
+    theme_colors: &[String],
+) -> Option<String> {
+    let mut colors = runs
+        .iter()
+        .map(|run| rich_run_color(run, theme_colors));
+    let first = colors.next()??;
+    if colors.all(|color| color.as_deref() == Some(first.as_str())) {
+        Some(first)
+    } else {
+        None
+    }
+}
+
 fn rich_run_underline_type(
     run: &domain_types::RichTextRun,
 ) -> Option<ooxml_types::styles::UnderlineStyle> {
@@ -191,7 +206,7 @@ fn apply_rich_text_aggregate_font(
     format.font_size = common_option(aggregate_runs, |run| {
         run.font_size.map(domain_types::FontSize::from_points)
     });
-    format.font_color = common_option(aggregate_runs, |run| rich_run_color(run, &theme_colors));
+    format.font_color = common_explicit_rich_run_color(&runs, &theme_colors);
     format.font_color_tint = None;
     format.font_theme = common_option(aggregate_runs, |run| run.scheme.clone());
     format.font_charset = common_option(aggregate_runs, |run| run.charset);

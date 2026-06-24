@@ -123,6 +123,7 @@ export function useVersionHistoryPanelActions({
     getCapabilityAvailability(data, actionBusy, loading, 'version:mergeApply'),
     getCapabilityAvailability(data, actionBusy, loading, 'version:mergePreview'),
     getCapabilityAvailability(data, actionBusy, loading, 'version:branch'),
+    getCapabilityAvailability(data, actionBusy, loading, 'version:checkout'),
   );
   const remotePromotionStatus = getRemotePromotionStatus(data?.surface);
   const canCommit = commitAvailability.enabled;

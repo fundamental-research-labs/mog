@@ -73,6 +73,35 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     expect(screen.getByTestId('panel-version-history')).not.toHaveTextContent(PRIVATE_COMMIT_ID);
   });
 
+  it('keeps direct merge apply disabled when checkout is unavailable', async () => {
+    const checkoutReason = 'Checkout denied before merge materialization.';
+    const workbook = createDirectMergeWorkbook({
+      getSurfaceStatus: jest.fn(async () =>
+        createSurfaceStatus({
+          capabilityOverrides: {
+            'version:checkout': disabledCapability(checkoutReason),
+          },
+        }),
+      ),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    const previewButton = screen.getByTestId(mergePreviewButtonTestId());
+    const applyButton = screen.getByTestId(mergeApplyButtonTestId());
+
+    await waitFor(() => expect(previewButton).toBeEnabled());
+    expectDisabledButtonReason(applyButton, checkoutReason);
+
+    await user.click(previewButton);
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+    expectDisabledButtonReason(applyButton, checkoutReason);
+
+    await user.click(applyButton);
+    expect(workbook.version.applyMerge).not.toHaveBeenCalled();
+    expect(workbook.version.checkout).not.toHaveBeenCalled();
+  });
+
   it('previews a direct merge with selected base, current ref head, and incoming ref head', async () => {
     const workbook = createDirectMergeWorkbook();
     const { user } = renderVersionHistoryPanel({ workbook });

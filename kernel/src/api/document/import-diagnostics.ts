@@ -14,14 +14,14 @@ export function projectImportDiagnostic(diagnostic: WireImportDiagnostic): Impor
   const reference = diagnostic.reference
     ? projectImportDiagnosticReference(diagnostic.reference)
     : undefined;
-  const details = (diagnostic as { details?: unknown }).details;
+  const details = jsonCompatibleDiagnosticValue((diagnostic as { details?: unknown }).details);
   const importPhases = (diagnostic as { importPhases?: ImportDiagnosticDto['importPhases'] })
     .importPhases;
   const firstImportPhase = (
     diagnostic as { firstImportPhase?: ImportDiagnosticDto['firstImportPhase'] }
   ).firstImportPhase;
 
-  return {
+  return stripUndefined({
     id: diagnostic.id,
     code: enumDiscriminant(diagnostic.code),
     severity: normalizeImportSeverity(diagnostic.severity),
@@ -34,7 +34,7 @@ export function projectImportDiagnostic(diagnostic: WireImportDiagnostic): Impor
     location: reference,
     importPhases,
     firstImportPhase,
-  };
+  });
 }
 
 export function documentImportWarningsFromDiagnostics(
@@ -155,4 +155,41 @@ function stripUndefined<T extends object>(value: T): T {
     if (mutable[key] === undefined) delete mutable[key];
   }
   return value;
+}
+
+function jsonCompatibleDiagnosticValue(value: unknown): unknown {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol') {
+    return undefined;
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? (Object.is(value, -0) ? 0 : value) : null;
+  }
+  if (Array.isArray(value)) {
+    const projected: unknown[] = [];
+    for (let index = 0; index < value.length; index++) {
+      const child = Object.prototype.hasOwnProperty.call(value, index)
+        ? jsonCompatibleDiagnosticValue(value[index])
+        : undefined;
+      projected.push(child === undefined ? null : child);
+    }
+    return projected;
+  }
+  if (isPlainRecord(value)) {
+    const projected: Record<string, unknown> = {};
+    for (const [key, childValue] of Object.entries(value)) {
+      const child = jsonCompatibleDiagnosticValue(childValue);
+      if (child !== undefined) projected[key] = child;
+    }
+    return projected;
+  }
+  return undefined;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

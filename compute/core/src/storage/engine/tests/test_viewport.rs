@@ -3,11 +3,15 @@
 use super::super::*;
 use super::helpers::*;
 use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
+use compute_document::cell_serde::write_rich_string_to_yrs;
+use compute_document::hex::id_to_hex;
+use compute_document::schema::KEY_CELLS;
 use compute_pivot::types::{
     FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
 };
-use domain_types::CellFormat;
+use domain_types::{CellFormat, FontSize, RichSharedString, RichTextRun};
 use value_types::CellValue;
+use yrs::{Map, Out, Transact};
 
 // -------------------------------------------------------------------
 // Test 23: register_viewport and get_registered_viewports
@@ -266,6 +270,289 @@ fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
     assert_eq!(cell(1, 5).formatted.as_deref(), Some("250"));
     assert_eq!(cell(2, 4).formatted.as_deref(), Some("Grand Total"));
     assert_eq!(cell(2, 5).formatted.as_deref(), Some("250"));
+}
+
+fn write_rich_string_for_test_cell(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    cell_id: &CellId,
+    rich_string: &RichSharedString,
+) {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let cell_hex = id_to_hex(cell_id.as_u128());
+    let sheets = engine.storage().sheets_ref();
+    let mut txn = engine.storage().doc().transact_mut();
+    let sheet_map = match sheets.get(&txn, &sheet_hex) {
+        Some(Out::YMap(map)) => map,
+        other => panic!("expected sheet map, got {other:?}"),
+    };
+    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
+        Some(Out::YMap(map)) => map,
+        other => panic!("expected cells map, got {other:?}"),
+    };
+    let cell_map = match cells_map.get(&txn, &cell_hex) {
+        Some(Out::YMap(map)) => map,
+        other => panic!("expected cell map, got {other:?}"),
+    };
+
+    write_rich_string_to_yrs(&cell_map, &mut txn, rich_string);
+}
+
+#[test]
+fn rich_text_viewport_format_uses_run_aggregate_font() {
+    let sid = sheet_id();
+    let cell_id_c1 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440004").unwrap();
+    let cell_id_b2 = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440005").unwrap();
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                CellData {
+                    cell_id: cell_id_a1().to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::from("Rent Roll"),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_b1().to_uuid_string(),
+                    row: 0,
+                    col: 1,
+                    value: CellValue::from("High Investment Flag (IF FCF < 0)"),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_c1.to_uuid_string(),
+                    row: 0,
+                    col: 2,
+                    value: CellValue::from("Please answer each question using Excellent ratings"),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_a2().to_uuid_string(),
+                    row: 1,
+                    col: 0,
+                    value: CellValue::from("Operating Expenses "),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_id_b2.to_uuid_string(),
+                    row: 1,
+                    col: 1,
+                    value: CellValue::from(
+                        "Selected Software Transactions (Target/Acquiror)\nFinancial Sponsor Acquirors",
+                    ),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                font_family: Some("Arial".to_string()),
+                font_size: Some(FontSize::from_points(13.0)),
+                font_color: Some("#303030".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(1, 0, 1, 0)],
+            &CellFormat {
+                font_family: Some("Calibri".to_string()),
+                font_size: Some(FontSize::from_points(14.0)),
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 1, 0, 1)],
+            &CellFormat {
+                font_family: Some("Calibri".to_string()),
+                font_size: Some(FontSize::from_points(12.0)),
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_a1(),
+        &RichSharedString {
+            plain_text: "Rent Roll".to_string(),
+            runs: vec![RichTextRun {
+                text: "Rent Roll".to_string(),
+                font_name: Some("Arial".to_string()),
+                font_size: Some(11.0),
+                ..Default::default()
+            }],
+            ..Default::default()
+        },
+    );
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_c1,
+        &RichSharedString {
+            plain_text: "Please answer each question using Excellent ratings".to_string(),
+            runs: vec![
+                RichTextRun {
+                    text: "Please answer each question using ".to_string(),
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: "Excellent".to_string(),
+                    font_name: Some("Arial".to_string()),
+                    font_size: Some(8.0),
+                    bold: true,
+                    italic: true,
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: " ratings".to_string(),
+                    font_name: Some("Arial".to_string()),
+                    font_size: Some(8.0),
+                    italic: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+    );
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_b1(),
+        &RichSharedString {
+            plain_text: "High Investment Flag (IF FCF < 0)".to_string(),
+            runs: vec![
+                RichTextRun {
+                    text: "High Investment Flag".to_string(),
+                    font_name: Some("Calibri".to_string()),
+                    font_size: Some(12.0),
+                    bold: true,
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: " (IF FCF < 0)".to_string(),
+                    font_name: Some("Calibri".to_string()),
+                    font_size: Some(12.0),
+                    bold: false,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+    );
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_a2(),
+        &RichSharedString {
+            plain_text: "Operating Expenses ".to_string(),
+            runs: vec![
+                RichTextRun {
+                    text: "Operating Expenses".to_string(),
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: " ".to_string(),
+                    font_name: Some("Calibri".to_string()),
+                    font_size: Some(12.0),
+                    bold: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+    );
+    write_rich_string_for_test_cell(
+        &engine,
+        &sid,
+        &cell_id_b2,
+        &RichSharedString {
+            plain_text:
+                "Selected Software Transactions (Target/Acquiror)\nFinancial Sponsor Acquirors"
+                    .to_string(),
+            runs: vec![
+                RichTextRun {
+                    text: "Selected Software Transactions (Target/Acquiror)\n".to_string(),
+                    ..Default::default()
+                },
+                RichTextRun {
+                    text: "Financial Sponsor Acquirors".to_string(),
+                    font_name: Some("Arial".to_string()),
+                    font_size: Some(10.0),
+                    bold: true,
+                    italic: true,
+                    underline_style: Some(ooxml_types::styles::UnderlineStyle::SingleAccounting),
+                    underline: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        },
+    );
+
+    let viewport = engine.build_viewport_render_data(&sid, 0, 0, 2, 3);
+    let cell =
+        |row: usize, col: usize| &viewport.cells[row * viewport.viewport_cols as usize + col];
+    let format = |row: usize, col: usize| {
+        let format_idx = cell(row, col).format_idx as usize;
+        &viewport.format_palette[format_idx]
+    };
+
+    assert_eq!(format(0, 0).font_size, Some(FontSize::from_points(11.0)));
+    assert_eq!(format(0, 0).font_color, None);
+    assert_eq!(format(0, 1).bold, None);
+    assert_eq!(format(0, 2).font_family.as_deref(), Some("Arial"));
+    assert_eq!(format(0, 2).font_size, Some(FontSize::from_points(8.0)));
+    assert_eq!(format(0, 2).italic, Some(true));
+    assert_eq!(format(0, 2).bold, None);
+    assert_eq!(format(1, 0).font_size, None);
+    assert_eq!(format(1, 0).bold, Some(true));
+    assert_eq!(format(1, 1).font_family.as_deref(), Some("Arial"));
+    assert_eq!(format(1, 1).font_size, Some(FontSize::from_points(10.0)));
+    assert_eq!(format(1, 1).bold, Some(true));
+    assert_ne!(format(1, 1).italic, Some(true));
+    assert_eq!(
+        format(1, 1).underline_type,
+        Some(ooxml_types::styles::UnderlineStyle::SingleAccounting)
+    );
 }
 
 #[test]

@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use cell_types::SheetId;
 use compute_document::hex::{hex_to_id, id_to_hex};
+use compute_document::schema::KEY_CELLS;
 use compute_wire::flags as render_flags;
 use value_types::CellValue;
+use yrs::{Map, Out, Transact};
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
 use super::materialized_cells::build_materialized_cell_material;
@@ -19,6 +23,239 @@ pub(super) struct RenderCellMaterial {
     pub(super) number_value: f64,
     pub(super) formatted: Option<String>,
     pub(super) error: Option<String>,
+}
+
+fn read_cell_rich_string(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    cell_id_hex: &str,
+) -> Option<domain_types::RichSharedString> {
+    let sheet_hex = id_to_hex(sheet_id.as_u128());
+    let txn = stores.storage.doc().transact();
+    let sheet_map = match stores.storage.sheets().get(&txn, &sheet_hex) {
+        Some(Out::YMap(map)) => map,
+        _ => return None,
+    };
+    let cells_map = match sheet_map.get(&txn, KEY_CELLS) {
+        Some(Out::YMap(map)) => map,
+        _ => return None,
+    };
+    let cell_map = match cells_map.get(&txn, cell_id_hex) {
+        Some(Out::YMap(map)) => map,
+        _ => return None,
+    };
+
+    compute_document::cell_serde::read_rich_string_from_yrs(&cell_map, &txn)
+}
+
+fn workbook_theme_colors(theme_palette: &HashMap<String, String>) -> Vec<String> {
+    const THEME_SLOT_ALIASES: &[&[&str]] = &[
+        &["dk1", "dark1"],
+        &["lt1", "light1"],
+        &["dk2", "dark2"],
+        &["lt2", "light2"],
+        &["accent1"],
+        &["accent2"],
+        &["accent3"],
+        &["accent4"],
+        &["accent5"],
+        &["accent6"],
+        &["hlink", "hyperlink"],
+        &["folHlink", "followedHyperlink"],
+    ];
+
+    let mut colors = Vec::with_capacity(THEME_SLOT_ALIASES.len());
+    for aliases in THEME_SLOT_ALIASES {
+        let Some(color) = aliases
+            .iter()
+            .find_map(|slot| theme_palette.get(*slot).cloned())
+        else {
+            return Vec::new();
+        };
+        colors.push(color);
+    }
+    colors
+}
+
+fn common_option<T, F>(runs: &[&domain_types::RichTextRun], value: F) -> Option<T>
+where
+    T: Clone + PartialEq,
+    F: Fn(&domain_types::RichTextRun) -> Option<T>,
+{
+    let first = value(runs[0])?;
+    if runs[1..]
+        .iter()
+        .all(|run| value(run).as_ref() == Some(&first))
+    {
+        Some(first)
+    } else {
+        None
+    }
+}
+
+fn has_mixed_bool<F>(runs: &[&domain_types::RichTextRun], value: F) -> bool
+where
+    F: Fn(&domain_types::RichTextRun) -> bool,
+{
+    let first = value(runs[0]);
+    runs[1..].iter().any(|run| value(run) != first)
+}
+
+fn has_mixed_option<T, F>(runs: &[&domain_types::RichTextRun], value: F) -> bool
+where
+    T: PartialEq,
+    F: Fn(&domain_types::RichTextRun) -> Option<T>,
+{
+    let first = value(runs[0]);
+    runs[1..].iter().any(|run| value(run) != first)
+}
+
+fn has_explicit_rich_font_style(run: &domain_types::RichTextRun) -> bool {
+    run.font_name.is_some()
+        || run.font_size.is_some()
+        || run.color.is_some()
+        || run.color_indexed.is_some()
+        || run.color_theme.is_some()
+        || run.color_tint.is_some()
+        || run.bold
+        || run.italic
+        || run.underline
+        || run.underline_style.is_some()
+        || run.strikethrough
+        || run.outline.is_some()
+        || run.shadow.is_some()
+        || run.condense.is_some()
+        || run.extend.is_some()
+        || run.charset.is_some()
+        || run.family.is_some()
+        || run.scheme.is_some()
+        || run.vert_align.is_some()
+}
+
+fn rich_run_color(run: &domain_types::RichTextRun, theme_colors: &[String]) -> Option<String> {
+    let color_input = domain_types::style_resolver::ColorInput {
+        rgb: run.color.clone(),
+        theme: run.color_theme,
+        tint: run.color_tint,
+        indexed: run.color_indexed,
+        auto: false,
+    };
+    domain_types::style_resolver::resolve_color(&color_input, theme_colors).map(|color| {
+        if color.starts_with('#') {
+            color.to_ascii_uppercase()
+        } else {
+            color
+        }
+    })
+}
+
+fn rich_run_underline_type(
+    run: &domain_types::RichTextRun,
+) -> Option<ooxml_types::styles::UnderlineStyle> {
+    if let Some(style) = run.underline_style {
+        Some(style)
+    } else if run.underline {
+        Some(ooxml_types::styles::UnderlineStyle::Single)
+    } else {
+        None
+    }
+}
+
+fn apply_rich_text_aggregate_font(
+    format: &mut domain_types::CellFormat,
+    rich_string: &domain_types::RichSharedString,
+    theme_palette: &HashMap<String, String>,
+) {
+    let runs: Vec<_> = rich_string
+        .runs
+        .iter()
+        .filter(|run| !run.text.trim().is_empty())
+        .collect();
+    if runs.is_empty() {
+        return;
+    }
+
+    let theme_colors = workbook_theme_colors(theme_palette);
+    let styled_runs: Vec<_> = runs
+        .iter()
+        .copied()
+        .filter(|run| has_explicit_rich_font_style(run))
+        .collect();
+    let aggregate_runs = if styled_runs.is_empty() {
+        runs.as_slice()
+    } else {
+        styled_runs.as_slice()
+    };
+
+    format.font_family = common_option(aggregate_runs, |run| run.font_name.clone());
+    format.font_size = common_option(aggregate_runs, |run| {
+        run.font_size.map(domain_types::FontSize::from_points)
+    });
+    format.font_color = common_option(aggregate_runs, |run| rich_run_color(run, &theme_colors));
+    format.font_color_tint = None;
+    format.font_theme = common_option(aggregate_runs, |run| run.scheme.clone());
+    format.font_charset = common_option(aggregate_runs, |run| run.charset);
+    format.font_family_type = common_option(aggregate_runs, |run| run.family);
+
+    if !styled_runs.is_empty() {
+        let has_multiple_visible_runs = runs.len() > 1;
+        if has_mixed_bool(&styled_runs, |run| run.bold) {
+            format.bold = None;
+        } else if has_multiple_visible_runs && styled_runs.iter().all(|run| run.bold) {
+            format.bold = Some(true);
+        }
+
+        if has_mixed_bool(&styled_runs, |run| run.italic) {
+            format.italic = None;
+        } else if styled_runs.len() > 1 && styled_runs.iter().all(|run| run.italic) {
+            format.italic = Some(true);
+        }
+
+        if has_mixed_option(&styled_runs, rich_run_underline_type) {
+            format.underline_type = None;
+        } else if has_multiple_visible_runs {
+            format.underline_type = rich_run_underline_type(styled_runs[0]);
+        }
+
+        if has_mixed_bool(&styled_runs, |run| run.strikethrough) {
+            format.strikethrough = None;
+        } else if has_multiple_visible_runs && styled_runs.iter().all(|run| run.strikethrough) {
+            format.strikethrough = Some(true);
+        }
+
+        if has_mixed_option(&styled_runs, |run| run.outline) {
+            format.font_outline = None;
+        }
+        if has_mixed_option(&styled_runs, |run| run.shadow) {
+            format.font_shadow = None;
+        }
+    }
+
+    if has_mixed_option(aggregate_runs, |run| run.vert_align.clone()) {
+        format.superscript = None;
+        format.subscript = None;
+    }
+}
+
+fn apply_cell_rich_text_aggregate_font(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    cell_id_hex: &str,
+    value: &CellValue,
+    format: &mut domain_types::CellFormat,
+    theme_palette: &HashMap<String, String>,
+) {
+    let CellValue::Text(text) = value else {
+        return;
+    };
+    let Some(rich_string) = read_cell_rich_string(stores, sheet_id, cell_id_hex) else {
+        return;
+    };
+    if rich_string.plain_text != text.as_ref() {
+        return;
+    }
+
+    apply_rich_text_aggregate_font(format, &rich_string, theme_palette);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -145,6 +382,14 @@ pub(super) fn build_render_cell_materials(
                             &mut effective,
                             &settings.theme_palette,
                         );
+                        apply_cell_rich_text_aggregate_font(
+                            stores,
+                            sheet_id,
+                            &format_cell_id_hex,
+                            proj.value,
+                            &mut effective,
+                            &settings.theme_palette,
+                        );
                         apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
                         let formula_str = stores.compute.get_formula(&proj.anchor_id);
@@ -265,6 +510,14 @@ pub(super) fn build_render_cell_materials(
                         // also makes `format_idx` and `display_text` agree on the
                         // wire (see fix-009 history).
                         domain_types::theme_color::resolve_theme_refs(
+                            &mut effective,
+                            &settings.theme_palette,
+                        );
+                        apply_cell_rich_text_aggregate_font(
+                            stores,
+                            sheet_id,
+                            &cell_id_hex,
+                            value,
                             &mut effective,
                             &settings.theme_palette,
                         );

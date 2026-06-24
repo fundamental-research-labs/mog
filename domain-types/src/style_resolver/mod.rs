@@ -14,6 +14,7 @@ mod xf;
 mod tests;
 
 pub use cache::FormatCache;
+pub use color::resolve_color;
 pub use input::{
     AlignmentInput, BorderInput, BorderSideInput, CellXfInput, ColorInput, FillInput, FontInput,
     GradientFillInput, GradientStopInput, ProtectionInput, StyleInput,

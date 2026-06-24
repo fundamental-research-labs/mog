@@ -89,7 +89,7 @@ fn resolve_indexed_color(index: u32) -> Option<&'static str> {
 /// 3. **Theme without palette**: return `theme:slot` or `theme:slot:tint`
 /// 4. **Indexed**: look up the standard 64-entry OOXML indexed color palette
 /// 5. **Auto**: system foreground color (black)
-pub(super) fn resolve_color(color: &ColorInput, theme_colors: &[String]) -> Option<String> {
+pub fn resolve_color(color: &ColorInput, theme_colors: &[String]) -> Option<String> {
     // RGB color takes priority
     if let Some(ref rgb) = color.rgb
         && !rgb.is_empty()

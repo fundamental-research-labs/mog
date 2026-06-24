@@ -311,6 +311,7 @@ export abstract class WorkbookImplFoundation {
   // Platform-provided save handler
   protected readonly _onSave?: (buffer: Uint8Array) => Promise<void>;
   protected readonly _writeFile?: (path: string, data: Uint8Array) => Promise<void>;
+  private readonly persistCheckoutMaterialization?: WorkbookConfig['persistCheckoutMaterialization'];
 
   // Track disposal
   protected _disposed = false;
@@ -390,6 +391,7 @@ export abstract class WorkbookImplFoundation {
     this._onSave = config.onSave;
     this._writeFile = config.writeFile;
     this._importWarnings = resolveWorkbookImportWarnings(config);
+    this.persistCheckoutMaterialization = config.persistCheckoutMaterialization;
 
     // Write gate: if the workbook is opened read-only, lock the gate.
     applyWorkbookReadOnlyMode(this.ctx, this.readOnly);
@@ -431,6 +433,7 @@ export abstract class WorkbookImplFoundation {
     attachWorkbookVersioning(nextContext, nextVersioning);
     attachWorkbookVersionSurfaceStatusService(nextContext, this.versionSurfaceStatusService);
 
+    await this.persistCheckoutMaterialization?.(materialization, input);
     this.contextBinding.publish(this.withWorkbookFeatureGates(nextContext));
     this.versionSurfaceStatusService.recordCheckoutMaterialization(input);
     this._checkoutMaterializations.add(materialization);

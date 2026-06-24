@@ -1131,6 +1131,25 @@ describe('RustDocument orchestrator contract', () => {
       await doc.destroy();
     });
 
+    it('checkpoints attached Providers from an alternate materialized bridge state', async () => {
+      const { doc, bridge } = await makeOrchestrator();
+      const sourceBridge = makeStubBridge({ baselineUpdate: new Uint8Array([42]) });
+      const storage = new Map<string, Uint8Array[]>();
+      const provider = new InMemoryProvider('rust-doc-orch-test', { storage });
+
+      await doc.attachProvider(provider);
+      bridge.queueBridgeUpdate(new Uint8Array([9]));
+
+      await doc.fullStateCheckpointFromBridge(
+        sourceBridge as Parameters<RustDocument['fullStateCheckpointFromBridge']>[0],
+      );
+
+      const persisted = storage.get('rust-doc-orch-test') ?? [];
+      expect(persisted).toHaveLength(1);
+      expect([...persisted[0]!]).toEqual([42]);
+      await doc.destroy();
+    });
+
     it('does not fan Provider replay updates back out as live appends during attach', async () => {
       const { doc, bridge } = await makeOrchestrator();
       const events: string[] = [];

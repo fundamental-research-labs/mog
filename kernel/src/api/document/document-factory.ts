@@ -927,6 +927,17 @@ function createDocumentHandle(
           writeFile: config.writeFile,
           importWarnings: config.importWarnings ?? importWarnings,
           versioning,
+          persistCheckoutMaterialization: async (materialization) => {
+            const rustDoc = lifecycle.rustDocument;
+            if (!rustDoc) {
+              throw new Error(
+                'DocumentHandle.workbook: cannot persist checkout materialization before engine readiness',
+              );
+            }
+            await rustDoc.fullStateCheckpointFromBridge(materialization.context.computeBridge, {
+              publishAfterCommit: true,
+            });
+          },
           liveness: createWorkbookLiveness('document.workbook(config)'),
         });
       }

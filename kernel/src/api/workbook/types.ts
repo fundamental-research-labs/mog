@@ -38,7 +38,10 @@ import type { ProposalWorkspaceLifecycleService } from '../../document/version-s
 import type { WorkbookVersionRevertService } from '../../document/version-store/revert-service';
 import type { WorkbookVersionReviewService } from '../../document/version-store/review-service';
 import type { VersionProviderWriteActivityTracker } from '../../document/version-store/provider-write-activity';
-import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
+import type {
+  CheckoutSnapshotApplyInput,
+  CheckoutSnapshotMaterializer,
+} from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
@@ -52,6 +55,7 @@ import type { VersionLiveCollaborationStatusReader } from './version/live-collab
 import type { DomainSupportManifestValidationOptions } from '../../document/version-store/domain-support-manifest-validator';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import type { VersionCheckoutTransactionGuard } from './version-checkout';
+import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 
 // =============================================================================
 // Lazy CodeExecutor Types
@@ -152,6 +156,11 @@ export interface WorkbookConfig {
   liveness?: HandleLiveness;
   /** Optional document-scoped version graph services for the public wb.version facade. */
   versioning?: WorkbookVersioningConfig;
+  /** Internal owner hook for making published checkout materializations durable. */
+  persistCheckoutMaterialization?: (
+    materialization: SnapshotRootFreshLifecycleMaterialization,
+    input: CheckoutSnapshotApplyInput,
+  ) => MaybePromise<void>;
   /**
    * Host principal lock — when present, prevents `setActivePrincipal` and
    * `makePrincipal` from mutating the active principal. Installed by the

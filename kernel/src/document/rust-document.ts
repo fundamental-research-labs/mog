@@ -1256,6 +1256,24 @@ export class RustDocument {
     }
   }
 
+  async fullStateCheckpointFromBridge(
+    sourceBridge: ComputeBridge,
+    options: Pick<RustDocumentFullStateCheckpointOptions, 'publishAfterCommit'> = {},
+  ): Promise<void> {
+    if (this.destroyed) return;
+
+    await this.drainBridgePendingUpdatesNow();
+    this.drainQueuedUpdatesNow();
+    await this.computeBridge.flushUndoCapture();
+
+    const { createBridgeBackedProviderDoc } = await import('./providers/bridge-provider-doc');
+    const doc = createBridgeBackedProviderDoc(sourceBridge, this.docId);
+    await Promise.all(this.providers.map((p) => p.checkpointFullState(doc, { kind: 'normal' })));
+    if (options.publishAfterCommit) {
+      await this.touchUserVisibleDoc();
+    }
+  }
+
   async runImportInitializeHydration<T>(work: () => Promise<T>): Promise<T> {
     if (this.destroyed) {
       throw new Error('RustDocument.runImportInitializeHydration: document is destroyed');

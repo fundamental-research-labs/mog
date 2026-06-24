@@ -3328,6 +3328,10 @@ export class WorksheetImpl implements Worksheet {
       (this.__internal as WorksheetInternalImpl).dispose();
       this.__internal = undefined;
     }
+    if (this._tables) {
+      this._tables.dispose();
+      this._tables = undefined;
+    }
     if (this._cellMetadata) {
       this._cellMetadata.destroy();
       this._cellMetadata = null;

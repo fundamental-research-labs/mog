@@ -99,6 +99,7 @@ import {
   tableStyleForEventConfig,
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
+import { WorksheetTableListCache } from './table-list-cache';
 
 type PendingClipboardPasteGlobal = typeof globalThis & {
   __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
@@ -131,11 +132,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
   // TODO(4.8): Persist sort specs to document model via bridge (OOXML
   // TableSortState infrastructure exists but canonical Table type lacks it).
   private sortSpecCache = new Map<string, Array<{ columnIndex: number; ascending?: boolean }>>();
+  private readonly tableListCache: WorksheetTableListCache;
 
   constructor(
     private readonly ctx: DocumentContext,
     private readonly sheetId: SheetId,
-  ) {}
+  ) {
+    this.tableListCache = new WorksheetTableListCache(ctx, sheetId);
+  }
 
   private _ensureWritable(op: string): void {
     this.ctx.writeGate.assertWritable(op);
@@ -440,8 +444,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async list(): Promise<TableInfo[]> {
     await waitForPendingClipboardPaste();
-    const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
-    return tables.map((t) => bridgeTableToTableInfo(t));
+    return this.tableListCache.list();
   }
 
   async getCount(): Promise<number> {
@@ -697,6 +700,8 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   async getAtCell(a: string | number, b?: number): Promise<TableInfo | null> {
     const { row, col } = resolveCell(a, b);
+    const cached = this.tableListCache.getAtCell(row, col);
+    if (cached !== undefined) return cached;
     const table = await this.ctx.computeBridge.getTableAtCell(this.sheetId, row, col);
     if (!table) return null;
     return bridgeTableToTableInfo(table);
@@ -2030,6 +2035,10 @@ export class WorksheetTablesImpl implements WorksheetTables {
       callback(event as TableSelectionChangedEvent);
     });
     return toDisposable(unsub);
+  }
+
+  dispose(): void {
+    this.tableListCache.dispose();
   }
 }
 

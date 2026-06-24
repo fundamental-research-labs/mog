@@ -67,7 +67,11 @@ fn explicit_false_apply_flags_preserve_base_style() {
             },
         ],
         fills: vec![
-            FillInput::default(),
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "none".to_string(),
+                ..Default::default()
+            },
             FillInput {
                 fill_type: "pattern".to_string(),
                 pattern_type: "solid".to_string(),
@@ -171,7 +175,11 @@ fn absent_apply_flags_use_nonzero_and_presence_heuristics() {
             },
         ],
         fills: vec![
-            FillInput::default(),
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "none".to_string(),
+                ..Default::default()
+            },
             FillInput {
                 fill_type: "pattern".to_string(),
                 pattern_type: "solid".to_string(),
@@ -276,6 +284,87 @@ fn present_number_format_zero_preserves_general_override_without_apply_flag() {
 
     let fmt = &resolve_styles(&input)[1];
     assert_eq!(fmt.number_format.as_deref(), Some("General"));
+}
+
+#[test]
+fn present_fill_zero_preserves_no_fill_override_without_apply_flag() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            fill_id: Some(1),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                fill_id: Some(0),
+                ..Default::default()
+            },
+        ],
+        fills: vec![
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "none".to_string(),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "solid".to_string(),
+                fg_color: Some(ColorInput {
+                    rgb: Some("FFFF0000".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let fmt = &resolve_styles(&input)[1];
+    let fill = fmt.fill.as_ref().expect("explicit no-fill override");
+    assert_eq!(fill.pattern_type.as_deref(), Some("none"));
+    assert!(fill.background_color.is_none());
+}
+
+#[test]
+fn applied_fill_zero_preserves_no_fill_override() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            fill_id: Some(1),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                fill_id: Some(0),
+                apply_fill: Some(true),
+                ..Default::default()
+            },
+        ],
+        fills: vec![
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "none".to_string(),
+                ..Default::default()
+            },
+            FillInput {
+                fill_type: "pattern".to_string(),
+                pattern_type: "solid".to_string(),
+                fg_color: Some(ColorInput {
+                    rgb: Some("FFFF0000".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let fmt = &resolve_styles(&input)[1];
+    let fill = fmt.fill.as_ref().expect("explicit no-fill override");
+    assert_eq!(fill.pattern_type.as_deref(), Some("none"));
+    assert!(fill.background_color.is_none());
 }
 
 #[test]

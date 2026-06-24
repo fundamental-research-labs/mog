@@ -1,4 +1,4 @@
-use crate::{AlignmentFormat, DocumentFormat, FontFormat, ProtectionFormat};
+use crate::{AlignmentFormat, DocumentFormat, FillFormat, FontFormat, ProtectionFormat};
 
 use super::{
     components::{resolve_alignment, resolve_border, resolve_fill, resolve_font},
@@ -89,7 +89,7 @@ fn should_apply_font(xf: &CellXfInput) -> bool {
     xf.apply_font.unwrap_or(xf.font_id.unwrap_or(0) != 0)
 }
 fn should_apply_fill(xf: &CellXfInput) -> bool {
-    xf.apply_fill.unwrap_or(xf.fill_id.unwrap_or(0) != 0)
+    xf.apply_fill.unwrap_or(xf.fill_id.is_some())
 }
 fn should_apply_border(xf: &CellXfInput) -> bool {
     xf.apply_border.unwrap_or(xf.border_id.unwrap_or(0) != 0)
@@ -120,6 +120,28 @@ fn resolve_applied_font(xf: &CellXfInput, input: &StyleInput) -> Option<FontForm
         complete_applied_font(&mut fmt, font);
         fmt
     })
+}
+
+fn resolve_applied_fill(xf: &CellXfInput, input: &StyleInput) -> Option<FillFormat> {
+    let fill_id = xf.fill_id.unwrap_or(0);
+    input.fills.get(fill_id as usize).and_then(|fill| {
+        if fill.fill_type == "pattern" && fill.pattern_type == "none" {
+            Some(explicit_no_fill())
+        } else {
+            resolve_fill(fill, &input.theme_colors)
+        }
+    })
+}
+
+fn explicit_no_fill() -> FillFormat {
+    FillFormat {
+        background_color: None,
+        background_color_tint: None,
+        pattern_type: Some("none".to_string()),
+        pattern_foreground_color: None,
+        pattern_foreground_color_tint: None,
+        gradient_fill: None,
+    }
 }
 
 fn complete_applied_font(fmt: &mut FontFormat, font: &FontInput) {
@@ -187,7 +209,7 @@ pub(super) fn resolve_single_xf(xf: &CellXfInput, input: &StyleInput) -> Option<
             base.font
         },
         fill: if should_apply_fill(xf) {
-            direct.fill
+            resolve_applied_fill(xf, input)
         } else {
             base.fill
         },

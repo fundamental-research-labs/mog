@@ -1,4 +1,5 @@
 use domain_types::{CellBorderSide, CellBorders, CellFormat};
+use ooxml_types::styles::PatternType;
 
 /// Merge two `CellFormat` objects with property-level precedence.
 /// For each field: if `higher` has `Some`, use it; otherwise keep `lower`.
@@ -52,6 +53,7 @@ pub(crate) fn merge_formats(lower: &CellFormat, higher: &CellFormat) -> CellForm
 
     // Clean up any invalid legacy lower layer that already carries both flags.
     enforce_wrap_shrink_exclusive(&mut merged);
+    clear_fill_fields_for_no_fill(&mut merged);
     merged
 }
 
@@ -126,11 +128,22 @@ pub(crate) fn normalize_format_patch(format: &CellFormat) -> CellFormat {
         (_, Some(true)) => normalized.wrap_text = Some(false),
         _ => {}
     }
+    clear_fill_fields_for_no_fill(&mut normalized);
     normalized
 }
 
 fn enforce_wrap_shrink_exclusive(format: &mut CellFormat) {
     if format.wrap_text == Some(true) && format.shrink_to_fit == Some(true) {
         format.shrink_to_fit = Some(false);
+    }
+}
+
+fn clear_fill_fields_for_no_fill(format: &mut CellFormat) {
+    if format.pattern_type == Some(PatternType::None) {
+        format.background_color = None;
+        format.background_color_tint = None;
+        format.pattern_foreground_color = None;
+        format.pattern_foreground_color_tint = None;
+        format.gradient_fill = None;
     }
 }

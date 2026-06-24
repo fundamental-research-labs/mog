@@ -408,7 +408,22 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
-    setSelectedCommitId('commitRef' in result.value ? result.value.commitRef.id : undefined);
+    if ('commitRef' in result.value) {
+      const checkoutTarget = result.value.commitRef.refName
+        ? { kind: 'ref' as const, name: result.value.commitRef.refName }
+        : { kind: 'commit' as const, id: result.value.commitRef.id };
+      setActionState({ status: 'running', label: 'Materializing merge' });
+      const checkoutResult = await readVersionResult('VERSION_UI_MERGE_CHECKOUT_FAILED', () =>
+        workbook.version.checkout(checkoutTarget, { includeDiagnostics: true }),
+      );
+      if (!checkoutResult.ok) {
+        setActionState({ status: 'error', diagnostic: checkoutResult.diagnostic });
+        return;
+      }
+      setSelectedCommitId(checkoutResult.value.plan.commitId);
+    } else {
+      setSelectedCommitId(undefined);
+    }
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});
     setActionState({ status: 'running', label: 'Refreshing version history' });

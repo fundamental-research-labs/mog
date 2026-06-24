@@ -123,6 +123,11 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         },
       }),
     );
+    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    expect(firstCallArgs(workbook.version.checkout)[0]?.[0]).toEqual({
+      kind: 'ref',
+      name: CURRENT_REF,
+    });
   });
 
   it('does not apply a conflicted direct merge preview without resolutions', async () => {

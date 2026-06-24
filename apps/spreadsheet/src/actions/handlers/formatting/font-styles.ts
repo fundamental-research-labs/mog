@@ -27,6 +27,7 @@ import {
   getUIStore,
   handled,
 } from './shared';
+import { solidFillFormat } from './fill-format';
 import { autoFitRowsForBoundedRanges } from './row-autofit';
 
 // =============================================================================
@@ -478,7 +479,7 @@ export const SET_BACKGROUND_COLOR: AsyncActionHandler = async (
     if (color === null) {
       await ws.formats.clearFillForRanges(ranges);
     } else {
-      await ws.formats.setRanges(ranges, { backgroundColor: color });
+      await ws.formats.setRanges(ranges, solidFillFormat(color));
     }
   }
 

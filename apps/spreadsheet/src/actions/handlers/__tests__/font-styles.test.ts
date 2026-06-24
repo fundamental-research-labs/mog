@@ -3,7 +3,12 @@ import { jest } from '@jest/globals';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 
-import { SET_FONT_SIZE, TOGGLE_BOLD, TOGGLE_WRAP_TEXT } from '../formatting/font-styles';
+import {
+  SET_BACKGROUND_COLOR,
+  SET_FONT_SIZE,
+  TOGGLE_BOLD,
+  TOGGLE_WRAP_TEXT,
+} from '../formatting/font-styles';
 
 const activeSheetId = 'sheet1' as SheetId;
 
@@ -59,8 +64,16 @@ function createMockDeps(
     }),
   };
 
+  const uiState = {
+    setLastUsedFillColor: jest.fn(),
+    setPendingCellFormat: jest.fn(),
+  };
+
   const deps = {
     workbook,
+    uiStore: {
+      getState: () => uiState,
+    },
     accessors: {
       selection: {
         getActiveCell: jest
@@ -77,7 +90,7 @@ function createMockDeps(
     getActiveSheetId: () => activeSheetId,
   } as unknown as ActionDependencies;
 
-  return { deps, workbook, worksheet, calls };
+  return { deps, workbook, worksheet, uiState, calls };
 }
 
 describe('font style formatting actions', () => {
@@ -168,5 +181,19 @@ describe('font style formatting actions', () => {
     expect(result.handled).toBe(true);
     expect(worksheet.formats.getDisplayedRangeProperties).not.toHaveBeenCalled();
     expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], { bold: true });
+  });
+
+  it('applies background colors as explicit solid fills', async () => {
+    const range: CellRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 1 };
+    const { deps, worksheet, uiState } = createMockDeps([range]);
+
+    const result = await SET_BACKGROUND_COLOR(deps, { color: '#FFF2CC' });
+
+    expect(result.handled).toBe(true);
+    expect(uiState.setLastUsedFillColor).toHaveBeenCalledWith('#FFF2CC');
+    expect(worksheet.formats.setRanges).toHaveBeenCalledWith([range], {
+      backgroundColor: '#FFF2CC',
+      patternType: 'solid',
+    });
   });
 });

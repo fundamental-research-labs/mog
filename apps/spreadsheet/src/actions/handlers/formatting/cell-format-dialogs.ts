@@ -27,6 +27,7 @@ import {
   handled,
 } from './shared';
 import { applyCenterAcrossSelectionFormat } from './center-across-selection';
+import { normalizeSolidFillFormat } from './fill-format';
 import { autoFitRowsForBoundedRanges } from './row-autofit';
 
 // =============================================================================
@@ -152,9 +153,10 @@ export const APPLY_FILL_FORMAT: AsyncActionHandler = async (deps) => {
 
   // Apply to all selected ranges on ALL selected sheets
   // Uses setFormatForRanges for O(1) full row/column performance
+  const fillFormat = normalizeSolidFillFormat(pendingFillFormat);
   for (const sheetId of targetSheetIds) {
     const ws = deps.workbook.getSheetById(sheetId);
-    await ws.formats.setRanges(ranges, pendingFillFormat);
+    await ws.formats.setRanges(ranges, fillFormat);
   }
 
   // Clear pending format after applying

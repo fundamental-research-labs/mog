@@ -1,4 +1,3 @@
-use super::support::*;
 use super::*;
 
 #[test]
@@ -112,6 +111,26 @@ fn test_merge_formats_no_fill_pattern_clears_lower_fill_fields() {
     assert!(merged.pattern_foreground_color.is_none());
     assert!(merged.pattern_foreground_color_tint.is_none());
     assert!(merged.gradient_fill.is_none());
+}
+
+#[test]
+fn test_merge_formats_solid_fill_patch_overrides_lower_no_fill_pattern() {
+    use ooxml_types::styles::PatternType;
+
+    let lower = CellFormat {
+        pattern_type: Some(PatternType::None),
+        ..Default::default()
+    };
+    let higher = CellFormat {
+        background_color: Some("#FFF2CC".to_string()),
+        pattern_type: Some(PatternType::Solid),
+        ..Default::default()
+    };
+
+    let merged = merge_formats(&lower, &higher);
+
+    assert_eq!(merged.pattern_type, Some(PatternType::Solid));
+    assert_eq!(merged.background_color, Some("#FFF2CC".to_string()));
 }
 
 #[test]

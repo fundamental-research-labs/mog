@@ -45,6 +45,7 @@ import {
   useUIStore,
   useWorkbook,
 } from '../../infra/context';
+import { normalizeSolidFillFormat } from '../../actions/handlers/formatting/fill-format';
 import type { Selection } from '../../systems/shared/types';
 import { useCoordinator } from '../shared/use-coordinator';
 import { useDispatch } from './use-action-dependencies';
@@ -354,6 +355,7 @@ export function useToolbarActions(options: UseToolbarActionsOptions = {}): UseTo
         // Apply style via Worksheet API: set format from the resolved style
         if (style) {
           const ws = wb.getSheetById(activeSheetId);
+          const format = normalizeSolidFillFormat(style);
           await ws.formats.setRanges(
             ranges.map((r) => ({
               startRow: r.startRow,
@@ -361,7 +363,7 @@ export function useToolbarActions(options: UseToolbarActionsOptions = {}): UseTo
               endRow: r.endRow,
               endCol: r.endCol,
             })),
-            style,
+            format,
           );
         }
       })();

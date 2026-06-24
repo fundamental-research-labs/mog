@@ -67,6 +67,7 @@ import {
 } from '../../data-command-target';
 import { getUIStore, handled, notHandled } from '../handler-utils';
 import { beginEditSessionFromAction } from '../edit-entry';
+import { solidFillFormat } from '../formatting/fill-format';
 import {
   isPickerBackedValidation,
   peekValidationEditorConfig,
@@ -827,7 +828,7 @@ export const APPLY_MORE_COLORS_FILL: AsyncActionHandler = async (
       endRow: r.endRow,
       endCol: r.endCol,
     })),
-    { backgroundColor: payload.color } as CellFormat,
+    solidFillFormat(payload.color),
   );
 
   // Track as recent color

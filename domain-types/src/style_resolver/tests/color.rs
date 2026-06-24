@@ -72,6 +72,67 @@ fn theme_color_with_tint() {
 }
 
 #[test]
+fn theme_color_tint_matches_excel_hls() {
+    let theme_colors = vec![
+        "#000000".to_string(), // dk1
+        "#FFFFFF".to_string(), // lt1
+        "#0E2841".to_string(), // dk2
+        "#E7E6E6".to_string(), // lt2
+        "#156082".to_string(), // accent1
+        "#E97132".to_string(), // accent2
+        "#196B24".to_string(), // accent3
+        "#0F9ED5".to_string(), // accent4
+    ];
+
+    let cases = [
+        (7, -0.499984740745262, "#074F69"),
+        (7, 0.59999389629810485, "#94DCF8"),
+        (3, 0.89999084444715716, "#DAE9F8"),
+        (3, 0.249977111117893, "#215C98"),
+    ];
+
+    for (theme, tint, expected) in cases {
+        let color = ColorInput {
+            theme: Some(theme),
+            tint: Some(tint),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_color(&color, &theme_colors).as_deref(),
+            Some(expected),
+            "theme={theme} tint={tint}"
+        );
+    }
+}
+
+#[test]
+fn theme_color_tint_canonicalizes_excel_ui_precision() {
+    let theme_colors = vec![
+        "#000000".to_string(), // dk1
+        "#FFFFFF".to_string(), // lt1
+        "#44546A".to_string(), // dk2
+        "#E7E6E6".to_string(), // lt2
+        "#4472C4".to_string(), // accent1
+        "#ED7D31".to_string(), // accent2
+        "#A5A5A5".to_string(), // accent3
+        "#FFC000".to_string(), // accent4
+        "#5B9BD5".to_string(), // accent5
+        "#70AD47".to_string(), // accent6
+    ];
+
+    let color = ColorInput {
+        theme: Some(9),
+        tint: Some(0.79998168889431442),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        resolve_color(&color, &theme_colors).as_deref(),
+        Some("#E2EFDA")
+    );
+}
+
+#[test]
 fn theme_color_fallback_without_palette() {
     // No theme_colors provided — should fall back to symbolic reference
     let color = ColorInput {

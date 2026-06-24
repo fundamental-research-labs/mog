@@ -2,7 +2,7 @@
 //!
 //! Extracted from the former `format-types` crate. These functions handle
 //! ECMA-376 theme color references (`"theme:slot:tint"` strings) and
-//! HSL-based tint application.
+//! Excel-compatible HLS tint application.
 
 use std::collections::HashMap;
 
@@ -85,10 +85,14 @@ pub fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
     (r, g, b)
 }
 
+const HLSMAX: i32 = 240;
+const RGBMAX: i32 = 255;
+const HLS_UNDEFINED: i32 = (HLSMAX * 2) / 3;
+
 /// Apply an ECMA-376 tint to a hex color string (e.g. "#4472C4").
 ///
 /// - tint < 0 darkens: L' = L * (1 + tint)
-/// - tint > 0 lightens: L' = L * (1 - tint) + tint
+/// - tint > 0 lightens: L' = L * (1 - tint) + HLSMAX * tint
 ///
 /// Returns a hex color string with "#" prefix.
 pub fn apply_tint(hex_color: &str, tint: f64) -> String {
@@ -100,16 +104,116 @@ pub fn apply_tint(hex_color: &str, tint: f64) -> String {
     let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
     let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
 
-    let (h, s, l) = rgb_to_hsl(r, g, b);
+    let tint = canonicalize_excel_tint(tint);
+    let (h, l, s) = rgb_to_excel_hls(r, g, b);
 
     let l2 = if tint < 0.0 {
-        l * (1.0 + tint)
+        (l as f64 * (1.0 + tint)).floor()
     } else {
-        l * (1.0 - tint) + tint
+        (l as f64 * (1.0 - tint) + HLSMAX as f64 * tint).floor()
+    }
+    .clamp(0.0, HLSMAX as f64) as i32;
+
+    let (r2, g2, b2) = excel_hls_to_rgb(h, l2, s);
+    format!("#{:02X}{:02X}{:02X}", r2, g2, b2)
+}
+
+fn canonicalize_excel_tint(tint: f64) -> f64 {
+    let rounded = (tint * 100.0).round() / 100.0;
+    if (tint - rounded).abs() < 0.0001 {
+        rounded
+    } else {
+        tint
+    }
+}
+
+fn rgb_to_excel_hls(r: u8, g: u8, b: u8) -> (i32, i32, i32) {
+    let r = r as i32;
+    let g = g as i32;
+    let b = b as i32;
+
+    let c_max = r.max(g).max(b);
+    let c_min = r.min(g).min(b);
+    let luminance = (((c_max + c_min) * HLSMAX) + RGBMAX) / (2 * RGBMAX);
+
+    if c_max == c_min {
+        return (HLS_UNDEFINED, luminance, 0);
+    }
+
+    let saturation = if luminance <= HLSMAX / 2 {
+        (((c_max - c_min) * HLSMAX) + ((c_max + c_min) / 2)) / (c_max + c_min)
+    } else {
+        (((c_max - c_min) * HLSMAX) + ((2 * RGBMAX - c_max - c_min) / 2))
+            / (2 * RGBMAX - c_max - c_min)
     };
 
-    let (r2, g2, b2) = hsl_to_rgb(h, s, l2);
-    format!("#{:02X}{:02X}{:02X}", r2, g2, b2)
+    let r_delta = (((c_max - r) * (HLSMAX / 6)) + ((c_max - c_min) / 2)) / (c_max - c_min);
+    let g_delta = (((c_max - g) * (HLSMAX / 6)) + ((c_max - c_min) / 2)) / (c_max - c_min);
+    let b_delta = (((c_max - b) * (HLSMAX / 6)) + ((c_max - c_min) / 2)) / (c_max - c_min);
+
+    let mut hue = if r == c_max {
+        b_delta - g_delta
+    } else if g == c_max {
+        (HLSMAX / 3) + r_delta - b_delta
+    } else {
+        ((2 * HLSMAX) / 3) + g_delta - r_delta
+    };
+
+    if hue < 0 {
+        hue += HLSMAX;
+    }
+    if hue > HLSMAX {
+        hue -= HLSMAX;
+    }
+
+    (hue, luminance, saturation)
+}
+
+fn excel_hls_to_rgb(hue: i32, luminance: i32, saturation: i32) -> (u8, u8, u8) {
+    if saturation == 0 {
+        let value = ((luminance * RGBMAX) + (HLSMAX / 2)) / HLSMAX;
+        let value = value.clamp(0, RGBMAX) as u8;
+        return (value, value, value);
+    }
+
+    let magic2 = if luminance <= HLSMAX / 2 {
+        (luminance * (HLSMAX + saturation) + (HLSMAX / 2)) / HLSMAX
+    } else {
+        luminance + saturation - ((luminance * saturation + (HLSMAX / 2)) / HLSMAX)
+    };
+    let magic1 = 2 * luminance - magic2;
+
+    let r = excel_hue_to_rgb(magic1, magic2, hue + HLSMAX / 3);
+    let g = excel_hue_to_rgb(magic1, magic2, hue);
+    let b = excel_hue_to_rgb(magic1, magic2, hue - HLSMAX / 3);
+
+    (
+        (((r * RGBMAX) + (HLSMAX / 2)) / HLSMAX).clamp(0, RGBMAX) as u8,
+        (((g * RGBMAX) + (HLSMAX / 2)) / HLSMAX).clamp(0, RGBMAX) as u8,
+        (((b * RGBMAX) + (HLSMAX / 2)) / HLSMAX).clamp(0, RGBMAX) as u8,
+    )
+}
+
+fn excel_hue_to_rgb(magic1: i32, magic2: i32, mut hue: i32) -> i32 {
+    if hue < 0 {
+        hue += HLSMAX;
+    }
+    if hue > HLSMAX {
+        hue -= HLSMAX;
+    }
+
+    if hue < HLSMAX / 6 {
+        return magic1 + (((magic2 - magic1) * hue + (HLSMAX / 12)) / (HLSMAX / 6));
+    }
+    if hue < HLSMAX / 2 {
+        return magic2;
+    }
+    if hue < (HLSMAX * 2) / 3 {
+        return magic1
+            + (((magic2 - magic1) * (((HLSMAX * 2) / 3) - hue) + (HLSMAX / 12)) / (HLSMAX / 6));
+    }
+
+    magic1
 }
 
 /// Resolve a color string that may be a theme reference.
@@ -188,5 +292,40 @@ pub fn resolve_theme_refs(fmt: &mut CellFormat, palette: &HashMap<String, String
                 stop.color = resolve_theme_color(&stop.color, palette);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_tint, resolve_theme_color};
+    use std::collections::HashMap;
+
+    #[test]
+    fn apply_tint_matches_excel_hls() {
+        let cases = [
+            ("#0F9ED5", -0.499984740745262, "#074F69"),
+            ("#0F9ED5", 0.59999389629810485, "#94DCF8"),
+            ("#0E2841", 0.89999084444715716, "#DAE9F8"),
+            ("#0E2841", 0.249977111117893, "#215C98"),
+            ("#70AD47", 0.79998168889431442, "#E2EFDA"),
+            ("#9BBB59", 0.79998168889431442, "#EBF1DE"),
+            ("#FFC000", 0.79998168889431442, "#FFF2CC"),
+            ("#4EA72E", 0.79998168889431442, "#DAF2D0"),
+        ];
+
+        for (base, tint, expected) in cases {
+            assert_eq!(apply_tint(base, tint), expected, "base={base} tint={tint}");
+        }
+    }
+
+    #[test]
+    fn resolve_theme_color_applies_excel_hls_tint() {
+        let mut palette = HashMap::new();
+        palette.insert("accent4".to_string(), "#0F9ED5".to_string());
+
+        assert_eq!(
+            resolve_theme_color("theme:accent4:-0.499984740745262", &palette),
+            "#074F69"
+        );
     }
 }

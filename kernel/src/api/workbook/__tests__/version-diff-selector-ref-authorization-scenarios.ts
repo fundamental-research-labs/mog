@@ -43,6 +43,7 @@ export function registerSelectorRefAuthorizationScenarios(): void {
     ['unsafe branch ref', { kind: 'ref', name: 'refs/heads/private-review.lock' }],
     ['tag ref', { kind: 'ref', name: 'refs/tags/v1' }],
     ['system ref', { kind: 'ref', name: 'refs/system/secret' }],
+    ['hidden branch namespace', { kind: 'ref', name: 'refs/heads/hidden/payroll-shadow' }],
     ['malformed branch ref', { kind: 'ref', name: 'refs/heads/scenario/../secret' }],
   ])('rejects %s before diff service lookup', async (_label, ref) => {
     const diff = jest.fn(async () => {

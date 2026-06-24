@@ -22,7 +22,36 @@ describe('WorkbookVersion listCommits selector forwarding', () => {
   it('forwards public ref and commit roots without leaking unsupported options to the graph service', async () => {
     const graphStore = createFakeGraphStore();
     graphStore.listCommits
-      .mockResolvedValueOnce(successPage())
+      .mockResolvedValueOnce(
+        successPage({
+          commits: [
+            {
+              ...rootCommitSummary(),
+              parents: [ROOT_COMMIT_ID],
+              id: CHILD_COMMIT_ID,
+              author: {
+                authorId: 'agent-1',
+                actorKind: 'agent',
+                displayName: 'Public Reader',
+                clientId: 'hidden-client',
+                principalId: 'protected-principal',
+                agentRunId: 'opaque-agent-run',
+              },
+              annotation: {
+                title: { kind: 'text', value: 'protected salary details' },
+                message: { kind: 'text', value: 'deleted acquisition plan' },
+                tags: [{ kind: 'text', value: 'opaque finance blob' }],
+              },
+            },
+            {
+              ...rootCommitSummary(),
+              annotation: {
+                title: { kind: 'redacted', reason: 'permission-denied' },
+              },
+            },
+          ],
+        }),
+      )
       .mockResolvedValueOnce(successPage())
       .mockResolvedValueOnce(successPage({ commits: [rootCommitSummary()] }))
       .mockResolvedValueOnce(successPage())
@@ -38,7 +67,7 @@ describe('WorkbookVersion listCommits selector forwarding', () => {
             parents: [ROOT_COMMIT_ID],
             createdAt: CREATED_AT,
             author: {
-              actorKind: 'user',
+              actorKind: 'agent',
               displayName: 'Public Reader',
               redacted: true,
             },
@@ -90,6 +119,37 @@ describe('WorkbookVersion listCommits selector forwarding', () => {
     expect(graphStore.listCommits).toHaveBeenLastCalledWith({
       pageToken: PUBLIC_LIST_PAGE_TOKEN,
     });
+  });
+
+  it('rejects reserved branch ref namespaces before provider dispatch', async () => {
+    const graphStore = createFakeGraphStore();
+    const version = createVersion(graphStore);
+
+    await expect(
+      version.listCommits({
+        ref: 'refs/heads/hidden/vc08_hidden_ref_payroll_shadow',
+        includeDiagnostics: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.listCommits',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_PERMISSION_DENIED',
+            data: expect.objectContaining({
+              redacted: true,
+              payload: expect.objectContaining({
+                option: 'ref',
+                refName: 'redacted',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(graphStore.listCommits).not.toHaveBeenCalled();
   });
 
   it('uses the active checkout branch as the implicit commit list root', async () => {

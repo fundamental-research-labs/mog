@@ -5,7 +5,6 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import { validateRefName } from '../../../../document/version-store/refs/ref-name';
 import {
   VERSION_HEAD_REF,
   VERSION_LIST_COMMITS_DEFAULT_PAGE_SIZE,
@@ -20,6 +19,7 @@ import {
 } from './version-list-commits-constants';
 import { publicDiagnostic } from './version-list-commits-diagnostics';
 import { formatPrimitiveForPayload, isRecord, toCommitId } from './version-list-commits-utils';
+import { validatePublicVersionBranchRefName } from '../version-public-ref-selectors';
 
 export function validateListCommitsOptions(
   options: VersionListCommitsOptions,
@@ -227,8 +227,21 @@ function validateListCommitsRef(ref: unknown): readonly VersionStoreDiagnostic[]
     ];
   }
 
-  const parsed = validateRefName(ref.slice('refs/heads/'.length));
+  const parsed = validatePublicVersionBranchRefName(ref.slice('refs/heads/'.length), 'ref');
   if (parsed.ok) return [];
+  if (parsed.diagnostics.some((item) => item.issue === 'reservedPublicNamespace')) {
+    return [
+      publicDiagnostic(
+        'VERSION_PERMISSION_DENIED',
+        'listCommits ref is not exposed by this public slice.',
+        {
+          severity: 'error',
+          recoverability: 'unsupported',
+          payload: { option: 'ref', refName: 'redacted' },
+        },
+      ),
+    ];
+  }
   return parsed.diagnostics.map((item) =>
     publicDiagnostic('VERSION_INVALID_OPTIONS', 'listCommits ref must be public-safe.', {
       severity: 'error',

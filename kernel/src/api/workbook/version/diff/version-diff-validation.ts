@@ -11,7 +11,6 @@ import {
   VERSION_DIFF_MAX_PAGE_LIMIT,
   VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
 } from '@mog-sdk/contracts/versioning';
-import { validateRefName } from '../../../../document/version-store/refs/ref-name';
 import {
   VERSION_COMMIT_SELECTOR_KEYS,
   VERSION_DIFF_OPTION_KEYS,
@@ -26,6 +25,7 @@ import type {
   NormalizedDiffOptions,
 } from './version-diff-types';
 import { formatPrimitiveForPayload, isRecord, toCommitId, toPageToken } from './version-diff-utils';
+import { validatePublicVersionBranchRefName } from '../version-public-ref-selectors';
 
 export function validateDiffRequest(
   base: VersionCommitish,
@@ -213,7 +213,7 @@ function normalizePublicRefSelector(value: unknown): VersionRefSelector | null {
   if (value === VERSION_HEAD_REF) return VERSION_HEAD_REF;
   if (value === VERSION_MAIN_REF) return VERSION_MAIN_REF;
   if (typeof value === 'string' && value.startsWith('refs/heads/')) {
-    const parsed = validateRefName(value.slice('refs/heads/'.length));
+    const parsed = validatePublicVersionBranchRefName(value.slice('refs/heads/'.length));
     if (parsed.ok) return value as VersionRefName;
   }
   return null;

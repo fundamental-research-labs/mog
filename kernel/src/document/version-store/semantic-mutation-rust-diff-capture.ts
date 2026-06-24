@@ -49,15 +49,6 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
       input.beforeSemanticState.state,
       afterSemanticState.state,
     );
-    const blockingDiagnosticCount =
-      semanticDiff.diagnostics?.filter((diagnostic) => diagnostic.severity === 'error').length ?? 0;
-    if (blockingDiagnosticCount > 0) {
-      return failedSemanticCapture(
-        input,
-        'Rust semantic diff reported blocking diagnostics for this mutation range.',
-        { blockingDiagnosticCount },
-      );
-    }
     if (semanticDiff.changes.length === 0) {
       return failedSemanticCapture(
         input,

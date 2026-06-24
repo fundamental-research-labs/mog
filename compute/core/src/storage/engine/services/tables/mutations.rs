@@ -917,6 +917,9 @@ pub(in crate::storage::engine) fn convert_table_to_range(
     );
 
     let mut result = MutationResult::empty();
+    let materialized_format_result = materialize_table_visible_formats(stores, mirror, &table)?;
+    merge_mutation_result(&mut result, materialized_format_result);
+
     stores.compute.remove_table(mirror, table_name);
     let visibility_transitions = remove_table_from_yrs_with_filter(
         stores,

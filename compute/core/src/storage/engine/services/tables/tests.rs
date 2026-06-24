@@ -491,6 +491,104 @@ mod tests {
     }
 
     #[test]
+    fn convert_to_range_materializes_visible_table_style() {
+        let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
+        let sid = sheet_id();
+
+        engine
+            .batch_set_cells_by_position(
+                vec![
+                    (
+                        sid,
+                        0,
+                        0,
+                        CellInput::Parse {
+                            text: "Region".into(),
+                        },
+                    ),
+                    (
+                        sid,
+                        0,
+                        1,
+                        CellInput::Parse {
+                            text: "Amount".into(),
+                        },
+                    ),
+                    (
+                        sid,
+                        1,
+                        0,
+                        CellInput::Parse {
+                            text: "West".into(),
+                        },
+                    ),
+                    (sid, 1, 1, CellInput::Parse { text: "10".into() }),
+                    (
+                        sid,
+                        2,
+                        0,
+                        CellInput::Parse {
+                            text: "East".into(),
+                        },
+                    ),
+                    (sid, 2, 1, CellInput::Parse { text: "20".into() }),
+                ],
+                false,
+            )
+            .expect("seed table data");
+
+        engine
+            .create_table(
+                &sid,
+                "Table1".into(),
+                0,
+                0,
+                2,
+                1,
+                vec!["Region".into(), "Amount".into()],
+                true,
+            )
+            .expect("create_table");
+
+        let header_before = engine.get_resolved_format(&sid, 0, 0);
+        let banded_before = engine.get_resolved_format(&sid, 2, 0);
+        assert!(
+            header_before.background_color.is_some(),
+            "default table style should format the header row"
+        );
+        assert!(
+            banded_before.background_color.is_some(),
+            "default table style should format banded data rows"
+        );
+
+        engine
+            .convert_table_to_range("Table1")
+            .expect("convert_to_range");
+
+        assert!(
+            engine.get_table_by_name("Table1").is_none(),
+            "convert_to_range must remove the table"
+        );
+        assert!(
+            engine.resolve_table_format_at_cell(&sid, 0, 0).is_none(),
+            "post-convert style must not come from a table layer"
+        );
+
+        let header_after = engine.get_resolved_format(&sid, 0, 0);
+        let banded_after = engine.get_resolved_format(&sid, 2, 0);
+        assert_eq!(
+            header_after.background_color,
+            header_before.background_color
+        );
+        assert_eq!(header_after.font_color, header_before.font_color);
+        assert_eq!(header_after.bold, header_before.bold);
+        assert_eq!(
+            banded_after.background_color,
+            banded_before.background_color
+        );
+    }
+
+    #[test]
     fn custom_table_style_mutation_persists_to_yrs_and_export() {
         let (mut engine, _) = YrsComputeEngine::from_snapshot(simple_snapshot()).unwrap();
         let style = compute_table::custom_styles::CustomTableStyleConfig {

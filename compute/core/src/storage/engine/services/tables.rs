@@ -22,6 +22,7 @@ use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
 
 mod filter_delete;
+mod format_materialization;
 mod mutations;
 mod options;
 mod persistence;
@@ -30,6 +31,7 @@ mod queries;
 mod tests;
 
 pub(in crate::storage::engine) use filter_delete::*;
+pub(in crate::storage::engine) use format_materialization::*;
 pub(in crate::storage::engine) use mutations::*;
 pub(in crate::storage::engine) use options::*;
 pub(in crate::storage::engine) use persistence::*;

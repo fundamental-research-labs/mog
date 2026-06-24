@@ -820,12 +820,29 @@ impl YrsComputeEngine {
         &mut self,
         table_name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        let converted_table = self.mirror.get_table(table_name).cloned();
         let result = services::tables::convert_table_to_range(
             &mut self.stores,
             &mut self.mirror,
             table_name,
         )?;
-        Ok((serialize_multi_viewport_patches(&[]), result))
+        let patches = converted_table
+            .as_ref()
+            .and_then(|table| {
+                let sheet_id = cell_types::SheetId::from_uuid_str(&table.sheet_id).ok()?;
+                let grid = self.stores.grid_indexes.get(&sheet_id)?;
+                let mut affected_cells = Vec::new();
+                for row in table.range.start_row()..=table.range.end_row() {
+                    for col in table.range.start_col()..=table.range.end_col() {
+                        if let Some(cell_id) = grid.cell_id_at(row, col) {
+                            affected_cells.push((cell_id.as_u128(), row, col));
+                        }
+                    }
+                }
+                Some(self.produce_format_change_patches(&sheet_id, &affected_cells))
+            })
+            .unwrap_or_else(|| serialize_multi_viewport_patches(&[]));
+        Ok((patches, result))
     }
 }
 

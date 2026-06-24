@@ -37,6 +37,11 @@ import {
 import { parseCellKey } from './clipboard-utils';
 import { shouldResetNumberFormatBeforeExternalPaste } from './external-paste-format-reset';
 import { isDenseCoreCopyUnsafeForSource } from './full-shape-ranges';
+import {
+  expandTablesForPastedValues,
+  rangeFromPastedValueUpdates,
+  type PasteTableInfo,
+} from './paste-table-expansion';
 
 // =============================================================================
 // Constants
@@ -367,6 +372,8 @@ export interface PasteStoreOperations {
    * @param width - Width in pixels (or undefined for default)
    */
   setColumnWidth?(sheetId: SheetId, col: number, width: number | undefined): void;
+  getTables?(sheetId: SheetId): Promise<PasteTableInfo[]> | PasteTableInfo[];
+  resizeTable?(sheetId: SheetId, tableName: string, rangeA1: string): Promise<void> | void;
 }
 
 // =============================================================================
@@ -1231,6 +1238,14 @@ export async function executePaste(
     if (!useCoreCopyRange && formatUpdates.length > 0) {
       await applyCellFormatUpdates(store, sheetId, formatUpdates);
     }
+
+    await expandTablesForPastedValues(
+      store,
+      sheetId,
+      useCoreCopyRange && coreCopyType !== 'formats'
+        ? affectedRange
+        : rangeFromPastedValueUpdates(valueUpdates),
+    );
 
     // Step 7: Recreate merges from clipboard
     // Only when pasting all (not values/formulas/formats only)

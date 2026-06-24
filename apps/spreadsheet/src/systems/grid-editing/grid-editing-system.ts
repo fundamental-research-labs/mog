@@ -85,6 +85,7 @@ import {
 import { setupEditorCommitCoordination } from './coordination/editor-commit-coordination';
 import { setupClipboardPasteIntegration } from './coordination/paste-integration';
 import { compactCellFormatUpdates } from '../../domain/clipboard/paste-format-batching';
+import { createTablePasteStoreOperations } from './paste-table-store-operations';
 import { setupValidationCirclesCoordination } from './features/validation';
 import { setupTableSelectionCoordination } from './features/table';
 import { setupPivotSelectionCoordination } from './features/pivot';
@@ -1542,6 +1543,7 @@ export class GridEditingSystem implements IGridEditingSystem {
         };
       },
       getSheetName: async (sheetId) => (await workbook.getSheetById(sheetId).getName()) ?? sheetId,
+      ...createTablePasteStoreOperations(workbook, guardBridgeMutation),
       mergeRange: (sheetId, startRow, startCol, endRow, endCol) => {
         void workbook.getSheetById(sheetId).structure.merge(startRow, startCol, endRow, endCol);
         return true;

@@ -173,6 +173,21 @@ describe('WorksheetTablesImpl table event identity', () => {
     );
   });
 
+  it('decorates listed tables with containsCell based on the current range', async () => {
+    ctx.computeBridge.getAllTablesInSheet.mockResolvedValueOnce([
+      createRawTable({ range: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 } }),
+    ]);
+
+    const [table] = (await tables.list()) as Array<{
+      range: string;
+      containsCell?: (row: number, col: number) => boolean;
+    }>;
+
+    expect(table.range).toBe('A1:B5');
+    expect(table.containsCell?.(4, 1)).toBe(true);
+    expect(table.containsCell?.(4, 2)).toBe(false);
+  });
+
   it('emits table:updated with the stable table id while preserving name-based update input', async () => {
     const receipt = await tables.update('Sales', { style: 'TableStyleMedium4' });
 

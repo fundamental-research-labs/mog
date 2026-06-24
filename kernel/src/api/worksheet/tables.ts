@@ -73,6 +73,7 @@ import {
   getTotalRowRangeFromInfo,
   type TableMutationOptions,
 } from './operations/table-operations';
+import { attachTableInfoMethods } from './operations/table-info-methods';
 import { applyAutoExpansion as applyAutoExpansionOperation } from './operations/table-auto-expansion';
 import {
   applyClearCalculatedColumnWithReceipt,
@@ -244,6 +245,14 @@ export class WorksheetTablesImpl implements WorksheetTables {
     return tableStyleForEventConfig(styleName, flags);
   }
 
+  private tableInfoWithMethods(table: TableInfo): TableInfo {
+    return attachTableInfoMethods(table, {
+      setTotalsRow: (tableName, visible) => this.setShowTotals(tableName, visible),
+      setTotalsFunction: (tableName, columnName, func) =>
+        this.setColumnTotalsFunction(tableName, columnName, func as TotalsFunction),
+    });
+  }
+
   private async assertValidTableNameForRename(currentName: string, newName: string): Promise<void> {
     const existingNames = (await this.list())
       .map((table) => table.name)
@@ -390,45 +399,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     try {
       const table = await this.ctx.computeBridge.getTableByName(name);
       if (!table) return null;
-      const info = bridgeTableToTableInfo(table) as TableInfo & {
-        totalsRow?: number;
-        totalsRowIndex?: number;
-        setTotalsRow?: (visible: boolean) => Promise<void>;
-        setTotalsFunction?: (columnName: string, func: string) => Promise<void>;
-        containsCell?: (row: number, col: number) => boolean;
-      };
-
-      // Compute totals row index when the totals row is enabled.
-      if (info.hasTotalsRow) {
-        const parsed = parseCellRange(info.range);
-        if (parsed) {
-          info.totalsRow = parsed.endRow;
-          info.totalsRowIndex = parsed.endRow;
-        }
-      }
-
-      // Bind operational methods so callers can do `table.setTotalsRow(true)`.
-      const tables = this;
-      info.setTotalsRow = async (visible: boolean) => {
-        await tables.setShowTotals(name, visible);
-      };
-      info.setTotalsFunction = (columnName: string, func: string) =>
-        tables.setColumnTotalsFunction(name, columnName, func as TotalsFunction);
-
-      // containsCell(row, col): returns true if the 0-based (row, col) falls within
-      // the table's range (including header and totals rows).
-      info.containsCell = (row: number, col: number): boolean => {
-        const parsed = parseCellRange(info.range);
-        if (!parsed) return false;
-        return (
-          row >= parsed.startRow &&
-          row <= parsed.endRow &&
-          col >= parsed.startCol &&
-          col <= parsed.endCol
-        );
-      };
-
-      return info;
+      return this.tableInfoWithMethods(bridgeTableToTableInfo(table));
     } catch {
       return null;
     }
@@ -441,7 +412,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
   async list(): Promise<TableInfo[]> {
     await waitForPendingClipboardPaste();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
-    return tables.map((t) => bridgeTableToTableInfo(t));
+    return tables.map((t) => this.tableInfoWithMethods(bridgeTableToTableInfo(t)));
   }
 
   async getCount(): Promise<number> {

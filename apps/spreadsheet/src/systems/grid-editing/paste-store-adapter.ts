@@ -204,6 +204,22 @@ export function buildPasteStoreOperations(
       const format = await ws.conditionalFormats.add(ranges, rules as CFRuleInput[]);
       return format.id;
     },
+    getTables: async (sheetId) => {
+      if (sheetId !== ws.getSheetId()) return [];
+      const tables = await ws.tables.list();
+      return tables.map((table) => ({
+        name: table.name,
+        range: table.range,
+        autoExpand: table.autoExpand,
+        hasTotalsRow: table.hasTotalsRow,
+      }));
+    },
+    resizeTable: async (sheetId, tableName, rangeA1) => {
+      if (sheetId !== ws.getSheetId()) {
+        throw new Error('resizeTable target sheet does not match adapter worksheet');
+      }
+      await ws.tables.resize(tableName, rangeA1);
+    },
     // Hidden/Filtered Row Handling
     // Use pre-fetched hidden rows
     isRowHidden: (sheetId, row) => {

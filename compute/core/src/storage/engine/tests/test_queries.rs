@@ -273,6 +273,76 @@ fn test_find_data_edge_uses_materialized_range_values() {
     assert_eq!((target_right.row, target_right.col), (0, 9));
 }
 
+#[test]
+fn test_current_region_uses_materialized_range_values() {
+    const ROWS: usize = 5;
+    const COLS: usize = 2;
+
+    let sheet_id = SheetId::from_uuid_str("770e8400-e29b-41d4-a716-446655440000").unwrap();
+    let row_ids: Vec<RowId> = (0..ROWS)
+        .map(|i| RowId::from_raw((i + 1) as u128))
+        .collect();
+    let col_ids: Vec<ColId> = (0..COLS)
+        .map(|i| ColId::from_raw((ROWS + i + 1) as u128))
+        .collect();
+    let mut payload = Vec::new();
+    for row in 0..ROWS {
+        for col in 0..COLS {
+            let value = (row * 10 + col) as f64;
+            payload.extend_from_slice(&value.to_le_bytes());
+        }
+    }
+
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sheet_id.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: ROWS as u32,
+            cols: COLS as u32,
+            cells: vec![],
+            ranges: vec![RangeData {
+                range_id: RangeId::from_uuid_str("770e8400-e29b-41d4-a716-446655440002").unwrap(),
+                kind: RangeKind::Data,
+                anchor: RangeAnchor::Elastic {
+                    start_row: row_ids[0],
+                    end_row: row_ids[ROWS - 1],
+                    start_col: col_ids[0],
+                    end_col: col_ids[COLS - 1],
+                },
+                encoding: PayloadEncoding::F64Le,
+                payload,
+                row_axis: None,
+                col_axis: None,
+                row_ids,
+                col_ids,
+            }],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+
+    let region = engine.get_current_region(&sheet_id, 0, 0);
+    assert_eq!(region.start_row, 0);
+    assert_eq!(region.start_col, 0);
+    assert_eq!(region.end_row, 4);
+    assert_eq!(region.end_col, 1);
+
+    let bounded_columns = engine
+        .get_data_bounds_for_range(&sheet_id, 0, 0, 1_048_575, 1, true, false)
+        .expect("full-column range should find materialized range data");
+    assert_eq!(bounded_columns.start_row, 0);
+    assert_eq!(bounded_columns.start_col, 0);
+    assert_eq!(bounded_columns.end_row, 4);
+    assert_eq!(bounded_columns.end_col, 1);
+}
+
 /// Verify that query_range includes formatted display strings.
 #[test]
 fn test_query_range_includes_formatted() {

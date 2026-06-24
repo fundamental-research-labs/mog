@@ -246,6 +246,7 @@ pub(in crate::storage::engine) fn get_cells_in_range_yrs(
 #[allow(clippy::too_many_arguments)]
 pub(in crate::storage::engine) fn get_data_bounds_for_range(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -264,13 +265,14 @@ pub(in crate::storage::engine) fn get_data_bounds_for_range(
     };
 
     let grid = stores.grid_indexes.get(sheet_id)?;
-    let bounded = cell_iter::get_data_bounds_for_range(
+    let bounded = cell_iter::get_data_bounds_for_range_with_extra_data(
         stores.storage.doc(),
         stores.storage.sheets(),
         *sheet_id,
         grid,
         &range,
         span,
+        |r, c| super::dimensions::mirror_render_has_data(stores, mirror, sheet_id, r, c),
     )?;
 
     Some(RectBounds {

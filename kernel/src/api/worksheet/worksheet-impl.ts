@@ -106,7 +106,6 @@ import { KernelError, toMogSdkError } from '../../errors';
 import type { RangeCellData } from '../../bridges/compute/compute-types.gen';
 import { CellMetadataCache, createCellMetadataCache } from '../../bridges/wire/cell-metadata-cache';
 import type { DocumentContext } from '../../context';
-import { getCurrentRegion as getCurrentRegionDomain } from '../../domain/cells/cell-iteration';
 import * as CellReads from '../../domain/cells/cell-reads';
 import type { SpreadsheetObjectManager } from '../../floating-objects';
 import { ERROR_DISPLAY_MAP, isCellError } from '@mog/spreadsheet-utils/errors';
@@ -1974,7 +1973,8 @@ export class WorksheetImpl implements Worksheet {
   }
 
   async getCurrentRegion(row: number, col: number): Promise<WorksheetRange> {
-    return toWorksheetRange(await getCurrentRegionDomain(this.ctx, this.sheetId, row, col));
+    const region = await this.ctx.computeBridge.getCurrentRegion(toSheetId(this.sheetId), row, col);
+    return toWorksheetRange(region);
   }
 
   async findDataEdge(
@@ -3327,10 +3327,6 @@ export class WorksheetImpl implements Worksheet {
     if (this.__internal) {
       (this.__internal as WorksheetInternalImpl).dispose();
       this.__internal = undefined;
-    }
-    if (this._tables) {
-      this._tables.dispose();
-      this._tables = undefined;
     }
     if (this._cellMetadata) {
       this._cellMetadata.destroy();

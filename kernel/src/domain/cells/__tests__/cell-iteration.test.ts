@@ -1,73 +1,95 @@
 import { jest } from '@jest/globals';
-import type { SheetId } from '@mog-sdk/contracts/core';
+import type { SheetId, CellRange } from '@mog-sdk/contracts/core';
 
-import { getCurrentRegion } from '../cell-iteration';
+import { getCurrentRegion, getDataBoundsForRange } from '../cell-iteration';
 import type { DocumentContext } from '../../../context/types';
 
 const SHEET_ID = 'sheet-1' as SheetId;
 
-function makeContext(
-  cells: Array<{ row: number; col: number; value?: unknown; formula?: string }>,
-) {
-  const queryRange = jest.fn(async () => ({ cells, merges: [] }));
-  const getDataBounds = jest.fn(async () => ({
-    minRow: Math.min(...cells.map((cell) => cell.row)),
-    minCol: Math.min(...cells.map((cell) => cell.col)),
-    maxRow: Math.max(...cells.map((cell) => cell.row)),
-    maxCol: Math.max(...cells.map((cell) => cell.col)),
+function makeContext() {
+  const getCurrentRegionBridge = jest.fn(async () => ({
+    startRow: 0,
+    startCol: 0,
+    endRow: 1812,
+    endCol: 9,
+  }));
+  const getDataBoundsForRangeBridge = jest.fn(async () => ({
+    startRow: 0,
+    startCol: 0,
+    endRow: 1812,
+    endCol: 9,
   }));
 
   return {
     ctx: {
       computeBridge: {
-        getDataBounds,
-        queryRange,
+        getCurrentRegion: getCurrentRegionBridge,
+        getDataBoundsForRange: getDataBoundsForRangeBridge,
       },
     } as unknown as DocumentContext,
-    getDataBounds,
-    queryRange,
+    getCurrentRegionBridge,
+    getDataBoundsForRangeBridge,
   };
 }
 
 describe('getCurrentRegion', () => {
-  it('detects contiguous imported data beyond the old 1000-row query window', async () => {
-    const cells: Array<{ row: number; col: number; value: string }> = [];
-    for (let row = 0; row < 1813; row++) {
-      for (let col = 0; col < 10; col++) {
-        cells.push({ row, col, value: `${row}:${col}` });
-      }
-    }
-    const { ctx, queryRange } = makeContext(cells);
+  it('delegates current-region detection to compute', async () => {
+    const { ctx, getCurrentRegionBridge } = makeContext();
 
-    const region = await getCurrentRegion(ctx, SHEET_ID, 1, 1);
-
-    expect(region).toEqual({
+    await expect(getCurrentRegion(ctx, SHEET_ID, 1, 1)).resolves.toEqual({
       sheetId: SHEET_ID,
       startRow: 0,
       startCol: 0,
       endRow: 1812,
       endCol: 9,
     });
-    expect(queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1812, 9);
+
+    expect(getCurrentRegionBridge).toHaveBeenCalledWith(SHEET_ID, 1, 1);
+  });
+});
+
+describe('getDataBoundsForRange', () => {
+  it('returns exact ranges without compute expansion', async () => {
+    const { ctx, getDataBoundsForRangeBridge } = makeContext();
+    const range: CellRange = {
+      sheetId: SHEET_ID,
+      startRow: 2,
+      startCol: 3,
+      endRow: 4,
+      endCol: 5,
+    };
+
+    await expect(getDataBoundsForRange(ctx, SHEET_ID, range)).resolves.toBe(range);
+    expect(getDataBoundsForRangeBridge).not.toHaveBeenCalled();
   });
 
-  it('stops at blank boundary rows inside larger sheet data bounds', async () => {
-    const cells = [
-      { row: 1, col: 1, value: 'a' },
-      { row: 1, col: 2, value: 'b' },
-      { row: 2, col: 1, value: 'c' },
-      { row: 2, col: 2, value: 'd' },
-      { row: 5, col: 1, value: 'e' },
-      { row: 5, col: 2, value: 'f' },
-    ];
-    const { ctx } = makeContext(cells);
-
-    await expect(getCurrentRegion(ctx, SHEET_ID, 1, 1)).resolves.toEqual({
+  it('delegates full-column range bounds to compute', async () => {
+    const { ctx, getDataBoundsForRangeBridge } = makeContext();
+    const range: CellRange = {
       sheetId: SHEET_ID,
-      startRow: 1,
-      startCol: 1,
-      endRow: 2,
-      endCol: 2,
+      startRow: 0,
+      startCol: 0,
+      endRow: 1_048_575,
+      endCol: 1,
+      isFullColumn: true,
+    };
+
+    await expect(getDataBoundsForRange(ctx, SHEET_ID, range)).resolves.toEqual({
+      sheetId: SHEET_ID,
+      startRow: 0,
+      startCol: 0,
+      endRow: 1812,
+      endCol: 9,
     });
+
+    expect(getDataBoundsForRangeBridge).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      1_048_575,
+      1,
+      true,
+      false,
+    );
   });
 });

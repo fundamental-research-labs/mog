@@ -194,6 +194,7 @@ pub(in crate::storage::engine) fn get_data_bounds_for_range(
 ) -> Option<RectBounds> {
     services::queries::get_data_bounds_for_range(
         &engine.stores,
+        &engine.mirror,
         sheet_id,
         start_row,
         start_col,

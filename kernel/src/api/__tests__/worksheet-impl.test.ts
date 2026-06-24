@@ -343,6 +343,12 @@ function createMockCtx(): any {
       getProjectionSource: jest.fn().mockResolvedValue(null),
       isProjectedPosition: jest.fn().mockResolvedValue(false),
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
+      getCurrentRegion: jest.fn().mockResolvedValue({
+        startRow: 0,
+        startCol: 0,
+        endRow: 0,
+        endCol: 0,
+      }),
       getResolvedFormat: jest.fn().mockResolvedValue({}),
       addComment: jest.fn().mockResolvedValue(undefined),
       addCommentByPosition: jest.fn().mockResolvedValue(undefined),
@@ -2270,8 +2276,7 @@ describe('WorksheetImpl', () => {
     });
 
     it('getCurrentRegion returns a public worksheet range', async () => {
-      (CellIteration.getCurrentRegion as jest.Mock).mockResolvedValue({
-        sheetId: SHEET_ID,
+      ctx.computeBridge.getCurrentRegion.mockResolvedValue({
         startRow: 1,
         startCol: 2,
         endRow: 4,
@@ -2280,7 +2285,7 @@ describe('WorksheetImpl', () => {
 
       const result = await ws.getCurrentRegion(2, 3);
 
-      expect(CellIteration.getCurrentRegion).toHaveBeenCalledWith(ctx, SHEET_ID, 2, 3);
+      expect(ctx.computeBridge.getCurrentRegion).toHaveBeenCalledWith(SHEET_ID, 2, 3);
       expect(result).toEqual({
         startRow: 1,
         startCol: 2,

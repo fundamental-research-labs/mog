@@ -246,7 +246,13 @@ pub(in crate::storage::engine) fn get_current_region(
     start_row: u32,
     start_col: u32,
 ) -> RectBounds {
-    services::queries::get_current_region(&engine.stores, sheet_id, start_row, start_col)
+    services::queries::get_current_region(
+        &engine.stores,
+        &engine.mirror,
+        sheet_id,
+        start_row,
+        start_col,
+    )
 }
 
 pub(in crate::storage::engine) fn find_data_edge(

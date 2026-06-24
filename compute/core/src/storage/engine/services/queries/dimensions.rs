@@ -335,6 +335,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
 
 pub(in crate::storage::engine) fn get_current_region(
     stores: &EngineStores,
+    mirror: &CellMirror,
     sheet_id: &SheetId,
     start_row: u32,
     start_col: u32,
@@ -347,13 +348,14 @@ pub(in crate::storage::engine) fn get_current_region(
             end_col: start_col,
         };
     };
-    let region = cell_iter::get_current_region(
+    let region = cell_iter::get_current_region_with_extra_data(
         stores.storage.doc(),
         stores.storage.sheets(),
         *sheet_id,
         grid,
         start_row,
         start_col,
+        |r, c| mirror_render_has_data(stores, mirror, sheet_id, r, c),
     );
     RectBounds {
         start_row: region.start_row(),
@@ -386,7 +388,7 @@ pub(in crate::storage::engine) fn find_data_edge(
     )
 }
 
-fn mirror_render_has_data(
+pub(super) fn mirror_render_has_data(
     stores: &EngineStores,
     mirror: &CellMirror,
     sheet_id: &SheetId,

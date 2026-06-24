@@ -40,6 +40,9 @@ pub(crate) use clear::{clear_cells_by_hex, clear_range_and_return_ids};
 pub(crate) use identity::{get_or_create_cell_id, update_cell_position};
 pub(crate) use iteration::{for_each_cell, for_each_cell_in_range};
 pub(crate) use navigation::{find_data_edge, find_data_edge_with_extra_data};
-pub(crate) use region::{get_current_region, get_data_bounds_for_range};
+pub(crate) use region::{
+    get_current_region, get_current_region_with_extra_data, get_data_bounds_for_range,
+    get_data_bounds_for_range_with_extra_data,
+};
 pub(crate) use relocation::relocate_cells;
 pub(crate) use types::{IterCellData, RangeSpan, RelocationResult};

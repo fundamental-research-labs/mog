@@ -353,7 +353,8 @@ export async function forEachInRange(
  *
  * This is what Excel selects with Ctrl+Shift+* (Select Current Region).
  *
- * Queries ComputeBridge to read cell values for expansion.
+ * Delegates to ComputeBridge so current-region detection uses the same
+ * mirror-backed production read authority as viewport and range queries.
  *
  * @param ctx - Store context
  * @param sheetId - Sheet ID
@@ -368,137 +369,16 @@ export async function getCurrentRegion(
   sheetId: SheetId,
   startRow: number,
   startCol: number,
-  maxRow: number = 10000,
-  maxCol: number = 500,
+  _maxRow: number = 10000,
+  _maxCol: number = 500,
 ): Promise<CellRange> {
-  // First, get the data bounds to limit our search
-  const bounds = await ctx.computeBridge.getDataBounds(sheetId);
-  if (!bounds) {
-    return { sheetId, startRow, startCol, endRow: startRow, endCol: startCol };
-  }
-
-  // Constrain search to the provider-reported data bounds. Current-region
-  // detection must see deferred/imported data beyond the viewport and beyond
-  // the old 1000-row sampling window.
-  const searchMinRow = Math.max(0, Math.min(startRow, bounds.minRow));
-  const searchMinCol = Math.max(0, Math.min(startCol, bounds.minCol));
-  const searchMaxRow = Math.min(maxRow, Math.max(startRow, bounds.maxRow));
-  const searchMaxCol = Math.min(maxCol, Math.max(startCol, bounds.maxCol));
-
-  const rangeData = await ctx.computeBridge.queryRange(
-    sheetId,
-    searchMinRow,
-    searchMinCol,
-    searchMaxRow,
-    searchMaxCol,
-  );
-
-  // Build set of non-empty positions
-  const nonEmpty = new Set<string>();
-  if (rangeData?.cells) {
-    for (const cell of rangeData.cells) {
-      const value = cell.value;
-      if ((value !== null && value !== undefined) || cell.formula) {
-        nonEmpty.add(`${cell.row},${cell.col}`);
-      }
-    }
-  }
-
-  const hasData = (row: number, col: number): boolean => nonEmpty.has(`${row},${col}`);
-
-  // Check if start cell has data
-  const startHasData = hasData(startRow, startCol);
-
-  // Initialize bounds
-  let top = startRow;
-  let bottom = startRow;
-  let left = startCol;
-  let right = startCol;
-
-  // If start cell is empty, check adjacent cells
-  if (!startHasData) {
-    const hasDataAbove = startRow > 0 && hasData(startRow - 1, startCol);
-    const hasDataBelow = startRow < searchMaxRow && hasData(startRow + 1, startCol);
-    const hasDataLeft = startCol > 0 && hasData(startRow, startCol - 1);
-    const hasDataRight = startCol < searchMaxCol && hasData(startRow, startCol + 1);
-
-    if (!hasDataAbove && !hasDataBelow && !hasDataLeft && !hasDataRight) {
-      return { sheetId, startRow, startCol, endRow: startRow, endCol: startCol };
-    }
-  }
-
-  // Keep expanding until no more non-empty cells found
-  let expanded = true;
-  while (expanded) {
-    expanded = false;
-
-    // Try expanding up
-    if (top > 0) {
-      let rowHasData = false;
-      for (let col = left; col <= right; col++) {
-        if (hasData(top - 1, col)) {
-          rowHasData = true;
-          break;
-        }
-      }
-      if (rowHasData) {
-        top--;
-        expanded = true;
-      }
-    }
-
-    // Try expanding down
-    if (bottom < searchMaxRow) {
-      let rowHasData = false;
-      for (let col = left; col <= right; col++) {
-        if (hasData(bottom + 1, col)) {
-          rowHasData = true;
-          break;
-        }
-      }
-      if (rowHasData) {
-        bottom++;
-        expanded = true;
-      }
-    }
-
-    // Try expanding left
-    if (left > 0) {
-      let colHasData = false;
-      for (let row = top; row <= bottom; row++) {
-        if (hasData(row, left - 1)) {
-          colHasData = true;
-          break;
-        }
-      }
-      if (colHasData) {
-        left--;
-        expanded = true;
-      }
-    }
-
-    // Try expanding right
-    if (right < searchMaxCol) {
-      let colHasData = false;
-      for (let row = top; row <= bottom; row++) {
-        if (hasData(row, right + 1)) {
-          colHasData = true;
-          break;
-        }
-      }
-      if (colHasData) {
-        right++;
-        expanded = true;
-      }
-    }
-  }
-
+  const region = await ctx.computeBridge.getCurrentRegion(sheetId, startRow, startCol);
   return {
     sheetId,
-    startRow: top,
-    startCol: left,
-    endRow: bottom,
-    endCol: right,
+    startRow: region.startRow,
+    startCol: region.startCol,
+    endRow: region.endRow,
+    endCol: region.endCol,
   };
 }
 
@@ -526,31 +406,42 @@ export async function getDataBoundsForRange(
     return range;
   }
 
-  const bounds = await ctx.computeBridge.getDataBounds(sheetId);
-  if (!bounds) return null;
-
   if (range.isFullColumn) {
-    // Constrain to actual data rows
-    const dataRegion = await getCurrentRegion(ctx, sheetId, bounds.minRow, range.startCol);
-
+    const dataRegion = await ctx.computeBridge.getDataBoundsForRange(
+      sheetId,
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+      true,
+      false,
+    );
+    if (!dataRegion) return null;
     return {
       sheetId,
       startRow: dataRegion.startRow,
-      startCol: range.startCol,
+      startCol: dataRegion.startCol,
       endRow: dataRegion.endRow,
-      endCol: range.endCol,
+      endCol: dataRegion.endCol,
     };
   }
 
   if (range.isFullRow) {
-    // Constrain to actual data columns
-    const dataRegion = await getCurrentRegion(ctx, sheetId, range.startRow, bounds.minCol);
-
+    const dataRegion = await ctx.computeBridge.getDataBoundsForRange(
+      sheetId,
+      range.startRow,
+      range.startCol,
+      range.endRow,
+      range.endCol,
+      false,
+      true,
+    );
+    if (!dataRegion) return null;
     return {
       sheetId,
-      startRow: range.startRow,
+      startRow: dataRegion.startRow,
       startCol: dataRegion.startCol,
-      endRow: range.endRow,
+      endRow: dataRegion.endRow,
       endCol: dataRegion.endCol,
     };
   }

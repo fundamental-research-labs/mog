@@ -60,4 +60,92 @@ export function registerWriteCasPublicDeleteScenarios(): void {
       },
     });
   });
+
+  it('deletes non-current refs without rebinding HEAD or changing the current branch', async () => {
+    const { branchService, version } =
+      createWorkbookVersionWithBranchService('scenario/current-delete');
+    await version.createBranch({
+      name: 'scenario/current-delete' as any,
+      targetCommitId: COMMIT_A,
+    });
+    await version.createBranch({
+      name: 'scenario/delete-non-current' as any,
+      targetCommitId: COMMIT_A,
+    });
+
+    await expect(version.getRef('HEAD')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/scenario/current-delete',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
+      },
+    });
+
+    await expect(
+      version.deleteRef({
+        name: 'refs/heads/scenario/delete-non-current' as any,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/delete-non-current',
+        commitId: COMMIT_A,
+        revision: refVersion('1'),
+      },
+    });
+
+    await expect(version.getRef('HEAD')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/scenario/current-delete',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
+      },
+    });
+    await expect(version.getRef('scenario/current-delete' as any)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/current-delete',
+          commitId: COMMIT_A,
+          revision: refVersion('0'),
+        },
+      },
+    });
+
+    const scenarioRefs = await version.listRefs({ prefix: 'refs/heads/scenario' as any });
+    expect(scenarioRefs).toMatchObject({
+      ok: true,
+      value: {
+        items: [expect.objectContaining({ name: 'refs/heads/scenario/current-delete' })],
+      },
+    });
+    expect(scenarioRefs.ok).toBe(true);
+    if (!scenarioRefs.ok) throw new Error('expected listRefs success');
+    expect(scenarioRefs.value.items.map((ref) => ref.name)).not.toContain(
+      'refs/heads/scenario/delete-non-current',
+    );
+    expect(branchService.readBranch('scenario/current-delete')).toMatchObject({
+      ok: true,
+      branch: {
+        ref: {
+          state: 'live',
+          targetCommitId: COMMIT_A,
+          refVersion: refVersion('0'),
+        },
+      },
+    });
+  });
 }

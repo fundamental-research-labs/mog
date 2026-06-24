@@ -1,5 +1,6 @@
 import {
   createPublicVersionDomainSupportManifest,
+  DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND,
   PUBLIC_VERSION_DOMAIN_DEFAULT_MANIFEST_MATRIX_ROW_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_IDS,
   PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY,
@@ -8,6 +9,12 @@ import {
   VERSION_DOMAIN_POLICY_ID_PATTERN,
   VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION,
   VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY,
+  VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS,
+  VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS,
+  VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID,
+  VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST,
+  VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST_SCHEMA_VERSION,
+  VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS,
 } from '../index';
 import {
   PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS,
@@ -16,6 +23,7 @@ import {
   VERSION_DOMAIN_POLICY_CONTRACT_VERSION,
   VERSION_DOMAIN_PUBLIC_DIAGNOSTIC_CODE_PATTERN,
 } from '../domain-policy-registry';
+import semanticMergePolicyManifest from '../semantic-merge-policy-manifest.fixture.json';
 
 const INTERNAL_ONLY_FIELDS = Object.freeze([
   'ownerWorkstream',
@@ -36,6 +44,10 @@ const DEPRECATED_SCALAR_SUPPORT_FIELDS = Object.freeze([
 const PUBLIC_SAFE_SINK_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const UNSAFE_PUBLIC_DIAGNOSTIC_PAYLOAD =
   /ownerWorkstream|requiredOracles|requiredOracleByCapability|supportEvidenceByCapability|scenarioIds|reportPath|acceptedRisk|evidenceDigest|mog-internal|dev\/version-control-eval|plans\/|\/Users\/|xl\/|\.xml\b|https?:\/\/|password\s*=|token\s*=/i;
+
+function sortedUnique(values: readonly string[]): readonly string[] {
+  return [...new Set(values)].sort();
+}
 
 describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
   it('exports a closed public-safe policy id set for the current matrix projection', () => {
@@ -164,6 +176,9 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
       merge: 'supported',
       export: 'supported',
     });
+    expect(rows.get('cells.formats.direct')?.capabilityStates).toMatchObject({
+      merge: 'supported',
+    });
     expect(rows.get('rows-columns')?.capabilityStates).toMatchObject({
       capture: 'supported',
       replay: 'supported',
@@ -195,6 +210,69 @@ describe('PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY', () => {
     for (const matrixRowId of PUBLIC_VERSION_DOMAIN_EXPORT_REQUIRED_MATRIX_ROW_IDS) {
       const exportState = rows.get(matrixRowId)?.capabilityStates.export;
       expect(exportState === 'supported' || exportState === 'derived').toBe(true);
+    }
+  });
+
+  it('publishes semantic merge and diff support metadata from contracts', () => {
+    expect(VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST).toMatchObject({
+      schemaVersion: VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST_SCHEMA_VERSION,
+      defaultMaterializerKind: DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND,
+      rawPublicDiffDomainIds: VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS,
+      materializableDomainIds: VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS,
+      materializableDomainIdsByMatrixRowId:
+        VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID,
+      unsupportedStructuralMatrixRowIds:
+        VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS,
+    });
+    expect(new Set(VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS).size).toBe(
+      VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS.length,
+    );
+    expect(new Set(VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS).size).toBe(
+      VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS.length,
+    );
+    expect(semanticMergePolicyManifest).toMatchObject({
+      schemaVersion: 'semantic-merge-policy-manifest.v1',
+      policyId: 'semantic-merge-first-slice.v1',
+      materializer: DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND,
+      failClosed: true,
+    });
+
+    const policyRows = new Map(
+      PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY.domains.map((row) => [row.matrixRowId, row]),
+    );
+    const supportByMatrixRowId: Readonly<Record<string, readonly string[]>> =
+      VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID;
+    const policyIds = new Set<string>(PUBLIC_VERSION_DOMAIN_POLICY_IDS);
+    for (const matrixRowId of Object.keys(supportByMatrixRowId)) {
+      if (matrixRowId === 'cell') continue;
+      expect(policyIds.has(matrixRowId)).toBe(true);
+    }
+    for (const matrixRowId of VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS) {
+      expect(policyIds.has(matrixRowId)).toBe(true);
+    }
+
+    expect(
+      sortedUnique(
+        Object.keys(supportByMatrixRowId).filter((matrixRowId) => policyRows.has(matrixRowId)),
+      ),
+    ).toEqual(
+      sortedUnique(semanticMergePolicyManifest.supportedDomains.map((row) => row.matrixRowId)),
+    );
+    expect(sortedUnique(VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS)).toEqual(
+      sortedUnique(
+        semanticMergePolicyManifest.supportedDomains.flatMap((row) => row.acceptedDomainIds),
+      ),
+    );
+
+    for (const semanticMergeDomain of semanticMergePolicyManifest.supportedDomains) {
+      const policyRow = policyRows.get(semanticMergeDomain.matrixRowId);
+      expect(policyRow).toBeDefined();
+      expect(supportByMatrixRowId[semanticMergeDomain.matrixRowId]).toEqual(
+        semanticMergeDomain.acceptedDomainIds,
+      );
+      expect(semanticMergeDomain.acceptedDomainIds).toContain(policyRow?.domainId);
+      expect(policyRow?.domainClass).toBe(semanticMergeDomain.domainClass);
+      expect(policyRow?.capabilityStates.merge).toBe(semanticMergeDomain.mergeCapabilityState);
     }
   });
 

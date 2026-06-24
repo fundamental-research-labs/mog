@@ -1,6 +1,6 @@
 import type { VersionCapability, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { validateVersionBranchCreationName } from './version-branch-name';
+import { validateVersionBranchCreationName } from '../version-branch-name';
 import {
   actionSurfaceDisabledReason,
   checkoutUnsafeDisabledReason,

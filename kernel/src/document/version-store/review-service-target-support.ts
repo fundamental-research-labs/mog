@@ -14,6 +14,8 @@ type ReviewTargetSupportResult =
 
 const REVIEW_TARGET_PROPERTY_PATHS = new Map<string, readonly (readonly string[])[]>([
   ['cell', [['value']]],
+  ['cells.values', [[], ['value']]],
+  ['cells.formulas', [['formula'], ['value']]],
   ['sheet', [['name'], ['tabColor'], ['sheet'], ['order']]],
   ['rows-columns', [['order']]],
   ['cells.formats.direct', [['format']]],

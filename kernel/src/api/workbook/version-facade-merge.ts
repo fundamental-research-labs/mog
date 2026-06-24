@@ -19,23 +19,23 @@ import type {
   VersionSaveMergeResolutionsResult,
   VersionStoreDiagnostic,
   WorkbookCommitRef,
+  WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { applyMergeWorkbookVersion } from './version-apply-merge';
 import { mergeWorkbookVersion } from './version-merge';
 import {
-  type ActiveCheckoutWriteContext,
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
   expectedHeadFromActiveCheckout,
   readActiveCheckoutWriteContext,
   recordActiveCheckoutBranchCommit,
+  recordActiveCheckoutBranchRefMove,
 } from './version/active-checkout-write-context';
 import {
   invalidApplyMergeOptionDiagnostic,
 } from './version/apply-merge/version-apply-merge-results';
-import { mapPublicApplyTargetRef } from './version/apply-merge/target-ref/version-apply-merge-target-ref';
 import {
   getMergeConflictDetailWorkbookVersion,
   putMergeResolutionPayloadWorkbookVersion,
@@ -75,12 +75,13 @@ export async function applyMergeWorkbookVersionFacade(
   const commitRef = applyMergeResultCommitRef(result);
   if (
     publicResult.ok &&
-    applyMergeInput.activeCheckoutRefName &&
-    commitRef?.refName === applyMergeInput.activeCheckoutRefName
+    commitRef?.refName &&
+    isMergeCommitApplyInput(applyMergeInput.input)
   ) {
-    recordActiveCheckoutBranchCommit(
+    recordActiveCheckoutBranchRefMove(
       ctx,
-      applyMergeInput.activeCheckoutRefName,
+      commitRef.refName,
+      applyMergeInput.input.ours,
       commitRef.id,
     );
   }
@@ -155,21 +156,13 @@ async function applyMergeInputForActiveCheckout(
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
   if (options.mode === 'preview') return { ok: true, input, options };
+  if (hasExplicitTargetRef(options)) {
+    return { ok: true, input, options };
+  }
 
   const activeCheckout = await readActiveCheckoutWriteContext(ctx, 'applyMergeGraphWrite');
   if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {
     return { ok: false, diagnostics: activeCheckout.diagnostics };
-  }
-  if (hasExplicitTargetRef(options)) {
-    return {
-      ok: true,
-      input,
-      options,
-      activeCheckoutRefName: activeCheckoutRefNameForExplicitApplyMergeTarget(
-        activeCheckout,
-        options,
-      ),
-    };
   }
   if (activeCheckout.status === 'detached') {
     return {
@@ -216,11 +209,12 @@ async function revertInputForActiveCheckout(
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
+  if (hasExplicitTargetRef(input)) return { ok: true, input };
+
   const activeCheckout = await readActiveCheckoutWriteContext(ctx, 'revertGraphWrite');
   if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
-  if (hasExplicitTargetRef(input)) return { ok: true, input };
   if (activeCheckout.status === 'detached') {
     return {
       ok: false,
@@ -246,20 +240,20 @@ function hasExplicitTargetRef(input: VersionRevertInput | VersionApplyMergeOptio
   return Object.prototype.hasOwnProperty.call(input, 'targetRef');
 }
 
-function activeCheckoutRefNameForExplicitApplyMergeTarget(
-  activeCheckout: ActiveCheckoutWriteContext,
-  options: VersionApplyMergeOptions,
-): ActiveCheckoutWriteRefName | undefined {
-  if (activeCheckout.status !== 'attached') return undefined;
-  return mapPublicApplyTargetRef(options.targetRef) === activeCheckout.refName
-    ? activeCheckout.refName
-    : undefined;
-}
-
 function isMergeCommitApplyInput(
   input: VersionApplyMergeInput,
-): input is Extract<VersionApplyMergeInput, { readonly base: unknown; readonly ours: unknown }> {
-  return isRecord(input) && 'base' in input && 'ours' in input && 'theirs' in input;
+): input is VersionApplyMergeInput & {
+  readonly base: WorkbookCommitId;
+  readonly ours: WorkbookCommitId;
+  readonly theirs: WorkbookCommitId;
+} {
+  if (!isRecord(input)) return false;
+  const record = input as Readonly<Record<string, unknown>>;
+  return (
+    typeof record.base === 'string' &&
+    typeof record.ours === 'string' &&
+    typeof record.theirs === 'string'
+  );
 }
 
 function applyMergeResultCommitRef(result: VersionApplyMergeResult): WorkbookCommitRef | null {

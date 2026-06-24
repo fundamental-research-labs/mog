@@ -200,6 +200,39 @@ describe('VersionHistoryPanelContent action flows', () => {
     await expectActionResult('Committed changes', 'success');
   });
 
+  it('does not announce checkout success until the post-checkout history refresh resolves', async () => {
+    const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(createSurfaceStatus())
+      .mockImplementationOnce(async () => refreshedSurface.promise);
+    const workbook = createWorkbook({ getSurfaceStatus });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+
+    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+        'Refreshing version history',
+      ),
+    );
+    expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
+      'Checked out scenario/budget',
+    );
+
+    refreshedSurface.resolve(
+      createSurfaceStatus({
+        current: {
+          headCommitId: PARENT_COMMIT_ID,
+          branchName: 'refs/heads/scenario/budget',
+        },
+      }),
+    );
+    await expectActionResult('Checked out scenario/budget', 'success');
+  });
+
   it('does not announce branch creation until refreshed refs include the new checkout action', async () => {
     const branchName = 'refs/heads/review/version-panel';
     const branchResult =
@@ -260,19 +293,25 @@ describe('VersionHistoryPanelContent action flows', () => {
 
   it('refreshes commit availability when workbook edits dirty an open panel', async () => {
     let hasUncommittedLocalChanges = false;
-    const refreshHandlers = new Map<string, (event: unknown) => void>();
-    const getSurfaceStatus = jest.fn(async () =>
-      createSurfaceStatus({
+    let surfaceReadCount = 0;
+    const refreshHandlers = new Map<string, Array<(event: unknown) => void>>();
+    const getSurfaceStatus = jest.fn(async () => {
+      surfaceReadCount += 1;
+      return createSurfaceStatus({
         dirty: {
+          statusRevision: `dirty:${surfaceReadCount}`,
+          checkoutPreflightToken: `token:${surfaceReadCount}`,
           hasUncommittedLocalChanges,
           commitEligibleChanges: hasUncommittedLocalChanges,
         },
-      }),
-    );
+      });
+    });
     const workbook: VersionHistoryWorkbook = {
       ...createWorkbook({ getSurfaceStatus }),
       on: jest.fn((event: string, handler: (event: unknown) => void) => {
-        refreshHandlers.set(event, handler);
+        const handlers = refreshHandlers.get(event) ?? [];
+        handlers.push(handler);
+        refreshHandlers.set(event, handlers);
         return jest.fn();
       }) as VersionHistoryWorkbook['on'],
     };
@@ -285,16 +324,81 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     hasUncommittedLocalChanges = true;
     act(() => {
-      refreshHandlers.get('workbook:version-dirty-status-changed')?.({
-        type: 'workbook:version-dirty-status-changed',
-        hasUncommittedLocalChanges: true,
-        previousHasUncommittedLocalChanges: false,
-        statusRevision: 2,
-      });
+      for (const handler of refreshHandlers.get('workbook:version-dirty-status-changed') ?? []) {
+        handler({
+          type: 'workbook:version-dirty-status-changed',
+          hasUncommittedLocalChanges: true,
+          previousHasUncommittedLocalChanges: false,
+          statusRevision: 2,
+        });
+      }
     });
 
     await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(commitButton).toBeEnabled());
+  });
+
+  it('keeps commit disabled when a post-commit refresh returns the same dirty snapshot', async () => {
+    const staleDirtySurface = createSurfaceStatus({
+      dirty: {
+        statusRevision: 'dirty:1',
+        checkoutPreflightToken: 'token:1',
+        hasUncommittedLocalChanges: true,
+        commitEligibleChanges: true,
+      },
+    });
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(staleDirtySurface)
+      .mockResolvedValueOnce(staleDirtySurface);
+    const workbook = createWorkbook({ getSurfaceStatus });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    const commitInput = screen.getByTestId('version-history-commit-message-input');
+    const commitButton = screen.getByTestId('version-history-commit-button');
+
+    await user.type(commitInput, 'Checkpoint');
+    await user.click(commitButton);
+
+    await waitFor(() => expect(workbook.version.commit).toHaveBeenCalledTimes(1));
+    await expectActionResult('Committed changes', 'success');
+
+    await user.type(commitInput, 'Second checkpoint');
+    expectDisabledButtonReason(commitButton, 'Version status is refreshing.');
+    await user.click(commitButton);
+    expect(workbook.version.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps commit disabled when a post-checkout refresh returns the same dirty snapshot', async () => {
+    const staleDirtySurface = createSurfaceStatus({
+      dirty: {
+        statusRevision: 'dirty:checkout-1',
+        checkoutPreflightToken: 'token:checkout-1',
+        hasUncommittedLocalChanges: true,
+        commitEligibleChanges: true,
+        checkoutSafe: true,
+      },
+    });
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(staleDirtySurface)
+      .mockResolvedValueOnce(staleDirtySurface);
+    const workbook = createWorkbook({ getSurfaceStatus });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    const commitButton = screen.getByTestId('version-history-commit-button');
+
+    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
+    expect(commitButton).toBeEnabled();
+
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+
+    await expectActionResult('Checked out scenario/budget', 'success');
+    expectDisabledButtonReason(commitButton, 'Version status is refreshing.');
+    await user.click(commitButton);
+    expect(workbook.version.commit).not.toHaveBeenCalled();
   });
 
   it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {

@@ -32,6 +32,47 @@ export function registerSelectorPageScenarios(): void {
     ).toEqual(['first', 'second', 'third']);
   });
 
+  it('assigns strict order ids to duplicate merge no-op semantic entries', async () => {
+    const changes = Array.from({ length: 12 }, () => duplicateMergeNoopChange());
+    const diff = jest.fn(async () => ({
+      status: 'success',
+      items: [
+        changes[11]!,
+        changes[1]!,
+        changes[10]!,
+        changes[0]!,
+        changes[9]!,
+        changes[2]!,
+        changes[8]!,
+        changes[3]!,
+        changes[7]!,
+        changes[4]!,
+        changes[6]!,
+        changes[5]!,
+      ],
+      readRevision: READ_REVISION,
+      order: 'semantic-change-order',
+      diagnostics: [],
+    }));
+    const version = createVersion(diff);
+
+    const result = await version.diff(ROOT_COMMIT_ID, ROOT_COMMIT_ID);
+
+    if (!result.ok) throw new Error(`expected diff success: ${result.error.code}`);
+    const ids = result.value.items.map((item) =>
+      item.structural.kind === 'metadata' ? item.structural.changeId : item.structural.kind,
+    );
+    expect(ids).toHaveLength(12);
+    expect(new Set(ids).size).toBe(12);
+    expect(ids).toEqual([...ids].sort());
+    expect(ids.every((id) => id.startsWith('merge-noop-cell~'))).toBe(true);
+    expect(
+      result.value.items.every(
+        (item) => JSON.stringify(item.before) === JSON.stringify(item.after),
+      ),
+    ).toBe(true);
+  });
+
   it.each([
     [
       'missing object',
@@ -144,4 +185,29 @@ export function registerSelectorPageScenarios(): void {
     });
     expect(result).not.toHaveProperty('value');
   });
+}
+
+function duplicateMergeNoopChange() {
+  return {
+    pageCursorOrderKey: {
+      domainOrder: 20,
+      hashPropertyPath: '/sheets/sheet-1/cells/A1/value',
+      canonicalEventKey: 'merge-result:no-op',
+      hashIdentity: 'sheet-1!A1',
+      valueClass: 'noop',
+    },
+    structural: {
+      kind: 'metadata',
+      changeId: 'merge-noop-cell',
+      domain: 'cell',
+      entityId: 'sheet-1!A1',
+      propertyPath: ['value'],
+    },
+    before: { kind: 'value', value: 'unchanged' },
+    after: { kind: 'value', value: 'unchanged' },
+    display: {
+      sheetName: { kind: 'value', value: 'Sheet1' },
+      address: { kind: 'value', value: 'A1' },
+    },
+  };
 }

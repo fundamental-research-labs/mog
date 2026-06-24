@@ -926,6 +926,7 @@ export interface VersionReviewRecord {
 
 export * from './emergency-disable-policy';
 export * from './release-artifact-manifest';
+export * from './semantic-merge-support';
 export type {
   VersionSyncAuthorState,
   VersionSyncBatchStatusState,

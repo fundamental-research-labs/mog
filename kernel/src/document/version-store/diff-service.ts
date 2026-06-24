@@ -45,6 +45,8 @@ type DiffServiceSuccessResult = Extract<WorkbookDiffPage, { readonly status: 'su
 
 type DiffServiceResult = DiffServiceSuccessResult | DiffServiceDegradedResult;
 
+type MaterializedMergeDiffRole = 'base' | 'ours' | 'theirs';
+
 export type WorkbookVersionDiffMetadataPage =
   | (DiffServiceSuccessResult & {
       readonly baseCommitId: WorkbookCommitId;
@@ -135,13 +137,13 @@ export class WorkbookVersionDiffService {
       );
       if (!candidate.ok) return degradedDiffPage(candidate.diagnostics);
       if (
-        isProvenMaterializedMergeDiff(
+        (semanticPayload = materializedMergeDiffPayload(
           candidate.payload,
           resolvedBase.commitId,
           targetCommit.payload.parentCommitIds,
-        )
+        ))
       ) {
-        semanticPayload = candidate.payload;
+        // The semantic payload was already projected for the requested merge diff slice.
       }
     }
 
@@ -215,16 +217,90 @@ export class WorkbookVersionDiffService {
   }
 }
 
-function isProvenMaterializedMergeDiff(
+function materializedMergeDiffPayload(
   payload: unknown,
   baseCommitId: WorkbookCommitId,
   parentCommitIds: readonly WorkbookCommitId[],
-): boolean {
-  if (!isRecord(payload) || !isRecord(payload.merge)) return false;
-  return (
-    payload.merge.baseCommitId === baseCommitId &&
-    payload.merge.oursCommitId === parentCommitIds[0] &&
-    payload.merge.theirsCommitId === parentCommitIds[1]
+): unknown | undefined {
+  const role = materializedMergeDiffRole(payload, baseCommitId, parentCommitIds);
+  if (!role) return undefined;
+  if (role === 'base' && (!isRecord(payload) || !Array.isArray(payload.mergeChanges))) {
+    return payload;
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.mergeChanges)) return undefined;
+
+  const changes: unknown[] = [];
+  for (const change of payload.mergeChanges) {
+    const projected = projectMaterializedMergeChange(change, role);
+    if (projected === null) return undefined;
+    if (projected !== undefined) changes.push(projected);
+  }
+
+  return {
+    schemaVersion: payload.schemaVersion,
+    merge: payload.merge,
+    changes,
+  };
+}
+
+function materializedMergeDiffRole(
+  payload: unknown,
+  baseCommitId: WorkbookCommitId,
+  parentCommitIds: readonly WorkbookCommitId[],
+): MaterializedMergeDiffRole | null {
+  if (!isRecord(payload) || !isRecord(payload.merge)) return null;
+  if (
+    payload.merge.oursCommitId !== parentCommitIds[0] ||
+    payload.merge.theirsCommitId !== parentCommitIds[1]
+  ) {
+    return null;
+  }
+  if (payload.merge.baseCommitId === baseCommitId) return 'base';
+  if (payload.merge.oursCommitId === baseCommitId) return 'ours';
+  if (payload.merge.theirsCommitId === baseCommitId) return 'theirs';
+  return null;
+}
+
+function projectMaterializedMergeChange(
+  change: unknown,
+  role: MaterializedMergeDiffRole,
+): unknown | undefined | null {
+  if (!isRecord(change)) return null;
+  const before = mergeDiffBeforeValue(change, role);
+  const after = change.merged;
+  if (before === undefined || after === undefined) return null;
+  if (jsonValuesEqual(before, after)) return undefined;
+  return {
+    structural: change.structural,
+    before,
+    after,
+    ...(change.display ? { display: change.display } : {}),
+  };
+}
+
+function mergeDiffBeforeValue(
+  change: Readonly<Record<string, unknown>>,
+  role: MaterializedMergeDiffRole,
+): unknown {
+  if (role === 'base') return change.base;
+  if (role === 'ours') return change.ours ?? change.base;
+  return change.theirs ?? change.base;
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+    return left.every((entry, index) => jsonValuesEqual(entry, right[index]));
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every(
+    (key, index) => key === rightKeys[index] && jsonValuesEqual(left[key], right[key]),
   );
 }
 

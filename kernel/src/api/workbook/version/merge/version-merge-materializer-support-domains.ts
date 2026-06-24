@@ -1,47 +1,32 @@
+import {
+  DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND,
+  VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS,
+  VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID,
+  VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_DOMAIN_IDS,
+  VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS,
+} from '@mog-sdk/contracts/versioning';
+
 import type { MergeDomainReference } from './version-merge-materializer-support-types';
 
-const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
-  'cell',
-  'cells.values',
-  'cells.formulas',
-  'cells.formats',
-  'cells.formats.direct',
-  'rows-columns',
-  'sheet',
-  'sheets',
-]);
-export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND = 'semantic-cell-merge-commit-materializer.v1';
-const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
-  ['cell', new Set(['cell', 'cells.values', 'cells.formulas'])],
-  ['cells.values', new Set(['cell', 'cells.values'])],
-  ['cells.formulas', new Set(['cell', 'cells.values', 'cells.formulas'])],
-  ['cells.formats.direct', new Set(['cells.formats', 'cells.formats.direct'])],
-  ['rows-columns', new Set(['rows-columns'])],
-  ['sheets', new Set(['sheet', 'sheets'])],
-]);
-const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set([
-  'tables',
-  'filters.auto-filter',
-  'charts.source-range',
-  'floating-objects.anchors',
-]);
-const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS = new Set([
-  'chart',
-  'charts',
-  'charts.source-range',
-  'column',
-  'columns',
-  'filter',
-  'filters',
-  'filters.auto-filter',
-  'floating-object',
-  'floating-objects',
-  'floating-objects.anchors',
-  'row',
-  'rows',
-  'table',
-  'tables',
-]);
+const MATERIALIZABLE_MERGE_DOMAIN_IDS: ReadonlySet<string> = new Set<string>(
+  VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS,
+);
+export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND =
+  DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND;
+const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID: ReadonlyMap<
+  string,
+  ReadonlySet<string>
+> = new Map(
+  Object.entries(VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID).map(
+    ([matrixRowId, domainIds]) => [matrixRowId, new Set<string>(domainIds)] as const,
+  ),
+);
+const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS: ReadonlySet<string> = new Set<string>(
+  VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS,
+);
+const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS: ReadonlySet<string> = new Set<string>(
+  VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_DOMAIN_IDS,
+);
 
 export function isMaterializableMergeDomainReference(reference: MergeDomainReference): boolean {
   if (isUnsupportedStructuralMergeDomainId(reference.domainId)) return false;

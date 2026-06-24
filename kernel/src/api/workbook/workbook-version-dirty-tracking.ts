@@ -132,8 +132,9 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     if (!('commitRef' in result)) return;
 
     const service = readSurfaceStatusService(this.readVersionContext());
-    service?.recordActiveCheckoutBranchCommit?.({
-      commitId: result.commitRef.id,
+    service?.recordActiveCheckoutBranchRefMove?.({
+      checkedOutCommitId: result.ours,
+      refHeadCommitId: result.commitRef.id,
       refName: currentToken.refName,
     });
   }
@@ -225,6 +226,11 @@ function readSurfaceStatusService(ctx: DocumentContext): {
     readonly commitId: string;
     readonly refName: string;
   }) => void;
+  readonly recordActiveCheckoutBranchRefMove?: (input: {
+    readonly checkedOutCommitId: string;
+    readonly refHeadCommitId: string;
+    readonly refName: string;
+  }) => void;
 } | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
@@ -237,12 +243,24 @@ function readSurfaceStatusService(ctx: DocumentContext): {
     services,
   ]) {
     if (!isRecord(candidate)) continue;
-    const method = candidate.recordActiveCheckoutBranchCommit;
-    if (typeof method !== 'function') continue;
+    const recordCommit = candidate.recordActiveCheckoutBranchCommit;
+    const recordRefMove = candidate.recordActiveCheckoutBranchRefMove;
+    if (typeof recordCommit !== 'function' && typeof recordRefMove !== 'function') continue;
     return {
-      recordActiveCheckoutBranchCommit: (input) => {
-        Reflect.apply(method, candidate, [input]);
-      },
+      ...(typeof recordCommit === 'function'
+        ? {
+            recordActiveCheckoutBranchCommit: (input) => {
+              Reflect.apply(recordCommit, candidate, [input]);
+            },
+          }
+        : {}),
+      ...(typeof recordRefMove === 'function'
+        ? {
+            recordActiveCheckoutBranchRefMove: (input) => {
+              Reflect.apply(recordRefMove, candidate, [input]);
+            },
+          }
+        : {}),
     };
   }
   return null;

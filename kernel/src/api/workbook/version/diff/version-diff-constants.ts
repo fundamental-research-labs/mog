@@ -1,4 +1,5 @@
 import type { VersionMainRefName } from '@mog-sdk/contracts/api';
+import { VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS } from '@mog-sdk/contracts/versioning';
 
 export const VERSION_HEAD_REF = 'HEAD';
 export const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -13,12 +14,9 @@ export const VERSION_DIFF_OPTION_KEYS = new Set([
 export const VERSION_COMMIT_SELECTOR_KEYS = new Set(['kind', 'id']);
 export const VERSION_REF_SELECTOR_KEYS = new Set(['kind', 'name']);
 
-export const RAW_PUBLIC_DIFF_DOMAINS = new Set([
-  'cell',
-  'sheet',
-  'cells.formats.direct',
-  'rows-columns',
-]);
+export const RAW_PUBLIC_DIFF_DOMAINS: ReadonlySet<string> = new Set<string>(
+  VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS,
+);
 export const REDACTED_VALUE_REASONS = new Set([
   'permission-denied',
   'redaction-policy',

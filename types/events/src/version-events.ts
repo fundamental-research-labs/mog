@@ -18,6 +18,27 @@ export interface WorkbookVersionDirtyStatusChangedEvent extends BaseEvent {
   readonly statusRevision: number;
 }
 
+export interface WorkbookVersionActiveCheckoutSessionSnapshot {
+  readonly checkedOutCommitId: string;
+  readonly branchName?: string;
+  readonly refHeadAtMaterialization?: string;
+  readonly detached: boolean;
+}
+
+export type WorkbookVersionActiveCheckoutStateChangeReason =
+  | 'checkout-materialized'
+  | 'branch-head-advanced'
+  | 'branch-ref-moved';
+
+export interface WorkbookVersionActiveCheckoutStateChangedEvent extends BaseEvent {
+  readonly type: 'workbook:version-active-checkout-state-changed';
+  readonly activeCheckoutSession: WorkbookVersionActiveCheckoutSessionSnapshot | null;
+  readonly previousActiveCheckoutSession: WorkbookVersionActiveCheckoutSessionSnapshot | null;
+  readonly statusRevision: number;
+  readonly reason: WorkbookVersionActiveCheckoutStateChangeReason;
+}
+
 export type VersionEvent =
   | WorkbookVersionCheckoutMaterializedEvent
-  | WorkbookVersionDirtyStatusChangedEvent;
+  | WorkbookVersionDirtyStatusChangedEvent
+  | WorkbookVersionActiveCheckoutStateChangedEvent;

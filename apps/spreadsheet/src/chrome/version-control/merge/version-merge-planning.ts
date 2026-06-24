@@ -6,7 +6,7 @@ import type {
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
-import type { VersionHistoryData } from './version-history-panel-data';
+import type { VersionHistoryData } from '../version-history-panel-data';
 
 export type VersionMergeTarget = {
   readonly commitId: WorkbookCommitId;

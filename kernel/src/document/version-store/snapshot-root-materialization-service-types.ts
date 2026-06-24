@@ -16,12 +16,14 @@ export type SnapshotRootMaterializationDiagnosticCode =
   | 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_CHECKOUT_PLAN_FAILED'
   | 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_COMMIT_READ_FAILED'
   | 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_OBJECT_READ_FAILED'
+  | 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_MIRROR_SETTLE_FAILED'
   | 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_RELOAD_FAILED';
 
 type SnapshotRootMaterializationSourceDiagnostic =
   | VersionStoreDiagnostic
   | CheckoutMaterializationDiagnostic
   | SnapshotRootReloadDiagnostic
+  | SnapshotRootMaterializationDiagnostic
   | Readonly<Record<string, unknown>>;
 
 export interface SnapshotRootMaterializationDiagnostic {

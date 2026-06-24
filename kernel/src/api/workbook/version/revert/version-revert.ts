@@ -6,7 +6,10 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
-import { readVersionCheckoutAdmissionBlock } from '../checkout/version-checkout-admission';
+import {
+  readVersionCheckoutAdmissionBlock,
+  type VersionCheckoutAdmissionBlock,
+} from '../checkout/version-checkout-admission';
 import { validateVersionOperationGate } from '../../version-operation-gate';
 import {
   revertAdmissionDiagnostic,
@@ -70,7 +73,7 @@ export async function revertWorkbookVersion(
   }
 
   const admissionBlock = await readVersionCheckoutAdmissionBlock(ctx);
-  if (admissionBlock) {
+  if (admissionBlock && !canBypassRevertAdmissionBlock(validated.input, admissionBlock)) {
     return versionFailureFromRevertDiagnostics([
       revertAdmissionDiagnostic(admissionBlock, validated.input),
     ]);
@@ -102,4 +105,11 @@ export async function revertWorkbookVersion(
   } catch {
     return versionFailureFromRevertDiagnostics([providerErrorDiagnostic()]);
   }
+}
+
+function canBypassRevertAdmissionBlock(
+  input: VersionRevertInput,
+  block: VersionCheckoutAdmissionBlock,
+): boolean {
+  return input.targetRef !== undefined && block.reason === 'staleWorkspaceHead';
 }

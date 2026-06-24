@@ -4,7 +4,7 @@ import type {
   VersionSurfaceStatus,
 } from '@mog-sdk/contracts/api';
 
-import { displayBranchName } from './version-branch-name';
+import { displayBranchName } from '../version-branch-name';
 import {
   hostCapabilityDiagnosticDisabledReason,
   publicStatusDiagnosticDisabledReason,

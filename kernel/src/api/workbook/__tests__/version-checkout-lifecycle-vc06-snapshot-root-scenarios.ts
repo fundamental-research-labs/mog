@@ -46,6 +46,7 @@ export function registerVc06SnapshotRootMaterializationScenario(): void {
       });
 
       await authorVc06State(sourceWb);
+      await sourceWb.activeSheet.view.freezePanes(2, 1);
       installVersionDomainDetectorNoopsOnWorkbook(sourceWb);
       const commitResult = await sourceWb.version.commit({
         expectedHead: {

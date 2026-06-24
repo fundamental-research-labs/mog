@@ -79,4 +79,76 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
   });
+
+  it('creates sibling refs without rebinding symbolic HEAD away from the current branch', async () => {
+    const { branchService, version } =
+      createWorkbookVersionWithBranchService('scenario/current');
+
+    await expect(
+      version.createBranch({
+        name: 'scenario/current' as any,
+        targetCommitId: COMMIT_A,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+
+    await expect(version.getRef('HEAD')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/scenario/current',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
+      },
+    });
+
+    await expect(
+      version.createBranch({
+        name: 'scenario/sibling' as any,
+        targetCommitId: COMMIT_A,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      value: {
+        name: 'refs/heads/scenario/sibling',
+        commitId: COMMIT_A,
+        revision: refVersion('0'),
+        updatedAt: '2026-06-20T00:00:00.000Z',
+      },
+    });
+
+    await expect(version.getRef('HEAD')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'HEAD',
+          target: 'refs/heads/scenario/current',
+          revision: refVersion('0'),
+        },
+        diagnostics: [],
+      },
+    });
+    await expect(version.getRef('scenario/current' as any)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/current',
+          commitId: COMMIT_A,
+          revision: refVersion('0'),
+        },
+      },
+    });
+    expect(branchService.getHead()).toMatchObject({
+      ok: true,
+      head: {
+        branchName: 'scenario/current',
+        commitId: COMMIT_A,
+        refVersion: refVersion('0'),
+      },
+    });
+  });
 }

@@ -189,6 +189,7 @@ import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
 import { createWorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
+import type { VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
 import {
   applyWorkbookReadOnlyMode,
   createWorkbookFeatureGateBinder,
@@ -253,6 +254,8 @@ export abstract class WorkbookImplFoundation {
     }),
     readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
     readLiveCollaborationStatus: () => readVersionLiveCollaborationStatus(this.ctx),
+    notifyActiveCheckoutStateChanged: (change) =>
+      this.emitVersionActiveCheckoutStateChanged(change),
   });
 
   protected get _floatingObjectManager(): SpreadsheetObjectManager {
@@ -553,6 +556,19 @@ export abstract class WorkbookImplFoundation {
       hasUncommittedLocalChanges,
       previousHasUncommittedLocalChanges,
       statusRevision: this._dirtyStatusSequence,
+      timestamp: Date.now(),
+    } satisfies InternalSpreadsheetEvent);
+  }
+
+  private emitVersionActiveCheckoutStateChanged(
+    change: VersionSurfaceActiveCheckoutStateChanged,
+  ): void {
+    this.eventBus.emit({
+      type: 'workbook:version-active-checkout-state-changed',
+      activeCheckoutSession: change.activeCheckoutSession,
+      previousActiveCheckoutSession: change.previousActiveCheckoutSession,
+      statusRevision: change.statusRevision,
+      reason: change.reason,
       timestamp: Date.now(),
     } satisfies InternalSpreadsheetEvent);
   }
@@ -964,6 +980,7 @@ export abstract class WorkbookImplFoundation {
 const NON_MUTATING_WORKBOOK_EVENT_TYPES = new Set<InternalEventType>([
   'workbook:version-checkout-materialized',
   'workbook:version-dirty-status-changed',
+  'workbook:version-active-checkout-state-changed',
   'security:policies-reloaded',
 ]);
 

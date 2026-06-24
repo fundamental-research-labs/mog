@@ -1,7 +1,8 @@
 import 'fake-indexeddb/auto';
 
-import type { WorkbookCommitId } from '@mog-sdk/contracts/api';
+import type { ObjectDigest, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
+import type { VersionObjectRecord } from '../../../document/version-store/object-store';
 import {
   namespaceForDocumentScope,
   type VersionDocumentScope,
@@ -32,6 +33,18 @@ export async function readRootCommitPayload(
 ): Promise<Record<string, unknown>> {
   const { root } = await readRootCommit(rootCommitId, documentId);
   return root.commit.payload as unknown as Record<string, unknown>;
+}
+
+export async function readRootSnapshotRootRecord(
+  rootCommitId: WorkbookCommitId,
+  documentId = DOCUMENT_ID,
+): Promise<VersionObjectRecord<unknown>> {
+  const { graph, root } = await readRootCommit(rootCommitId, documentId);
+  return graph.getObjectRecord({
+    kind: 'object',
+    objectType: 'workbook.snapshotRoot.v1',
+    digest: root.commit.payload.snapshotRootDigest as ObjectDigest,
+  });
 }
 
 async function readRootCommit(rootCommitId: WorkbookCommitId, documentId: string) {

@@ -28,7 +28,14 @@ function fallbackDiffOrderKey(entry: VersionDiffEntry, sourceIndex: number): str
         'authored',
         structural.changeId,
       )
-    : semanticDiffOrderKey(100, '', undefined, undefined, 'diagnosticOnly', sourceIndex.toString());
+    : semanticDiffOrderKey(
+        100,
+        '',
+        undefined,
+        undefined,
+        'diagnosticOnly',
+        sourceIndex.toString().padStart(12, '0'),
+      );
 }
 
 export function semanticDiffOrderKey(

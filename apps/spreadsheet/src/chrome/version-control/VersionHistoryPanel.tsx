@@ -3,7 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useWorkbook } from '../../internal-api';
 import { VersionActions } from './VersionActionStatus';
 import { VersionHistoryDiffPreview } from './VersionHistoryDiffPreview';
-import { VersionMergeControls } from './VersionMergeControls';
+import { VersionMergeControls } from './merge';
 import { ReviewProposalSurface } from './ReviewProposalSurface';
 import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';

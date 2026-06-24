@@ -76,6 +76,9 @@ const AUTHORED_GRID = capabilityStates('contracted', {
   persistence: 'supported',
   export: 'supported',
 });
+const DIRECT_FORMATS = capabilityStates('contracted', {
+  merge: 'supported',
+});
 const STRUCTURED_AUTHORED_NO_MERGE = capabilityStates('supported', {
   merge: 'contracted',
 });
@@ -595,7 +598,7 @@ const DOMAINS = Object.freeze([
     domainId: 'cells.formats',
     domainClass: 'authored',
     capturePolicy: 'commitEligible',
-    capabilityStates: CONTRACTED,
+    capabilityStates: DIRECT_FORMATS,
   }),
   domainPolicy({
     matrixRowId: 'cells.formats.catalogs',

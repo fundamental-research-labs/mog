@@ -109,6 +109,7 @@ export function registerVersionStatusCommitProviderScenarios() {
       throw new Error(`expected branch create success: ${branchResult.error.code}`);
     }
     const branch = branchResult.value;
+    const activeCheckoutStateChanges: unknown[] = [];
     const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
       readDirtyState: () => ({
         hasUncommittedLocalChanges: false,
@@ -117,6 +118,7 @@ export function registerVersionStatusCommitProviderScenarios() {
         revision: 0,
         contextGeneration: 0,
       }),
+      notifyActiveCheckoutStateChanged: (change) => activeCheckoutStateChanges.push(change),
     });
     surfaceStatusService.recordActiveCheckoutBranchCommit({
       commitId: initialized.rootCommit.id,
@@ -142,8 +144,31 @@ export function registerVersionStatusCommitProviderScenarios() {
       checkedOutCommitId: committed.id,
       branchName: 'scenario/direct-active-branch',
       refHeadAtMaterialization: committed.id,
-      detached: false,
-    });
+        detached: false,
+      });
+    expect(activeCheckoutStateChanges).toEqual([
+      expect.objectContaining({
+        activeCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: initialized.rootCommit.id,
+          branchName: 'scenario/direct-active-branch',
+        }),
+        previousActiveCheckoutSession: null,
+        statusRevision: 1,
+        reason: 'branch-head-advanced',
+      }),
+      expect.objectContaining({
+        activeCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: committed.id,
+          branchName: 'scenario/direct-active-branch',
+        }),
+        previousActiveCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: initialized.rootCommit.id,
+          branchName: 'scenario/direct-active-branch',
+        }),
+        statusRevision: 2,
+        reason: 'branch-head-advanced',
+      }),
+    ]);
     await expect(version.readRef(branch.name)).resolves.toMatchObject({
       ok: true,
       value: {

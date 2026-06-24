@@ -8,6 +8,7 @@ import { projectDirtyStatus } from './version-surface-status-dirty-projector';
 import type {
   AttachedVersionSurfaceStatusService,
   CreateWorkbookVersionSurfaceStatusServiceInput,
+  VersionSurfaceActiveCheckoutStateChangeReason,
   VersionSurfaceCheckoutSession,
   WorkbookVersionSurfaceDirtyState,
   WorkbookVersionSurfaceStatusService,
@@ -22,6 +23,26 @@ export function createWorkbookVersionSurfaceStatusService(
   input: CreateWorkbookVersionSurfaceStatusServiceInput,
 ): WorkbookVersionSurfaceStatusService {
   let activeCheckoutSession: VersionSurfaceCheckoutSession | null = null;
+  let activeCheckoutStatusRevision = 0;
+
+  const setActiveCheckoutSession = (
+    nextSession: VersionSurfaceCheckoutSession,
+    reason: VersionSurfaceActiveCheckoutStateChangeReason,
+    options: { readonly notifyWhenUnchanged?: boolean } = {},
+  ): void => {
+    const next = freezeCheckoutSession(nextSession);
+    const previous = activeCheckoutSession;
+    const changed = !checkoutSessionsEqual(previous, next);
+    if (!changed && !options.notifyWhenUnchanged) return;
+    if (changed) activeCheckoutSession = next;
+    activeCheckoutStatusRevision += 1;
+    input.notifyActiveCheckoutStateChanged?.({
+      activeCheckoutSession: cloneCheckoutSession(next),
+      previousActiveCheckoutSession: cloneCheckoutSession(previous),
+      statusRevision: activeCheckoutStatusRevision,
+      reason,
+    });
+  };
 
   return {
     readDirtyStatus: async () =>
@@ -37,20 +58,39 @@ export function createWorkbookVersionSurfaceStatusService(
           ? await input.readLiveCollaborationStatus()
           : cleanLiveCollaborationStatus(),
       ),
-    readActiveCheckoutSession: () =>
-      activeCheckoutSession === null ? null : Object.freeze({ ...activeCheckoutSession }),
+    readActiveCheckoutSession: () => cloneCheckoutSession(activeCheckoutSession),
     recordCheckoutMaterialization: (materialization) => {
-      activeCheckoutSession = checkoutSessionFromMaterialization(materialization);
+      setActiveCheckoutSession(
+        checkoutSessionFromMaterialization(materialization),
+        'checkout-materialized',
+      );
     },
     recordActiveCheckoutBranchCommit: (materialization) => {
       const branchName = branchNameFromRefName(materialization.refName);
       if (!branchName) return;
-      activeCheckoutSession = Object.freeze({
-        checkedOutCommitId: materialization.commitId,
-        branchName,
-        refHeadAtMaterialization: materialization.commitId,
-        detached: false,
-      });
+      setActiveCheckoutSession(
+        {
+          checkedOutCommitId: materialization.commitId,
+          branchName,
+          refHeadAtMaterialization: materialization.commitId,
+          detached: false,
+        },
+        'branch-head-advanced',
+      );
+    },
+    recordActiveCheckoutBranchRefMove: (move) => {
+      const branchName = branchNameFromRefName(move.refName);
+      if (!branchName) return;
+      setActiveCheckoutSession(
+        {
+          checkedOutCommitId: move.checkedOutCommitId,
+          branchName,
+          refHeadAtMaterialization: move.refHeadCommitId,
+          detached: false,
+        },
+        'branch-ref-moved',
+        { notifyWhenUnchanged: true },
+      );
     },
   };
 }
@@ -108,18 +148,44 @@ function checkoutSessionFromMaterialization(
 ): VersionSurfaceCheckoutSession {
   const target = input.resolvedTarget;
   if (target.kind === 'commit') {
-    return Object.freeze({
+    return {
       checkedOutCommitId: input.commitId,
       detached: true,
-    });
+    };
   }
 
-  return Object.freeze({
+  return {
     checkedOutCommitId: input.commitId,
     branchName: target.refName,
     refHeadAtMaterialization: target.commitId,
     detached: false,
-  });
+  };
+}
+
+function cloneCheckoutSession(
+  session: VersionSurfaceCheckoutSession | null,
+): VersionSurfaceCheckoutSession | null {
+  return session === null ? null : freezeCheckoutSession(session);
+}
+
+function freezeCheckoutSession(
+  session: VersionSurfaceCheckoutSession,
+): VersionSurfaceCheckoutSession {
+  return Object.freeze({ ...session });
+}
+
+function checkoutSessionsEqual(
+  left: VersionSurfaceCheckoutSession | null,
+  right: VersionSurfaceCheckoutSession | null,
+): boolean {
+  if (left === right) return true;
+  if (left === null || right === null) return false;
+  return (
+    left.checkedOutCommitId === right.checkedOutCommitId &&
+    left.branchName === right.branchName &&
+    left.refHeadAtMaterialization === right.refHeadAtMaterialization &&
+    left.detached === right.detached
+  );
 }
 
 function branchNameFromRefName(refName: string): string | null {

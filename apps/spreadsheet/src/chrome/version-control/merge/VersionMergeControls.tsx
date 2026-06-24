@@ -14,13 +14,13 @@ import {
   DisabledReason,
   safeDomId,
   sanitizeVersionStatusText,
-} from './version-action-availability';
-import { displayBranchName } from './version-branch-name';
-import { shortCommitId } from './version-history-format';
+} from '../availability/version-action-availability';
+import { displayBranchName } from '../version-branch-name';
+import { shortCommitId } from '../version-history-format';
 import type {
   VersionMergePreviewState,
   VersionMergeResolutionSelections,
-} from './version-history-panel-actions';
+} from './merge-actions';
 
 export type VersionMergeControlsProps = {
   readonly sourceRefs: readonly VersionRef[];

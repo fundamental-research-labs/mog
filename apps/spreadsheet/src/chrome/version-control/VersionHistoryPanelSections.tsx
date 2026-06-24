@@ -13,7 +13,7 @@ import {
   DisabledReason,
   safeDomId,
   sanitizeVersionStatusText,
-} from './version-action-availability';
+} from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
 import { displayBranchName } from './version-branch-name';

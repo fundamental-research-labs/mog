@@ -40,7 +40,10 @@ export const TARGET_REF = 'refs/heads/main' as const;
 export async function withReviewArtifact(
   graphId: string,
   run: (fixture: ReviewFixture) => Promise<void>,
-  options: { readonly status?: MergePreviewArtifactStatus } = {},
+  options: {
+    readonly status?: MergePreviewArtifactStatus;
+    readonly conflicts?: readonly VersionMergeConflict[];
+  } = {},
 ): Promise<void> {
   const documentScope = documentScopeForGraph(graphId);
   const provider = createInMemoryVersionStoreProvider({ documentScope });
@@ -49,7 +52,7 @@ export async function withReviewArtifact(
   );
   expectInitializeSuccess(initialized);
   const namespace = namespaceForDocumentScope(documentScope, graphId);
-  const conflicts = [basicConflict()];
+  const conflicts = options.conflicts ?? [basicConflict()];
   const previewRecord = await objectRecord(namespace, 'workbook.mergePreview.v1', {
     schemaVersion: 1,
     recordKind: 'mergePreview',

@@ -54,6 +54,12 @@ export function createWorkbookCheckoutSnapshotMaterializer(
         };
       }
 
+      const settled = await settleMaterializedMirrorState(input, reloaded.materialized);
+      if (settled.status === 'failed') {
+        await reloaded.materialized.dispose();
+        return settled;
+      }
+
       const publishDiagnostics = await publisher.revalidateCheckoutPublish?.(input);
       if (publishDiagnostics && publishDiagnostics.length > 0) {
         await reloaded.materialized.dispose();
@@ -89,6 +95,41 @@ export function createWorkbookCheckoutSnapshotMaterializer(
       return { status: 'applied' };
     },
   };
+}
+
+async function settleMaterializedMirrorState(
+  input: CheckoutSnapshotApplyInput,
+  materialization: SnapshotRootFreshLifecycleMaterialization,
+): Promise<
+  | { readonly status: 'settled' }
+  | {
+      readonly status: 'failed';
+      readonly diagnostics: readonly CheckoutMaterializationDiagnostic[];
+      readonly mutationGuarantee: 'no-workbook-mutation';
+    }
+> {
+  try {
+    await materialization.context.computeBridge.settleForMirror();
+    return { status: 'settled' };
+  } catch (error) {
+    return {
+      status: 'failed',
+      diagnostics: [
+        {
+          code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
+          severity: 'error',
+          message: 'Fresh lifecycle checkout materialization could not settle mirrored sheet state.',
+          commitId: input.commitId,
+          details: {
+            ...checkoutPublishErrorDetails(error),
+            phase: 'settleForMirror',
+            partialSnapshot: true,
+          },
+        },
+      ],
+      mutationGuarantee: 'no-workbook-mutation',
+    };
+  }
 }
 
 function checkoutApplyDiagnostic(

@@ -1,11 +1,11 @@
-export { ActionStatus, VersionActions } from './status';
+export { ActionStatus, VersionActions } from './VersionActionStatusControls';
 export {
   diagnosticFromRemotePromotionResult,
   getRemotePromotionStatus,
   remotePromotionActionMessage,
-} from './status';
+} from './version-action-status-model';
 export type {
   VersionActionState,
   VersionPanelDiagnostic,
   VersionRemotePromotionStatus,
-} from './status';
+} from './version-action-status-types';

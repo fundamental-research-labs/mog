@@ -1,6 +1,13 @@
 import { describe, expect, it } from '@jest/globals';
 import type { Workbook } from '@mog-sdk/contracts/api';
 
+import { DocumentFactory } from '../../document/document-factory';
+import {
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+} from '../../../document/version-store/provider';
+import { createIndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
+import { XLSX_IMPORT_ROOT_GRAPH_ID } from '../../../document/version-store/xlsx-import-root';
 import {
   createMaterializerDocumentHandle,
   expectCommit,
@@ -12,11 +19,336 @@ import {
   requireRefRevision,
   withVersionManifest,
 } from './version-apply-merge-materializer-test-utils';
+import { expectedCellDiff } from './version-indexeddb-public-cell-edit-diff-test-utils';
+import {
+  createSourceXlsx,
+  durableIndexedDbVersioning,
+  resetVersionStoreIndexedDbForXlsxImportRootTests,
+} from './version-xlsx-import-root-test-utils';
 
 const BASIC_FLOW_BRANCH_NAME = 'scenario/basic-production-flow';
 const BASIC_FLOW_BRANCH_REF = 'refs/heads/scenario/basic-production-flow';
+const IMPORTED_FIXTURE_BRANCH_NAME = 'scenario/basic-production-flow-imported-fixture';
+const IMPORTED_FIXTURE_BRANCH_REF = 'refs/heads/scenario/basic-production-flow-imported-fixture';
+const IMPORTED_FIXTURE_DOCUMENT_ID_PREFIX = 'vc-basic-production-flow-imported-fixture';
+const IMPORTED_FIXTURE_A1_VALUE = 'Imported basic version flow fixture';
+const IMPORTED_FIXTURE_BASE_EDIT = 'base edit after imported fixture root';
+const IMPORTED_FIXTURE_BRANCH_EDIT = 'branch edit after imported fixture root';
+const IMPORTED_FIXTURE_MAIN_EDIT = 'main edit after imported fixture root';
 
 describe('WorkbookVersion basic production flow', () => {
+  it('imports a real workbook fixture and runs the public branch checkout merge flow end to end', async () => {
+    await resetVersionStoreIndexedDbForXlsxImportRootTests();
+
+    const documentId = `${IMPORTED_FIXTURE_DOCUMENT_ID_PREFIX}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    const documentScope: VersionDocumentScope = { documentId };
+    const xlsxBytes = await createSourceXlsx(IMPORTED_FIXTURE_A1_VALUE);
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: xlsxBytes },
+      {
+        documentId,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected XLSX fixture import success: ${imported.error?.message}`);
+    }
+    const importedHandle = imported.handle;
+
+    const branchHandle = await DocumentFactory.create({
+      documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    const verifyHandle = await DocumentFactory.create({
+      documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    installVersionDomainDetectorNoopsOnHandles(importedHandle, branchHandle, verifyHandle);
+
+    let mainWb: Workbook | undefined;
+    let branchWb: Workbook | undefined;
+    let verifyWb: Workbook | undefined;
+    const graphProvider = createIndexedDbVersionStoreProvider({ documentScope });
+
+    try {
+      mainWb = await importedHandle.workbook({
+        versioning: withVersionManifest(durableIndexedDbVersioning()),
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(mainWb);
+
+      const rootHead = await expectHead(mainWb);
+      expect(rootHead).toMatchObject({
+        refName: 'refs/heads/main',
+        resolvedFrom: 'HEAD',
+      });
+      await expect(mainWb.activeSheet.getValue('A1')).resolves.toBe(IMPORTED_FIXTURE_A1_VALUE);
+      await expect(mainWb.activeSheet.getValue('B1')).resolves.toBe(42);
+
+      await mainWb.activeSheet.setCell('C1', IMPORTED_FIXTURE_BASE_EDIT);
+      const baseCommit = await expectCommit(
+        mainWb.version.commit({
+          message: 'base edit after imported fixture root',
+          expectedHead: {
+            commitId: rootHead.id,
+            revision: requireRefRevision(rootHead),
+          },
+        }),
+      );
+      expect(baseCommit.parents).toEqual([rootHead.id]);
+      const baseHead = await expectHead(mainWb);
+
+      const branch = await mainWb.version.createBranch({
+        name: IMPORTED_FIXTURE_BRANCH_NAME as any,
+        targetCommitId: baseCommit.id,
+        expectedAbsent: true,
+      });
+      if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+      expect(branch.value).toMatchObject({
+        name: IMPORTED_FIXTURE_BRANCH_REF,
+        commitId: baseCommit.id,
+      });
+
+      branchWb = await branchHandle.workbook({
+        versioning: withVersionManifest(durableIndexedDbVersioning()),
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(branchWb);
+      branchWb.markClean();
+      const branchCheckout = await branchWb.version.checkout({
+        kind: 'ref',
+        name: branch.value.name,
+      });
+      if (!branchCheckout.ok) {
+        throw new Error(`expected imported fixture branch checkout: ${branchCheckout.error.code}`);
+      }
+      expect(branchCheckout.value).toMatchObject({
+        status: 'success',
+        materialization: 'applied',
+        mutationGuarantee: 'workbook-state-materialized',
+      });
+      await expect(branchWb.activeSheet.getValue('A1')).resolves.toBe(IMPORTED_FIXTURE_A1_VALUE);
+      await expect(branchWb.activeSheet.getValue('B1')).resolves.toBe(42);
+      await expect(branchWb.activeSheet.getValue('C1')).resolves.toBe(IMPORTED_FIXTURE_BASE_EDIT);
+
+      await branchWb.activeSheet.setCell('D1', IMPORTED_FIXTURE_BRANCH_EDIT);
+      const branchCommit = await expectCommit(
+        branchWb.version.commit({
+          message: 'branch edit after imported fixture root',
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: branch.value.revision,
+          },
+        }),
+      );
+      expect(branchCommit.parents).toEqual([baseCommit.id]);
+
+      await mainWb.activeSheet.setCell('E1', IMPORTED_FIXTURE_MAIN_EDIT);
+      const oursCommit = await expectCommit(
+        mainWb.version.commit({
+          message: 'main edit after imported fixture root',
+          expectedHead: {
+            commitId: baseCommit.id,
+            revision: requireRefRevision(baseHead),
+          },
+        }),
+      );
+      expect(oursCommit.parents).toEqual([baseCommit.id]);
+      const oursHead = await expectHead(mainWb);
+
+      const mergeInput = {
+        base: baseCommit.id,
+        ours: oursCommit.id,
+        theirs: branchCommit.id,
+      };
+      const preview = await mainWb.version.merge(mergeInput);
+      if (!preview.ok) {
+        throw new Error(`expected imported fixture clean merge preview: ${preview.error.code}`);
+      }
+      expect(preview.value).toMatchObject({
+        status: 'clean',
+        conflicts: [],
+      });
+
+      const applied = await mainWb.version.applyMerge(mergeInput, {
+        targetRef: 'refs/heads/main' as any,
+        expectedTargetHead: {
+          commitId: oursCommit.id,
+          revision: requireRefRevision(oursHead),
+        },
+      });
+      if (!applied.ok) {
+        throw new Error(`expected imported fixture applyMerge success: ${applied.error.code}`);
+      }
+      expect(applied.value).toMatchObject({
+        status: 'applied',
+        ours: oursCommit.id,
+        theirs: branchCommit.id,
+        mutationGuarantee: 'merge-commit-created',
+        commitRef: {
+          refName: 'refs/heads/main',
+          resolvedFrom: 'refs/heads/main',
+        },
+      });
+      if (applied.value.status !== 'applied') {
+        throw new Error(`expected applied merge result, got ${applied.value.status}`);
+      }
+      const mergeCommitId = applied.value.commitRef.id;
+
+      await expect(mainWb.version.readRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/main',
+          },
+        },
+      });
+      await expect(mainWb.version.readRef('refs/heads/main')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/main',
+            commitId: mergeCommitId,
+          },
+        },
+      });
+      await expect(
+        mainWb.version.readRef(IMPORTED_FIXTURE_BRANCH_REF as any),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: IMPORTED_FIXTURE_BRANCH_REF,
+            commitId: branchCommit.id,
+          },
+        },
+      });
+
+      const mainCommits = await mainWb.version.listCommits();
+      if (!mainCommits.ok) {
+        throw new Error(`expected imported fixture listCommits: ${mainCommits.error.code}`);
+      }
+      expect(mainCommits.value.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: mergeCommitId, parents: [oursCommit.id, branchCommit.id] }),
+          expect.objectContaining({ id: oursCommit.id, parents: [baseCommit.id] }),
+          expect.objectContaining({ id: branchCommit.id, parents: [baseCommit.id] }),
+          expect.objectContaining({ id: baseCommit.id, parents: [rootHead.id] }),
+          expect.objectContaining({ id: rootHead.id, parents: [] }),
+        ]),
+      );
+
+      const branchCommits = await mainWb.version.listCommits({
+        ref: IMPORTED_FIXTURE_BRANCH_REF as any,
+      });
+      if (!branchCommits.ok) {
+        throw new Error(`expected imported fixture branch listCommits: ${branchCommits.error.code}`);
+      }
+      expect(branchCommits.value.items.map((commit) => commit.id)).toEqual(
+        expect.arrayContaining([branchCommit.id, baseCommit.id, rootHead.id]),
+      );
+
+      const refs = await mainWb.version.listRefs();
+      if (!refs.ok) throw new Error(`expected imported fixture listRefs: ${refs.error.code}`);
+      expect(refs.value.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'refs/heads/main', commitId: mergeCommitId }),
+          expect.objectContaining({
+            name: IMPORTED_FIXTURE_BRANCH_REF,
+            commitId: branchCommit.id,
+          }),
+        ]),
+      );
+
+      const baseDiff = await mainWb.version.diff(rootHead.id, baseCommit.id);
+      if (!baseDiff.ok) {
+        throw new Error(`expected imported fixture base diff: ${baseDiff.error.code}`);
+      }
+      expect(baseDiff.value.items).toEqual(
+        expect.arrayContaining([expectedCellDiff('C1', IMPORTED_FIXTURE_BASE_EDIT)]),
+      );
+
+      const branchDiff = await mainWb.version.diff(baseCommit.id, branchCommit.id);
+      if (!branchDiff.ok) {
+        throw new Error(`expected imported fixture branch diff: ${branchDiff.error.code}`);
+      }
+      expect(branchDiff.value.items).toEqual(
+        expect.arrayContaining([expectedCellDiff('D1', IMPORTED_FIXTURE_BRANCH_EDIT)]),
+      );
+
+      verifyWb = await verifyHandle.workbook({
+        versioning: withVersionManifest(durableIndexedDbVersioning()),
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(verifyWb);
+      verifyWb.markClean();
+
+      const mergeDiff = await verifyWb.version.diff(oursCommit.id, mergeCommitId);
+      if (!mergeDiff.ok) {
+        throw new Error(
+          `expected imported fixture merge diff: ${mergeDiff.error.code} ${JSON.stringify(
+            mergeDiff.error.diagnostics,
+          )}`,
+        );
+      }
+      expect(mergeDiff.value.items).toEqual(
+        expect.arrayContaining([expectedCellDiff('D1', IMPORTED_FIXTURE_BRANCH_EDIT)]),
+      );
+
+      const graph = await graphProvider.openGraph(
+        namespaceForDocumentScope(documentScope, XLSX_IMPORT_ROOT_GRAPH_ID),
+      );
+      await expect(graph.readRef('refs/heads/main')).resolves.toMatchObject({
+        status: 'success',
+        ref: {
+          name: 'refs/heads/main',
+          commitId: mergeCommitId,
+        },
+      });
+      await expect(graph.readRef(IMPORTED_FIXTURE_BRANCH_REF)).resolves.toMatchObject({
+        status: 'success',
+        ref: {
+          name: IMPORTED_FIXTURE_BRANCH_REF,
+          commitId: branchCommit.id,
+        },
+      });
+
+      const verifyCheckout = await verifyWb.version.checkout({
+        kind: 'ref',
+        name: 'refs/heads/main',
+      });
+      if (!verifyCheckout.ok) {
+        throw new Error(`expected imported fixture final checkout: ${verifyCheckout.error.code}`);
+      }
+      expect(verifyCheckout.value).toMatchObject({
+        status: 'success',
+        materialization: 'applied',
+        mutationGuarantee: 'workbook-state-materialized',
+      });
+      await expect(verifyWb.activeSheet.getValue('A1')).resolves.toBe(IMPORTED_FIXTURE_A1_VALUE);
+      await expect(verifyWb.activeSheet.getValue('B1')).resolves.toBe(42);
+      await expect(verifyWb.activeSheet.getValue('C1')).resolves.toBe(IMPORTED_FIXTURE_BASE_EDIT);
+      await expect(verifyWb.activeSheet.getValue('D1')).resolves.toBe(IMPORTED_FIXTURE_BRANCH_EDIT);
+      await expect(verifyWb.activeSheet.getValue('E1')).resolves.toBe(IMPORTED_FIXTURE_MAIN_EDIT);
+    } finally {
+      if (verifyWb) await verifyWb.close('skipSave');
+      if (branchWb) await branchWb.close('skipSave');
+      if (mainWb) await mainWb.close('skipSave');
+      await verifyHandle.dispose();
+      await branchHandle.dispose();
+      await importedHandle.dispose();
+      await graphProvider.dispose();
+      await resetVersionStoreIndexedDbForXlsxImportRootTests();
+    }
+  });
+
   it('commits edits, branches, checks out branch/main, applies a clean merge, and lists commits/refs', async () => {
     const { documentScope, provider, initialized } =
       await initializeMaterializerGraph('basic-production-flow');

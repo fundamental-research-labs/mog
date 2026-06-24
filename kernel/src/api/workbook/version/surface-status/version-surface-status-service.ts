@@ -33,6 +33,8 @@ export type {
   SurfaceHostCapabilityDecisions,
   SurfaceOnlyVersionCapability,
   SurfaceVersionCapability,
+  VersionSurfaceActiveCheckoutStateChanged,
+  VersionSurfaceActiveCheckoutStateChangeReason,
   VersionSurfaceCheckoutSession,
   WorkbookVersionSurfaceDirtyState,
   WorkbookVersionSurfaceStatusService,

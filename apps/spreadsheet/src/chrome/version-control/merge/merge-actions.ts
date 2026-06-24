@@ -18,7 +18,7 @@ import {
   type VersionHistoryData,
   type VersionHistoryWorkbook,
 } from '../version-history-panel-data';
-import type { VersionMergeTarget } from '../version-merge-planning';
+import type { VersionMergeTarget } from './version-merge-planning';
 
 const MERGE_GRAPH_PAGE_SIZE = 100;
 

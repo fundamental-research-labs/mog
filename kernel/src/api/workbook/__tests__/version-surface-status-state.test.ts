@@ -10,6 +10,8 @@ import {
   createSurfaceDirtyStatus,
   createSurfaceReadyVersionWithContext,
 } from './version-surface-status-test-utils';
+import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
+import type { VersionSurfaceActiveCheckoutStateChanged } from '../version/surface-status/version-surface-status-service';
 
 describe('WorkbookVersion surface status state projection', () => {
   beforeEach(() => {
@@ -87,6 +89,106 @@ describe('WorkbookVersion surface status state projection', () => {
     expect(readHeadShouldNotRun).not.toHaveBeenCalled();
     expect(sessionReadRef).toHaveBeenCalledWith('refs/heads/main');
     expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
+  });
+
+  it('notifies active checkout state changes with monotonic revisions', () => {
+    const changes: VersionSurfaceActiveCheckoutStateChanged[] = [];
+    const service = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+      notifyActiveCheckoutStateChanged: (change) => changes.push(change),
+    });
+
+    service.recordActiveCheckoutBranchCommit({
+      commitId: CHILD_COMMIT_ID,
+      refName: 'refs/heads/scenario/active-checkout-state',
+    });
+    service.recordActiveCheckoutBranchCommit({
+      commitId: CHILD_COMMIT_ID,
+      refName: 'refs/heads/scenario/active-checkout-state',
+    });
+    service.recordActiveCheckoutBranchRefMove({
+      checkedOutCommitId: CHILD_COMMIT_ID,
+      refHeadCommitId: MOVED_COMMIT_ID,
+      refName: 'refs/heads/scenario/active-checkout-state',
+    });
+    service.recordActiveCheckoutBranchCommit({
+      commitId: MOVED_COMMIT_ID,
+      refName: 'refs/heads/scenario/active-checkout-state',
+    });
+    service.recordCheckoutMaterialization({
+      commitId: CHILD_COMMIT_ID,
+      resolvedTarget: { kind: 'commit', commitId: CHILD_COMMIT_ID },
+    } as never);
+
+    expect(changes).toEqual([
+      {
+        activeCheckoutSession: {
+          checkedOutCommitId: CHILD_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: CHILD_COMMIT_ID,
+          detached: false,
+        },
+        previousActiveCheckoutSession: null,
+        statusRevision: 1,
+        reason: 'branch-head-advanced',
+      },
+      {
+        activeCheckoutSession: {
+          checkedOutCommitId: CHILD_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: MOVED_COMMIT_ID,
+          detached: false,
+        },
+        previousActiveCheckoutSession: {
+          checkedOutCommitId: CHILD_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: CHILD_COMMIT_ID,
+          detached: false,
+        },
+        statusRevision: 2,
+        reason: 'branch-ref-moved',
+      },
+      {
+        activeCheckoutSession: {
+          checkedOutCommitId: MOVED_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: MOVED_COMMIT_ID,
+          detached: false,
+        },
+        previousActiveCheckoutSession: {
+          checkedOutCommitId: CHILD_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: MOVED_COMMIT_ID,
+          detached: false,
+        },
+        statusRevision: 3,
+        reason: 'branch-head-advanced',
+      },
+      {
+        activeCheckoutSession: {
+          checkedOutCommitId: CHILD_COMMIT_ID,
+          detached: true,
+        },
+        previousActiveCheckoutSession: {
+          checkedOutCommitId: MOVED_COMMIT_ID,
+          branchName: 'scenario/active-checkout-state',
+          refHeadAtMaterialization: MOVED_COMMIT_ID,
+          detached: false,
+        },
+        statusRevision: 4,
+        reason: 'checkout-materialized',
+      },
+    ]);
+    expect(service.readActiveCheckoutSession()).toEqual({
+      checkedOutCommitId: CHILD_COMMIT_ID,
+      detached: true,
+    });
   });
 
   it('falls back to conservative dirty status when the adapter payload is invalid', async () => {

@@ -17,6 +17,7 @@ import {
   reloadFailure,
 } from './snapshot-root-materialization-service-results';
 import type {
+  SnapshotRootMaterializationDiagnostic,
   SnapshotRootMaterializationResult,
   SnapshotRootMaterializationServiceOptions,
 } from './snapshot-root-materialization-service-types';
@@ -96,6 +97,22 @@ export class SnapshotRootMaterializationService<TMaterialized = unknown> {
       return reloadFailure(plan.commitId, snapshotRootDigest, reloaded);
     }
 
+    const settleDiagnostics = await settleMaterializedMirrorState(reloaded.materialized);
+    if (settleDiagnostics.length > 0) {
+      await disposeMaterializedQuietly(reloaded.materialized);
+      return failure(
+        'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_MIRROR_SETTLE_FAILED',
+        'Snapshot-root fresh lifecycle could not settle mirrored sheet state.',
+        {
+          namespace: opened.namespace,
+          commitId: plan.commitId,
+          snapshotRootDigest,
+          decodedByteLength: reloaded.decodedByteLength,
+          sourceDiagnostics: settleDiagnostics,
+        },
+      );
+    }
+
     return Object.freeze({
       ok: true as const,
       materialization: 'fresh-lifecycle' as const,
@@ -154,6 +171,56 @@ export class SnapshotRootMaterializationService<TMaterialized = unknown> {
       };
     }
   }
+}
+
+type MaterializedMirrorSettler = () => unknown;
+
+async function settleMaterializedMirrorState(
+  materialized: unknown,
+): Promise<readonly SnapshotRootMaterializationDiagnostic[]> {
+  const settle = materializedMirrorSettler(materialized);
+  if (!settle) return [];
+
+  try {
+    await settle();
+    return [];
+  } catch (error) {
+    return Object.freeze([
+      Object.freeze({
+        code: 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_MIRROR_SETTLE_FAILED' as const,
+        severity: 'error' as const,
+        message: 'Snapshot-root fresh lifecycle mirror settlement failed.',
+        details: {
+          cause: errorName(error),
+          phase: 'settleForMirror',
+        },
+      }),
+    ]);
+  }
+}
+
+function materializedMirrorSettler(materialized: unknown): MaterializedMirrorSettler | null {
+  if (!isRecord(materialized)) return null;
+  const context = materialized.context;
+  if (!isRecord(context)) return null;
+  const computeBridge = context.computeBridge;
+  if (!isRecord(computeBridge)) return null;
+  const settleForMirror = computeBridge.settleForMirror;
+  if (typeof settleForMirror !== 'function') return null;
+  return () => Reflect.apply(settleForMirror, computeBridge, []) as unknown;
+}
+
+async function disposeMaterializedQuietly(materialized: unknown): Promise<void> {
+  if (!isRecord(materialized) || typeof materialized.dispose !== 'function') return;
+  try {
+    await Reflect.apply(materialized.dispose, materialized, []);
+  } catch {
+    // Materialization failure is already reported; disposal is best-effort cleanup.
+  }
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }
 
 export function createSnapshotRootMaterializationService<TMaterialized = unknown>(

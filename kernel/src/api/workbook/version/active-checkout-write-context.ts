@@ -108,6 +108,16 @@ export function recordActiveCheckoutBranchCommit(
   recorder?.recordActiveCheckoutBranchCommit?.({ commitId, refName });
 }
 
+export function recordActiveCheckoutBranchRefMove(
+  ctx: DocumentContext,
+  refName: ActiveCheckoutWriteRefName,
+  checkedOutCommitId: string,
+  refHeadCommitId: string,
+): void {
+  const recorder = readSurfaceStatusRecorder(ctx);
+  recorder?.recordActiveCheckoutBranchRefMove?.({ checkedOutCommitId, refHeadCommitId, refName });
+}
+
 function refNameFromBranchName(branchName: string): ActiveCheckoutWriteRefName {
   return branchName === 'main' ? 'refs/heads/main' : (`refs/heads/${branchName}` as VersionRefName);
 }
@@ -153,6 +163,11 @@ function readSurfaceStatusRecorder(ctx: DocumentContext): {
     readonly commitId: string;
     readonly refName: string;
   }) => void;
+  readonly recordActiveCheckoutBranchRefMove?: (input: {
+    readonly checkedOutCommitId: string;
+    readonly refHeadCommitId: string;
+    readonly refName: string;
+  }) => void;
 } | null {
   const runtime = ctx as {
     readonly versioning?: unknown;
@@ -169,12 +184,24 @@ function readSurfaceStatusRecorder(ctx: DocumentContext): {
     services,
   ]) {
     if (!isRecord(candidate)) continue;
-    const method = candidate.recordActiveCheckoutBranchCommit;
-    if (typeof method !== 'function') continue;
+    const recordCommit = candidate.recordActiveCheckoutBranchCommit;
+    const recordRefMove = candidate.recordActiveCheckoutBranchRefMove;
+    if (typeof recordCommit !== 'function' && typeof recordRefMove !== 'function') continue;
     return {
-      recordActiveCheckoutBranchCommit: (input) => {
-        Reflect.apply(method, candidate, [input]);
-      },
+      ...(typeof recordCommit === 'function'
+        ? {
+            recordActiveCheckoutBranchCommit: (input) => {
+              Reflect.apply(recordCommit, candidate, [input]);
+            },
+          }
+        : {}),
+      ...(typeof recordRefMove === 'function'
+        ? {
+            recordActiveCheckoutBranchRefMove: (input) => {
+              Reflect.apply(recordRefMove, candidate, [input]);
+            },
+          }
+        : {}),
     };
   }
   return null;

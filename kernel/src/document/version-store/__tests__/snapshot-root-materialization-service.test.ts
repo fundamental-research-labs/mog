@@ -10,6 +10,7 @@ describe('SnapshotRootMaterializationService', () => {
       author: async (workbook) => {
         await workbook.activeSheet.setCell('A1', 7);
         await workbook.activeSheet.setCell('A2', '=A1*6');
+        await workbook.activeSheet.view.freezePanes(2, 1);
         await workbook.names.add('ReplayRevenue', 'Sheet1!A1:A2', 'VC-06 replay range');
         await workbook.activeSheet.comments.setNote('B1', 'Replay note', 'VC Agent');
       },
@@ -40,6 +41,12 @@ describe('SnapshotRootMaterializationService', () => {
       await expect(fixture.materialized.workbook.activeSheet.getCell('A2')).resolves.toMatchObject({
         value: 42,
       });
+      await expect(fixture.materialized.workbook.activeSheet.view.getFrozenPanes()).resolves.toEqual(
+        {
+          rows: 2,
+          cols: 1,
+        },
+      );
       await expect(fixture.materialized.workbook.names.get('ReplayRevenue')).resolves.toMatchObject(
         {
           name: 'ReplayRevenue',

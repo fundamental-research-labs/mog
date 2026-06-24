@@ -69,17 +69,19 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
     await user.click(screen.getByRole('button', { name: 'Stage rollback' }));
 
-    await expectActionResult(`Rollback staged for ${shortCommitId(HEAD_COMMIT_ID)}`, 'success');
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Stage rollback' }),
-      'Enter a rollback reason.',
+    await waitFor(() => expect(workbook.version.revert).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+        'Refreshing version history',
+      ),
     );
-
-    await user.click(screen.getByRole('button', { name: 'Refresh version history' }));
+    expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
+      `Rollback staged for ${shortCommitId(HEAD_COMMIT_ID)}`,
+    );
     await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
     expectDisabledButtonReason(
       screen.getByRole('button', { name: 'Stage rollback' }),
-      'Version status is refreshing.',
+      'Wait for the current version action to finish.',
     );
 
     await act(async () => {
@@ -101,6 +103,7 @@ describe('VersionHistoryPanelContent rollback staging', () => {
     await waitFor(() =>
       expect(screen.getByTestId('version-history-current-stale-status')).toBeVisible(),
     );
+    await expectActionResult(`Rollback staged for ${shortCommitId(HEAD_COMMIT_ID)}`, 'success');
     expectDisabledButtonReason(
       screen.getByRole('button', { name: 'Stage rollback' }),
       'main is stale because the branch head moved. Refresh before staging rollback.',

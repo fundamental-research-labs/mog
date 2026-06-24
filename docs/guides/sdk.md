@@ -273,6 +273,151 @@ const xlsxBytes = await wb.toXlsx();
 host write failures reject with `MogSdkError` details containing fields such as
 `issue`, `requestedPath`, `cwd`, `absolutePath`, and `filesystemCode`.
 
+## Version History
+
+Enable version history when the workbook is created. The public SDK accepts
+provider selection through `versionStore`; version operations then live under
+`wb.version`.
+
+```javascript
+import { createWorkbook } from '@mog-sdk/sdk';
+
+const mainRef = 'refs/heads/main';
+const scenarioRef = 'refs/heads/scenario/budget-q1';
+
+function failFromDiagnostics(diagnostics) {
+  return diagnostics.map((diagnostic) => diagnostic.safeMessage ?? 'Version diagnostic').join('\n');
+}
+
+async function valueOf(resultPromise) {
+  const result = await resultPromise;
+  if (!result.ok) throw new Error(result.error.reason);
+  return result.value;
+}
+
+async function readRef(wb, refName) {
+  const result = await valueOf(wb.version.readRef(refName));
+  if (result.status !== 'success') throw new Error(failFromDiagnostics(result.diagnostics));
+  return result.ref;
+}
+
+const wb = await createWorkbook({
+  documentId: 'budget-2026',
+  userTimezone: 'UTC',
+  versionStore: {
+    kind: 'memory-durable-snapshot',
+    workspaceId: 'finance',
+    principalScope: 'analyst-1',
+  },
+});
+
+try {
+  const rootHead = await valueOf(wb.version.getHead());
+  if (!rootHead.refRevision) throw new Error('Main version head is missing its ref revision');
+
+  await wb.activeSheet.setCell('A1', 'Base forecast');
+  const baseCommit = await valueOf(
+    wb.version.commit({
+      message: 'Initial budget model',
+      expectedHead: { commitId: rootHead.id, revision: rootHead.refRevision },
+    }),
+  );
+  wb.markClean();
+
+  await valueOf(
+    wb.version.createBranch({
+      name: scenarioRef,
+      targetCommitId: baseCommit.id,
+      expectedAbsent: true,
+    }),
+  );
+
+  const checkout = await valueOf(
+    wb.version.checkout({ kind: 'ref', name: scenarioRef }, { requireClean: true }),
+  );
+  if (checkout.materialization !== 'applied') {
+    throw new Error('Checkout did not materialize workbook state');
+  }
+
+  await wb.activeSheet.setCell('B2', 1200);
+  const branchHead = await valueOf(wb.version.getHead());
+  if (!branchHead.refRevision) throw new Error('Scenario branch head is missing its revision');
+  const branchCommit = await valueOf(
+    wb.version.commit({
+      message: 'Scenario revenue upside',
+      expectedHead: { commitId: branchHead.id, revision: branchHead.refRevision },
+    }),
+  );
+  wb.markClean();
+
+  await valueOf(wb.version.checkout({ kind: 'ref', name: mainRef }, { requireClean: true }));
+  const mainHead = await readRef(wb, mainRef);
+  const expectedTargetHead = { commitId: mainHead.commitId, revision: mainHead.revision };
+
+  const preview = await valueOf(
+    wb.version.merge(
+      { base: baseCommit.id, ours: expectedTargetHead.commitId, theirs: branchCommit.id },
+      { mode: 'preview', targetRef: mainRef, expectedTargetHead },
+    ),
+  );
+  if (preview.status === 'blocked') throw new Error(failFromDiagnostics(preview.diagnostics));
+
+  const applied = await valueOf(
+    wb.version.applyMerge(
+      { base: baseCommit.id, ours: expectedTargetHead.commitId, theirs: branchCommit.id },
+      { mode: 'apply', targetRef: mainRef, expectedTargetHead },
+    ),
+  );
+  if (applied.status === 'blocked' || applied.status === 'staleTargetHead') {
+    throw new Error(failFromDiagnostics(applied.diagnostics));
+  }
+  if (applied.status === 'conflicted') {
+    throw new Error(`Merge still has ${applied.requiredResolutionCount} unresolved conflicts`);
+  }
+  if (applied.status === 'planned') {
+    throw new Error('applyMerge planned the merge but did not mutate the target ref');
+  }
+  if (!applied.commitRef.refRevision) throw new Error('Merged target ref is missing its revision');
+
+  const reverted = await valueOf(
+    wb.version.revert(
+      {
+        target: { kind: 'commit', commitId: branchCommit.id },
+        targetRef: mainRef,
+        expectedTargetHead: {
+          commitId: applied.commitRef.id,
+          revision: applied.commitRef.refRevision,
+        },
+        preflight: {
+          cas: { refName: mainRef, expectedRevision: applied.commitRef.refRevision },
+        },
+        reason: 'Back out scenario commit',
+      },
+      { includeDiagnostics: true },
+    ),
+  );
+  if (reverted.status === 'rejected' || reverted.status === 'requires-review') {
+    throw new Error(failFromDiagnostics(reverted.diagnostics));
+  }
+  if (reverted.status === 'planned') {
+    throw new Error('revert planned the change but did not mutate the target ref');
+  }
+
+  console.log({
+    baseCommit: baseCommit.id,
+    branchCommit: branchCommit.id,
+    mergedHead: applied.commitRef.id,
+    revertCommit: reverted.commitRef?.id,
+  });
+} finally {
+  await wb.dispose();
+}
+```
+
+For merge and revert, read the target ref immediately before mutation and pass
+its commit/revision as `expectedTargetHead`. Use `{ dryRun: true }` for revert
+when the host wants to inspect diagnostics before moving the target ref.
+
 ## Error Handling
 
 The package exports `MogSdkError` and the `MogSdkErrorCode` type for structured

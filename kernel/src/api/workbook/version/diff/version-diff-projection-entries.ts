@@ -125,6 +125,8 @@ function withUniqueMetadataChangeIds(
   items: readonly MappedDiffEntry[],
 ): readonly MappedDiffEntry[] {
   const counts = new Map<string, number>();
+  const structuralCounts = new Map<string, number>();
+  const valueCounts = new Map<string, number>();
   for (const item of items) {
     const structural = metadataForOrder(item.source, item.entry);
     if (structural) {
@@ -132,13 +134,33 @@ function withUniqueMetadataChangeIds(
     }
   }
   if (![...counts.values()].some((count) => count > 1)) return items;
+  for (const item of items) {
+    const structural = metadataForOrder(item.source, item.entry);
+    if (!structural || counts.get(structural.changeId) === 1) continue;
+    const structuralKey = duplicateStructuralKey(structural);
+    const structuralScope = `${structural.changeId}\u0000${structuralKey}`;
+    const valueScope = `${structuralScope}\u0000${duplicateValueHash(item.entry)}`;
+    structuralCounts.set(structuralScope, (structuralCounts.get(structuralScope) ?? 0) + 1);
+    valueCounts.set(valueScope, (valueCounts.get(valueScope) ?? 0) + 1);
+  }
+  const valueOccurrences = new Map<string, number>();
   return items.map((item) => {
     const structural = metadataForOrder(item.source, item.entry);
     if (!structural || counts.get(structural.changeId) === 1) {
       return item;
     }
+    const structuralKey = duplicateStructuralKey(structural);
+    const structuralScope = `${structural.changeId}\u0000${structuralKey}`;
+    const valueHash = duplicateValueHash(item.entry);
+    const valueScope = `${structuralScope}\u0000${valueHash}`;
+    const occurrence =
+      (valueCounts.get(valueScope) ?? 0) > 1
+        ? nextDuplicateOccurrence(valueOccurrences, valueScope)
+        : undefined;
     const suffix = encodeURIComponent(
-      JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]),
+      structuralCounts.get(structuralScope) === 1
+        ? structuralKey
+        : duplicateStructuralValueKey(structural, valueHash, occurrence),
     );
     const orderChangeId = `${structural.changeId}~${suffix}`;
     return {
@@ -153,6 +175,63 @@ function withUniqueMetadataChangeIds(
           : item.entry,
     };
   });
+}
+
+function duplicateStructuralKey(structural: MetadataDiffStructural): string {
+  return JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]);
+}
+
+function duplicateStructuralValueKey(
+  structural: MetadataDiffStructural,
+  valueHash: string,
+  occurrence: string | undefined,
+): string {
+  return JSON.stringify([
+    structural.domain,
+    structural.entityId,
+    structural.propertyPath,
+    valueHash,
+    ...(occurrence === undefined ? [] : [occurrence]),
+  ]);
+}
+
+function duplicateValueHash(entry: VersionDiffEntry): string {
+  return stringFingerprint(
+    stableStringify([entry.before, entry.after, entry.display ?? null]),
+  );
+}
+
+function nextDuplicateOccurrence(occurrences: Map<string, number>, key: string): string {
+  const occurrence = occurrences.get(key) ?? 0;
+  occurrences.set(key, occurrence + 1);
+  return occurrence.toString().padStart(12, '0');
+}
+
+function stringFingerprint(value: string): string {
+  let primary = 0x811c9dc5;
+  let secondary = 0x811c9dc5 ^ value.length;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    primary = Math.imul(primary ^ code, 0x01000193);
+    secondary = Math.imul(secondary ^ code, 0x5bd1e995);
+  }
+  return [
+    (primary >>> 0).toString(36),
+    (secondary >>> 0).toString(36),
+    value.length.toString(36),
+  ].join('.');
+}
+
+function stableStringify(value: unknown): string {
+  if (value === undefined) return '"__undefined__"';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  const entries = Object.entries(value as Readonly<Record<string, unknown>>).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  return `{${entries
+    .map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`)
+    .join(',')}}`;
 }
 
 function metadataForOrder(

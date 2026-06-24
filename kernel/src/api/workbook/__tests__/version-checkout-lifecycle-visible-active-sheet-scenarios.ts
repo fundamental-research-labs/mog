@@ -68,10 +68,17 @@ export function registerVisibleActiveSheetMaterializationScenario(): void {
       expect(checkoutWb.activeSheet.name).toBe('Sheet1');
       checkoutWb.markClean();
       const checkoutMaterializedEvents: unknown[] = [];
+      const activeCheckoutStateEvents: unknown[] = [];
       const unsubscribeCheckoutMaterialized = checkoutWb.on(
         'workbook:version-checkout-materialized',
         (event) => {
           checkoutMaterializedEvents.push(event);
+        },
+      );
+      const unsubscribeActiveCheckoutState = checkoutWb.on(
+        'workbook:version-active-checkout-state-changed',
+        (event) => {
+          activeCheckoutStateEvents.push(event);
         },
       );
 
@@ -86,6 +93,7 @@ export function registerVisibleActiveSheetMaterializationScenario(): void {
         },
       });
       unsubscribeCheckoutMaterialized();
+      unsubscribeActiveCheckoutState();
 
       expect(checkoutWb.activeSheet.name).toBe('Visible Output');
       expect(checkoutWb.activeSheet.index).toBe(1);
@@ -95,6 +103,18 @@ export function registerVisibleActiveSheetMaterializationScenario(): void {
           type: 'workbook:version-checkout-materialized',
           commitId: committed.id,
           targetKind: 'commit',
+        }),
+      ]);
+      expect(activeCheckoutStateEvents).toEqual([
+        expect.objectContaining({
+          type: 'workbook:version-active-checkout-state-changed',
+          activeCheckoutSession: {
+            checkedOutCommitId: committed.id,
+            detached: true,
+          },
+          previousActiveCheckoutSession: null,
+          statusRevision: 1,
+          reason: 'checkout-materialized',
         }),
       ]);
       await expect(checkoutWb.activeSheet.getVisibility()).resolves.toBe('visible');

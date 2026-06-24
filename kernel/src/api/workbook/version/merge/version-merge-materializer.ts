@@ -82,7 +82,8 @@ export function createSemanticMergeCommitCapture(
             resolutionCount: input.resolutionCount,
             materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
           },
-          changes: parsed.changes.map((entry) => semanticMergeChangeRecord(entry.change)),
+          changes: parsed.changes.map((entry) => semanticMergeDiffChangeRecord(entry.change)),
+          mergeChanges: parsed.changes.map((entry) => semanticMergeChangeRecord(entry.change)),
         },
       });
       const mutationSegmentRecords = [
@@ -130,12 +131,26 @@ export function createSemanticMergeCommitCapture(
   };
 }
 
-function semanticMergeChangeRecord(change: VersionMergeChange) {
+function semanticMergeDiffChangeRecord(change: VersionMergeChange) {
   return {
     structural: change.structural,
     before: change.base,
     after: change.merged,
     ...(change.display ? { display: change.display } : {}),
+  };
+}
+
+function semanticMergeChangeRecord(change: VersionMergeChange) {
+  return {
+    structural: change.structural,
+    base: change.base,
+    ...(change.ours ? { ours: change.ours } : {}),
+    ...(change.theirs ? { theirs: change.theirs } : {}),
+    merged: change.merged,
+    ...(change.display ? { display: change.display } : {}),
+    ...(change.diagnostics && change.diagnostics.length > 0
+      ? { diagnostics: change.diagnostics }
+      : {}),
   };
 }
 

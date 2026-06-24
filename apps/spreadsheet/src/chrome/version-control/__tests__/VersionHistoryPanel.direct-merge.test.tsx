@@ -14,10 +14,13 @@ import {
   MERGE_COMMIT_ID,
   PARENT_COMMIT_ID,
   REF_REVISION,
+  appliedMergeResult,
   cleanMergeResult,
   conflictedMergeResult,
+  createDeferred,
   createSurfaceStatus,
   createWorkbook,
+  expectActionResult,
   expectDisabledButtonReason,
   failedInvalidState,
   mergeResolutionFor,
@@ -26,12 +29,15 @@ import {
   mergeSourceRefSelectTestId,
   renderVersionHistoryPanel,
   sameCellMergeConflict,
+  shortCommitId,
   type DirectMergeVersionHistoryWorkbook,
 } from './VersionHistoryPanel.test-utils';
 
 const CURRENT_REF = 'refs/heads/main';
 const INCOMING_REF = 'refs/heads/scenario/budget';
+const REVIEW_REF = 'refs/heads/review/revenue';
 const PRIVATE_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}`;
+const REVIEW_COMMIT_ID = `commit:sha256:${'f'.repeat(64)}`;
 const SOURCE_RESOLUTION_RADIO_NAME = 'cells.values value: Source - theirs';
 
 describe('VersionHistoryPanelContent direct merge controls', () => {
@@ -165,6 +171,118 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
       kind: 'ref',
       name: CURRENT_REF,
     });
+  });
+
+  it('keeps merge apply pending until the public checkout and history refresh complete', async () => {
+    const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
+    const getSurfaceStatus = jest
+      .fn<DirectMergeVersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(createSurfaceStatus())
+      .mockImplementationOnce(async () => refreshedSurface.promise);
+    const workbook = createDirectMergeWorkbook({ getSurfaceStatus });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+
+    const applyButton = screen.getByTestId(mergeApplyButtonTestId());
+    await waitFor(() => expect(applyButton).toBeEnabled());
+    await user.click(applyButton);
+
+    await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+        'Refreshing version history',
+      ),
+    );
+    expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
+      'Merge applied',
+    );
+    expect(getSurfaceStatus).toHaveBeenCalledTimes(2);
+
+    refreshedSurface.resolve(createSurfaceStatus());
+    await expectActionResult(`Merge applied at ${shortCommitId(MERGE_COMMIT_ID)}`, 'success');
+  });
+
+  it('requires a fresh public preview after changing the source ref before applying', async () => {
+    const workbook = createDirectMergeWorkbook({
+      listCommits: jest.fn(async () => ({
+        ok: true,
+        value: {
+          items: directMergeCommitsWithReviewBranch(),
+          limit: 20,
+        },
+      })),
+      listRefs: jest.fn(async () => ({
+        ok: true,
+        value: {
+          items: directMergeRefsWithReviewBranch(),
+          limit: 3,
+        },
+      })),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
+        async (input) => ({
+          ok: true,
+          value: cleanMergeResult(input.base, input.ours, input.theirs),
+        }),
+      ),
+      applyMerge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>(
+        async (input) => {
+          const mergeInput = directMergeInput(input);
+          return {
+            ok: true,
+            value: appliedMergeResult(mergeInput.base, mergeInput.ours, mergeInput.theirs),
+          };
+        },
+      ),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    const sourceSelect = screen.getByTestId(mergeSourceRefSelectTestId());
+    expect(sourceSelect).toHaveValue(INCOMING_REF);
+
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+    expect(firstCallArgs(workbook.version.merge)[0]?.[0]).toEqual({
+      base: PARENT_COMMIT_ID,
+      ours: HEAD_COMMIT_ID,
+      theirs: LATEST_COMMIT_ID,
+    });
+    await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
+
+    await user.selectOptions(sourceSelect, REVIEW_REF);
+    await waitFor(() =>
+      expectDisabledButtonReason(
+        screen.getByTestId(mergeApplyButtonTestId()),
+        'Preview a merge first.',
+      ),
+    );
+    expect(screen.queryByTestId('version-merge-preview-status')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId(mergeApplyButtonTestId()));
+    expect(workbook.version.applyMerge).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(2));
+    expect(firstCallArgs(workbook.version.merge)[1]?.[0]).toEqual({
+      base: PARENT_COMMIT_ID,
+      ours: HEAD_COMMIT_ID,
+      theirs: REVIEW_COMMIT_ID,
+    });
+
+    await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
+    await user.click(screen.getByTestId(mergeApplyButtonTestId()));
+
+    await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
+    expect(firstCallArgs(workbook.version.applyMerge)[0]?.[0]).toEqual({
+      base: PARENT_COMMIT_ID,
+      ours: HEAD_COMMIT_ID,
+      theirs: REVIEW_COMMIT_ID,
+    });
+    await expectActionResult(`Merge applied at ${shortCommitId(MERGE_COMMIT_ID)}`, 'success');
   });
 
   it('does not apply a conflicted direct merge preview without resolutions', async () => {
@@ -403,6 +521,42 @@ function directMergeRefs(): readonly VersionRef[] {
       revision: { kind: 'counter', value: '2' },
     },
   ];
+}
+
+function directMergeCommitsWithReviewBranch(): readonly WorkbookCommitSummary[] {
+  return [
+    ...directMergeCommits(),
+    {
+      id: REVIEW_COMMIT_ID,
+      parents: [PARENT_COMMIT_ID],
+      createdAt: '2026-06-22T10:13:00.000Z',
+      author: { redacted: false, displayName: 'Review agent' },
+      annotation: { title: { kind: 'text', value: 'Revenue review' } },
+    },
+  ];
+}
+
+function directMergeRefsWithReviewBranch(): readonly VersionRef[] {
+  return [
+    ...directMergeRefs(),
+    {
+      name: REVIEW_REF,
+      commitId: REVIEW_COMMIT_ID,
+      revision: { kind: 'counter', value: '3' },
+    },
+  ];
+}
+
+function directMergeInput(
+  input: Parameters<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>[0],
+) {
+  if ('base' in input) return input;
+
+  return {
+    base: PARENT_COMMIT_ID,
+    ours: HEAD_COMMIT_ID,
+    theirs: REVIEW_COMMIT_ID,
+  };
 }
 
 function disabledCapability(reason: string): VersionCapabilityState {

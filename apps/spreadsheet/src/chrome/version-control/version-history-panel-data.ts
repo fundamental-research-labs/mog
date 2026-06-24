@@ -15,7 +15,7 @@ import type {
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 
-import { isCapabilityEnabled } from './version-action-availability';
+import { isCapabilityEnabled } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { shortCommitId } from './version-history-format';
 
@@ -73,6 +73,42 @@ export type VersionHistoryData = {
   readonly proposalDiagnostic?: VersionPanelDiagnostic;
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
+
+export type CommitDirtySnapshot = {
+  readonly statusRevision: string;
+  readonly checkoutPreflightToken: string;
+  readonly hasUncommittedLocalChanges: boolean;
+};
+
+export type CommitDirtyRefreshFence = {
+  readonly data?: VersionHistoryData;
+  readonly snapshot?: CommitDirtySnapshot;
+};
+
+export function commitDirtyRefreshFenceSnapshot(
+  data: VersionHistoryData | undefined,
+): Pick<CommitDirtyRefreshFence, 'snapshot'> {
+  const snapshot = commitDirtySnapshot(data);
+  return snapshot ? { snapshot } : {};
+}
+
+export function commitDirtyRefreshFenceRequiresRefresh(
+  fence: CommitDirtyRefreshFence | undefined,
+  data: VersionHistoryData | undefined,
+): boolean {
+  if (!fence) return false;
+  if (data === fence.data) return true;
+
+  const snapshot = commitDirtySnapshot(data);
+  if (!snapshot) return true;
+  if (!snapshot.hasUncommittedLocalChanges) return false;
+
+  return (
+    fence.snapshot === undefined ||
+    snapshot.statusRevision === fence.snapshot.statusRevision ||
+    snapshot.checkoutPreflightToken === fence.snapshot.checkoutPreflightToken
+  );
+}
 
 export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   readonly loadState: VersionHistoryLoadState;
@@ -245,6 +281,23 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     data,
     diagnostics,
     loading: loadState.status === 'loading',
+  };
+}
+
+function commitDirtySnapshot(data: VersionHistoryData | undefined): CommitDirtySnapshot | undefined {
+  const dirty = data?.surface?.dirty;
+  if (!dirty) return undefined;
+  if (
+    dirty.source !== 'VC-05' ||
+    dirty.statusRevision.length === 0 ||
+    dirty.checkoutPreflightToken.length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    statusRevision: dirty.statusRevision,
+    checkoutPreflightToken: dirty.checkoutPreflightToken,
+    hasUncommittedLocalChanges: dirty.hasUncommittedLocalChanges,
   };
 }
 

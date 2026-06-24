@@ -1,5 +1,6 @@
 export {
   conflictDigestObject,
+  multiSheetRangeConflicts,
   mutateDigest,
   requireResolutionOption,
   resolutionFor,

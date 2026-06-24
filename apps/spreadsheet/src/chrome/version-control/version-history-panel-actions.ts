@@ -16,7 +16,7 @@ import {
   getDiffAvailability,
   getRemotePromoteAvailability,
   getRollbackAvailability,
-} from './version-action-availability';
+} from './availability/version-action-availability';
 import {
   diagnosticFromRemotePromotionResult,
   getRemotePromotionStatus,
@@ -27,47 +27,51 @@ import type { VersionDiffPreview } from './VersionHistoryDiffPreview';
 import type { ReviewProposalDiffTarget } from './ReviewProposalSurface';
 import {
   applyMergeInputFromPreview,
-  mergeApplyConflictedMessage,
+  clearMergeReviewDraft,
   diagnosticFromMergeApplyResult,
+  findLoadedMergeBase,
   mergeApplyActionDisabledReason,
   mergeApplyActionMessage,
   mergeApplyBlocked,
   mergeApplyBlockedMessage,
+  mergeApplyConflictedMessage,
   mergeExpectedTargetHead,
   mergePreviewActionDisabledReason,
   mergePreviewActionMessage,
+  mergeReviewDraftMatches,
+  mergeReviewDraftStorageKey,
+  mergeSourceRefs,
   readMergeGraph,
+  readMergeReviewDraft,
+  resolveCurrentMergeTarget,
+  sanitizeMergeReviewDraftSelections,
+  writeMergeReviewDraft,
   type VersionMergePreviewState,
   type VersionMergeResolutionSelections,
-} from './actions/merge-actions';
+  type VersionMergeTarget,
+} from './merge';
 import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
 import {
+  commitDirtyRefreshFenceRequiresRefresh,
+  commitDirtyRefreshFenceSnapshot,
   diagnosticFromRevertResult,
   readVersionResult,
   resolveSelectedOrHeadCommitId,
   rollbackActionMessage,
+  type CommitDirtyRefreshFence,
   type VersionHistoryData,
   type VersionHistoryWorkbook,
 } from './version-history-panel-data';
-import {
-  findLoadedMergeBase,
-  mergeSourceRefs,
-  resolveCurrentMergeTarget,
-  type VersionMergeTarget,
-} from './version-merge-planning';
-import {
-  clearMergeReviewDraft,
-  mergeReviewDraftMatches,
-  mergeReviewDraftStorageKey,
-  readMergeReviewDraft,
-  sanitizeMergeReviewDraftSelections,
-  writeMergeReviewDraft,
-} from './version-merge-review-draft-storage';
 
 export type {
   VersionMergePreviewState,
   VersionMergeResolutionSelections,
-} from './actions/merge-actions';
+} from './merge';
+
+const VERSION_COMMIT_DIRTY_REFRESH_EVENTS = [
+  'workbook:version-dirty-status-changed',
+  'workbook:version-checkout-materialized',
+] as const;
 
 type UseVersionHistoryPanelActionsInput = {
   readonly workbook: VersionHistoryWorkbook;
@@ -76,7 +80,13 @@ type UseVersionHistoryPanelActionsInput = {
   readonly load: () => Promise<void>;
 };
 
-type VersionPanelActionKind = 'commit' | 'merge-preview' | 'merge-apply' | 'merge-restore';
+type VersionPanelActionKind =
+  | 'checkout'
+  | 'commit'
+  | 'merge-preview'
+  | 'merge-apply'
+  | 'merge-restore'
+  | 'rollback';
 
 type VersionPanelActionRun = {
   readonly id: number;
@@ -104,6 +114,11 @@ export function useVersionHistoryPanelActions({
   const restoredMergeReviewDraftKeyRef = useRef<string | undefined>(undefined);
   const actionSequenceRef = useRef(0);
   const activeActionRef = useRef<VersionPanelActionRun | undefined>(undefined);
+  const latestDataRef = useRef<VersionHistoryData | undefined>(data);
+  const commitDirtyRefreshFenceRef = useRef<CommitDirtyRefreshFence | undefined>(undefined);
+  const [commitDirtyRefreshFence, setCommitDirtyRefreshFence] =
+    useState<CommitDirtyRefreshFence | undefined>(undefined);
+  latestDataRef.current = data;
 
   const actionBusy = actionState.status === 'running';
   const selectedOrHeadCommitId = data
@@ -123,7 +138,39 @@ export function useVersionHistoryPanelActions({
     target: currentMergeTarget,
     source: selectedMergeSource,
   };
-  const commitAvailability = getCommitAvailability(data, actionBusy, loading, commitMessage);
+  const setCommitDirtyRefreshRequired = useCallback((fence: CommitDirtyRefreshFence) => {
+    commitDirtyRefreshFenceRef.current = fence;
+    setCommitDirtyRefreshFence(fence);
+  }, []);
+  const clearCommitDirtyRefreshRequired = useCallback(() => {
+    commitDirtyRefreshFenceRef.current = undefined;
+    setCommitDirtyRefreshFence(undefined);
+  }, []);
+  const markCommitDirtyRefreshRequired = useCallback(
+    (fenceData: VersionHistoryData | undefined = latestDataRef.current) => {
+      setCommitDirtyRefreshRequired({
+        ...(fenceData ? { data: fenceData } : {}),
+        ...commitDirtyRefreshFenceSnapshot(fenceData),
+      });
+    },
+    [setCommitDirtyRefreshRequired],
+  );
+  const isCommitDirtyRefreshRequired = useCallback(() => {
+    return commitDirtyRefreshFenceRequiresRefresh(
+      commitDirtyRefreshFenceRef.current,
+      latestDataRef.current,
+    );
+  }, []);
+  const commitDirtyStatusRefreshing = commitDirtyRefreshFenceRequiresRefresh(
+    commitDirtyRefreshFence,
+    data,
+  );
+  const commitAvailability = getCommitAvailability(
+    data,
+    actionBusy,
+    loading || commitDirtyStatusRefreshing,
+    commitMessage,
+  );
   const branchAvailability = getBranchAvailability(
     data,
     actionBusy,
@@ -182,6 +229,30 @@ export function useVersionHistoryPanelActions({
     [],
   );
 
+  useEffect(() => {
+    if (!workbook.on) return undefined;
+
+    const markRefreshRequired = () => {
+      markCommitDirtyRefreshRequired();
+    };
+
+    const unsubscriptions = VERSION_COMMIT_DIRTY_REFRESH_EVENTS.map((event) =>
+      workbook.on?.(event, markRefreshRequired),
+    );
+
+    return () => {
+      for (const unsubscribe of unsubscriptions) {
+        unsubscribe?.();
+      }
+    };
+  }, [markCommitDirtyRefreshRequired, workbook]);
+
+  useEffect(() => {
+    if (!commitDirtyRefreshFence) return;
+    if (commitDirtyRefreshFenceRequiresRefresh(commitDirtyRefreshFence, data)) return;
+    clearCommitDirtyRefreshRequired();
+  }, [clearCommitDirtyRefreshRequired, commitDirtyRefreshFence, data]);
+
   const beginAction = useCallback((kind: VersionPanelActionKind) => {
     if (activeActionRef.current) return undefined;
     const action = { id: (actionSequenceRef.current += 1), kind };
@@ -211,6 +282,16 @@ export function useVersionHistoryPanelActions({
       return true;
     },
     [isActionCurrent],
+  );
+
+  const refreshThenCompleteAction = useCallback(
+    async (action: VersionPanelActionRun, nextState: VersionActionState) => {
+      if (!setRunningAction(action, 'Refreshing version history')) return false;
+      await load();
+      if (!isActionCurrent(action)) return false;
+      return completeAction(action, nextState);
+    },
+    [completeAction, isActionCurrent, load, setRunningAction],
   );
 
   const cancelAction = useCallback(
@@ -351,9 +432,10 @@ export function useVersionHistoryPanelActions({
   ]);
 
   const handleCommit = useCallback(async () => {
-    if (!data || !canCommit) return;
+    if (!data || !canCommit || isCommitDirtyRefreshRequired()) return;
     const action = beginAction('commit');
     if (!action) return;
+    const dirtyRefreshFenceData = data;
 
     const message = commitMessage.trim();
     const expectedHead =
@@ -377,20 +459,20 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
+    markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
     setCommitMessage('');
     setSelectedCommitId(result.value.id);
-    if (!setRunningAction(action, 'Refreshing version history')) return;
-    await load();
-    if (!isActionCurrent(action)) return;
-    completeAction(action, { status: 'success', message: 'Committed changes' });
+    await refreshThenCompleteAction(action, { status: 'success', message: 'Committed changes' });
   }, [
     beginAction,
     canCommit,
     commitMessage,
     completeAction,
     data,
+    isCommitDirtyRefreshRequired,
     isActionCurrent,
-    load,
+    markCommitDirtyRefreshRequired,
+    refreshThenCompleteAction,
     setRunningAction,
     workbook,
   ]);
@@ -429,6 +511,8 @@ export function useVersionHistoryPanelActions({
 
   const handleStageRollback = useCallback(async () => {
     if (!data || !canStageRollback || !selectedOrHeadCommitId) return;
+    const action = beginAction('rollback');
+    if (!action) return;
 
     const targetRef = data.surface?.current.branchName as
       | VersionRevertInput['targetRef']
@@ -447,17 +531,18 @@ export function useVersionHistoryPanelActions({
       reason: rollbackReason.trim(),
     };
 
-    setActionState({ status: 'running', label: 'Staging rollback' });
+    if (!setRunningAction(action, 'Staging rollback')) return;
     const result = await readVersionResult('VERSION_UI_REVERT_FAILED', () =>
       workbook.version.revert(input, { dryRun: true, includeDiagnostics: true }),
     );
+    if (!isActionCurrent(action)) return;
     if (!result.ok) {
-      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
       return;
     }
 
     if (result.value.status === 'rejected') {
-      setActionState({
+      completeAction(action, {
         status: 'error',
         diagnostic: diagnosticFromRevertResult('VERSION_UI_REVERT_REJECTED', result.value),
       });
@@ -465,11 +550,22 @@ export function useVersionHistoryPanelActions({
     }
 
     setRollbackReason('');
-    setActionState({
+    await refreshThenCompleteAction(action, {
       status: 'success',
       message: rollbackActionMessage(result.value, selectedOrHeadCommitId),
     });
-  }, [canStageRollback, data, rollbackReason, selectedOrHeadCommitId, workbook]);
+  }, [
+    beginAction,
+    canStageRollback,
+    completeAction,
+    data,
+    isActionCurrent,
+    refreshThenCompleteAction,
+    rollbackReason,
+    selectedOrHeadCommitId,
+    setRunningAction,
+    workbook,
+  ]);
 
   const handlePromotePendingRemote = useCallback(async () => {
     if (!data || !canPromoteRemote) return;
@@ -596,6 +692,7 @@ export function useVersionHistoryPanelActions({
     }
     const action = beginAction('merge-apply');
     if (!action) return;
+    const dirtyRefreshFenceData = data;
 
     const input = applyMergeInputFromPreview(
       mergePreviewState.result,
@@ -658,6 +755,7 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
+    markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
     if (selectedMergeSource) {
       clearMergeReviewDraft(mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource));
     }
@@ -681,10 +779,10 @@ export function useVersionHistoryPanelActions({
     } else {
       setSelectedCommitId(undefined);
     }
-    if (!setRunningAction(action, 'Refreshing version history')) return;
-    await load();
-    if (!isActionCurrent(action)) return;
-    completeAction(action, { status: 'success', message: mergeApplyActionMessage(result.value) });
+    await refreshThenCompleteAction(action, {
+      status: 'success',
+      message: mergeApplyActionMessage(result.value),
+    });
   }, [
     beginAction,
     canApplyMerge,
@@ -693,9 +791,10 @@ export function useVersionHistoryPanelActions({
     currentMergeTarget,
     data,
     isActionCurrent,
-    load,
+    markCommitDirtyRefreshRequired,
     mergePreviewState,
     mergeResolutionSelections,
+    refreshThenCompleteAction,
     selectedMergeSource,
     setRunningAction,
     workbook,
@@ -724,8 +823,11 @@ export function useVersionHistoryPanelActions({
   const handleCheckoutRef = useCallback(
     async (ref: VersionRef) => {
       if (!canCheckout) return;
+      const action = beginAction('checkout');
+      if (!action) return;
+      const dirtyRefreshFenceData = data;
 
-      setActionState({ status: 'running', label: 'Checking out branch' });
+      if (!setRunningAction(action, 'Checking out branch')) return;
       const result = await readVersionResult('VERSION_UI_CHECKOUT_FAILED', () =>
         workbook.version.checkout(
           {
@@ -735,17 +837,30 @@ export function useVersionHistoryPanelActions({
           { includeDiagnostics: true },
         ),
       );
+      if (!isActionCurrent(action)) return;
       if (!result.ok) {
-        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        completeAction(action, { status: 'error', diagnostic: result.diagnostic });
         return;
       }
 
+      markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
       setSelectedCommitId(result.value.plan.commitId);
-      setActionState({ status: 'running', label: 'Refreshing version history' });
-      await load();
-      setActionState({ status: 'success', message: `Checked out ${displayBranchName(ref.name)}` });
+      await refreshThenCompleteAction(action, {
+        status: 'success',
+        message: `Checked out ${displayBranchName(ref.name)}`,
+      });
     },
-    [canCheckout, load, workbook],
+    [
+      beginAction,
+      canCheckout,
+      completeAction,
+      data,
+      isActionCurrent,
+      markCommitDirtyRefreshRequired,
+      refreshThenCompleteAction,
+      setRunningAction,
+      workbook,
+    ],
   );
 
   const handleDiffCommit = useCallback(

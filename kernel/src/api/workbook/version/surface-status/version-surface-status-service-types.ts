@@ -48,11 +48,30 @@ export type VersionSurfaceBranchCommitMaterialization = {
   readonly refName: string;
 };
 
+export type VersionSurfaceBranchRefMove = {
+  readonly checkedOutCommitId: string;
+  readonly refHeadCommitId: string;
+  readonly refName: string;
+};
+
+export type VersionSurfaceActiveCheckoutStateChangeReason =
+  | 'checkout-materialized'
+  | 'branch-head-advanced'
+  | 'branch-ref-moved';
+
+export type VersionSurfaceActiveCheckoutStateChanged = {
+  readonly activeCheckoutSession: VersionSurfaceCheckoutSession | null;
+  readonly previousActiveCheckoutSession: VersionSurfaceCheckoutSession | null;
+  readonly statusRevision: number;
+  readonly reason: VersionSurfaceActiveCheckoutStateChangeReason;
+};
+
 export type WorkbookVersionSurfaceStatusService = {
   readDirtyStatus(): MaybePromise<VersionSurfaceStatus['dirty']>;
   readActiveCheckoutSession(): VersionSurfaceCheckoutSession | null;
   recordCheckoutMaterialization(input: CheckoutSnapshotApplyInput): void;
   recordActiveCheckoutBranchCommit(input: VersionSurfaceBranchCommitMaterialization): void;
+  recordActiveCheckoutBranchRefMove(input: VersionSurfaceBranchRefMove): void;
 };
 
 export type AttachedVersionSurfaceStatusService = {
@@ -64,4 +83,7 @@ export type CreateWorkbookVersionSurfaceStatusServiceInput = {
   readonly readDirtyState: () => WorkbookVersionSurfaceDirtyState;
   readonly readPendingProviderWrites?: () => MaybePromise<VersionPendingProviderWritesStatus>;
   readonly readLiveCollaborationStatus?: () => MaybePromise<VersionLiveCollaborationDirtyStatus>;
+  readonly notifyActiveCheckoutStateChanged?: (
+    change: VersionSurfaceActiveCheckoutStateChanged,
+  ) => void;
 };

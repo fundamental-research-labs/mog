@@ -11,6 +11,10 @@ export async function expectVc06SnapshotRootDomains(checkoutWb: Workbook): Promi
       index: sheet.index,
     })),
   ).toEqual([{ name: 'Sheet1', index: 0 }]);
+  await expect(checkoutWb.activeSheet.view.getFrozenPanes()).resolves.toEqual({
+    rows: 2,
+    cols: 1,
+  });
 
   await expect(checkoutWb.names.get('RevenueCells')).resolves.toMatchObject({
     name: 'RevenueCells',

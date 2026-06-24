@@ -50,6 +50,32 @@ export function basicConflict(): VersionMergeConflict {
   return conflictRecord('8', structural, diffValue('base'), diffValue('ours'), diffValue('theirs'));
 }
 
+export function multiSheetRangeConflicts(): readonly VersionMergeConflict[] {
+  return [
+    conflictRecord(
+      '1',
+      metadata('w8-05-sheet-alpha-range-a1-b2', 'sheet-alpha!A1:B2', 'cells.values', ['value']),
+      diffValue('base:alpha:A1:B2'),
+      diffValue('ours:alpha:A1:B2'),
+      diffValue('theirs:alpha:A1:B2'),
+    ),
+    conflictRecord(
+      '2',
+      metadata('w8-05-sheet-beta-range-c3-d4', 'sheet-beta!C3:D4', 'cells.values', ['value']),
+      diffValue('base:beta:C3:D4'),
+      diffValue('ours:beta:C3:D4'),
+      diffValue('theirs:beta:C3:D4'),
+    ),
+    conflictRecord(
+      '3',
+      metadata('w8-05-sheet-gamma-range-g2-g8', 'sheet-gamma!G2:G8', 'cells.values', ['value']),
+      diffValue('base:gamma:G2:G8'),
+      diffValue('ours:gamma:G2:G8'),
+      diffValue('theirs:gamma:G2:G8'),
+    ),
+  ];
+}
+
 function conflictRecord(
   digit: string,
   structural: VersionDiffStructuralMetadata,

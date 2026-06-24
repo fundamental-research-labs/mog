@@ -117,17 +117,32 @@ if (receipt.status === "applied") {
     .map((effect) => effect.range);
 }`;
 
-const versionCommitSnippet = `const commitResult = await wb.version.commit({
+const versionCommitSnippet = `const headResult = await wb.version.getHead();
+if (!headResult.ok) {
+  throw new Error(headResult.error.reason);
+}
+if (!headResult.value.refRevision) {
+  throw new Error("Current version head is not attached to a mutable ref");
+}
+const commitResult = await wb.version.commit({
   message: "Update forecast inputs",
+  expectedHead: {
+    commitId: headResult.value.id,
+    revision: headResult.value.refRevision,
+  },
 });
 if (!commitResult.ok) {
   throw new Error(commitResult.error.reason);
 }
 const commitId = commitResult.value.id;`;
 
-const versionBranchSnippet = `const branchResult = await wb.version.createBranch({
+const versionBranchSnippet = `const targetHeadResult = await wb.version.getHead();
+if (!targetHeadResult.ok) {
+  throw new Error(targetHeadResult.error.reason);
+}
+const branchResult = await wb.version.createBranch({
   name: "refs/heads/scenario/budget-q1",
-  targetCommitId: commitId,
+  targetCommitId: targetHeadResult.value.id,
   expectedAbsent: true,
 });
 if (!branchResult.ok) {
@@ -135,9 +150,12 @@ if (!branchResult.ok) {
 }
 const branchRef = branchResult.value;`;
 
-const versionCheckoutSnippet = `const checkoutResult = await wb.version.checkout({
+const versionCheckoutSnippet = `wb.markClean();
+const checkoutResult = await wb.version.checkout({
   kind: "ref",
   name: "refs/heads/scenario/budget-q1",
+}, {
+  requireClean: true,
 });
 if (!checkoutResult.ok) {
   throw new Error(checkoutResult.error.reason);
@@ -163,7 +181,12 @@ const mergeInput = {
   ours: expectedTargetHead.commitId,
   theirs: branchCommitId,
 };
-const previewResult = await wb.version.merge(mergeInput);
+const previewResult = await wb.version.merge(mergeInput, {
+  mode: "preview",
+  targetRef: "refs/heads/main",
+  expectedTargetHead,
+  persistReviewRecord: true,
+});
 if (!previewResult.ok) {
   throw new Error(previewResult.error.reason);
 }
@@ -227,6 +250,45 @@ if (applied.status === "planned") {
   throw new Error("applyMerge planned the merge but did not mutate the target ref");
 }
 const newHeadId = applied.commitRef.id;`;
+
+const versionRevertSnippet = `const targetRefResult = await wb.version.readRef("refs/heads/main");
+if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
+  throw new Error(
+    targetRefResult.ok
+      ? targetRefResult.value.diagnostics[0]?.safeMessage ?? "Main ref unavailable"
+      : targetRefResult.error.reason,
+  );
+}
+const commitToRevertId = branchCommit.id;
+const revertResult = await wb.version.revert(
+  {
+    target: { kind: "commit", commitId: commitToRevertId },
+    targetRef: "refs/heads/main",
+    expectedTargetHead: {
+      commitId: targetRefResult.value.ref.commitId,
+      revision: targetRefResult.value.ref.revision,
+    },
+    preflight: {
+      cas: {
+        refName: "refs/heads/main",
+        expectedRevision: targetRefResult.value.ref.revision,
+      },
+    },
+    reason: "Back out scenario commit",
+  },
+  { includeDiagnostics: true },
+);
+if (!revertResult.ok) {
+  throw new Error(revertResult.error.reason);
+}
+const reverted = revertResult.value;
+if (reverted.status === "rejected" || reverted.status === "requires-review") {
+  throw new Error(reverted.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+if (reverted.status === "planned") {
+  throw new Error("revert planned the change but did not mutate the target ref");
+}
+const revertCommitId = reverted.commitRef?.id;`;
 
 export const apiGuidanceCatalog = [
   {
@@ -568,11 +630,12 @@ export const apiGuidanceCatalog = [
       { id: 'mog-version.workbook-preview-merge-guess', kind: 'call', symbol: 'wb.previewMerge' },
       { id: 'mog-version.workbook-merge-preview-guess', kind: 'call', symbol: 'wb.mergePreview' },
       { id: 'mog-version.workbook-apply-merge-guess', kind: 'call', symbol: 'wb.applyMerge' },
+      { id: 'mog-version.workbook-revert-guess', kind: 'call', symbol: 'wb.revert' },
     ],
     message:
       'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
-      'Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, and `wb.version.applyMerge`; every operation returns a VersionResult and merge calls also return status receipts.',
+      'Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.',
     mogReplacements: [
       {
         path: 'wb.version.commit',
@@ -598,6 +661,11 @@ export const apiGuidanceCatalog = [
         path: 'wb.version.applyMerge',
         snippet: versionApplyMergeSnippet,
         note: 'Apply merge with a concrete target ref and expected target head so stale refs fail closed.',
+      },
+      {
+        path: 'wb.version.revert',
+        snippet: versionRevertSnippet,
+        note: 'Revert with an explicit target ref and expected target head; dry-run first with { dryRun: true } when the host needs review before mutation.',
       },
     ],
     confidence: 0.86,

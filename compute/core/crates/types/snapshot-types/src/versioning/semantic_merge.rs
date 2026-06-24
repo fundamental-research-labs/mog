@@ -155,7 +155,24 @@ fn policy_domain(
 
 #[cfg(test)]
 mod tests {
+    use std::{fs, path::PathBuf};
+
     use super::*;
+
+    fn public_typescript_policy_fixture() -> SemanticMergePolicyManifest {
+        let fixture_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "../../../../../contracts/src/versioning/semantic-merge-policy-manifest.fixture.json",
+        );
+        let fixture = fs::read_to_string(&fixture_path).unwrap_or_else(|error| {
+            panic!(
+                "failed to read public TypeScript semantic merge policy fixture at {}: {}",
+                fixture_path.display(),
+                error
+            )
+        });
+
+        serde_json::from_str(&fixture).expect("public TypeScript semantic merge policy fixture")
+    }
 
     #[test]
     fn semantic_merge_policy_manifest_lists_first_slice_supported_domains() {
@@ -190,5 +207,11 @@ mod tests {
 
         assert_eq!(first_digest, second_digest);
         assert_eq!(first_digest.byte_length, Some(canonical_bytes.len()));
+    }
+
+    #[test]
+    fn semantic_merge_policy_manifest_matches_public_typescript_fixture() {
+        let fixture = public_typescript_policy_fixture();
+        assert_eq!(first_slice_semantic_merge_policy_manifest(), fixture);
     }
 }

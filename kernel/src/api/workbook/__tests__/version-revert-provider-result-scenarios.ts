@@ -224,6 +224,68 @@ export function registerRevertProviderResultScenarios(): void {
     expect(readRef).toHaveBeenCalledWith(MAIN_REF);
   });
 
+  it('allows explicit target ref revert when the active checkout session is stale', async () => {
+    const branchRef = 'refs/heads/scenario/stale-explicit-revert' as const;
+    const input = {
+      target: { kind: 'mergeCommit', commitId: COMMIT_C, mainlineParent: 1 },
+      targetRef: branchRef,
+      expectedTargetHead: { commitId: COMMIT_C, revision: STALE_MAIN_REVISION },
+      reason: 'explicit-stale-active-revert',
+    } satisfies VersionRevertInput;
+    const providerResult: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'applied',
+      target: input.target,
+      commitRef: {
+        id: COMMIT_D,
+      },
+      reviewInvalidationIds: [],
+      diagnostics: [],
+      mutationGuarantee: 'revert-commit-created',
+    };
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordActiveCheckoutBranchCommit({
+      commitId: COMMIT_B,
+      refName: branchRef,
+    });
+    const revert = jest.fn(async () => providerResult);
+    const readRef = jest.fn(async (name: string) => ({
+      status: 'success',
+      ref: { name, commitId: COMMIT_C, revision: STALE_MAIN_REVISION },
+    }));
+    const version = workbookVersionWithRevertService(revert, {
+      readService: { readRef },
+      surfaceStatusService,
+    });
+
+    await expect(version.revert(input)).resolves.toStrictEqual({
+      ok: true,
+      value: {
+        ...providerResult,
+        commitRef: {
+          id: COMMIT_D,
+          refName: branchRef,
+          resolvedFrom: branchRef,
+        },
+      },
+    });
+    expect(revert).toHaveBeenCalledWith(input, {});
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: COMMIT_B,
+      branchName: 'scenario/stale-explicit-revert',
+      refHeadAtMaterialization: COMMIT_B,
+      detached: false,
+    });
+  });
+
   it('blocks detached checkout reverts when no target ref is supplied', async () => {
     const input = {
       target: { kind: 'commit', commitId: COMMIT_A },

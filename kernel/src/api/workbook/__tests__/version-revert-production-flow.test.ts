@@ -572,6 +572,114 @@ describe('WorkbookVersion revert production flow', () => {
       await fixture.cleanup();
     }
   });
+
+  it('blocks rollback commits from a stale active workbook after applying and reverting a merge commit', async () => {
+    const fixture = await createMaterializerMergeFixture({
+      graphId: 'revert-production-merge-stale-active-flow',
+      branchName: 'scenario/revert-merge-stale-active-incoming',
+      baseEdits: [['A1', 'base']],
+      oursEdits: [['B1', 'ours']],
+      theirsEdits: [['C1', 'theirs']],
+    });
+
+    try {
+      const { sourceWb, baseCommit, oursCommit, theirsCommit, expectedTargetHead } = fixture;
+      const applied = await sourceWb.version.applyMerge(
+        {
+          base: baseCommit.id,
+          ours: oursCommit.id,
+          theirs: theirsCommit.id,
+        },
+        {
+          targetRef: MATERIALIZER_TARGET_REF as any,
+          expectedTargetHead,
+        },
+      );
+      if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
+      if (applied.value.status !== 'applied') {
+        throw new Error(`expected applied merge result, got ${applied.value.status}`);
+      }
+      const mergeCommitId = applied.value.commitRef.id;
+
+      await expect(sourceWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: null });
+      await expect(sourceWb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          checkedOutCommitId: oursCommit.id,
+          refHeadAtMaterialization: mergeCommitId,
+          currentRefHeadId: mergeCommitId,
+          detached: false,
+          stale: true,
+          staleReason: 'activeSessionBehind',
+        },
+      });
+
+      const mergeHead = await expectHead(sourceWb);
+      const reverted = await sourceWb.version.revert({
+        target: { kind: 'mergeCommit', commitId: mergeCommitId, mainlineParent: 1 },
+        targetRef: MATERIALIZER_TARGET_REF,
+        expectedTargetHead: {
+          commitId: mergeCommitId,
+          revision: requireRefRevision(mergeHead),
+        },
+        reason: 'regression-test-revert-merge-stale-active',
+      });
+      if (!reverted.ok) {
+        throw new Error(
+          `expected merge revert success: ${reverted.error.code} ${JSON.stringify(
+            reverted.error.diagnostics,
+          )}`,
+        );
+      }
+      if (reverted.value.status !== 'applied' || !reverted.value.commitRef) {
+        throw new Error(`expected applied merge revert result, got ${reverted.value.status}`);
+      }
+      const revertCommitId = reverted.value.commitRef.id;
+
+      await expect(sourceWb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          checkedOutCommitId: oursCommit.id,
+          refHeadAtMaterialization: mergeCommitId,
+          currentRefHeadId: revertCommitId,
+          detached: false,
+          stale: true,
+          staleReason: 'refMoved',
+        },
+      });
+
+      const commitIdsAfterRevert = await listCommitIds(sourceWb);
+      await sourceWb.activeSheet.setCell('D1', 'post-revert-local');
+      await expect(sourceWb.version.commit({ message: 'must not rollback reverted merge' }))
+        .resolves.toMatchObject({
+          ok: false,
+          error: {
+            diagnostics: [
+              expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
+            ],
+          },
+        });
+      await expect(listCommitIds(sourceWb)).resolves.toEqual(commitIdsAfterRevert);
+
+      const mergedWb = await fixture.openMergedWorkbook();
+      const checkout = await mergedWb.version.checkout({
+        kind: 'ref',
+        name: MATERIALIZER_TARGET_REF,
+      });
+      if (!checkout.ok) throw new Error(`expected checkout success: ${checkout.error.code}`);
+      await expect(mergedWb.version.getHead()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          id: revertCommitId,
+          refName: MATERIALIZER_TARGET_REF,
+        },
+      });
+      await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
+      await expect(mergedWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
+      await expect(mergedWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: null });
+      await expect(mergedWb.activeSheet.getCell('D1')).resolves.toMatchObject({ value: null });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
 });
 
 async function listCommitIds(wb: Workbook): Promise<readonly string[]> {

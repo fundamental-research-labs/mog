@@ -20,6 +20,7 @@ const SHEETS_DOMAIN: &str = "sheets";
 const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";
 const CELL_VALUES_DOMAIN: &str = "cells.values";
 const CELL_FORMULAS_DOMAIN: &str = "cells.formulas";
+const DIRECT_FORMATS_DOMAIN: &str = "cells.formats.direct";
 const NAMED_RANGES_DOMAIN: &str = "named-ranges";
 const CHARTS_DOMAIN: &str = "charts";
 const FLOATING_OBJECTS_DOMAIN: &str = "floating-objects";
@@ -368,6 +369,23 @@ fn semantic_objects(
                 },
             );
 
+            if let Some(value) = &cell.value {
+                let digest = match &value.digest {
+                    Some(digest) => digest.clone(),
+                    None => canonical_digest(value)?,
+                };
+                let object_id = format!("value:{cell_id}");
+                objects.insert(
+                    object_id.clone(),
+                    SemanticObjectDigest {
+                        object_id,
+                        object_kind: SemanticObjectKind::CellValue,
+                        domain_id: CELL_VALUES_DOMAIN.to_string(),
+                        digest,
+                    },
+                );
+            }
+
             if let Some(formula) = &cell.formula {
                 let digest = match &formula.digest {
                     Some(digest) => digest.clone(),
@@ -380,6 +398,23 @@ fn semantic_objects(
                         object_id,
                         object_kind: SemanticObjectKind::CellFormula,
                         domain_id: CELL_FORMULAS_DOMAIN.to_string(),
+                        digest,
+                    },
+                );
+            }
+
+            if let Some(direct_format) = &cell.direct_format {
+                let digest = match &direct_format.digest {
+                    Some(digest) => digest.clone(),
+                    None => canonical_digest(direct_format)?,
+                };
+                let object_id = format!("direct-format:{cell_id}");
+                objects.insert(
+                    object_id.clone(),
+                    SemanticObjectDigest {
+                        object_id,
+                        object_kind: SemanticObjectKind::DirectFormat,
+                        domain_id: DIRECT_FORMATS_DOMAIN.to_string(),
                         digest,
                     },
                 );
@@ -531,10 +566,17 @@ mod tests {
 
         assert_eq!(first, second);
         assert_ne!(first.before_digest, first.after_digest);
-        assert_eq!(first.changes.len(), 2);
+        assert_eq!(first.changes.len(), 3);
         assert_eq!(first.changes[0].change_id, "updated:cell:sheet-1:1:1");
         assert_eq!(first.changes[0].kind, SemanticChangeKind::Updated);
         assert_eq!(first.changes[0].domain_id, CELL_VALUES_DOMAIN);
+        assert_eq!(
+            first.changes[2].change_id,
+            "updated:value:cell:sheet-1:1:1"
+        );
+        assert_eq!(first.changes[2].kind, SemanticChangeKind::Updated);
+        assert_eq!(first.changes[2].object_kind, SemanticObjectKind::CellValue);
+        assert_eq!(first.changes[2].domain_id, CELL_VALUES_DOMAIN);
         assert_eq!(first.diagnostics, Vec::new());
     }
 
@@ -553,10 +595,15 @@ mod tests {
 
         assert_eq!(
             change_ids,
-            vec!["removed:cell:sheet-1:1:1", "removed:sheet:sheet-1"]
+            vec![
+                "removed:cell:sheet-1:1:1",
+                "removed:sheet:sheet-1",
+                "removed:value:cell:sheet-1:1:1",
+            ]
         );
         assert_eq!(diff.changes[0].domain_id, CELL_VALUES_DOMAIN);
         assert_eq!(diff.changes[1].domain_id, SHEETS_DOMAIN);
+        assert_eq!(diff.changes[2].domain_id, CELL_VALUES_DOMAIN);
     }
 
     #[test]

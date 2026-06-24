@@ -30,9 +30,9 @@ use super::semantic_ids::{
     canonical_cell_key, canonical_column_key, canonical_row_key, canonical_sheet_key,
 };
 use super::{
-    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, FLOATING_OBJECTS_DOMAIN,
-    NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN, SemanticStateReadError,
-    SemanticWorkbookStateReader,
+    CELL_FORMULAS_DOMAIN, CELL_VALUES_DOMAIN, CHARTS_DOMAIN, DIRECT_FORMATS_DOMAIN,
+    FLOATING_OBJECTS_DOMAIN, NAMED_RANGES_DOMAIN, ROWS_COLUMNS_DOMAIN, SHEETS_DOMAIN,
+    SemanticStateReadError, SemanticWorkbookStateReader,
 };
 use value_provenance::{
     ambiguous_cell_value, canonical_cell_value, cell_value_provenance,
@@ -60,6 +60,7 @@ pub fn read_engine_semantic_workbook_state(
         ROWS_COLUMNS_DOMAIN,
         CELL_VALUES_DOMAIN,
         CELL_FORMULAS_DOMAIN,
+        DIRECT_FORMATS_DOMAIN,
         NAMED_RANGES_DOMAIN,
     ] {
         state.domains.insert(

@@ -1,6 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 import type { VersionRevertInput, VersionRevertResult } from '@mog-sdk/contracts/api';
 
+import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
 import {
   COMMIT_A,
   COMMIT_B,
@@ -101,5 +102,62 @@ export function registerRevertProviderResultScenarios(): void {
     });
     expect(JSON.stringify(result)).not.toContain('do-not-leak');
     expect(revert).toHaveBeenCalledTimes(1);
+  });
+
+  it('targets direct active checkout branch for implicit WorkbookVersionImpl revert', async () => {
+    const branchRef = 'refs/heads/scenario/direct-active-revert' as const;
+    const input = {
+      target: { kind: 'commit', commitId: COMMIT_A },
+      expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
+      reason: 'direct-active-branch-revert',
+    } satisfies VersionRevertInput;
+    const providerResult: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'applied',
+      target: input.target,
+      commitRef: {
+        id: COMMIT_D,
+        refName: branchRef,
+        refRevision: STALE_MAIN_REVISION,
+      },
+      reviewInvalidationIds: [],
+      diagnostics: [],
+      mutationGuarantee: 'revert-commit-created',
+    };
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordActiveCheckoutBranchCommit({
+      commitId: COMMIT_B,
+      refName: branchRef,
+    });
+    const revert = jest.fn(async () => providerResult);
+    const readRef = jest.fn(async (name: string) => ({
+      status: 'success',
+      ref: { name, commitId: COMMIT_B, revision: MAIN_REVISION },
+    }));
+    const version = workbookVersionWithRevertService(revert, {
+      readService: { readRef },
+      surfaceStatusService,
+    });
+
+    await expect(version.revert(input)).resolves.toStrictEqual({
+      ok: true,
+      value: providerResult,
+    });
+    expect(revert).toHaveBeenCalledWith({ ...input, targetRef: branchRef }, {});
+    expect(readRef).toHaveBeenCalledWith(branchRef);
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: COMMIT_D,
+      branchName: 'scenario/direct-active-revert',
+      refHeadAtMaterialization: COMMIT_D,
+      detached: false,
+    });
   });
 }

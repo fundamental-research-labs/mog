@@ -162,8 +162,9 @@ const ControlRenderer = memo(
           left: x,
           top: y,
           zIndex: control.zIndex,
-          pointerEvents: 'none',
+          pointerEvents: 'auto',
         }}
+        data-no-grid-pointer="true"
         data-form-control-id={control.id}
         data-form-control-type={control.type}
         data-form-control-linked-row={linkedCellPosition?.row}

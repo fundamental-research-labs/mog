@@ -53,6 +53,35 @@ describe('FormControlLayer numeric controls', () => {
     );
   });
 
+  it('makes the positioned checkbox wrapper hit-testable without routing to grid input', () => {
+    const onCellValueChange = jest.fn();
+    const control: CheckboxControl = {
+      id: 'check-1',
+      type: 'checkbox',
+      sheetId: 'sheet-1' as never,
+      anchor: { cellId: 'cell-a1' as never, xOffset: 0, yOffset: 0 },
+      width: 16,
+      height: 16,
+      enabled: true,
+      zIndex: 3,
+      linkedCellId: 'cell-a1' as never,
+    };
+
+    render(
+      <FormControlLayer
+        controls={[resolved(control, false)]}
+        onCellValueChange={onCellValueChange}
+      />,
+    );
+
+    const wrapper = document.querySelector('[data-form-control-id="check-1"]');
+    expect(wrapper).toHaveStyle({ pointerEvents: 'auto' });
+    expect(wrapper).toHaveAttribute('data-no-grid-pointer', 'true');
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Checkbox (unchecked)' }));
+    expect(onCellValueChange).toHaveBeenCalledWith('check-1', true);
+  });
+
   it('renders scroll bars as DOM form-control overlays and writes numeric values', () => {
     const onCellValueChange = jest.fn();
     const control: ScrollBarControl = {

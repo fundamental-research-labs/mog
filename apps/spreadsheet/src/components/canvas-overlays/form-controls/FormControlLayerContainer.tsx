@@ -201,8 +201,8 @@ export function FormControlLayerContainer() {
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 overflow-hidden pointer-events-none"
-      style={{ willChange: 'transform' }}
+      className="absolute inset-0"
+      style={{ willChange: 'transform', zIndex: 2, pointerEvents: 'auto' }}
       data-testid="form-control-layer-scroll-container"
     >
       <FormControlLayer controls={resolvedControls} onCellValueChange={handleCellValueChange} />

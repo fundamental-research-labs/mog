@@ -42,10 +42,10 @@ export interface InteractiveCellInfo {
   sheetId: string;
 }
 
-export function toInteractiveViewportCellInfo(
-  cell: CellRenderInfo,
-  region: RenderRegion,
-): CellRenderInfo {
+type Bounds = { x: number; y: number; width: number; height: number };
+export type InteractiveBoundsMapper = (bounds: Bounds) => Bounds;
+
+export function toInteractiveViewportBounds(bounds: Bounds, region: RenderRegion): Bounds {
   const zoom = region.zoom || 1;
   const viewportSpaceRegion = {
     bounds: { x: 0, y: 0 },
@@ -53,40 +53,17 @@ export function toInteractiveViewportCellInfo(
     scrollOffset: region.scrollOffset,
     zoom,
   };
-  const toViewportXY = (x: number, y: number): { x: number; y: number } => {
-    const doc = canvasToDocXY(region.bounds.x + x * zoom, region.bounds.y + y * zoom, region);
-    return docToCanvasXY(doc.x, doc.y, viewportSpaceRegion);
-  };
-  const scaleRect = (rect: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): { x: number; y: number; width: number; height: number } => {
-    const { x, y } = toViewportXY(rect.x, rect.y);
-    return {
-      x,
-      y,
-      width: rect.width * zoom,
-      height: rect.height * zoom,
-    };
-  };
-
+  const doc = canvasToDocXY(
+    region.bounds.x + bounds.x * zoom,
+    region.bounds.y + bounds.y * zoom,
+    region,
+  );
+  const viewport = docToCanvasXY(doc.x, doc.y, viewportSpaceRegion);
   return {
-    ...cell,
-    ...scaleRect(cell),
-    merge: cell.merge
-      ? (() => {
-          const merge = toViewportXY(cell.merge.mergeX, cell.merge.mergeY);
-          return {
-            ...cell.merge,
-            mergeX: merge.x,
-            mergeY: merge.y,
-            mergeWidth: cell.merge.mergeWidth * zoom,
-            mergeHeight: cell.merge.mergeHeight * zoom,
-          };
-        })()
-      : undefined,
+    x: viewport.x,
+    y: viewport.y,
+    width: bounds.width * zoom,
+    height: bounds.height * zoom,
   };
 }
 
@@ -128,9 +105,20 @@ export function collectInteractiveElements(
   cell: CellRenderInfo,
   info: InteractiveCellInfo,
   collector: InteractiveElementCollector,
+  mapBounds?: InteractiveBoundsMapper,
 ): void {
   const { row, col, x, y, width, height } = cell;
   const { sheetId } = info;
+  const addElement = (element: InteractiveElement): void => {
+    collector.add(
+      mapBounds
+        ? {
+            ...element,
+            bounds: mapBounds(element.bounds),
+          }
+        : element,
+    );
+  };
 
   // Comment indicator — bounds cover only the top-right triangle + hit padding
   if (info.hasComment) {
@@ -155,7 +143,7 @@ export function collectInteractiveElements(
         col,
       },
     };
-    collector.add(element);
+    addElement(element);
   }
 
   // Checkbox
@@ -173,7 +161,7 @@ export function collectInteractiveElements(
         col,
       },
     };
-    collector.add(element);
+    addElement(element);
   }
 
   // Filter button
@@ -192,7 +180,7 @@ export function collectInteractiveElements(
         col,
       },
     };
-    collector.add(element);
+    addElement(element);
   }
 
   // Validation dropdown
@@ -210,7 +198,7 @@ export function collectInteractiveElements(
         options: info.validationDropdown.options,
       },
     };
-    collector.add(element);
+    addElement(element);
   }
 }
 

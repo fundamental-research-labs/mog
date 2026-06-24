@@ -76,7 +76,7 @@ export function getFilterButtonIconBounds(
   height: number,
 ): { x: number; y: number; width: number; height: number } {
   return {
-    x: x + width - FILTER_BUTTON_SIZE - FILTER_BUTTON_PADDING,
+    x: x + width - FILTER_BUTTON_SIZE + FILTER_BUTTON_PADDING,
     y: y + (height - FILTER_BUTTON_SIZE) / 2,
     width: FILTER_BUTTON_SIZE,
     height: FILTER_BUTTON_SIZE,
@@ -92,7 +92,7 @@ export function getFilterButtonHitBounds(
   const icon = getFilterButtonIconBounds(x, y, width, height);
   const hitSize = Math.max(1, Math.min(FILTER_BUTTON_HIT_SIZE, width, height));
   return {
-    x: icon.x - (hitSize - icon.width) / 2,
+    x: icon.x,
     y: icon.y - (hitSize - icon.height) / 2,
     width: hitSize,
     height: hitSize,
@@ -102,7 +102,7 @@ export function getFilterButtonHitBounds(
 export function getFilterButtonTextContentWidth(cellWidth: number): number {
   return Math.max(
     0,
-    cellWidth - FILTER_BUTTON_SIZE - FILTER_BUTTON_PADDING - FILTER_BUTTON_TEXT_GAP,
+    cellWidth - FILTER_BUTTON_SIZE + FILTER_BUTTON_PADDING - FILTER_BUTTON_TEXT_GAP,
   );
 }
 

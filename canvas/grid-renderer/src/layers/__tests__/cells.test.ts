@@ -616,10 +616,56 @@ describe('CellsLayer', () => {
         .find((element) => element.id === `filter-button:${sheetId}:3,10`);
 
       expect(filterButton?.bounds).toEqual({
-        x: 884,
+        x: 893,
         y: 79.5,
         width: 16,
         height: 16,
+      });
+    });
+
+    it('emits zoom-scaled filter button bounds from unscaled cell geometry', () => {
+      const sheetId = 'sheet-filter-button-zoomed-frozen-row';
+      const collector = createInteractiveElementCollector();
+      const cellData: CellDataSource = {
+        ...NULL_CELL_DATA_SOURCE,
+        getFilterHeaderInfo: (_sheetId, cell) =>
+          cell.row === 3 && cell.col === 10
+            ? {
+                filterId: 'auto-filter-1',
+                headerCellId: toCellId('header-k'),
+                hasActiveFilter: false,
+              }
+            : undefined,
+      };
+      const layer = createCellsLayer(
+        createLayerConfig({
+          binaryCellReader: undefined,
+          cellData,
+          interactiveElements: collector,
+          positionIndex: createPositionIndex(100, 20, 25),
+        }),
+      );
+      const ctx = createMockContext();
+      const frozenRowsRegion = makeMainRegion({
+        sheetId,
+        viewportId: 'frozen-rows',
+        viewportOrigin: { x: 800, y: 0 },
+        scrollOffset: { x: 200, y: 0 },
+        zoom: 0.9,
+        cellRange: { startRow: 3, startCol: 10, endRow: 3, endCol: 10 },
+      });
+
+      layer.render(ctx, frozenRowsRegion, createFrame());
+
+      const filterButton = collector
+        .getAll()
+        .find((element) => element.id === `filter-button:${sheetId}:3,10`);
+
+      expect(filterButton?.bounds).toEqual({
+        x: 803.7,
+        y: 71.55,
+        width: 14.4,
+        height: 14.4,
       });
     });
 

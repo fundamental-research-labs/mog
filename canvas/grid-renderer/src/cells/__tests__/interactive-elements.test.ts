@@ -103,4 +103,29 @@ describe('collectInteractiveElements', () => {
     expect(el.bounds.width).toBe(100);
     expect(el.bounds.height).toBe(30);
   });
+
+  it('computes filter button hit bounds from local unscaled cell geometry', () => {
+    const collector = makeCollector();
+    collectInteractiveElements(
+      makeCell({ x: 200, y: 50, width: 120, height: 25 }),
+      makeInfo({
+        filterInfo: {
+          filterId: 'filter-1',
+          headerCellId: 'header-f',
+          hasActiveFilter: false,
+        },
+      }),
+      collector,
+    );
+
+    expect(collector.elements).toHaveLength(1);
+    const el = collector.elements[0];
+    expect(el.type).toBe('filter-button');
+    expect(el.bounds).toEqual({
+      x: 313,
+      y: 54.5,
+      width: 16,
+      height: 16,
+    });
+  });
 });

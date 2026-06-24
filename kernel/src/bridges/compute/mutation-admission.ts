@@ -135,6 +135,7 @@ export function recordVersionMutationCapture(
   const capture = (ctx as IKernelContext & VersionMutationCaptureContext).versioning
     ?.mutationCapture;
   if (!capture?.recordMutationResult) return;
+  if (shouldSkipContextlessSemanticCapture(normalizedInput)) return;
   try {
     capture.recordMutationResult(normalizedInput);
   } catch {
@@ -142,6 +143,16 @@ export function recordVersionMutationCapture(
       ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
     )?.('versioning:mutation-capture-error', { operation: input.operation });
   }
+}
+
+function shouldSkipContextlessSemanticCapture(input: VersionMutationCaptureRecordInput): boolean {
+  if (input.operationContext) return false;
+  const classification = classifyWriteOperation(input.operation);
+  if (!classification) return false;
+  return (
+    classification.capturePolicy !== 'commitEligible' ||
+    classification.writeAdmissionMode !== 'capture'
+  );
 }
 
 export async function prepareVersionMutationCapture(

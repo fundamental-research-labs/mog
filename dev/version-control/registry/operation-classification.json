@@ -302,6 +302,7 @@
           "compute_patch_workbook_settings",
           "compute_reset_sheet_viewports",
           "compute_set_current_time",
+          "compute_set_custom_setting",
           "compute_set_format_for_ranges_ui_state",
           "compute_set_scroll_position",
           "compute_set_view_option",

@@ -128,6 +128,11 @@ describe('Compute mutation admission', () => {
       capturePolicy: 'shadowOnly',
       writeAdmissionMode: 'shadowOnly',
     });
+    expect(classifyWriteOperation('compute_set_custom_setting')).toMatchObject({
+      capturePolicy: 'shadowOnly',
+      writeAdmissionMode: 'shadowOnly',
+      domainClass: 'transient',
+    });
     expect(classifyWriteOperation('compute_wb_security_add_policy')).toMatchObject({
       capturePolicy: 'excluded',
       writeAdmissionMode: 'block',
@@ -268,6 +273,33 @@ describe('Compute mutation admission', () => {
       directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
       operationContext,
     });
+  });
+
+  it('does not record contextless shadow-only mutations to the semantic capture sink', async () => {
+    const recordMutationResult = jest.fn();
+    const ctx = makeMockContext({
+      versioning: {
+        mutationCapture: { recordMutationResult },
+      },
+    } as unknown as Partial<IKernelContext>);
+    const result = mutationResult();
+    const transport: BridgeTransport & { call: jest.Mock } = {
+      call: jest.fn(async () => [new Uint8Array(), result]),
+    };
+    const core = createStartedCore(ctx, transport);
+
+    await core.mutatePublic(
+      'compute_set_scroll_position',
+      () =>
+        transport.call('compute_set_scroll_position', { docId: 'test-doc' }) as Promise<
+          [Uint8Array, MutationResult]
+        >,
+    );
+
+    expect(transport.call).toHaveBeenCalledWith('compute_set_scroll_position', {
+      docId: 'test-doc',
+    });
+    expect(recordMutationResult).not.toHaveBeenCalled();
   });
 
   it('records direct edits for date and time bridge value writes', async () => {

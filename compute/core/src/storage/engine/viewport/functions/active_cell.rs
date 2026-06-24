@@ -79,7 +79,7 @@ pub(in crate::storage::engine::viewport) fn get_active_cell(
     let cell_id_hex = id_to_hex(cell_id.as_u128());
     let pos = mirror.resolve_position(cell_id);
     let table_fmt = pos.and_then(|p| {
-        crate::storage::engine::services::tables::resolve_table_format_at_cell(
+        crate::storage::engine::services::resolve_structured_format_at_cell(
             mirror,
             sheet_id,
             p.row(),

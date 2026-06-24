@@ -9,6 +9,8 @@
 use domain_types::ParseOutput;
 use snapshot_types::PivotTableDef;
 
+use crate::import::phantom::parse_range_ref;
+
 use super::SheetResolver;
 
 pub(crate) fn convert_pivot_tables(
@@ -34,34 +36,50 @@ pub(crate) fn convert_pivot_tables(
             let num_row_fields = config.row_placements().len() as u32;
             let num_data_fields = config.value_placements().len().max(1) as u32;
             let has_col_fields = !config.column_placements().is_empty();
-            let first_data_row: u32 = if has_col_fields { 2 } else { 1 };
-            let first_data_col = num_row_fields.max(1);
+            let first_data_row: u32 =
+                config
+                    .first_data_row
+                    .unwrap_or(if has_col_fields { 2 } else { 1 });
+            let first_data_col = config.first_data_col.unwrap_or(num_row_fields.max(1));
+
+            let parsed_ref_range = config.ref_range.as_deref().and_then(|ref_range| {
+                let (_sheet, range) = compute_parser::split_sheet_prefix(ref_range);
+                parse_range_ref(range)
+            });
 
             // Scan the output sheet to find the actual extent of the pivot region.
             let est_cols = first_data_col + num_data_fields;
             let est_end_col = start_col + est_cols.saturating_sub(1);
-            let (end_row, end_col) = output
-                .sheets
-                .iter()
-                .find(|s| s.name == config.output_sheet_name)
-                .map(|sheet| {
-                    let mut max_row = start_row;
-                    let mut max_col = est_end_col;
-                    for cell in &sheet.cells {
-                        if cell.row >= start_row
-                            && cell.col >= start_col
-                            && cell.col <= est_end_col
-                            && !matches!(cell.value, value_types::CellValue::Null)
-                        {
-                            if cell.row > max_row {
-                                max_row = cell.row;
+            let (end_row, end_col) = parsed_ref_range
+                .map(
+                    |(_ref_start_row, _ref_start_col, ref_end_row, ref_end_col)| {
+                        (ref_end_row, ref_end_col)
+                    },
+                )
+                .or_else(|| {
+                    output
+                        .sheets
+                        .iter()
+                        .find(|s| s.name == config.output_sheet_name)
+                        .map(|sheet| {
+                            let mut max_row = start_row;
+                            let mut max_col = est_end_col;
+                            for cell in &sheet.cells {
+                                if cell.row >= start_row
+                                    && cell.col >= start_col
+                                    && cell.col <= est_end_col
+                                    && !matches!(cell.value, value_types::CellValue::Null)
+                                {
+                                    if cell.row > max_row {
+                                        max_row = cell.row;
+                                    }
+                                    if cell.col > max_col {
+                                        max_col = cell.col;
+                                    }
+                                }
                             }
-                            if cell.col > max_col {
-                                max_col = cell.col;
-                            }
-                        }
-                    }
-                    (max_row, max_col)
+                            (max_row, max_col)
+                        })
                 })
                 .unwrap_or((start_row + first_data_row, est_end_col));
 
@@ -129,6 +147,15 @@ pub(crate) fn convert_pivot_tables(
                 row_field_indices,
                 col_field_indices,
                 data_on_rows,
+                style: config.style.clone(),
+                show_row_grand_totals: config
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.show_row_grand_totals),
+                show_column_grand_totals: config
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.show_column_grand_totals),
             })
         })
         .collect()

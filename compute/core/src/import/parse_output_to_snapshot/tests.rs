@@ -6,6 +6,10 @@
 
 use super::parse_output_to_workbook_snapshot;
 use crate::storage::infra::hydration::DefaultIdAllocator;
+use domain_types::domain::pivot::{
+    CellRange, OutputLocation, PIVOT_CONFIG_SCHEMA_VERSION, ParsedPivotTable, PivotTableConfig,
+    PivotTableLayout, PivotTableStyle,
+};
 use domain_types::{
     CalculationProperties, CellData as DtCellData, ImportedCellProjectionRole, NamedRange,
     ParseOutput, SheetData, TableColumnSpec, TableSpec,
@@ -232,6 +236,93 @@ fn tables_converted_with_parsed_range() {
     assert_eq!(table.columns, vec!["Col1", "Col2", "Col3"]);
     assert!(table.has_headers);
     assert!(!table.has_totals);
+}
+
+#[test]
+fn imported_pivot_uses_ooxml_ref_range_and_style() {
+    let mut output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Pivot".into(),
+            rows: 100,
+            cols: 10,
+            cells: vec![DtCellData {
+                row: 35,
+                col: 6,
+                value: CellValue::number(1.0),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    output.pivot_tables.push(ParsedPivotTable {
+        config: PivotTableConfig {
+            schema_version: PIVOT_CONFIG_SCHEMA_VERSION,
+            id: "pivot-1".into(),
+            name: "PivotTable1".into(),
+            source_sheet_id: None,
+            source_sheet_name: "Data".into(),
+            source_range: CellRange::new(0, 0, 1, 1),
+            output_sheet_id: None,
+            output_sheet_name: "Pivot".into(),
+            output_location: OutputLocation { row: 16, col: 2 },
+            fields: vec![],
+            placements: vec![],
+            filters: vec![],
+            layout: Some(PivotTableLayout {
+                show_row_grand_totals: Some(true),
+                show_column_grand_totals: Some(true),
+                ..Default::default()
+            }),
+            style: Some(PivotTableStyle {
+                style_name: Some("PivotStyleLight16".into()),
+                show_row_headers: Some(true),
+                show_column_headers: Some(true),
+                show_row_stripes: Some(false),
+                show_column_stripes: Some(false),
+                show_last_column: Some(true),
+            }),
+            data_options: None,
+            created_at: None,
+            updated_at: None,
+            calculated_fields: None,
+            allow_multiple_filters_per_field: None,
+            auto_format: None,
+            preserve_formatting: None,
+            cache_id: None,
+            data_on_rows: Some(false),
+            ref_range: Some("C17:G36".into()),
+            first_data_row: Some(2),
+            first_header_row: Some(1),
+            first_data_col: Some(1),
+            rows_per_page: None,
+            cols_per_page: None,
+            row_items: vec![],
+            col_items: vec![],
+        },
+        initial_expansion_state: None,
+        ooxml_preservation: Default::default(),
+    });
+
+    let mut allocator = DefaultIdAllocator::new();
+    let snapshot = parse_output_to_workbook_snapshot(&output, None, &mut allocator);
+
+    let pivot = snapshot.pivot_tables.first().expect("pivot table def");
+    assert_eq!(pivot.start_row, 16);
+    assert_eq!(pivot.start_col, 2);
+    assert_eq!(pivot.end_row, 35);
+    assert_eq!(pivot.end_col, 6);
+    assert_eq!(pivot.first_data_row, 2);
+    assert_eq!(pivot.first_data_col, 1);
+    assert_eq!(
+        pivot
+            .style
+            .as_ref()
+            .and_then(|style| style.style_name.as_deref()),
+        Some("PivotStyleLight16")
+    );
+    assert_eq!(pivot.show_row_grand_totals, Some(true));
+    assert_eq!(pivot.show_column_grand_totals, Some(true));
 }
 
 #[test]

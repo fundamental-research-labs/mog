@@ -5,7 +5,7 @@
 //! cell info queries. By living in the engine, all FFI targets (WASM, Tauri,
 //! N-API) get them automatically.
 
-use super::YrsComputeEngine;
+use super::{YrsComputeEngine, services};
 use crate::storage::cells::values as cell_values;
 use crate::storage::properties;
 use bridge_core as bridge;
@@ -145,7 +145,8 @@ impl YrsComputeEngine {
 
         // Get effective format
         let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
-        let table_fmt = self.resolve_table_format_at_cell(sheet_id, row, col);
+        let table_fmt =
+            services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
         let effective = properties::get_effective_format(
             &self.stores.storage,
             sheet_id,

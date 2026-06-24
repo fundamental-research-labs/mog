@@ -9,7 +9,9 @@ use compute_document::schema::KEY_CELLS;
 use compute_pivot::types::{
     FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
 };
+use domain_types::domain::pivot::PivotTableStyle;
 use domain_types::{CellFormat, FontSize, RichSharedString, RichTextRun};
+use snapshot_types::PivotTableDef;
 use value_types::CellValue;
 use yrs::{Map, Out, Transact};
 
@@ -553,6 +555,93 @@ fn rich_text_viewport_format_uses_run_aggregate_font() {
         format(1, 1).underline_type,
         Some(ooxml_types::styles::UnderlineStyle::SingleAccounting)
     );
+}
+
+#[test]
+fn pivot_total_viewport_format_overrides_cell_xf() {
+    let sid = sheet_id();
+    let cell_id = CellId::from_uuid_str("550e8400-e29b-41d4-a716-446655440040").unwrap();
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid.to_uuid_string(),
+            name: "Pivot".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![CellData {
+                cell_id: cell_id.to_uuid_string(),
+                row: 35,
+                col: 3,
+                value: CellValue::number(10.0),
+                formula: None,
+                identity_formula: None,
+                array_ref: None,
+            }],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![PivotTableDef {
+            id: "pivot-1".to_string(),
+            name: "PivotTable1".to_string(),
+            sheet: sid.to_uuid_string(),
+            start_row: 16,
+            start_col: 2,
+            end_row: 35,
+            end_col: 6,
+            rendered_rows: Some(20),
+            rendered_cols: Some(5),
+            first_data_row: 2,
+            first_data_col: 1,
+            data_field_names: vec![],
+            cache_field_names: vec![],
+            row_field_indices: vec![],
+            col_field_indices: vec![],
+            data_on_rows: false,
+            style: Some(PivotTableStyle {
+                style_name: Some("PivotStyleLight16".to_string()),
+                show_row_headers: Some(true),
+                show_column_headers: Some(true),
+                show_row_stripes: Some(false),
+                show_column_stripes: Some(false),
+                show_last_column: Some(true),
+            }),
+            show_row_grand_totals: Some(true),
+            show_column_grand_totals: Some(true),
+        }],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    engine
+        .set_cell_format(
+            &sid,
+            &cell_id,
+            &CellFormat {
+                number_format: Some(
+                    "_(* #,##0.00_);_(* (#,##0.00);_(* \"-\"??_);_(@_)".to_string(),
+                ),
+                pattern_type: Some(ooxml_types::styles::PatternType::None),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let viewport = engine.build_viewport_render_data(&sid, 35, 3, 36, 4);
+    let cell = &viewport.cells[0];
+    let format = &viewport.format_palette[cell.format_idx as usize];
+
+    assert_eq!(cell.formatted.as_deref(), Some("10"));
+    assert_eq!(format.number_format.as_deref(), Some("General"));
+    assert_eq!(
+        format.pattern_type,
+        Some(ooxml_types::styles::PatternType::Solid)
+    );
+    assert_eq!(format.background_color.as_deref(), Some("#d9e1f2"));
+    assert_eq!(format.bold, Some(true));
 }
 
 #[test]

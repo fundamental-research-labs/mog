@@ -30,7 +30,8 @@ impl YrsComputeEngine {
     ) -> String {
         let cell_id_hex = self.format_lookup_cell_id_hex(sheet_id, row, col);
 
-        let table_fmt = self.resolve_table_format_at_cell(sheet_id, row, col);
+        let table_fmt =
+            services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
         let mut effective = properties::get_effective_format(
             &self.stores.storage,
             sheet_id,

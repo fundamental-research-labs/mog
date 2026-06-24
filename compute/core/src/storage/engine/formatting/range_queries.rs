@@ -43,12 +43,8 @@ pub(super) fn query_range_properties(
 
             let fmt = if let Some(cid) = cell_id {
                 let cell_hex = id_to_hex(cid.as_u128());
-                let table_fmt = services::tables::resolve_table_format_at_cell(
-                    &engine.mirror,
-                    sheet_id,
-                    row,
-                    col,
-                );
+                let table_fmt =
+                    services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
                 Some(properties::get_effective_format(
                     &engine.stores.storage,
                     sheet_id,

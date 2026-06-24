@@ -67,8 +67,7 @@ pub use cell::{
     set_properties,
 };
 pub use defaults::default_format;
-#[cfg(test)]
-use merge::merge_formats;
+pub(crate) use merge::merge_formats;
 pub(crate) use merge::normalize_format_patch;
 pub use protection::{is_cell_locked, is_formula_hidden};
 pub(crate) use ranges::set_col_format_range_with_alloc;

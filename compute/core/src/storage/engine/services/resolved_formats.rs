@@ -21,7 +21,7 @@ pub(in crate::storage::engine) fn get_resolved_cell_format(
 
     let mut format = if let Some(cell_id) = cell_id {
         let cell_hex = id_to_hex(cell_id.as_u128());
-        let table_format = super::tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
+        let table_format = super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
         crate::storage::properties::get_effective_format(
             &stores.storage,
             sheet_id,

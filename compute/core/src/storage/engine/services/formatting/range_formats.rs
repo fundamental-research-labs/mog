@@ -8,7 +8,7 @@ use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::CellFormat;
 use value_types::ComputeError;
 
-use super::super::tables::resolve_table_format_at_cell;
+use super::super::resolve_structured_format_at_cell;
 
 type FormatResult = Result<(Vec<(u128, u32, u32)>, MutationResult), ComputeError>;
 
@@ -32,7 +32,7 @@ pub(in crate::storage::engine) fn toggle_format_property(
 
     let active_cell_id = grid.ensure_cell_id(active_row, active_col);
     let active_cell_hex = id_to_hex(active_cell_id.as_u128());
-    let table_fmt = resolve_table_format_at_cell(mirror, sheet_id, active_row, active_col);
+    let table_fmt = resolve_structured_format_at_cell(mirror, sheet_id, active_row, active_col);
     let effective = properties::get_effective_format(
         &stores.storage,
         sheet_id,

@@ -158,7 +158,7 @@ pub(in crate::storage::engine) fn set_date_value(
         cell_id.and_then(|cid| {
             let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&engine.mirror, sheet_id, row, col);
+                services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
             let fmt = crate::storage::properties::get_effective_format(
                 &engine.stores.storage,
                 sheet_id,
@@ -228,7 +228,7 @@ pub(in crate::storage::engine) fn set_time_value(
         cell_id.and_then(|cid| {
             let cell_hex = id_to_hex(cid.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&engine.mirror, sheet_id, row, col);
+                services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
             let fmt = crate::storage::properties::get_effective_format(
                 &engine.stores.storage,
                 sheet_id,

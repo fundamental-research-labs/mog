@@ -295,6 +295,9 @@ mod tests {
             row_field_indices: vec![0],
             col_field_indices: vec![],
             data_on_rows: false,
+            style: None,
+            show_row_grand_totals: None,
+            show_column_grand_totals: None,
         }
     }
 

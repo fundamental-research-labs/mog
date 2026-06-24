@@ -73,7 +73,7 @@ impl YrsComputeEngine {
                     Ok(cid) => id_to_hex(cid.as_u128()),
                     Err(_) => continue,
                 };
-                let table_fmt = services::tables::resolve_table_format_at_cell(
+                let table_fmt = services::resolve_structured_format_at_cell(
                     &self.mirror,
                     &sheet_id,
                     pos.row,
@@ -337,7 +337,7 @@ impl YrsComputeEngine {
                 .map(|cell_id| id_to_hex(cell_id.as_u128()))
                 .unwrap_or_default();
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, row, col);
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
             let effective = properties::get_effective_format(
                 &self.stores.storage,
                 sheet_id,
@@ -497,7 +497,7 @@ impl YrsComputeEngine {
                     Ok(cid) => id_to_hex(cid.as_u128()),
                     Err(_) => continue,
                 };
-                let table_fmt = services::tables::resolve_table_format_at_cell(
+                let table_fmt = services::resolve_structured_format_at_cell(
                     &self.mirror,
                     sid,
                     pos.row,
@@ -622,12 +622,8 @@ impl YrsComputeEngine {
                     });
 
                 let cell_hex = id_to_hex(cell_id_raw);
-                let table_fmt = services::tables::resolve_table_format_at_cell(
-                    &self.mirror,
-                    sheet_id,
-                    row,
-                    col,
-                );
+                let table_fmt =
+                    services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
                 let effective = properties::get_effective_format(
                     &self.stores.storage,
                     sheet_id,
@@ -770,8 +766,7 @@ impl YrsComputeEngine {
                 .resolve_cell_id(sheet_id, SheetPos::new(row, col))
                 .map(|cid| id_to_hex(cid.as_u128()))
                 .unwrap_or_default();
-            let table_fmt =
-                services::tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
+            let table_fmt = services::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
             let mut effective = properties::get_effective_format(
                 &stores.storage,
                 sheet_id,
@@ -867,7 +862,7 @@ impl YrsComputeEngine {
                     });
                 let cell_hex = id_to_hex(cell_id_raw);
                 let table_fmt =
-                    services::tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
+                    services::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
                 let effective = properties::get_effective_format(
                     &stores.storage,
                     sheet_id,

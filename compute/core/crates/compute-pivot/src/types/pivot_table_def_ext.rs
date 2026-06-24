@@ -95,6 +95,15 @@ impl PivotTableDefExt for PivotTableConfig {
             row_field_indices,
             col_field_indices,
             data_on_rows: false,
+            style: self.style.clone(),
+            show_row_grand_totals: self
+                .layout
+                .as_ref()
+                .and_then(|layout| layout.show_row_grand_totals),
+            show_column_grand_totals: self
+                .layout
+                .as_ref()
+                .and_then(|layout| layout.show_column_grand_totals),
         }
     }
 }

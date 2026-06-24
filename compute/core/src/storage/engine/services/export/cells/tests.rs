@@ -630,6 +630,9 @@ fn register_rendered_pivot(engine: &mut YrsComputeEngine, sheet_id: &SheetId, va
         row_field_indices: vec![0],
         col_field_indices: vec![],
         data_on_rows: false,
+        style: None,
+        show_row_grand_totals: None,
+        show_column_grand_totals: None,
     });
 }
 
@@ -709,6 +712,9 @@ fn export_cells_does_not_emit_empty_pivot_overlay_at_origin() {
         row_field_indices: vec![],
         col_field_indices: vec![],
         data_on_rows: false,
+        style: None,
+        show_row_grand_totals: None,
+        show_column_grand_totals: None,
     });
     engine.stores.grid_indexes.remove(&sheet_id);
 

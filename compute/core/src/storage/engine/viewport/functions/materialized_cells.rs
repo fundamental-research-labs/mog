@@ -3,7 +3,7 @@ use compute_wire::flags as render_flags;
 use value_types::CellValue;
 
 use super::cf_format::{apply_cf_to_format, apply_number_format_color};
-use super::render_cells::RenderCellMaterial;
+use super::render_cells::{RenderCellMaterial, apply_pivot_display_format};
 use crate::mirror::CellMirror;
 use crate::storage::engine::settings::EngineSettings;
 use crate::storage::engine::stores::{CFCacheEntry, EngineStores};
@@ -35,6 +35,7 @@ pub(super) fn build_materialized_cell_material(
         mirror.get_sheet(sheet_id),
     );
     domain_types::theme_color::resolve_theme_refs(&mut effective, &settings.theme_palette);
+    apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
     apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
     let format_code = effective.number_format.as_deref().unwrap_or("General");

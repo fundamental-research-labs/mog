@@ -17,7 +17,7 @@ pub(super) fn get_displayed_cell_properties(
     let mut fmt = if let Some(cid) = cell_id {
         let cell_hex = id_to_hex(cid.as_u128());
         let table_fmt =
-            services::tables::resolve_table_format_at_cell(&engine.mirror, sheet_id, row, col);
+            services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
         properties::get_effective_format(
             &engine.stores.storage,
             sheet_id,
@@ -116,12 +116,8 @@ pub(super) fn get_displayed_range_properties(
 
             let mut fmt = if let Some(cid) = cell_id {
                 let cell_hex = id_to_hex(cid.as_u128());
-                let table_fmt = services::tables::resolve_table_format_at_cell(
-                    &engine.mirror,
-                    sheet_id,
-                    row,
-                    col,
-                );
+                let table_fmt =
+                    services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
                 properties::get_effective_format(
                     &engine.stores.storage,
                     sheet_id,

@@ -258,6 +258,23 @@ fn apply_cell_rich_text_aggregate_font(
     apply_rich_text_aggregate_font(format, &rich_string, theme_palette);
 }
 
+pub(super) fn apply_pivot_display_format(
+    mirror: &CellMirror,
+    sheet_id: &SheetId,
+    row: u32,
+    col: u32,
+    format: &mut domain_types::CellFormat,
+) {
+    let Some(pivot_format) =
+        crate::storage::engine::services::objects::resolve_pivot_format_at_cell(
+            mirror, sheet_id, row, col,
+        )
+    else {
+        return;
+    };
+    *format = properties::merge_formats(format, &pivot_format);
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn build_render_cell_materials(
     stores: &EngineStores,
@@ -390,6 +407,7 @@ pub(super) fn build_render_cell_materials(
                             &mut effective,
                             &settings.theme_palette,
                         );
+                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
                         apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
                         let formula_str = stores.compute.get_formula(&proj.anchor_id);
@@ -521,6 +539,7 @@ pub(super) fn build_render_cell_materials(
                             &mut effective,
                             &settings.theme_palette,
                         );
+                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut effective);
                         apply_cf_to_format(cf_cache_entry, &mut effective, row, col);
 
                         let is_null_no_formula = matches!(value, CellValue::Null) && !has_formula;
@@ -644,6 +663,7 @@ pub(super) fn build_render_cell_materials(
                             &mut positional_fmt,
                             &settings.theme_palette,
                         );
+                        apply_pivot_display_format(mirror, sheet_id, row, col, &mut positional_fmt);
                         // CF is the 6th cascade layer — applies to truly-blank
                         // cells too (e.g. `containsBlanks` rules).
                         apply_cf_to_format(cf_cache_entry, &mut positional_fmt, row, col);

@@ -12,6 +12,7 @@ use cell_types::{
     AxisIdentityRef, AxisIdentityRun, AxisIdentityRunRef, ColId, PayloadEncoding, RangeAnchor,
     RangeId, RangeKind, RowId,
 };
+use domain_types::domain::pivot::PivotTableStyle;
 use formula_types::{CellRef, NamedRangeDef, TableDef};
 use value_types::{CellValue, FiniteF64};
 
@@ -58,6 +59,15 @@ pub struct PivotTableDef {
     /// Whether data fields are arranged on rows (true) vs columns (false).
     #[serde(default)]
     pub data_on_rows: bool,
+    /// Imported/native pivot style options used for display formatting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub style: Option<PivotTableStyle>,
+    /// Whether row grand totals are rendered and styled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_row_grand_totals: Option<bool>,
+    /// Whether column grand totals are rendered and styled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show_column_grand_totals: Option<bool>,
 }
 
 impl PivotTableDef {
@@ -603,6 +613,9 @@ mod tests {
             row_field_indices: vec![0],
             col_field_indices: vec![],
             data_on_rows: false,
+            style: None,
+            show_row_grand_totals: None,
+            show_column_grand_totals: None,
         };
         let json = serde_json::to_string(&ptd).unwrap();
         let ptd2: PivotTableDef = serde_json::from_str(&json).unwrap();

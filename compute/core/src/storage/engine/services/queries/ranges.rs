@@ -333,7 +333,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
 
                     // Build effective format reusing the pre-fetched cell format
                     let table_fmt =
-                        crate::storage::engine::services::tables::resolve_table_format_at_cell(
+                        crate::storage::engine::services::resolve_structured_format_at_cell(
                             mirror, sheet_id, row, col,
                         );
                     let mut effective = properties::get_effective_format_preloaded(
@@ -372,7 +372,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     if !proj_value.is_null() {
                         let value = proj_value.clone();
                         let table_fmt =
-                            crate::storage::engine::services::tables::resolve_table_format_at_cell(
+                            crate::storage::engine::services::resolve_structured_format_at_cell(
                                 mirror, sheet_id, row, col,
                             );
                         let empty_cell_id_hex = String::new();
@@ -414,7 +414,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                     // No cell_id, no spill value — but explicit row/column
                     // format exists that should be visible to the API.
                     let table_fmt =
-                        crate::storage::engine::services::tables::resolve_table_format_at_cell(
+                        crate::storage::engine::services::resolve_structured_format_at_cell(
                             mirror, sheet_id, row, col,
                         );
                     let empty_cell_id_hex = String::new();

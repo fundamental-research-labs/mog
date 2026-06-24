@@ -103,7 +103,7 @@ fn source_format_at(
         .get(sheet_id)
         .and_then(|grid| grid.cell_id_at(row, col))
         .or_else(|| mirror.resolve_cell_id(sheet_id, pos));
-    let table_fmt = super::super::tables::resolve_table_format_at_cell(mirror, sheet_id, row, col);
+    let table_fmt = super::super::resolve_structured_format_at_cell(mirror, sheet_id, row, col);
 
     if let Some(cell_id) = cell_id {
         let cell_hex = id_to_hex(cell_id.as_u128());

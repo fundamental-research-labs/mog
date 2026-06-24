@@ -67,7 +67,7 @@ impl YrsComputeEngine {
                 };
             let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
             let effective = crate::storage::properties::get_effective_format(
                 &self.stores.storage,
                 sheet_id,
@@ -155,7 +155,7 @@ impl YrsComputeEngine {
                 };
             let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
             let effective = crate::storage::properties::get_effective_format(
                 &self.stores.storage,
                 sheet_id,
@@ -229,7 +229,7 @@ impl YrsComputeEngine {
                 };
             let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
             let effective = crate::storage::properties::get_effective_format(
                 &self.stores.storage,
                 sheet_id,
@@ -303,7 +303,7 @@ impl YrsComputeEngine {
                 };
             let cell_hex = id_to_hex(cell_id.as_u128());
             let table_fmt =
-                services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, *row, *col);
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, *row, *col);
             let effective = crate::storage::properties::get_effective_format(
                 &self.stores.storage,
                 sheet_id,
@@ -450,7 +450,7 @@ impl YrsComputeEngine {
     ) -> bool {
         let cell_hex = id_to_hex(cell_id.as_u128());
         let table_fmt =
-            services::tables::resolve_table_format_at_cell(&self.mirror, sheet_id, row, col);
+            services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col);
         let effective = crate::storage::properties::get_effective_format(
             &self.stores.storage,
             sheet_id,
@@ -480,7 +480,7 @@ impl YrsComputeEngine {
         let sheet_id = self.mirror.sheet_for_cell(cell_id)?;
         let pos = self.mirror.resolve_position(cell_id)?;
         let cell_hex = id_to_hex(cell_id.as_u128());
-        let table_fmt = services::tables::resolve_table_format_at_cell(
+        let table_fmt = services::resolve_structured_format_at_cell(
             &self.mirror,
             &sheet_id,
             pos.row(),

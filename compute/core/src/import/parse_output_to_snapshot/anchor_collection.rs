@@ -622,6 +622,9 @@ mod tests {
             row_field_indices: vec![],
             col_field_indices: vec![],
             data_on_rows: false,
+            style: None,
+            show_row_grand_totals: None,
+            show_column_grand_totals: None,
         }];
 
         // 14. Data table at (50, 50)

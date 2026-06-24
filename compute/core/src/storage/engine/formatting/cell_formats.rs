@@ -8,8 +8,7 @@ pub(super) fn get_cell_format(
     col: u32,
 ) -> CellFormat {
     let cell_hex = id_to_hex(cell_id.as_u128());
-    let table_fmt =
-        services::tables::resolve_table_format_at_cell(&engine.mirror, sheet_id, row, col);
+    let table_fmt = services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
     properties::get_effective_format(
         &engine.stores.storage,
         sheet_id,
@@ -62,7 +61,7 @@ pub(super) fn get_resolved_format(
         // Cell exists: full cascade (default -> col -> row -> Format Range -> table -> cell)
         let cell_hex = id_to_hex(cid.as_u128());
         let table_fmt =
-            services::tables::resolve_table_format_at_cell(&engine.mirror, sheet_id, row, col);
+            services::resolve_structured_format_at_cell(&engine.mirror, sheet_id, row, col);
         properties::get_effective_format(
             &engine.stores.storage,
             sheet_id,

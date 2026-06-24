@@ -856,7 +856,9 @@ impl YrsComputeEngine {
             &self.settings,
             recalc,
             changes,
-            &|sheet_id, row, col| self.resolve_table_format_at_cell(sheet_id, row, col),
+            &|sheet_id, row, col| {
+                services::resolve_structured_format_at_cell(&self.mirror, sheet_id, row, col)
+            },
         )
     }
 

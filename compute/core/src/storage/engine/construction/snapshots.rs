@@ -513,6 +513,15 @@ fn read_pivot_defs_from_yrs(
                 row_field_indices,
                 col_field_indices,
                 data_on_rows: config.data_on_rows.unwrap_or(false),
+                style: config.style,
+                show_row_grand_totals: config
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.show_row_grand_totals),
+                show_column_grand_totals: config
+                    .layout
+                    .as_ref()
+                    .and_then(|layout| layout.show_column_grand_totals),
             });
         }
     }

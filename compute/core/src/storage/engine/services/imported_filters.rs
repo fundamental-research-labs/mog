@@ -856,7 +856,7 @@ fn evaluate_runtime_filter(
                 Some(cid) => {
                     let cell_hex = id_to_hex(cid.as_u128());
                     let table_fmt =
-                        super::tables::resolve_table_format_at_cell(mirror, &sid, row, col);
+                        super::resolve_structured_format_at_cell(mirror, &sid, row, col);
                     crate::storage::properties::get_effective_format(
                         &stores.storage,
                         &sid,

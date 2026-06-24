@@ -12,9 +12,13 @@ import {
 } from '../../../../../document/version-store/merge-apply-intent-store';
 import {
   createMergeResolutionSetArtifactRecord,
-  createResolvedMergeAttemptArtifactRecord,
   type MergePreviewArtifactPayload,
+  type MergeResolutionSetArtifactRecord,
+  type ResolvedMergeAttemptArtifactRecord,
 } from '../../../../../document/version-store/merge-attempt-artifacts';
+import type {
+  ObjectDigest as InternalObjectDigest,
+} from '../../../../../document/version-store/object-digest';
 import type { VersionGraphNamespace } from '../../../../../document/version-store/object-store';
 import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
 import {
@@ -40,6 +44,7 @@ import {
   validatePreparedMergeApplyArtifactIntentRecord,
   validateAppliedMergeCommitIdentity,
 } from './version-apply-merge-persisted-artifact-recovery';
+import { createResolvedMergeAttemptArtifactRecordForResolutionSet } from '../../merge-review/version-merge-review-saved-resolution-artifacts';
 import {
   getAttachedVersionApplyMergeService,
   openPersistedMergeGraph,
@@ -328,27 +333,17 @@ async function prepareResolvedAttempt(
     };
   }
 
-  const resolutionSet = await createMergeResolutionSetArtifactRecord(
+  const artifacts = await prepareResolvedAttemptArtifacts(
     opened.namespace,
-    input.resolutions,
-  );
-  const resolvedAttempt = await createResolvedMergeAttemptArtifactRecord(opened.namespace, {
+    input,
+    options,
     resultDigest,
-    resolutionSetDigest: resolutionSet.digest,
-    targetRef: options.targetRef,
-    expectedTargetHead: options.expectedTargetHead,
-  });
-  const digestDiagnostics = validateResolvedAttemptDigests(input, {
-    resolutionSetDigest: resolutionSet.digest,
-    resolvedAttemptDigest: resolvedAttempt.digest,
-  });
-  if (digestDiagnostics.length > 0) {
-    return { ok: false, diagnostics: digestDiagnostics };
-  }
+  );
+  if (!artifacts.ok) return { ok: false, diagnostics: artifacts.diagnostics };
 
-  const intentId = intentIdForResolvedAttemptDigest(resolvedAttempt.digest);
+  const intentId = intentIdForResolvedAttemptDigest(artifacts.resolvedAttempt.digest);
   const idempotencyKey = idempotencyKeyForResolvedAttempt({
-    resolvedAttemptDigest: resolvedAttempt.digest,
+    resolvedAttemptDigest: artifacts.resolvedAttempt.digest,
     targetRef: options.targetRef,
     expectedTargetHead: options.expectedTargetHead,
   });
@@ -365,8 +360,8 @@ async function prepareResolvedAttempt(
         targetRef: options.targetRef,
         expectedTargetHead: options.expectedTargetHead,
         resultDigest,
-        resolutionSetDigest: resolutionSet.digest,
-        resolvedAttemptDigest: resolvedAttempt.digest,
+        resolutionSetDigest: artifacts.resolutionSet.digest,
+        resolvedAttemptDigest: artifacts.resolvedAttempt.digest,
       },
       resolutionMismatchDiagnostic,
     );
@@ -387,7 +382,10 @@ async function prepareResolvedAttempt(
   );
   if (staleBeforeStaging) return { ok: false, result: staleBeforeStaging };
 
-  const persisted = await opened.graph.putObjects([resolutionSet, resolvedAttempt]);
+  const persisted = await opened.graph.putObjects([
+    artifacts.resolutionSet,
+    artifacts.resolvedAttempt,
+  ]);
   if (persisted.status !== 'success') {
     return { ok: false, diagnostics: mapProviderDiagnostics(persisted.diagnostics) };
   }
@@ -402,12 +400,87 @@ async function prepareResolvedAttempt(
     targetRef: options.targetRef,
     expectedTargetHead: options.expectedTargetHead,
     resultDigest,
-    resolutionSetDigest: resolutionSet.digest,
-    resolvedAttemptDigest: resolvedAttempt.digest,
+    resolutionSetDigest: artifacts.resolutionSet.digest,
+    resolvedAttemptDigest: artifacts.resolvedAttempt.digest,
     createdAt: new Date().toISOString(),
   });
   if (begin.status === 'failed' || begin.status === 'conflict') {
     return { ok: false, diagnostics: intentStoreDiagnostics(begin.diagnostics) };
   }
   return { ok: true, store: opened.intentStore, intent: begin.record };
+}
+
+type PreparedResolvedAttemptArtifacts =
+  | {
+      readonly ok: true;
+      readonly resolutionSet: MergeResolutionSetArtifactRecord;
+      readonly resolvedAttempt: ResolvedMergeAttemptArtifactRecord;
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
+
+async function prepareResolvedAttemptArtifacts(
+  namespace: VersionGraphNamespace,
+  input: NormalizedPersistedApplyMergeInput,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
+  resultDigest: InternalObjectDigest,
+): Promise<PreparedResolvedAttemptArtifacts> {
+  const legacy = await createResolvedAttemptArtifacts(namespace, {
+    resultDigest,
+    options,
+    resolutionSet: await createMergeResolutionSetArtifactRecord(namespace, input.resolutions),
+  });
+  const hasExpectedDigest =
+    Boolean(input.resolutionSetDigest) || Boolean(input.resolvedAttemptDigest);
+  if (!hasExpectedDigest) return { ok: true, ...legacy };
+
+  const legacyDiagnostics = validateResolvedAttemptDigests(input, {
+    resolutionSetDigest: legacy.resolutionSet.digest,
+    resolvedAttemptDigest: legacy.resolvedAttempt.digest,
+  });
+  if (legacyDiagnostics.length === 0) return { ok: true, ...legacy };
+
+  const boundResolutionSet = await createMergeResolutionSetArtifactRecord(namespace, {
+    resultId: input.resultId,
+    resultDigest,
+    previewArtifactDigest: resultDigest,
+    resolutions: input.resolutions,
+  });
+  const bound = await createResolvedAttemptArtifacts(namespace, {
+    resultDigest,
+    options,
+    resolutionSet: boundResolutionSet,
+  });
+  const boundDiagnostics = validateResolvedAttemptDigests(input, {
+    resolutionSetDigest: bound.resolutionSet.digest,
+    resolvedAttemptDigest: bound.resolvedAttempt.digest,
+  });
+  if (boundDiagnostics.length === 0) return { ok: true, ...bound };
+
+  return { ok: false, diagnostics: legacyDiagnostics };
+}
+
+async function createResolvedAttemptArtifacts(
+  namespace: VersionGraphNamespace,
+  input: {
+    readonly resultDigest: InternalObjectDigest;
+    readonly options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>;
+    readonly resolutionSet: MergeResolutionSetArtifactRecord;
+  },
+): Promise<{
+  readonly resolutionSet: MergeResolutionSetArtifactRecord;
+  readonly resolvedAttempt: ResolvedMergeAttemptArtifactRecord;
+}> {
+  const resolvedAttempt = await createResolvedMergeAttemptArtifactRecordForResolutionSet(
+    namespace,
+    {
+      resultDigest: input.resultDigest,
+      resolutionSetRecord: input.resolutionSet,
+      targetRef: input.options.targetRef,
+      expectedTargetHead: input.options.expectedTargetHead,
+    },
+  );
+  return { resolutionSet: input.resolutionSet, resolvedAttempt };
 }

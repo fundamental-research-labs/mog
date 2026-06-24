@@ -1,4 +1,4 @@
-import { mergeResolutionSetArtifactRef } from '../../../document/version-store/merge-attempt-artifacts';
+import { mergeResolutionSetV2ArtifactRef } from '../../../document/version-store/merge-attempt-artifacts';
 import { namespaceForDocumentScope } from '../../../document/version-store/provider';
 import {
   resolutionFor,
@@ -44,11 +44,16 @@ export function registerMergeReviewEndpointPayloadSaveRefScenario(): void {
           provider.accessContext,
         );
         await expect(
-          graph.getObjectRecord(mergeResolutionSetArtifactRef(saved.value.resolutionSetDigest)),
+          graph.getObjectRecord(mergeResolutionSetV2ArtifactRef(saved.value.resolutionSetDigest)),
         ).resolves.toMatchObject({
           preimage: {
-            objectType: 'workbook.mergeResolutionSet.v1',
+            objectType: 'workbook.mergeResolutionSet.v2',
             payload: {
+              schemaVersion: 2,
+              recordKind: 'mergeResolutionSet',
+              resultId: preview.resultId,
+              resultDigest: preview.resultDigest,
+              previewArtifactDigest: preview.previewArtifactDigest,
               resolutions: [
                 expect.objectContaining({
                   conflictId: conflict.conflictId,

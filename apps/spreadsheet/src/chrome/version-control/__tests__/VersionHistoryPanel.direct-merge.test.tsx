@@ -15,6 +15,8 @@ import {
   PARENT_COMMIT_ID,
   REF_REVISION,
   appliedMergeResult,
+  branchTargetTestId,
+  checkoutBranchTestId,
   cleanMergeResult,
   conflictedMergeResult,
   createDeferred,
@@ -38,6 +40,7 @@ const INCOMING_REF = 'refs/heads/scenario/budget';
 const REVIEW_REF = 'refs/heads/review/revenue';
 const PRIVATE_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}`;
 const REVIEW_COMMIT_ID = `commit:sha256:${'f'.repeat(64)}`;
+const MERGE_REF_REVISION = { kind: 'counter' as const, value: '5' };
 const SOURCE_RESOLUTION_RADIO_NAME = 'cells.values value: Source - theirs';
 
 describe('VersionHistoryPanelContent direct merge controls', () => {
@@ -131,13 +134,75 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
   });
 
   it('applies a clean direct merge through workbook.version.applyMerge', async () => {
-    const workbook = createDirectMergeWorkbook({
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: cleanMergeResult(input.base, input.ours, input.theirs),
+    const getSurfaceStatus = jest
+      .fn<DirectMergeVersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(createSurfaceStatus())
+      .mockResolvedValue(
+        createSurfaceStatus({
+          current: {
+            headCommitId: MERGE_COMMIT_ID,
+            branchName: CURRENT_REF,
+            detached: false,
+            stale: false,
+          },
         }),
-      ),
+      );
+    const workbook = createDirectMergeWorkbook({
+      getSurfaceStatus,
+      getHead: jest
+        .fn<DirectMergeVersionHistoryWorkbook['version']['getHead']>()
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            id: HEAD_COMMIT_ID,
+            refName: CURRENT_REF,
+            refRevision: REF_REVISION,
+          },
+        })
+        .mockResolvedValue({
+          ok: true,
+          value: {
+            id: MERGE_COMMIT_ID,
+            refName: CURRENT_REF,
+            refRevision: MERGE_REF_REVISION,
+          },
+        }),
+      listCommits: jest
+        .fn<DirectMergeVersionHistoryWorkbook['version']['listCommits']>()
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: directMergeCommits(),
+            limit: 20,
+          },
+        })
+        .mockResolvedValue({
+          ok: true,
+          value: {
+            items: directMergeCommitsAfterApply(),
+            limit: 20,
+          },
+        }),
+      listRefs: jest
+        .fn<DirectMergeVersionHistoryWorkbook['version']['listRefs']>()
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: directMergeRefs(),
+            limit: 2,
+          },
+        })
+        .mockResolvedValue({
+          ok: true,
+          value: {
+            items: directMergeRefsAfterApply(),
+            limit: 2,
+          },
+        }),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: cleanMergeResult(input.base, input.ours, input.theirs),
+      })),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -168,6 +233,25 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         },
       }),
     );
+    await expectActionResult(`Merge applied at ${shortCommitId(MERGE_COMMIT_ID)}`, 'success');
+    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
+
+    const statusSummary = screen.getByRole('region', { name: 'Version status' });
+    expect(statusSummary).toHaveTextContent(CURRENT_REF);
+    expect(statusSummary).toHaveTextContent(shortCommitId(MERGE_COMMIT_ID));
+    expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
+      shortCommitId(MERGE_COMMIT_ID),
+    );
+    expect(screen.getByText('Merge budget scenario')).toBeVisible();
+    expect(screen.getByTestId(branchTargetTestId(MERGE_COMMIT_ID))).toBeChecked();
+    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+      'data-version-commit-id',
+      MERGE_COMMIT_ID,
+    );
+
+    const mainBranchRow = screen.getByTestId(checkoutBranchTestId(CURRENT_REF)).closest('li');
+    if (!mainBranchRow) throw new Error('Missing refreshed main branch row');
+    expect(mainBranchRow).toHaveTextContent(shortCommitId(MERGE_COMMIT_ID));
     expect(workbook.version.checkout).not.toHaveBeenCalled();
   });
 
@@ -203,12 +287,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
           },
         };
       }),
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: cleanMergeResult(input.base, input.ours, input.theirs),
-        }),
-      ),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: cleanMergeResult(input.base, input.ours, input.theirs),
+      })),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -290,12 +372,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
           limit: 3,
         },
       })),
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: cleanMergeResult(input.base, input.ours, input.theirs),
-        }),
-      ),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: cleanMergeResult(input.base, input.ours, input.theirs),
+      })),
       applyMerge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>(
         async (input) => {
           const mergeInput = directMergeInput(input);
@@ -355,12 +435,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
 
   it('does not apply a conflicted direct merge preview without resolutions', async () => {
     const workbook = createDirectMergeWorkbook({
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: conflictedMergeResult(input.base, input.ours, input.theirs),
-        }),
-      ),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: conflictedMergeResult(input.base, input.ours, input.theirs),
+      })),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -381,12 +459,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     const conflict = sameCellMergeConflict();
     const expectedResolution = mergeResolutionFor(conflict, 'acceptTheirs');
     const workbook = createDirectMergeWorkbook({
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
-        }),
-      ),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
+      })),
       checkout: jest.fn<DirectMergeVersionHistoryWorkbook['version']['checkout']>(async () => ({
         ok: true,
         value: {
@@ -425,8 +501,9 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await user.click(applyButton);
     expect(workbook.version.applyMerge).not.toHaveBeenCalled();
 
-    expect(screen.getByRole('region', { name: '1 merge conflict requiring resolution' }))
-      .toContainElement(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
+    expect(
+      screen.getByRole('region', { name: '1 merge conflict requiring resolution' }),
+    ).toContainElement(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
 
     await user.click(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
     await waitFor(() => expect(applyButton).toBeEnabled());
@@ -458,12 +535,10 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
   it('restores a conflicted direct merge preview and selected resolution after remount', async () => {
     const conflict = sameCellMergeConflict();
     const workbook = createDirectMergeWorkbook({
-      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
-        async (input) => ({
-          ok: true,
-          value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
-        }),
-      ),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+        ok: true,
+        value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
+      })),
     });
     const firstRender = renderVersionHistoryPanel({ workbook });
 
@@ -574,6 +649,34 @@ function directMergeRefs(): readonly VersionRef[] {
       name: CURRENT_REF,
       commitId: HEAD_COMMIT_ID,
       revision: REF_REVISION,
+    },
+    {
+      name: INCOMING_REF,
+      commitId: LATEST_COMMIT_ID,
+      revision: { kind: 'counter', value: '2' },
+    },
+  ];
+}
+
+function directMergeCommitsAfterApply(): readonly WorkbookCommitSummary[] {
+  return [
+    {
+      id: MERGE_COMMIT_ID,
+      parents: [HEAD_COMMIT_ID, LATEST_COMMIT_ID],
+      createdAt: '2026-06-22T10:15:00.000Z',
+      author: { redacted: false, displayName: 'Planning agent' },
+      annotation: { title: { kind: 'text', value: 'Merge budget scenario' } },
+    },
+    ...directMergeCommits(),
+  ];
+}
+
+function directMergeRefsAfterApply(): readonly VersionRef[] {
+  return [
+    {
+      name: CURRENT_REF,
+      commitId: MERGE_COMMIT_ID,
+      revision: MERGE_REF_REVISION,
     },
     {
       name: INCOMING_REF,

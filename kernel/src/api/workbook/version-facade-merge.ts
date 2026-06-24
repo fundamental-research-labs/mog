@@ -12,7 +12,6 @@ import type {
   VersionPromotePendingRemoteResult,
   VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult,
-  VersionCheckoutResult,
   VersionResult,
   VersionRevertInput,
   VersionRevertOptions,
@@ -20,19 +19,13 @@ import type {
   VersionSaveMergeResolutionsRequest,
   VersionSaveMergeResolutionsResult,
   VersionStoreDiagnostic,
-  WorkbookCommitRef,
-  WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { applyMergeWorkbookVersion } from './version-apply-merge';
-import {
-  checkoutWriteFenceUnavailableDiagnostic,
-  type VersionCheckoutTransactionGuard,
-} from './version-checkout';
+import { type VersionCheckoutTransactionGuard } from './version-checkout';
 import { mergeWorkbookVersion } from './version-merge';
 import {
-  type ActiveCheckoutWriteContext,
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
   expectedHeadFromActiveCheckout,
@@ -41,14 +34,12 @@ import {
   recordActiveCheckoutBranchRefMove,
 } from './version/active-checkout-write-context';
 import {
-  invalidApplyMergeOptionDiagnostic,
-} from './version/apply-merge/version-apply-merge-results';
-import {
-  providerErrorDiagnostic as checkoutProviderErrorDiagnostic,
-  serviceUnavailableDiagnostic as checkoutServiceUnavailableDiagnostic,
-} from './version/checkout/version-checkout-diagnostic-factories';
-import { mapCheckoutResult } from './version/checkout/version-checkout-result-mapping';
-import { getAttachedCheckoutMaterializationService } from './version/checkout/version-checkout-service';
+  applyMergeResultCommitRef,
+  isMergeCommitApplyInput,
+  materializeAppliedMergeTargetRef,
+  prepareActiveCheckoutMergeMaterialization,
+} from './version/apply-merge/version-apply-merge-active-checkout-materialization';
+import { invalidApplyMergeOptionDiagnostic } from './version/apply-merge/version-apply-merge-results';
 import {
   getMergeConflictDetailWorkbookVersion,
   putMergeResolutionPayloadWorkbookVersion,
@@ -283,253 +274,6 @@ async function revertInputForActiveCheckout(
 
 function hasExplicitTargetRef(input: VersionRevertInput | VersionApplyMergeOptions): boolean {
   return Object.prototype.hasOwnProperty.call(input, 'targetRef');
-}
-
-function isMergeCommitApplyInput(
-  input: VersionApplyMergeInput,
-): input is VersionApplyMergeInput & {
-  readonly base: WorkbookCommitId;
-  readonly ours: WorkbookCommitId;
-  readonly theirs: WorkbookCommitId;
-} {
-  if (!isRecord(input)) return false;
-  const record = input as Readonly<Record<string, unknown>>;
-  return (
-    typeof record.base === 'string' &&
-    typeof record.ours === 'string' &&
-    typeof record.theirs === 'string'
-  );
-}
-
-function applyMergeResultCommitRef(result: VersionApplyMergeResult): WorkbookCommitRef | null {
-  if (!('commitRef' in result)) return null;
-  return result.commitRef;
-}
-
-type ActiveCheckoutMergeMaterializationPreparation =
-  | { readonly ok: true; readonly enabled: false }
-  | { readonly ok: true; readonly enabled: true; readonly targetRef: ActiveCheckoutWriteRefName }
-  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
-
-type ActiveCheckoutMergeMaterializationResult =
-  | { readonly ok: true; readonly diagnostics: readonly VersionStoreDiagnostic[] }
-  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
-
-async function prepareActiveCheckoutMergeMaterialization(
-  ctx: DocumentContext,
-  input: VersionApplyMergeInput,
-  options: VersionApplyMergeOptions,
-  transactionGuard: VersionCheckoutTransactionGuard | undefined,
-): Promise<ActiveCheckoutMergeMaterializationPreparation> {
-  if (!options.materializeActiveCheckout) return { ok: true, enabled: false };
-  if (options.mode === 'preview') {
-    return {
-      ok: false,
-      diagnostics: [
-        invalidApplyMergeOptionDiagnostic(
-          'materializeActiveCheckout',
-          'materializeActiveCheckout is valid only in apply mode.',
-        ),
-      ],
-    };
-  }
-  if (!options.targetRef || !options.expectedTargetHead) {
-    return {
-      ok: false,
-      diagnostics: [
-        invalidApplyMergeOptionDiagnostic(
-          'materializeActiveCheckout',
-          'materializeActiveCheckout requires targetRef and expectedTargetHead.',
-        ),
-      ],
-    };
-  }
-  if (!transactionGuard) {
-    return {
-      ok: false,
-      diagnostics: [
-        checkoutWriteFenceUnavailableDiagnostic({
-          operation: 'applyMerge.materializeActiveCheckout',
-          reason: 'checkoutTransactionGuardUnavailable',
-        }),
-      ],
-    };
-  }
-  const service = getAttachedCheckoutMaterializationService(ctx);
-  if (!service?.checkout) {
-    return {
-      ok: false,
-      diagnostics: [
-        checkoutServiceUnavailableDiagnostic({
-          operation: 'applyMerge.materializeActiveCheckout',
-          targetKind: 'ref',
-          refName: options.targetRef,
-        }),
-      ],
-    };
-  }
-
-  const activeCheckout = await readActiveCheckoutWriteContext(ctx, 'applyMergeGraphWrite');
-  if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {
-    return { ok: false, diagnostics: activeCheckout.diagnostics };
-  }
-  if (activeCheckout.status === 'detached') {
-    return {
-      ok: false,
-      diagnostics: [detachedImplicitCheckoutWriteDiagnostic('applyMergeGraphWrite')],
-    };
-  }
-  if (activeCheckout.status !== 'attached') {
-    return {
-      ok: false,
-      diagnostics: [
-        invalidApplyMergeOptionDiagnostic(
-          'materializeActiveCheckout',
-          'materializeActiveCheckout requires an attached active checkout session.',
-        ),
-      ],
-    };
-  }
-
-  const diagnostics = activeCheckoutMaterializationProofDiagnostics(
-    input,
-    options,
-    activeCheckout,
-  );
-  if (diagnostics.length > 0) return { ok: false, diagnostics };
-
-  const transaction = transactionGuard.beginCheckoutTransaction();
-  if (!transaction.ok) return { ok: false, diagnostics: transaction.diagnostics };
-  transactionGuard.endCheckoutTransaction(transaction.token);
-
-  return { ok: true, enabled: true, targetRef: activeCheckout.refName };
-}
-
-function activeCheckoutMaterializationProofDiagnostics(
-  input: VersionApplyMergeInput,
-  options: VersionApplyMergeOptions,
-  activeCheckout: Extract<ActiveCheckoutWriteContext, { readonly status: 'attached' }>,
-): readonly VersionStoreDiagnostic[] {
-  const diagnostics: VersionStoreDiagnostic[] = [];
-  if (options.targetRef !== activeCheckout.refName) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        'materializeActiveCheckout',
-        'materializeActiveCheckout targetRef must match the active checkout branch.',
-      ),
-    );
-  }
-  if (options.expectedTargetHead?.commitId !== activeCheckout.commitId) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        'materializeActiveCheckout',
-        'materializeActiveCheckout expectedTargetHead must match the active checkout head.',
-      ),
-    );
-  }
-  if (
-    options.expectedTargetHead &&
-    !versionRecordRevisionsEqual(options.expectedTargetHead.revision, activeCheckout.refRevision)
-  ) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        'materializeActiveCheckout',
-        'materializeActiveCheckout expectedTargetHead revision must match the active checkout ref revision.',
-      ),
-    );
-  }
-  if (isMergeCommitApplyInput(input) && input.ours !== activeCheckout.commitId) {
-    diagnostics.push(
-      invalidApplyMergeOptionDiagnostic(
-        'ours',
-        'applyMerge ours must match the active checkout head for materializeActiveCheckout.',
-      ),
-    );
-  }
-  return diagnostics;
-}
-
-async function materializeAppliedMergeTargetRef(
-  ctx: DocumentContext,
-  targetRef: ActiveCheckoutWriteRefName,
-  transactionGuard: VersionCheckoutTransactionGuard | undefined,
-): Promise<ActiveCheckoutMergeMaterializationResult> {
-  if (!transactionGuard) {
-    return {
-      ok: false,
-      diagnostics: [
-        checkoutWriteFenceUnavailableDiagnostic({
-          operation: 'applyMerge.materializeActiveCheckout',
-          reason: 'checkoutTransactionGuardUnavailable',
-        }),
-      ],
-    };
-  }
-
-  const service = getAttachedCheckoutMaterializationService(ctx);
-  const serviceRefName = checkoutServiceRefNameForTargetRef(targetRef);
-  if (!service?.checkout) {
-    return {
-      ok: false,
-      diagnostics: [
-        checkoutServiceUnavailableDiagnostic({
-          operation: 'applyMerge.materializeActiveCheckout',
-          targetKind: 'ref',
-          refName: targetRef,
-        }),
-      ],
-    };
-  }
-
-  const transaction = transactionGuard.beginCheckoutTransaction();
-  if (!transaction.ok) return { ok: false, diagnostics: transaction.diagnostics };
-  try {
-    const result = mapCheckoutResult(
-      await service.checkout({ target: 'ref', refName: serviceRefName }),
-      {
-        operation: 'applyMerge.materializeActiveCheckout',
-        targetKind: 'ref',
-        refName: targetRef,
-      },
-    );
-    if (isAppliedCheckoutSuccess(result)) {
-      return { ok: true, diagnostics: result.diagnostics };
-    }
-    return { ok: false, diagnostics: result.diagnostics };
-  } catch {
-    return {
-      ok: false,
-      diagnostics: [
-        checkoutProviderErrorDiagnostic({
-          operation: 'applyMerge.materializeActiveCheckout',
-          targetKind: 'ref',
-          refName: targetRef,
-        }),
-      ],
-    };
-  } finally {
-    transactionGuard.endCheckoutTransaction(transaction.token);
-  }
-}
-
-function isAppliedCheckoutSuccess(
-  result: VersionCheckoutResult,
-): result is VersionCheckoutResult & {
-  readonly status: 'success';
-  readonly materialization: 'applied';
-} {
-  return result.status === 'success' && result.materialization === 'applied';
-}
-
-function versionRecordRevisionsEqual(
-  left: VersionCommitExpectedHead['revision'],
-  right: VersionCommitExpectedHead['revision'],
-): boolean {
-  return left.kind === right.kind && left.value === right.value;
-}
-
-function checkoutServiceRefNameForTargetRef(refName: ActiveCheckoutWriteRefName): string {
-  return refName.startsWith('refs/heads/') ? refName.slice('refs/heads/'.length) : refName;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

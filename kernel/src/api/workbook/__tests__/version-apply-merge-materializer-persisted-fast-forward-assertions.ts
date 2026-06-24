@@ -140,7 +140,8 @@ export function expectPersistedFastForwardCommitGraph(
   );
   expect(
     items.some(
-      (item) => item.parents[0] === input.oursCommit.id && item.parents[1] === input.theirsCommit.id,
+      (item) =>
+        item.parents[0] === input.oursCommit.id && item.parents[1] === input.theirsCommit.id,
     ),
   ).toBe(false);
 }
@@ -155,4 +156,22 @@ export async function expectPersistedFastForwardCheckoutCells(workbook: Workbook
   await expect(workbook.activeSheet.getCell('C1')).resolves.toMatchObject({
     value: 'theirs',
   });
+}
+
+export async function expectPersistedFastForwardActiveCheckoutMaterialized(
+  workbook: Workbook,
+  input: FastForwardCommits,
+): Promise<void> {
+  await expect(workbook.version.getSurfaceStatus()).resolves.toMatchObject({
+    current: {
+      headCommitId: input.theirsCommit.id,
+      checkedOutCommitId: input.theirsCommit.id,
+      branchName: 'main',
+      currentRefHeadId: input.theirsCommit.id,
+      refHeadAtMaterialization: input.theirsCommit.id,
+      detached: false,
+      stale: false,
+    },
+  });
+  await expectPersistedFastForwardCheckoutCells(workbook);
 }

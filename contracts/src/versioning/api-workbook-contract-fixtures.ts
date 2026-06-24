@@ -720,10 +720,11 @@ const workbookVersionApplyMergeOptionFixtures = [
   {
     mode: 'apply',
     targetRef: versionScenarioRefName,
+    expectedTargetHead: versionExpectedHeadFixture,
     includeDiagnostics: true,
+    materializeActiveCheckout: true,
   },
 ] satisfies readonly VersionApplyMergeOptions[];
-
 const versionMergeCommitRefFixture = {
   id: versionMergeCommitId,
   refName: versionMainRefName,

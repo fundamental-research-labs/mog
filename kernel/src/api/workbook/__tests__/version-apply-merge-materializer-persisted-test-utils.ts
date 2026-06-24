@@ -135,6 +135,7 @@ export async function createPersistedFastForwardTheirsCommit(
   input: {
     readonly branchName: string;
     readonly oursCommit: WorkbookCommitSummary;
+    readonly editWorkbook?: Workbook;
   },
 ): Promise<WorkbookCommitSummary> {
   const branch = await sourceWb.version.createBranch({
@@ -144,9 +145,20 @@ export async function createPersistedFastForwardTheirsCommit(
   });
   if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
 
-  await sourceWb.activeSheet.setCell('C1', 'theirs');
+  const editWorkbook = input.editWorkbook ?? sourceWb;
+  if (editWorkbook !== sourceWb) {
+    const checkoutOurs = await editWorkbook.version.checkout({
+      kind: 'commit',
+      id: input.oursCommit.id,
+    });
+    if (!checkoutOurs.ok) {
+      throw new Error(`expected branch edit checkout success: ${checkoutOurs.error.code}`);
+    }
+  }
+
+  await editWorkbook.activeSheet.setCell('C1', 'theirs');
   return expectCommit(
-    sourceWb.version.commit({
+    editWorkbook.version.commit({
       targetRef: input.branchName as any,
       expectedHead: {
         commitId: input.oursCommit.id,

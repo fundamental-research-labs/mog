@@ -10,6 +10,7 @@ import {
 } from './version-apply-merge-materializer-persisted-test-utils';
 import {
   expectPersistedFastForwardAppliedResult,
+  expectPersistedFastForwardActiveCheckoutMaterialized,
   expectPersistedFastForwardCheckoutCells,
   expectPersistedFastForwardCommitGraph,
   expectPersistedFastForwardPreviewResult,
@@ -48,13 +49,10 @@ export async function runPersistedFastForwardExistingDescendantScenario(): Promi
       theirsCommit,
     });
 
-    const applied = await sourceWb.version.applyMerge(
-      previewMetadata,
-      {
-        targetRef: MATERIALIZER_TARGET_REF as any,
-        expectedTargetHead,
-      },
-    );
+    const applied = await sourceWb.version.applyMerge(previewMetadata, {
+      targetRef: MATERIALIZER_TARGET_REF as any,
+      expectedTargetHead,
+    });
     if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
     expectPersistedFastForwardAppliedResult(applied.value, {
       oursCommit,
@@ -62,13 +60,10 @@ export async function runPersistedFastForwardExistingDescendantScenario(): Promi
       previewMetadata,
     });
 
-    const repeated = await sourceWb.version.applyMerge(
-      previewMetadata,
-      {
-        targetRef: MATERIALIZER_TARGET_REF as any,
-        expectedTargetHead,
-      },
-    );
+    const repeated = await sourceWb.version.applyMerge(previewMetadata, {
+      targetRef: MATERIALIZER_TARGET_REF as any,
+      expectedTargetHead,
+    });
     if (!repeated.ok)
       throw new Error(`expected repeated applyMerge success: ${repeated.error.code}`);
     expectPersistedFastForwardRepeatedApplyResult(repeated.value, {
@@ -87,13 +82,10 @@ export async function runPersistedFastForwardExistingDescendantScenario(): Promi
         },
       }),
     );
-    const staleTerminal = await sourceWb.version.applyMerge(
-      previewMetadata,
-      {
-        targetRef: MATERIALIZER_TARGET_REF as any,
-        expectedTargetHead,
-      },
-    );
+    const staleTerminal = await sourceWb.version.applyMerge(previewMetadata, {
+      targetRef: MATERIALIZER_TARGET_REF as any,
+      expectedTargetHead,
+    });
     if (!staleTerminal.ok) {
       throw new Error(`expected stale terminal applyMerge result: ${staleTerminal.error.code}`);
     }
@@ -122,6 +114,70 @@ export async function runPersistedFastForwardExistingDescendantScenario(): Promi
     await expectPersistedFastForwardCheckoutCells(merged.workbook);
   } finally {
     if (merged) await merged.cleanup();
+    await fixture.cleanup();
+  }
+}
+
+export async function runPersistedFastForwardMaterializeActiveCheckoutScenario(): Promise<void> {
+  const fixture = await createPersistedMaterializerSourceFixture(
+    'graph-fast-forward-active-checkout',
+  );
+  let branchWriter: PersistedMaterializerWorkbook | undefined;
+
+  try {
+    const { sourceWb, baseCommit, oursCommit, expectedTargetHead } = fixture;
+    branchWriter = await openPersistedMaterializerWorkbook(fixture);
+    const theirsCommit = await createPersistedFastForwardTheirsCommit(sourceWb, {
+      branchName: 'scenario/fast-forward-active-checkout-incoming',
+      oursCommit,
+      editWorkbook: branchWriter.workbook,
+    });
+
+    const preview = await sourceWb.version.merge(
+      {
+        base: baseCommit.id,
+        ours: oursCommit.id,
+        theirs: theirsCommit.id,
+      },
+      {
+        mode: 'preview',
+        targetRef: MATERIALIZER_TARGET_REF as any,
+        expectedTargetHead,
+        persistReviewRecord: true,
+      },
+    );
+    if (!preview.ok)
+      throw new Error(`expected persisted merge preview success: ${preview.error.code}`);
+    const previewMetadata = expectPersistedFastForwardPreviewResult(preview.value, {
+      oursCommit,
+      theirsCommit,
+    });
+
+    const checkoutOurs = await sourceWb.version.checkout({
+      kind: 'ref',
+      name: MATERIALIZER_TARGET_REF as any,
+    });
+    if (!checkoutOurs.ok) {
+      throw new Error(`expected source main checkout success: ${checkoutOurs.error.code}`);
+    }
+
+    const applied = await sourceWb.version.applyMerge(previewMetadata, {
+      targetRef: MATERIALIZER_TARGET_REF as any,
+      expectedTargetHead,
+      materializeActiveCheckout: true,
+    });
+    if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
+    expectPersistedFastForwardAppliedResult(applied.value, {
+      oursCommit,
+      theirsCommit,
+      previewMetadata,
+    });
+    await expectPersistedFastForwardActiveCheckoutMaterialized(sourceWb, {
+      oursCommit,
+      theirsCommit,
+    });
+  } finally {
+    if (branchWriter) await branchWriter.cleanup();
     await fixture.cleanup();
   }
 }

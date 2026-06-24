@@ -293,7 +293,10 @@ The basic public flow is:
    `wb.version.applyMerge(...)`.
 6. Apply the accepted merge preview with the same `targetRef` and
    `expectedTargetHead`. If the target moved, handle `staleTargetHead` by
-   re-reading the target and previewing again.
+   re-reading the target and previewing again. Non-materializing direct applies
+   from an attached active checkout branch may omit `targetRef`; the SDK targets
+   the active branch and uses its current head when `expectedTargetHead` is also
+   omitted.
 7. Revert with a concrete `targetRef` plus a freshly read `expectedTargetHead`
    so stale target refs fail closed.
 
@@ -465,6 +468,14 @@ previewed `conflictId`, `conflictDigest`, `optionId`, and option `kind`. For
 revert, read the target ref immediately before mutation and pass its
 commit/revision as `expectedTargetHead`. Use `{ dryRun: true }` for revert when
 the host wants to inspect diagnostics before moving the target ref.
+
+Direct `applyMerge` calls against an attached active checkout are branch writes;
+they move the target ref but do not reload the live workbook contents by
+default. Pass `{ mode: 'apply', targetRef, expectedTargetHead,
+materializeActiveCheckout: true }` when the target is the active checkout branch
+and the workbook should immediately materialize the merged branch state. The
+option is valid only in apply mode, and `targetRef`, `expectedTargetHead`, and
+`input.ours` must all match the attached active checkout head.
 
 ## Error Handling
 

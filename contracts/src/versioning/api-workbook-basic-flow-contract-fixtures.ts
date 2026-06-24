@@ -156,7 +156,12 @@ export const CONTRACTS_WORKBOOK_VERSION_BASIC_FLOW_CONTRACT_FIXTURES = Object.fr
     theirs: theirsCommitId,
     resolutions: [mergeResolution],
   },
-  applyMergeOptions: { mode: 'apply', targetRef: mainRefName, expectedTargetHead: expectedHead },
+  applyMergeOptions: {
+    mode: 'apply',
+    targetRef: mainRefName,
+    expectedTargetHead: expectedHead,
+    materializeActiveCheckout: true,
+  },
   applyMergeResult: {
     status: 'applied',
     base: baseCommitId,

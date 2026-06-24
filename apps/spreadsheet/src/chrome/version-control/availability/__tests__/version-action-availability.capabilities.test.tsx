@@ -1,5 +1,10 @@
-import type { VersionCapability, VersionCapabilityState } from '@mog-sdk/contracts/api';
+import type {
+  VersionCapability,
+  VersionCapabilityState,
+  VersionSurfaceStatus,
+} from '@mog-sdk/contracts/api';
 
+import { firstDisabledAvailability } from '../../version-history-panel-action-utils';
 import {
   getBranchAvailability,
   getCapabilityAvailability,
@@ -22,6 +27,27 @@ import {
   expectDisabled,
   redactedDisabledCapability,
 } from './version-action-availability.test-utils';
+
+function getDirectMergeApplyAvailability(surface: VersionSurfaceStatus) {
+  return firstDisabledAvailability(
+    getCapabilityAvailability({ surface }, false, false, 'version:mergeApply'),
+    getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
+    getCapabilityAvailability({ surface }, false, false, 'version:branch'),
+    getCapabilityAvailability({ surface }, false, false, 'version:checkout'),
+  );
+}
+
+function omitSurfaceCapability(
+  surface: VersionSurfaceStatus,
+  capability: VersionCapability,
+): VersionSurfaceStatus {
+  return {
+    ...surface,
+    capabilities: Object.fromEntries(
+      Object.entries(surface.capabilities).filter(([candidate]) => candidate !== capability),
+    ) as VersionSurfaceStatus['capabilities'],
+  };
+}
 
 describe('version action availability capability contract', () => {
   it('uses the feature-gate disabled reason for every action', () => {
@@ -99,6 +125,42 @@ describe('version action availability capability contract', () => {
     }
   });
 
+  it('requires checkout availability for direct merge apply materializing the active checkout', () => {
+    const checkoutReason = 'Checkout denied before merge materialization.';
+    const cases = [
+      {
+        surface: createSurfaceStatus({
+          capabilityOverrides: {
+            'version:checkout': disabledCapability(checkoutReason, 'hostCapability', false),
+          },
+        }),
+        reason: checkoutReason,
+        reasonId: 'version-capability-host-denied',
+      },
+      {
+        surface: createSurfaceStatus({
+          capabilityOverrides: {
+            'version:checkout': redactedDisabledCapability('hostCapability', false),
+          },
+        }),
+        reason: 'Checkout is unavailable.',
+        reasonId: 'version-capability-host-denied',
+      },
+      {
+        surface: omitSurfaceCapability(createSurfaceStatus(), 'version:checkout'),
+        reason: 'Checkout is unavailable.',
+        reasonId: 'version-capability-unavailable',
+      },
+    ] as const;
+
+    for (const item of cases) {
+      expect(
+        getCapabilityAvailability({ surface: item.surface }, false, false, 'version:mergeApply'),
+      ).toEqual({ enabled: true });
+      expectDisabled(getDirectMergeApplyAvailability(item.surface), item.reason, item.reasonId);
+    }
+  });
+
   it('treats read availability as a shared action prerequisite', () => {
     const surface = createSurfaceStatus({
       capabilityOverrides: {
@@ -128,8 +190,9 @@ describe('version action availability capability contract', () => {
     });
 
     expectDisabled(getCommitAvailability({ surface }, false, false, 'Checkpoint'), reason);
-    expect(getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID))
-      .toEqual({ enabled: true });
+    expect(
+      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+    ).toEqual({ enabled: true });
   });
 
   it('blocks sensitive actions when public diagnostics report incomplete history', () => {

@@ -1,12 +1,13 @@
 use super::*;
 use crate::domain::drawings::{CellAnchor, ClientData, Extent, OneCellAnchor};
+use crate::domain::styles::types::{ColorDef, DxfDef, FontDef};
 use crate::output::results::FullParsedSheet;
 use domain_types::CFRule;
 use domain_types::chart::AnchorPosition;
 use domain_types::domain::floating_object::ChartDrawingFrameOoxmlProps;
 use ooxml_types::cond_format::{
-    CfColor, CfRule as OoxmlCfRule, CfRuleType, Cfvo, CfvoType, DataBar, DataBarAxisPosition,
-    DataBarDirection,
+    CfColor, CfOperator, CfRule as OoxmlCfRule, CfRuleType, Cfvo, CfvoType, DataBar,
+    DataBarAxisPosition, DataBarDirection,
 };
 
 fn fallback_chart_spec() -> ChartSpec {
@@ -48,6 +49,62 @@ fn basic_ooxml_data_bar() -> DataBar {
         },
         ..Default::default()
     }
+}
+
+fn cell_is_rule_with_dxf(dxf_id: u32) -> OoxmlCfRule {
+    OoxmlCfRule {
+        rule_type: CfRuleType::CellIs,
+        priority: 1,
+        dxf_id: Some(dxf_id),
+        operator: Some(CfOperator::GreaterThan),
+        formulas: vec!["0".to_string()],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn cf_dxf_theme_font_uses_spreadsheet_theme_indices() {
+    let theme_colors = vec![
+        "#000000".to_string(), // dk1
+        "#FFFFFF".to_string(), // lt1
+        "#44546A".to_string(), // dk2
+        "#E7E6E6".to_string(), // lt2
+    ];
+    let dxfs = vec![
+        DxfDef {
+            font: Some(FontDef {
+                color: Some(ColorDef::Theme { id: 1, tint: None }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        DxfDef {
+            font: Some(FontDef {
+                color: Some(ColorDef::Theme { id: 0, tint: None }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    ];
+
+    let dark = convert_cf_rule(&cell_is_rule_with_dxf(0), &dxfs, &theme_colors);
+    let light = convert_cf_rule(&cell_is_rule_with_dxf(1), &dxfs, &theme_colors);
+
+    let CFRule::CellValue {
+        style: dark_style, ..
+    } = dark
+    else {
+        panic!("expected cell value rule");
+    };
+    let CFRule::CellValue {
+        style: light_style, ..
+    } = light
+    else {
+        panic!("expected cell value rule");
+    };
+
+    assert_eq!(dark_style.font_color.as_deref(), Some("#000000"));
+    assert_eq!(light_style.font_color.as_deref(), Some("#ffffff"));
 }
 
 #[test]

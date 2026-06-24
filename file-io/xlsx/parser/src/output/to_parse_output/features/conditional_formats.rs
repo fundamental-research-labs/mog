@@ -100,88 +100,42 @@ fn resolve_color_def_to_hex(
 ) -> Option<String> {
     use crate::domain::styles::types::ColorDef;
 
-    /// Parse an AARRGGBB or RRGGBB hex string to (r, g, b).
-    fn parse_hex_rgb(s: &str) -> Option<(u8, u8, u8)> {
+    fn theme_index_to_palette_index(theme_idx: u32) -> Option<usize> {
+        match theme_idx {
+            0 => Some(1),
+            1 => Some(0),
+            2 => Some(3),
+            3 => Some(2),
+            4..=11 => Some(theme_idx as usize),
+            _ => None,
+        }
+    }
+
+    fn normalize_hex_rgb(s: &str) -> Option<String> {
         let hex = s.strip_prefix('#').unwrap_or(s);
         let rgb_part = if hex.len() == 8 { &hex[2..] } else { hex };
         if rgb_part.len() != 6 {
             return None;
         }
-        let r = u8::from_str_radix(&rgb_part[0..2], 16).ok()?;
-        let g = u8::from_str_radix(&rgb_part[2..4], 16).ok()?;
-        let b = u8::from_str_radix(&rgb_part[4..6], 16).ok()?;
-        Some((r, g, b))
-    }
-
-    /// Apply ECMA-376 tint to an (r, g, b) tuple, returning the adjusted color.
-    fn apply_tint(r: u8, g: u8, b: u8, tint: f64) -> (u8, u8, u8) {
-        // Convert to HSL
-        let rf = r as f64 / 255.0;
-        let gf = g as f64 / 255.0;
-        let bf = b as f64 / 255.0;
-        let max = rf.max(gf).max(bf);
-        let min = rf.min(gf).min(bf);
-        let l = (max + min) / 2.0;
-        let s = if (max - min).abs() < f64::EPSILON {
-            0.0
-        } else if l <= 0.5 {
-            (max - min) / (max + min)
-        } else {
-            (max - min) / (2.0 - max - min)
-        };
-        let h = if (max - min).abs() < f64::EPSILON {
-            0.0
-        } else if (max - rf).abs() < f64::EPSILON {
-            ((gf - bf) / (max - min)).rem_euclid(6.0) * 60.0
-        } else if (max - gf).abs() < f64::EPSILON {
-            ((bf - rf) / (max - min) + 2.0) * 60.0
-        } else {
-            ((rf - gf) / (max - min) + 4.0) * 60.0
-        };
-
-        // Apply tint per ECMA-376 spec
-        let new_l = if tint < 0.0 {
-            l * (1.0 + tint)
-        } else {
-            l * (1.0 - tint) + tint
-        }
-        .clamp(0.0, 1.0);
-
-        // Convert back to RGB
-        let c = (1.0 - (2.0 * new_l - 1.0).abs()) * s;
-        let x = c * (1.0 - ((h / 60.0).rem_euclid(2.0) - 1.0).abs());
-        let m = new_l - c / 2.0;
-        let (r1, g1, b1) = match h as u32 {
-            0..=59 => (c, x, 0.0),
-            60..=119 => (x, c, 0.0),
-            120..=179 => (0.0, c, x),
-            180..=239 => (0.0, x, c),
-            240..=299 => (x, 0.0, c),
-            _ => (c, 0.0, x),
-        };
-        (
-            ((r1 + m) * 255.0).round() as u8,
-            ((g1 + m) * 255.0).round() as u8,
-            ((b1 + m) * 255.0).round() as u8,
-        )
+        u32::from_str_radix(rgb_part, 16).ok()?;
+        Some(format!("#{}", rgb_part.to_ascii_lowercase()))
     }
 
     /// Resolve and optionally tint a base hex color.
     fn resolve_with_tint(base_hex: &str, tint_str: &Option<String>) -> Option<String> {
-        let (r, g, b) = parse_hex_rgb(base_hex)?;
+        let base = normalize_hex_rgb(base_hex)?;
         if let Some(t) = tint_str.as_deref().and_then(|s| s.parse::<f64>().ok()) {
             if t.abs() > f64::EPSILON {
-                let (r2, g2, b2) = apply_tint(r, g, b, t);
-                return Some(format!("#{:02x}{:02x}{:02x}", r2, g2, b2));
+                return Some(domain_types::theme_color::apply_tint(&base, t).to_ascii_lowercase());
             }
         }
-        Some(format!("#{:02x}{:02x}{:02x}", r, g, b))
+        Some(base)
     }
 
     match color {
         ColorDef::Rgb { val, tint } => resolve_with_tint(val, tint),
         ColorDef::Theme { id, tint } => {
-            let base = theme_colors.get(*id as usize)?;
+            let base = theme_index_to_palette_index(*id).and_then(|idx| theme_colors.get(idx))?;
             resolve_with_tint(base, tint)
         }
         ColorDef::Indexed { id, tint } => {

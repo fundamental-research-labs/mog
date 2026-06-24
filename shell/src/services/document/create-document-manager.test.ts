@@ -144,7 +144,7 @@ describe('createDocumentManager import identity', () => {
     expectDefaultIndexedDbProviderSelection(originalWorkbook);
   });
 
-  it('materializes the default version head once when opening a persisted normal document', async () => {
+  it('does not checkout the default version head when opening a persisted normal document', async () => {
     const checkout = jest.fn(async () => ({
       ok: true,
       value: {
@@ -169,8 +169,7 @@ describe('createDocumentManager import identity', () => {
     await returnedHandle.workbook();
     await returnedHandle.workbook();
 
-    expect(checkout).toHaveBeenCalledTimes(1);
-    expect(checkout).toHaveBeenCalledWith({ kind: 'head' }, { includeDiagnostics: true });
+    expect(checkout).not.toHaveBeenCalled();
   });
 
   it('does not materialize the default version head for newly created normal documents', async () => {

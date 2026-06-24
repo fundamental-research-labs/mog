@@ -23,7 +23,6 @@ const DEFAULT_VERSION_PROVIDER_SELECTION = {
 type DefaultVersionProviderSelection = NonNullable<
   NonNullable<DocumentHandleWorkbookConfig['versioning']>['providerSelection']
 >;
-type DefaultVersionedWorkbook = Awaited<ReturnType<DocumentHandle['workbook']>>;
 
 export function decorateNormalLocalHandleWithDefaultVersioning(
   handle: DocumentHandle,
@@ -32,21 +31,18 @@ export function decorateNormalLocalHandleWithDefaultVersioning(
   if (options?.skipLocalPersistence === true || options?.internal === true) {
     return handle;
   }
-  return decorateHandleWithDefaultIndexedDbVersioning(handle, options);
+  return decorateHandleWithDefaultIndexedDbVersioning(handle);
 }
 
 export function decorateHandleWithDefaultIndexedDbVersioning(
   handle: DocumentHandle,
-  options: Pick<DefaultVersioningDocumentOptions, 'operation'> = {},
 ): DocumentHandle {
   const originalWorkbook = handle.workbook.bind(handle);
-  const materializeHeadOnOpen = options.operation === 'open';
-  let materializedHead = false;
 
   (handle as DocumentHandle & MutableDocumentHandleWorkbook).workbook = (async (
     config?: DocumentHandleWorkbookConfig,
   ) => {
-    const workbook = await originalWorkbook({
+    return originalWorkbook({
       ...config,
       versioning: {
         providerSelection: createDefaultVersionProviderSelection(handle),
@@ -54,38 +50,8 @@ export function decorateHandleWithDefaultIndexedDbVersioning(
         ...config?.versioning,
       },
     });
-
-    if (materializeHeadOnOpen && !materializedHead) {
-      materializedHead = true;
-      await materializeDefaultVersionHead(workbook, handle.documentId);
-    }
-
-    return workbook;
   }) as DocumentHandle['workbook'];
   return handle;
-}
-
-async function materializeDefaultVersionHead(
-  workbook: DefaultVersionedWorkbook,
-  documentId: string,
-): Promise<void> {
-  try {
-    const result = await workbook.version.checkout(
-      { kind: 'head' },
-      { includeDiagnostics: true },
-    );
-    if (!result.ok) {
-      console.warn('[DocumentManager] default version head checkout failed:', {
-        documentId,
-        code: result.error.code,
-      });
-    }
-  } catch (error) {
-    console.warn('[DocumentManager] default version head checkout threw:', {
-      documentId,
-      error,
-    });
-  }
 }
 
 function createDefaultVersionProviderSelection(

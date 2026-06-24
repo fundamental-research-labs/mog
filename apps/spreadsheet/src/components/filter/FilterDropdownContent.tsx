@@ -75,7 +75,7 @@ const SUBMENU_PANEL_GAP_PX = 4;
 
 function submenuPanelClassName(placement: SubmenuPlacement): string {
   return cn(
-    'absolute top-0 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px] max-h-[min(480px,calc(100vh-16px))] overflow-y-auto overscroll-contain',
+    'absolute top-0 pointer-events-auto bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px] max-h-[min(480px,calc(100vh-16px))] overflow-y-auto overscroll-contain',
     placement === 'right' ? 'left-full ml-1' : 'right-full mr-1',
   );
 }
@@ -224,7 +224,7 @@ export function FilterDropdownContent({
       return;
     }
     let stale = false;
-    const ws = wb.getSheetById(activeSheetId);
+    const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
     void ws.filters.getInfo(filterId).then((info) => {
       if (!stale) setFilter(info ? { id: info.id, columnFilters: info.columnFilters } : null);
     });
@@ -267,7 +267,7 @@ export function FilterDropdownContent({
     }
     let stale = false;
     void (async () => {
-      const ws = wb.getSheetById(activeSheetId);
+      const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
 
       const filterInfo = await ws.filters.getInfo(filterId);
       if (!filterInfo || stale) return;
@@ -349,7 +349,7 @@ export function FilterDropdownContent({
   const handleClearFilter = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
-    const ws = wb.getSheetById(activeSheetId);
+    const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
     void runFilterMutation(
       () => ws.filters.clearColumnFilter(col, filterId),
       () => {
@@ -364,7 +364,7 @@ export function FilterDropdownContent({
   const handleSortAsc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
-    const ws = wb.getSheetById(activeSheetId);
+    const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
     onClose();
     trackPendingFilterAction(async () => {
       await sortFilterRange(ws, filterId, col, 'asc');
@@ -375,7 +375,7 @@ export function FilterDropdownContent({
   const handleSortDesc = useCallback(() => {
     if (!filterId || !headerCellId || col === undefined) return;
 
-    const ws = wb.getSheetById(activeSheetId);
+    const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
     onClose();
     trackPendingFilterAction(async () => {
       await sortFilterRange(ws, filterId, col, 'desc');
@@ -473,7 +473,7 @@ export function FilterDropdownContent({
   return (
     <div
       ref={contentRef}
-      className="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+      className="flex min-h-0 w-full flex-1 flex-col overflow-visible"
       data-testid="filter-dropdown-content"
       onKeyDown={handleContentKeyDown}
     >

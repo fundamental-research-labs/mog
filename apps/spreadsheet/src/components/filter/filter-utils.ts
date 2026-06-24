@@ -191,20 +191,46 @@ export async function getUniqueColors(
   col: number,
   type: 'fill' | 'font',
 ): Promise<string[]> {
-  // Batch-fetch all formats in parallel (1 round-trip vs N sequential IPC calls)
-  const formats = await Promise.all(rows.map((row) => ws.formats.get(row, col)));
-
   const colors = new Set<string>();
-  for (const format of formats) {
-    if (!format) continue;
 
-    // The CellFormat field is named `backgroundColor` (CSS-style); only the
-    // filter/sort *discriminator* changes from 'background' to 'fill'.
+  const addFormatColor = (format: { backgroundColor?: unknown; fontColor?: unknown } | null) => {
+    if (!format) return;
     const color = type === 'fill' ? format.backgroundColor : format.fontColor;
+    if (color && typeof color === 'string') colors.add(color);
+  };
 
-    if (color && typeof color === 'string') {
-      colors.add(color);
+  if (rows.length === 0) return [];
+
+  const minRow = Math.min(...rows);
+  const maxRow = Math.max(...rows);
+  try {
+    const displayedFormats = await ws.formats.getDisplayedRangeProperties({
+      startRow: minRow,
+      startCol: col,
+      endRow: maxRow,
+      endCol: col,
+    });
+    for (const row of rows) {
+      addFormatColor(displayedFormats[row - minRow]?.[0] ?? null);
     }
+    return Array.from(colors);
+  } catch {
+    // Fall back for partial worksheet mocks and older host surfaces.
+  }
+
+  try {
+    const range = await ws.getRange(minRow, col, maxRow, col);
+    for (const row of rows) {
+      addFormatColor(range[row - minRow]?.[0]?.format ?? null);
+    }
+    return Array.from(colors);
+  } catch {
+    // Fall back to single-cell format reads when no range API is available.
+  }
+
+  const formats = await Promise.all(rows.map((row) => ws.formats.get(row, col)));
+  for (const format of formats) {
+    addFormatColor(format);
   }
 
   return Array.from(colors);

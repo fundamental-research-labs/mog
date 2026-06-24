@@ -860,6 +860,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     endRow: number,
     col: number,
   ): Promise<{ values: CellValue[]; columnType: FilterDropdownColumnType }> {
+    if (typeof this.ctx.computeBridge.queryRange === 'function') {
+      return this.readColumnDataWithTypeFromRange(startRow, endRow, col);
+    }
+
     const values: CellValue[] = [];
     const counts = { number: 0, text: 0, date: 0 };
 
@@ -871,6 +875,50 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
 
       if (typeof value === 'number') {
         const format = await this.ctx.computeBridge.getResolvedFormat(this.sheetId, row, col);
+        if (formatIsDateLike(format)) {
+          counts.date++;
+        } else {
+          counts.number++;
+        }
+        continue;
+      }
+
+      counts.text++;
+    }
+
+    return { values, columnType: classifyDropdownColumnType(counts) };
+  }
+
+  private async readColumnDataWithTypeFromRange(
+    startRow: number,
+    endRow: number,
+    col: number,
+  ): Promise<{ values: CellValue[]; columnType: FilterDropdownColumnType }> {
+    const sheetId = this.sheetId as Parameters<typeof this.ctx.computeBridge.queryRange>[0];
+    const rangeData = await this.ctx.computeBridge.queryRange(
+      sheetId,
+      startRow,
+      col,
+      endRow,
+      col,
+    );
+    const cellsByRow = new Map<number, (typeof rangeData.cells)[number]>();
+    for (const cell of rangeData.cells) {
+      cellsByRow.set(cell.row, cell);
+    }
+
+    const values: CellValue[] = [];
+    const counts = { number: 0, text: 0, date: 0 };
+    for (let row = startRow; row <= endRow; row++) {
+      const cell = cellsByRow.get(row);
+      const value = (cell?.value as CellValue | undefined) ?? null;
+      values.push(value);
+
+      if (value === null || value === undefined || value === '') continue;
+
+      if (typeof value === 'number') {
+        const format =
+          cell?.format ?? (await this.ctx.computeBridge.getResolvedFormat(sheetId, row, col));
         if (formatIsDateLike(format)) {
           counts.date++;
         } else {

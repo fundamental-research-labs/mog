@@ -81,6 +81,50 @@ describe('WorksheetFiltersImpl.getFilterDropdownData', () => {
     expect(result).toEqual({ ...dropdownData, columnType: 'text' });
   });
 
+  it('reads dropdown column values with one range query when available', async () => {
+    const mockFilter = {
+      id: 'filter-1',
+      type: 'autoFilter',
+      headerStartCellId: 'header-a',
+      headerEndCellId: 'header-a',
+      dataEndCellId: 'data-end',
+      columnFilters: {},
+    };
+    const dropdownData = {
+      items: [],
+      hasBlank: true,
+      blankCount: 1,
+      blankSelected: true,
+      totalRowCount: 3,
+    };
+    ctx.computeBridge.queryRange = jest.fn().mockResolvedValue({
+      cells: [
+        { row: 1, col: 0, value: 10, format: { numberFormat: 'General' } },
+        { row: 3, col: 0, value: 20, format: { numberFormat: 'General' } },
+      ],
+      merges: [],
+    });
+    ctx.computeBridge.getFiltersInSheet.mockResolvedValue([mockFilter]);
+    ctx.computeBridge.getCellPosition
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 0, col: 0 })
+      .mockResolvedValueOnce({ sheetId: SHEET_ID, row: 3, col: 0 });
+    ctx.computeBridge.getCellIdAt.mockResolvedValue('header-a');
+    ctx.computeBridge.tableBuildFilterDropdown.mockResolvedValue(dropdownData);
+
+    const result = await filters.getFilterDropdownData(0, 'filter-1');
+
+    expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 1, 0, 3, 0);
+    expect(ctx.computeBridge.getCellValue).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.getResolvedFormat).not.toHaveBeenCalled();
+    expect(ctx.computeBridge.tableBuildFilterDropdown).toHaveBeenCalledWith(
+      [10, null, 20],
+      null,
+      null,
+    );
+    expect(result).toEqual({ ...dropdownData, columnType: 'number' });
+  });
+
   it('marks dropdown data as unsupported-preserved from imported header metadata', async () => {
     const mockFilter = {
       id: 'filter-1',

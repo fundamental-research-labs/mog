@@ -12,6 +12,7 @@ import {
   buildSidecarRawSyncProvenance,
   type SidecarRawSyncClassification,
 } from './sync-provenance';
+import type { CellRange } from '@mog-sdk/contracts/core';
 import type { DocumentByteSyncPort } from '../providers/provider';
 
 export { fetchRoomSnapshot, type RoomSnapshot } from './room-snapshot';
@@ -52,6 +53,9 @@ export interface PresenceState {
   avatarUrl?: string;
   selection?: {
     sheetId: string;
+    ranges?: CellRange[];
+    startRow?: number;
+    startCol?: number;
     row: number;
     col: number;
     endRow?: number;

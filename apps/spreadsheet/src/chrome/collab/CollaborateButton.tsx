@@ -96,6 +96,7 @@ export function CollaborateButton() {
     if (connecting) return;
 
     if (!isRoomBacked) {
+      setError('Sharing requires room seeding');
       return;
     }
 
@@ -178,10 +179,12 @@ export function CollaborateButton() {
           type="button"
           onClick={handleButtonClick}
           disabled={connecting}
+          aria-describedby={error ? 'collab-button-status' : undefined}
+          data-unavailable={!isRoomBacked ? 'room-seeding-required' : undefined}
           data-testid={!isRoomBacked ? 'collab-start-blocked' : undefined}
           className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
             !isRoomBacked
-              ? 'bg-neutral-100 text-neutral-500'
+              ? 'cursor-not-allowed bg-neutral-100 text-neutral-500'
               : isReconnecting
                 ? 'bg-amber-50 text-amber-600'
                 : isActive
@@ -235,7 +238,11 @@ export function CollaborateButton() {
       </PopoverTrigger>
 
       {error && (
-        <p className="absolute right-0 top-full mt-1 text-[10px] text-red-500 whitespace-nowrap">
+        <p
+          id="collab-button-status"
+          role="status"
+          className="absolute right-0 top-full mt-1 text-[10px] text-red-500 whitespace-nowrap"
+        >
           {error}
         </p>
       )}

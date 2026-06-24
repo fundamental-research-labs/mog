@@ -42,6 +42,7 @@ import {
   readResolvedNumberFormats,
 } from './viewport-inspector';
 import { completeDrawingAnchor, getChartReadback } from './drawing-readbacks';
+import { getRemoteCursorReadbacks } from './remote-cursor-readback';
 
 export function createConsoleAPI(
   store: EventStore,
@@ -2183,40 +2184,7 @@ export function createConsoleAPI(
     },
 
     getRemoteCursors(): import('../types').RemoteCursorDescriptor[] {
-      try {
-        const shell = (window as any).__SHELL__;
-        if (!shell?.documentManager) return [];
-
-        const activeFileId = shell.store?.getState?.()?.activeFileId;
-        if (!activeFileId) return [];
-
-        const sidecar = shell.documentManager.getSidecar(activeFileId);
-        if (!sidecar?.participants) return [];
-
-        const out: import('../types').RemoteCursorDescriptor[] = [];
-        for (const [participantId, state] of sidecar.participants as ReadonlyMap<string, any>) {
-          if (!state.selection) continue;
-          const sel = state.selection;
-          out.push({
-            userId: participantId,
-            name: state.displayName ?? 'Unknown',
-            color: state.color ?? '#888',
-            activeCell: { row: sel.row, col: sel.col },
-            selection:
-              sel.endRow != null && sel.endCol != null
-                ? [{ startRow: sel.row, startCol: sel.col, endRow: sel.endRow, endCol: sel.endCol }]
-                : [{ startRow: sel.row, startCol: sel.col, endRow: sel.row, endCol: sel.col }],
-            sheetId: sel.sheetId,
-            isEditing: !!state.editing,
-            ...(state.editing
-              ? { editingCell: { row: state.editing.row, col: state.editing.col } }
-              : {}),
-          });
-        }
-        return out;
-      } catch {
-        return [];
-      }
+      return getRemoteCursorReadbacks();
     },
 
     async getRenderedRowHeight(_sheet: string | null, row: number): Promise<number | null> {

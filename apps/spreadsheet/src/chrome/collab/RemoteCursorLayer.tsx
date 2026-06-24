@@ -81,9 +81,29 @@ function RemoteCursor({
     if (!rect) return null;
 
     // Handle range selections
+    let left = rect.x;
+    let top = rect.y;
     let width = rect.width;
     let height = rect.height;
-    if (state.selection.endRow != null && state.selection.endCol != null) {
+    const range = state.selection.ranges?.[0];
+    if (range) {
+      const startRect = getCellRect(
+        state.selection.sheetId,
+        range.startRow,
+        range.startCol,
+      );
+      const endRect = getCellRect(
+        state.selection.sheetId,
+        range.endRow,
+        range.endCol,
+      );
+      if (startRect && endRect) {
+        left = startRect.x;
+        top = startRect.y;
+        width = endRect.x + endRect.width - startRect.x;
+        height = endRect.y + endRect.height - startRect.y;
+      }
+    } else if (state.selection.endRow != null && state.selection.endCol != null) {
       const endRect = getCellRect(
         state.selection.sheetId,
         state.selection.endRow,
@@ -99,8 +119,8 @@ function RemoteCursor({
       <div
         className="pointer-events-none absolute"
         style={{
-          left: rect.x,
-          top: rect.y,
+          left,
+          top,
           width,
           height,
         }}

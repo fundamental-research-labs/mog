@@ -142,10 +142,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     this.ctx.writeGate.assertWritable(op);
   }
 
-  private _tableMutationOptions(
-    operationIdPrefix: string,
-    groupId?: string,
-  ): TableMutationOptions {
+  private _tableMutationOptions(operationIdPrefix: string, groupId?: string): TableMutationOptions {
     return createTableMutationOptions(this.ctx, operationIdPrefix, this.sheetId, groupId);
   }
 
@@ -247,9 +244,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   private tableInfoWithMethods(table: TableInfo): TableInfo {
     return attachTableInfoMethods(table, {
-      setTotalsRow: (tableName, visible) => this.setShowTotals(tableName, visible),
-      setTotalsFunction: (tableName, columnName, func) =>
-        this.setColumnTotalsFunction(tableName, columnName, func as TotalsFunction),
+      setTotalsRow: async (tableName, visible) => {
+        await this.setShowTotals(tableName, visible);
+      },
+      setTotalsFunction: async (tableName, columnName, func) => {
+        await this.setColumnTotalsFunction(tableName, columnName, func as TotalsFunction);
+      },
     });
   }
 
@@ -2002,7 +2002,6 @@ export class WorksheetTablesImpl implements WorksheetTables {
     });
     return toDisposable(unsub);
   }
-
 }
 
 /**

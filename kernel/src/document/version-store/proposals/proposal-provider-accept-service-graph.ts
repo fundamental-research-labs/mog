@@ -11,7 +11,7 @@ import type {
   ProposalGraphProvider,
 } from './proposal-provider-accept-service-types';
 import type { ResolvedBranchHead } from './proposal-provider-service-types';
-import { namespaceForRegistry } from './registry';
+import { namespaceForRegistry } from '../registry';
 
 export async function fastForwardTargetRef(
   graphProvider: ProposalGraphProvider | undefined,

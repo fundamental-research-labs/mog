@@ -1,5 +1,5 @@
 import type { VersionGraphNamespace } from '../object-store';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import type { VersionDocumentScope, VersionStoreDiagnostic } from '../provider';
 
 export async function openGraphDiagnostic(

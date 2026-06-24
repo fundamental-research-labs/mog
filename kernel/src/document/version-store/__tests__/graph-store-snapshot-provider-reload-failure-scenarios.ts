@@ -3,14 +3,14 @@ import type { VersionMainRefName } from '@mog-sdk/contracts/api';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-} from '../graph-store';
+} from '../graph';
 import {
   createMergePreviewArtifactRecord,
   createMergeResolutionSetArtifactRecord,
   createResolvedMergeAttemptArtifactRecord,
 } from '../merge-attempt-artifacts';
 import { versionGraphNamespaceKey } from '../object-store';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import {
   INDEX_MANIFESTS_STORE,
   OBJECTS_STORE,

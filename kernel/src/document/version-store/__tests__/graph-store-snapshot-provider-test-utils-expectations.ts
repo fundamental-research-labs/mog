@@ -1,7 +1,7 @@
 import type {
   VersionGraphReadRefResult,
   VersionGraphWriteResult,
-} from '../graph-store';
+} from '../graph';
 import { versionGraphNamespaceKey, type VersionGraphNamespace } from '../object-store';
 import type {
   VersionDocumentScope,

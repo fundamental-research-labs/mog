@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import {
   DEFAULT_PAYLOAD_HASH,
   DOCUMENT_SCOPE,

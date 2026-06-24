@@ -11,7 +11,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { AgentProposalStatus } from './status';
-import type { VersionDocumentScope } from '../registry';
+import type { VersionDocumentScope } from '../../registry';
 
 export type { AgentProposalStatus } from './status';
 

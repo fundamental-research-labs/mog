@@ -38,4 +38,4 @@ export type {
 export type { VersionGraphStoreOperation } from './graph-store-operation';
 export type { VersionGraphBranchRefName } from './graph-store-refs';
 export type { InMemoryVersionGraphStoreSnapshot } from './graph-store-snapshot';
-export type { VersionGraphNamespace } from './object-store';
+export type { VersionGraphNamespace } from '../object-store';

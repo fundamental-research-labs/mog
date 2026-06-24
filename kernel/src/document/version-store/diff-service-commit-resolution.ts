@@ -1,7 +1,7 @@
 import type { VersionRecordRevision, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import { graphDiagnostics, type DiffServiceDiagnostic } from './diff-service-diagnostics';
-import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph';
 import type { VersionGraphStore } from './provider';
 
 type NormalizedDiffCommitish =

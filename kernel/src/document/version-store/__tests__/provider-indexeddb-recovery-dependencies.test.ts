@@ -6,7 +6,7 @@ import {
   namespaceCounts,
   openGraphDiagnostic,
 } from './provider-indexeddb-recovery-test-utils';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import { OBJECTS_STORE } from '../provider-indexeddb-schema';
 import { namespaceForDocumentScope } from '../provider';
 

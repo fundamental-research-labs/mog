@@ -1,7 +1,7 @@
 import type { WorkbookCommitId as PublicWorkbookCommitId } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { VersionGraphReadHeadResult } from '../graph-store';
+import type { VersionGraphReadHeadResult } from '../graph';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,

@@ -9,7 +9,7 @@ import {
   type VersionGraphInitializeInput,
   type VersionGraphInitializeResult,
 } from '../provider';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import { AUTHOR, DOCUMENT_SCOPE } from './provider-indexeddb-branch-lifecycle-helpers-context';
 
 export async function createBranchFixture(graphId: string) {

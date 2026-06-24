@@ -1,4 +1,4 @@
-import type { AgentProposalMetadataStore, AgentProposalRecord } from '../proposal-store';
+import type { AgentProposalMetadataStore, AgentProposalRecord } from '../proposals/proposal-store';
 import { ACTOR } from './proposal-store-test-utils';
 
 export async function openProposalWorkspaceWithIdempotencyChecks(

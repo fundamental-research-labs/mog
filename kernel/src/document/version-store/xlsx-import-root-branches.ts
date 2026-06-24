@@ -1,4 +1,4 @@
-import type { VersionGraphBranchRefName } from './graph-store';
+import type { VersionGraphBranchRefName } from './graph';
 import { isObjectDigest, type WorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import { versionStoreDiagnostic, type VersionGraphStore } from './provider';

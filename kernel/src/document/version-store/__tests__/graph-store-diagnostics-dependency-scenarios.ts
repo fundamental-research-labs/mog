@@ -1,5 +1,5 @@
 import { InMemoryVersionObjectStore, VersionObjectMemoryBackend } from '../object-store';
-import { createInMemoryVersionGraphStore } from '../graph-store';
+import { createInMemoryVersionGraphStore } from '../graph';
 import {
   AUTHOR,
   NAMESPACE,

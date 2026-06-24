@@ -1,4 +1,4 @@
-import type { InMemoryVersionGraphStoreSnapshot } from '../graph-store';
+import type { InMemoryVersionGraphStoreSnapshot } from '../graph';
 
 export function withoutDigest(
   snapshot: InMemoryVersionGraphStoreSnapshot,

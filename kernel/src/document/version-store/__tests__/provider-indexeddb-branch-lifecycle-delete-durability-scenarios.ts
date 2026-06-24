@@ -1,5 +1,5 @@
 import { createProviderBackedBranchLifecycleService } from '../branch-provider-service';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import { namespaceForDocumentScope } from '../provider';
 import {
   AUTHOR,

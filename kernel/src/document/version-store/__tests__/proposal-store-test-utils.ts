@@ -3,7 +3,7 @@ import type {
   AgentProposalMetadataStore,
   AgentProposalRecord,
   CreateAgentProposalStoreInput,
-} from '../proposal-store';
+} from '../proposals/proposal-store';
 
 export const DOCUMENT_SCOPE: VersionDocumentScope = {
   workspaceId: 'workspace-1',

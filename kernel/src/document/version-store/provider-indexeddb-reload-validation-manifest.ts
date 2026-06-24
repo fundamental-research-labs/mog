@@ -3,7 +3,7 @@ import {
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
 } from './object-store';
-import type { StoredIndexManifest } from './provider-indexeddb-internal';
+import type { StoredIndexManifest } from './provider-indexeddb/internal';
 import { throwLoadError } from './provider-indexeddb-reload-errors';
 import {
   normalizeGraphNamespaceForLoad,

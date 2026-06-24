@@ -1,6 +1,6 @@
-import { type VersionGraphStoreDiagnostic } from './graph-store';
+import { type VersionGraphStoreDiagnostic } from './graph';
 import { type VersionGraphNamespace } from './object-store';
-import { errorMessage, graphDiagnostic } from './provider-indexeddb-internal';
+import { errorMessage, graphDiagnostic } from './provider-indexeddb/internal';
 import {
   IndexedDbGraphSnapshotLoadError,
   sanitizeLoadDetails,

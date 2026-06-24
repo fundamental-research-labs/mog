@@ -2,7 +2,7 @@ import { createWorkbookVersionDiffService } from '../diff-service';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-} from '../graph-store';
+} from '../graph';
 import {
   appendChild,
   graphWithRootAndChild,

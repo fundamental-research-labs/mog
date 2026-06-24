@@ -1,7 +1,7 @@
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-} from './graph-store';
+} from './graph';
 import type { WorkbookCommit } from './commit-store';
 import { isObjectDigest, type ObjectDigest } from './object-digest';
 import type {

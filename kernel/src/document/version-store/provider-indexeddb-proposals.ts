@@ -5,14 +5,14 @@ import {
   storedAgentProposalRow,
   type AgentProposalRowMutation,
   type AgentProposalStoreRow,
-} from './proposal-store';
+} from './proposals/proposal-store';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
 } from './registry';
 import { PROPOSALS_STORE } from './provider-indexeddb-schema';
-import { idbRequest, idbTransactionDone } from './provider-indexeddb-internal';
+import { idbRequest, idbTransactionDone } from './provider-indexeddb/internal';
 
 export class IndexedDbAgentProposalMetadataStore extends AgentProposalMetadataStoreImpl {
   constructor(options: {

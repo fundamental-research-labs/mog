@@ -1,34 +1,34 @@
-import type { WorkbookCommitPayload } from './commit-store';
-import { workbookCommitIdFromObjectDigest } from './object-digest';
+import type { WorkbookCommitPayload } from '../commit-store';
+import { workbookCommitIdFromObjectDigest } from '../object-digest';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
   type VersionObjectRecord,
-} from './object-store';
+} from '../object-store';
 import {
   COMMIT_INDEXES_STORE,
   OBJECTS_STORE,
   PARENT_INDEXES_STORE,
-} from './provider-indexeddb-schema';
+} from '../provider-indexeddb-schema';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
-} from './registry';
-import { idbTransactionDone } from './provider-indexeddb-internal-idb';
-import { cloneJson } from './provider-indexeddb-internal-json';
+} from '../registry';
+import { idbTransactionDone } from './internal-idb';
+import { cloneJson } from './internal-json';
 import {
   commitIndexKey,
   objectKey,
   parentIndexKey,
   parentLookupKey,
-} from './provider-indexeddb-internal-keys';
+} from './internal-keys';
 import type {
   StoredCommitIndex,
   StoredObjectRecord,
   StoredParentIndex,
-} from './provider-indexeddb-internal-records';
+} from './internal-records';
 
 export async function persistObjectRecords(options: {
   readonly db: IDBDatabase;

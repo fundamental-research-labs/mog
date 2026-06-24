@@ -1,4 +1,4 @@
-import type { VersionGraphCommitPageResult, VersionGraphWriteResult } from '../graph-store';
+import type { VersionGraphCommitPageResult, VersionGraphWriteResult } from '../graph';
 import { versionGraphNamespaceKey } from '../object-store';
 import type { VersionGraphNamespace } from '../object-store';
 import type { VersionDocumentScope, VersionStoreDiagnostic } from '../provider';

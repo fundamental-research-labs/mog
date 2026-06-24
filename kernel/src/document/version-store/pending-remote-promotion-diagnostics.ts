@@ -1,4 +1,4 @@
-import type { VersionGraphStoreDiagnostic } from './graph-store';
+import type { VersionGraphStoreDiagnostic } from './graph';
 import type { WorkbookCommitId } from './object-digest';
 import type {
   PendingRemoteSegmentId,

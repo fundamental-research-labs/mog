@@ -1,6 +1,6 @@
 import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
 
-import type { VersionGraphListCommitsOptions } from './graph-store';
+import type { VersionGraphListCommitsOptions } from './graph';
 import {
   fastForwardMergeCommit,
   type WorkbookVersionCommitServiceFastForwardMergeResult,

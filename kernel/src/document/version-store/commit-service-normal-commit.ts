@@ -1,6 +1,6 @@
 import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
 
-import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph';
 import {
   diagnosticsForGraphRead,
   isRetryableGraphWriteFailure,

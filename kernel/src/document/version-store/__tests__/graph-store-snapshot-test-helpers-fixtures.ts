@@ -1,6 +1,6 @@
 import type { VersionMainRefName } from '@mog-sdk/contracts/api';
 
-import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph';
 import {
   createMergePreviewArtifactRecord,
   createMergeResolutionSetArtifactRecord,

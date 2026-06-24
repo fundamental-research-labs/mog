@@ -11,30 +11,30 @@ import {
   type VersionGraphReadRefResult,
   type VersionGraphRefSelector,
   type VersionGraphWriteResult,
-} from './graph-store';
-import type { ReadWorkbookCommitResult } from './commit-store';
+} from '../graph';
+import type { ReadWorkbookCommitResult } from '../commit-store';
 import {
   parseWorkbookCommitId,
   type VersionDependencyRef,
   type WorkbookCommitId,
-} from './object-digest';
+} from '../object-digest';
 import {
   normalizeVersionGraphNamespace,
   type VersionGraphNamespace,
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
-} from './object-store';
+} from '../object-store';
 import {
   createIndexedDbGraphBranchLifecycle,
   type IndexedDbGraphBranchLifecycle,
-} from './provider-indexeddb-branch-lifecycle';
+} from '../provider-indexeddb-branch-lifecycle';
 import {
   failedIndexedDbBackendGraphCommit,
   failedIndexedDbBackendMissingRefCasMetadata,
   failedIndexedDbBackendObjectBatch,
   failedIndexedDbBackendRefCasConflict,
-} from './provider-indexeddb-backend-diagnostics';
-import { storageRefNameFromGraphRefName } from './provider-indexeddb-backend-serialization';
+} from './backend-diagnostics';
+import { storageRefNameFromGraphRefName } from './backend-serialization';
 import {
   RefCasConflictError,
   errorMessage,
@@ -43,14 +43,14 @@ import {
   normalizeVersionAccessContext,
   persistGraphSnapshot,
   persistObjectRecords,
-} from './provider-indexeddb-internal';
-import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
+} from './internal';
+import { graphLoadDiagnostic, loadGraphSnapshot } from '../provider-indexeddb-reload';
 import type {
   VersionAccessContext,
   VersionGraphInitializeInput,
   VersionGraphStore,
-} from './provider';
-import { normalizeVersionDocumentScope, type VersionDocumentScope } from './registry';
+} from '../provider';
+import { normalizeVersionDocumentScope, type VersionDocumentScope } from '../registry';
 
 export class IndexedDbVersionGraphStore implements VersionGraphStore {
   readonly namespace: VersionGraphNamespace;

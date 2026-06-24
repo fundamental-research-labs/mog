@@ -1,10 +1,10 @@
 import type { VersionDiagnostic, VersionResult, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import type { ReadBranchResult } from './branch-service';
-import type { VersionGraphReadRefResult } from './graph-store';
+import type { ReadBranchResult } from '../branch-service';
+import type { VersionGraphReadRefResult } from '../graph';
 import { branchCommitId } from './proposal-provider-service-utils';
-import type { VersionStoreProvider } from './provider';
-import { namespaceForRegistry } from './registry';
+import type { VersionStoreProvider } from '../provider';
+import { namespaceForRegistry } from '../registry';
 
 type ProposalBranchHeadValidationBranchService = {
   readBranch(

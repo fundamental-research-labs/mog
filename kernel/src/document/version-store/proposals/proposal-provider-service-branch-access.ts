@@ -1,6 +1,6 @@
 import type { VersionResult, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import type { CreateBranchResult, ReadBranchResult } from './branch-service';
+import type { CreateBranchResult, ReadBranchResult } from '../branch-service';
 import {
   branchFailure,
   diagnosticsFromProviderError,
@@ -16,7 +16,7 @@ import type {
 import { PROPOSAL_BRANCH_AUTHOR } from './proposal-provider-service-types';
 import { branchCommitId, parsePublicBranchName } from './proposal-provider-service-utils';
 import type { AgentProposalMetadataStore, AgentProposalRecord } from './proposal-store';
-import { namespaceForRegistry } from './registry';
+import { namespaceForRegistry } from '../registry';
 
 export async function openProviderBackedProposalStore(input: {
   readonly openStore: () => Promise<AgentProposalMetadataStore>;

@@ -1,6 +1,6 @@
-import type { VersionGraphStoreDiagnostic, VersionGraphStoreDiagnosticCode } from './graph-store';
-import type { WorkbookCommitId } from './object-digest';
-import { normalizeVersionGraphNamespace, type VersionGraphNamespace } from './object-store';
+import type { VersionGraphStoreDiagnostic, VersionGraphStoreDiagnosticCode } from '../graph';
+import type { WorkbookCommitId } from '../object-digest';
+import { normalizeVersionGraphNamespace, type VersionGraphNamespace } from '../object-store';
 import type {
   VersionDiagnosticMessageId,
   VersionStoreCapabilities,
@@ -9,13 +9,13 @@ import type {
   VersionStoreLifecycleState,
   VersionStoreMutationGuarantee,
   VersionStoreOperation,
-} from './provider';
-import { cloneVersionStoreCapabilities, type VersionAccessContext } from './provider';
+} from '../provider';
+import { cloneVersionStoreCapabilities, type VersionAccessContext } from '../provider';
 import {
   normalizeVersionDocumentScope,
   normalizeVersionStoreString,
   type VersionDocumentScope,
-} from './registry';
+} from '../registry';
 
 export function mapGraphDiagnostics(
   diagnostics: readonly VersionGraphStoreDiagnostic[],

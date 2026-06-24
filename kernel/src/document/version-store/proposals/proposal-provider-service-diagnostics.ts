@@ -1,6 +1,6 @@
 import type { VersionDiagnostic, VersionResult } from '@mog-sdk/contracts/api';
 
-import { VersionStoreProviderError } from './provider';
+import { VersionStoreProviderError } from '../provider';
 import type { ProposalProviderOperation } from './proposal-provider-service-types';
 
 type PublicDiagnosticData = Readonly<Record<string, string | number | boolean | null>>;

@@ -4,7 +4,7 @@ import {
   reservePersistedPendingRemoteSegment,
   validatePendingRemoteSegmentObjects,
 } from '../pending-remote-segment-store';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../provider-indexeddb-schema';
 import {
   DOCUMENT_SCOPE,

@@ -5,7 +5,7 @@ import type {
   VersionGraphStoreDiagnostic,
   VersionGraphStoreDiagnosticCode,
   VersionGraphSymbolicRef,
-} from './graph-store';
+} from './graph';
 import type { WorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore } from './provider-graph-store';

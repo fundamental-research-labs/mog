@@ -1,19 +1,19 @@
-import type { VersionGraphStoreDiagnostic, VersionGraphWriteResult } from './graph-store';
-import type { VersionGraphNamespace, VersionObjectPutBatchResult } from './object-store';
+import type { VersionGraphStoreDiagnostic, VersionGraphWriteResult } from '../graph';
+import type { VersionGraphNamespace, VersionObjectPutBatchResult } from '../object-store';
 import type {
   VersionStoreDiagnostic,
   VersionStoreFailure,
   VersionStoreLifecycleState,
   VersionStoreOperation,
-} from './provider';
+} from '../provider';
 import {
   RefCasConflictError,
   failedGraphWrite,
   failedStoreResult,
   graphDiagnostic,
   versionStoreDiagnostic,
-} from './provider-indexeddb-internal';
-import type { VersionDocumentScope } from './registry';
+} from './internal';
+import type { VersionDocumentScope } from '../registry';
 
 export function indexedDbBackendLifecycleUnavailableDiagnostic(options: {
   readonly operation: VersionStoreOperation;

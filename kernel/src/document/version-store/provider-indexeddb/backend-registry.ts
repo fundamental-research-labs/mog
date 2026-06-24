@@ -1,5 +1,5 @@
-import type { InMemoryVersionGraphStoreSnapshot } from './graph-store';
-import type { VersionGraphInitializeResult, VersionGraphRegistry } from './provider';
+import type { InMemoryVersionGraphStoreSnapshot } from '../graph';
+import type { VersionGraphInitializeResult, VersionGraphRegistry } from '../provider';
 import {
   decodeRegistryEnvelope,
   errorMessage,
@@ -16,10 +16,10 @@ import {
   versionStoreDiagnostic,
   type RegistryRecordRead,
   type StoredRegistryEnvelope,
-} from './provider-indexeddb-internal';
-import { REGISTRIES_STORE } from './provider-indexeddb-schema';
-import type { VersionStoreFailure } from './provider';
-import { createVersionGraphRegistry, type VersionDocumentScope } from './registry';
+} from './internal';
+import { REGISTRIES_STORE } from '../provider-indexeddb-schema';
+import type { VersionStoreFailure } from '../provider';
+import { createVersionGraphRegistry, type VersionDocumentScope } from '../registry';
 
 export async function readIndexedDbBackendRegistryRecord(options: {
   readonly db: IDBDatabase;

@@ -1,5 +1,5 @@
 import type { WorkbookCommit } from './commit-store';
-import type { VersionGraphReadHeadResult } from './graph-store';
+import type { VersionGraphReadHeadResult } from './graph';
 import type { VersionObjectRecord } from './object-store';
 import type {
   PendingRemotePromotionDiagnostic,

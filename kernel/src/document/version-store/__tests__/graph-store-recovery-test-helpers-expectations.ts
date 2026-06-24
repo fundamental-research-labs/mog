@@ -3,8 +3,8 @@ import type {
   VersionGraphReadHeadResult,
   VersionGraphStoreDiagnostic,
   VersionGraphWriteResult,
-} from '../graph-store';
-import { mapGraphDiagnostics } from '../provider-indexeddb-internal';
+} from '../graph';
+import { mapGraphDiagnostics } from '../provider-indexeddb/internal';
 import { NAMESPACE } from './graph-store-recovery-test-helpers-fixtures';
 
 export function expectGraphSuccess(

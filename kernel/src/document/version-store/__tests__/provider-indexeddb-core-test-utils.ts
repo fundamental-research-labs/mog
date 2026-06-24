@@ -19,7 +19,7 @@ export {
 export {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_CAPABILITIES,
-} from '../provider-indexeddb-backend';
+} from '../provider-indexeddb/backend';
 export {
   COMMIT_INDEXES_STORE,
   INDEX_MANIFESTS_STORE,

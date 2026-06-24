@@ -1,4 +1,4 @@
-import { createInMemoryVersionGraphStoreFromSnapshot } from '../graph-store';
+import { createInMemoryVersionGraphStoreFromSnapshot } from '../graph';
 import { snapshotFixture, withoutDigest } from './graph-store-snapshot-test-helpers';
 
 export function registerGraphStoreSnapshotValidationScenarios(): void {

@@ -73,6 +73,8 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
     providerSelection.initializeTiming === 'deferred'
       ? []
       : await initializeSelectedProviderWhenAbsent(initializationInput);
+  const initializationFailureReadService =
+    diagnostics.length > 0 ? createLifecycleFailureReadService(diagnostics) : undefined;
 
   return {
     versioning: resolveSemanticMutationCapture({
@@ -85,7 +87,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       reviewService: config.reviewService,
       providerWriteActivityTracker: config.providerWriteActivityTracker,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
-      writeService: config.writeService,
+      writeService: initializationFailureReadService ?? config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
       readLiveCollaborationStatus: config.readLiveCollaborationStatus,
       ...domainSupportManifestLifecycleFields(config),

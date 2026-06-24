@@ -1,5 +1,5 @@
-import type { VersionAccessContext } from './provider';
-import type { VersionDocumentScope } from './registry';
+import type { VersionAccessContext } from '../provider';
+import type { VersionDocumentScope } from '../registry';
 
 export const INDEXEDDB_VERSION_STORE_PROVIDER_KIND = 'indexeddb' as const;
 

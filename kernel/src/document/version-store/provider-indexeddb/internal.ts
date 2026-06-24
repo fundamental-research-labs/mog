@@ -4,32 +4,32 @@ export {
   normalizeVersionAccessContext,
   readOnlyCapabilities,
   versionStoreDiagnostic,
-} from './provider-indexeddb-internal-diagnostics';
-export { idbRequest, idbTransactionDone } from './provider-indexeddb-internal-idb';
-export { cloneJson, errorMessage } from './provider-indexeddb-internal-json';
+} from './internal-diagnostics';
+export { idbRequest, idbTransactionDone } from './internal-idb';
+export { cloneJson, errorMessage } from './internal-json';
 export {
   RefAlreadyExistsError,
   RefCasConflictError,
   RefStoreManifestConflictError,
   persistGraphSnapshot,
   persistObjectRecords,
-} from './provider-indexeddb-internal-persistence';
+} from './internal-persistence';
 export type {
   RegistryRecordRead,
   StoredIndexManifest,
   StoredObjectRecord,
   StoredRefRecord,
   StoredRegistryEnvelope,
-} from './provider-indexeddb-internal-records';
+} from './internal-records';
 export {
   failedGraphWrite,
   failedStoreResult,
   registryRecordResult,
-} from './provider-indexeddb-internal-results';
-export { decodeRegistryEnvelope, registryEnvelope } from './provider-indexeddb-internal-registry';
+} from './internal-results';
+export { decodeRegistryEnvelope, registryEnvelope } from './internal-registry';
 export {
   initializeSuccess,
   liveMainFromSnapshot,
   rootCommitFromSnapshot,
   versionGraphRefFromLiveRef,
-} from './provider-indexeddb-internal-snapshots';
+} from './internal-snapshots';

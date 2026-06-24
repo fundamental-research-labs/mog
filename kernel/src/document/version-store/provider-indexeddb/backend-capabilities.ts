@@ -1,4 +1,4 @@
-import { cloneVersionStoreCapabilities, type VersionStoreCapabilities } from './provider';
+import { cloneVersionStoreCapabilities, type VersionStoreCapabilities } from '../provider';
 
 export const INDEXEDDB_VERSION_STORE_CAPABILITIES: VersionStoreCapabilities =
   cloneVersionStoreCapabilities({

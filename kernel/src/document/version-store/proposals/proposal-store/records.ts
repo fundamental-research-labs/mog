@@ -11,7 +11,7 @@ import type {
   CreateAgentProposalStoreInput,
   UpdateAgentProposalStoreInput,
 } from './types';
-import type { VersionDocumentScope } from '../registry';
+import type { VersionDocumentScope } from '../../registry';
 
 export function createProposalRecord(input: {
   readonly documentScope: VersionDocumentScope;

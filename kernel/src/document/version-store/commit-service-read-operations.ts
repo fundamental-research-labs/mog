@@ -1,4 +1,4 @@
-import type { VersionGraphListCommitsOptions } from './graph-store';
+import type { VersionGraphListCommitsOptions } from './graph';
 import { openVisibleVersionGraph } from './commit-service-open-graph';
 import type {
   WorkbookVersionCommitServiceListCommitsResult,

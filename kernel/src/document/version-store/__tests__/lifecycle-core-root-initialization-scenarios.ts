@@ -4,7 +4,7 @@ import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versio
 import { createWorkbookVersionCommitService } from '../commit-service';
 import { resolveDocumentWorkbookVersioningLifecycle } from '../lifecycle';
 import { namespaceForDocumentScope } from '../provider';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb/backend';
 import {
   DOCUMENT_ID,
   GRAPH_ID,

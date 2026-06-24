@@ -2,7 +2,7 @@ import {
   type PendingRemoteSegmentRecord,
   isPendingRemoteSegmentRecord,
 } from './pending-remote-segment-store';
-import { cloneJson } from './provider-indexeddb-internal';
+import { cloneJson } from './provider-indexeddb/internal';
 import type { StoredPendingRemoteSegment } from './provider-indexeddb-pending-remote-segments-types';
 
 export function storedPendingRemoteSegment(

@@ -21,7 +21,7 @@ import type {
 } from './proposal-provider-service-types';
 import type { AgentProposalMetadataStore, AgentProposalRecord } from './proposal-store';
 import type { ProposalWorkspaceLifecycleService } from './proposal-workspace-lifecycle-service';
-import type { WorkbookVersionReviewService } from './review-service';
+import type { WorkbookVersionReviewService } from '../review-service';
 
 export type ProviderBackedAgentProposalServiceOptions = {
   readonly openStore: () => Promise<AgentProposalMetadataStore>;

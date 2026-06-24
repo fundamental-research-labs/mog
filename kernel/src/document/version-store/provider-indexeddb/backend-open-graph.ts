@@ -2,22 +2,22 @@ import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
-} from './object-store';
+} from '../object-store';
 import {
   type VersionAccessContext,
   type VersionGraphStore,
   VersionStoreProviderError,
-} from './provider';
-import { namespaceForRegistry, type VersionDocumentScope } from './registry';
-import { IndexedDbVersionGraphStore } from './provider-indexeddb-backend-graph-store';
+} from '../provider';
+import { namespaceForRegistry, type VersionDocumentScope } from '../registry';
+import { IndexedDbVersionGraphStore } from './backend-graph-store';
 import {
   mapGraphDiagnostics,
   normalizeVersionAccessContext,
   registryRecordResult,
   versionStoreDiagnostic,
   type RegistryRecordRead,
-} from './provider-indexeddb-internal';
-import { graphLoadDiagnostic, loadGraphSnapshot } from './provider-indexeddb-reload';
+} from './internal';
+import { graphLoadDiagnostic, loadGraphSnapshot } from '../provider-indexeddb-reload';
 
 export async function openIndexedDbBackendGraph(options: {
   readonly namespaceInput: VersionGraphNamespace;

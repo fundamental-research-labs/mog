@@ -1,4 +1,4 @@
-import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph';
 import {
   AUTHOR,
   NAMESPACE,
@@ -87,7 +87,7 @@ export function registerListCommitsCommitListingDiagnosticScenarios(): void {
     }
   });
 
-  it('returns an explicit stale cursor diagnostic for unsupported page tokens', async () => {
+  it('returns an explicit stale cursor diagnostic for unavailable page tokens', async () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
 
     const page = await graph.listCommits({ pageToken: 'vpt_pending_token_1234' });
@@ -97,7 +97,7 @@ export function registerListCommitsCommitListingDiagnosticScenarios(): void {
         code: 'VERSION_STALE_PAGE_CURSOR',
         operation: 'listCommits',
         option: 'pageToken',
-        details: expect.objectContaining({ pageTokenUnsupported: true }),
+        details: expect.objectContaining({ cursorCategory: 'staleCursor' }),
       }),
     ]);
   });

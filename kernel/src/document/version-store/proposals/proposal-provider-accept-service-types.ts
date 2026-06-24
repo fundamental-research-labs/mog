@@ -7,7 +7,7 @@ import type {
 
 import type { ProposalGraphProvider, ResolvedBranchHead } from './proposal-provider-service-types';
 import type { AgentProposalMetadataStore } from './proposal-store';
-import type { WorkbookVersionMarkReviewAppliedInput } from './review-service';
+import type { WorkbookVersionMarkReviewAppliedInput } from '../review-service';
 
 export type { ProposalGraphProvider };
 

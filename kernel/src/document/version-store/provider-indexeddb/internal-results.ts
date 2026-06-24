@@ -1,12 +1,12 @@
-import type { VersionGraphStoreDiagnostic, VersionGraphWriteResult } from './graph-store';
+import type { VersionGraphStoreDiagnostic, VersionGraphWriteResult } from '../graph';
 import type {
   VersionGraphRegistryReadResult,
   VersionStoreDiagnostic,
   VersionStoreFailure,
   VersionStoreOperation,
-} from './provider';
-import type { VersionDocumentScope } from './registry';
-import { versionStoreDiagnostic } from './provider-indexeddb-internal-diagnostics';
+} from '../provider';
+import type { VersionDocumentScope } from '../registry';
+import { versionStoreDiagnostic } from './internal-diagnostics';
 
 export function failedStoreResult(
   diagnostics: readonly VersionStoreDiagnostic[],

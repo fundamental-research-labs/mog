@@ -1,4 +1,4 @@
-import { createInMemoryVersionGraphStore } from '../graph-store';
+import { createInMemoryVersionGraphStore } from '../graph';
 import {
   NAMESPACE,
   OTHER_NAMESPACE,

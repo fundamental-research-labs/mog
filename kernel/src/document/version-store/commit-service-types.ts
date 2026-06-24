@@ -15,7 +15,7 @@ import type {
   VersionGraphRef,
   VersionGraphSymbolicRef,
   VersionGraphWriteResult,
-} from './graph-store';
+} from './graph';
 import type { ObjectDigest, WorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import type {

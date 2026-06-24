@@ -8,7 +8,7 @@ import {
   rootWrite,
   storedRef,
 } from './provider-indexeddb-recovery-test-utils';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import { namespaceForDocumentScope } from '../provider';
 
 describe('IndexedDB provider recovery hardening: stale heads', () => {

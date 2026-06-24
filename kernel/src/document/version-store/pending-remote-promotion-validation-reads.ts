@@ -1,4 +1,4 @@
-import type { VersionGraphReadHeadResult } from './graph-store';
+import type { VersionGraphReadHeadResult } from './graph';
 import type { ObjectDigest, VersionObjectType, WorkbookCommitId } from './object-digest';
 import {
   pendingRemotePromotionDiagnostic as diagnostic,

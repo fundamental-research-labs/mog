@@ -10,6 +10,7 @@ import {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
   parseListCommitsOptions,
+  publicListCommitsPageTokenFor,
 } from './graph-store-list-options';
 import { resolveListCommitsRoot } from './graph-store-list-commits-root';
 import type { GraphStoreRefHelpers } from './graph-store-ref-helpers';
@@ -21,6 +22,7 @@ import {
   symbolicHeadFromLiveRef,
 } from './graph-store-refs';
 import {
+  graphMetadataCompletenessDetails,
   orderTopologicalNewestFirst,
 } from './graph-store-traversal';
 import type {
@@ -30,9 +32,10 @@ import type {
   VersionGraphReadHeadResult,
   VersionGraphReadRefResult,
 } from './graph-store-types';
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommitId } from '../object-digest';
 
 export type GraphStoreReadContext = {
+  readonly cursorNamespaceKey: string;
   readonly refs: GraphStoreRefHelpers;
 };
 
@@ -128,6 +131,27 @@ export async function listVersionGraphCommits(
   if (!root.ok) {
     return { status: 'failed', diagnostics: root.diagnostics };
   }
+  if (
+    parsedOptions.target.kind === 'pageCursor' &&
+    parsedOptions.target.cursor.root.namespaceKey !== context.cursorNamespaceKey
+  ) {
+    return {
+      status: 'failed',
+      diagnostics: [
+        diagnostic(
+          'VERSION_STALE_PAGE_CURSOR',
+          'listCommits pageToken is stale or no longer available.',
+          {
+            operation: 'listCommits',
+            option: 'pageToken',
+            details: graphMetadataCompletenessDetails('stale', {
+              cursorCategory: 'wrongNamespaceCursor',
+            }),
+          },
+        ),
+      ],
+    };
+  }
 
   const collected = await context.refs.collectReachableCommits(root.commitId, 'listCommits');
   if (!collected.ok) {
@@ -145,30 +169,46 @@ export async function listVersionGraphCommits(
   if (ordered.diagnostics.length > 0) {
     return { status: 'failed', diagnostics: ordered.diagnostics };
   }
-  if (ordered.commits.length > parsedOptions.pageSize) {
+  const pageOffset =
+    parsedOptions.target.kind === 'pageCursor' ? parsedOptions.target.cursor.offset : 0;
+  if (pageOffset >= ordered.commits.length) {
     return {
       status: 'failed',
       diagnostics: [
         diagnostic(
-          'VERSION_UNSUPPORTED_PAGE_TOKEN',
-          'Commit pagination requires page tokens, which are not implemented by this in-memory graph store slice.',
+          'VERSION_STALE_PAGE_CURSOR',
+          'listCommits pageToken is stale or no longer available.',
           {
             operation: 'listCommits',
             option: 'pageToken',
             ...(root.ref ? { refName: root.ref.name } : {}),
-            details: {
-              pageSize: parsedOptions.pageSize,
+            details: graphMetadataCompletenessDetails('stale', {
+              cursorCategory: 'staleCursor',
               commitCount: ordered.commits.length,
-            },
+            }),
           },
         ),
       ],
     };
   }
+  const pageCommits = ordered.commits.slice(pageOffset, pageOffset + parsedOptions.pageSize);
+  const nextOffset = pageOffset + pageCommits.length;
+  const nextPageToken =
+    nextOffset < ordered.commits.length
+      ? publicListCommitsPageTokenFor({
+          root: {
+            commitId: root.commitId,
+            namespaceKey: context.cursorNamespaceKey,
+            readRevision: root.readRevision,
+          },
+          offset: nextOffset,
+        })
+      : undefined;
 
   return {
     status: 'success',
-    commits: ordered.commits.map(graphCommitSummary),
+    commits: pageCommits.map(graphCommitSummary),
+    ...(nextPageToken ? { nextPageToken } : {}),
     readRevision: root.readRevision,
     order: 'topological-newest',
     pageSize: parsedOptions.pageSize,

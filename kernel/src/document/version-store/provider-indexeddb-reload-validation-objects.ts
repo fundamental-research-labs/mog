@@ -5,7 +5,7 @@ import {
   type VersionObjectRecord,
   type VersionObjectStoreDiagnostic,
 } from './object-store';
-import type { StoredObjectRecord } from './provider-indexeddb-internal';
+import type { StoredObjectRecord } from './provider-indexeddb/internal';
 import {
   sanitizeLoadDetails,
   throwLoadError,

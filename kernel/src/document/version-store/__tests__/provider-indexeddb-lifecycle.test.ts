@@ -7,7 +7,7 @@ import {
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-} from '../provider-indexeddb-backend';
+} from '../provider-indexeddb/backend';
 import { namespaceForDocumentScope, type VersionDocumentScope } from '../provider';
 
 describe('IndexedDB version provider document/workbook lifecycle', () => {

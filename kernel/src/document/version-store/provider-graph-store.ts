@@ -24,7 +24,7 @@ import type {
   VersionGraphReadRefResult,
   VersionGraphRefSelector,
   VersionGraphWriteResult,
-} from './graph-store';
+} from './graph';
 import type { VersionDependencyRef, WorkbookCommitId } from './object-digest';
 import type {
   VersionGraphNamespace,

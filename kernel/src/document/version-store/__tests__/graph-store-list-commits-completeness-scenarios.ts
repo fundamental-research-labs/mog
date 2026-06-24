@@ -1,6 +1,6 @@
 import type { WorkbookCommit } from '../commit-store';
-import { createInMemoryVersionGraphStore } from '../graph-store';
-import { orderTopologicalNewestFirst } from '../graph-store-traversal';
+import { createInMemoryVersionGraphStore } from '../graph';
+import { orderTopologicalNewestFirst } from '../graph/graph-store-traversal';
 import {
   NAMESPACE,
   commit,
@@ -31,7 +31,7 @@ export function registerListCommitsCompletenessScenarios(): void {
     ]);
   });
 
-  it('marks stale list cursors as access-filtered graph metadata incompleteness', async () => {
+  it('marks unavailable list cursors as access-filtered graph metadata incompleteness', async () => {
     const graph = createInMemoryVersionGraphStore({ namespace: NAMESPACE });
 
     const page = await graph.listCommits({ pageToken: 'vpt_pending_token_1234' });
@@ -47,8 +47,7 @@ export function registerListCommitsCompletenessScenarios(): void {
           completenessScope: 'graph-metadata',
           completenessCondition: 'stale',
           accessFiltered: true,
-          cursorCategory: 'unsupportedCursor',
-          pageTokenUnsupported: true,
+          cursorCategory: 'staleCursor',
         }),
       }),
     ]);

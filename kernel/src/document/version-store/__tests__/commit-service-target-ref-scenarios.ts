@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 import { createProviderBackedBranchLifecycleService } from '../branch-provider-service';
 import { createWorkbookVersionCommitService } from '../commit-service';
-import { VERSION_GRAPH_MAIN_REF } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../graph';
 import { createInMemoryVersionStoreProvider, namespaceForDocumentScope } from '../provider';
 import {
   DOCUMENT_SCOPE,

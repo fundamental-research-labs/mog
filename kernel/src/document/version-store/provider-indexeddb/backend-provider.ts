@@ -14,40 +14,40 @@ import {
   type VersionStoreOperation,
   type VersionStoreProvider,
   VersionStoreProviderError,
-} from './provider';
+} from '../provider';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
-} from './registry';
-import type { VersionGraphNamespace } from './object-store';
-import { openVersionStoreIndexedDb } from './provider-indexeddb-schema';
+} from '../registry';
+import type { VersionGraphNamespace } from '../object-store';
+import { openVersionStoreIndexedDb } from '../provider-indexeddb-schema';
 import {
   normalizeVersionAccessContext,
   readOnlyCapabilities,
   registryRecordResult,
   versionStoreDiagnostic,
   type RegistryRecordRead,
-} from './provider-indexeddb-internal';
-import { IndexedDbMergeApplyIntentStore } from './provider-indexeddb-merge-intents';
-import { IndexedDbPendingRemoteSegmentStore } from './provider-indexeddb-pending-remote-segments';
-import { IndexedDbAppliedSyncUpdateIdentityStore } from './provider-indexeddb-applied-sync-updates';
-import { IndexedDbSyncBatchStatusStore } from './provider-indexeddb-sync-batch-statuses';
-import { IndexedDbWorkbookVersionReviewRecordStore } from './provider-indexeddb-review-records';
-import { IndexedDbAgentProposalMetadataStore } from './provider-indexeddb-proposals';
+} from './internal';
+import { IndexedDbMergeApplyIntentStore } from '../provider-indexeddb-merge-intents';
+import { IndexedDbPendingRemoteSegmentStore } from '../provider-indexeddb-pending-remote-segments';
+import { IndexedDbAppliedSyncUpdateIdentityStore } from '../provider-indexeddb-applied-sync-updates';
+import { IndexedDbSyncBatchStatusStore } from '../provider-indexeddb-sync-batch-statuses';
+import { IndexedDbWorkbookVersionReviewRecordStore } from '../provider-indexeddb-review-records';
+import { IndexedDbAgentProposalMetadataStore } from '../provider-indexeddb-proposals';
 import {
   indexedDbBackendLifecycleUnavailableDiagnostic,
   indexedDbBackendLifecycleUnavailableFailure,
   indexedDbBackendReadOnlyFailure,
-} from './provider-indexeddb-backend-diagnostics';
-import { initializeIndexedDbBackendGraph } from './provider-indexeddb-backend-initialize';
-import { openIndexedDbBackendGraph } from './provider-indexeddb-backend-open-graph';
-import { readIndexedDbBackendRegistryRecord } from './provider-indexeddb-backend-registry';
-import { INDEXEDDB_VERSION_STORE_CAPABILITIES } from './provider-indexeddb-backend-capabilities';
+} from './backend-diagnostics';
+import { initializeIndexedDbBackendGraph } from './backend-initialize';
+import { openIndexedDbBackendGraph } from './backend-open-graph';
+import { readIndexedDbBackendRegistryRecord } from './backend-registry';
+import { INDEXEDDB_VERSION_STORE_CAPABILITIES } from './backend-capabilities';
 import {
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
   type IndexedDbVersionStoreProviderOptions,
-} from './provider-indexeddb-backend-types';
+} from './backend-types';
 
 export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
   readonly kind = INDEXEDDB_VERSION_STORE_PROVIDER_KIND;

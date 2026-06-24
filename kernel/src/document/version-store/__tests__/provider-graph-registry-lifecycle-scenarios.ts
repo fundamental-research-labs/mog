@@ -1,4 +1,4 @@
-import { VERSION_GRAPH_MAIN_REF } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../graph';
 import {
   InMemoryVersionDocumentProviderBackend,
   createInMemoryVersionStoreProvider,

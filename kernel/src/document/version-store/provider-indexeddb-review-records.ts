@@ -12,7 +12,7 @@ import {
   type VersionDocumentScope,
 } from './registry';
 import { INTENTS_STORE } from './provider-indexeddb-schema';
-import { idbRequest, idbTransactionDone } from './provider-indexeddb-internal';
+import { idbRequest, idbTransactionDone } from './provider-indexeddb/internal';
 
 export class IndexedDbWorkbookVersionReviewRecordStore extends WorkbookVersionReviewRecordStoreImpl {
   constructor(options: {

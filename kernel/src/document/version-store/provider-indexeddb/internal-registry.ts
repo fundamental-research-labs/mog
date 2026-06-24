@@ -7,13 +7,13 @@ import {
   versionDocumentScopeKey,
   type VersionDocumentScope,
   type VersionGraphRegistry,
-} from './registry';
-import { parseWorkbookCommitId } from './object-digest';
-import { hasOnlyKeys, isPlainRecord } from './provider-indexeddb-internal-json';
+} from '../registry';
+import { parseWorkbookCommitId } from '../object-digest';
+import { hasOnlyKeys, isPlainRecord } from './internal-json';
 import type {
   RegistryRecordRead,
   StoredRegistryEnvelope,
-} from './provider-indexeddb-internal-records';
+} from './internal-records';
 
 export async function decodeRegistryEnvelope(
   value: unknown,

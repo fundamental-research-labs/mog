@@ -1,4 +1,4 @@
-import type { VersionGraphStoreDiagnostic } from './graph-store';
+import type { VersionGraphStoreDiagnostic } from './graph';
 import type { WorkbookCommitId } from './object-digest';
 import { normalizeVersionGraphNamespace, type VersionGraphNamespace } from './object-store';
 import { normalizeVersionDocumentScope, type VersionDocumentScope } from './registry';

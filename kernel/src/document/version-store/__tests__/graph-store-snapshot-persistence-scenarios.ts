@@ -2,7 +2,7 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStoreFromSnapshot,
-} from '../graph-store';
+} from '../graph';
 import {
   mergePreviewArtifactRef,
   resolvedMergeAttemptArtifactRef,

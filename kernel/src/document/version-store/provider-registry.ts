@@ -15,7 +15,7 @@ import {
   INDEXEDDB_VERSION_STORE_CAPABILITIES,
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
   createIndexedDbVersionStoreProvider,
-} from './provider-indexeddb-backend';
+} from './provider-indexeddb/backend';
 import type { VersionDocumentScope } from './registry';
 
 export type VersionStoreProviderKind =

@@ -1,4 +1,4 @@
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import {
   BASE,
   DOCUMENT_SCOPE,

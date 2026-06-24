@@ -1,5 +1,5 @@
-import type { WorkbookCommitId } from './object-digest';
-import type { VersionObjectRecord } from './object-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { VersionObjectRecord } from '../object-store';
 
 export function objectKey(namespaceKey: string, record: VersionObjectRecord<unknown>): string {
   return `${namespaceKey}\u0000${record.digest.algorithm}\u0000${record.digest.digest}`;

@@ -2,7 +2,7 @@ import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-id
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import type { VersionGraphNamespace } from './object-store';
 import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
-import { InMemoryAgentProposalMetadataStore } from './proposal-store';
+import { InMemoryAgentProposalMetadataStore } from './proposals/proposal-store';
 import { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
 import { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
 import { openInMemoryGraph } from './provider-in-memory-graph';

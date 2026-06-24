@@ -3,7 +3,7 @@ import type {
   VersionGraphStoreDiagnostic,
 } from './graph-store-types';
 import { diagnostic } from './graph-store-diagnostics';
-import { versionGraphNamespaceKey, type VersionObjectRecord } from './object-store';
+import { versionGraphNamespaceKey, type VersionObjectRecord } from '../object-store';
 
 export function validateInputNamespaces(
   expectedNamespaceKey: string,

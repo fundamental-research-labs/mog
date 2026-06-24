@@ -6,7 +6,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { invalidState, targetUnavailable } from './proposal-provider-accept-service-results';
-import type { WorkbookVersionMarkReviewAppliedInput } from './review-service';
+import type { WorkbookVersionMarkReviewAppliedInput } from '../review-service';
 
 export async function requireApprovedProposalReview(input: {
   readonly proposalId: string;

@@ -3,7 +3,7 @@ import {
   createInMemoryVersionGraphStoreFromSnapshot,
   type InMemoryVersionGraphStore,
   type InMemoryVersionGraphStoreSnapshot,
-} from './graph-store';
+} from './graph';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
@@ -39,7 +39,7 @@ import {
 import {
   AgentProposalMetadataMemoryBackend,
   type AgentProposalMetadataMemoryBackendSnapshot,
-} from './proposal-store';
+} from './proposals/proposal-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 

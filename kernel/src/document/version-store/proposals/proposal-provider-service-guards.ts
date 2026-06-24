@@ -2,7 +2,7 @@ import type {
   ProposalBranchService,
   ProposalGraphProvider,
 } from './proposal-provider-service-types';
-import type { WorkbookVersionReviewService } from './review-service';
+import type { WorkbookVersionReviewService } from '../review-service';
 
 export function isProposalBranchService(value: unknown): value is ProposalBranchService {
   return (

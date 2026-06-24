@@ -20,7 +20,7 @@ import {
   type VersionDocumentScope,
 } from './registry';
 import { INTENTS_STORE } from './provider-indexeddb-schema';
-import { cloneJson, idbRequest, idbTransactionDone } from './provider-indexeddb-internal';
+import { cloneJson, idbRequest, idbTransactionDone } from './provider-indexeddb/internal';
 
 type StoredAppliedSyncUpdateIdentity = {
   readonly schemaVersion: 1;

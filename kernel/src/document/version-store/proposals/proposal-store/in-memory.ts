@@ -5,7 +5,7 @@ import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
   type VersionDocumentScope,
-} from '../registry';
+} from '../../registry';
 
 export class InMemoryAgentProposalMetadataStore
   extends AgentProposalMetadataStoreImpl

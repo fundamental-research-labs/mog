@@ -12,14 +12,14 @@ import {
   rootWrite,
 } from './provider-indexeddb-test-utils';
 
-export { VERSION_GRAPH_MAIN_REF } from '../graph-store';
+export { VERSION_GRAPH_MAIN_REF } from '../graph';
 export {
   createMergePreviewArtifactRecord,
   mergePreviewArtifactRef,
 } from '../merge-attempt-artifacts';
 export { objectDigestFromWorkbookCommitId } from '../object-digest';
 export { namespaceForDocumentScope } from '../provider';
-export { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+export { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 export {
   AUTHOR,
   DOCUMENT_SCOPE,

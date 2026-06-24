@@ -1,6 +1,6 @@
 import type { VersionResult } from '@mog-sdk/contracts/api';
 
-import { objectDigestFor } from '../merge-apply-intent-store';
+import { objectDigestFor } from '../../merge-apply-intent-store';
 import { canonicalJsonStringify, cloneAgentProposalRecord } from './codec';
 import { invalidClientRequestReuse, ok } from './results';
 import type {

@@ -1,4 +1,4 @@
-import type { AgentProposalMetadataStore } from '../proposal-store';
+import type { AgentProposalMetadataStore } from '../proposals/proposal-store';
 import {
   InMemoryVersionDocumentProviderBackend,
   createInMemoryVersionStoreProvider,

@@ -1,5 +1,5 @@
 import type { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
-import type { InMemoryVersionGraphStore } from './graph-store';
+import type { InMemoryVersionGraphStore } from './graph';
 import type { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import type { VersionGraphNamespace } from './object-store';
 import type { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
@@ -35,7 +35,7 @@ import type {
   VersionStoreLifecycleState,
   VersionStoreProvider,
 } from './provider-types';
-import type { InMemoryAgentProposalMetadataStore } from './proposal-store';
+import type { InMemoryAgentProposalMetadataStore } from './proposals/proposal-store';
 import type { VersionDocumentScope } from './registry';
 import type { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
 import type { InMemorySyncBatchStatusStore } from './sync-batch-status-store';

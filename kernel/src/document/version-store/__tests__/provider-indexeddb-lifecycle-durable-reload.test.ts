@@ -8,7 +8,7 @@ import {
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-} from '../provider-indexeddb-backend';
+} from '../provider-indexeddb/backend';
 import { OBJECTS_STORE } from '../provider-indexeddb-schema';
 import { namespaceForDocumentScope, type VersionDocumentScope } from '../provider';
 import {

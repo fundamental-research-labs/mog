@@ -1,5 +1,5 @@
-import type { CommitVersionGraphInput } from './graph-store';
-import { createInMemoryVersionGraphStore } from './graph-store';
+import type { CommitVersionGraphInput } from './graph';
+import { createInMemoryVersionGraphStore } from './graph';
 import { createVersionObjectRecord } from './object-store';
 import { mapGraphDiagnostics, versionStoreDiagnostic } from './provider';
 import { captureWorkbookSnapshotRootRecord } from './snapshot-root-capture';

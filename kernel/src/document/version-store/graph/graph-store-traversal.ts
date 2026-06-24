@@ -1,5 +1,5 @@
-import type { WorkbookCommit } from './commit-store';
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommit } from '../commit-store';
+import type { WorkbookCommitId } from '../object-digest';
 import type { VersionGraphStoreDiagnostic } from './graph-store-types';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 

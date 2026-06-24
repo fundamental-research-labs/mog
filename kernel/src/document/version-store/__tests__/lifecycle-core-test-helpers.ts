@@ -9,7 +9,7 @@ import {
   type VersionObjectRecord,
 } from '../object-store';
 import type { VersionGraphInitializeInput } from '../provider';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb/backend';
 
 export const DOCUMENT_ID = 'version-store-lifecycle-blank-root';
 export const GRAPH_ID = 'blank-workbook-root';

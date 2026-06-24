@@ -4,7 +4,7 @@ import {
   putRegistryEnvelope,
   resetIndexedDbVersionStoreForTesting,
 } from './provider-indexeddb-lifecycle-test-utils';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../provider-indexeddb/backend';
 import { createVersionGraphRegistry, type VersionDocumentScope } from '../provider';
 
 describe('IndexedDB version provider document/workbook lifecycle registry failures', () => {

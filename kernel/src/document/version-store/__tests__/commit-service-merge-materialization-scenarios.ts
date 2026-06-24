@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { createWorkbookVersionCommitService } from '../commit-service';
-import { VERSION_GRAPH_MAIN_REF } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../graph';
 import { namespaceForDocumentScope } from '../provider';
 import {
   DOCUMENT_SCOPE,

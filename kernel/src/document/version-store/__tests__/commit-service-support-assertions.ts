@@ -4,7 +4,7 @@ import {
   type VersionNormalCommitCaptureFinalizeResult,
   type WorkbookVersionCommitServiceCommitResult,
 } from '../commit-service';
-import { VERSION_GRAPH_MAIN_REF } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../graph';
 import type { WorkbookCommitId } from '../object-digest';
 import {
   namespaceForDocumentScope,

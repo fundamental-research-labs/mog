@@ -2,8 +2,8 @@ import {
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
   type VersionGraphWriteResult,
-} from './graph-store';
-import type { VersionGraphNamespace } from './object-store';
+} from '../graph';
+import type { VersionGraphNamespace } from '../object-store';
 import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
@@ -12,8 +12,8 @@ import {
   type VersionGraphStore,
   type VersionStoreCapabilities,
   type VersionStoreFailure,
-} from './provider';
-import { createVersionGraphRegistry, type VersionDocumentScope } from './registry';
+} from '../provider';
+import { createVersionGraphRegistry, type VersionDocumentScope } from '../registry';
 import {
   failedStoreResult,
   initializeSuccess,
@@ -21,11 +21,11 @@ import {
   registryRecordResult,
   versionStoreDiagnostic,
   type RegistryRecordRead,
-} from './provider-indexeddb-internal';
+} from './internal';
 import {
   persistInitializedIndexedDbBackendGraphSnapshot,
   publishIndexedDbBackendRegistryVisibleLast,
-} from './provider-indexeddb-backend-registry';
+} from './backend-registry';
 
 export async function initializeIndexedDbBackendGraph(options: {
   readonly input: VersionGraphInitializeInput;

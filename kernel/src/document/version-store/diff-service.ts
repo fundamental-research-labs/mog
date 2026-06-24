@@ -26,7 +26,7 @@ import { readSemanticChangeSet } from './diff-service-object-diagnostics';
 import { resolveCommitish } from './diff-service-commit-resolution';
 import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
 import { openVisibleDiffGraph } from './diff-service-visible-graph';
-import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph';
 import { type VersionStoreDiagnostic, type VersionStoreProvider } from './provider';
 
 type NormalizedDiffCommitish =

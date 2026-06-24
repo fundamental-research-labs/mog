@@ -1,4 +1,4 @@
-import type { InMemoryVersionGraphStore } from './graph-store';
+import type { InMemoryVersionGraphStore } from './graph';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,

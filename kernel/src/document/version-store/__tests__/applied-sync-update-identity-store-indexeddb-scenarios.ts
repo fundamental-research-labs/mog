@@ -1,5 +1,5 @@
 import { prepareAppliedSyncUpdateIdentityBeforeApply } from '../../applied-sync-update-identity-wiring';
-import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
 import {
   admittedContextFor,
   appliedIdentityInput,

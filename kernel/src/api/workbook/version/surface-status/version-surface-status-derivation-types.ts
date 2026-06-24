@@ -17,7 +17,12 @@ export type MaybeVersionRuntimeContext = DocumentContext & {
 };
 
 export type CapabilityArea = 'reads' | 'writes';
-export type VersionDomainSupportOperation = 'commit' | 'checkout' | 'merge' | 'applyMerge';
+export type VersionDomainSupportOperation =
+  | 'commit'
+  | 'checkout'
+  | 'merge'
+  | 'applyMerge'
+  | 'revert';
 
 export type LowerGateIssue = {
   readonly diagnostic: VersionDiagnostic;
@@ -35,6 +40,7 @@ export type VersionSurfaceCapabilityAvailability = {
   readonly mergePreview: boolean;
   readonly mergeApply: boolean;
   readonly refAdmin: boolean;
+  readonly revert: boolean;
   readonly provenance: boolean;
   readonly remotePromote: boolean;
 };

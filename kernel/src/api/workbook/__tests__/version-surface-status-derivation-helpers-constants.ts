@@ -12,6 +12,7 @@ export const PROVIDER_WRITE_CAPABILITIES = [
   'version:commit',
   'version:branch',
   'version:mergeApply',
+  'version:revert',
 ] as const;
 
 export const FEATURE_GATE_SIBLING_CAPABILITIES = [
@@ -26,6 +27,7 @@ export const MANIFEST_OPERATION_CAPABILITIES = [
   'version:checkout',
   'version:mergePreview',
   'version:mergeApply',
+  'version:revert',
 ] as const;
 
 export const PROMOTED_SURFACE_CAPABILITIES = [
@@ -35,6 +37,7 @@ export const PROMOTED_SURFACE_CAPABILITIES = [
   'version:mergePreview',
   'version:mergeApply',
   'version:refAdmin',
+  'version:revert',
   'version:provenance',
   'version:remotePromote',
 ] as const;
@@ -44,6 +47,7 @@ export const READ_ONLY_PROVIDER_DIAGNOSTIC_CODES = [
   'version.surfaceStatus.branchUnavailable',
   'version.surfaceStatus.mergeApplyUnavailable',
   'version.surfaceStatus.refAdminUnavailable',
+  'version.surfaceStatus.revertUnavailable',
 ] as const;
 
 export const FEATURE_GATE_DIAGNOSTIC_CODES = [

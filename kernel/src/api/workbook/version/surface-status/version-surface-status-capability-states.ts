@@ -212,12 +212,7 @@ export function buildVersionSurfaceCapabilityStates(
       'version:mergePreview': storageOrHostDisabled('version:mergePreview'),
       'version:mergeApply': storageOrHostDisabled('version:mergeApply'),
       'version:refAdmin': storageOrHostDisabled('version:refAdmin'),
-      'version:revert': deferredOrHostDisabled(
-        'version:revert',
-        'upstreamRevertContract',
-        'Authored revert is reserved until an upstream revert contract exists.',
-        'version.surfaceStatus.revertUnavailable',
-      ),
+      'version:revert': storageOrHostDisabled('version:revert'),
       'version:provenance': deferredOrHostDisabled(
         'version:provenance',
         'VC-09',
@@ -320,9 +315,9 @@ export function buildVersionSurfaceCapabilityStates(
     ),
     'version:revert': mutableCapability(
       'version:revert',
-      false,
+      availability.revert,
       'upstreamRevertContract',
-      'Authored revert is reserved until an upstream revert contract exists.',
+      'Version revert services are not attached.',
       false,
       'version.surfaceStatus.revertUnavailable',
     ),

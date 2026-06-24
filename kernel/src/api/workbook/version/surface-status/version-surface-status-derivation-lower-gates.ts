@@ -25,6 +25,7 @@ const HIGHER_SURFACE_CAPABILITIES = [
   'version:mergePreview',
   'version:mergeApply',
   'version:refAdmin',
+  'version:revert',
   'version:provenance',
   'version:remotePromote',
 ] as const satisfies readonly SurfaceVersionCapability[];
@@ -238,6 +239,8 @@ function availabilityForCapability(
       return availability.mergeApply;
     case 'version:refAdmin':
       return availability.refAdmin;
+    case 'version:revert':
+      return availability.revert;
     case 'version:provenance':
       return availability.provenance;
     case 'version:remotePromote':

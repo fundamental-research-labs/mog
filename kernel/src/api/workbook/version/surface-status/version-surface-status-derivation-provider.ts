@@ -83,6 +83,15 @@ export function deriveProviderCapabilityBlocks(
       !readGraph || !readRefs,
     );
   }
+  if (availability.revert && (!readGraph || !writeCommits)) {
+    blocks['version:revert'] = providerBlock(
+      'version.surfaceStatus.revertUnavailable',
+      readGraph
+        ? 'The attached version storage provider is read-only for revert writes.'
+        : 'Version revert requires provider graph reads.',
+      !readGraph,
+    );
+  }
   if (availability.remotePromote && (!readGraph || !writeCommits)) {
     blocks['version:remotePromote'] = providerBlock(
       'version.surfaceStatus.remotePromoteUnavailable',

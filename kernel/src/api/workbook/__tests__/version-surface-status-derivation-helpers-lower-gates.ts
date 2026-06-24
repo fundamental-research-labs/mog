@@ -16,6 +16,7 @@ export function createMixedLowerGateEvidenceSurfaceVersion() {
     {
       captureMergeCommit: jest.fn(),
       mergeCommitMaterializer: { kind: 'test-materializer' },
+      revertService: { revert: jest.fn() },
       provenanceTruthService: {
         vc09ProvenanceTruthComplete: true,
       },
@@ -84,6 +85,7 @@ export function createAuthorizedPendingRemotePromotionSurfaceVersion() {
       provenanceTruthService: {
         vc09ProvenanceTruthComplete: true,
       },
+      revertService: { revert: jest.fn() },
       pendingRemotePromotionService: {
         promotePendingRemoteSegments,
       },

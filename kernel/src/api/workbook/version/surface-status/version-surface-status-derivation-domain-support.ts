@@ -27,6 +27,7 @@ export async function deriveDomainSupportCapabilityBlocks(
     { capability: 'version:checkout', operation: 'checkout', available: availability.checkout },
     { capability: 'version:mergePreview', operation: 'merge', available: availability.mergePreview },
     { capability: 'version:mergeApply', operation: 'applyMerge', available: availability.mergeApply },
+    { capability: 'version:revert', operation: 'revert', available: availability.revert },
   ];
   const blocks: VersionSurfaceCapabilityBlocks = {};
   await Promise.all(

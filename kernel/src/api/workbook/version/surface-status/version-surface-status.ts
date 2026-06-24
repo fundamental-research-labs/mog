@@ -39,6 +39,7 @@ import {
   getDocumentId,
   hasAnyVersionAttachment,
 } from './version-surface-status-attachments';
+import { getAttachedVersionRevertService } from '../revert/version-revert-provider';
 import {
   buildVersionSurfaceCapabilityStates,
   determineVersionSurfaceStage,
@@ -159,6 +160,7 @@ export async function getWorkbookVersionSurfaceStatus(
       Boolean(workbookStatus?.merge.available || hasAttachedVersionMergeService(ctx)) &&
       hasAttachedVersionApplyMergeService(services),
     refAdmin: hasAttachedVersionRefAdminService(services),
+    revert: Boolean(getAttachedVersionRevertService(ctx)),
     provenance: Boolean(workbookStatus?.provenanceAdmission.available),
     remotePromote: Boolean(
       workbookStatus?.provenanceAdmission.available &&

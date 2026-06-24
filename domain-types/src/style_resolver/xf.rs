@@ -1,8 +1,8 @@
-use crate::{DocumentFormat, FontFormat, ProtectionFormat};
+use crate::{AlignmentFormat, DocumentFormat, FontFormat, ProtectionFormat};
 
 use super::{
     components::{resolve_alignment, resolve_border, resolve_fill, resolve_font},
-    input::{CellXfInput, StyleInput},
+    input::{AlignmentInput, CellXfInput, FontInput, StyleInput},
     number_format::resolve_number_format,
 };
 
@@ -95,14 +95,69 @@ fn should_apply_border(xf: &CellXfInput) -> bool {
     xf.apply_border.unwrap_or(xf.border_id.unwrap_or(0) != 0)
 }
 fn should_apply_number_format(xf: &CellXfInput) -> bool {
-    xf.apply_number_format
-        .unwrap_or(xf.num_fmt_id.unwrap_or(0) != 0)
+    xf.apply_number_format.unwrap_or(xf.num_fmt_id.is_some())
 }
 fn should_apply_alignment(xf: &CellXfInput) -> bool {
     xf.apply_alignment.unwrap_or(xf.alignment.is_some())
 }
 fn should_apply_protection(xf: &CellXfInput) -> bool {
     xf.apply_protection.unwrap_or(xf.protection.is_some())
+}
+
+fn resolve_applied_number_format(xf: &CellXfInput, input: &StyleInput) -> Option<String> {
+    resolve_number_format(xf.num_fmt_id.unwrap_or(0), &input.num_fmts)
+}
+
+fn resolve_applied_font(xf: &CellXfInput, input: &StyleInput) -> Option<FontFormat> {
+    let font_id = xf.font_id.unwrap_or(0);
+    input.fonts.get(font_id as usize).map(|font| {
+        let mut fmt = resolve_font(
+            font,
+            &input.theme_colors,
+            input.major_font.as_deref(),
+            input.minor_font.as_deref(),
+        );
+        complete_applied_font(&mut fmt, font);
+        fmt
+    })
+}
+
+fn complete_applied_font(fmt: &mut FontFormat, font: &FontInput) {
+    fmt.bold = Some(font.bold);
+    fmt.italic = Some(font.italic);
+    fmt.strikethrough = Some(font.strikethrough);
+    fmt.underline = Some(font.underline.as_deref().unwrap_or("none").to_string());
+
+    // In an applied font component, absent vertical-alignment effects mean
+    // baseline text, not inheritance from a lower-priority row or column style.
+    if font.vert_align.is_none() {
+        fmt.superscript = Some(false);
+        fmt.subscript = Some(false);
+        fmt.vertical_align = Some("baseline".to_string());
+    }
+}
+
+fn resolve_applied_alignment(xf: &CellXfInput) -> Option<AlignmentFormat> {
+    xf.alignment.as_ref().map(|alignment| {
+        let mut fmt = resolve_alignment(alignment).unwrap_or_default();
+        complete_applied_alignment(&mut fmt, alignment);
+        fmt
+    })
+}
+
+fn complete_applied_alignment(fmt: &mut AlignmentFormat, alignment: &AlignmentInput) {
+    fmt.horizontal.get_or_insert_with(|| "general".to_string());
+    fmt.vertical.get_or_insert_with(|| "bottom".to_string());
+    fmt.wrap_text = Some(alignment.wrap_text.unwrap_or(false));
+    fmt.rotation = Some(alignment.text_rotation.unwrap_or(0) as i32);
+    fmt.indent = Some(alignment.indent.unwrap_or(0));
+    fmt.shrink_to_fit = Some(alignment.shrink_to_fit.unwrap_or(false));
+    if alignment.reading_order.is_none() {
+        fmt.reading_order = Some("context".to_string());
+    }
+    fmt.auto_indent = Some(alignment.auto_indent.unwrap_or(false));
+    fmt.relative_indent = Some(alignment.relative_indent.unwrap_or(0));
+    fmt.justify_last_line = Some(alignment.justify_last_line.unwrap_or(false));
 }
 
 /// Resolve a single CellXf record into a `DocumentFormat` with cellStyleXfs inheritance.
@@ -122,12 +177,12 @@ pub(super) fn resolve_single_xf(xf: &CellXfInput, input: &StyleInput) -> Option<
     // 3. Merge: for each property, use direct if apply_* says override, else inherit base.
     let fmt = DocumentFormat {
         number_format: if should_apply_number_format(xf) {
-            direct.number_format
+            resolve_applied_number_format(xf, input)
         } else {
             base.number_format
         },
         font: if should_apply_font(xf) {
-            direct.font
+            resolve_applied_font(xf, input)
         } else {
             base.font
         },
@@ -142,7 +197,7 @@ pub(super) fn resolve_single_xf(xf: &CellXfInput, input: &StyleInput) -> Option<
             base.border
         },
         alignment: if should_apply_alignment(xf) {
-            direct.alignment
+            resolve_applied_alignment(xf)
         } else {
             base.alignment
         },

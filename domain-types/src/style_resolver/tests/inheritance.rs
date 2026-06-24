@@ -222,3 +222,150 @@ fn absent_apply_flags_use_nonzero_and_presence_heuristics() {
     assert_eq!(fmt.protection.as_ref().and_then(|p| p.locked), Some(false));
     assert_eq!(fmt.protection.as_ref().and_then(|p| p.hidden), Some(true));
 }
+
+#[test]
+fn applied_number_format_zero_preserves_general_override() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            num_fmt_id: Some(164),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                num_fmt_id: Some(0),
+                apply_number_format: Some(true),
+                ..Default::default()
+            },
+        ],
+        num_fmts: {
+            let mut m = HashMap::new();
+            m.insert(164, "#,##0".to_string());
+            m
+        },
+        ..Default::default()
+    };
+
+    let fmt = &resolve_styles(&input)[1];
+    assert_eq!(fmt.number_format.as_deref(), Some("General"));
+}
+
+#[test]
+fn present_number_format_zero_preserves_general_override_without_apply_flag() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            num_fmt_id: Some(164),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                num_fmt_id: Some(0),
+                ..Default::default()
+            },
+        ],
+        num_fmts: {
+            let mut m = HashMap::new();
+            m.insert(164, "#,##0".to_string());
+            m
+        },
+        ..Default::default()
+    };
+
+    let fmt = &resolve_styles(&input)[1];
+    assert_eq!(fmt.number_format.as_deref(), Some("General"));
+}
+
+#[test]
+fn applied_alignment_defaults_block_base_alignment() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            alignment: Some(AlignmentInput {
+                horizontal: Some("right".to_string()),
+                vertical: Some("top".to_string()),
+                wrap_text: Some(true),
+                text_rotation: Some(45),
+                indent: Some(3),
+                shrink_to_fit: Some(true),
+                reading_order: Some(2),
+                auto_indent: Some(true),
+                relative_indent: Some(2),
+                justify_last_line: Some(true),
+            }),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                apply_alignment: Some(true),
+                alignment: Some(AlignmentInput {
+                    vertical: Some("center".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let alignment = resolve_styles(&input)[1].alignment.clone().unwrap();
+    assert_eq!(alignment.horizontal.as_deref(), Some("general"));
+    assert_eq!(alignment.vertical.as_deref(), Some("middle"));
+    assert_eq!(alignment.wrap_text, Some(false));
+    assert_eq!(alignment.rotation, Some(0));
+    assert_eq!(alignment.indent, Some(0));
+    assert_eq!(alignment.shrink_to_fit, Some(false));
+    assert_eq!(alignment.reading_order.as_deref(), Some("context"));
+    assert_eq!(alignment.auto_indent, Some(false));
+    assert_eq!(alignment.relative_indent, Some(0));
+    assert_eq!(alignment.justify_last_line, Some(false));
+}
+
+#[test]
+fn applied_font_false_effects_block_base_font() {
+    let input = StyleInput {
+        cell_style_xfs: vec![CellXfInput {
+            font_id: Some(1),
+            ..Default::default()
+        }],
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                xf_id: Some(0),
+                font_id: Some(2),
+                apply_font: Some(true),
+                ..Default::default()
+            },
+        ],
+        fonts: vec![
+            FontInput::default(),
+            FontInput {
+                name: "Base".to_string(),
+                bold: true,
+                italic: true,
+                underline: Some("single".to_string()),
+                strikethrough: true,
+                vert_align: Some("superscript".to_string()),
+                ..Default::default()
+            },
+            FontInput {
+                name: "Direct".to_string(),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let font = resolve_styles(&input)[1].font.clone().unwrap();
+    assert_eq!(font.name.as_deref(), Some("Direct"));
+    assert_eq!(font.bold, Some(false));
+    assert_eq!(font.italic, Some(false));
+    assert_eq!(font.underline.as_deref(), Some("none"));
+    assert_eq!(font.strikethrough, Some(false));
+    assert_eq!(font.superscript, Some(false));
+    assert_eq!(font.subscript, Some(false));
+    assert_eq!(font.vertical_align.as_deref(), Some("baseline"));
+}

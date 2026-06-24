@@ -40,6 +40,7 @@ import {
   serializeInterfaceDefinition,
   type InterfaceTypeElement,
 } from './api-spec-interface-serialization';
+import { pickApiSpecOverload } from './api-spec-overload-selection';
 import { REQUIRED_OPERATION_RECEIPT_TYPE_NAMES } from './api-spec-receipt-types';
 import type {
   ApiCompatibilityIndex,
@@ -243,25 +244,6 @@ function collectTypeRefs(signature: string): string[] {
     }
   }
   return [...seen];
-}
-
-/** For overloaded members, prefer the most agent-friendly overload. */
-function pickOverload(overloads: InterfaceTypeElement[]): InterfaceTypeElement {
-  if (overloads.length === 1) return overloads[0];
-
-  const nonGenericOverload = overloads.find(
-    ({ member }) => ts.isMethodSignature(member) && !member.typeParameters?.length,
-  );
-  if (nonGenericOverload) return nonGenericOverload;
-
-  for (const overload of overloads) {
-    if (ts.isMethodSignature(overload.member) && overload.member.parameters.length > 0) {
-      const firstParam = overload.member.parameters[0];
-      const typeText = firstParam.type?.getText(overload.sourceFile) ?? '';
-      if (typeText === 'string') return overload;
-    }
-  }
-  return overloads[0];
 }
 
 // ---------------------------------------------------------------------------
@@ -814,7 +796,7 @@ function extractInterface(
   }
 
   for (const [name, overloads] of byName) {
-    const chosen = pickOverload(overloads);
+    const chosen = pickApiSpecOverload(node.name.text, name, overloads);
     const entry = createMemberEntry({
       interfaceName: node.name.text,
       memberName: name,

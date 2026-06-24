@@ -1027,12 +1027,12 @@
           "usedTypes": []
         },
         "version.readRef": {
-          "signature": "version.readRef(name: \"HEAD\"): Promise<VersionResult<VersionSymbolicRefReadResult>>",
+          "signature": "version.readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
           "docstring": null,
           "usedTypes": []
         },
         "version.getRef": {
-          "signature": "version.getRef(name: \"HEAD\"): Promise<VersionResult<VersionSymbolicRefReadResult>>",
+          "signature": "version.getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -4602,7 +4602,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-24T08:41:46.254Z",
+  "generated": "2026-06-24T10:06:26.161Z",
   "formatPresets": {
     "general": {
       "default": {

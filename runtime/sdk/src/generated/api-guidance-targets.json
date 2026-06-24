@@ -5198,8 +5198,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
+      "signature": "getRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5464,8 +5464,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
+      "signature": "readRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24547,8 +24547,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
+      "signature": "getRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24813,8 +24813,8 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
+      "signature": "readRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"

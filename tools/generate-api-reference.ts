@@ -283,7 +283,10 @@ function extractTags(node: { getJsDocs(): JSDoc[] }): string[] | undefined {
 // Type Extraction
 // ============================================================================
 
-function extractUsedTypes(method: MethodSignature, knownTypes: Set<string>): string[] {
+function extractUsedTypesFromMethods(
+  methods: readonly MethodSignature[],
+  knownTypes: Set<string>,
+): string[] {
   const used: Set<string> = new Set();
 
   const extractFromType = (type: Type) => {
@@ -304,10 +307,12 @@ function extractUsedTypes(method: MethodSignature, knownTypes: Set<string>): str
     }
   };
 
-  for (const param of method.getParameters()) {
-    extractFromType(param.getType());
+  for (const method of methods) {
+    for (const param of method.getParameters()) {
+      extractFromType(param.getType());
+    }
+    extractFromType(method.getReturnType());
   }
-  extractFromType(method.getReturnType());
 
   return Array.from(used).sort();
 }
@@ -332,6 +337,65 @@ function formatSignature(method: MethodSignature, prefix?: string): string {
   returnType = returnType.replace(/import\([^)]+\)\./g, '');
 
   return `${name}(${params}): ${returnType}`;
+}
+
+function methodsByName(iface: InterfaceDeclaration): Map<string, MethodSignature[]> {
+  const groups = new Map<string, MethodSignature[]>();
+  for (const method of iface.getMethods()) {
+    const name = method.getName();
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name)!.push(method);
+  }
+  return groups;
+}
+
+function pickApiReferenceMethod(
+  interfaceName: string,
+  methodName: string,
+  methods: readonly MethodSignature[],
+): MethodSignature {
+  if (methods.length === 0) {
+    throw new Error('Cannot choose a method from an empty overload set.');
+  }
+  if (methods.length === 1) return methods[0]!;
+  if (!usesBroadPublicRefOverload(interfaceName, methodName)) return methods[0]!;
+
+  return methods.reduce((best, candidate) =>
+    methodGeneralityScore(candidate) > methodGeneralityScore(best) ? candidate : best,
+  );
+}
+
+function usesBroadPublicRefOverload(interfaceName: string, methodName: string): boolean {
+  return (
+    interfaceName === 'WorkbookVersion' &&
+    (methodName === 'readRef' || methodName === 'getRef')
+  );
+}
+
+function methodGeneralityScore(method: MethodSignature): number {
+  let score = method.getTypeParameters().length > 0 ? 0 : 100;
+  for (const parameter of method.getParameters()) {
+    const typeText = parameter.getTypeNode()?.getText() ?? parameter.getType().getText();
+    score += parameterTypeGeneralityScore(typeText);
+  }
+  return score;
+}
+
+function parameterTypeGeneralityScore(typeText: string): number {
+  const compact = typeText
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}()[\]<>,:;|&=])\s*/g, '$1')
+    .trim();
+  if (!compact) return 0;
+  if (/^(['"`]).*\1$/.test(compact)) return 1;
+
+  let score = Math.min(compact.length, 80);
+  if (compact === 'string' || compact === 'unknown') score += 80;
+  if (compact.includes('VersionRefSelector')) score += 80;
+  if (compact.includes('VersionCommitish')) score += 80;
+  if (compact.includes('|')) score += 20 + compact.split('|').length * 10;
+  if (compact.includes('{') || compact.includes('Record<')) score += 20;
+  return score;
 }
 
 // ============================================================================
@@ -370,18 +434,20 @@ function extractRootInterface(iface: InterfaceDeclaration, knownTypes: Set<strin
     };
   }
 
-  for (const method of iface.getMethods()) {
-    const name = method.getName();
+  for (const [name, overloads] of methodsByName(iface)) {
     if (name.startsWith('_') || SKIP_METHODS.has(name)) continue;
 
-    // For overloaded methods, only take the first signature
     if (spec.functions[name]) continue;
 
+    const method = pickApiReferenceMethod(iface.getName(), name, overloads);
+    const usedTypeMethods = usesBroadPublicRefOverload(iface.getName(), name)
+      ? overloads
+      : [method];
     const tags = extractTags(method);
     spec.functions[name] = {
       signature: formatSignature(method),
       docstring: getJsDocComment(method),
-      usedTypes: extractUsedTypes(method, knownTypes),
+      usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),
     };
   }
@@ -396,20 +462,22 @@ function extractSubApiMethods(
 ): Record<string, ApiFunction> {
   const functions: Record<string, ApiFunction> = {};
 
-  for (const method of iface.getMethods()) {
-    const methodName = method.getName();
+  for (const [methodName, overloads] of methodsByName(iface)) {
     if (methodName.startsWith('_')) continue;
 
     const dottedName = `${namespace}.${methodName}`;
 
-    // For overloaded methods, only take the first signature
     if (functions[dottedName]) continue;
 
+    const method = pickApiReferenceMethod(iface.getName(), methodName, overloads);
+    const usedTypeMethods = usesBroadPublicRefOverload(iface.getName(), methodName)
+      ? overloads
+      : [method];
     const tags = extractTags(method);
     functions[dottedName] = {
       signature: formatSignature(method, namespace),
       docstring: getJsDocComment(method),
-      usedTypes: extractUsedTypes(method, knownTypes),
+      usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),
     };
   }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { Tooltip } from '@mog/shell';
+import { useRibbonButtonVisible } from '../visibility/RibbonVisibilityContext';
 import { DropdownArrowIcon } from './ToolbarIcons';
 
 interface StackedRibbonMenuButtonProps {
@@ -8,6 +9,7 @@ interface StackedRibbonMenuButtonProps {
   testId: string;
   icon: ReactNode;
   label: string;
+  visibilityKey: string;
   isOpen: boolean;
   onClick: () => void;
 }
@@ -17,9 +19,16 @@ export function StackedRibbonMenuButton({
   testId,
   icon,
   label,
+  visibilityKey,
   isOpen,
   onClick,
 }: StackedRibbonMenuButtonProps) {
+  const visible = useRibbonButtonVisible({ visibilityKey, label, testId });
+
+  if (!visible) {
+    return null;
+  }
+
   return (
     <Tooltip title={label}>
       <button

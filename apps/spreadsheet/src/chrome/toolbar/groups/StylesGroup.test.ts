@@ -26,10 +26,16 @@ describe('StylesGroup responsive layout', () => {
     expect(source).toContain('<ConditionalFormattingMenu variant="stacked" />');
     expect(conditionalSource).toContain('id="conditional-formatting"');
     expect(conditionalSource).toContain('testId="ribbon-dropdown-conditional-formatting"');
+    expect(conditionalSource).toContain('visibilityKey="conditionalFormatting"');
+    expect(conditionalSource).toContain('<RibbonVisibilityItem item="conditionalFormatting">');
     expect(source).toContain('id="format-as-table"');
     expect(source).toContain('testId="ribbon-dropdown-format-as-table"');
+    expect(source).toContain('visibilityKey="formatAsTable"');
+    expect(source).toContain('<RibbonVisibilityItem item="formatAsTable">');
     expect(source).toContain('id="cell-styles"');
     expect(source).toContain('testId="ribbon-dropdown-cell-styles"');
+    expect(source).toContain('visibilityKey="cellStyles"');
+    expect(source).toContain('<RibbonVisibilityItem item="cellStyles">');
   });
 
   test('stacked command primitive preserves compact non-wrapping rows', () => {
@@ -40,5 +46,6 @@ describe('StylesGroup responsive layout', () => {
 
     expect(source).toContain('h-5 min-w-[132px]');
     expect(source).toContain('whitespace-nowrap');
+    expect(source).toContain('useRibbonButtonVisible');
   });
 });

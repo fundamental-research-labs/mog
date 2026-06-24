@@ -44,6 +44,7 @@ import {
 } from '../primitives/RibbonDropdown';
 import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Types
@@ -231,6 +232,7 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
         testId="ribbon-dropdown-conditional-formatting"
         icon={<ConditionalFormattingStackIcon />}
         label="Conditional Formatting"
+        visibilityKey="conditionalFormatting"
         isOpen={isOpen}
         onClick={() => setIsOpen(!isOpen)}
       />
@@ -250,7 +252,7 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
       </Tooltip>
     );
 
-  return (
+  const menu = (
     <div className="relative inline-flex">
       <RibbonDropdown open={isOpen} onOpenChange={setIsOpen} trigger={trigger} width={220}>
         {/* Wrapper carries the chrome-symmetry menu testid; the popover
@@ -438,6 +440,12 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
         </div>
       </RibbonDropdown>
     </div>
+  );
+
+  return variant === 'stacked' ? (
+    <RibbonVisibilityItem item="conditionalFormatting">{menu}</RibbonVisibilityItem>
+  ) : (
+    menu
   );
 });
 

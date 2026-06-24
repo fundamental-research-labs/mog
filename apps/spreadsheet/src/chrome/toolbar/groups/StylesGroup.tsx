@@ -42,6 +42,7 @@ import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Icons
@@ -190,57 +191,63 @@ export const StylesGroup = React.memo(function StylesGroup() {
       <div className="flex flex-col justify-center gap-0.5">
         <ConditionalFormattingMenu variant="stacked" />
 
-        <div className="relative inline-flex">
-          <StackedRibbonMenuButton
-            id="format-as-table"
-            testId="ribbon-dropdown-format-as-table"
-            icon={<FormatAsTableIcon />}
-            label="Format as Table"
-            isOpen={tableStyleGalleryOpen}
-            onClick={() => setTableStyleGalleryOpen(!tableStyleGalleryOpen)}
-          />
-          <RibbonDropdownPanel
-            open={tableStyleGalleryOpen}
-            onClose={() => setTableStyleGalleryOpen(false)}
-            position="bottom-right"
-          >
-            <div data-testid="ribbon-dropdown-menu-format-as-table">
-              <TableStyleGallery
-                onSelectStyle={(styleId) => {
-                  formatAsTable(styleId);
-                  setTableStyleGalleryOpen(false);
-                }}
-                onClose={() => setTableStyleGalleryOpen(false)}
-              />
-            </div>
-          </RibbonDropdownPanel>
-        </div>
+        <RibbonVisibilityItem item="formatAsTable">
+          <div className="relative inline-flex">
+            <StackedRibbonMenuButton
+              id="format-as-table"
+              testId="ribbon-dropdown-format-as-table"
+              icon={<FormatAsTableIcon />}
+              label="Format as Table"
+              visibilityKey="formatAsTable"
+              isOpen={tableStyleGalleryOpen}
+              onClick={() => setTableStyleGalleryOpen(!tableStyleGalleryOpen)}
+            />
+            <RibbonDropdownPanel
+              open={tableStyleGalleryOpen}
+              onClose={() => setTableStyleGalleryOpen(false)}
+              position="bottom-right"
+            >
+              <div data-testid="ribbon-dropdown-menu-format-as-table">
+                <TableStyleGallery
+                  onSelectStyle={(styleId) => {
+                    formatAsTable(styleId);
+                    setTableStyleGalleryOpen(false);
+                  }}
+                  onClose={() => setTableStyleGalleryOpen(false)}
+                />
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+        </RibbonVisibilityItem>
 
-        <div className="relative inline-flex">
-          <StackedRibbonMenuButton
-            id="cell-styles"
-            testId="ribbon-dropdown-cell-styles"
-            icon={<CellStylesIcon />}
-            label="Cell Styles"
-            isOpen={styleGalleryOpen}
-            onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
-          />
-          <RibbonDropdownPanel
-            open={styleGalleryOpen}
-            onClose={() => setStyleGalleryOpen(false)}
-            position="bottom-right"
-          >
-            <div data-testid="ribbon-dropdown-menu-cell-styles">
-              <StyleGallery
-                onSelectStyle={(styleId) => {
-                  applyStyle(styleId);
-                  setStyleGalleryOpen(false);
-                }}
-                onClose={() => setStyleGalleryOpen(false)}
-              />
-            </div>
-          </RibbonDropdownPanel>
-        </div>
+        <RibbonVisibilityItem item="cellStyles">
+          <div className="relative inline-flex">
+            <StackedRibbonMenuButton
+              id="cell-styles"
+              testId="ribbon-dropdown-cell-styles"
+              icon={<CellStylesIcon />}
+              label="Cell Styles"
+              visibilityKey="cellStyles"
+              isOpen={styleGalleryOpen}
+              onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
+            />
+            <RibbonDropdownPanel
+              open={styleGalleryOpen}
+              onClose={() => setStyleGalleryOpen(false)}
+              position="bottom-right"
+            >
+              <div data-testid="ribbon-dropdown-menu-cell-styles">
+                <StyleGallery
+                  onSelectStyle={(styleId) => {
+                    applyStyle(styleId);
+                    setStyleGalleryOpen(false);
+                  }}
+                  onClose={() => setStyleGalleryOpen(false)}
+                />
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+        </RibbonVisibilityItem>
       </div>
     </ToolbarGroup>
   );

@@ -16,6 +16,7 @@ import type {
   WriteDataTableValuesOptions,
 } from '@mog-sdk/contracts/what-if';
 import type { DocumentContext } from '../../context';
+import { createVersionMutationAdmissionOptions } from '../workbook/version-operation-context';
 import * as DataTableOps from './operations/data-table-operations';
 import * as GoalSeekOps from './operations/goal-seek-operations';
 
@@ -46,14 +47,33 @@ export class WorksheetWhatIfImpl implements WorksheetWhatIf {
   }
 
   async createDataTable(options: CreateDataTableOptions): Promise<CreateDataTableResult> {
-    return DataTableOps.createDataTable(this.ctx, this.sheetId, options);
+    return DataTableOps.createDataTable(
+      this.ctx,
+      this.sheetId,
+      options,
+      createVersionMutationAdmissionOptions(this.ctx, {
+        operationIdPrefix: 'worksheet.whatIf.createDataTable',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    );
   }
 
   async writeDataTableValues(
     formulaCell: string,
     options: WriteDataTableValuesOptions,
   ): Promise<DataTableWriteStaticValuesReceipt> {
-    return DataTableOps.writeDataTableValues(this.ctx, this.sheetId, formulaCell, options);
+    return DataTableOps.writeDataTableValues(
+      this.ctx,
+      this.sheetId,
+      formulaCell,
+      options,
+      createVersionMutationAdmissionOptions(this.ctx, {
+        operationIdPrefix: 'worksheet.whatIf.writeDataTableValues',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells'],
+      }),
+    );
   }
 
   async describeDataTables(range?: string): Promise<DataTableDescriptor[]> {

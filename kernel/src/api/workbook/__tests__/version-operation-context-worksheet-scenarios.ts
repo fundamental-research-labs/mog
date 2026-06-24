@@ -23,17 +23,42 @@ export function registerVersionOperationContextWorksheetScenarios(): void {
         operationIdPrefix: 'worksheet.setRange',
         run: (worksheet: WorksheetImpl) => worksheet.setRange('C1:D1', [[1, 2]]),
       },
-    ])('$name carries context into version capture', async ({ operationIdPrefix, run }) => {
-      const { capture, worksheet } = createWorksheetFixture();
+      {
+        name: 'whatIf.createDataTable',
+        operation: 'compute_create_data_table',
+        operationIdPrefix: 'worksheet.whatIf.createDataTable',
+        run: (worksheet: WorksheetImpl) =>
+          worksheet.whatIf.createDataTable({
+            tableRange: 'A1:B2',
+            colInputCell: 'C1',
+          }),
+      },
+      {
+        name: 'whatIf.writeDataTableValues',
+        operationIdPrefix: 'worksheet.whatIf.writeDataTableValues',
+        run: (worksheet: WorksheetImpl) =>
+          worksheet.whatIf.writeDataTableValues('A1', {
+            rowInputCell: null,
+            colInputCell: null,
+            rowValues: [1],
+            colValues: [],
+            targetRange: 'B1:B1',
+          }),
+      },
+    ])(
+      '$name carries context into version capture',
+      async ({ operation = 'compute_batch_set_cells_by_position', operationIdPrefix, run }) => {
+        const { capture, worksheet } = createWorksheetFixture();
 
-      await run(worksheet);
+        await run(worksheet);
 
-      expectCapturedContext(capture, {
-        operation: 'compute_batch_set_cells_by_position',
-        operationIdPrefix,
-        sheetIds: [SHEET_ID],
-        domainIds: ['cells'],
-      });
-    });
+        expectCapturedContext(capture, {
+          operation,
+          operationIdPrefix,
+          sheetIds: [SHEET_ID],
+          domainIds: ['cells'],
+        });
+      },
+    );
   });
 }

@@ -14,6 +14,33 @@ function createTransport(): BridgeTransport & { call: jest.Mock } {
       switch (command) {
         case 'compute_batch_set_cells_by_position':
           return [new Uint8Array(), mutationResult()];
+        case 'compute_create_data_table':
+          return [
+            new Uint8Array(),
+            mutationResult({
+              data: {
+                regionId: 'sheet-1:0:0:1:1',
+                tableRange: 'A1:B2',
+                bodyRange: 'B2:B2',
+                rowInputCell: null,
+                colInputCell: 'C1',
+                rowsComputed: 1,
+                colsComputed: 1,
+                cellCount: 1,
+              },
+            }),
+          ];
+        case 'compute_data_table':
+          return {
+            results: [[10]],
+            cellCount: 1,
+            cancelled: false,
+          };
+        case 'compute_get_all_column_schemas':
+        case 'compute_get_range_schemas_for_sheet':
+          return [];
+        case 'compute_get_cell_id_at':
+          return 'cell-id';
         case 'compute_create_sheet_with_default_col_width':
           return ['sheet-created', mutationResult()];
         case 'compute_copy_sheet':

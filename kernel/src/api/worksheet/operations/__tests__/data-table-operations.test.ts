@@ -30,6 +30,24 @@ function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
   };
 }
 
+function mutationOptions(): any {
+  return {
+    operationContext: {
+      operationId: 'worksheet.whatIf.test:0:1',
+      kind: 'mutation',
+      author: {
+        authorId: 'test-user',
+        actorKind: 'user',
+      },
+      createdAt: '2026-06-24T00:00:00.000Z',
+      sheetIds: ['sheet-1'],
+      domainIds: ['cells'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    },
+  };
+}
+
 describe('data table operations', () => {
   describe('dataTable', () => {
     it('returns a transient compute receipt with worksheet unchanged effects', async () => {
@@ -96,18 +114,24 @@ describe('data table operations', () => {
         }),
       });
 
-      const result = await DataTableOps.createDataTable(ctx, 'sheet-1', {
-        tableRange: 'B2:D4',
-        rowInputCell: 'A1',
-        colInputCell: 'A2',
-      });
+      const options = mutationOptions();
+      const result = await DataTableOps.createDataTable(
+        ctx,
+        'sheet-1',
+        {
+          tableRange: 'B2:D4',
+          rowInputCell: 'A1',
+          colInputCell: 'A2',
+        },
+        options,
+      );
 
       expect(ctx.computeBridge.createDataTable).toHaveBeenCalledWith('sheet-1', 1, 1, 3, 3, {
         sheetId: 'sheet-1',
         tableRange: 'B2:D4',
         rowInputCell: 'A1',
         colInputCell: 'A2',
-      });
+      }, options);
       expect(result).toEqual({
         kind: 'dataTable.create',
         status: 'applied',
@@ -153,11 +177,16 @@ describe('data table operations', () => {
       });
 
       await expect(
-        DataTableOps.createDataTable(ctx, 'sheet-1', {
-          tableRange: 'B2:D4',
-          rowInputCell: 'A1',
-          colInputCell: 'A2',
-        }),
+        DataTableOps.createDataTable(
+          ctx,
+          'sheet-1',
+          {
+            tableRange: 'B2:D4',
+            rowInputCell: 'A1',
+            colInputCell: 'A2',
+          },
+          mutationOptions(),
+        ),
       ).rejects.toThrow('CreateDataTableResult');
     });
   });
@@ -180,20 +209,27 @@ describe('data table operations', () => {
         }),
       });
 
-      const result = await DataTableOps.writeDataTableValues(ctx, 'sheet-1', 'B2', {
-        rowInputCell: 'A1',
-        colInputCell: 'A2',
-        rowValues: [1, 2],
-        colValues: [3, 4],
-        targetRange: 'C3:D4',
-      });
+      const options = mutationOptions();
+      const result = await DataTableOps.writeDataTableValues(
+        ctx,
+        'sheet-1',
+        'B2',
+        {
+          rowInputCell: 'A1',
+          colInputCell: 'A2',
+          rowValues: [1, 2],
+          colValues: [3, 4],
+          targetRange: 'C3:D4',
+        },
+        options,
+      );
 
       expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith('sheet-1', [
         { row: 2, col: 2, input: { kind: 'value', value: 10 } },
         { row: 2, col: 3, input: { kind: 'value', value: 20 } },
         { row: 3, col: 2, input: { kind: 'value', value: 30 } },
         { row: 3, col: 3, input: { kind: 'value', value: 40 } },
-      ]);
+      ], options);
       expect(result).toMatchObject({
         kind: 'dataTable.writeStaticValues',
         status: 'applied',
@@ -222,13 +258,19 @@ describe('data table operations', () => {
         }),
       });
 
-      const result = await DataTableOps.writeDataTableValues(ctx, 'sheet-1', 'B2', {
-        rowInputCell: null,
-        colInputCell: null,
-        rowValues: [],
-        colValues: [3, 4],
-        targetRange: 'C3:C4',
-      });
+      const result = await DataTableOps.writeDataTableValues(
+        ctx,
+        'sheet-1',
+        'B2',
+        {
+          rowInputCell: null,
+          colInputCell: null,
+          rowValues: [],
+          colValues: [3, 4],
+          targetRange: 'C3:C4',
+        },
+        mutationOptions(),
+      );
 
       expect(ctx.computeBridge.setCellsByPosition).not.toHaveBeenCalled();
       expect(result.status).toBe('failed');

@@ -26,6 +26,7 @@ import type {
 } from '@mog-sdk/contracts/what-if';
 import { KernelError } from '../../../errors';
 import type { DocumentContext } from '../../../context';
+import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import { parseCellRange, rangeToA1, toA1 } from '../../internal/utils';
 import { resolveCell } from '../../internal/address-resolver';
 import { getData } from '../../../domain/cells/cell-reads';
@@ -284,6 +285,7 @@ export async function createDataTable(
   ctx: DocumentContext,
   sheetId: SheetId,
   options: CreateDataTableOptions,
+  mutationOptions: MutationAdmissionOptions,
 ): Promise<CreateDataTableResult> {
   const range = parseCellRange(options.tableRange);
   if (!range) {
@@ -307,6 +309,7 @@ export async function createDataTable(
       rowInputCell: options.rowInputCell ?? null,
       colInputCell: options.colInputCell ?? null,
     },
+    mutationOptions,
   );
 
   const payload = decodeCreateDataTableResult(bridgeResult.data);
@@ -337,6 +340,7 @@ export async function writeDataTableValues(
   sheetId: SheetId,
   formulaCell: string,
   options: WriteDataTableValuesOptions,
+  mutationOptions: MutationAdmissionOptions,
 ): Promise<DataTableWriteStaticValuesReceipt> {
   const started = elapsedNow(ctx);
   const targetRange = parseDataTableRange(sheetId, options.targetRange);
@@ -427,7 +431,7 @@ export async function writeDataTableValues(
     }
   }
 
-  const writeResult: SetCellsResult = await CellOps.setCells(ctx, sheetId, writes);
+  const writeResult: SetCellsResult = await CellOps.setCells(ctx, sheetId, writes, mutationOptions);
   const diagnostics = (writeResult.errors ?? []).map((error) =>
     diagnosticFromSetCellError(sheetId, error),
   );

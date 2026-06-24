@@ -25,6 +25,24 @@ export function chartSourceBindingFromChart(chart: Chart): ChartSourceBindingApp
   const explicitSeries = chart.series ?? [];
   const renderableSeriesCount = explicitSeries.filter(hasRenderableExplicitSeriesData).length;
   if (explicitSeries.length > 0 && renderableSeriesCount > 0) {
+    if (chart.dataRange) {
+      const parsedDataRange = parseCellRange(chart.dataRange);
+      if (parsedDataRange) {
+        const orientation = chart.seriesOrientation ?? detectSeriesOrientation(parsedDataRange);
+        return {
+          kind: 'partial',
+          orientation,
+          dataRange: chart.dataRange,
+          categoryRange: chart.categoryRange,
+          seriesRange: chart.seriesRange,
+          explicitSeriesCount: explicitSeries.length,
+          renderableSeriesCount,
+          supportsOrientationSwitch: true,
+          diagnostics: ['explicit-series-source-can-be-cleared-for-data-range-orientation-switch'],
+        };
+      }
+    }
+
     const kind = seriesBindingKind(explicitSeries);
     return {
       kind,
@@ -35,9 +53,7 @@ export function chartSourceBindingFromChart(chart: Chart): ChartSourceBindingApp
       explicitSeriesCount: explicitSeries.length,
       renderableSeriesCount,
       supportsOrientationSwitch: false,
-      diagnostics: [
-        'explicit-series-source-takes-precedence-over-series-orientation',
-      ],
+      diagnostics: ['explicit-series-source-takes-precedence-over-series-orientation'],
     };
   }
 

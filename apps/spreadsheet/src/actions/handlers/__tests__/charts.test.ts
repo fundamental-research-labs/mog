@@ -18,7 +18,7 @@
 
 import { jest } from '@jest/globals';
 
-import type { SerializedChart } from '@mog/charts';
+import { DEFAULT_CHART_COLORS, type SerializedChart } from '@mog/charts';
 import type { ActionDependencies } from '@mog-sdk/contracts/actions';
 import { sheetId as makeSheetId } from '@mog-sdk/contracts/core';
 
@@ -142,6 +142,7 @@ function createMockDeps(overrides?: Partial<ActionDependencies>): ActionDependen
       setChartWizardError: jest.fn(),
       setActiveSheetId: jest.fn(),
       setActiveSheet: jest.fn(),
+      setChartEditorTab: jest.fn(),
     }),
   };
 
@@ -1249,8 +1250,10 @@ describe('Chart Handlers - Context Menu Actions', () => {
       const deps = createMockDeps();
       const result = await ChartHandlers.RESET_CHART_STYLE(deps, { chartId: 'chart-123' });
 
-      // Handler uses ws.updateChart via unified API
       expect(result.handled).toBe(true);
+      expect(deps.workbook.activeSheet.charts.update).toHaveBeenCalledWith('chart-123', {
+        colors: [...DEFAULT_CHART_COLORS],
+      });
     });
   });
 
@@ -1264,10 +1267,20 @@ describe('Chart Handlers - Context Menu Actions', () => {
   });
 
   describe('OPEN_FORMAT_CHART_AREA', () => {
-    it('should call onUIAction with chart ID', () => {
-      const deps = createMockDeps();
+    it('should open the chart editor on the style tab', () => {
+      const setChartEditorTab = jest.fn();
+      const deps = createMockDeps({
+        uiStore: {
+          getState: jest.fn(() => ({
+            setChartEditorTab,
+          })),
+        },
+      });
       ChartHandlers.OPEN_FORMAT_CHART_AREA(deps, { chartId: 'chart-123' });
 
+      expect(setChartEditorTab).toHaveBeenCalledWith('style');
+      expect(deps.commands.object.selectObject).toHaveBeenCalledWith('chart-123', false, false);
+      expect(deps.commands.chart.startEdit).toHaveBeenCalled();
       expect(deps.onUIAction).toHaveBeenCalledWith('OPEN_FORMAT_CHART_AREA:chart-123');
     });
   });

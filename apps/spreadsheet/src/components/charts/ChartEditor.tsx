@@ -36,6 +36,8 @@ export interface ChartEditorProps {
   config: ChartConfig;
   /** Semantic chart model for first-party controls. */
   appModel?: ChartAppModel;
+  /** Initial tab to show when opening the editor. */
+  initialTab?: TabId;
   /** Called when config changes */
   onChange: (updates: Partial<ChartConfig>) => void;
   /** Called when legend visibility changes semantically. */
@@ -186,14 +188,15 @@ function ChartTypeIcon({ type }: { type: ChartType }) {
 export function ChartEditor({
   config,
   appModel,
+  initialTab = 'data',
   onChange,
   onSetLegendVisible,
   onSetAxisTitle,
   onClose,
   onDelete,
 }: ChartEditorProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('data');
-  const resolvedLegendVisible = appModel?.legend.visible ?? (config.legend?.show !== false);
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const resolvedLegendVisible = appModel?.legend.visible ?? config.legend?.show !== false;
   const resolvedCategoryAxisTitle = appModel
     ? (appModel.axes.category.title ?? '')
     : (config.axis?.categoryAxis?.title ?? config.axis?.xAxis?.title ?? '');
@@ -215,6 +218,10 @@ export function ChartEditor({
   useEffect(() => {
     setValueAxisTitleDraft(resolvedValueAxisTitle);
   }, [resolvedValueAxisTitle]);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // Handlers
   const handleTitleChange = useCallback(
@@ -299,16 +306,13 @@ export function ChartEditor({
     [config.colors, onChange],
   );
 
-  const handleAxisTitleChange = useCallback(
-    (axisRole: 'category' | 'value', title: string) => {
-      if (axisRole === 'category') {
-        setCategoryAxisTitleDraft(title);
-      } else {
-        setValueAxisTitleDraft(title);
-      }
-    },
-    [],
-  );
+  const handleAxisTitleChange = useCallback((axisRole: 'category' | 'value', title: string) => {
+    if (axisRole === 'category') {
+      setCategoryAxisTitleDraft(title);
+    } else {
+      setValueAxisTitleDraft(title);
+    }
+  }, []);
 
   const commitAxisTitle = useCallback(
     (axisRole: 'category' | 'value', title: string) => {
@@ -333,14 +337,11 @@ export function ChartEditor({
     [config.axis, onChange, onSetAxisTitle],
   );
 
-  const handleAxisTitleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
-        event.currentTarget.blur();
-      }
-    },
-    [],
-  );
+  const handleAxisTitleKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur();
+    }
+  }, []);
 
   const handleGridLinesChange = useCallback(
     (axisRole: 'category' | 'value', show: boolean) => {
@@ -666,7 +667,9 @@ export function ChartEditor({
 
             <div className="mb-4">
               <Checkbox
-                checked={config.axis?.categoryAxis?.gridLines ?? config.axis?.xAxis?.gridLines ?? false}
+                checked={
+                  config.axis?.categoryAxis?.gridLines ?? config.axis?.xAxis?.gridLines ?? false
+                }
                 onChange={(checked) => handleGridLinesChange('category', checked)}
                 label="X-axis grid lines"
               />
@@ -702,7 +705,9 @@ export function ChartEditor({
                 }
                 onChange={(checked) => handleMinorGridLinesChange('value', checked)}
                 label="Y-axis minor grid lines"
-                disabled={(config.axis?.valueAxis?.gridLines ?? config.axis?.yAxis?.gridLines) === false}
+                disabled={
+                  (config.axis?.valueAxis?.gridLines ?? config.axis?.yAxis?.gridLines) === false
+                }
               />
             </div>
           </>

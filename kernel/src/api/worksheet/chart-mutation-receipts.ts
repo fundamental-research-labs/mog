@@ -318,9 +318,9 @@ function inferredRangeSeriesMutationCapacity(chart: Chart): number {
 
   const orientation = chart.seriesOrientation ?? detectSeriesOrientation(dataRange);
   if (orientation === 'columns') {
-    return Math.max(0, rowCount - (chart.categoryRange ? 0 : 1));
+    return Math.max(0, colCount - (chart.categoryRange ? 0 : 1));
   }
-  return Math.max(0, colCount - (chart.categoryRange ? 0 : 1));
+  return Math.max(0, rowCount - (chart.categoryRange ? 0 : 1));
 }
 
 export function chartSeriesMutationCapacityForReceipt(chart: Chart): number {

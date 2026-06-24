@@ -40,8 +40,9 @@ describe('chart data point value provenance', () => {
       anchorCol: 0,
       width: 8,
       height: 15,
-      dataRange: 'A1:G2',
-      seriesOrientation: 'columns',
+      dataRange: 'A2:G2',
+      categoryRange: 'A1:G1',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);

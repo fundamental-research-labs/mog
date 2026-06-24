@@ -26,7 +26,7 @@
  * Charts
  */
 
-import type { ChartConfig, SerializedChart } from '@mog/charts';
+import { DEFAULT_CHART_COLORS, type ChartConfig, type SerializedChart } from '@mog/charts';
 import type {
   ActionDependencies,
   ActionHandler,
@@ -1355,18 +1355,16 @@ export const RESET_CHART_STYLE: AsyncActionHandler = async (
   deps,
   payload,
 ): Promise<ActionResult> => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
   const ws = deps.workbook.activeSheet;
 
-  // Reset style-related properties to undefined (use defaults)
-  // Note: ChartConfig has limited styling options - just colors for now
   try {
     await ws.charts.update(chartId, {
-      colors: undefined,
+      colors: [...DEFAULT_CHART_COLORS],
     });
   } catch (e: any) {
     return { handled: false, error: e.message ?? String(e) };
@@ -1409,17 +1407,17 @@ export const OPEN_MOVE_CHART_DIALOG: ActionHandler = (deps, payload): ActionResu
  */
 // SCOPE: deferred to dialog component does not exist yet
 export const OPEN_FORMAT_CHART_AREA: ActionHandler = (deps, payload): ActionResult => {
-  const chartId = payload?.chartId;
+  const chartId = getChartIdFromPayloadOrSelectedObject(deps, payload);
   if (!chartId) {
     return { handled: false, error: 'Missing chartId in payload' };
   }
 
-  // Delegate to UI layer to open the format panel
-  if (!deps.onUIAction) {
-    return notHandled('disabled');
-  }
+  const uiStore = getUIStore(deps);
+  uiStore.getState().setChartEditorTab?.('style');
+  selectChartObject(deps, chartId);
+  deps.commands.chart.startEdit();
 
-  deps.onUIAction(`OPEN_FORMAT_CHART_AREA:${chartId}`);
+  deps.onUIAction?.(`OPEN_FORMAT_CHART_AREA:${chartId}`);
   return handled();
 };
 

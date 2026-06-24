@@ -110,10 +110,11 @@ export function manualLayoutToWire(layout: ManualLayout): ManualLayout {
 
 /** Convert a wire SingleAxisData to the contract SingleAxisConfig. */
 export function wireToSingleAxisConfig(w: SingleAxisData): SingleAxisConfig {
+  const visible = w.visibleExplicit !== true && w.visible === false ? true : w.visible;
   return {
     // structural fields (no narrowing needed)
     title: w.title,
-    visible: w.visible,
+    visible,
     visibleExplicit: w.visibleExplicit,
     min: w.min,
     max: w.max,

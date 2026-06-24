@@ -99,13 +99,15 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   // Check if chart has title/legend
   const observedHasTitle =
     selectedChart?.appModel?.title.visible ??
-    (selectedChart?.config.autoTitleDeleted === true ? false : Boolean(selectedChart?.config.title));
+    (selectedChart?.config.autoTitleDeleted === true
+      ? false
+      : Boolean(selectedChart?.config.title));
   const hasTitle =
     optimisticTitleToggle && optimisticTitleToggle.chartId === selectedChartId
       ? optimisticTitleToggle.checked
       : observedHasTitle;
   const observedHasLegend = selectedChart
-    ? (selectedChart.appModel?.legend.visible ?? (selectedChart.config.legend?.show !== false))
+    ? (selectedChart.appModel?.legend.visible ?? selectedChart.config.legend?.show !== false)
     : false;
   const hasLegend =
     optimisticLegendToggle && optimisticLegendToggle.chartId === selectedChartId
@@ -153,6 +155,11 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
       current?.chartId === chartId && current.checked === checked ? null : current,
     );
   }, []);
+
+  const getSelectedChartIdForCommand = useCallback(
+    () => deps.accessors.object.getFirstSelectedId() ?? selectedChartId,
+    [deps, selectedChartId],
+  );
 
   // ==========================================================================
   // Handlers
@@ -203,41 +210,35 @@ export function ChartToolsRibbon(_props: ContextualTabProps) {
   );
 
   const handleSwitchRowColumn = useCallback(() => {
-    if (selectedChartId) {
-      void switchSeriesOrientation(selectedChartId);
+    const chartId = getSelectedChartIdForCommand();
+    if (chartId) {
+      void switchSeriesOrientation(chartId);
     }
-  }, [selectedChartId, switchSeriesOrientation]);
+  }, [getSelectedChartIdForCommand, switchSeriesOrientation]);
 
   const handleSelectData = useCallback(() => {
-    if (selectedChartId) {
+    const chartId = getSelectedChartIdForCommand();
+    if (chartId) {
       // Open the chart editor which allows data range selection
-      dispatch('EDIT_CHART', deps, { chartId: selectedChartId });
+      dispatch('EDIT_CHART', deps, { chartId });
     }
-  }, [selectedChartId, deps]);
+  }, [getSelectedChartIdForCommand, deps]);
 
   const handleBringToFront = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('BRING_CHART_TO_FRONT', deps, { chartId: selectedChartId });
-    }
-  }, [selectedChartId, deps]);
+    dispatch('BRING_CHART_TO_FRONT', deps);
+  }, [deps]);
 
   const handleSendToBack = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('SEND_CHART_TO_BACK', deps, { chartId: selectedChartId });
-    }
-  }, [selectedChartId, deps]);
+    dispatch('SEND_CHART_TO_BACK', deps);
+  }, [deps]);
 
   const handleBringForward = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('BRING_CHART_FORWARD', deps, { chartId: selectedChartId });
-    }
-  }, [selectedChartId, deps]);
+    dispatch('BRING_CHART_FORWARD', deps);
+  }, [deps]);
 
   const handleSendBackward = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('SEND_CHART_BACKWARD', deps, { chartId: selectedChartId });
-    }
-  }, [selectedChartId, deps]);
+    dispatch('SEND_CHART_BACKWARD', deps);
+  }, [deps]);
 
   const handleDelete = useCallback(() => {
     deleteSelectedChart();

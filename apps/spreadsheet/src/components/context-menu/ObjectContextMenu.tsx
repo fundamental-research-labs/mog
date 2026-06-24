@@ -302,6 +302,11 @@ export function ObjectContextMenu() {
     dispatch('RESET_PICTURE', deps, { objectId: targetObjectId });
   }, [targetObjectId, deps]);
 
+  const handleFormatChartArea = useCallback(() => {
+    if (!targetObjectId) return;
+    dispatch('OPEN_FORMAT_CHART_AREA', deps, { chartId: targetObjectId });
+  }, [targetObjectId, deps]);
+
   // Equation-specific handler
   const handleEditEquation = useCallback(() => {
     if (!targetObjectId) return;
@@ -345,6 +350,13 @@ export function ObjectContextMenu() {
         label: 'Size and Properties...',
         icon: <SettingsIcon />,
         onClick: handleFormatPicture,
+      });
+    } else if (isChart) {
+      items.push({
+        id: 'formatChartArea',
+        label: 'Format Chart Area...',
+        icon: <SettingsIcon />,
+        onClick: handleFormatChartArea,
       });
     }
 
@@ -457,6 +469,7 @@ export function ObjectContextMenu() {
     return items;
   }, [
     isPicture,
+    isChart,
     isEquation,
     handleCut,
     handleCopy,
@@ -464,6 +477,7 @@ export function ObjectContextMenu() {
     handleFormatPicture,
     handleChangePicture,
     handleResetPicture,
+    handleFormatChartArea,
     handleBringToFront,
     handleSendToBack,
     handleBringForward,

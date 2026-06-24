@@ -423,7 +423,33 @@ describe('WorksheetChartsImpl mutation receipts', () => {
       }),
     );
 
-    const unsupported = await explicitCase.charts.switchSeriesOrientation('chart-1');
+    const switchedExplicitRange = await explicitCase.charts.switchSeriesOrientation('chart-1');
+    expect(switchedExplicitRange).toEqual(
+      expect.objectContaining({
+        kind: 'chart.source.switchSeriesOrientation',
+        status: 'applied',
+        sourceBindingChange: expect.objectContaining({
+          renderedGroupingChanged: true,
+          explicitSeriesAction: 'cleared',
+        }),
+      }),
+    );
+    expect(explicitCase.updateChart).toHaveBeenCalledWith(
+      SHEET_ID,
+      'chart-1',
+      expect.objectContaining({ seriesOrientation: 'rows', series: [] }),
+      expect.any(Object),
+    );
+
+    const standaloneExplicitCase = createMutableChartsApi(
+      makeChart({
+        chartType: 'column',
+        seriesOrientation: 'columns',
+        series: [{ name: 'Revenue', values: 'B1:B4' }],
+      }),
+    );
+
+    const unsupported = await standaloneExplicitCase.charts.switchSeriesOrientation('chart-1');
     expect(unsupported).toEqual(
       expect.objectContaining({
         kind: 'chart.source.switchSeriesOrientation',
@@ -434,7 +460,7 @@ describe('WorksheetChartsImpl mutation receipts', () => {
         }),
       }),
     );
-    expect(explicitCase.updateChart).not.toHaveBeenCalled();
+    expect(standaloneExplicitCase.updateChart).not.toHaveBeenCalled();
 
     const invalidRangeCase = createMutableChartsApi(
       makeChart({

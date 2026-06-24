@@ -123,8 +123,8 @@ function detectSeriesOrientationFromValues(
   const firstRowAfterLeftIsNumeric =
     firstRowAfterLeft.numeric >= 2 && firstRowAfterLeft.labels === 0;
 
-  if (firstColumnIsLabels && firstRowAfterLeftIsNumeric) return 'rows';
-  if (firstRowIsLabels && firstColumnBelowTopIsNumeric) return 'columns';
+  if (firstColumnIsLabels && firstRowAfterLeftIsNumeric) return 'columns';
+  if (firstRowIsLabels && firstColumnBelowTopIsNumeric) return 'rows';
 
   return shapeOrientation;
 }
@@ -208,6 +208,18 @@ export function extractChartDataFromRange(
 
   const orientation =
     options?.seriesOrientation || detectSeriesOrientationFromValues(accessor, dataRange);
+  const firstColumn = collectEdgeStats(firstColumnValues(accessor, dataRange));
+  const firstColumnBelowTop = collectEdgeStats(
+    firstColumnValues(accessor, dataRange, { skipTopCell: true }),
+  );
+  const firstRow = collectEdgeStats(firstRowValues(accessor, dataRange));
+  const firstRowAfterLeft = collectEdgeStats(
+    firstRowValues(accessor, dataRange, { skipLeftCell: true }),
+  );
+  const hasCategoryColumn = firstColumn.labels >= 2 && firstColumn.numeric === 0;
+  const hasCategoryRow = firstRow.labels >= 2 && firstRow.numeric === 0;
+  const hasColumnSeriesHeader = firstRowAfterLeft.labels >= 1 && firstRowAfterLeft.numeric === 0;
+  const hasRowSeriesHeader = firstColumnBelowTop.labels >= 1 && firstColumnBelowTop.numeric === 0;
 
   // Extract categories
   let categories: (string | number)[] = [];
@@ -216,16 +228,18 @@ export function extractChartDataFromRange(
   } else {
     // Auto-extract from first row or column of data range
     if (orientation === 'columns') {
-      // First row contains categories
-      for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
-        const value = getRangeValue(accessor, dataRange, dataRange.startRow, col);
-        categories.push(hasCellValue(value) ? String(value) : `Col ${col + 1}`);
-      }
-    } else {
       // First column contains categories
-      for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
+      const startRow = hasColumnSeriesHeader ? dataRange.startRow + 1 : dataRange.startRow;
+      for (let row = startRow; row <= dataRange.endRow; row++) {
         const value = getRangeValue(accessor, dataRange, row, dataRange.startCol);
         categories.push(hasCellValue(value) ? String(value) : `Row ${row + 1}`);
+      }
+    } else {
+      // First row contains categories
+      const startCol = hasRowSeriesHeader ? dataRange.startCol + 1 : dataRange.startCol;
+      for (let col = startCol; col <= dataRange.endCol; col++) {
+        const value = getRangeValue(accessor, dataRange, dataRange.startRow, col);
+        categories.push(hasCellValue(value) ? String(value) : `Col ${col + 1}`);
       }
     }
   }
@@ -234,21 +248,37 @@ export function extractChartDataFromRange(
   let seriesLabels: string[] = [];
   if (options?.seriesRange) {
     seriesLabels = extractLabels(accessor, options.seriesRange).map(String);
+  } else if (orientation === 'columns' && hasColumnSeriesHeader) {
+    const startCol =
+      options?.categoryRange || !hasCategoryColumn ? dataRange.startCol : dataRange.startCol + 1;
+    for (let col = startCol; col <= dataRange.endCol; col++) {
+      const value = getRangeValue(accessor, dataRange, dataRange.startRow, col);
+      seriesLabels.push(hasCellValue(value) ? String(value) : `Series ${col - startCol + 1}`);
+    }
+  } else if (orientation === 'rows' && hasRowSeriesHeader) {
+    const startRow =
+      options?.categoryRange || !hasCategoryRow ? dataRange.startRow : dataRange.startRow + 1;
+    for (let row = startRow; row <= dataRange.endRow; row++) {
+      const value = getRangeValue(accessor, dataRange, row, dataRange.startCol);
+      seriesLabels.push(hasCellValue(value) ? String(value) : `Series ${row - startRow + 1}`);
+    }
   }
 
   // Extract series data
   const series: ChartDataSeries[] = [];
 
   if (orientation === 'columns') {
-    // Each row (after header) is a series
-    const startRow = options?.categoryRange ? dataRange.startRow : dataRange.startRow + 1;
-    for (let row = startRow; row <= dataRange.endRow; row++) {
-      const seriesIndex = row - startRow;
+    // Each column (after category labels) is a series
+    const startCol =
+      options?.categoryRange || !hasCategoryColumn ? dataRange.startCol : dataRange.startCol + 1;
+    const startRow = hasColumnSeriesHeader ? dataRange.startRow + 1 : dataRange.startRow;
+    for (let col = startCol; col <= dataRange.endCol; col++) {
+      const seriesIndex = col - startCol;
       const name = seriesLabels[seriesIndex] || `Series ${seriesIndex + 1}`;
       const data: ChartDataPoint[] = [];
 
-      for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
-        const catIndex = col - dataRange.startCol;
+      for (let row = startRow; row <= dataRange.endRow; row++) {
+        const catIndex = row - startRow;
         const category = categories[catIndex] ?? catIndex;
         const rawValue = getRangeValue(accessor, dataRange, row, col);
         data.push(createDataPoint(category, rawValue, String(category)));
@@ -257,15 +287,17 @@ export function extractChartDataFromRange(
       series.push({ name, data });
     }
   } else {
-    // Each column (after header) is a series
-    const startCol = options?.categoryRange ? dataRange.startCol : dataRange.startCol + 1;
-    for (let col = startCol; col <= dataRange.endCol; col++) {
-      const seriesIndex = col - startCol;
+    // Each row (after category labels) is a series
+    const startRow =
+      options?.categoryRange || !hasCategoryRow ? dataRange.startRow : dataRange.startRow + 1;
+    const startCol = hasRowSeriesHeader ? dataRange.startCol + 1 : dataRange.startCol;
+    for (let row = startRow; row <= dataRange.endRow; row++) {
+      const seriesIndex = row - startRow;
       const name = seriesLabels[seriesIndex] || `Series ${seriesIndex + 1}`;
       const data: ChartDataPoint[] = [];
 
-      for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
-        const catIndex = row - dataRange.startRow;
+      for (let col = startCol; col <= dataRange.endCol; col++) {
+        const catIndex = col - startCol;
         const category = categories[catIndex] ?? catIndex;
         const rawValue = getRangeValue(accessor, dataRange, row, col);
         data.push(createDataPoint(category, rawValue, String(category)));

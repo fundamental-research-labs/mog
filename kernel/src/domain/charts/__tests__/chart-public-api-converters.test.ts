@@ -65,6 +65,12 @@ describe('chart public API converters', () => {
     expect(publicChart.height).toBe(225);
   });
 
+  it('reports drawing z-index as read-only public chart metadata', () => {
+    const publicChart = serializedChartToChart(chart({ zIndex: 7 }));
+
+    expect(publicChart.zIndex).toBe(7);
+  });
+
   it('uses pixel geometry ahead of stale cell spans on read', () => {
     const publicChart = serializedChartToChart(
       chart({

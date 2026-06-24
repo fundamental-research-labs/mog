@@ -6,7 +6,7 @@
  * internal-only fields (StoredChartConfig).
  *
  * These are pure type definitions only -- no runtime values, no CellId imports.
- * Internal storage concerns (CellId anchors, zIndex, table linking) belong
+ * Internal storage concerns (CellId anchors, table linking) belong
  * in the charts package's StoredChartConfig.
  */
 
@@ -3484,7 +3484,7 @@ export interface ChartSurfaceBandFormat {
  * Public chart configuration -- the shape used by the unified API surface.
  *
  * This contains all user-facing fields for creating/updating charts.
- * Internal-only fields (CellId anchors, zIndex, table linking cache)
+ * Internal-only fields (CellId anchors, table linking cache)
  * are defined in StoredChartConfig in the charts package.
  */
 export interface ChartConfig {
@@ -3717,6 +3717,8 @@ export interface ChartConfig {
 export interface Chart extends ChartConfig {
   id: string;
   sheetId?: string;
+  /** Read-only drawing stack order metadata. Use zOrder updates to change it. */
+  zIndex?: number;
   createdAt?: number;
   updatedAt?: number;
 }

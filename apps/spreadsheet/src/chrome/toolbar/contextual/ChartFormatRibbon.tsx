@@ -24,26 +24,28 @@ export function ChartFormatRibbon(_props: ContextualTabProps) {
   const { charts, updateChart } = useCharts({ sheetId: activeSheetId });
   const selectedChart = charts.find((c) => c.id === selectedChartId);
 
+  const getSelectedChartIdForCommand = useCallback(
+    () => deps.accessors.object.getFirstSelectedId() ?? selectedChartId,
+    [deps, selectedChartId],
+  );
+
   const handleOpenFormat = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('OPEN_FORMAT_CHART_AREA', deps, { chartId: selectedChartId });
-    }
-  }, [deps, selectedChartId]);
+    dispatch('OPEN_FORMAT_CHART_AREA', deps);
+  }, [deps]);
 
   const handleResetStyle = useCallback(() => {
-    if (selectedChartId) {
-      dispatch('RESET_CHART_STYLE', deps, { chartId: selectedChartId });
-    }
-  }, [deps, selectedChartId]);
+    dispatch('RESET_CHART_STYLE', deps);
+  }, [deps]);
 
   const updateSize = useCallback(
     (field: 'width' | 'height', value: string) => {
-      if (!selectedChartId) return;
+      const chartId = getSelectedChartIdForCommand();
+      if (!chartId) return;
       const parsed = Number(value);
       if (!Number.isFinite(parsed) || parsed <= 0) return;
-      updateChart(selectedChartId, { [field]: parsed });
+      updateChart(chartId, { [field]: parsed });
     },
-    [selectedChartId, updateChart],
+    [getSelectedChartIdForCommand, updateChart],
   );
 
   const dispatchChartCommand = useCallback(
@@ -54,11 +56,9 @@ export function ChartFormatRibbon(_props: ContextualTabProps) {
         | 'BRING_CHART_FORWARD'
         | 'SEND_CHART_BACKWARD',
     ) => {
-      if (selectedChartId) {
-        dispatch(action, deps, { chartId: selectedChartId });
-      }
+      dispatch(action, deps);
     },
-    [deps, selectedChartId],
+    [deps],
   );
 
   return (

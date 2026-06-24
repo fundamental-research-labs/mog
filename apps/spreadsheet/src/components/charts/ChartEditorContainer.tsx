@@ -8,10 +8,12 @@
  * which requires the coordinator context.
  */
 
+import { useUIStore } from '../../internal-api';
 import { useChartEditorActions } from '../../hooks/charts/use-chart-editor-actions';
 import { ChartEditor } from './ChartEditor';
 
 export function ChartEditorContainer() {
+  const chartEditorTab = useUIStore((s) => s.chartEditorTab);
   const {
     editingChart,
     handleChartEditorChange,
@@ -30,6 +32,7 @@ export function ChartEditorContainer() {
       <ChartEditor
         config={editingChart.config}
         appModel={editingChart.appModel}
+        initialTab={chartEditorTab === 'style' ? 'style' : 'data'}
         onChange={handleChartEditorChange}
         onSetLegendVisible={handleChartLegendVisibleChange}
         onSetAxisTitle={handleChartAxisTitleChange}

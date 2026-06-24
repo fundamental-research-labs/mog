@@ -70,15 +70,13 @@ import {
   resolveStoredChartWidthPoints,
 } from './chart-size-units';
 
-function formatPublicRange(
-  range: {
-    startRow: number;
-    startCol: number;
-    endRow: number;
-    endCol: number;
-    sheetName?: string | null;
-  },
-): string {
+function formatPublicRange(range: {
+  startRow: number;
+  startCol: number;
+  endRow: number;
+  endCol: number;
+  sheetName?: string | null;
+}): string {
   const body = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
   return range.sheetName ? `${quoteSheetName(range.sheetName)}!${body}` : body;
 }
@@ -718,6 +716,7 @@ export function serializedChartToChart(rawChart: ChartFloatingObject): Chart {
     anchorCol: anchor.anchorCol,
     width: widthPt,
     height: heightPt,
+    zIndex: typeof chart.zIndex === 'number' ? chart.zIndex : undefined,
     title: chart.title && chart.title !== 'undefined' ? chart.title : undefined,
     subtitle: chart.subtitle && chart.subtitle !== 'undefined' ? chart.subtitle : undefined,
     legend,

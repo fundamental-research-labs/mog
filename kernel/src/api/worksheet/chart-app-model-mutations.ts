@@ -51,9 +51,12 @@ function sourceBindingChange(
 function explicitSeriesSwitchAction(
   source: ChartSourceBindingAppModel,
 ): NonNullable<ChartSourceBindingChange['explicitSeriesAction']> {
-  return source.explicitSeriesCount && source.explicitSeriesCount > 0
-    ? 'preserved'
-    : 'notApplicable';
+  if (!source.explicitSeriesCount || source.explicitSeriesCount <= 0) return 'notApplicable';
+  return source.supportsOrientationSwitch &&
+    source.dataRange &&
+    (source.renderableSeriesCount ?? 0) > 0
+    ? 'cleared'
+    : 'preserved';
 }
 
 async function applyChartAppModelUpdateAndReceipt(
@@ -188,6 +191,11 @@ export async function switchChartSeriesOrientationMutation(
 
   await applyUpdate(ctx, sheetId, read.resolvedChartId, {
     seriesOrientation: toggleSeriesOrientation(appModelBefore.source.orientation),
+    ...(appModelBefore.source.renderableSeriesCount &&
+    appModelBefore.source.renderableSeriesCount > 0 &&
+    appModelBefore.source.dataRange
+      ? { series: [] }
+      : {}),
   });
   const chart = await readResolvedChart(ctx, sheetId, read.resolvedChartId);
   const appModelAfter = chart ? chartToAppModel(chart) : undefined;

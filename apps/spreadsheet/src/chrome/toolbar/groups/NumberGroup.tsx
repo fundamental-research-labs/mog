@@ -313,14 +313,14 @@ export const NumberGroup = React.memo(function NumberGroup() {
                   className={`
  h-7 px-2 ${isCompactMode ? 'min-w-[70px]' : 'min-w-[90px]'}
  flex items-center justify-between gap-1
- border border-transparent rounded
+ border rounded
  text-ss-text-secondary text-ribbon
  cursor-pointer outline-none disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none
  transition-colors duration-ss-fast
  ${
    numberFormatOpen
-     ? 'bg-ss-primary-light text-ss-primary'
-     : 'bg-transparent hover:bg-ss-surface-hover'
+     ? 'bg-ss-primary-light border-ss-primary ring-1 ring-ss-primary text-ss-primary'
+     : 'bg-ss-surface border-ss-border hover:bg-ss-surface-hover'
  }
  `}
                   aria-label="Number format"

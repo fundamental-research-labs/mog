@@ -83,6 +83,22 @@ function computeCollapseLevel(width: number): CollapseLevel {
   return 4;
 }
 
+function resolveWidthCollapseLevel(
+  width: number,
+  widthLevel: CollapseLevel,
+  previousLevel: CollapseLevel,
+  releaseWidth: number,
+): { level: CollapseLevel; releaseWidth: number } {
+  if (releaseWidth === Number.POSITIVE_INFINITY || width > releaseWidth) {
+    return { level: widthLevel, releaseWidth: Number.POSITIVE_INFINITY };
+  }
+
+  return {
+    level: Math.max(widthLevel, previousLevel) as CollapseLevel,
+    releaseWidth,
+  };
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -154,17 +170,14 @@ export function useRibbonCollapse(
     const applyWidth = (width: number) => {
       const widthLevel = computeCollapseLevel(width);
       setState((prev) => {
-        let level: CollapseLevel;
-        if (width > releaseWidthRef.current) {
-          // Container is now comfortably wider than the level that overflowed —
-          // release the escalation and fall back to the width-based level.
-          releaseWidthRef.current = Number.POSITIVE_INFINITY;
-          level = widthLevel;
-        } else {
-          // Still within the escalated regime. Never render *fuller* than the
-          // width breakpoints allow, but keep any escalation already applied.
-          level = Math.max(widthLevel, prev.level) as CollapseLevel;
-        }
+        const resolved = resolveWidthCollapseLevel(
+          width,
+          widthLevel,
+          prev.level,
+          releaseWidthRef.current,
+        );
+        releaseWidthRef.current = resolved.releaseWidth;
+        const level = resolved.level;
         if (prev.level === level && prev.containerWidth === width) return prev;
         return { level, containerWidth: width };
       });
@@ -249,5 +262,6 @@ export function useRibbonCollapse(
  */
 export const __testing__ = {
   computeCollapseLevel,
+  resolveWidthCollapseLevel,
   COLLAPSE_BREAKPOINTS,
 };

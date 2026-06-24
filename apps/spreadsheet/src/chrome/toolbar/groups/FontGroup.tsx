@@ -521,12 +521,12 @@ export const FontGroup = React.memo(function FontGroup() {
                   className={`
  h-7 px-2 ${isCompactMode ? 'min-w-[80px] max-w-[100px]' : 'min-w-[100px] max-w-[130px]'}
  flex items-center justify-between
- border border-transparent rounded
- bg-transparent text-ss-text-secondary text-ribbon
+ border rounded
+ bg-ss-surface text-ss-text-secondary text-ribbon
  cursor-pointer outline-none disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none
  transition-colors duration-ss-fast
  hover:bg-ss-surface-hover
- ${fontPickerOpen ? 'bg-ss-primary-light text-ss-primary' : ''}
+ ${fontPickerOpen ? 'border-ss-primary ring-1 ring-ss-primary' : 'border-ss-border'}
  `}
                   style={{ fontFamily: `"${fontFamily ?? DEFAULT_FONT_FAMILY}", sans-serif` }}
                   title="Font family"

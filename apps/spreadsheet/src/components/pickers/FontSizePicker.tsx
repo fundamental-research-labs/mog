@@ -298,8 +298,8 @@ export function FontSizePicker({
         onFocus={handleFocus}
         className={`
  ${isCompact ? 'w-10' : 'w-12'} h-7 px-1
- border border-transparent rounded
- bg-transparent text-ss-text-secondary text-ribbon text-center
+ border rounded
+ bg-ss-surface text-ss-text-secondary text-ribbon text-center
  cursor-pointer outline-none
  transition-colors duration-ss-fast
  hover:bg-ss-surface-hover
@@ -309,8 +309,8 @@ export function FontSizePicker({
    : isSmallFont
        ? 'border-ss-warning ring-1 ring-ss-warning/20 bg-ss-warning-bg'
    : isOpen
-        ? 'bg-ss-primary-light text-ss-primary'
-        : ''
+        ? 'border-ss-primary ring-1 ring-ss-primary/20'
+        : 'border-ss-border'
  }
  `}
         title={

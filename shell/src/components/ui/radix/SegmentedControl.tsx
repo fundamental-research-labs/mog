@@ -56,17 +56,18 @@ export interface SegmentedControlProps {
 
 const groupClasses = [
   'inline-flex items-center',
-  'rounded-ss-sm border border-transparent',
-  'bg-transparent overflow-hidden',
+  'rounded-ss-sm border border-ss-border',
+  'bg-ss-surface overflow-hidden',
 ].join(' ');
 
 const itemClasses = [
   'relative inline-flex items-center justify-center',
   'px-2 h-6 text-ribbon font-medium',
+  'border-r border-ss-border last:border-r-0',
   'cursor-pointer select-none',
   'transition-colors duration-100',
   // Inactive state
-  'bg-transparent text-ss-text-secondary',
+  'bg-ss-surface text-ss-text-secondary',
   'hover:bg-ss-surface-hover hover:text-ss-text',
   // Active state — Radix sets data-state="checked" on the active item
   'data-[state=checked]:bg-ss-primary',

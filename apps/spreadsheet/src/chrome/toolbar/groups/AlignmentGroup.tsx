@@ -33,7 +33,7 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useActiveSheetId, useFeatureGate, useUIStore, useWorkbook } from '../../../internal-api';
 
-import { SegmentedControl, Tooltip } from '@mog/shell';
+import { Tooltip } from '@mog/shell';
 import { ALIGNMENT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
@@ -51,7 +51,6 @@ import {
 } from '../primitives/HomeAlignmentIcons';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
-import { SplitButton } from '../primitives/SplitButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
 import { useRibbonVisibilityPathVisible } from '../visibility/RibbonVisibilityContext';
 import {
@@ -61,6 +60,7 @@ import {
   AlignMiddleIcon,
   AlignRightIcon,
   AlignTopIcon,
+  DropdownArrowIcon,
   MergeAcrossIcon,
   MergeAndCenterIcon,
   MergeCellsIcon,
@@ -72,7 +72,6 @@ import {
 // Types
 // =============================================================================
 
-type HorizontalAlign = 'left' | 'center' | 'right' | 'justify';
 type VerticalAlign = 'top' | 'middle' | 'bottom';
 
 // =============================================================================
@@ -266,33 +265,6 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   const showAlignCenter = useRibbonVisibilityPathVisible(['home', 'alignment', 'center']);
   const showAlignRight = useRibbonVisibilityPathVisible(['home', 'alignment', 'alignRight']);
 
-  const horizontalAlignmentOptions = [
-    {
-      value: 'left',
-      id: 'align-left',
-      ariaLabel: 'Align left',
-      tooltip: 'Align Left',
-      label: <AlignLeftIcon />,
-      visible: showAlignLeft,
-    },
-    {
-      value: 'center',
-      id: 'align-center',
-      ariaLabel: 'Align center',
-      tooltip: 'Align Center',
-      label: <AlignCenterIcon />,
-      visible: showAlignCenter,
-    },
-    {
-      value: 'right',
-      id: 'align-right',
-      ariaLabel: 'Align right',
-      tooltip: 'Align Right',
-      label: <AlignRightIcon />,
-      visible: showAlignRight,
-    },
-  ].filter((option) => option.visible);
-
   if (!isEnabled) return null;
 
   return (
@@ -304,23 +276,49 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       dialogLaunchTitle="Alignment Settings"
     >
       <div className="flex items-center gap-2">
-        <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
-          {/* Bind to the *raw* alignment, not the mapped textAlign: Radix
- RadioGroup suppresses onValueChange when clicking the already-
- selected segment (radios don't uncheck on re-click), so mapping
- 'general' → 'left' would silence the keytip-driven synthetic
- click on `align-left`. Excel shows the unset state as no segment
- highlighted, which matches this binding by construction. */}
-          <SegmentedControl
-            id="horizontal-align"
-            ariaLabel="Horizontal alignment"
-            value={rawHAlign}
-            onChange={(v) => dispatch('SET_HORIZONTAL_ALIGN', { align: v as HorizontalAlign })}
-            disabled={!canFormatCells}
-            options={horizontalAlignmentOptions}
-          />
-
-          <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+        <div className="grid grid-cols-3 gap-[var(--ribbon-button-inline-gap)]">
+          {showAlignLeft && (
+            <Tooltip title="Align Left">
+              <RibbonButton
+                id="align-left"
+                layout="icon-only"
+                icon={<AlignLeftIcon />}
+                onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'left' })}
+                isOpen={rawHAlign === 'left'}
+                disabled={!canFormatCells}
+                aria-label="Align left"
+                aria-pressed={rawHAlign === 'left'}
+              />
+            </Tooltip>
+          )}
+          {showAlignCenter && (
+            <Tooltip title="Align Center">
+              <RibbonButton
+                id="align-center"
+                layout="icon-only"
+                icon={<AlignCenterIcon />}
+                onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'center' })}
+                isOpen={rawHAlign === 'center'}
+                disabled={!canFormatCells}
+                aria-label="Align center"
+                aria-pressed={rawHAlign === 'center'}
+              />
+            </Tooltip>
+          )}
+          {showAlignRight && (
+            <Tooltip title="Align Right">
+              <RibbonButton
+                id="align-right"
+                layout="icon-only"
+                icon={<AlignRightIcon />}
+                onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'right' })}
+                isOpen={rawHAlign === 'right'}
+                disabled={!canFormatCells}
+                aria-label="Align right"
+                aria-pressed={rawHAlign === 'right'}
+              />
+            </Tooltip>
+          )}
             <Tooltip title="Align Top">
               <RibbonButton
                 id="align-top"
@@ -357,12 +355,11 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
                 aria-pressed={verticalAlign === 'bottom'}
               />
             </Tooltip>
-          </div>
         </div>
 
         <div className="w-px h-11 bg-ss-surface-tertiary" />
 
-        <div className="grid grid-cols-3 items-center gap-x-1 gap-y-[var(--ribbon-button-gap)]">
+        <div className="grid grid-cols-[auto_auto] items-center gap-x-1.5 gap-y-[var(--ribbon-button-gap)]">
           <Tooltip title="Word Wrap">
             <RibbonButton
               id="word-wrap"
@@ -381,23 +378,22 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
  handler's internal toggle behavior). */}
           <div className="relative inline-flex">
             <Tooltip title="Merge & Center" shortcut="Ctrl+Shift+M">
-              <SplitButton
+              <RibbonButton
                 id="merge-center"
-                icon={<MergeCellsIcon />}
-                variant="small"
+                layout="icon-only"
+                icon={
+                  <span className="flex items-center gap-[var(--ribbon-button-icon-gap)]">
+                    <MergeCellsIcon />
+                    <DropdownArrowIcon />
+                  </span>
+                }
                 isOpen={isMerged || mergeDropdownOpen}
                 disabled={!canFormatCells || (!canMerge && !canUnmerge)}
                 visibilityKey="mergeCenter"
                 aria-label="Merge & Center"
-                onMainClick={() => {
-                  if (isMerged || canUnmerge) {
-                    dispatch('UNMERGE_CELLS');
-                  } else if (canMerge) {
-                    dispatch('MERGE_AND_CENTER');
-                  }
-                }}
-                onDropdownClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
-                dropdownTestId="merge-dropdown-trigger"
+                onClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+                aria-expanded={mergeDropdownOpen}
+                aria-haspopup="menu"
               />
             </Tooltip>
             <RibbonDropdownPanel
@@ -674,29 +670,31 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             </RibbonDropdownPanel>
           </div>
 
-          {/* Decrease Indent */}
-          <Tooltip title="Decrease Indent">
-            <RibbonButton
-              id="decrease-indent"
-              layout="icon-only"
-              icon={<DecreaseIndentIcon />}
-              onClick={() => dispatch('DECREASE_INDENT')}
-              disabled={!canFormatCells || indent === 0}
-              aria-label="Decrease indent"
-            />
-          </Tooltip>
+          <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
+            {/* Decrease Indent */}
+            <Tooltip title="Decrease Indent">
+              <RibbonButton
+                id="decrease-indent"
+                layout="icon-only"
+                icon={<DecreaseIndentIcon />}
+                onClick={() => dispatch('DECREASE_INDENT')}
+                disabled={!canFormatCells || indent === 0}
+                aria-label="Decrease indent"
+              />
+            </Tooltip>
 
-          {/* Increase Indent */}
-          <Tooltip title="Increase Indent">
-            <RibbonButton
-              id="increase-indent"
-              layout="icon-only"
-              icon={<IncreaseIndentIcon />}
-              onClick={() => dispatch('INCREASE_INDENT')}
-              disabled={!canFormatCells}
-              aria-label="Increase indent"
-            />
-          </Tooltip>
+            {/* Increase Indent */}
+            <Tooltip title="Increase Indent">
+              <RibbonButton
+                id="increase-indent"
+                layout="icon-only"
+                icon={<IncreaseIndentIcon />}
+                onClick={() => dispatch('INCREASE_INDENT')}
+                disabled={!canFormatCells}
+                aria-label="Increase indent"
+              />
+            </Tooltip>
+          </div>
         </div>
       </div>
     </ToolbarGroup>

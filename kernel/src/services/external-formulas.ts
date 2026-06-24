@@ -1,9 +1,13 @@
 import type { DocumentContext } from '../context/types';
 import type { BatchRangeResponse, RangeQueryResult } from '../bridges/compute/compute-types.gen';
+import type { MutationAdmissionOptions } from '../bridges/compute';
+import type { PositionedCellInput } from '../bridges/compute/table-header-write-intercept';
+import type { TypedActiveCellData } from '../bridges/compute/compute-bridge';
 import { getExternalWorkbookSession } from './workbook-links/session-registry';
 import type { PersistedWorkbookLinkRecord } from './workbook-links/types';
 import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import { quoteSheetName } from '@mog/spreadsheet-utils/a1';
+import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { KernelError } from '../errors';
 
 export interface ExternalFormulaCell {
@@ -31,7 +35,11 @@ export interface ExternalFormulaFeedback {
   readonly suggestedFormula?: string;
 }
 
-const formulasByContext = new WeakMap<DocumentContext, Map<string, ExternalFormulaCell>>();
+const formulasByContext = new WeakMap<object, Map<string, ExternalFormulaCell>>();
+
+function formulaTrackerKey(ctx: DocumentContext): object {
+  return ctx.computeBridge as unknown as object;
+}
 
 export function trackExternalFormulaWrite(
   ctx: DocumentContext,
@@ -41,8 +49,9 @@ export function trackExternalFormulaWrite(
   value: unknown,
 ): void {
   const key = cellKey(sheetId, row, col);
-  const formulas = formulasByContext.get(ctx) ?? new Map<string, ExternalFormulaCell>();
-  if (!formulasByContext.has(ctx)) formulasByContext.set(ctx, formulas);
+  const trackerKey = formulaTrackerKey(ctx);
+  const formulas = formulasByContext.get(trackerKey) ?? new Map<string, ExternalFormulaCell>();
+  if (!formulasByContext.has(trackerKey)) formulasByContext.set(trackerKey, formulas);
 
   if (typeof value === 'string' && value.startsWith('=') && parseExternalRefs(value).length > 0) {
     formulas.set(key, { sheetId, row, col, formula: value });
@@ -57,11 +66,11 @@ export function getTrackedExternalFormula(
   row: number,
   col: number,
 ): string | undefined {
-  return formulasByContext.get(ctx)?.get(cellKey(sheetId, row, col))?.formula;
+  return formulasByContext.get(formulaTrackerKey(ctx))?.get(cellKey(sheetId, row, col))?.formula;
 }
 
 export function getTrackedExternalFormulas(ctx: DocumentContext): readonly ExternalFormulaCell[] {
-  return [...(formulasByContext.get(ctx)?.values() ?? [])];
+  return [...(formulasByContext.get(formulaTrackerKey(ctx))?.values() ?? [])];
 }
 
 export async function prepareExternalFormulaWrite(
@@ -103,6 +112,18 @@ export function applyExternalFormulaReadbacks(
   return changed ? { ...result, cells } : result;
 }
 
+export function applyExternalFormulaCellReadback<T extends { readonly formula?: string }>(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  cell: T,
+): T {
+  const formula = getTrackedExternalFormula(ctx, sheetId, row, col);
+  if (!formula || cell.formula === formula) return cell;
+  return { ...cell, formula } as T;
+}
+
 export function applyExternalFormulaBatchReadbacks(
   ctx: DocumentContext,
   response: BatchRangeResponse,
@@ -123,6 +144,7 @@ export function applyExternalFormulaBatchReadbacks(
 
 export function installExternalFormulaReadbacks(ctx: DocumentContext): void {
   const bridge = ctx.computeBridge;
+  let activeCellFormula: string | undefined;
 
   if (typeof bridge.queryRange === 'function') {
     const queryRange = bridge.queryRange.bind(bridge);
@@ -139,6 +161,38 @@ export function installExternalFormulaReadbacks(ctx: DocumentContext): void {
     bridge.queryRanges = async (requests) =>
       applyExternalFormulaBatchReadbacks(ctx, await queryRanges(requests));
   }
+
+  if (typeof bridge.getRawCellData === 'function') {
+    const getRawCellData = bridge.getRawCellData.bind(bridge);
+    bridge.getRawCellData = async (sheetId, row, col, includeFormula) => {
+      const cell = await getRawCellData(sheetId, row, col, includeFormula);
+      if (!cell || includeFormula === false) return cell;
+      return applyExternalFormulaCellReadback(ctx, sheetId, row, col, cell);
+    };
+  }
+
+  if (
+    typeof bridge.refreshActiveCell === 'function' &&
+    typeof bridge.getCellPosition === 'function'
+  ) {
+    const refreshActiveCell = bridge.refreshActiveCell.bind(bridge);
+    bridge.refreshActiveCell = async (sheetId, cellId) => {
+      await refreshActiveCell(sheetId, cellId);
+      const position = await bridge.getCellPosition(sheetId, cellId);
+      activeCellFormula = position
+        ? getTrackedExternalFormula(ctx, sheetId, position.row, position.col)
+        : undefined;
+    };
+  }
+
+  if (typeof bridge.getActiveCellData === 'function') {
+    const getActiveCellData = bridge.getActiveCellData.bind(bridge);
+    bridge.getActiveCellData = () => {
+      const cell = getActiveCellData();
+      if (!cell || !activeCellFormula || cell.formula === activeCellFormula) return cell;
+      return { ...cell, formula: asFormulaA1(activeCellFormula) } as TypedActiveCellData;
+    };
+  }
 }
 
 export function maskExternalFormulaRefsForValidation(formula: string): string {
@@ -152,17 +206,28 @@ export function maskExternalFormulaRefsForValidation(formula: string): string {
   return out;
 }
 
-export async function materializeExternalFormulas(ctx: DocumentContext): Promise<number> {
-  const formulas = formulasByContext.get(ctx);
+export async function materializeExternalFormulas(
+  ctx: DocumentContext,
+  options?: MutationAdmissionOptions,
+): Promise<number> {
+  const formulas = formulasByContext.get(formulaTrackerKey(ctx));
   if (!formulas || formulas.size === 0) return 0;
 
   let materialized = 0;
+  const editsBySheet = new Map<SheetId, PositionedCellInput[]>();
   for (const cell of formulas.values()) {
     const formula = await materializeFormula(ctx, cell.formula);
-    await ctx.computeBridge.setCellsByPosition(cell.sheetId, [
-      { row: cell.row, col: cell.col, input: { kind: 'parse', text: formula } as never },
-    ]);
+    const edits = editsBySheet.get(cell.sheetId) ?? [];
+    edits.push({ row: cell.row, col: cell.col, input: { kind: 'parse', text: formula } });
+    editsBySheet.set(cell.sheetId, edits);
     materialized += 1;
+  }
+  for (const [sheetId, edits] of editsBySheet) {
+    if (options) {
+      await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
+    } else {
+      await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+    }
   }
   return materialized;
 }

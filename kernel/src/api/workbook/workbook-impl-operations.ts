@@ -62,7 +62,11 @@ import {
   toDisposable,
 } from '@mog/spreadsheet-utils/disposable';
 import type { DocumentImportWarning } from '@mog-sdk/contracts/document';
-import { materializeExternalFormulas } from '../../services/external-formulas';
+import {
+  getTrackedExternalFormulas,
+  materializeExternalFormulas,
+} from '../../services/external-formulas';
+import { createVersionMutationAdmissionOptions } from './version-operation-context';
 import { slog } from '../../lib/slog';
 import type {
   EventByType,
@@ -312,7 +316,17 @@ export abstract class WorkbookImplOperations extends WorkbookImplFoundation {
 
     this._calculationState = 'calculating';
     try {
-      const externalMaterialized = await materializeExternalFormulas(this.ctx);
+      const trackedExternalFormulas = getTrackedExternalFormulas(this.ctx);
+      const externalMaterialized = await materializeExternalFormulas(
+        this.ctx,
+        trackedExternalFormulas.length > 0
+          ? createVersionMutationAdmissionOptions(this.ctx, {
+              operationIdPrefix: 'workbook.calculate.externalFormulas',
+              sheetIds: [...new Set(trackedExternalFormulas.map((formula) => formula.sheetId))],
+              domainIds: ['cells'],
+            })
+          : undefined,
+      );
       const result = await this.ctx.computeBridge.fullRecalc(recalcOptions);
       this._calculationState = 'done';
       return {

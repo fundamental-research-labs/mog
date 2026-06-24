@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import type { SheetId } from '@mog-sdk/contracts/core';
 
+import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context/types';
 import {
   applyExternalFormulaReadbacks,
@@ -25,6 +26,22 @@ function scope(): WorkbookLinkStatusScope {
     requestingSessionId: 'target-session',
     actor: 'agent',
     principal: { tags: [] },
+  };
+}
+
+function mutationOptions(): MutationAdmissionOptions {
+  return {
+    operationContext: {
+      operationId: 'workbook.calculate.externalFormulas:1:1',
+      kind: 'mutation',
+      author: { authorId: 'agent', actorKind: 'user' },
+      createdAt: '2026-05-29T00:00:00.000Z',
+      workbookId: 'target-doc',
+      sheetIds: ['sheet-1'],
+      domainIds: ['cells'],
+      capturePolicy: 'commitEligible',
+      writeAdmissionMode: 'capture',
+    },
   };
 }
 
@@ -120,6 +137,38 @@ describe('external formula materialization', () => {
     ]);
   });
 
+  it('forwards admission options while batching materialized writes by sheet', async () => {
+    const sourceValues = { Inputs: { A1: 125, A2: 25 } };
+    unregister = registerExternalWorkbookSession('source-session', {
+      workbook: {
+        async getSheet(name: string) {
+          return {
+            async getValue(address: string) {
+              return sourceValues[name]?.[address] ?? null;
+            },
+          };
+        },
+      },
+    });
+    const ctx = createContext(sourceValues);
+    const sheetId = 'sheet-1' as SheetId;
+    const options = mutationOptions();
+
+    await prepareExternalFormulaWrite(ctx, sheetId, 0, 0, '=[Budget.xlsx]Inputs!A1');
+    await prepareExternalFormulaWrite(ctx, sheetId, 1, 0, '=[Budget.xlsx]Inputs!A2');
+    await expect(materializeExternalFormulas(ctx, options)).resolves.toBe(2);
+
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledTimes(1);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      sheetId,
+      [
+        { row: 0, col: 0, input: { kind: 'parse', text: '=125' } },
+        { row: 1, col: 0, input: { kind: 'parse', text: '=25' } },
+      ],
+      options,
+    );
+  });
+
   it('overlays tracked external formulas on range readbacks', async () => {
     const sourceValues = { Inputs: { A1: 125 } };
     unregister = registerExternalWorkbookSession('source-session', {
@@ -182,11 +231,33 @@ describe('external formula materialization', () => {
         },
       ],
     }));
+    const getRawCellData = jest.fn(async () => ({
+      raw: 125,
+      computed: 125,
+      formula: '=125',
+    }));
+    const refreshActiveCell = jest.fn(async () => undefined);
+    const getCellPosition = jest.fn(async () => ({
+      sheetId: 'sheet-1',
+      sheetName: 'Sheet1',
+      row: 0,
+      col: 0,
+    }));
+    const getActiveCellData = jest.fn(() => ({
+      cellId: 'cell-1',
+      value: 125,
+      formula: '=125',
+      isFormulaHidden: false,
+    }));
     const ctx = createContext(sourceValues, {
       computeBridge: {
         setCellsByPosition: jest.fn(async () => ({ success: true })),
         queryRange,
         queryRanges,
+        getRawCellData,
+        refreshActiveCell,
+        getCellPosition,
+        getActiveCellData,
       },
     });
     const sheetId = 'sheet-1' as SheetId;
@@ -199,6 +270,13 @@ describe('external formula materialization', () => {
     });
     await expect(ctx.computeBridge.queryRanges([{ sheetName: 'Sheet1' }])).resolves.toMatchObject({
       entries: [{ result: { cells: [{ formula: '=[Budget.xlsx]Inputs!A1' }] } }],
+    });
+    await expect(ctx.computeBridge.getRawCellData(sheetId, 0, 0, true)).resolves.toMatchObject({
+      formula: '=[Budget.xlsx]Inputs!A1',
+    });
+    await ctx.computeBridge.refreshActiveCell(sheetId, 'cell-1');
+    expect(ctx.computeBridge.getActiveCellData()).toMatchObject({
+      formula: '=[Budget.xlsx]Inputs!A1',
     });
   });
 

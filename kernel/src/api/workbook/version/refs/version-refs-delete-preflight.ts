@@ -15,7 +15,7 @@ import {
 } from './version-refs-delete-diagnostics';
 import { parsePublicBranchName } from './version-refs-delete-options';
 import { mapBranchRecord } from './version-refs-delete-results';
-import { getActiveCheckoutSessionReader } from './version-refs-delete-service';
+import { getActiveCheckoutSessionReader } from './version-refs-active-session-service';
 import {
   isRecord,
   revisionsEqual,

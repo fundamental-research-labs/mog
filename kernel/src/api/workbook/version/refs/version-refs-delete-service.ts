@@ -28,25 +28,6 @@ export function getDeleteCapableVersionRefLifecycleService(
   return null;
 }
 
-export function getActiveCheckoutSessionReader(
-  ctx: DocumentContext,
-  service: DeleteCapableVersionRefLifecycleService,
-): (() => MaybePromise<unknown>) | null {
-  if (service.readActiveCheckoutSession) return service.readActiveCheckoutSession;
-  const services = getAttachedVersionServices(ctx);
-  if (!services) return null;
-  for (const candidate of [
-    services.surfaceStatusService,
-    services.versionSurfaceStatusService,
-    services.statusService,
-    services,
-  ]) {
-    const reader = bindMethod(candidate, 'readActiveCheckoutSession');
-    if (reader) return () => reader();
-  }
-  return null;
-}
-
 export function bindMethod(value: unknown, name: string): BoundMethod | null {
   if (!isRecord(value)) return null;
   const method = value[name];
@@ -64,7 +45,9 @@ function toDeleteCapableVersionRefLifecycleService(
   const readRef = bindMethod(value, 'readRef');
   const getHead = bindMethod(value, 'getHead');
   const readHead = bindMethod(value, 'readHead');
-  const readActiveCheckoutSession = bindMethod(value, 'readActiveCheckoutSession');
+  const readActiveCheckoutSession =
+    bindMethod(value, 'readActiveCheckoutSession') ??
+    bindMethod(value, 'getActiveCheckoutSession');
   return {
     deleteBranch: (input) => deleteBranch(input),
     ...(readBranch ? { readBranch: (input) => readBranch(input) } : {}),

@@ -23,6 +23,7 @@ import {
   VERSION_MAIN_REF,
   VERSION_REF_OPERATION_AUTHOR,
 } from './version-refs-constants';
+import { preflightActiveCheckoutBranchAdvance } from './version-refs-active-session-preflight';
 import { deleteWorkbookVersionBranchRef } from './version-refs-delete';
 import {
   degradedList,
@@ -174,16 +175,24 @@ export async function fastForwardWorkbookVersionBranch(
   ctx: DocumentContext,
   options: VersionFastForwardBranchOptions,
 ): Promise<VersionRefMutationResult> {
-  const validated = validateFastForwardOptions(options, 'fastForwardBranch');
+  return advanceWorkbookVersionBranch(ctx, options, 'fastForwardBranch');
+}
+
+async function advanceWorkbookVersionBranch(
+  ctx: DocumentContext,
+  options: VersionFastForwardBranchOptions,
+  operation: 'fastForwardBranch' | 'updateBranch',
+): Promise<VersionRefMutationResult> {
+  const validated = validateFastForwardOptions(options, operation);
   if (!validated.ok) return degradedMutation(null, validated.diagnostics);
 
   if (validated.branchName === 'main') {
-    return degradedMutation(null, [protectedMainDiagnostic('fastForwardBranch')]);
+    return degradedMutation(null, [protectedMainDiagnostic(operation)]);
   }
 
   const operationGateDiagnostics = validateVersionOperationGate(
     ctx,
-    'fastForwardBranch',
+    operation,
     'version:branch',
     { mutates: true },
   );
@@ -193,7 +202,21 @@ export async function fastForwardWorkbookVersionBranch(
 
   const service = getAttachedVersionRefLifecycleService(ctx);
   if (!service?.fastForwardBranch) {
-    return degradedMutation(null, [writeUnavailableDiagnostic('fastForwardBranch')]);
+    return degradedMutation(null, [writeUnavailableDiagnostic(operation)]);
+  }
+
+  const activeCheckoutDiagnostics = await preflightActiveCheckoutBranchAdvance(
+    ctx,
+    service,
+    {
+      branchName: validated.branchName,
+      refName: validated.refName,
+      expectedHead: validated.expectedHead,
+    },
+    operation,
+  );
+  if (activeCheckoutDiagnostics.length > 0) {
+    return degradedMutation(null, activeCheckoutDiagnostics);
   }
 
   try {
@@ -205,10 +228,10 @@ export async function fastForwardWorkbookVersionBranch(
         expectedRefVersion: validated.expectedRefVersion,
         updatedBy: VERSION_REF_OPERATION_AUTHOR,
       }),
-      'fastForwardBranch',
+      operation,
     );
   } catch (error) {
-    return degradedMutation(null, providerExceptionDiagnostics(error, 'fastForwardBranch'));
+    return degradedMutation(null, providerExceptionDiagnostics(error, operation));
   }
 }
 
@@ -216,7 +239,7 @@ export async function updateWorkbookVersionBranch(
   ctx: DocumentContext,
   options: VersionUpdateBranchOptions,
 ): Promise<VersionRefMutationResult> {
-  return fastForwardWorkbookVersionBranch(ctx, options);
+  return advanceWorkbookVersionBranch(ctx, options, 'updateBranch');
 }
 
 export async function deleteWorkbookVersionBranch(

@@ -102,6 +102,7 @@ export function validateFastForwardOptions(
   | {
       readonly ok: true;
       readonly branchName: string;
+      readonly refName: VersionMainRefName | VersionRefName;
       readonly nextCommitId: WorkbookCommitId;
       readonly expectedHead: WorkbookCommitId;
       readonly expectedRefVersion: VersionRecordRevision;
@@ -142,6 +143,7 @@ export function validateFastForwardOptions(
   return {
     ok: true,
     branchName: parsedName.branchName,
+    refName: parsedName.refName,
     nextCommitId,
     expectedHead,
     expectedRefVersion,

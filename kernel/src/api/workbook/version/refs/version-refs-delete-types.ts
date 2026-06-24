@@ -25,6 +25,7 @@ export type DeleteCapableVersionRefLifecycleService = {
   getHead?: () => MaybePromise<unknown>;
   readHead?: () => MaybePromise<unknown>;
   readActiveCheckoutSession?: () => MaybePromise<unknown>;
+  getActiveCheckoutSession?: () => MaybePromise<unknown>;
 };
 
 export type MaybeVersionRuntimeContext = DocumentContext & {

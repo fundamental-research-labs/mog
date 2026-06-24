@@ -321,4 +321,62 @@ describe('version action availability dirty state contract', () => {
       'version-head-stale',
     );
   });
+
+  it('fails closed from restored active checkout metadata when stale was not precomputed', () => {
+    const cases = [
+      {
+        current: {
+          checkedOutCommitId: HEAD_COMMIT_ID,
+          refHeadAtMaterialization: HEAD_COMMIT_ID,
+          currentRefHeadId: LATEST_COMMIT_ID,
+          stale: false,
+        },
+        prefix: 'main is stale because the branch head moved.',
+      },
+      {
+        current: {
+          checkedOutCommitId: HEAD_COMMIT_ID,
+          refHeadAtMaterialization: LATEST_COMMIT_ID,
+          currentRefHeadId: LATEST_COMMIT_ID,
+          stale: false,
+        },
+        prefix: 'main is stale because the active checkout session is behind the branch head.',
+      },
+    ] as const satisfies readonly {
+      readonly current: Partial<VersionSurfaceStatus['current']>;
+      readonly prefix: string;
+    }[];
+
+    for (const item of cases) {
+      const surface = createSurfaceStatus({
+        current: item.current,
+        dirty: {
+          hasUncommittedLocalChanges: false,
+          commitEligibleChanges: true,
+          checkoutSafe: true,
+        },
+      });
+
+      expectDisabled(
+        getCommitAvailability({ surface }, false, false, 'Checkpoint'),
+        `${item.prefix} Refresh before committing.`,
+        'version-head-stale',
+      );
+      expectDisabled(
+        getCheckoutAvailability({ surface }, false, false),
+        `${item.prefix} Checkout is blocked until the active checkout session is refreshed.`,
+        'version-head-stale',
+      );
+      expectDisabled(
+        getCapabilityAvailability({ surface }, false, false, 'version:mergePreview'),
+        `${item.prefix} Refresh before merging.`,
+        'version-head-stale',
+      );
+      expectDisabled(
+        getCapabilityAvailability({ surface }, false, false, 'version:mergeApply'),
+        `${item.prefix} Refresh before merging.`,
+        'version-head-stale',
+      );
+    }
+  });
 });

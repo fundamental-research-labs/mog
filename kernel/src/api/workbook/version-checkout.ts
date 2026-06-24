@@ -7,6 +7,10 @@ import type {
 
 import type { DocumentContext } from '../../context';
 import {
+  clearPersistedActiveCheckoutMaterialization,
+  updatePersistedActiveCheckoutMaterializationAfterCheckout,
+} from './version/active-checkout/version-active-checkout-persistence';
+import {
   readVersionCheckoutAdmissionState,
   revalidateVersionCheckoutAdmissionLease,
 } from './version/checkout/version-checkout-admission';
@@ -104,19 +108,29 @@ export async function checkoutWorkbookVersion(
     return degradedCheckout([checkoutAdmissionDiagnostic(fencedBlock, parsed.payload)]);
   }
 
+  let materializationAttempted = false;
   try {
     const planCheckout = service.planCheckout;
     if (service.checkout) {
+      materializationAttempted = true;
       const checkoutResult = await service.checkout(parsed.request);
       if (!isMaterializerUnavailableResult(checkoutResult) || !planCheckout) {
-        return mapCheckoutResult(checkoutResult, parsed.payload);
+        const result = mapCheckoutResult(checkoutResult, parsed.payload);
+        await updatePersistedActiveCheckoutMaterializationAfterCheckout(ctx, result, {
+          materializationAttempted,
+        });
+        return result;
       }
+      materializationAttempted = false;
     }
     if (!planCheckout) {
       return degradedCheckout([serviceUnavailableDiagnostic(parsed.payload)]);
     }
     return mapCheckoutResult(await planCheckout(parsed.request), parsed.payload);
   } catch {
+    if (materializationAttempted) {
+      await clearPersistedActiveCheckoutMaterialization(ctx);
+    }
     return degradedCheckout([providerErrorDiagnostic(parsed.payload)]);
   } finally {
     if (token) transactionGuard?.endCheckoutTransaction(token);

@@ -485,7 +485,9 @@ describe('VersionHistoryPanelContent', () => {
     const staleStatus = screen.getByTestId('version-history-current-stale-status');
     expect(staleStatus).toBeVisible();
     expect(staleStatus).toHaveTextContent('Current checkout is stale');
-    expect(staleStatus).toHaveTextContent('main is stale because the branch head moved.');
+    expect(staleStatus).toHaveTextContent(
+      'Checkout from main is stale because the branch head moved.',
+    );
     expect(staleStatus).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
     expect(staleStatus).not.toHaveTextContent(shortCommitId(LATEST_COMMIT_ID));
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
@@ -509,6 +511,42 @@ describe('VersionHistoryPanelContent', () => {
     expectDisabledButtonReason(
       screen.getByRole('button', { name: 'Checkout scenario/budget' }),
       'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
+    );
+  });
+
+  it('shows restored detached checkout status without a current branch label', async () => {
+    const workbook = createWorkbook({
+      getSurfaceStatus: jest.fn(async () =>
+        createSurfaceStatus({
+          current: {
+            headCommitId: undefined,
+            checkedOutCommitId: PARENT_COMMIT_ID,
+            branchName: 'refs/heads/main',
+            detached: true,
+            stale: false,
+          },
+        }),
+      ),
+      getHead: jest.fn(async () => ({
+        ok: true,
+        value: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: { kind: 'counter', value: '9' },
+        },
+      })),
+    });
+
+    renderVersionHistoryPanel({ workbook });
+
+    const statusSummary = await screen.findByRole('region', { name: 'Version status' });
+    expect(statusSummary).toHaveTextContent('Detached or unavailable');
+    expect(statusSummary).toHaveTextContent(shortCommitId(PARENT_COMMIT_ID));
+    expect(statusSummary).not.toHaveTextContent('refs/heads/main');
+    expect(statusSummary).not.toHaveTextContent('main');
+    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+      'data-version-commit-id',
+      PARENT_COMMIT_ID,
     );
   });
 });

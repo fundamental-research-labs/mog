@@ -17,16 +17,17 @@ import type {
 
 import { isCapabilityEnabled } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
+import { normalizeVersionBranchNameInput } from './version-branch-name';
 import { shortCommitId } from './version-history-format';
 
 const COMMIT_PAGE_SIZE = 20;
 const REVIEW_PAGE_SIZE = 5;
 const PROPOSAL_PAGE_SIZE = 5;
 const VERSION_HISTORY_REFRESH_DELAY_MS = 40;
-const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS = [
   'workbook:version-dirty-status-changed',
   'workbook:version-checkout-materialized',
+  'workbook:version-active-checkout-state-changed',
 ] as const;
 
 type VersionHistoryWorkbookRefreshEvent = (typeof VERSION_HISTORY_WORKBOOK_REFRESH_EVENTS)[number];
@@ -84,6 +85,10 @@ export type CommitDirtySnapshot = {
 export type CommitDirtyRefreshFence = {
   readonly data?: VersionHistoryData;
   readonly snapshot?: CommitDirtySnapshot;
+};
+
+type PublicSurfaceCurrentBranch = {
+  readonly refName: NonNullable<VersionHead['refName']>;
 };
 
 export function commitDirtyRefreshFenceSnapshot(
@@ -170,7 +175,7 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     if (!reviews.ok) diagnostics.push(reviews.diagnostic);
     if (!proposals.ok) diagnostics.push(proposals.diagnostic);
 
-    const surfaceValue = surface.ok ? surface.value : undefined;
+    const surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
     const headValue = head.ok ? head.value : undefined;
     const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
 
@@ -356,7 +361,24 @@ export function resolveSelectedOrHeadCommitId(
   selectedCommitId: WorkbookCommitId | undefined,
 ): WorkbookCommitId | undefined {
   if (selectedCommitId) return selectedCommitId;
-  return (data.surface?.current.headCommitId as WorkbookCommitId | undefined) ?? data.head?.id;
+  return currentCheckoutCommitId(data.surface?.current) ?? data.head?.id;
+}
+
+function projectVersionHistorySurface(
+  surface: VersionSurfaceStatus | undefined,
+): VersionSurfaceStatus | undefined {
+  if (!surface) return undefined;
+
+  const publicBranch = publicSurfaceCurrentBranch(surface.current);
+  const branchName = publicBranch?.refName;
+  if (surface.current.branchName === branchName) return surface;
+
+  return {
+    ...surface,
+    current: branchName
+      ? { ...surface.current, branchName }
+      : surfaceCurrentWithoutBranchName(surface.current),
+  };
 }
 
 function projectVersionHistoryHead(
@@ -366,12 +388,10 @@ function projectVersionHistoryHead(
   const current = surface?.current;
   if (!current) return head;
 
-  const currentHeadId = current.headCommitId as WorkbookCommitId | undefined;
+  const currentHeadId = currentCheckoutCommitId(current);
   if (!currentHeadId) return head;
 
-  const currentRefName = current.detached
-    ? undefined
-    : refNameFromSurfaceBranchName(current.branchName);
+  const currentRefName = publicSurfaceCurrentBranch(current)?.refName;
   const headMatchesCurrent =
     head?.id === currentHeadId &&
     (currentRefName ? head.refName === currentRefName : head.refName === undefined);
@@ -384,13 +404,40 @@ function projectVersionHistoryHead(
   };
 }
 
-function refNameFromSurfaceBranchName(
-  branchName: string | undefined,
-): NonNullable<VersionHead['refName']> | undefined {
-  if (!branchName) return undefined;
-  return (branchName.startsWith(VERSION_BRANCH_REF_PREFIX)
-    ? branchName
-    : `${VERSION_BRANCH_REF_PREFIX}${branchName}`) as NonNullable<VersionHead['refName']>;
+function currentCheckoutCommitId(
+  current: VersionSurfaceStatus['current'] | undefined,
+): WorkbookCommitId | undefined {
+  return (current?.checkedOutCommitId ??
+    current?.headCommitId) as WorkbookCommitId | undefined;
+}
+
+function publicSurfaceCurrentBranch(
+  current: VersionSurfaceStatus['current'],
+): PublicSurfaceCurrentBranch | undefined {
+  if (current.detached || !current.branchName) return undefined;
+
+  const normalized = normalizeVersionBranchNameInput(current.branchName);
+  if (!normalized.ok) return undefined;
+
+  return {
+    refName: normalized.branch.refName as NonNullable<VersionHead['refName']>,
+  };
+}
+
+function surfaceCurrentWithoutBranchName(
+  current: VersionSurfaceStatus['current'],
+): VersionSurfaceStatus['current'] {
+  return {
+    ...(current.headCommitId ? { headCommitId: current.headCommitId } : {}),
+    ...(current.checkedOutCommitId ? { checkedOutCommitId: current.checkedOutCommitId } : {}),
+    ...(current.refHeadAtMaterialization
+      ? { refHeadAtMaterialization: current.refHeadAtMaterialization }
+      : {}),
+    ...(current.currentRefHeadId ? { currentRefHeadId: current.currentRefHeadId } : {}),
+    detached: current.detached,
+    stale: current.stale,
+    ...(current.staleReason ? { staleReason: current.staleReason } : {}),
+  };
 }
 
 export function rollbackActionMessage(

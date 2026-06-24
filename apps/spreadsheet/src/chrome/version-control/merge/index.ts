@@ -9,6 +9,7 @@ export {
   mergeApplyBlockedMessage,
   mergeApplyConflictedMessage,
   mergeExpectedTargetHead,
+  materializedActiveCheckoutMergeApplyOptions,
   mergePreviewActionDisabledReason,
   mergePreviewActionMessage,
   readMergeGraph,
@@ -28,9 +29,11 @@ export type {
 } from './version-merge-planning';
 export {
   clearMergeReviewDraft,
+  clearMergeReviewDraftForTarget,
   mergeReviewDraftMatches,
   mergeReviewDraftStorageKey,
   readMergeReviewDraft,
+  readMergeReviewDraftForTarget,
   sanitizeMergeReviewDraftSelections,
   writeMergeReviewDraft,
 } from './version-merge-review-draft-storage';

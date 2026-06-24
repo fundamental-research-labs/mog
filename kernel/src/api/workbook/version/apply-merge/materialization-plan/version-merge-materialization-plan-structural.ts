@@ -69,3 +69,7 @@ export function parseSheetMetadataStructural(
     ? (structural as ParsedSheetMetadataStructural)
     : null;
 }
+
+export function isViewStateStructural(structural: VersionDiffStructuralMetadata): boolean {
+  return structural.kind === 'metadata' && structural.domain === 'view-state';
+}

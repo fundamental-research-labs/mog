@@ -32,7 +32,7 @@ import {
 } from './version-history-panel-action-run';
 import {
   applyMergeInputFromPreview,
-  clearMergeReviewDraft,
+  clearMergeReviewDraftForTarget,
   diagnosticFromMergeApplyResult,
   findLoadedMergeBase,
   mergeApplyActionDisabledReason,
@@ -41,13 +41,12 @@ import {
   mergeApplyBlockedMessage,
   mergeApplyConflictedMessage,
   mergeExpectedTargetHead,
+  materializedActiveCheckoutMergeApplyOptions,
   mergePreviewActionDisabledReason,
   mergePreviewActionMessage,
-  mergeReviewDraftMatches,
-  mergeReviewDraftStorageKey,
   mergeSourceRefs,
   readMergeGraph,
-  readMergeReviewDraft,
+  readMergeReviewDraftForTarget,
   resolveCurrentMergeTarget,
   sanitizeMergeReviewDraftSelections,
   writeMergeReviewDraft,
@@ -352,12 +351,10 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
-    const draftKey = mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource);
+    const draftRead = readMergeReviewDraftForTarget(currentMergeTarget, selectedMergeSource);
+    if (!draftRead) return;
+    const { key: draftKey, draft } = draftRead;
     if (restoredMergeReviewDraftKeyRef.current === draftKey) return;
-    const draft = readMergeReviewDraft(draftKey);
-    if (!draft || !mergeReviewDraftMatches(draft, currentMergeTarget, selectedMergeSource)) {
-      return;
-    }
 
     let cancelled = false;
     let completed = false;
@@ -382,7 +379,7 @@ export function useVersionHistoryPanelActions({
         return;
       }
       if (!result.ok) {
-        clearMergeReviewDraft(draftKey);
+        clearMergeReviewDraftForTarget(currentMergeTarget, selectedMergeSource);
         completed = completeAction(action, { status: 'idle' });
         return;
       }
@@ -713,6 +710,7 @@ export function useVersionHistoryPanelActions({
     const action = beginAction('merge-apply');
     if (!action) return;
     const dirtyRefreshFenceData = data;
+    const targetRef = currentMergeTarget.refName;
 
     const input = applyMergeInputFromPreview(
       mergePreviewState.result,
@@ -734,16 +732,24 @@ export function useVersionHistoryPanelActions({
       completeAction(action, { status: 'error', diagnostic: expectedTargetHead.diagnostic });
       return;
     }
+    if (!targetRef) {
+      completeAction(action, {
+        status: 'error',
+        diagnostic: {
+          code: 'VERSION_UI_MERGE_TARGET_REF_UNAVAILABLE',
+          severity: 'warning',
+          message: 'Current branch ref is unavailable.',
+        },
+      });
+      return;
+    }
 
     if (!setRunningAction(action, 'Applying merge')) return;
     const result = await readVersionResult('VERSION_UI_MERGE_APPLY_FAILED', () =>
-      workbook.version.applyMerge(input, {
-        mode: 'apply',
-        includeDiagnostics: true,
-        materializeActiveCheckout: true,
-        ...(currentMergeTarget.refName ? { targetRef: currentMergeTarget.refName } : {}),
-        expectedTargetHead: expectedTargetHead.value,
-      }),
+      workbook.version.applyMerge(
+        input,
+        materializedActiveCheckoutMergeApplyOptions(targetRef, expectedTargetHead.value),
+      ),
     );
     if (!isActionCurrent(action)) return;
     if (!result.ok) {
@@ -758,7 +764,7 @@ export function useVersionHistoryPanelActions({
       });
       setMergeResolutionSelections({});
       if (selectedMergeSource) {
-        clearMergeReviewDraft(mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource));
+        clearMergeReviewDraftForTarget(currentMergeTarget, selectedMergeSource);
       }
       completeAction(action, {
         status: 'error',
@@ -775,7 +781,7 @@ export function useVersionHistoryPanelActions({
       });
       setMergeResolutionSelections({});
       if (selectedMergeSource) {
-        clearMergeReviewDraft(mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource));
+        clearMergeReviewDraftForTarget(currentMergeTarget, selectedMergeSource);
       }
       completeAction(action, {
         status: 'error',
@@ -790,7 +796,7 @@ export function useVersionHistoryPanelActions({
 
     markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
     if (selectedMergeSource) {
-      clearMergeReviewDraft(mergeReviewDraftStorageKey(currentMergeTarget, selectedMergeSource));
+      clearMergeReviewDraftForTarget(currentMergeTarget, selectedMergeSource);
     }
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});

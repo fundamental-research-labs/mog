@@ -109,7 +109,10 @@ export function VersionStatusSummary({
   readonly data: VersionHistoryData;
 }): React.JSX.Element {
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
-  const branchName = data.surface?.current.branchName ?? data.head?.refName;
+  const branchName = data.surface?.current.detached
+    ? undefined
+    : data.surface?.current.branchName ?? data.head?.refName;
+  const branchLabel = branchName ? displayBranchName(branchName) : 'Detached or unavailable';
   const storageLabel = data.surface
     ? `${data.surface.storage.backend}${data.surface.storage.ready ? ' ready' : ' unavailable'}`
     : 'Unknown';
@@ -127,7 +130,7 @@ export function VersionStatusSummary({
         <span className="text-ss-text-secondary">Storage</span>
         <span className="text-ss-text">{storageLabel}</span>
         <span className="text-ss-text-secondary">Branch</span>
-        <span className="text-ss-text truncate">{branchName ?? 'Detached or unavailable'}</span>
+        <span className="text-ss-text truncate">{branchLabel}</span>
         <span className="text-ss-text-secondary">Head</span>
         <span className="font-mono text-xs text-ss-text truncate">
           {headId ? shortCommitId(headId) : 'Unavailable'}

@@ -1,7 +1,9 @@
 import type {
+  VersionApplyMergeOptions,
   VersionApplyMergeInput,
   VersionApplyMergeResolution,
   VersionApplyMergeResult,
+  VersionCommitExpectedHead,
   VersionMergeInput,
   VersionMergeResult,
   VersionRef,
@@ -115,6 +117,22 @@ export function mergeExpectedTargetHead(
   return data.head?.id && data.head.refRevision
     ? { expectedTargetHead: { commitId: data.head.id, revision: data.head.refRevision } }
     : {};
+}
+
+export function materializedActiveCheckoutMergeApplyOptions(
+  targetRef: NonNullable<VersionMergeTarget['refName']>,
+  expectedTargetHead: VersionCommitExpectedHead,
+): Pick<
+  VersionApplyMergeOptions,
+  'mode' | 'targetRef' | 'expectedTargetHead' | 'includeDiagnostics' | 'materializeActiveCheckout'
+> {
+  return {
+    mode: 'apply',
+    includeDiagnostics: true,
+    materializeActiveCheckout: true,
+    targetRef,
+    expectedTargetHead,
+  };
 }
 
 export function applyMergeInputFromPreview(

@@ -107,15 +107,16 @@ export function currentStaleDisabledReason(
   action: CurrentStaleAction,
 ): DisabledActionReason | undefined {
   const current = surface.current;
-  if (!current.stale) return undefined;
+  const staleReason = effectiveCurrentStaleReason(current);
+  if (!staleReason) return undefined;
 
   const branchLabel = current.branchName
     ? displayBranchName(current.branchName)
     : 'Current checkout';
   const reason =
-    current.staleReason === 'refMoved'
+    staleReason === 'refMoved'
       ? 'the branch head moved'
-      : current.staleReason === 'activeSessionBehind'
+      : staleReason === 'activeSessionBehind'
         ? 'the active checkout session is behind the branch head'
         : 'the current head could not be verified';
   const suffix =
@@ -136,6 +137,31 @@ export function currentStaleDisabledReason(
     id: 'version-head-stale',
     message: `${branchLabel} is stale because ${reason}. ${suffix}`,
   };
+}
+
+function effectiveCurrentStaleReason(
+  current: VersionSurfaceStatus['current'],
+): NonNullable<VersionSurfaceStatus['current']['staleReason']> | undefined {
+  if (current.stale) return current.staleReason ?? 'unknown';
+  if (
+    hasCommitId(current.currentRefHeadId) &&
+    hasCommitId(current.refHeadAtMaterialization) &&
+    current.currentRefHeadId !== current.refHeadAtMaterialization
+  ) {
+    return 'refMoved';
+  }
+  if (
+    hasCommitId(current.checkedOutCommitId) &&
+    hasCommitId(current.refHeadAtMaterialization) &&
+    current.checkedOutCommitId !== current.refHeadAtMaterialization
+  ) {
+    return 'activeSessionBehind';
+  }
+  return undefined;
+}
+
+function hasCommitId(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 export function checkoutUnsafeDisabledReason(

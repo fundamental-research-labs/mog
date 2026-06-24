@@ -8,6 +8,7 @@ import type {
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
+import { versionPanelActionExpectsActiveWorkbookReadback } from '../version-history-panel-action-run';
 import {
   HEAD_COMMIT_ID,
   LATEST_COMMIT_ID,
@@ -46,6 +47,13 @@ const SOURCE_RESOLUTION_RADIO_NAME = 'cells.values value: Source - theirs';
 describe('VersionHistoryPanelContent direct merge controls', () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+  });
+
+  it('classifies direct merge apply as an active workbook readback action', () => {
+    expect(versionPanelActionExpectsActiveWorkbookReadback({ id: 1, kind: 'merge-apply' })).toBe(
+      true,
+    );
+    expect(versionPanelActionExpectsActiveWorkbookReadback({ id: 2, kind: 'commit' })).toBe(false);
   });
 
   it('keeps direct merge controls disabled when merge capabilities are unavailable', async () => {
@@ -133,7 +141,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     expect(workbook.version.applyMerge).not.toHaveBeenCalled();
   });
 
-  it('applies a clean direct merge through workbook.version.applyMerge', async () => {
+  it('applies a clean direct merge through applyMerge materialization and refreshed readback', async () => {
     const getSurfaceStatus = jest
       .fn<DirectMergeVersionHistoryWorkbook['version']['getSurfaceStatus']>()
       .mockResolvedValueOnce(createSurfaceStatus())
@@ -174,6 +182,20 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
           value: {
             items: directMergeCommits(),
             limit: 20,
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: directMergeCommits(),
+            limit: 100,
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          value: {
+            items: directMergeCommits(),
+            limit: 100,
           },
         })
         .mockResolvedValue({
@@ -234,10 +256,28 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
       }),
     );
     await expectActionResult(`Merge applied at ${shortCommitId(MERGE_COMMIT_ID)}`, 'success');
-    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(getSurfaceStatus).toHaveBeenCalledTimes(2);
+      expect(workbook.version.getHead).toHaveBeenCalledTimes(2);
+      expect(workbook.version.listCommits).toHaveBeenCalledTimes(4);
+      expect(workbook.version.listRefs).toHaveBeenCalledTimes(2);
+    });
+    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
+      firstInvocationOrder(getSurfaceStatus, 1),
+    );
+    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
+      firstInvocationOrder(workbook.version.getHead, 1),
+    );
+    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
+      firstInvocationOrder(workbook.version.listCommits, 3),
+    );
+    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
+      firstInvocationOrder(workbook.version.listRefs, 1),
+    );
 
     const statusSummary = screen.getByRole('region', { name: 'Version status' });
-    expect(statusSummary).toHaveTextContent(CURRENT_REF);
+    expect(statusSummary).toHaveTextContent('main');
+    expect(statusSummary).not.toHaveTextContent(CURRENT_REF);
     expect(statusSummary).toHaveTextContent(shortCommitId(MERGE_COMMIT_ID));
     expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
       shortCommitId(MERGE_COMMIT_ID),
@@ -341,6 +381,18 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await user.click(applyButton);
 
     await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
+    expect(firstCallArgs(workbook.version.applyMerge)[0]?.[1]).toEqual(
+      expect.objectContaining({
+        mode: 'apply',
+        targetRef: CURRENT_REF,
+        materializeActiveCheckout: true,
+        expectedTargetHead: {
+          commitId: HEAD_COMMIT_ID,
+          revision: REF_REVISION,
+          symbolicHeadRevision: REF_REVISION,
+        },
+      }),
+    );
     expect(workbook.version.checkout).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
@@ -559,6 +611,64 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         'conflicted',
       );
     });
+    expect(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME })).toBeChecked();
+    expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled();
+  });
+
+  it('restores a merge draft after materialized checkout marker recovery', async () => {
+    const conflict = sameCellMergeConflict();
+    const merge = jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(async (input) => ({
+      ok: true,
+      value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
+    }));
+    const firstRender = renderVersionHistoryPanel({
+      workbook: createDirectMergeWorkbook({ merge }),
+    });
+
+    await screen.findByText('Calculated forecast');
+    await firstRender.user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(merge).toHaveBeenCalledTimes(1));
+    await firstRender.user.click(
+      screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }),
+    );
+    await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
+
+    firstRender.unmount();
+    renderVersionHistoryPanel({
+      workbook: createDirectMergeWorkbook({
+        getSurfaceStatus: jest.fn(async () =>
+          createSurfaceStatus({
+            current: {
+              headCommitId: HEAD_COMMIT_ID,
+              checkedOutCommitId: HEAD_COMMIT_ID,
+              branchName: 'main',
+              refHeadAtMaterialization: HEAD_COMMIT_ID,
+              currentRefHeadId: HEAD_COMMIT_ID,
+              detached: false,
+              stale: false,
+            },
+          }),
+        ),
+        getHead: jest.fn<DirectMergeVersionHistoryWorkbook['version']['getHead']>(async () =>
+          failedInvalidState('head unavailable after active checkout restore'),
+        ),
+        merge,
+      }),
+    });
+
+    await screen.findByText('Calculated forecast');
+    expect(screen.getByTestId(mergeSourceRefSelectTestId())).toHaveValue(INCOMING_REF);
+    await waitFor(() => expect(merge).toHaveBeenCalledTimes(2));
+    expect(firstCallArgs(merge)[1]?.[0]).toEqual({
+      base: PARENT_COMMIT_ID,
+      ours: HEAD_COMMIT_ID,
+      theirs: LATEST_COMMIT_ID,
+    });
+    expect(firstCallArgs(merge)[1]?.[1]).toEqual(
+      expect.objectContaining({
+        targetRef: CURRENT_REF,
+      }),
+    );
     expect(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME })).toBeChecked();
     expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled();
   });

@@ -21,6 +21,7 @@ import {
   readActiveCheckoutWriteContext,
 } from '../active-checkout/active-checkout-write-context';
 import {
+  invalidPayloadDiagnostic as checkoutInvalidPayloadDiagnostic,
   providerErrorDiagnostic as checkoutProviderErrorDiagnostic,
   serviceUnavailableDiagnostic as checkoutServiceUnavailableDiagnostic,
 } from '../checkout/version-checkout-diagnostic-factories';
@@ -126,6 +127,7 @@ export async function prepareActiveCheckoutMergeMaterialization(
 export async function materializeAppliedMergeTargetRef(
   ctx: DocumentContext,
   targetRef: ActiveCheckoutWriteRefName,
+  expectedCommitId: WorkbookCommitId,
   transactionGuard: VersionCheckoutTransactionGuard | undefined,
 ): Promise<ActiveCheckoutMergeMaterializationResult> {
   if (!transactionGuard) {
@@ -167,6 +169,12 @@ export async function materializeAppliedMergeTargetRef(
       },
     );
     if (isAppliedCheckoutSuccess(result)) {
+      const diagnostics = materializedCheckoutProofDiagnostics(
+        result,
+        targetRef,
+        expectedCommitId,
+      );
+      if (diagnostics.length > 0) return { ok: false, diagnostics };
       return { ok: true, diagnostics: result.diagnostics };
     }
     return { ok: false, diagnostics: result.diagnostics };
@@ -207,6 +215,23 @@ export function applyMergeResultCommitRef(
 ): WorkbookCommitRef | null {
   if (!('commitRef' in result)) return null;
   return result.commitRef;
+}
+
+export function shouldClearPersistedActiveCheckoutMaterializationAfterApplyMerge(
+  result: VersionApplyMergeResult,
+): boolean {
+  return result.status === 'blocked' && result.mutationGuarantee === 'unknown-after-crash';
+}
+
+export function shouldMaterializeActiveCheckoutAfterApplyMerge(
+  result: VersionApplyMergeResult,
+): boolean {
+  return (
+    result.status === 'applied' ||
+    result.status === 'fastForwarded' ||
+    result.status === 'alreadyApplied' ||
+    result.status === 'alreadyMerged'
+  );
 }
 
 function activeCheckoutMaterializationProofDiagnostics(
@@ -260,6 +285,51 @@ function isAppliedCheckoutSuccess(
   readonly materialization: 'applied';
 } {
   return result.status === 'success' && result.materialization === 'applied';
+}
+
+function materializedCheckoutProofDiagnostics(
+  result: Extract<VersionCheckoutResult, { readonly status: 'success' }>,
+  targetRef: ActiveCheckoutWriteRefName,
+  expectedCommitId: WorkbookCommitId,
+): readonly VersionStoreDiagnostic[] {
+  const diagnostics: VersionStoreDiagnostic[] = [];
+  const payload = {
+    operation: 'applyMerge.materializeActiveCheckout',
+    targetKind: 'ref',
+    refName: targetRef,
+    expectedCommitId,
+  };
+  if (result.plan.commitId !== expectedCommitId) {
+    diagnostics.push(
+      checkoutInvalidPayloadDiagnostic({
+        ...payload,
+        reason: 'materializedCommitMismatch',
+        materializedCommitId: result.plan.commitId,
+      }),
+    );
+  }
+  const target = result.plan.target;
+  if (
+    target.kind !== 'ref' ||
+    target.refName !== targetRef ||
+    target.commitId !== expectedCommitId
+  ) {
+    const targetPayload: Record<string, string | number | boolean | null> = {
+      materializedCommitId: target.commitId,
+    };
+    if (target.kind !== 'commit') {
+      targetPayload.materializedRefName = target.refName;
+    }
+    diagnostics.push(
+      checkoutInvalidPayloadDiagnostic({
+        ...payload,
+        reason: 'materializedTargetMismatch',
+        materializedTargetKind: target.kind,
+        ...targetPayload,
+      }),
+    );
+  }
+  return diagnostics;
 }
 
 function versionRecordRevisionsEqual(

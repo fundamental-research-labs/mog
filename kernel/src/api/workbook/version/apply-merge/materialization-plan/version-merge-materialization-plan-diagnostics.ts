@@ -25,7 +25,7 @@ export function unsupportedMergeChange(
           refName: input.currentRef.name,
           commitId: input.ours,
           safeMessage:
-            'Version merge materialization supports only cell value, formula, direct cell format, and rows-columns order changes in this slice.',
+            'Version merge materialization supports cell values, formulas, direct cell formats, row/column order changes, and sheet name/tab color/frozen pane metadata in this slice.',
           recoverability: 'unsupported',
           mutationGuarantee: 'no-write-attempted',
           details: {

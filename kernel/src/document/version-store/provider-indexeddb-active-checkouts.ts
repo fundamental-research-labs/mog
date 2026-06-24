@@ -2,6 +2,8 @@ import {
   type ActiveCheckoutMaterializationRecord,
   type ActiveCheckoutMaterializationStore,
   decodeActiveCheckoutMaterializationRecord,
+  decodeStoredActiveCheckoutMaterializationRecord,
+  storedActiveCheckoutMaterializationRecord,
 } from './active-checkout-materialization-store';
 import { ACTIVE_CHECKOUTS_STORE } from './provider-indexeddb-schema';
 import { idbRequest, idbTransactionDone } from './provider-indexeddb/internal';
@@ -29,35 +31,56 @@ export class IndexedDbActiveCheckoutMaterializationStore
 
   async read(): Promise<ActiveCheckoutMaterializationRecord | null> {
     const db = await this.options.getDb();
-    const row = await idbRequest<unknown | undefined>(
-      db.transaction(ACTIVE_CHECKOUTS_STORE, 'readonly')
-        .objectStore(ACTIVE_CHECKOUTS_STORE)
-        .get(this.documentScopeKey),
-    );
-    return decodeActiveCheckoutMaterializationRecord(row, this.documentScopeKey);
+    const tx = db.transaction(ACTIVE_CHECKOUTS_STORE, 'readwrite');
+    const done = idbTransactionDone(tx);
+    const store = tx.objectStore(ACTIVE_CHECKOUTS_STORE);
+    const row = await idbRequest<unknown | undefined>(store.get(this.documentScopeKey));
+    if (row === undefined) {
+      await done;
+      return null;
+    }
+
+    const decoded = decodeStoredActiveCheckoutMaterializationRecord(row, this.documentScopeKey);
+    if (decoded.status === 'valid') {
+      await done;
+      return decoded.record;
+    }
+
+    await idbRequest(store.delete(this.documentScopeKey));
+    await done;
+    return null;
   }
 
   async write(
     record: Omit<ActiveCheckoutMaterializationRecord, 'documentScopeKey'>,
   ): Promise<void> {
+    const materialization = decodeActiveCheckoutMaterializationRecord(
+      {
+        ...record,
+        documentScopeKey: this.documentScopeKey,
+      },
+      this.documentScopeKey,
+    );
+    if (!materialization) {
+      throw new Error('Active checkout materialization record is malformed.');
+    }
     const db = await this.options.getDb();
     const tx = db.transaction(ACTIVE_CHECKOUTS_STORE, 'readwrite');
+    const done = idbTransactionDone(tx);
     await idbRequest(
       tx.objectStore(ACTIVE_CHECKOUTS_STORE).put(
-        {
-          ...record,
-          documentScopeKey: this.documentScopeKey,
-        } satisfies ActiveCheckoutMaterializationRecord,
+        storedActiveCheckoutMaterializationRecord(materialization),
         this.documentScopeKey,
       ),
     );
-    await idbTransactionDone(tx);
+    await done;
   }
 
   async clear(): Promise<void> {
     const db = await this.options.getDb();
     const tx = db.transaction(ACTIVE_CHECKOUTS_STORE, 'readwrite');
+    const done = idbTransactionDone(tx);
     await idbRequest(tx.objectStore(ACTIVE_CHECKOUTS_STORE).delete(this.documentScopeKey));
-    await idbTransactionDone(tx);
+    await done;
   }
 }

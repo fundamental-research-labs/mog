@@ -42,7 +42,7 @@ import {
 } from './proposals/proposal-store';
 import {
   ActiveCheckoutMaterializationMemoryBackend,
-  type ActiveCheckoutMaterializationRecord,
+  type ActiveCheckoutMaterializationMemoryBackendSnapshot,
 } from './active-checkout-materialization-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
@@ -61,7 +61,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly syncBatchStatuses?: SyncBatchStatusMemoryBackendSnapshot;
   readonly reviewRecords?: WorkbookVersionReviewRecordMemoryBackendSnapshot;
   readonly proposalMetadataRecords?: AgentProposalMetadataMemoryBackendSnapshot;
-  readonly activeCheckoutMaterializations?: readonly ActiveCheckoutMaterializationRecord[];
+  readonly activeCheckoutMaterializations?: ActiveCheckoutMaterializationMemoryBackendSnapshot;
 };
 
 export class InMemoryVersionDocumentProviderBackend {

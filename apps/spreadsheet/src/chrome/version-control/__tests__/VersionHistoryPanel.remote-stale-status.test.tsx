@@ -50,6 +50,11 @@ describe('VersionHistoryPanelContent remote stale status projection', () => {
     expect(staleStatus).not.toHaveTextContent(LATEST_REMOTE_COMMIT_ID);
     expect(staleStatus).not.toHaveTextContent('aaaaaaaaaaaa');
     expect(staleStatus).not.toHaveTextContent('eeeeeeeeeeee');
+
+    const statusSummary = screen.getByRole('region', { name: 'Version status' });
+    expect(statusSummary).toHaveTextContent('Detached or unavailable');
+    expect(statusSummary).not.toHaveTextContent(rawProviderRef);
+    expect(statusSummary).not.toHaveTextContent('refs/heads/refs/provider-internal/main');
   });
 
   it('projects stale pending remote reconciliation through stable redacted codes', async () => {

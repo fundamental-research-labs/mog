@@ -38,8 +38,13 @@ import {
   isMergeCommitApplyInput,
   materializeAppliedMergeTargetRef,
   prepareActiveCheckoutMergeMaterialization,
+  shouldClearPersistedActiveCheckoutMaterializationAfterApplyMerge,
+  shouldMaterializeActiveCheckoutAfterApplyMerge,
 } from './version/apply-merge/version-apply-merge-active-checkout-materialization';
-import { writePersistedActiveCheckoutMaterialization } from './version/active-checkout/version-active-checkout-persistence';
+import {
+  clearPersistedActiveCheckoutMaterialization,
+  writePersistedActiveCheckoutMaterialization,
+} from './version/active-checkout/version-active-checkout-persistence';
 import { invalidApplyMergeOptionDiagnostic } from './version/apply-merge/version-apply-merge-results';
 import {
   getMergeConflictDetailWorkbookVersion,
@@ -89,13 +94,25 @@ export async function applyMergeWorkbookVersionFacade(
   );
   let materializedActiveCheckout = false;
   const commitRef = applyMergeResultCommitRef(result);
-  if (materialization.enabled && commitRef?.id) {
+  if (
+    materialization.enabled &&
+    shouldClearPersistedActiveCheckoutMaterializationAfterApplyMerge(result)
+  ) {
+    await clearPersistedActiveCheckoutMaterialization(ctx);
+  }
+  if (
+    materialization.enabled &&
+    commitRef?.id &&
+    shouldMaterializeActiveCheckoutAfterApplyMerge(result)
+  ) {
     const materialized = await materializeAppliedMergeTargetRef(
       ctx,
       materialization.targetRef,
+      commitRef.id,
       transactionGuard,
     );
     if (!materialized.ok) {
+      await clearPersistedActiveCheckoutMaterialization(ctx);
       if (commitRef.refName && isMergeCommitApplyInput(applyMergeInput.input)) {
         recordActiveCheckoutBranchRefMove(
           ctx,

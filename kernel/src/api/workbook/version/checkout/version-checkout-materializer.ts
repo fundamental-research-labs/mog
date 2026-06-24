@@ -12,6 +12,7 @@ import {
   createDocumentLifecycleSnapshotRootHydrator,
   type SnapshotRootFreshLifecycleMaterialization,
 } from '../../../document/snapshot-root-lifecycle-hydrator';
+import { materializeCheckoutFrozenPanes } from './version-checkout-materializer-frozen-panes';
 import { checkoutRebindIdentityDiagnosticDetails } from './version-checkout-rebind';
 
 export interface WorkbookCheckoutPublisher {
@@ -58,6 +59,15 @@ export function createWorkbookCheckoutSnapshotMaterializer(
       if (settled.status === 'failed') {
         await reloaded.materialized.dispose();
         return settled;
+      }
+
+      const frozenPanesMaterialized = await materializeCheckoutFrozenPanes(
+        input,
+        reloaded.materialized,
+      );
+      if (frozenPanesMaterialized.status === 'failed') {
+        await reloaded.materialized.dispose();
+        return frozenPanesMaterialized;
       }
 
       const publishDiagnostics = await publisher.revalidateCheckoutPublish?.(input);

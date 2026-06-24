@@ -21,16 +21,45 @@ type VersionMergeReviewDraft = {
   readonly updatedAt: number;
 };
 
+type VersionMergeReviewDraftRead = {
+  readonly key: string;
+  readonly draft: VersionMergeReviewDraft;
+};
+
 const MERGE_REVIEW_DRAFT_STORAGE_PREFIX = 'mog.versionHistory.mergeReviewDraft.v1';
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
+const VERSION_MAIN_BRANCH = 'main';
+const VERSION_MAIN_REF = 'refs/heads/main';
 
 export function mergeReviewDraftStorageKey(
   target: VersionMergeTarget,
   source: VersionRef,
 ): string {
+  return mergeReviewDraftStorageKeyForRefName(
+    target.commitId,
+    canonicalMergeReviewRefName(target.refName),
+    source,
+  );
+}
+
+function mergeReviewDraftStorageKeys(
+  target: VersionMergeTarget,
+  source: VersionRef,
+): readonly string[] {
+  return [...mergeReviewDraftTargetRefAliases(target.refName)].map((targetRefName) =>
+    mergeReviewDraftStorageKeyForRefName(target.commitId, targetRefName, source),
+  );
+}
+
+function mergeReviewDraftStorageKeyForRefName(
+  targetCommitId: WorkbookCommitId,
+  targetRefName: string | undefined,
+  source: VersionRef,
+): string {
   return [
     MERGE_REVIEW_DRAFT_STORAGE_PREFIX,
-    target.refName ?? 'detached',
-    target.commitId,
+    targetRefName ?? 'detached',
+    targetCommitId,
     source.name,
     source.commitId,
   ]
@@ -45,11 +74,12 @@ export function writeMergeReviewDraft(
 ): void {
   const storage = mergeReviewDraftStorage();
   if (!storage) return;
+  const targetRefName = canonicalMergeReviewRefName(target.refName);
   const value: VersionMergeReviewDraft = {
     schemaVersion: 1,
     input: draft.input,
     sourceRefName: source.name,
-    ...(target.refName ? { targetRefName: target.refName } : {}),
+    ...(targetRefName ? { targetRefName } : {}),
     selections: draft.selections,
     updatedAt: Date.now(),
   };
@@ -79,6 +109,18 @@ export function readMergeReviewDraft(key: string): VersionMergeReviewDraft | nul
   }
 }
 
+export function readMergeReviewDraftForTarget(
+  target: VersionMergeTarget,
+  source: VersionRef,
+): VersionMergeReviewDraftRead | null {
+  for (const key of mergeReviewDraftStorageKeys(target, source)) {
+    const draft = readMergeReviewDraft(key);
+    if (!draft) continue;
+    if (mergeReviewDraftMatches(draft, target, source)) return { key, draft };
+  }
+  return null;
+}
+
 export function clearMergeReviewDraft(key: string): void {
   const storage = mergeReviewDraftStorage();
   if (!storage) return;
@@ -89,16 +131,27 @@ export function clearMergeReviewDraft(key: string): void {
   }
 }
 
+export function clearMergeReviewDraftForTarget(
+  target: VersionMergeTarget,
+  source: VersionRef,
+): void {
+  for (const key of mergeReviewDraftStorageKeys(target, source)) {
+    clearMergeReviewDraft(key);
+  }
+}
+
 export function mergeReviewDraftMatches(
   draft: VersionMergeReviewDraft,
   target: VersionMergeTarget,
   source: VersionRef,
 ): boolean {
+  const draftTargetRefName = canonicalMergeReviewRefName(draft.targetRefName);
+  const targetRefName = canonicalMergeReviewRefName(target.refName);
   return (
     draft.input.ours === target.commitId &&
     draft.input.theirs === source.commitId &&
     draft.sourceRefName === source.name &&
-    (draft.targetRefName ?? undefined) === (target.refName ?? undefined)
+    (draftTargetRefName ?? undefined) === (targetRefName ?? undefined)
   );
 }
 
@@ -144,4 +197,25 @@ function isMergeReviewDraft(value: unknown): value is VersionMergeReviewDraft {
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function canonicalMergeReviewRefName(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value === VERSION_MAIN_BRANCH) return VERSION_MAIN_REF;
+  if (value.startsWith(VERSION_BRANCH_REF_PREFIX)) return value;
+  if (value.startsWith('refs/')) return value;
+  return `${VERSION_BRANCH_REF_PREFIX}${value}`;
+}
+
+function mergeReviewDraftTargetRefAliases(
+  value: string | undefined,
+): ReadonlySet<string | undefined> {
+  const aliases = new Set<string | undefined>();
+  const canonical = canonicalMergeReviewRefName(value);
+  aliases.add(canonical);
+  if (value && value !== canonical) aliases.add(value);
+  if (canonical?.startsWith(VERSION_BRANCH_REF_PREFIX)) {
+    aliases.add(canonical.slice(VERSION_BRANCH_REF_PREFIX.length));
+  }
+  return aliases;
 }

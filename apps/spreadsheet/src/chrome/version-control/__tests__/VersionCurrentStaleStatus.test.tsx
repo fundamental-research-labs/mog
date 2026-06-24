@@ -105,9 +105,31 @@ describe('VersionCurrentStaleStatus', () => {
 
     const staleStatus = screen.getByTestId('version-history-current-stale-status');
     expect(staleStatus).toHaveTextContent(
-      'scenario/budget is stale because the branch head moved.',
+      'Checkout from scenario/budget is stale because the branch head moved.',
     );
     expect(staleStatus).not.toHaveTextContent('refs/heads/scenario/budget');
+  });
+
+  it('keeps detached checkout copy detached even if a stale surface carries branch metadata', () => {
+    render(
+      <VersionCurrentStaleStatus
+        surface={createSurfaceStatus({
+          current: {
+            branchName: 'refs/heads/scenario/restored',
+            detached: true,
+            stale: true,
+            staleReason: 'unknown',
+          },
+        })}
+      />,
+    );
+
+    const staleStatus = screen.getByTestId('version-history-current-stale-status');
+    expect(staleStatus).toHaveTextContent(
+      'Detached checkout is stale because the current head could not be verified.',
+    );
+    expect(staleStatus).not.toHaveTextContent('scenario/restored');
+    expect(staleStatus).not.toHaveTextContent('refs/heads/scenario/restored');
   });
 
   it('projects unknown provider state without rendering diagnostic payloads', () => {

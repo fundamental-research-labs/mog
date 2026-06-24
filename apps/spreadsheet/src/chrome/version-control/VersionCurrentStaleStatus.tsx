@@ -57,15 +57,13 @@ function currentStaleStatus(surface: VersionSurfaceStatus): CurrentStaleStatus |
   const current = surface.current;
   if (!current.stale) return undefined;
 
-  const branchLabel = current.branchName
-    ? publicBranchLabel(current.branchName)
-    : 'Current checkout';
+  const checkoutLabel = currentCheckoutLabel(current);
   const statusCode = currentStaleStatusCode(current.staleReason);
 
   return {
     statusCode,
     ...currentReconciliationStatusCode(surface),
-    message: `${branchLabel} is stale because ${currentStaleReason(statusCode)}.`,
+    message: `${checkoutLabel} is stale because ${currentStaleReason(statusCode)}.`,
   };
 }
 
@@ -173,7 +171,15 @@ function positiveDiagnosticCount(diagnostic: VersionDiagnostic, key: string): bo
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
 }
 
-function publicBranchLabel(branchName: string): string {
+function currentCheckoutLabel(current: VersionSurfaceStatus['current']): string {
+  if (current.detached) return 'Detached checkout';
+  if (!current.branchName) return 'Current checkout';
+
+  const branchLabel = publicBranchLabel(current.branchName);
+  return branchLabel ? `Checkout from ${branchLabel}` : 'Current checkout';
+}
+
+function publicBranchLabel(branchName: string): string | undefined {
   const normalized = normalizeVersionBranchNameInput(branchName);
-  return normalized.ok ? normalized.branch.displayName : 'Current checkout';
+  return normalized.ok ? normalized.branch.displayName : undefined;
 }

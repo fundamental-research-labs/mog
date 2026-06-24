@@ -8,6 +8,10 @@ import type {
 
 import type { VersionHistoryData } from '../version-history-panel-data';
 
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
+const VERSION_MAIN_BRANCH = 'main';
+const VERSION_MAIN_REF = 'refs/heads/main';
+
 export type VersionMergeTarget = {
   readonly commitId: WorkbookCommitId;
   readonly refName?: VersionMainRefName | VersionRefName;
@@ -20,10 +24,13 @@ export type LoadedMergeBaseResult =
 export function resolveCurrentMergeTarget(
   data: VersionHistoryData,
 ): VersionMergeTarget | undefined {
+  const current = data.surface?.current;
   const commitId =
-    data.head?.id ?? (data.surface?.current.headCommitId as WorkbookCommitId | undefined);
-  const refName =
-    data.head?.refName ?? (data.surface?.current.branchName as VersionRefName | undefined);
+    (current?.checkedOutCommitId as WorkbookCommitId | undefined) ??
+    (current?.headCommitId as WorkbookCommitId | undefined) ??
+    data.head?.id;
+  const surfaceRefName = publicBranchRefName(current?.branchName);
+  const refName = surfaceRefName ?? (current?.checkedOutCommitId ? undefined : data.head?.refName);
   if (!commitId) return undefined;
   return {
     commitId,
@@ -32,7 +39,10 @@ export function resolveCurrentMergeTarget(
 }
 
 export function mergeSourceRefs(data: VersionHistoryData): readonly VersionRef[] {
-  const currentRefName = data.head?.refName ?? data.surface?.current.branchName;
+  const current = data.surface?.current;
+  const surfaceRefName = publicBranchRefName(current?.branchName);
+  const currentRefName =
+    surfaceRefName ?? (current?.checkedOutCommitId ? undefined : data.head?.refName);
   return data.refs.filter((ref) => ref.name !== currentRefName);
 }
 
@@ -116,4 +126,16 @@ function collectAncestorDistances(
   }
 
   return distances;
+}
+
+function publicBranchRefName(
+  value: string | undefined,
+): VersionMainRefName | VersionRefName | undefined {
+  if (!value) return undefined;
+  if (value === VERSION_MAIN_BRANCH) return VERSION_MAIN_REF as VersionMainRefName;
+  if (value.startsWith(VERSION_BRANCH_REF_PREFIX)) {
+    return value as VersionMainRefName | VersionRefName;
+  }
+  if (value.startsWith('refs/')) return undefined;
+  return `${VERSION_BRANCH_REF_PREFIX}${value}` as VersionRefName;
 }

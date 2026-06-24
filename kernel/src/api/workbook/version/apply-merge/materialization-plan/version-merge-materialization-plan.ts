@@ -8,6 +8,7 @@ import {
 } from './version-merge-materialization-plan-entities';
 import { compareParsedMergeChanges } from './version-merge-materialization-plan-ordering';
 import {
+  isViewStateStructural,
   parseCellStructural,
   parseDirectFormatStructural,
   parseRowColumnStructural,
@@ -50,6 +51,13 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
   const parsed: ParsedMergeChange[] = [];
   for (let index = 0; index < input.changes.length; index++) {
     const change = input.changes[index];
+    if (isViewStateStructural(change.structural)) {
+      return unsupportedMergeChange(input, index, change.structural, {
+        reason: 'unsupportedViewState',
+        matrixRowId: 'view-state.selection-scroll',
+        capturePolicy: 'excluded',
+      });
+    }
     const support = inspectMaterializableMergeChange(change);
     if (!support.ok) {
       return unsupportedMergeChange(input, index, change.structural, {

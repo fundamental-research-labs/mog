@@ -24,6 +24,7 @@ import {
 } from './version-checkout';
 import {
   type ActiveCheckoutWriteRefName,
+  expectedHeadFromActiveCheckout,
   readActiveCheckoutWriteContext,
   recordActiveCheckoutBranchCommit,
 } from './version/active-checkout-write-context';
@@ -155,12 +156,11 @@ async function commitOptionsForActiveCheckout(
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
 > {
-  if (hasExplicitTargetRef(options)) return { ok: true, options };
-
   const activeCheckout = await readActiveCheckoutWriteContext(ctx, 'commitGraphWrite');
-  if (activeCheckout.status === 'stale') {
+  if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
+  if (hasExplicitTargetRef(options)) return { ok: true, options };
   if (activeCheckout.status !== 'attached') return { ok: true, options };
 
   const targetRef = activeCheckout.refName;
@@ -170,6 +170,9 @@ async function commitOptionsForActiveCheckout(
     options: {
       ...options,
       targetRef,
+      ...(options.expectedHead
+        ? {}
+        : { expectedHead: expectedHeadFromActiveCheckout(activeCheckout) }),
     },
   };
 }

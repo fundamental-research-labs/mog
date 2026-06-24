@@ -1,15 +1,23 @@
 import type {
+  VersionCommitExpectedHead,
   VersionMainRefName,
+  VersionRecordRevision,
   VersionRefName,
   VersionStoreDiagnostic,
+  WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../context';
 import { publicDiagnostic } from './commit/version-commit-diagnostics';
+import { readActiveCheckoutHead } from './status/version-active-checkout-head';
 import { getWorkbookVersionStatus } from './status/version-status';
 import { getWorkbookVersionSurfaceStatus } from './surface-status/version-surface-status';
 
 export type ActiveCheckoutWriteRefName = VersionMainRefName | VersionRefName;
+export type ActiveCheckoutWriteOperation =
+  | 'commitGraphWrite'
+  | 'revertGraphWrite'
+  | 'applyMergeGraphWrite';
 
 export type ActiveCheckoutWriteContext =
   | { readonly status: 'absent' }
@@ -17,12 +25,17 @@ export type ActiveCheckoutWriteContext =
   | {
       readonly status: 'attached';
       readonly refName: ActiveCheckoutWriteRefName;
+      readonly commitId: WorkbookCommitId;
+      readonly refRevision: VersionRecordRevision;
     }
-  | { readonly status: 'stale'; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+  | {
+      readonly status: 'blocked' | 'stale';
+      readonly diagnostics: readonly VersionStoreDiagnostic[];
+    };
 
 export async function readActiveCheckoutWriteContext(
   ctx: DocumentContext,
-  operation: 'commitGraphWrite' | 'revertGraphWrite',
+  operation: ActiveCheckoutWriteOperation,
 ): Promise<ActiveCheckoutWriteContext> {
   const surface = await getWorkbookVersionSurfaceStatus(ctx, getWorkbookVersionStatus(ctx));
   const current = surface.current;
@@ -34,7 +47,37 @@ export async function readActiveCheckoutWriteContext(
     };
   }
   if (!current.branchName || current.detached) return { status: 'detached' };
-  return { status: 'attached', refName: refNameFromBranchName(current.branchName) };
+  const refName = refNameFromBranchName(current.branchName);
+  const activeHead = await readActiveCheckoutHead(ctx);
+  if (activeHead.status === 'degraded') {
+    return { status: 'blocked', diagnostics: activeHead.result.diagnostics };
+  }
+  if (
+    activeHead.status !== 'resolved' ||
+    activeHead.session.detached ||
+    activeHead.head.refName !== refName ||
+    !activeHead.head.refRevision
+  ) {
+    return {
+      status: 'blocked',
+      diagnostics: [unresolvedActiveCheckoutWriteDiagnostic(operation)],
+    };
+  }
+  return {
+    status: 'attached',
+    refName,
+    commitId: activeHead.head.id,
+    refRevision: activeHead.head.refRevision,
+  };
+}
+
+export function expectedHeadFromActiveCheckout(
+  context: Extract<ActiveCheckoutWriteContext, { readonly status: 'attached' }>,
+): VersionCommitExpectedHead {
+  return {
+    commitId: context.commitId,
+    revision: context.refRevision,
+  };
 }
 
 export function recordActiveCheckoutBranchCommit(
@@ -51,7 +94,7 @@ function refNameFromBranchName(branchName: string): ActiveCheckoutWriteRefName {
 }
 
 function staleImplicitCheckoutWriteDiagnostic(
-  operation: 'commitGraphWrite' | 'revertGraphWrite',
+  operation: ActiveCheckoutWriteOperation,
 ): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
@@ -62,6 +105,24 @@ function staleImplicitCheckoutWriteDiagnostic(
       payload: {
         operation,
         reason: 'staleCheckoutSession',
+      },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function unresolvedActiveCheckoutWriteDiagnostic(
+  operation: ActiveCheckoutWriteOperation,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_PROVIDER_FAILED',
+    'Version write is blocked because the active checkout branch head could not be resolved.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload: {
+        operation,
+        reason: 'activeCheckoutHeadUnresolved',
       },
       mutationGuarantee: 'no-write-attempted',
     },

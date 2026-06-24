@@ -174,6 +174,57 @@ export function registerVersionStatusCommitProviderScenarios() {
     });
   });
 
+  it('blocks explicit-target commits when the active checkout session is stale', async () => {
+    const branchRef = 'refs/heads/scenario/stale-explicit-commit' as const;
+    const checkedOutCommit = `commit:sha256:${'6'.repeat(64)}` as const;
+    const branchHead = `commit:sha256:${'7'.repeat(64)}` as const;
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordActiveCheckoutBranchCommit({
+      commitId: checkedOutCommit,
+      refName: branchRef,
+    });
+    const readRef = jest.fn(async (name: string) => ({
+      status: 'success',
+      ref: {
+        name,
+        commitId: branchHead,
+        revision: { kind: 'counter' as const, value: '2' },
+      },
+    }));
+    const commit = jest.fn();
+    const version = createWorkbookVersion({
+      readService: { readRef },
+      writeService: { commit },
+    });
+    attachWorkbookVersionSurfaceStatusService(versionContext(version), surfaceStatusService);
+
+    await expect(
+      version.commit({
+        targetRef: branchRef,
+        expectedHead: {
+          commitId: checkedOutCommit,
+          revision: { kind: 'counter' as const, value: '1' },
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
+        ],
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it('returns graph-uninitialized diagnostics before capture when provider registry is absent', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const captureNormalCommit = jest.fn(createNormalCommitCapture('should-not-run'));

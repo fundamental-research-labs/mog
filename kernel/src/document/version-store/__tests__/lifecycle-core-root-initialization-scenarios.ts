@@ -70,7 +70,7 @@ export function registerLifecycleCoreRootInitializationScenarios(): void {
       await second.versioning?.provider?.dispose('test-teardown');
     });
 
-    it('can defer missing root initialization while still attaching the provider', async () => {
+    it('can lazily materialize deferred missing root initialization on first version read', async () => {
       const documentId = `${DOCUMENT_ID}-deferred-root`;
       const namespace = namespaceForDocumentScope({ documentId }, GRAPH_ID);
       const rootBuilder = jest.fn(() => rootWrite('deferred-root', namespace));
@@ -90,14 +90,14 @@ export function registerLifecycleCoreRootInitializationScenarios(): void {
       expect(result.diagnostics).toEqual([]);
       const provider = result.versioning?.provider;
       if (!provider) throw new Error('expected lifecycle to attach a provider');
+      expect(rootBuilder).not.toHaveBeenCalled();
       const writeService = createWorkbookVersionCommitService({
         provider,
+        ensureInitialized: result.versioning?.ensureProviderInitialized,
         captureNormalCommit: emptyAuthoredCapture,
       });
-      await expect(writeService.readHead()).resolves.toMatchObject({
-        status: 'degraded',
-      });
-      expect(rootBuilder).not.toHaveBeenCalled();
+      await expect(writeService.readHead()).resolves.toMatchObject({ status: 'success' });
+      expect(rootBuilder).toHaveBeenCalledTimes(1);
 
       await provider.dispose('test-teardown');
     });

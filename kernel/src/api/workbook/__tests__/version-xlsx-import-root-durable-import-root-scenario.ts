@@ -41,6 +41,7 @@ export function registerDurableImportRootScenario(): void {
         },
       });
       if (!head.ok) throw new Error(`expected import-root head: ${head.error.code}`);
+      expect(wb.isDirty).toBe(false);
       const rootCommitId = head.value.id;
 
       await expect(wb.version.listCommits()).resolves.toMatchObject({

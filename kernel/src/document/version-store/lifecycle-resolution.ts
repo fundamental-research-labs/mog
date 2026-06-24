@@ -69,10 +69,13 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
     xlsxImportRootExistingGraph: config.xlsxImportRootExistingGraph,
     requireDurablePersistence: providerSelection.requireDurablePersistence,
   };
-  const diagnostics =
-    providerSelection.initializeTiming === 'deferred'
-      ? []
-      : await initializeSelectedProviderWhenAbsent(initializationInput);
+  const ensureProviderInitialized =
+    providerSelection.initializeTiming === 'deferred' && providerSelection.initialize
+      ? () => initializeSelectedProviderWhenAbsent(initializationInput)
+      : undefined;
+  const diagnostics = ensureProviderInitialized
+    ? []
+    : await initializeSelectedProviderWhenAbsent(initializationInput);
   const initializationFailureReadService =
     diagnostics.length > 0 ? createLifecycleFailureReadService(diagnostics) : undefined;
 
@@ -91,6 +94,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       writeService: initializationFailureReadService ?? config.writeService,
       checkoutSnapshotMaterializer: config.checkoutSnapshotMaterializer,
       readLiveCollaborationStatus: config.readLiveCollaborationStatus,
+      ensureProviderInitialized,
       ...domainSupportManifestLifecycleFields(config),
     }),
     diagnostics,

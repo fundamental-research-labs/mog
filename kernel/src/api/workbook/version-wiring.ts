@@ -91,6 +91,7 @@ export function attachWorkbookVersioning(
           captureNormalCommit,
           captureMergeCommit,
           snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,
+          ensureInitialized: config.ensureProviderInitialized,
         })
       : undefined);
   const providerWriteActivityTracker =

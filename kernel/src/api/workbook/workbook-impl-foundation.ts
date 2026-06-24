@@ -198,7 +198,10 @@ import {
 import { createWorkbookCheckoutTransactionCoordinator } from './workbook-checkout-transactions';
 import { createWorkbookLiveness } from './workbook-liveness';
 import { resolveWorkbookImportWarnings } from './workbook-import-warnings';
-import { withDefaultWorkbookCheckoutMaterializer } from './workbook-versioning-assembly';
+import {
+  withDefaultWorkbookCheckoutMaterializer,
+  withPreviouslySavedVersioningInitialization,
+} from './workbook-versioning-assembly';
 
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
@@ -337,13 +340,22 @@ export abstract class WorkbookImplFoundation {
       this.withWorkbookFeatureGates(config.ctx as DocumentContext),
     );
     this.ctx = this.contextBinding.context;
-    const versioning = withDefaultWorkbookCheckoutMaterializer(config.versioning, {
-      currentContext: () => this.ctx,
-      revalidateCheckoutPublish: (input) =>
-        this.checkoutTransactions.revalidateCheckoutPublish(input),
-      publishCheckoutMaterialization: (materialization, input) =>
-        this.publishCheckoutMaterialization(materialization, input),
-    });
+    // Platform state
+    this._previouslySaved = config.previouslySaved ?? false;
+    const versioning = withPreviouslySavedVersioningInitialization(
+      withDefaultWorkbookCheckoutMaterializer(config.versioning, {
+        currentContext: () => this.ctx,
+        revalidateCheckoutPublish: (input) =>
+          this.checkoutTransactions.revalidateCheckoutPublish(input),
+        publishCheckoutMaterialization: (materialization, input) =>
+          this.publishCheckoutMaterialization(materialization, input),
+      }),
+      {
+        previouslySaved: this._previouslySaved,
+        currentContext: () => this.ctx,
+        markClean: () => this.markClean(),
+      },
+    );
     if (versioning) {
       attachWorkbookVersioning(this.ctx, versioning);
     }
@@ -366,8 +378,6 @@ export abstract class WorkbookImplFoundation {
       this.codeExecutorFactory = config.codeExecutorFactory;
     }
 
-    // Platform state
-    this._previouslySaved = config.previouslySaved ?? false;
     this.name = config.name ?? '';
     this.readOnly = config.readOnly ?? false;
     this._onSave = config.onSave;
@@ -625,6 +635,9 @@ export abstract class WorkbookImplFoundation {
       this._getOrCreateWorksheet(sheetId);
     }
     await this.refreshSheetMetadata();
+    if (this._previouslySaved) {
+      this.markClean();
+    }
   }
 
   /**

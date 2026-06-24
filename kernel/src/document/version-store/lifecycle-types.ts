@@ -64,6 +64,7 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
   readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
+  readonly ensureProviderInitialized?: () => MaybePromise<readonly VersionStoreDiagnostic[]>;
   readonly domainSupportManifest?: DomainSupportManifest | null;
   readonly readDomainSupportManifest?: () => MaybePromise<DomainSupportManifest | null | undefined>;
   readonly domainSupportManifestOptions?: DomainSupportManifestValidationOptions;

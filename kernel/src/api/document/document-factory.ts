@@ -920,7 +920,7 @@ function createDocumentHandle(
           stateProvider: config.stateProvider,
           featureGates: config.featureGates,
           readFeatureGates: config.readFeatureGates,
-          previouslySaved: config.previouslySaved,
+          previouslySaved: config.previouslySaved ?? xlsxImportRoot !== undefined,
           name: config.name,
           readOnly: config.readOnly,
           onSave: config.onSave,

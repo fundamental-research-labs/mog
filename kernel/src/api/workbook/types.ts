@@ -42,7 +42,10 @@ import type { CheckoutSnapshotMaterializer } from '../../document/version-store/
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
 import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
-import type { VersionStoreProvider } from '../../document/version-store/provider';
+import type {
+  VersionStoreDiagnostic,
+  VersionStoreProvider,
+} from '../../document/version-store/provider';
 import type { DocumentWorkbookVersioningLifecycleConfig } from '../../document/version-store/lifecycle';
 import type { WorkbookVersionProvenanceTruthService } from './version/provenance/version-provenance-truth-service';
 import type { VersionLiveCollaborationStatusReader } from './version/live-collaboration/version-live-collaboration-status';
@@ -89,6 +92,7 @@ export interface WorkbookVersioningConfig {
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
+  readonly ensureProviderInitialized?: () => MaybePromise<readonly VersionStoreDiagnostic[]>;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
   readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
   readonly domainSupportManifest?: DomainSupportManifest | null;

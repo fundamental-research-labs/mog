@@ -135,6 +135,9 @@ export type WorkbookVersionCommitServiceOptions = {
   readonly captureNormalCommit?: VersionNormalCommitCapture;
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
+  readonly ensureInitialized?: () =>
+    | readonly VersionStoreDiagnostic[]
+    | Promise<readonly VersionStoreDiagnostic[]>;
 };
 
 export type WorkbookVersionCommitServiceCommitResult =

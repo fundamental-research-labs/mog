@@ -16,18 +16,6 @@ import { displayBranchName } from './version-branch-name';
 import { shortCommitId } from './version-history-format';
 import type { VersionHistoryData } from './version-history-panel-data';
 
-const CAPABILITY_ROWS: readonly VersionCapability[] = [
-  'version:read',
-  'version:diff',
-  'version:commit',
-  'version:branch',
-  'version:checkout',
-  'version:revert',
-  'version:remotePromote',
-  'version:reviewRead',
-  'version:reviewWrite',
-];
-
 const CAPABILITY_LABELS: Record<VersionCapability, string> = {
   'version:read': 'Read',
   'version:diff': 'Diff',
@@ -43,6 +31,21 @@ const CAPABILITY_LABELS: Record<VersionCapability, string> = {
   'version:provenance': 'Provenance',
   'version:remotePromote': 'Remote promote',
 };
+
+const CAPABILITY_ROWS = Object.keys(CAPABILITY_LABELS) as readonly VersionCapability[];
+const CAPABILITY_ROW_INDEX = new Map(
+  CAPABILITY_ROWS.map((capability, index) => [capability, index] as const),
+);
+
+function capabilityRows(surface?: VersionSurfaceStatus): readonly VersionCapability[] {
+  if (!surface) return CAPABILITY_ROWS;
+
+  return (Object.keys(surface.capabilities) as VersionCapability[]).sort(
+    (left, right) =>
+      (CAPABILITY_ROW_INDEX.get(left) ?? Number.MAX_SAFE_INTEGER) -
+      (CAPABILITY_ROW_INDEX.get(right) ?? Number.MAX_SAFE_INTEGER),
+  );
+}
 
 export function VersionHistoryPanelHeader({
   closeButtonRef,
@@ -138,7 +141,7 @@ export function CapabilitySummary({
 }: {
   readonly surface?: VersionSurfaceStatus;
 }): React.JSX.Element {
-  const rows = CAPABILITY_ROWS.map((capability) => ({
+  const rows = capabilityRows(surface).map((capability) => ({
     capability,
     state: surface?.capabilities[capability],
   }));

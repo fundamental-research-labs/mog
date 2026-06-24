@@ -182,6 +182,32 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-promote-remote-button')).toBeEnabled();
   });
 
+  it('renders one summary row for every capability in the surface contract', async () => {
+    const surface = createSurfaceStatus();
+    const workbook = createWorkbook({
+      getSurfaceStatus: jest.fn(async () => surface),
+    });
+
+    renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+
+    const summary = screen.getByRole('region', { name: 'Version capabilities' });
+    const renderedIds = Array.from(
+      summary.querySelectorAll<HTMLElement>('[data-testid^="version-history-capability-"]'),
+      (row) => {
+        const id = row.getAttribute('data-testid');
+        if (!id) throw new Error('Capability summary row is missing data-testid.');
+        return id;
+      },
+    );
+    const expectedIds = Object.keys(surface.capabilities).map(
+      (capability) => `version-history-capability-${safeDomId(capability)}`,
+    );
+
+    expect(renderedIds).toEqual(expectedIds);
+  });
+
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {
     const workbook = createWorkbook({
       getSurfaceStatus: jest.fn(async () =>
@@ -214,7 +240,7 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByText('version:commit is not available.')).toBeVisible();
     expect(branchButton).toBeDisabled();
     expect(branchButton).toHaveAccessibleDescription('version:branch is not available.');
-    expect(screen.getByText('version:branch is not available.')).toBeVisible();
+    expect(screen.getAllByText('version:branch is not available.')[0]).toBeVisible();
     expect(checkoutButton).toBeDisabled();
     expect(checkoutButton).toHaveAccessibleDescription('version:checkout is not available.');
     expect(screen.getByText('version:checkout is not available.')).toBeVisible();

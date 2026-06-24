@@ -44,6 +44,12 @@ export async function applyMergeChanges(
         await SheetOps.renameSheet(ctx, sheet, change.merged.value, { operationContext });
         continue;
       }
+      if (change.merged.property === 'frozen') {
+        await ctx.computeBridge.setFrozenPanes(sheet, change.merged.rows, change.merged.cols, {
+          operationContext,
+        });
+        continue;
+      }
       await ctx.computeBridge.setTabColor(sheet, change.merged.value, { operationContext });
       continue;
     }
@@ -140,7 +146,10 @@ export function mergeMutationSegmentPayload(
             {
               sheetId: change.sheetId,
               property: change.merged.property,
-              value: change.merged.value,
+              value:
+                change.merged.property === 'frozen'
+                  ? { rows: change.merged.rows, cols: change.merged.cols }
+                  : change.merged.value,
             },
           ]
         : [],

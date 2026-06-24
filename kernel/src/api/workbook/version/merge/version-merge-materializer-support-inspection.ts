@@ -59,7 +59,7 @@ export function inspectMaterializableMergeChange(
       return unsupported(structural, 'unsupportedEntityId');
     }
     const property = structural.propertyPath[0];
-    if (property !== 'name' && property !== 'tabColor') {
+    if (property !== 'name' && property !== 'tabColor' && property !== 'frozen') {
       return unsupported(structural, 'unsupportedPropertyPath');
     }
     return parseSheetMetadataMergeValue(change.merged, property)

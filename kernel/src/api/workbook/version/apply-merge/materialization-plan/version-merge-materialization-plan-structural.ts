@@ -65,7 +65,7 @@ export function parseSheetMetadataStructural(
   if (structural.domain !== 'sheet' && structural.domain !== 'sheets') return null;
   if (structural.propertyPath.length !== 1) return null;
   const property = structural.propertyPath[0];
-  return property === 'name' || property === 'tabColor'
+  return property === 'name' || property === 'tabColor' || property === 'frozen'
     ? (structural as ParsedSheetMetadataStructural)
     : null;
 }

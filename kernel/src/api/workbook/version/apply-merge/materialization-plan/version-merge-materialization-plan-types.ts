@@ -116,7 +116,7 @@ export type RowColumnTransition =
       readonly index: number;
     };
 
-export type SheetMetadataProperty = 'name' | 'tabColor';
+export type SheetMetadataProperty = 'name' | 'tabColor' | 'frozen';
 
 export type SheetMetadataMergeValue =
   | {
@@ -126,4 +126,9 @@ export type SheetMetadataMergeValue =
   | {
       readonly property: 'tabColor';
       readonly value: string | null;
+    }
+  | {
+      readonly property: 'frozen';
+      readonly rows: number;
+      readonly cols: number;
     };

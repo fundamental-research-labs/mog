@@ -75,16 +75,38 @@ export function sheetMetadataChange(
 export function sheetMetadataChange(
   changeId: string,
   sheetId: string,
-  property: 'name' | 'tabColor',
-  base: string | null,
-  value: string | null,
+  property: 'frozen',
+  base: { readonly rows: number; readonly cols: number },
+  value: { readonly rows: number; readonly cols: number },
+): VersionMergeChange;
+export function sheetMetadataChange(
+  changeId: string,
+  sheetId: string,
+  property: 'name' | 'tabColor' | 'frozen',
+  base: string | null | { readonly rows: number; readonly cols: number },
+  value: string | null | { readonly rows: number; readonly cols: number },
 ): VersionMergeChange {
   return {
     structural: metadata(changeId, sheetId, 'sheet', [property]),
-    base: { kind: 'value', value: base },
-    theirs: { kind: 'value', value },
-    merged: { kind: 'value', value },
+    base: { kind: 'value', value: sheetMetadataValue(base) },
+    theirs: { kind: 'value', value: sheetMetadataValue(value) },
+    merged: { kind: 'value', value: sheetMetadataValue(value) },
   };
+}
+
+function sheetMetadataValue(
+  value: string | null | { readonly rows: number; readonly cols: number },
+): VersionSemanticValue {
+  if (typeof value === 'object' && value !== null && 'rows' in value && 'cols' in value) {
+    return {
+      kind: 'object',
+      fields: [
+        { key: 'rows', value: value.rows },
+        { key: 'cols', value: value.cols },
+      ],
+    };
+  }
+  return value;
 }
 
 function rowColumnValue(

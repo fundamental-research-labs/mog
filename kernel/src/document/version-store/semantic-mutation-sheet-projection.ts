@@ -1,9 +1,6 @@
 import { toA1 } from '@mog/spreadsheet-utils/a1';
 
-import type {
-  SheetChange,
-  StructureChangeResult,
-} from '../../bridges/compute/compute-types.gen';
+import type { SheetChange, StructureChangeResult } from '../../bridges/compute/compute-types.gen';
 import {
   isSheetIndex,
   isStableSheetId,
@@ -62,6 +59,48 @@ export function mapSheetTabColorChanges(
       },
       before: { kind: 'value', value: change.oldColor ?? null },
       after: { kind: 'value', value: change.color ?? null },
+    });
+  }
+  return changes;
+}
+
+export function mapSheetFrozenPaneChanges(
+  sheetChanges: readonly SheetChange[],
+  sequence: number,
+): readonly VersionSemanticChangeRecord[] {
+  const changes: VersionSemanticChangeRecord[] = [];
+  for (const change of sheetChanges) {
+    if (change.field !== 'frozen') continue;
+    if (
+      change.oldFrozenRows === undefined &&
+      change.oldFrozenCols === undefined &&
+      change.frozenRows === undefined &&
+      change.frozenCols === undefined
+    ) {
+      continue;
+    }
+    changes.push({
+      structural: {
+        kind: 'metadata',
+        changeId: `mutation-${sequence}:sheet:${changes.length}`,
+        domain: 'sheet',
+        entityId: change.sheetId,
+        propertyPath: ['frozen'],
+      },
+      before: {
+        kind: 'value',
+        value: semanticObjectValue([
+          { key: 'rows', value: change.oldFrozenRows ?? 0 },
+          { key: 'cols', value: change.oldFrozenCols ?? 0 },
+        ]),
+      },
+      after: {
+        kind: 'value',
+        value: semanticObjectValue([
+          { key: 'rows', value: change.frozenRows ?? 0 },
+          { key: 'cols', value: change.frozenCols ?? 0 },
+        ]),
+      },
     });
   }
   return changes;

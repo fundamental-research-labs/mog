@@ -18,7 +18,7 @@ import {
 } from './version-apply-merge-format-test-utils';
 
 export function registerExpandedDomainFormatScenario() {
-  it('materializes direct first-slice formulas and all row/column order transitions from a clean plan', async () => {
+  it('materializes direct first-slice formulas, row/column transitions, and sheet view metadata from a clean plan', async () => {
     const provider = createFormatVersionStoreProvider();
     const initialized = expectInitializeSuccess(
       await provider.initializeGraph(await initializeInput('graph-expanded-domain-clean', 'root')),
@@ -108,6 +108,13 @@ export function registerExpandedDomainFormatScenario() {
         rowColumnChange('merge-column-delete', sheetId, 'column', 2, 'delete'),
         sheetMetadataChange('merge-sheet-rename', sheetId, 'name', 'Sheet1', 'Forecast Sheet'),
         sheetMetadataChange('merge-sheet-tab-color', sheetId, 'tabColor', null, '#33AAFF'),
+        sheetMetadataChange(
+          'merge-sheet-frozen-panes',
+          sheetId,
+          'frozen',
+          { rows: 0, cols: 0 },
+          { rows: 2, cols: 1 },
+        ),
       ]);
 
       const applied = await sourceWb.version.applyMerge(
@@ -144,6 +151,10 @@ export function registerExpandedDomainFormatScenario() {
       }
       expect(mergedWb.activeSheet.name).toBe('Forecast Sheet');
       await expect(mergedWb.activeSheet.view.getTabColor()).resolves.toBe('#33AAFF');
+      await expect(mergedWb.activeSheet.view.getFrozenPanes()).resolves.toEqual({
+        rows: 2,
+        cols: 1,
+      });
       await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 1 });
       await expect(mergedWb.activeSheet.getFormula('A2')).resolves.toBe('=A1+1');
       await expect(mergedWb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 2 });

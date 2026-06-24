@@ -103,7 +103,9 @@ export function inspectSupportedSemanticValueChange(
     }
     if (
       structural.propertyPath.length !== 1 ||
-      (structural.propertyPath[0] !== 'name' && structural.propertyPath[0] !== 'tabColor')
+      (structural.propertyPath[0] !== 'name' &&
+        structural.propertyPath[0] !== 'tabColor' &&
+        structural.propertyPath[0] !== 'frozen')
     ) {
       return { ok: false, reason: 'unsupportedPropertyPath' };
     }
@@ -150,9 +152,33 @@ function hasMaterializableSheetEntity(entityId: string): boolean {
 
 function isSupportedSheetMetadataDiffValue(
   value: VersionDiffValue,
-  property: 'name' | 'tabColor',
+  property: 'name' | 'tabColor' | 'frozen',
 ): boolean {
   if (value.kind !== 'value') return false;
   if (property === 'name') return typeof value.value === 'string' && value.value.length > 0;
+  if (property === 'frozen') return isSupportedFrozenPaneDiffValue(value.value);
   return value.value === null || typeof value.value === 'string';
+}
+
+function isSupportedFrozenPaneDiffValue(value: unknown): boolean {
+  if (!isRecord(value) || value.kind !== 'object' || !Array.isArray(value.fields)) return false;
+  const fields = new Map<string, unknown>();
+  for (const field of value.fields) {
+    if (!isRecord(field) || typeof field.key !== 'string') return false;
+    fields.set(field.key, field.value);
+  }
+  const rows = fields.get('rows');
+  const cols = fields.get('cols');
+  return (
+    typeof rows === 'number' &&
+    typeof cols === 'number' &&
+    Number.isSafeInteger(rows) &&
+    Number.isSafeInteger(cols) &&
+    rows >= 0 &&
+    cols >= 0
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

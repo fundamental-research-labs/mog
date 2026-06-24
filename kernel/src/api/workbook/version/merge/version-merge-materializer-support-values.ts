@@ -29,7 +29,9 @@ export function parseMaterializableStructural(
   }
   if (structural.domain === 'sheet' || structural.domain === 'sheets') {
     return structural.propertyPath.length === 1 &&
-      (structural.propertyPath[0] === 'name' || structural.propertyPath[0] === 'tabColor')
+      (structural.propertyPath[0] === 'name' ||
+        structural.propertyPath[0] === 'tabColor' ||
+        structural.propertyPath[0] === 'frozen')
       ? structural
       : null;
   }
@@ -124,11 +126,27 @@ export function parseRowColumnMergeValue(
 
 export function parseSheetMetadataMergeValue(
   value: VersionDiffValue,
-  property: 'name' | 'tabColor',
+  property: 'name' | 'tabColor' | 'frozen',
 ): boolean {
   if (value.kind !== 'value') return false;
   if (property === 'name') return typeof value.value === 'string' && value.value.length > 0;
+  if (property === 'frozen') return isMaterializableFrozenPaneValue(value.value);
   return value.value === null || typeof value.value === 'string';
+}
+
+function isMaterializableFrozenPaneValue(value: VersionSemanticValue): boolean {
+  const fields = semanticObjectFieldMap(value);
+  if (!fields) return false;
+  const rows = fields.get('rows');
+  const cols = fields.get('cols');
+  return (
+    typeof rows === 'number' &&
+    typeof cols === 'number' &&
+    Number.isSafeInteger(rows) &&
+    Number.isSafeInteger(cols) &&
+    rows >= 0 &&
+    cols >= 0
+  );
 }
 
 function isMaterializableSemanticCellValue(value: VersionSemanticValue): boolean {

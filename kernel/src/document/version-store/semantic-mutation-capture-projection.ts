@@ -27,6 +27,7 @@ import {
 import {
   mapSheetCopyChanges,
   mapSheetCreateChanges,
+  mapSheetFrozenPaneChanges,
   mapSheetMoveChanges,
   mapSheetRemoveChanges,
   mapSheetRenameChanges,
@@ -66,6 +67,9 @@ export function mapMutationResultToSemanticChanges(
   }
   if (input.operation === 'compute_set_tab_color') {
     changes.push(...mapSheetTabColorChanges(input.result.sheetChanges ?? [], sequence));
+  }
+  if (input.operation === 'compute_set_frozen_panes') {
+    changes.push(...mapSheetFrozenPaneChanges(input.result.sheetChanges ?? [], sequence));
   }
   if (input.operation === 'compute_create_sheet_with_default_col_width') {
     changes.push(...mapSheetCreateChanges(input.result.sheetChanges ?? [], sequence));

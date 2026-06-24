@@ -13,7 +13,10 @@ import {
   parseRowColumnStructural,
   parseSheetMetadataStructural,
 } from './version-merge-materialization-plan-structural';
-import type { ParsedMergeChange } from './version-merge-materialization-plan-types';
+import type {
+  ParsedMergeChange,
+  SheetMetadataProperty,
+} from './version-merge-materialization-plan-types';
 import {
   isNoopCellMergeChange,
   isNoopDirectFormatMergeChange,
@@ -121,7 +124,7 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
           reason: 'unsupportedEntityId',
         });
       }
-      const property = structural.propertyPath[0] as 'name' | 'tabColor';
+      const property = structural.propertyPath[0] as SheetMetadataProperty;
       const merged = parseSheetMetadataMergeValue(change.merged, property);
       if (!merged) {
         return unsupportedMergeChange(input, index, structural, {

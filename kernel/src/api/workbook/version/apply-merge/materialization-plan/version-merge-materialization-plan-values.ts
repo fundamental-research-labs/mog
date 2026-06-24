@@ -15,7 +15,10 @@ import type {
   SheetMetadataProperty,
 } from './version-merge-materialization-plan-types';
 
-export function parseCellMergeValue(value: VersionDiffValue, domain: string): CellMergeValue | null {
+export function parseCellMergeValue(
+  value: VersionDiffValue,
+  domain: string,
+): CellMergeValue | null {
   if (value.kind !== 'value') return null;
   if (domain === 'cells.formulas') return parseSemanticFormulaCellValue(value.value);
   return parseSemanticCellValue(value.value);
@@ -30,7 +33,9 @@ export function isNoopCellMergeChange(
   return current ? cellMergeValuesEqual(current, merged) : false;
 }
 
-export function parseDirectFormatMergeValue(value: VersionDiffValue): DirectFormatMergeValue | null {
+export function parseDirectFormatMergeValue(
+  value: VersionDiffValue,
+): DirectFormatMergeValue | null {
   if (value.kind !== 'value') return null;
   if (value.value === null) return { kind: 'clear' };
   const plain = semanticFormatJsonValue(value.value);
@@ -72,6 +77,9 @@ export function parseSheetMetadataMergeValue(
     return typeof value.value === 'string' && value.value.length > 0
       ? { property, value: value.value }
       : null;
+  }
+  if (property === 'frozen') {
+    return parseFrozenPaneMergeValue(value.value);
   }
   return value.value === null || typeof value.value === 'string'
     ? { property, value: value.value }
@@ -156,7 +164,33 @@ function sheetMetadataMergeValuesEqual(
   left: SheetMetadataMergeValue,
   right: SheetMetadataMergeValue,
 ): boolean {
-  return left.property === right.property && left.value === right.value;
+  if (left.property !== right.property) return false;
+  if (left.property === 'frozen' && right.property === 'frozen') {
+    return left.rows === right.rows && left.cols === right.cols;
+  }
+  if (left.property === 'name' && right.property === 'name') return left.value === right.value;
+  if (left.property === 'tabColor' && right.property === 'tabColor') {
+    return left.value === right.value;
+  }
+  return false;
+}
+
+function parseFrozenPaneMergeValue(value: VersionSemanticValue): SheetMetadataMergeValue | null {
+  const fields = semanticObjectFieldMap(value);
+  if (!fields) return null;
+  const rows = fields.get('rows');
+  const cols = fields.get('cols');
+  if (
+    typeof rows !== 'number' ||
+    typeof cols !== 'number' ||
+    !Number.isSafeInteger(rows) ||
+    !Number.isSafeInteger(cols) ||
+    rows < 0 ||
+    cols < 0
+  ) {
+    return null;
+  }
+  return { property: 'frozen', rows, cols };
 }
 
 function semanticFormatJsonValue(value: VersionSemanticValue, depth = 0): unknown {

@@ -24,6 +24,9 @@ const STATE_DIGEST = {
   algorithm: 'sha256' as const,
   digest: 'c'.repeat(64),
 };
+const TRUSTED_METADATA_DOCUMENT_ID = 'trusted-metadata-document';
+const TRUSTED_METADATA_COMMIT_ID = `commit:sha256:${'d'.repeat(64)}`;
+const TRUSTED_METADATA_SIDECAR_PART = 'customXml/mog-version-metadata.xml';
 const SEMANTIC_STATE = {
   state: {
     schemaVersion: 'semantic-workbook-state.v1',
@@ -94,5 +97,58 @@ describe('xlsx import root', () => {
         Reflect.deleteProperty(globalWithAtob, 'atob');
       }
     }
+  });
+
+  it('persists trusted XLSX metadata only as a redacted import-root trust summary', async () => {
+    const encodeDiff = jest.fn().mockResolvedValue(new Uint8Array([4, 5, 6]) as never);
+    const semanticStateReader: VersionSemanticStateReaderPort = {
+      readCurrentSemanticState: jest.fn().mockResolvedValue(SEMANTIC_STATE as never),
+      diffSemanticStates: jest.fn(),
+    };
+
+    const rootWrite = await buildXlsxVersionImportRootWrite({
+      namespace: NAMESPACE,
+      snapshotRootByteSyncPort: { encodeDiff },
+      semanticStateReader,
+      provenance: {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 3 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'trusted',
+          sidecarPart: TRUSTED_METADATA_SIDECAR_PART,
+          redacted: true,
+        },
+        versionMetadataHeadCandidate: {
+          documentId: TRUSTED_METADATA_DOCUMENT_ID,
+          head: {
+            commitId: TRUSTED_METADATA_COMMIT_ID,
+            refName: 'refs/heads/main',
+            resolvedFrom: 'HEAD',
+            refRevision: { kind: 'counter', value: '7' },
+            semanticChangeSetDigest: { algorithm: 'sha256', digest: 'e'.repeat(64) },
+            snapshotRootDigest: { algorithm: 'sha256', digest: 'f'.repeat(64) },
+          },
+        },
+      },
+      createdAt: CREATED_AT,
+    });
+
+    const semanticPayload = rootWrite.semanticChangeSetRecord.preimage.payload;
+    expect(semanticPayload).toMatchObject({
+      source: {
+        kind: 'xlsxImportRoot',
+        versionMetadataTrust: {
+          status: 'trusted',
+          sidecarPart: TRUSTED_METADATA_SIDECAR_PART,
+          redacted: true,
+        },
+        semanticStateDigest: STATE_DIGEST,
+      },
+      importDiagnostics: [],
+    });
+    expect(JSON.stringify(semanticPayload)).not.toContain(TRUSTED_METADATA_DOCUMENT_ID);
+    expect(JSON.stringify(semanticPayload)).not.toContain(TRUSTED_METADATA_COMMIT_ID);
+    expect(JSON.stringify(semanticPayload)).not.toContain('versionMetadataHeadCandidate');
   });
 });

@@ -2,6 +2,7 @@ import type { ObjectDigest, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 export const DOCUMENT_ID = 'vc10-xlsx-import-root';
 export const CLEAN_EXPORT_DOCUMENT_ID = 'vc10-xlsx-clean-export';
+export const TRUSTED_ROUNDTRIP_DOCUMENT_ID = 'vc10-xlsx-trusted-roundtrip';
 export const METADATA_EXPORT_DOCUMENT_ID = 'vc10-xlsx-metadata-export';
 export const METADATA_REPLACE_DOCUMENT_ID = 'vc10-xlsx-metadata-replace';
 export const METADATA_TRUST_DOCUMENT_ID = 'vc10-xlsx-metadata-trust';

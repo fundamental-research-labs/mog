@@ -13,10 +13,11 @@ export async function buildXlsxVersionImportRootWrite(input: {
   readonly provenance: XlsxVersionImportRootProvenance;
   readonly createdAt: string;
 }): Promise<VersionGraphInitializeInput['rootWrite']> {
-  const [snapshotRootRecord, semanticState] = await Promise.all([
-    captureXlsxImportSnapshotRootRecord(input.namespace, input.snapshotRootByteSyncPort),
-    input.semanticStateReader.readCurrentSemanticState(),
-  ]);
+  const semanticState = await input.semanticStateReader.readCurrentSemanticState();
+  const snapshotRootRecord = await captureXlsxImportSnapshotRootRecord(
+    input.namespace,
+    input.snapshotRootByteSyncPort,
+  );
   const semanticChangeSetRecord = await createVersionObjectRecord(input.namespace, {
     objectType: 'workbook.semanticChangeSet.v1',
     schemaVersion: 1,

@@ -14,7 +14,10 @@ import {
   readResolutionSetArtifact,
   readResolvedMergeAttemptArtifact,
 } from './version-merge-review-saved-resolution-artifacts';
-import { validateResolvedAttemptBinding } from './version-merge-review-saved-resolution-binding';
+import {
+  validateResolutionSetBinding,
+  validateResolvedAttemptBinding,
+} from './version-merge-review-saved-resolution-binding';
 import { validateSavedResolutionPayloadRefs } from './version-merge-review-saved-resolution-payload-refs';
 import type { SavedResolutionPayloadTarget } from './version-merge-review-saved-resolution-types';
 import { digestsEqual } from './version-merge-review-saved-resolution-utils';
@@ -96,6 +99,16 @@ export async function resolveSavedConflictDetailSelection(
 
   const resolutionSet = await readResolutionSetArtifact(graph, operation, resolutionSetDigest);
   if (!resolutionSet.ok) return resolutionSet;
+
+  const resolutionSetDiagnostics = validateResolutionSetBinding(
+    operation,
+    input,
+    resolutionSet.payload,
+    resolutionSet.record,
+  );
+  if (resolutionSetDiagnostics.length > 0) {
+    return { ok: false, diagnostics: resolutionSetDiagnostics };
+  }
 
   const resolutionValidation = validateResolutionsForConflictSet(
     operation,

@@ -249,16 +249,56 @@ function materializedMergeDiffRole(
   parentCommitIds: readonly WorkbookCommitId[],
 ): MaterializedMergeDiffRole | null {
   if (!isRecord(payload) || !isRecord(payload.merge)) return null;
+  const merge = materializedMergeProof(payload.merge);
+  if (!merge || !materializedMergeParentsMatch(parentCommitIds, merge)) return null;
+
+  if (merge.baseCommitId === baseCommitId) return 'base';
+  if (merge.oursCommitId === baseCommitId) return 'ours';
+  if (merge.theirsCommitId === baseCommitId) return 'theirs';
+  return null;
+}
+
+function materializedMergeProof(
+  value: Readonly<Record<string, unknown>>,
+):
+  | {
+      readonly baseCommitId: WorkbookCommitId;
+      readonly oursCommitId: WorkbookCommitId;
+      readonly theirsCommitId: WorkbookCommitId;
+    }
+  | null {
   if (
-    payload.merge.oursCommitId !== parentCommitIds[0] ||
-    payload.merge.theirsCommitId !== parentCommitIds[1]
+    typeof value.baseCommitId !== 'string' ||
+    typeof value.oursCommitId !== 'string' ||
+    typeof value.theirsCommitId !== 'string'
   ) {
     return null;
   }
-  if (payload.merge.baseCommitId === baseCommitId) return 'base';
-  if (payload.merge.oursCommitId === baseCommitId) return 'ours';
-  if (payload.merge.theirsCommitId === baseCommitId) return 'theirs';
-  return null;
+  return {
+    baseCommitId: value.baseCommitId as WorkbookCommitId,
+    oursCommitId: value.oursCommitId as WorkbookCommitId,
+    theirsCommitId: value.theirsCommitId as WorkbookCommitId,
+  };
+}
+
+function materializedMergeParentsMatch(
+  parentCommitIds: readonly WorkbookCommitId[],
+  merge: {
+    readonly oursCommitId: WorkbookCommitId;
+    readonly theirsCommitId: WorkbookCommitId;
+  },
+): boolean {
+  if (
+    parentCommitIds.length !== 2 ||
+    parentCommitIds[0] === parentCommitIds[1] ||
+    merge.oursCommitId === merge.theirsCommitId
+  ) {
+    return false;
+  }
+  return (
+    (parentCommitIds[0] === merge.oursCommitId && parentCommitIds[1] === merge.theirsCommitId) ||
+    (parentCommitIds[0] === merge.theirsCommitId && parentCommitIds[1] === merge.oursCommitId)
+  );
 }
 
 function projectMaterializedMergeChange(

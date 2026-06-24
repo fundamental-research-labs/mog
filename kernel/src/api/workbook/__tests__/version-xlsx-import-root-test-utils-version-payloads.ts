@@ -47,6 +47,43 @@ export async function readRootSnapshotRootRecord(
   });
 }
 
+export async function expectImportBranchCounts(
+  documentId: string,
+  expected: {
+    readonly externalChange: number;
+    readonly newRoot: number;
+  },
+): Promise<void> {
+  const documentScope: VersionDocumentScope = { documentId };
+  const provider = selectVersionStoreProvider(
+    {
+      kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+      documentScope,
+      requireDurablePersistence: true,
+    },
+    createDefaultVersionStoreProviderRegistry(),
+  );
+  const registry = await provider.readGraphRegistry();
+  expect(registry.status).toBe('ok');
+  if (registry.status !== 'ok') {
+    throw new Error(`expected version registry: ${registry.diagnostics[0]?.code}`);
+  }
+  const graph = await provider.openGraph(
+    namespaceForDocumentScope(documentScope, registry.registry.currentGraphId),
+  );
+  const branches = await graph.listBranches({ prefix: 'import' });
+  expect(branches).toMatchObject({ ok: true });
+  if (!branches.ok) {
+    throw new Error(`expected import branches: ${branches.error.code}`);
+  }
+  expect(
+    branches.branches.filter((branch) => /^import\/external-change\//.test(branch.name)),
+  ).toHaveLength(expected.externalChange);
+  expect(
+    branches.branches.filter((branch) => /^import\/new-root\//.test(branch.name)),
+  ).toHaveLength(expected.newRoot);
+}
+
 async function readRootCommit(rootCommitId: WorkbookCommitId, documentId: string) {
   const documentScope: VersionDocumentScope = { documentId };
   const provider = selectVersionStoreProvider(

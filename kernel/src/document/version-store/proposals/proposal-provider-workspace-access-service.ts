@@ -83,6 +83,15 @@ export async function disposeProviderBackedProposalWorkspace(
   if (!targetBinding.ok) return targetBinding.result;
 
   if (!options.workspaceService) return workspaceUnavailable('disposeProposalWorkspace');
+  const workspace = await callWorkspaceService('disposeProposalWorkspace', () =>
+    options.workspaceService!.getProposalWorkspace(options.input),
+  );
+  if (!workspace.ok) return workspace;
+  const workspaceBinding = validateProposalWorkspaceHandle({
+    proposal: proposal.proposal,
+    handle: workspace.value,
+  });
+  if (!workspaceBinding.ok) return workspaceBinding.result;
   return callWorkspaceService('disposeProposalWorkspace', () =>
     options.workspaceService!.disposeProposalWorkspace(options.input),
   );

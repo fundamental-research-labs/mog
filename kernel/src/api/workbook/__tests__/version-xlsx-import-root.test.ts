@@ -5,6 +5,7 @@ import { registerCleanExportScenario } from './version-xlsx-import-root-clean-ex
 import { registerDurableImportRootScenario } from './version-xlsx-import-root-durable-import-root-scenario';
 import { registerSelfPromotedExportSupportScenario } from './version-xlsx-import-root-self-promoted-export-support-scenario';
 import { resetVersionStoreIndexedDbForXlsxImportRootTests } from './version-xlsx-import-root-test-utils';
+import { registerTrustedMetadataRoundTripScenario } from './version-xlsx-import-root-trusted-roundtrip-scenario';
 
 beforeEach(resetVersionStoreIndexedDbForXlsxImportRootTests);
 afterEach(resetVersionStoreIndexedDbForXlsxImportRootTests);
@@ -14,4 +15,5 @@ describe('WorkbookVersion XLSX import root', () => {
   registerAuthoredEditAfterImportRootScenario();
   registerCleanExportScenario();
   registerSelfPromotedExportSupportScenario();
+  registerTrustedMetadataRoundTripScenario();
 });

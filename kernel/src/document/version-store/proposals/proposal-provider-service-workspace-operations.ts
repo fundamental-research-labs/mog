@@ -146,6 +146,35 @@ export async function commitProviderBackedProposalWorkspace(
       'Proposal workspace commits must use the workspace opened for the proposal.',
     );
   }
+  const workspaceProposal = await store.value.getProposalByWorkspaceId(input.workspaceId);
+  if (!workspaceProposal.ok) return storeFailure(workspaceProposal);
+  if (workspaceProposal.value.id !== proposal.value.id) {
+    return invalidState(
+      'proposal_workspace_mismatch',
+      ['matching_workspace_id'],
+      'Proposal workspace commits must use the workspace opened for the proposal.',
+    );
+  }
+  if (workspaceProposal.value.revision !== input.expectedRevision) {
+    return staleRevision(input.expectedRevision, workspaceProposal.value.revision);
+  }
+  if (workspaceProposal.value.status !== 'workspace_open') {
+    return invalidState(
+      'proposal_workspace_not_open',
+      ['workspace_open'],
+      'Only workspace-open proposals can be committed.',
+    );
+  }
+  if (
+    workspaceProposal.value.proposalBranchName !== proposal.value.proposalBranchName ||
+    workspaceProposal.value.baseCommitId !== proposal.value.baseCommitId
+  ) {
+    return invalidState(
+      'proposal_workspace_branch_mismatch',
+      ['matching_proposal_workspace'],
+      'Proposal workspace commits must use the stored proposal branch opened for the workspace.',
+    );
+  }
 
   const targetBinding = await ensureProposalTargetBinding({
     proposal: proposal.value,
@@ -165,6 +194,7 @@ export async function commitProviderBackedProposalWorkspace(
   );
   if (!committed.ok) return committed;
   const workspaceBinding = validateProposalWorkspaceCommitResult({
+    proposal: proposal.value,
     workspaceId: input.workspaceId,
     result: committed.value,
   });

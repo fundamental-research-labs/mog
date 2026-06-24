@@ -37,18 +37,47 @@ export function validateProposalWorkspaceHandle(input: {
 }
 
 export function validateProposalWorkspaceCommitResult(input: {
+  readonly proposal: AgentProposalRecord;
   readonly workspaceId: string;
   readonly result: ProviderBackedProposalWorkspaceCommitResult;
 }): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<never> } {
-  if (input.result.workspaceId === input.workspaceId) return { ok: true };
-  return {
-    ok: false,
-    result: invalidState(
-      'proposal_workspace_commit_mismatch',
-      ['matching_workspace_id'],
-      'Proposal workspace commit results must echo the committed workspace id.',
-    ),
-  };
+  if (input.result.workspaceId !== input.workspaceId) {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_workspace_commit_mismatch',
+        ['matching_workspace_id'],
+        'Proposal workspace commit results must echo the committed workspace id.',
+      ),
+    };
+  }
+  if (
+    input.result.proposalBranchName !== undefined &&
+    input.result.proposalBranchName !== input.proposal.proposalBranchName
+  ) {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_workspace_commit_branch_mismatch',
+        ['matching_proposal_branch'],
+        'Proposal workspace commit results must echo the stored proposal branch when supplied.',
+      ),
+    };
+  }
+  if (
+    input.result.committedFromHeadId !== undefined &&
+    input.result.committedFromHeadId !== input.proposal.baseCommitId
+  ) {
+    return {
+      ok: false,
+      result: invalidState(
+        'proposal_workspace_commit_base_mismatch',
+        ['matching_workspace_head'],
+        'Proposal workspace commits must start from the proposal branch head opened for the workspace.',
+      ),
+    };
+  }
+  return { ok: true };
 }
 
 function workspaceBindingMismatch(

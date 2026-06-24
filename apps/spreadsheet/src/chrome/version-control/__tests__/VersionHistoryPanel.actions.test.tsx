@@ -20,6 +20,7 @@ import {
   failedInvalidBranchName,
   failedInvalidState,
   failedNotFound,
+  mergePreviewButtonTestId,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
   semanticDiffPage,
@@ -289,6 +290,45 @@ describe('VersionHistoryPanelContent action flows', () => {
     });
     await expectActionResult('Created review/version-panel', 'success');
     expect(await screen.findByTestId(checkoutBranchTestId(branchName))).toBeEnabled();
+  });
+
+  it('keeps checkout and merge controls disabled while branch creation is in flight', async () => {
+    const branchName = 'refs/heads/review/action-busy';
+    const branchResult =
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
+    const workbook = createWorkbook({
+      createBranch: jest.fn(() => branchResult.promise),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await user.click(screen.getByTestId('version-history-create-branch-button'));
+
+    await waitFor(() => expect(workbook.version.createBranch).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+      'Creating branch',
+    );
+
+    const runningReason = 'Wait for the current version action to finish.';
+    expectDisabledButtonReason(
+      screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')),
+      runningReason,
+    );
+    expectDisabledButtonReason(screen.getByTestId(mergePreviewButtonTestId()), runningReason);
+
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    expect(workbook.version.merge).not.toHaveBeenCalled();
+
+    branchResult.resolve({
+      ok: true,
+      value: {
+        name: branchName,
+        commitId: HEAD_COMMIT_ID,
+        revision: { kind: 'counter', value: '3' },
+      },
+    });
+    await expectActionResult('Created review/action-busy', 'success');
   });
 
   it('refreshes commit availability when workbook edits dirty an open panel', async () => {

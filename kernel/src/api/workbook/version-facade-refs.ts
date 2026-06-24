@@ -34,6 +34,7 @@ import {
   deleteWorkbookVersionRef,
   fastForwardWorkbookVersionBranch,
   getWorkbookVersionRef,
+  hasAttachedVersionRefLifecycleService,
   listWorkbookVersionRefs,
   readWorkbookVersionRef,
   updateWorkbookVersionBranch,
@@ -72,7 +73,10 @@ export async function readWorkbookVersionFacadeRef(
     if (activeCheckoutHead) return versionResultFromRefRead('readRef', activeCheckoutHead);
   }
 
-  if (name !== VERSION_HEAD_REF && name !== VERSION_MAIN_REF) {
+  if (
+    name !== VERSION_HEAD_REF &&
+    (name !== VERSION_MAIN_REF || hasAttachedVersionRefLifecycleService(ctx))
+  ) {
     return versionResultFromRefRead('readRef', await readWorkbookVersionRef(ctx, name));
   }
 

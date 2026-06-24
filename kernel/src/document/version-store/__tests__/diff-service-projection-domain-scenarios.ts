@@ -31,6 +31,8 @@ export function registerDiffServiceProjectionDomainScenarios(): void {
         entry.structural.kind === 'metadata' ? entry.structural.domain : entry.structural.kind,
       ),
     ).toEqual([
+      'cells.values',
+      'cells.formulas',
       'named-ranges',
       'tables',
       'comments-notes',
@@ -41,7 +43,13 @@ export function registerDiffServiceProjectionDomainScenarios(): void {
       'charts.source-range',
       'floating-objects.anchors',
     ]);
-    expect(result.items[0]?.display).toEqual(redactedEntityLabelDisplay());
+    expect(
+      result.items.find(
+        (entry) =>
+          entry.structural.kind === 'metadata' &&
+          entry.structural.changeId === 'vc06-named-range-definition',
+      )?.display,
+    ).toEqual(redactedEntityLabelDisplay());
     expect(JSON.stringify(result)).not.toContain('secretFormula');
   });
 }

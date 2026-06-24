@@ -3,6 +3,61 @@ import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { VersionSemanticStateReaderPort } from '../../../../document/version-store/semantic-state-reader';
 import { isVersioningRecord } from './version-checkout-rebind-utils';
 
+const CHECKOUT_REBIND_DERIVED_SERVICE_KEYS = [
+  'writeService',
+  'readService',
+  'commitService',
+  'publicService',
+  'checkoutService',
+  'checkoutMaterializationService',
+  'materializationService',
+  'versionCheckoutService',
+  'publicCheckoutService',
+  'mergeService',
+  'versionMergeService',
+  'diffService',
+  'versionDiffService',
+  'branchService',
+  'branchRefService',
+  'refLifecycleService',
+  'versionRefService',
+  'publicRefService',
+  'refService',
+  'revertService',
+  'versionRevertService',
+  'reviewService',
+  'versionReviewService',
+  'reviewMetadataStore',
+  'proposalService',
+  'versionProposalService',
+  'agentProposalService',
+  'proposalWorkspaceService',
+  'proposalWorkspaceLifecycleService',
+  'proposalWorkspaceSessionService',
+  'proposalMetadataStore',
+  'proposalStore',
+  'pendingRemotePromotionService',
+  'promotePendingRemoteSegments',
+  'provenanceTruthService',
+  'provenanceAdmissionService',
+  'provenanceStatusService',
+] as const;
+
+const CHECKOUT_REBIND_MUTABLE_LIFECYCLE_KEYS = [
+  'surfaceStatusService',
+  'versionSurfaceStatusService',
+  'statusService',
+  'dirtyStatusService',
+  'providerWriteActivityTracker',
+  'versionProviderWriteActivityTracker',
+  'providerWriteActivity',
+  'versionProviderWriteActivity',
+  'mutationCapture',
+  'capturePendingRemoteSegment',
+  'mergeCommitMaterializer',
+  'storageProvider',
+] as const;
+
 export function resetSemanticMutationCaptureAfterCheckout(
   versioning: Record<string, unknown>,
   semanticStateReader: VersionSemanticStateReaderPort,
@@ -18,17 +73,10 @@ export function resetSemanticMutationCaptureAfterCheckout(
 }
 
 export function deleteAttachedVersionServices(config: Record<string, unknown>): void {
-  delete config.writeService;
-  delete config.readService;
-  delete config.commitService;
-  delete config.publicService;
-  delete config.checkoutService;
-  delete config.checkoutMaterializationService;
-  delete config.mergeService;
-  delete config.versionMergeService;
-  delete config.diffService;
-  delete config.versionDiffService;
-  delete config.branchService;
-  delete config.branchRefService;
-  delete config.refLifecycleService;
+  for (const key of CHECKOUT_REBIND_DERIVED_SERVICE_KEYS) {
+    delete config[key];
+  }
+  for (const key of CHECKOUT_REBIND_MUTABLE_LIFECYCLE_KEYS) {
+    delete config[key];
+  }
 }

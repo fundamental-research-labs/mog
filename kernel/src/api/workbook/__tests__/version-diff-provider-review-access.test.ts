@@ -41,6 +41,8 @@ describe('WorkbookVersion provider-backed diff review access', () => {
         entry.structural.kind === 'metadata' ? entry.structural.domain : entry.structural.kind,
       ),
     ).toEqual([
+      'cells.values',
+      'cells.formulas',
       'named-ranges',
       'tables',
       'comments-notes',
@@ -51,7 +53,13 @@ describe('WorkbookVersion provider-backed diff review access', () => {
       'charts.source-range',
       'floating-objects.anchors',
     ]);
-    expect(result.value.items[0]?.display).toEqual(redactedEntityLabelDisplay());
+    expect(
+      result.value.items.find(
+        (entry) =>
+          entry.structural.kind === 'metadata' &&
+          entry.structural.changeId === 'vc06-named-range-definition',
+      )?.display,
+    ).toEqual(redactedEntityLabelDisplay());
   });
 
   it('projects table and filter review-safe changes without leaking omitted authored payloads', async () => {

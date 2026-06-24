@@ -205,48 +205,76 @@ function activeCheckoutSessionRefName(
 ): ActiveRefProjection {
   const session = unwrapProviderReadValue(value, operation, 'activeCheckoutSession');
   if (session.status === 'blocked') return session;
-  if (
-    !isRecord(session.value) ||
-    session.value.detached === true ||
-    (!('branchName' in session.value) && !('refName' in session.value))
-  ) {
+  if (session.value === null) {
     return { status: 'ok', refName: null };
   }
-  return {
-    status: 'ok',
-    refName: firstProviderRefName([session.value.branchName, session.value.refName]),
-  };
+  if (!isRecord(session.value)) {
+    return activeProjectionBlocked(operation, 'activeCheckoutSession');
+  }
+  if (session.value.detached === true) return { status: 'ok', refName: null };
+
+  const projected = firstProviderRefName([
+    session.value.branchName,
+    session.value.refName,
+    session.value.target,
+    session.value.name,
+  ]);
+  if (projected.status === 'invalid') {
+    return activeProjectionBlocked(operation, 'activeCheckoutSession');
+  }
+  return projected.refName
+    ? { status: 'ok', refName: projected.refName }
+    : activeProjectionBlocked(operation, 'activeCheckoutSession');
 }
 
 function currentHeadRefName(value: unknown, operation: DeleteRefOperation): ActiveRefProjection {
   const read = unwrapProviderReadValue(value, operation, 'currentHead');
   if (read.status === 'blocked') return read;
-  if (!isRecord(read.value)) return { status: 'ok', refName: null };
-  const head = isRecord(read.value.head)
-    ? read.value.head
-    : isRecord(read.value.ref)
-      ? read.value.ref
-      : read.value;
+  if (read.value === null) return { status: 'ok', refName: null };
+  if (!isRecord(read.value)) return activeProjectionBlocked(operation, 'currentHead');
+  const head = currentHeadPayload(read.value);
+  if (head === null) return { status: 'ok', refName: null };
+  if (!isRecord(head)) return activeProjectionBlocked(operation, 'currentHead');
   if (head.mode === 'detached') return { status: 'ok', refName: null };
-  return {
-    status: 'ok',
-    refName: firstProviderRefName([head.branchName, head.refName, head.target]),
-  };
+  const projected = firstProviderRefName([
+    head.branchName,
+    head.refName,
+    head.target,
+    head.name,
+  ]);
+  if (projected.status === 'invalid') return activeProjectionBlocked(operation, 'currentHead');
+  if (projected.refName) return { status: 'ok', refName: projected.refName };
+  return head.mode === 'attached'
+    ? activeProjectionBlocked(operation, 'currentHead')
+    : { status: 'ok', refName: null };
 }
 
-function firstProviderRefName(
-  values: readonly unknown[],
-): Extract<ActiveRefProjection, { readonly status: 'ok' }>['refName'] {
+function currentHeadPayload(value: Readonly<Record<string, unknown>>): unknown {
+  if ('head' in value) return value.head;
+  if ('ref' in value) return value.ref;
+  return value;
+}
+
+type ActiveProjectionRefName = Extract<
+  ActiveRefProjection,
+  { readonly status: 'ok' }
+>['refName'];
+
+type ProviderRefNameProjection =
+  | { readonly status: 'ok'; readonly refName: ActiveProjectionRefName }
+  | { readonly status: 'invalid' };
+
+function firstProviderRefName(values: readonly unknown[]): ProviderRefNameProjection {
+  let sawInvalidCandidate = false;
   for (const value of values) {
     const refName = providerRefName(value);
-    if (refName) return refName;
+    if (refName) return { status: 'ok', refName };
+    if (value !== null && value !== undefined) sawInvalidCandidate = true;
   }
-  return null;
+  return sawInvalidCandidate ? { status: 'invalid' } : { status: 'ok', refName: null };
 }
 
-function providerRefName(
-  value: unknown,
-): Extract<ActiveRefProjection, { readonly status: 'ok' }>['refName'] {
+function providerRefName(value: unknown): ActiveProjectionRefName {
   if (typeof value !== 'string') return null;
   const parsed = parsePublicBranchName(value, 'readRef');
   if (parsed.ok) return parsed.refName;
@@ -260,11 +288,22 @@ function providerRefName(
   }
 }
 
+function activeProjectionBlocked(
+  operation: DeleteRefOperation,
+  phase: 'activeCheckoutSession' | 'currentHead',
+): ActiveRefProjection {
+  return {
+    status: 'blocked',
+    diagnostics: [preflightReadFailedDiagnostic(operation, phase)],
+  };
+}
+
 function unwrapProviderReadValue(
   value: unknown,
   operation: DeleteRefOperation,
   phase: 'activeCheckoutSession' | 'currentHead',
 ): ProviderReadProjection {
+  if (value === null || value === undefined) return { status: 'read', value };
   if (!isRecord(value)) return { status: 'read', value };
   if (value.status === 'pending') {
     return {
@@ -272,23 +311,24 @@ function unwrapProviderReadValue(
       diagnostics: [preflightReadFailedDiagnostic(operation, `${phase}Pending`)],
     };
   }
-  if (value.status === 'failed' || value.status === 'degraded') {
+  if (value.ok === false || value.status === 'failed' || value.status === 'degraded') {
     return {
       status: 'blocked',
       diagnostics: [preflightReadFailedDiagnostic(operation, `${phase}Failed`)],
     };
   }
-  if (value.status === 'success') {
+  if (value.status === 'success' || value.ok === true) {
     return {
       status: 'read',
-      value: isRecord(value.session)
-        ? value.session
-        : isRecord(value.current)
-          ? value.current
-          : isRecord(value.value)
-            ? value.value
-            : value,
+      value: unwrapSuccessfulProviderReadValue(value),
     };
   }
   return { status: 'read', value };
+}
+
+function unwrapSuccessfulProviderReadValue(value: Readonly<Record<string, unknown>>): unknown {
+  if ('session' in value) return value.session;
+  if ('current' in value) return value.current;
+  if ('value' in value) return value.value;
+  return value;
 }

@@ -26,6 +26,11 @@ import {
 import type { VersionDiffPreview } from './VersionHistoryDiffPreview';
 import type { ReviewProposalDiffTarget } from './ReviewProposalSurface';
 import {
+  VERSION_COMMIT_DIRTY_REFRESH_EVENTS,
+  type VersionPanelActionKind,
+  type VersionPanelActionRun,
+} from './version-history-panel-action-run';
+import {
   applyMergeInputFromPreview,
   clearMergeReviewDraft,
   diagnosticFromMergeApplyResult,
@@ -52,6 +57,11 @@ import {
 } from './merge';
 import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
 import {
+  firstDisabledAvailability,
+  mergeSourcesMatch,
+  mergeTargetsMatch,
+} from './version-history-panel-action-utils';
+import {
   commitDirtyRefreshFenceRequiresRefresh,
   commitDirtyRefreshFenceSnapshot,
   diagnosticFromRevertResult,
@@ -62,35 +72,18 @@ import {
   type VersionHistoryData,
   type VersionHistoryWorkbook,
 } from './version-history-panel-data';
+import { readCurrentMergeExpectedTargetHead } from './version-history-panel-merge-target-head';
 
 export type {
   VersionMergePreviewState,
   VersionMergeResolutionSelections,
 } from './merge';
 
-const VERSION_COMMIT_DIRTY_REFRESH_EVENTS = [
-  'workbook:version-dirty-status-changed',
-  'workbook:version-checkout-materialized',
-] as const;
-
 type UseVersionHistoryPanelActionsInput = {
   readonly workbook: VersionHistoryWorkbook;
   readonly data?: VersionHistoryData;
   readonly loading: boolean;
   readonly load: () => Promise<void>;
-};
-
-type VersionPanelActionKind =
-  | 'checkout'
-  | 'commit'
-  | 'merge-preview'
-  | 'merge-apply'
-  | 'merge-restore'
-  | 'rollback';
-
-type VersionPanelActionRun = {
-  readonly id: number;
-  readonly kind: VersionPanelActionKind;
 };
 
 export function useVersionHistoryPanelActions({
@@ -340,12 +333,13 @@ export function useVersionHistoryPanelActions({
   }, [cancelActiveMergeReadAction, mergeSourceRefName, mergeSources]);
 
   const setMergeSourceRefName = useCallback((refName: string) => {
+    if (refName === mergeSourceRefName) return;
     cancelActiveMergeReadAction();
     setMergeSourceRefNameState(refName);
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});
     restoredMergeReviewDraftKeyRef.current = undefined;
-  }, [cancelActiveMergeReadAction]);
+  }, [cancelActiveMergeReadAction, mergeSourceRefName]);
 
   useEffect(() => {
     if (
@@ -479,14 +473,19 @@ export function useVersionHistoryPanelActions({
 
   const handleCreateBranch = useCallback(async () => {
     if (!data || !canCreateBranch || !selectedOrHeadCommitId) return;
+    const action = beginAction('branch');
+    if (!action) return;
 
     const normalizedBranch = normalizeVersionBranchNameInput(branchName);
-    if (!normalizedBranch.ok) return;
+    if (!normalizedBranch.ok) {
+      cancelAction(action);
+      return;
+    }
 
     const name = normalizedBranch.branch.refName as Parameters<
       WorkbookVersion['createBranch']
     >[0]['name'];
-    setActionState({ status: 'running', label: 'Creating branch' });
+    if (!setRunningAction(action, 'Creating branch')) return;
     const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
       workbook.version.createBranch({
         name,
@@ -494,20 +493,31 @@ export function useVersionHistoryPanelActions({
         expectedAbsent: true,
       }),
     );
+    if (!isActionCurrent(action)) return;
     if (!result.ok) {
-      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
       return;
     }
 
     setBranchName('');
     setSelectedCommitId(result.value.commitId);
-    setActionState({ status: 'running', label: 'Refreshing version history' });
-    await load();
-    setActionState({
+    await refreshThenCompleteAction(action, {
       status: 'success',
       message: `Created ${displayBranchName(result.value.name)}`,
     });
-  }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
+  }, [
+    beginAction,
+    branchName,
+    canCreateBranch,
+    cancelAction,
+    completeAction,
+    data,
+    isActionCurrent,
+    refreshThenCompleteAction,
+    selectedOrHeadCommitId,
+    setRunningAction,
+    workbook,
+  ]);
 
   const handleStageRollback = useCallback(async () => {
     if (!data || !canStageRollback || !selectedOrHeadCommitId) return;
@@ -569,18 +579,21 @@ export function useVersionHistoryPanelActions({
 
   const handlePromotePendingRemote = useCallback(async () => {
     if (!data || !canPromoteRemote) return;
+    const action = beginAction('remote-promote');
+    if (!action) return;
 
-    setActionState({ status: 'running', label: 'Promoting pending remote changes' });
+    if (!setRunningAction(action, 'Promoting pending remote changes')) return;
     const result = await readVersionResult('VERSION_UI_REMOTE_PROMOTE_FAILED', () =>
       workbook.version.promotePendingRemote({ includeDiagnostics: true }),
     );
+    if (!isActionCurrent(action)) return;
     if (!result.ok) {
-      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
       return;
     }
 
     if (result.value.status === 'failed') {
-      setActionState({
+      completeAction(action, {
         status: 'error',
         diagnostic: diagnosticFromRemotePromotionResult(
           'VERSION_UI_REMOTE_PROMOTE_REJECTED',
@@ -590,13 +603,20 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
-    setActionState({ status: 'running', label: 'Refreshing version history' });
-    await load();
-    setActionState({
+    await refreshThenCompleteAction(action, {
       status: 'success',
       message: remotePromotionActionMessage(result.value),
     });
-  }, [canPromoteRemote, data, load, workbook]);
+  }, [
+    beginAction,
+    canPromoteRemote,
+    completeAction,
+    data,
+    isActionCurrent,
+    refreshThenCompleteAction,
+    setRunningAction,
+    workbook,
+  ]);
 
   const handlePreviewMerge = useCallback(async () => {
     if (!data || !canPreviewMerge || !currentMergeTarget || !selectedMergeSource) return;
@@ -703,13 +723,25 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
+    if (!setRunningAction(action, 'Refreshing merge target')) return;
+    const expectedTargetHead = await readCurrentMergeExpectedTargetHead(
+      workbook,
+      currentMergeTarget,
+      mergePreviewState.input.ours,
+    );
+    if (!isActionCurrent(action)) return;
+    if (!expectedTargetHead.ok) {
+      completeAction(action, { status: 'error', diagnostic: expectedTargetHead.diagnostic });
+      return;
+    }
+
     if (!setRunningAction(action, 'Applying merge')) return;
     const result = await readVersionResult('VERSION_UI_MERGE_APPLY_FAILED', () =>
       workbook.version.applyMerge(input, {
         mode: 'apply',
         includeDiagnostics: true,
         ...(currentMergeTarget.refName ? { targetRef: currentMergeTarget.refName } : {}),
-        ...mergeExpectedTargetHead(data),
+        expectedTargetHead: expectedTargetHead.value,
       }),
     );
     if (!isActionCurrent(action)) return;
@@ -959,31 +991,4 @@ export function useVersionHistoryPanelActions({
     setRollbackReason,
     setSelectedCommitId,
   };
-}
-
-function firstDisabledAvailability<T extends { readonly enabled: boolean }>(
-  ...availabilities: readonly (T & { readonly disabledReason?: string })[]
-): T & { readonly disabledReason?: string } {
-  return (
-    availabilities.find((availability) => !availability.enabled) ?? availabilities[0]!
-  );
-}
-
-function mergeTargetsMatch(
-  current: VersionMergeTarget | undefined,
-  expected: VersionMergeTarget,
-): boolean {
-  return (
-    current !== undefined &&
-    current.commitId === expected.commitId &&
-    (current.refName ?? undefined) === (expected.refName ?? undefined)
-  );
-}
-
-function mergeSourcesMatch(current: VersionRef | undefined, expected: VersionRef): boolean {
-  return (
-    current !== undefined &&
-    current.name === expected.name &&
-    current.commitId === expected.commitId
-  );
 }

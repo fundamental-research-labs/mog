@@ -117,6 +117,18 @@ if (receipt.status === "applied") {
     .map((effect) => effect.range);
 }`;
 
+const versionStoreConfigSnippet = `import { createWorkbook } from "@mog-sdk/sdk";
+
+const wb = await createWorkbook({
+  documentId: "budget-2026",
+  userTimezone: "UTC",
+  versionStore: {
+    kind: "memory-durable-snapshot",
+    workspaceId: "finance",
+    principalScope: "analyst-1",
+  },
+});`;
+
 const versionCommitSnippet = `const headResult = await wb.version.getHead();
 if (!headResult.ok) {
   throw new Error(headResult.error.reason);
@@ -631,16 +643,23 @@ export const apiGuidanceCatalog = [
       { id: 'mog-version.workbook-merge-preview-guess', kind: 'call', symbol: 'wb.mergePreview' },
       { id: 'mog-version.workbook-apply-merge-guess', kind: 'call', symbol: 'wb.applyMerge' },
       { id: 'mog-version.workbook-revert-guess', kind: 'call', symbol: 'wb.revert' },
+      { id: 'mog-version.create-version-store-guess', kind: 'call', symbol: 'createVersionStore' },
+      { id: 'mog-version.workbook-version-store-guess', kind: 'member-chain', symbol: 'wb.versionStore' },
     ],
     message:
       'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
-      'Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.',
+      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.',
     mogReplacements: [
+      {
+        path: 'createWorkbook',
+        snippet: versionStoreConfigSnippet,
+        note: 'Version-store config belongs to createWorkbook options. Supported public kinds are memory, in-memory, memory-durable-snapshot, indexeddb, and browser; use documentId/workspaceId/principalScope for scope.',
+      },
       {
         path: 'wb.version.commit',
         snippet: versionCommitSnippet,
-        note: 'Commit captures the current workbook working state and advances the active or explicit target ref.',
+        note: 'Commit captures the current workbook working state and advances the active or explicit target ref. Read the head first and pass expectedHead so stale ref writes fail closed.',
       },
       {
         path: 'wb.version.createBranch',
@@ -655,12 +674,12 @@ export const apiGuidanceCatalog = [
       {
         path: 'wb.version.merge',
         snippet: versionMergePreviewSnippet,
-        note: 'Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying.',
+        note: 'Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying, and carry the accepted preview target head into applyMerge.',
       },
       {
         path: 'wb.version.applyMerge',
         snippet: versionApplyMergeSnippet,
-        note: 'Apply merge with a concrete target ref and expected target head so stale refs fail closed.',
+        note: 'Apply merge with a concrete target ref and the expected target head from the accepted preview so stale refs fail closed. If preview was conflicted, pass one resolution per conflict with the previewed conflictId, digest, optionId, and kind.',
       },
       {
         path: 'wb.version.revert',

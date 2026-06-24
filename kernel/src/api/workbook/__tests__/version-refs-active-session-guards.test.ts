@@ -15,6 +15,7 @@ import {
 } from './version-refs-test-utils';
 
 type BranchAdvanceMethod = 'fastForwardBranch' | 'updateBranch';
+type BranchDeleteMethod = 'deleteBranch' | 'deleteRef';
 
 describe('WorkbookVersion public ref active-session guards', () => {
   it.each<BranchAdvanceMethod>(['fastForwardBranch', 'updateBranch'])(
@@ -71,59 +72,115 @@ describe('WorkbookVersion public ref active-session guards', () => {
     },
   );
 
-  it('blocks deleteRef on the active checkout branch before tombstoning the ref', async () => {
-    const branchName = 'scenario/delete-active-session';
-    const { branchService, version } = createVersionWithActiveSession({
-      branchName,
-      checkedOutCommitId: COMMIT_A,
-      refHeadAtMaterialization: COMMIT_A,
-      useLegacySessionReaderAlias: true,
-    });
+  it.each<BranchAdvanceMethod>(['fastForwardBranch', 'updateBranch'])(
+    'blocks %s when the active checkout session has a stale workspace head',
+    async (method) => {
+      const branchName =
+        method === 'fastForwardBranch'
+          ? 'scenario/stale-session-fast-forward-branch'
+          : 'scenario/stale-session-update-branch';
+      const { branchService, version } = createVersionWithActiveSession({
+        branchName,
+        checkedOutCommitId: COMMIT_B,
+        refHeadAtMaterialization: COMMIT_A,
+      });
 
-    expect(
-      branchService.createBranch({
-        name: branchName,
-        targetCommitId: COMMIT_A,
-        expectedAbsent: true,
-        createdBy: AUTHOR,
-      }),
-    ).toMatchObject({ ok: true });
+      expect(
+        branchService.createBranch({
+          name: branchName,
+          targetCommitId: COMMIT_A,
+          expectedAbsent: true,
+          createdBy: AUTHOR,
+        }),
+      ).toMatchObject({ ok: true });
 
-    const blocked = await version.deleteRef({
-      name: `refs/heads/${branchName}` as any,
-      expectedHead: COMMIT_A,
-      expectedRefRevision: refVersion('0'),
-    });
+      const options = {
+        name: branchName as any,
+        nextCommitId: COMMIT_C,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: refVersion('0'),
+      };
+      const blocked =
+        method === 'fastForwardBranch'
+          ? await version.fastForwardBranch(options)
+          : await version.updateBranch(options);
 
-    expect(blocked).toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        diagnostics: [
-          expect.objectContaining({
-            code: 'VERSION_REF_WRITE_UNAVAILABLE',
-            data: expect.objectContaining({
-              mutationGuarantee: 'no-write-attempted',
-              payload: expect.objectContaining({
-                issue: 'activeBranchDelete',
-                operation: 'deleteRef',
+      expectStaleActiveCheckoutFailure(blocked, method);
+      expect(branchService.readBranch(branchName)).toMatchObject({
+        ok: true,
+        branch: {
+          ref: {
+            targetCommitId: COMMIT_A,
+            refVersion: refVersion('0'),
+          },
+        },
+      });
+    },
+  );
+
+  it.each<BranchDeleteMethod>(['deleteBranch', 'deleteRef'])(
+    'blocks %s on the active checkout branch before tombstoning the ref',
+    async (method) => {
+      const branchName = 'scenario/delete-active-session';
+      const { branchService, version } = createVersionWithActiveSession({
+        branchName,
+        checkedOutCommitId: COMMIT_A,
+        refHeadAtMaterialization: COMMIT_A,
+        useLegacySessionReaderAlias: method === 'deleteRef',
+      });
+
+      expect(
+        branchService.createBranch({
+          name: branchName,
+          targetCommitId: COMMIT_A,
+          expectedAbsent: true,
+          createdBy: AUTHOR,
+        }),
+      ).toMatchObject({ ok: true });
+
+      const blocked =
+        method === 'deleteBranch'
+          ? await version.deleteBranch({
+              name: branchName as any,
+              expectedHead: COMMIT_A,
+              expectedRefRevision: refVersion('0'),
+            })
+          : await version.deleteRef({
+              name: `refs/heads/${branchName}` as any,
+              expectedHead: COMMIT_A,
+              expectedRefRevision: refVersion('0'),
+            });
+
+      expect(blocked).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          diagnostics: [
+            expect.objectContaining({
+              code: 'VERSION_REF_WRITE_UNAVAILABLE',
+              data: expect.objectContaining({
+                mutationGuarantee: 'no-write-attempted',
+                payload: expect.objectContaining({
+                  issue: 'activeBranchDelete',
+                  operation: method,
+                }),
               }),
             }),
-          }),
-        ],
-      },
-    });
-    expect(branchService.readBranch(branchName)).toMatchObject({
-      ok: true,
-      branch: {
-        ref: {
-          state: 'live',
-          targetCommitId: COMMIT_A,
-          refVersion: refVersion('0'),
+          ],
         },
-      },
-    });
-  });
+      });
+      expect(branchService.readBranch(branchName)).toMatchObject({
+        ok: true,
+        branch: {
+          ref: {
+            state: 'live',
+            targetCommitId: COMMIT_A,
+            refVersion: refVersion('0'),
+          },
+        },
+      });
+    },
+  );
 });
 
 function createVersionWithActiveSession(input: {

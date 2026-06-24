@@ -163,6 +163,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         expectedTargetHead: {
           commitId: HEAD_COMMIT_ID,
           revision: REF_REVISION,
+          symbolicHeadRevision: REF_REVISION,
         },
       }),
     );
@@ -171,6 +172,75 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
       kind: 'ref',
       name: CURRENT_REF,
     });
+  });
+
+  it('refreshes the merge target ref revision immediately before apply', async () => {
+    const freshRevision = { kind: 'counter' as const, value: 'fresh-7' };
+    const freshSymbolicRevision = { kind: 'counter' as const, value: 'head-fresh-7' };
+    const workbook = createDirectMergeWorkbook({
+      readRef: jest.fn<DirectMergeVersionHistoryWorkbook['version']['readRef']>(async (name) => {
+        if (name === 'HEAD') {
+          return {
+            ok: true,
+            value: {
+              status: 'success',
+              ref: {
+                name: 'HEAD',
+                target: CURRENT_REF,
+                revision: freshSymbolicRevision,
+              },
+              diagnostics: [],
+            },
+          };
+        }
+        return {
+          ok: true,
+          value: {
+            status: 'success',
+            ref: {
+              name: CURRENT_REF,
+              commitId: HEAD_COMMIT_ID,
+              revision: freshRevision,
+            },
+            diagnostics: [],
+          },
+        };
+      }),
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
+        async (input) => ({
+          ok: true,
+          value: cleanMergeResult(input.base, input.ours, input.theirs),
+        }),
+      ),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
+    await user.click(screen.getByTestId(mergeApplyButtonTestId()));
+
+    await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
+    expect(workbook.version.readRef).toHaveBeenCalledWith(CURRENT_REF);
+    expect(workbook.version.readRef).toHaveBeenCalledWith('HEAD');
+    expect(firstInvocationOrder(workbook.version.merge)).toBeLessThan(
+      firstInvocationOrder(workbook.version.applyMerge),
+    );
+    expect(firstInvocationOrder(workbook.version.readRef)).toBeLessThan(
+      firstInvocationOrder(workbook.version.applyMerge),
+    );
+    expect(firstCallArgs(workbook.version.applyMerge)[0]?.[1]).toEqual(
+      expect.objectContaining({
+        targetRef: CURRENT_REF,
+        expectedTargetHead: {
+          commitId: HEAD_COMMIT_ID,
+          revision: freshRevision,
+          symbolicHeadRevision: freshSymbolicRevision,
+        },
+      }),
+    );
   });
 
   it('keeps merge apply pending until the public checkout and history refresh complete', async () => {
@@ -379,6 +449,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         expectedTargetHead: {
           commitId: HEAD_COMMIT_ID,
           revision: REF_REVISION,
+          symbolicHeadRevision: REF_REVISION,
         },
       }),
     );
@@ -572,10 +643,13 @@ function firstCallArgs<Args extends unknown[]>(fn: (...args: Args) => unknown): 
   return (fn as unknown as { readonly mock: { readonly calls: Args[] } }).mock.calls;
 }
 
-function firstInvocationOrder<Args extends unknown[]>(fn: (...args: Args) => unknown): number {
-  const [order] = (
+function firstInvocationOrder<Args extends unknown[]>(
+  fn: (...args: Args) => unknown,
+  index = 0,
+): number {
+  const order = (
     fn as unknown as { readonly mock: { readonly invocationCallOrder: readonly number[] } }
-  ).mock.invocationCallOrder;
+  ).mock.invocationCallOrder[index];
   if (order === undefined) throw new Error('Expected mock to have at least one invocation');
   return order;
 }

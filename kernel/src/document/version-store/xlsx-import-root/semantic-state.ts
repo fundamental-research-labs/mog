@@ -7,6 +7,8 @@ import {
   type VersionStoreDiagnostic,
 } from '../provider';
 
+const OBJECT_DIGEST_RE = /^[0-9a-f]{64}$/;
+
 export async function readCommitSemanticState(
   graph: VersionGraphStore,
   commit: WorkbookCommit,
@@ -65,7 +67,33 @@ function semanticStateEnvelopeFromPayload(payload: unknown): SemanticWorkbookSta
   if (!isRecord(semanticState)) return null;
   if (!isRecord(semanticState.state)) return null;
   if (!isRecord(semanticState.stateDigest)) return null;
+  if (!sourceSemanticStateDigestMatchesEnvelope(payload, semanticState.stateDigest)) return null;
   return semanticState as unknown as SemanticWorkbookStateEnvelope;
+}
+
+function sourceSemanticStateDigestMatchesEnvelope(
+  payload: Record<string, unknown>,
+  stateDigest: Record<string, unknown>,
+): boolean {
+  const source = payload.source;
+  if (!isRecord(source) || !('semanticStateDigest' in source)) return true;
+  const sourceDigestKey = objectDigestKey(source.semanticStateDigest);
+  const stateDigestKey = objectDigestKey(stateDigest);
+  return sourceDigestKey !== null && stateDigestKey !== null && sourceDigestKey === stateDigestKey;
+}
+
+function objectDigestKey(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  if (value.algorithm !== 'sha256') {
+    return null;
+  }
+  if (typeof value.digest === 'string' && OBJECT_DIGEST_RE.test(value.digest)) {
+    return `${value.algorithm}:${value.digest}`;
+  }
+  if (typeof value.value === 'string' && OBJECT_DIGEST_RE.test(value.value)) {
+    return `${value.algorithm}:${value.value}`;
+  }
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

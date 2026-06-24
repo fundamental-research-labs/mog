@@ -31,8 +31,8 @@ type ActiveCheckoutProjection =
   | {
       readonly status: 'active';
       readonly refName: VersionMainRefName | VersionRefName;
-      readonly checkedOutCommitId: WorkbookCommitId | null;
-      readonly refHeadAtMaterialization: WorkbookCommitId | null;
+      readonly checkedOutCommitId: WorkbookCommitId;
+      readonly refHeadAtMaterialization: WorkbookCommitId;
     }
   | { readonly status: 'blocked'; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
@@ -63,10 +63,6 @@ export async function preflightActiveCheckoutBranchAdvance(
 
   if (active.status === 'blocked') return active.diagnostics;
   if (active.status === 'absent' || active.refName !== input.refName) return [];
-
-  if (!active.checkedOutCommitId || !active.refHeadAtMaterialization) {
-    return [activeCheckoutPreflightReadFailedDiagnostic(operation, 'activeCheckoutSession')];
-  }
 
   if (active.checkedOutCommitId !== active.refHeadAtMaterialization) {
     return [staleActiveCheckoutBranchAdvanceDiagnostic(operation)];
@@ -151,7 +147,16 @@ function projectActiveCheckoutSession(
 ): ActiveCheckoutProjection {
   const read = unwrapProviderReadValue(value, operation, 'activeCheckoutSession');
   if (read.status === 'blocked') return read;
-  if (!isRecord(read.value) || read.value.detached === true) return { status: 'absent' };
+  if (read.value === null) return { status: 'absent' };
+  if (!isRecord(read.value)) {
+    return {
+      status: 'blocked',
+      diagnostics: [
+        activeCheckoutPreflightReadFailedDiagnostic(operation, 'activeCheckoutSession'),
+      ],
+    };
+  }
+  if (read.value.detached === true) return { status: 'absent' };
 
   const branchName =
     typeof read.value.branchName === 'string'
@@ -159,7 +164,14 @@ function projectActiveCheckoutSession(
       : typeof read.value.refName === 'string'
         ? read.value.refName
         : undefined;
-  if (!branchName) return { status: 'absent' };
+  if (!branchName) {
+    return {
+      status: 'blocked',
+      diagnostics: [
+        activeCheckoutPreflightReadFailedDiagnostic(operation, 'activeCheckoutSession'),
+      ],
+    };
+  }
 
   const parsed = parsePublicBranchName(branchName, operation);
   if (!parsed.ok) {
@@ -171,11 +183,22 @@ function projectActiveCheckoutSession(
     };
   }
 
+  const checkedOutCommitId = toCommitId(read.value.checkedOutCommitId);
+  const refHeadAtMaterialization = toCommitId(read.value.refHeadAtMaterialization);
+  if (!checkedOutCommitId || !refHeadAtMaterialization) {
+    return {
+      status: 'blocked',
+      diagnostics: [
+        activeCheckoutPreflightReadFailedDiagnostic(operation, 'activeCheckoutSession'),
+      ],
+    };
+  }
+
   return {
     status: 'active',
     refName: parsed.refName,
-    checkedOutCommitId: toCommitId(read.value.checkedOutCommitId),
-    refHeadAtMaterialization: toCommitId(read.value.refHeadAtMaterialization),
+    checkedOutCommitId,
+    refHeadAtMaterialization,
   };
 }
 
@@ -184,6 +207,7 @@ function unwrapProviderReadValue(
   operation: BranchAdvanceOperation,
   phase: 'activeCheckoutSession',
 ): ProviderReadProjection {
+  if (value === null || value === undefined) return { status: 'read', value };
   if (!isRecord(value)) return { status: 'read', value };
   if (value.status === 'pending') {
     return {
@@ -191,25 +215,26 @@ function unwrapProviderReadValue(
       diagnostics: [activeCheckoutPreflightReadFailedDiagnostic(operation, `${phase}Pending`)],
     };
   }
-  if (value.status === 'failed' || value.status === 'degraded') {
+  if (value.ok === false || value.status === 'failed' || value.status === 'degraded') {
     return {
       status: 'blocked',
       diagnostics: [activeCheckoutPreflightReadFailedDiagnostic(operation, `${phase}Failed`)],
     };
   }
-  if (value.status === 'success') {
+  if (value.status === 'success' || value.ok === true) {
     return {
       status: 'read',
-      value: isRecord(value.session)
-        ? value.session
-        : isRecord(value.current)
-          ? value.current
-          : isRecord(value.value)
-            ? value.value
-            : value,
+      value: unwrapSuccessfulProviderReadValue(value),
     };
   }
   return { status: 'read', value };
+}
+
+function unwrapSuccessfulProviderReadValue(value: Readonly<Record<string, unknown>>): unknown {
+  if ('session' in value) return value.session;
+  if ('current' in value) return value.current;
+  if ('value' in value) return value.value;
+  return value;
 }
 
 function staleActiveCheckoutBranchAdvanceDiagnostic(

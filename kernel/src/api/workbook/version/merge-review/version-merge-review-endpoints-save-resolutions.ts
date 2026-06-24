@@ -7,7 +7,6 @@ import type {
 import type { DocumentContext } from '../../../../context';
 import {
   createMergeResolutionSetArtifactRecord,
-  createResolvedMergeAttemptArtifactRecord,
 } from '../../../../document/version-store/merge-attempt-artifacts';
 import {
   normalizeMergeReviewConflicts,
@@ -30,6 +29,10 @@ import {
   mergeEndpointPreflight,
   readMergePreviewArtifact,
 } from './version-merge-review-endpoints-shared';
+import {
+  createResolvedMergeAttemptArtifactRecordForResolutionSet,
+} from './version-merge-review-saved-resolution-artifacts';
+import { validateResolutionSetBinding } from './version-merge-review-saved-resolution-binding';
 import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
 
 export async function saveMergeResolutionsWorkbookVersion(
@@ -125,10 +128,6 @@ export async function saveMergeResolutionsWorkbookVersion(
   }
 
   try {
-    const resolutionSet = await createMergeResolutionSetArtifactRecord(
-      opened.namespace,
-      resolutionValidation.resolutions,
-    );
     const resultDigest = toInternalSha256Digest(normalized.input.resultDigest);
     if (!resultDigest) {
       return mergeEndpointFailure('saveMergeResolutions', [
@@ -140,11 +139,26 @@ export async function saveMergeResolutionsWorkbookVersion(
         ),
       ]);
     }
+    const resolutionSet = await createMergeResolutionSetArtifactRecord(opened.namespace, {
+      resultId: normalized.input.resultId,
+      resultDigest,
+      previewArtifactDigest: resultDigest,
+      resolutions: resolutionValidation.resolutions,
+    });
+    const resolutionSetDiagnostics = validateResolutionSetBinding(
+      'saveMergeResolutions',
+      normalized.input,
+      resolutionSet.preimage.payload,
+      resolutionSet,
+    );
+    if (resolutionSetDiagnostics.length > 0) {
+      return mergeEndpointFailure('saveMergeResolutions', resolutionSetDiagnostics);
+    }
     const resolvedAttempt =
       target && resolutionValidation.status === 'readyToApply'
-        ? await createResolvedMergeAttemptArtifactRecord(opened.namespace, {
+        ? await createResolvedMergeAttemptArtifactRecordForResolutionSet(opened.namespace, {
             resultDigest,
-            resolutionSetDigest: resolutionSet.digest,
+            resolutionSetRecord: resolutionSet,
             targetRef: target.targetRef,
             expectedTargetHead: target.expectedTargetHead,
           })

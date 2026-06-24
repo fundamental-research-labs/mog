@@ -80,6 +80,25 @@ export function createWorkbook(
         refRevision: REF_REVISION,
       },
     })),
+    readRef: jest.fn(async (name: Parameters<VersionHistoryWorkbook['version']['readRef']>[0]) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        ref:
+          name === 'HEAD'
+            ? {
+                name: 'HEAD',
+                target: 'refs/heads/main',
+                revision: REF_REVISION,
+              }
+            : {
+                name,
+                commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
+                revision: name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+              },
+        diagnostics: [],
+      },
+    })),
     listCommits: jest.fn(async () => ({
       ok: true,
       value: {

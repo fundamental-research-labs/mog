@@ -11,6 +11,7 @@ export const VERSION_OBJECT_TYPES = Object.freeze([
   'workbook.reviewExtension.v1',
   'workbook.mergePreview.v1',
   'workbook.mergeResolutionSet.v1',
+  'workbook.mergeResolutionSet.v2',
   'workbook.resolvedMergeAttempt.v1',
 ] as const);
 

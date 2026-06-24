@@ -279,6 +279,29 @@ Enable version history when the workbook is created. The public SDK accepts
 provider selection through `versionStore`; version operations then live under
 `wb.version`.
 
+The basic public flow is:
+
+1. Pass `documentId` plus a supported `versionStore` to `createWorkbook(...)`.
+2. Before each commit, read the current head and pass `expectedHead` with the
+   head commit ID and ref revision.
+3. Create scenario or agent branches with `wb.version.createBranch(...)`, then
+   checkout the branch through `wb.version.checkout(...)` after the workbook is
+   clean.
+4. Preview merges with `wb.version.merge(...)`. Preview is read-only.
+5. If the preview is conflicted, choose a resolution for every conflict and pass
+   those conflict IDs, digests, option IDs, and option kinds to
+   `wb.version.applyMerge(...)`.
+6. Apply the accepted merge preview with the same `targetRef` and
+   `expectedTargetHead`. If the target moved, handle `staleTargetHead` by
+   re-reading the target and previewing again.
+7. Revert with a concrete `targetRef` plus a freshly read `expectedTargetHead`
+   so stale target refs fail closed.
+
+Supported public `versionStore.kind` values are `memory`, `in-memory`,
+`memory-durable-snapshot`, `indexeddb`, and `browser`. Scope durable public
+stores with `workspaceId` and `principalScope`; pass workbook import sources to
+`createWorkbook(...)`, not to `versionStore`.
+
 ```javascript
 import { createWorkbook } from '@mog-sdk/sdk';
 
@@ -362,9 +385,30 @@ try {
   );
   if (preview.status === 'blocked') throw new Error(failFromDiagnostics(preview.diagnostics));
 
+  const resolutions =
+    preview.status === 'conflicted'
+      ? preview.conflicts.map((conflict) => {
+          const option =
+            conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs') ??
+            conflict.resolutionOptions[0];
+          if (!option) throw new Error(`No resolution option for ${conflict.conflictId}`);
+          return {
+            conflictId: conflict.conflictId,
+            expectedConflictDigest: conflict.conflictDigest,
+            optionId: option.optionId,
+            kind: option.kind,
+          };
+        })
+      : [];
+
   const applied = await valueOf(
     wb.version.applyMerge(
-      { base: baseCommit.id, ours: expectedTargetHead.commitId, theirs: branchCommit.id },
+      {
+        base: baseCommit.id,
+        ours: expectedTargetHead.commitId,
+        theirs: branchCommit.id,
+        resolutions,
+      },
       { mode: 'apply', targetRef: mainRef, expectedTargetHead },
     ),
   );
@@ -414,9 +458,13 @@ try {
 }
 ```
 
-For merge and revert, read the target ref immediately before mutation and pass
-its commit/revision as `expectedTargetHead`. Use `{ dryRun: true }` for revert
-when the host wants to inspect diagnostics before moving the target ref.
+For merge, read the target ref immediately before preview and carry that exact
+commit/revision through `applyMerge` as `expectedTargetHead`. A conflicted merge
+preview is not applyable until every conflict has a resolution containing the
+previewed `conflictId`, `conflictDigest`, `optionId`, and option `kind`. For
+revert, read the target ref immediately before mutation and pass its
+commit/revision as `expectedTargetHead`. Use `{ dryRun: true }` for revert when
+the host wants to inspect diagnostics before moving the target ref.
 
 ## Error Handling
 

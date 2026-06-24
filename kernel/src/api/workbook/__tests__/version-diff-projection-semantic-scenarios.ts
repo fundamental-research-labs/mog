@@ -30,6 +30,111 @@ export function registerProjectionSemanticScenarios(): void {
     });
   });
 
+  it('projects materialized merge slices from base, ours, and theirs through public diff', async () => {
+    const formulaOurs = { kind: 'formula', formula: '=A1+1', result: 2 };
+    const formulaTheirs = { kind: 'formula', formula: '=A1+2', result: 3 };
+    const mergeChanges = [
+      mergeChange({
+        changeId: 'merge-cells-value',
+        domain: 'cells.values',
+        entityId: 'sheet-1!A1',
+        propertyPath: ['value'],
+        base: 1,
+        ours: 2,
+        theirs: 3,
+        merged: 4,
+        address: 'A1',
+      }),
+      mergeChange({
+        changeId: 'merge-formula-ours-noop',
+        domain: 'cells.formulas',
+        entityId: 'sheet-1!B1',
+        propertyPath: ['formula'],
+        base: { kind: 'formula', formula: '=A1', result: 1 },
+        ours: formulaOurs,
+        theirs: formulaTheirs,
+        merged: formulaOurs,
+        address: 'B1',
+      }),
+      mergeChange({
+        changeId: 'merge-value-theirs-noop',
+        domain: 'cells.values',
+        entityId: 'sheet-1!C1',
+        propertyPath: ['value'],
+        base: 'base',
+        ours: 'ours',
+        theirs: 'theirs-kept',
+        merged: 'theirs-kept',
+        address: 'C1',
+      }),
+      mergeChange({
+        changeId: 'merge-value-base-noop',
+        domain: 'cells.values',
+        entityId: 'sheet-1!D1',
+        propertyPath: ['value'],
+        base: 'base-kept',
+        ours: 'ours-alt',
+        theirs: 'theirs-alt',
+        merged: 'base-kept',
+        address: 'D1',
+      }),
+    ];
+    const graph = await graphWithMergeTarget({
+      materializedMergeProof: true,
+      changes: [],
+      mergeChanges,
+    });
+    const version = createVersion(graph.provider);
+
+    const baseToMerge = await version.diff(graph.baseCommitId, graph.mergeCommitId);
+    const oursToMerge = await version.diff(graph.oursCommitId, graph.mergeCommitId);
+    const theirsToMerge = await version.diff(graph.theirsCommitId, graph.mergeCommitId);
+
+    expect(baseToMerge).toMatchObject({ ok: true });
+    expect(oursToMerge).toMatchObject({ ok: true });
+    expect(theirsToMerge).toMatchObject({ ok: true });
+    if (!baseToMerge.ok || !oursToMerge.ok || !theirsToMerge.ok) {
+      throw new Error('expected public materialized merge diffs to succeed');
+    }
+
+    expect(changeIds(baseToMerge.value.items)).toEqual([
+      'merge-cells-value',
+      'merge-formula-ours-noop',
+      'merge-value-theirs-noop',
+    ]);
+    expect(changeIds(oursToMerge.value.items)).toEqual([
+      'merge-cells-value',
+      'merge-value-theirs-noop',
+      'merge-value-base-noop',
+    ]);
+    expect(changeIds(theirsToMerge.value.items)).toEqual([
+      'merge-cells-value',
+      'merge-formula-ours-noop',
+      'merge-value-base-noop',
+    ]);
+
+    expect(baseToMerge.value.items[0]).toMatchObject({
+      before: { kind: 'value', value: 1 },
+      after: { kind: 'value', value: 4 },
+    });
+    expect(oursToMerge.value.items[0]).toMatchObject({
+      before: { kind: 'value', value: 2 },
+      after: { kind: 'value', value: 4 },
+    });
+    expect(theirsToMerge.value.items[0]).toMatchObject({
+      before: { kind: 'value', value: 3 },
+      after: { kind: 'value', value: 4 },
+    });
+    expect(theirsToMerge.value.items[1]).toMatchObject({
+      structural: expect.objectContaining({
+        domain: 'cells.formulas',
+        propertyPath: ['formula'],
+      }),
+      before: { kind: 'value', value: formulaTheirs },
+      after: { kind: 'value', value: formulaOurs },
+    });
+  });
+
   it('projects multi-sheet edits and sheet rename/add/delete changes', async () => {
     const changes = [
       semanticRecord({
@@ -162,4 +267,39 @@ export function registerProjectionSemanticScenarios(): void {
       ]),
     );
   });
+}
+
+function mergeChange(input: {
+  readonly changeId: string;
+  readonly domain: string;
+  readonly entityId: string;
+  readonly propertyPath: readonly string[];
+  readonly base: unknown;
+  readonly ours: unknown;
+  readonly theirs: unknown;
+  readonly merged: unknown;
+  readonly address: string;
+}) {
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId: input.changeId,
+      domain: input.domain,
+      entityId: input.entityId,
+      propertyPath: [...input.propertyPath],
+    },
+    base: { kind: 'value', value: input.base },
+    ours: { kind: 'value', value: input.ours },
+    theirs: { kind: 'value', value: input.theirs },
+    merged: { kind: 'value', value: input.merged },
+    display: sheetAddressDisplay('Sheet1', input.address),
+  };
+}
+
+function changeIds(
+  items: readonly {
+    readonly structural: { readonly kind: string; readonly changeId?: string };
+  }[],
+): readonly string[] {
+  return items.map((item) => item.structural.changeId ?? item.structural.kind);
 }

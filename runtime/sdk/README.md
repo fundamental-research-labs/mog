@@ -179,6 +179,12 @@ and `filesystemCode`.
 storage provider for the version graph; commits, refs, checkout, and merge are
 all public `wb.version.*` operations after the workbook is open.
 
+The public basic flow is: configure `versionStore` at `createWorkbook`, commit
+with a freshly read `expectedHead`, create and checkout a branch, preview a
+merge, convert any preview conflicts into explicit resolutions, apply the merge
+with `expectedTargetHead`, and use revert with the same target-ref fencing when
+the host needs to back out a commit.
+
 ```typescript
 const wb = await createWorkbook({
   documentId: 'budget-2026',
@@ -428,13 +434,30 @@ try {
 ```
 
 For shorter flows, the same contracts apply: create a branch from a known
-commit, call `wb.markClean()` before checkout if your host still considers the
-working copy dirty, and read the target ref immediately before `applyMerge` or
-`revert`.
+commit, pass `expectedHead` on commits that advance mutable refs, call
+`wb.markClean()` before checkout if your host still considers the working copy
+dirty, read the target ref immediately before merge preview and carry that same
+`expectedTargetHead` into `applyMerge`, and read the target ref immediately
+before `revert`.
 
 ```typescript
+const initialHeadResult = await wb.version.getHead();
+if (!initialHeadResult.ok || !initialHeadResult.value.refRevision) {
+  throw new Error(
+    initialHeadResult.ok
+      ? 'Current head is missing its ref revision'
+      : initialHeadResult.error.reason,
+  );
+}
+
 await wb.activeSheet.setCell('A1', 'Base forecast');
-const baseResult = await wb.version.commit({ message: 'Initial budget model' });
+const baseResult = await wb.version.commit({
+  message: 'Initial budget model',
+  expectedHead: {
+    commitId: initialHeadResult.value.id,
+    revision: initialHeadResult.value.refRevision,
+  },
+});
 if (!baseResult.ok) throw new Error(baseResult.error.reason);
 const baseCommit = baseResult.value;
 wb.markClean();
@@ -483,8 +506,12 @@ wb.markClean();
 ```
 
 Merge preview is read-only. `applyMerge` is the mutating operation; pass a
-concrete `targetRef` and a freshly-read `expectedTargetHead` so a moved target
-ref returns `staleTargetHead` instead of applying over newer work.
+concrete `targetRef` and the same `expectedTargetHead` used by the accepted
+preview so a moved target ref returns `staleTargetHead` instead of applying over
+newer work. When preview returns `conflicted`, each applied resolution must echo
+the previewed `conflictId`, `conflictDigest`, selected `optionId`, and option
+`kind`. If apply returns `staleTargetHead`, re-read the target ref and preview
+again.
 
 ```typescript
 const mainRefResult = await wb.version.readRef('refs/heads/main');

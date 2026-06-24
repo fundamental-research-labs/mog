@@ -31,7 +31,11 @@ export async function graphWithRootAndChild(options: { readonly semanticPayload:
 }
 
 export async function graphWithMergeTarget(
-  options: { readonly materializedMergeProof?: boolean } = {},
+  options: {
+    readonly materializedMergeProof?: boolean;
+    readonly changes?: readonly unknown[];
+    readonly mergeChanges?: readonly unknown[];
+  } = {},
 ) {
   const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
   const initialized = await provider.initializeGraph(await initializeInput('graph-merge', 'root'));
@@ -76,8 +80,9 @@ export async function graphWithMergeTarget(
   }
 
   const mergeChange = defaultCellChange('merge');
+  const changes = options.changes ?? [mergeChange];
   const mergePayload = {
-    ...validSemanticPayload('merge', [mergeChange]),
+    ...validSemanticPayload('merge', changes),
     ...(options.materializedMergeProof
       ? {
           merge: {
@@ -89,11 +94,12 @@ export async function graphWithMergeTarget(
               commitId: ours.commit.id,
               revision: ours.main.revision,
             },
-            resolutionCount: 0,
+            resolutionCount: options.mergeChanges?.length ?? 0,
             materializer: 'test-materializer',
           },
         }
       : {}),
+    ...(options.mergeChanges ? { mergeChanges: [...options.mergeChanges] } : {}),
   };
 
   const merge = await graph.mergeCommit({

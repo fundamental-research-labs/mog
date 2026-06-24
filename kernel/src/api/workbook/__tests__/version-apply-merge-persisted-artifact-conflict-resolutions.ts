@@ -1,7 +1,9 @@
 import type {
   VersionApplyMergeResolution,
+  VersionCommitExpectedHead,
   VersionMergeConflict,
   VersionSealedResolutionPayloadRef,
+  Workbook,
 } from '@mog-sdk/contracts/api';
 
 import type { PersistedConflictedMergePreview } from './version-apply-merge-persisted-artifact-conflict-assertions';
@@ -16,15 +18,19 @@ export async function sealAcceptTheirsResolution(input: {
   readonly fixture: PersistedMergeScenario;
   readonly preview: PersistedConflictedMergePreview;
   readonly conflict: VersionMergeConflict;
+  readonly workbook?: Workbook;
+  readonly expectedTargetHead?: VersionCommitExpectedHead;
 }): Promise<{
   readonly sealedResolution: VersionApplyMergeResolution;
   readonly sealedPayloadRef: VersionSealedResolutionPayloadRef;
 }> {
   const { fixture, preview, conflict } = input;
+  const workbook = input.workbook ?? fixture.sourceWb;
+  const expectedTargetHead = input.expectedTargetHead ?? fixture.expectedTargetHead;
   const option = conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs');
   if (!option) throw new Error('expected acceptTheirs option');
 
-  const payload = await fixture.sourceWb.version.putMergeResolutionPayload({
+  const payload = await workbook.version.putMergeResolutionPayload({
     resultId: preview.resultId,
     resultDigest: preview.resultDigest,
     redactionPolicyDigest: preview.resultDigest,
@@ -33,7 +39,7 @@ export async function sealAcceptTheirsResolution(input: {
     optionId: option.optionId,
     kind: option.kind,
     targetRef: PERSISTED_ARTIFACT_TARGET_REF,
-    expectedTargetHead: fixture.expectedTargetHead,
+    expectedTargetHead,
     value: option.value as any,
     purpose: 'chooseValue',
   });

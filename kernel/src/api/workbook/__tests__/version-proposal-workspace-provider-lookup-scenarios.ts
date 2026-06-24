@@ -7,6 +7,7 @@ import {
   misbasedLookupService,
   misboundLookupService,
   openProposalWorkspace,
+  staleHeadCheckingWorkspaceService,
   versionForProvider,
   workspaceLookupService,
 } from './version-proposal-workspace-provider-fixtures';
@@ -142,6 +143,59 @@ export function registerProposalWorkspaceLookupScenarios(): void {
         code: 'target_unavailable',
         target: 'workbook.version.disposeProposalWorkspace',
         diagnostics: [expect.objectContaining({ code: 'stale_proposal_target_head' })],
+      },
+    });
+  });
+
+  it('rejects stale proposal workspace handles after the workspace commit closes the proposal workspace', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = staleHeadCheckingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, workspaceService);
+    const opened = await openProposalWorkspace(version, 'workspace-committed-handle');
+
+    const committed = await version.commitProposalWorkspace({
+      clientRequestId: 'workspace-commit-before-stale-handle-lookup',
+      proposalId: opened.proposalId,
+      workspaceId: opened.workspaceId,
+      expectedRevision: 2,
+      expectedTargetHeadId: opened.targetHeadIdAtCreation,
+      expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+      actor: ACTOR,
+      message: 'Commit proposal workspace before stale handle lookup',
+    });
+    expect(committed).toMatchObject({
+      ok: true,
+      value: { id: opened.proposalId, status: 'committed', revision: 3 },
+    });
+
+    await expect(
+      version.getProposalWorkspace({
+        workspaceId: opened.workspaceId,
+        expectedTargetHeadId: opened.targetHeadIdAtCreation,
+        expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_workspace_not_open',
+        allowed: ['workspace_open'],
+      },
+    });
+    await expect(
+      version.disposeProposalWorkspace({
+        clientRequestId: 'workspace-dispose-after-committed-handle',
+        workspaceId: opened.workspaceId,
+        expectedTargetHeadId: opened.targetHeadIdAtCreation,
+        expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+        actor: ACTOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'invalid_state',
+        state: 'proposal_workspace_not_open',
+        allowed: ['workspace_open'],
       },
     });
   });

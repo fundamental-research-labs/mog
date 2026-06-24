@@ -1,6 +1,7 @@
 export {
   type DiffServiceProvider,
   appendChild,
+  graphWithMergeTarget,
   graphWithRootAndChild,
   providerWithPermutedSemanticReads,
 } from './diff-service-fixtures-graph';

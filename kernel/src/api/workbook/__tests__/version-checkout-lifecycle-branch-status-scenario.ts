@@ -369,6 +369,85 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
     }
   });
 
+  it('isolates undo history when a branch checkout materializes a fresh workbook context', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const handle = await createBranchLifecycleDocumentHandle();
+    installVersionDomainDetectorNoopsOnHandles(handle);
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+      const branchBase = await commitActiveSheetBaseCell({
+        wb,
+        initialized,
+        value: 'undo-base',
+        errorLabel: 'undo isolation base',
+      });
+
+      const created = await wb.version.createBranch({
+        name: 'scenario/undo-isolation' as any,
+        targetCommitId: branchBase.id,
+        expectedAbsent: true,
+      });
+      expect(created).toMatchObject({
+        ok: true,
+        value: {
+          name: 'refs/heads/scenario/undo-isolation',
+          commitId: branchBase.id,
+        },
+      });
+      if (!created.ok) throw new Error(`expected branch create success: ${created.error.code}`);
+
+      const historyBeforeCheckout = await wb.history.getState();
+      expect(historyBeforeCheckout.canUndo).toBe(true);
+      expect(historyBeforeCheckout.undoDepth).toBeGreaterThan(0);
+
+      await expect(
+        wb.version.checkout({ kind: 'ref', name: 'refs/heads/scenario/undo-isolation' as any }),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(wb);
+
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'undo-base' });
+      const historyAfterCheckout = await wb.history.getState();
+      expect(historyAfterCheckout).toMatchObject({
+        canUndo: false,
+        canRedo: false,
+        undoDepth: 0,
+        redoDepth: 0,
+      });
+      expect(wb.history.canUndo()).toBe(false);
+      expect(wb.isDirty).toBe(false);
+
+      await wb.activeSheet.setCell('C1', 'post-checkout-edit');
+      const postCheckoutHistory = await wb.history.getState();
+      expect(postCheckoutHistory.canUndo).toBe(true);
+      expect(postCheckoutHistory.undoDepth).toBeGreaterThan(0);
+
+      await expect(wb.history.undo()).resolves.toMatchObject({ kind: 'undo', success: true });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'undo-base' });
+      await expect(wb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: null });
+      await expect(wb.version.getHead()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          id: branchBase.id,
+          refName: 'refs/heads/scenario/undo-isolation',
+          resolvedFrom: 'refs/heads/scenario/undo-isolation',
+          refRevision: created.value.revision,
+        },
+      });
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
+
   it('reports applied branch checkout session status and stale external ref movement', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const sourceHandle = await createBranchLifecycleDocumentHandle();

@@ -44,7 +44,13 @@ export function parseMogWorkbookVersionXlsxMetadata(
 ): MogWorkbookVersionXlsxMetadata | null {
   if (!isRecord(value)) return null;
   if (value.schemaVersion !== 'mog.workbookVersion.xlsxMetadata.v1') return null;
-  if (typeof value.exportedAt !== 'string' || !value.exportedAt) return null;
+  if (
+    typeof value.exportedAt !== 'string' ||
+    !value.exportedAt ||
+    Number.isNaN(Date.parse(value.exportedAt))
+  ) {
+    return null;
+  }
   if (typeof value.documentId !== 'string' || !value.documentId) return null;
   if ('workspaceId' in value && (typeof value.workspaceId !== 'string' || !value.workspaceId)) {
     return null;

@@ -13,6 +13,7 @@ interface CentralDirectoryEntry {
   readonly localHeaderOffset: number;
   readonly generalPurposeBitFlag: number;
   readonly compressionMethod: number;
+  readonly crc32: number;
   readonly compressedSize: number;
   readonly uncompressedSize: number;
 }
@@ -141,10 +142,17 @@ export function readMogVersionMetadataXmlFromXlsx(
   const extraLength = view.getUint16(localHeaderOffset + 28, true);
   const dataStart = localHeaderOffset + 30 + nameLength + extraLength;
   const dataEnd = dataStart + entry.compressedSize;
+  const localNameStart = localHeaderOffset + 30;
+  const localNameEnd = localNameStart + nameLength;
+  const localName = decodeUtf8(xlsxBytes.subarray(localNameStart, localNameEnd));
   if (
     dataStart < localHeaderOffset ||
     dataEnd > view.byteLength ||
-    dataEnd > eocd.centralDirectoryOffset
+    dataEnd > eocd.centralDirectoryOffset ||
+    normalizePackagePath(localName) !== normalizePackagePath(entry.name) ||
+    view.getUint32(localHeaderOffset + 14, true) !== entry.crc32 ||
+    view.getUint32(localHeaderOffset + 18, true) !== entry.compressedSize ||
+    view.getUint32(localHeaderOffset + 22, true) !== entry.uncompressedSize
   ) {
     return { status: 'untrusted', reason: 'malformed-sidecar' };
   }
@@ -163,8 +171,16 @@ function readCentralDirectoryEntries(
   const entries: CentralDirectoryEntry[] = [];
   let offset = eocd.centralDirectoryOffset;
   const end = eocd.centralDirectoryOffset + eocd.centralDirectorySize;
+  if (
+    eocd.centralDirectoryOffset < 0 ||
+    eocd.centralDirectorySize < 0 ||
+    end < eocd.centralDirectoryOffset ||
+    end > view.byteLength
+  ) {
+    throw new Error('invalid ZIP central directory bounds');
+  }
   while (offset < end) {
-    if (view.getUint32(offset, true) !== 0x02014b50) {
+    if (offset + 46 > end || view.getUint32(offset, true) !== 0x02014b50) {
       throw new Error(`invalid ZIP central directory header at ${offset}`);
     }
     const nameLength = view.getUint16(offset + 28, true);
@@ -172,6 +188,9 @@ function readCentralDirectoryEntries(
     const commentLength = view.getUint16(offset + 32, true);
     const nameStart = offset + 46;
     const nextOffset = nameStart + nameLength + extraLength + commentLength;
+    if (nextOffset < nameStart || nextOffset > end || nextOffset > view.byteLength) {
+      throw new Error(`invalid ZIP central directory entry bounds at ${offset}`);
+    }
     const name = decodeUtf8(bytes.subarray(nameStart, nameStart + nameLength));
     entries.push({
       name,
@@ -179,6 +198,7 @@ function readCentralDirectoryEntries(
       localHeaderOffset: view.getUint32(offset + 42, true),
       generalPurposeBitFlag: view.getUint16(offset + 8, true),
       compressionMethod: view.getUint16(offset + 10, true),
+      crc32: view.getUint32(offset + 16, true),
       compressedSize: view.getUint32(offset + 20, true),
       uncompressedSize: view.getUint32(offset + 24, true),
     });

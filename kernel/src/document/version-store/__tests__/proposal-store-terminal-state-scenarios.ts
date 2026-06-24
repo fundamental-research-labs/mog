@@ -2,7 +2,13 @@ import {
   InMemoryVersionDocumentProviderBackend,
   createInMemoryVersionStoreProvider,
 } from '../provider';
-import { ACTOR, DOCUMENT_SCOPE, createReadyProposal } from './proposal-store-test-utils';
+import {
+  ACCEPTED_COMMIT_ID,
+  ACTOR,
+  DOCUMENT_SCOPE,
+  HEAD_COMMIT_ID,
+  createReadyProposal,
+} from './proposal-store-test-utils';
 
 export function registerProposalTerminalStateTests(): void {
   it('projects stale and merge-conflicted proposal terminal states', async () => {
@@ -66,6 +72,57 @@ export function registerProposalTerminalStateTests(): void {
     ).resolves.toMatchObject({
       ok: true,
       value: { status: 'merge_conflicted', revision: conflictedReady.revision + 1 },
+    });
+  });
+
+  it('blocks lifecycle mutations after a proposal is superseded', async () => {
+    const provider = createInMemoryVersionStoreProvider({
+      documentScope: DOCUMENT_SCOPE,
+      backend: new InMemoryVersionDocumentProviderBackend(),
+      durability: 'snapshot-test-double',
+    });
+    const store = await provider.openAgentProposalMetadataStore();
+    const ready = await createReadyProposal(store, 'terminal-superseded');
+
+    const superseded = await store.updateProposal({
+      clientRequestId: 'supersede-terminal',
+      proposalId: ready.id,
+      expectedRevision: ready.revision,
+      status: 'superseded',
+      trustedActor: ACTOR,
+      reason: 'replacement proposal created',
+    });
+    expect(superseded).toMatchObject({
+      ok: true,
+      value: { status: 'superseded', revision: ready.revision + 1 },
+    });
+    if (!superseded.ok) throw new Error(`expected supersede success: ${superseded.error.code}`);
+
+    await expect(
+      store.updateProposal({
+        clientRequestId: 'apply-after-superseded',
+        proposalId: superseded.value.id,
+        expectedRevision: superseded.value.revision,
+        status: 'applied',
+        trustedActor: ACTOR,
+        accepted: {
+          targetRef: 'refs/heads/main',
+          expectedTargetHeadId: HEAD_COMMIT_ID,
+          appliedCommitId: ACCEPTED_COMMIT_ID,
+          refUpdateReceiptId: 'receipt-after-superseded',
+        },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_state', state: 'proposal_status_transition', allowed: [] },
+    });
+    await expect(store.getProposal(superseded.value.id)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'superseded',
+        revision: superseded.value.revision,
+        supersedeReason: 'replacement proposal created',
+      },
     });
   });
 }

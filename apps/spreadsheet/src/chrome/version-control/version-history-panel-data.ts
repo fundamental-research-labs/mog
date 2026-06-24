@@ -37,6 +37,7 @@ export type VersionHistoryWorkbook = {
     | 'getSurfaceStatus'
     | 'getStatus'
     | 'getHead'
+    | 'readRef'
     | 'listCommits'
     | 'commit'
     | 'listRefs'

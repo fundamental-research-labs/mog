@@ -483,15 +483,30 @@
           "id": "mog-version.workbook-revert-guess",
           "kind": "call",
           "symbol": "wb.revert"
+        },
+        {
+          "id": "mog-version.create-version-store-guess",
+          "kind": "call",
+          "symbol": "createVersionStore"
+        },
+        {
+          "id": "mog-version.workbook-version-store-guess",
+          "kind": "member-chain",
+          "symbol": "wb.versionStore"
         }
       ],
       "message": "Workbook version history APIs are exposed through the `wb.version` public API slice.",
-      "suggestion": "Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.",
+      "suggestion": "Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.",
       "mogReplacements": [
+        {
+          "path": "createWorkbook",
+          "snippet": "import { createWorkbook } from \"@mog-sdk/sdk\";\n\nconst wb = await createWorkbook({\n  documentId: \"budget-2026\",\n  userTimezone: \"UTC\",\n  versionStore: {\n    kind: \"memory-durable-snapshot\",\n    workspaceId: \"finance\",\n    principalScope: \"analyst-1\",\n  },\n});",
+          "note": "Version-store config belongs to createWorkbook options. Supported public kinds are memory, in-memory, memory-durable-snapshot, indexeddb, and browser; use documentId/workspaceId/principalScope for scope."
+        },
         {
           "path": "wb.version.commit",
           "snippet": "const headResult = await wb.version.getHead();\nif (!headResult.ok) {\n  throw new Error(headResult.error.reason);\n}\nif (!headResult.value.refRevision) {\n  throw new Error(\"Current version head is not attached to a mutable ref\");\n}\nconst commitResult = await wb.version.commit({\n  message: \"Update forecast inputs\",\n  expectedHead: {\n    commitId: headResult.value.id,\n    revision: headResult.value.refRevision,\n  },\n});\nif (!commitResult.ok) {\n  throw new Error(commitResult.error.reason);\n}\nconst commitId = commitResult.value.id;",
-          "note": "Commit captures the current workbook working state and advances the active or explicit target ref."
+          "note": "Commit captures the current workbook working state and advances the active or explicit target ref. Read the head first and pass expectedHead so stale ref writes fail closed."
         },
         {
           "path": "wb.version.createBranch",
@@ -506,12 +521,12 @@
         {
           "path": "wb.version.merge",
           "snippet": "const mainRefResult = await wb.version.readRef(\"refs/heads/main\");\nif (!mainRefResult.ok || mainRefResult.value.status !== \"success\") {\n  throw new Error(\n    mainRefResult.ok\n      ? mainRefResult.value.diagnostics[0]?.safeMessage ?? \"Main ref unavailable\"\n      : mainRefResult.error.reason,\n  );\n}\nconst expectedTargetHead = {\n  commitId: mainRefResult.value.ref.commitId,\n  revision: mainRefResult.value.ref.revision,\n};\nconst mergeInput = {\n  base: baseCommitId,\n  ours: expectedTargetHead.commitId,\n  theirs: branchCommitId,\n};\nconst previewResult = await wb.version.merge(mergeInput, {\n  mode: \"preview\",\n  targetRef: \"refs/heads/main\",\n  expectedTargetHead,\n  persistReviewRecord: true,\n});\nif (!previewResult.ok) {\n  throw new Error(previewResult.error.reason);\n}\nconst preview = previewResult.value;\nif (preview.status === \"blocked\") {\n  throw new Error(preview.diagnostics.map((diagnostic) => diagnostic.safeMessage).join(\"\\n\"));\n}\nconst resolutions = preview.status === \"conflicted\"\n  ? preview.conflicts.map((conflict) => {\n      const option =\n        conflict.resolutionOptions.find((candidate) => candidate.kind === \"acceptTheirs\") ??\n        conflict.resolutionOptions[0];\n      if (!option) {\n        throw new Error(\"No resolution option for \" + conflict.conflictId);\n      }\n      return {\n        conflictId: conflict.conflictId,\n        expectedConflictDigest: conflict.conflictDigest,\n        optionId: option.optionId,\n        kind: option.kind,\n      };\n    })\n  : [];",
-          "note": "Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying."
+          "note": "Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying, and carry the accepted preview target head into applyMerge."
         },
         {
           "path": "wb.version.applyMerge",
           "snippet": "const applyTargetRefResult = await wb.version.readRef(\"refs/heads/main\");\nif (!applyTargetRefResult.ok || applyTargetRefResult.value.status !== \"success\") {\n  throw new Error(\n    applyTargetRefResult.ok\n      ? applyTargetRefResult.value.diagnostics[0]?.safeMessage ?? \"Main ref unavailable\"\n      : applyTargetRefResult.error.reason,\n  );\n}\nconst applyExpectedTargetHead = {\n  commitId: applyTargetRefResult.value.ref.commitId,\n  revision: applyTargetRefResult.value.ref.revision,\n};\nconst applyResult = await wb.version.applyMerge(\n  {\n    base: baseCommitId,\n    ours: applyExpectedTargetHead.commitId,\n    theirs: branchCommitId,\n    resolutions,\n  },\n  {\n    mode: \"apply\",\n    targetRef: \"refs/heads/main\",\n    expectedTargetHead: applyExpectedTargetHead,\n  },\n);\nif (!applyResult.ok) {\n  throw new Error(applyResult.error.reason);\n}\nconst applied = applyResult.value;\nif (applied.status === \"blocked\" || applied.status === \"staleTargetHead\") {\n  throw new Error(applied.diagnostics.map((diagnostic) => diagnostic.safeMessage).join(\"\\n\"));\n}\nif (applied.status === \"conflicted\") {\n  throw new Error(\"Merge still has \" + applied.requiredResolutionCount + \" unresolved conflicts\");\n}\nif (applied.status === \"planned\") {\n  throw new Error(\"applyMerge planned the merge but did not mutate the target ref\");\n}\nconst newHeadId = applied.commitRef.id;",
-          "note": "Apply merge with a concrete target ref and expected target head so stale refs fail closed."
+          "note": "Apply merge with a concrete target ref and the expected target head from the accepted preview so stale refs fail closed. If preview was conflicted, pass one resolution per conflict with the previewed conflictId, digest, optionId, and kind."
         },
         {
           "path": "wb.version.revert",

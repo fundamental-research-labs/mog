@@ -28,6 +28,7 @@ import type {
   AgentProposalMetadataStore,
   AgentProposalRecord,
   AgentProposalStoreAdapter,
+  AgentProposalStoreRow,
   AgentProposalSummary,
   CreateAgentProposalStoreInput,
   ListAgentProposalsStoreInput,
@@ -132,7 +133,8 @@ export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStor
   ): Promise<VersionResult<AgentProposalRecord>> {
     const fingerprint = mutationFingerprint('updateProposal', updateProposalFingerprint(input));
     const updatedAt = input.updatedAt ?? new Date().toISOString();
-    return this.adapter.mutateRow<AgentProposalRecord>(input.proposalId, (row) => {
+    return this.adapter.mutateRows<AgentProposalRecord>((rows) => {
+      const row = rows.find((item) => item.record.id === input.proposalId);
       if (!row) return { action: 'none', result: notFound(input.proposalId) };
       const idempotent = idempotencyResult<AgentProposalRecord>(
         row,
@@ -153,6 +155,8 @@ export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStor
 
       const valid = validateStatusUpdate(row.record, input);
       if (!valid.ok) return { action: 'none', result: valid.result };
+      const uniqueWorkspace = validateWorkspaceBindingUniqueness(rows, row.record, input);
+      if (!uniqueWorkspace.ok) return { action: 'none', result: uniqueWorkspace.result };
 
       const record = applyStatusUpdate(row.record, input, updatedAt);
       const updatedRow = appendMutationLog(row, {
@@ -165,4 +169,26 @@ export class AgentProposalMetadataStoreImpl implements AgentProposalMetadataStor
       return { action: 'put', row: updatedRow, result: ok(cloneAgentProposalRecord(record)) };
     });
   }
+}
+
+function validateWorkspaceBindingUniqueness(
+  rows: readonly AgentProposalStoreRow[],
+  record: AgentProposalRecord,
+  input: UpdateAgentProposalStoreInput,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<AgentProposalRecord> } {
+  if (input.workspaceId === undefined) return { ok: true };
+  const existing = rows.find(
+    (row) => row.record.workspaceId === input.workspaceId && row.record.id !== record.id,
+  );
+  if (!existing) return { ok: true };
+  return {
+    ok: false,
+    result: invalidState(
+      'duplicate_proposal_workspace_binding',
+      ['unique_workspace_id'],
+      'Proposal workspace id must identify exactly one proposal.',
+    ),
+  };
 }

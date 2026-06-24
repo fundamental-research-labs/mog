@@ -1,3 +1,5 @@
+import { jest } from '@jest/globals';
+
 import {
   VERSION_STATUS_CHILD_COMMIT_ID as CHILD_COMMIT_ID,
   VERSION_STATUS_CREATED_AT as CREATED_AT,
@@ -135,5 +137,47 @@ export function registerVersionStatusReadGraphServiceScenarios(): void {
         includeDiagnostics: true,
       },
     );
+  });
+
+  it('prefers the ref lifecycle service for concrete main readRef when both read surfaces are attached', async () => {
+    const graphStore = createFakeGraphStore();
+    const freshCommitId = `commit:sha256:${'3'.repeat(64)}`;
+    const freshRevision = { kind: 'counter', value: '7' } as const;
+    const readBranch = jest.fn(async (input: Readonly<Record<string, unknown>>) => ({
+      ok: true,
+      branch: {
+        name: input.name,
+        ref: {
+          targetCommitId: freshCommitId,
+          refVersion: freshRevision,
+          updatedAt: CREATED_AT,
+        },
+      },
+      diagnostics: [],
+    }));
+    const wb = createWorkbook({
+      ctx: createMockCtx({
+        versioning: {
+          graphStore,
+          branchService: { readBranch },
+        },
+      }),
+    });
+
+    await expect(wb.version.readRef('refs/heads/main')).resolves.toEqual({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/main',
+          commitId: freshCommitId,
+          revision: freshRevision,
+          updatedAt: CREATED_AT,
+        },
+        diagnostics: [],
+      },
+    });
+    expect(readBranch).toHaveBeenCalledWith({ name: 'main' });
+    expect(graphStore.readRef).not.toHaveBeenCalled();
   });
 }

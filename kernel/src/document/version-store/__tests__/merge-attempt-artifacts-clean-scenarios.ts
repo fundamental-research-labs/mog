@@ -6,6 +6,7 @@ import {
   createResolvedMergeAttemptArtifactRecord,
   mergePreviewArtifactRef,
   mergeResolutionSetArtifactRef,
+  mergeResolutionSetV2ArtifactRef,
   mergeResultIdForPreviewDigest,
 } from '../merge-attempt-artifacts';
 import { createInMemoryVersionObjectStore } from '../object-store';
@@ -63,6 +64,24 @@ export function registerMergeAttemptArtifactsCleanScenarios(): void {
       resolutions: [],
     });
 
+    const resultId = mergeResultIdForPreviewDigest(first.digest);
+    const resolutionSetV2 = await createMergeResolutionSetArtifactRecord(NAMESPACE, {
+      resultId,
+      resultDigest: first.digest,
+      previewArtifactDigest: first.digest,
+      resolutions: [],
+    });
+    expect(resolutionSetV2.preimage.objectType).toBe('workbook.mergeResolutionSet.v2');
+    expect(resolutionSetV2.preimage.dependencies).toEqual([mergePreviewArtifactRef(first.digest)]);
+    expect(resolutionSetV2.preimage.payload).toEqual({
+      schemaVersion: 2,
+      recordKind: 'mergeResolutionSet',
+      resultId,
+      resultDigest: first.digest,
+      previewArtifactDigest: first.digest,
+      resolutions: [],
+    });
+
     const resolved = await createResolvedMergeAttemptArtifactRecord(NAMESPACE, {
       resultDigest: first.digest,
       resolutionSetDigest: resolutionSet.digest,
@@ -74,12 +93,13 @@ export function registerMergeAttemptArtifactsCleanScenarios(): void {
       mergePreviewArtifactRef(first.digest),
       mergeResolutionSetArtifactRef(resolutionSet.digest),
     ]);
-    expect(mergeResultIdForPreviewDigest(first.digest)).toBe(`merge-result:${first.digest.digest}`);
+    expect(resultId).toBe(`merge-result:${first.digest.digest}`);
 
     const store = createInMemoryVersionObjectStore(NAMESPACE);
     expectSuccess(
       await store.putObjects([
         resolved,
+        resolutionSetV2,
         resolutionSet,
         first,
         commits.base.record,
@@ -90,5 +110,8 @@ export function registerMergeAttemptArtifactsCleanScenarios(): void {
     await expect(store.getObject(mergePreviewArtifactRef(first.digest))).resolves.toEqual(
       first.preimage.payload,
     );
+    await expect(
+      store.getObject(mergeResolutionSetV2ArtifactRef(resolutionSetV2.digest)),
+    ).resolves.toEqual(resolutionSetV2.preimage.payload);
   });
 }

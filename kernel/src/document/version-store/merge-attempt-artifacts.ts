@@ -25,8 +25,11 @@ import {
 
 export const MERGE_PREVIEW_OBJECT_TYPE =
   'workbook.mergePreview.v1' satisfies VersionObjectType;
-export const MERGE_RESOLUTION_SET_OBJECT_TYPE =
+export const MERGE_RESOLUTION_SET_V1_OBJECT_TYPE =
   'workbook.mergeResolutionSet.v1' satisfies VersionObjectType;
+export const MERGE_RESOLUTION_SET_OBJECT_TYPE = MERGE_RESOLUTION_SET_V1_OBJECT_TYPE;
+export const MERGE_RESOLUTION_SET_V2_OBJECT_TYPE =
+  'workbook.mergeResolutionSet.v2' satisfies VersionObjectType;
 export const RESOLVED_MERGE_ATTEMPT_OBJECT_TYPE =
   'workbook.resolvedMergeAttempt.v1' satisfies VersionObjectType;
 
@@ -47,11 +50,24 @@ export type MergePreviewArtifactPayload = {
   readonly conflicts: readonly VersionMergeConflict[];
 };
 
-export type MergeResolutionSetArtifactPayload = {
+export type MergeResolutionSetArtifactPayloadV1 = {
   readonly schemaVersion: 1;
   readonly recordKind: 'mergeResolutionSet';
   readonly resolutions: readonly VersionApplyMergeResolution[];
 };
+
+export type MergeResolutionSetArtifactPayloadV2 = {
+  readonly schemaVersion: 2;
+  readonly recordKind: 'mergeResolutionSet';
+  readonly resultId: VersionMergeResultId;
+  readonly resultDigest: ObjectDigest;
+  readonly previewArtifactDigest: ObjectDigest;
+  readonly resolutions: readonly VersionApplyMergeResolution[];
+};
+
+export type MergeResolutionSetArtifactPayload =
+  | MergeResolutionSetArtifactPayloadV1
+  | MergeResolutionSetArtifactPayloadV2;
 
 export type ResolvedMergeAttemptArtifactPayload = {
   readonly schemaVersion: 1;
@@ -64,10 +80,21 @@ export type ResolvedMergeAttemptArtifactPayload = {
 
 export type MergePreviewArtifactRecord =
   VersionObjectRecord<MergePreviewArtifactPayload>;
+export type MergeResolutionSetArtifactRecordV1 =
+  VersionObjectRecord<MergeResolutionSetArtifactPayloadV1>;
+export type MergeResolutionSetArtifactRecordV2 =
+  VersionObjectRecord<MergeResolutionSetArtifactPayloadV2>;
 export type MergeResolutionSetArtifactRecord =
   VersionObjectRecord<MergeResolutionSetArtifactPayload>;
 export type ResolvedMergeAttemptArtifactRecord =
   VersionObjectRecord<ResolvedMergeAttemptArtifactPayload>;
+
+export type CreateMergeResolutionSetArtifactV2Input = {
+  readonly resultId: VersionMergeResultId;
+  readonly resultDigest: ObjectDigest;
+  readonly previewArtifactDigest: ObjectDigest;
+  readonly resolutions?: readonly VersionApplyMergeResolution[];
+};
 
 export async function createMergePreviewArtifactRecord(
   namespace: VersionGraphNamespace,
@@ -104,19 +131,57 @@ export async function createMergePreviewArtifactRecord(
 
 export async function createMergeResolutionSetArtifactRecord(
   namespace: VersionGraphNamespace,
-  resolutions: readonly VersionApplyMergeResolution[] = [],
+  resolutions?: readonly VersionApplyMergeResolution[],
+): Promise<MergeResolutionSetArtifactRecordV1>;
+export async function createMergeResolutionSetArtifactRecord(
+  namespace: VersionGraphNamespace,
+  input: CreateMergeResolutionSetArtifactV2Input,
+): Promise<MergeResolutionSetArtifactRecordV2>;
+export async function createMergeResolutionSetArtifactRecord(
+  namespace: VersionGraphNamespace,
+  input: readonly VersionApplyMergeResolution[] | CreateMergeResolutionSetArtifactV2Input = [],
 ): Promise<MergeResolutionSetArtifactRecord> {
+  if (isCreateMergeResolutionSetArtifactV2Input(input)) {
+    return createMergeResolutionSetArtifactRecordV2(namespace, input);
+  }
+
   return createVersionObjectRecord(namespace, {
-    objectType: MERGE_RESOLUTION_SET_OBJECT_TYPE,
+    objectType: MERGE_RESOLUTION_SET_V1_OBJECT_TYPE,
     schemaVersion: 1,
     payloadEncoding: 'mog-canonical-json-v1',
     dependencies: [],
     payload: {
       schemaVersion: 1,
       recordKind: 'mergeResolutionSet',
-      resolutions: sortedResolutions(resolutions),
+      resolutions: sortedResolutions(input),
     },
-  }) as Promise<MergeResolutionSetArtifactRecord>;
+  }) as Promise<MergeResolutionSetArtifactRecordV1>;
+}
+
+function isCreateMergeResolutionSetArtifactV2Input(
+  input: readonly VersionApplyMergeResolution[] | CreateMergeResolutionSetArtifactV2Input,
+): input is CreateMergeResolutionSetArtifactV2Input {
+  return !Array.isArray(input);
+}
+
+async function createMergeResolutionSetArtifactRecordV2(
+  namespace: VersionGraphNamespace,
+  input: CreateMergeResolutionSetArtifactV2Input,
+): Promise<MergeResolutionSetArtifactRecordV2> {
+  return createVersionObjectRecord(namespace, {
+    objectType: MERGE_RESOLUTION_SET_V2_OBJECT_TYPE,
+    schemaVersion: 1,
+    payloadEncoding: 'mog-canonical-json-v1',
+    dependencies: [mergePreviewArtifactRef(input.previewArtifactDigest)],
+    payload: {
+      schemaVersion: 2,
+      recordKind: 'mergeResolutionSet',
+      resultId: input.resultId,
+      resultDigest: cloneDigest(input.resultDigest),
+      previewArtifactDigest: cloneDigest(input.previewArtifactDigest),
+      resolutions: sortedResolutions(input.resolutions ?? []),
+    },
+  }) as Promise<MergeResolutionSetArtifactRecordV2>;
 }
 
 export async function createResolvedMergeAttemptArtifactRecord(
@@ -158,7 +223,15 @@ export function mergePreviewArtifactRef(digest: ObjectDigest): VersionDependency
 export function mergeResolutionSetArtifactRef(digest: ObjectDigest): VersionDependencyRef {
   return {
     kind: 'object',
-    objectType: MERGE_RESOLUTION_SET_OBJECT_TYPE,
+    objectType: MERGE_RESOLUTION_SET_V1_OBJECT_TYPE,
+    digest,
+  };
+}
+
+export function mergeResolutionSetV2ArtifactRef(digest: ObjectDigest): VersionDependencyRef {
+  return {
+    kind: 'object',
+    objectType: MERGE_RESOLUTION_SET_V2_OBJECT_TYPE,
     digest,
   };
 }
@@ -237,4 +310,11 @@ function compareStrings(left: string, right: string): number {
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneDigest(digest: ObjectDigest): ObjectDigest {
+  return {
+    algorithm: digest.algorithm,
+    digest: digest.digest,
+  };
 }

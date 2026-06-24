@@ -48,7 +48,26 @@ export async function commitInput(
   semanticPayload: unknown,
   expectedHeadCommitId: WorkbookCommitId,
   expectedMainRefVersion: RefVersion,
+  options: {
+    readonly targetRef?: string;
+    readonly parentCommitIds?: readonly WorkbookCommitId[];
+  } = {},
 ): Promise<CommitVersionGraphInput> {
+  return {
+    ...(await graphContentInput(namespace, label, semanticPayload)),
+    ...(options.targetRef
+      ? { targetRef: options.targetRef, expectedTargetRefVersion: expectedMainRefVersion }
+      : { expectedMainRefVersion }),
+    ...(options.parentCommitIds ? { parentCommitIds: options.parentCommitIds } : {}),
+    expectedHeadCommitId,
+  };
+}
+
+export async function graphContentInput(
+  namespace: VersionGraphNamespace,
+  label: string,
+  semanticPayload: unknown,
+) {
   return {
     snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
       label,
@@ -67,8 +86,6 @@ export async function commitInput(
     author: DIFF_SERVICE_AUTHOR,
     createdAt: DIFF_SERVICE_CREATED_AT,
     completenessDiagnostics: [],
-    expectedHeadCommitId,
-    expectedMainRefVersion,
   };
 }
 

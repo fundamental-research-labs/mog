@@ -7,7 +7,7 @@ use compute_document::schema::{
 use serde::Serialize;
 use serde_json::{Number, Value};
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalCellValue, SemanticObjectDigest, SemanticObjectKind,
+    CanonicalCellValue, SemanticObjectDigest, SemanticObjectKind, canonical_digest,
 };
 use value_types::CellValue;
 use yrs::{Map, Out, Transact};
@@ -18,7 +18,7 @@ use crate::storage::{
     properties,
 };
 
-use super::{canonicalize_json_value, SemanticStateReadError, UNSUPPORTED_CELL_VALUES_DOMAIN};
+use super::{SemanticStateReadError, UNSUPPORTED_CELL_VALUES_DOMAIN, canonicalize_json_value};
 
 const FORMULA_METADATA_CATEGORY: &str = "formula-metadata";
 const RICH_STRING_CELL_KEY: &str = "rt";

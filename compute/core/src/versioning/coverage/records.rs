@@ -1,8 +1,9 @@
 use compute_document::schema::*;
 
 use super::{
-    SemanticCoverageClassification, SemanticCoverageDigestPart, SemanticCoverageRecord,
-    SemanticCoverageScope, SemanticCoverageStatusEffect, SEMANTIC_COVERAGE_RECORD_SCHEMA_VERSION,
+    SEMANTIC_COVERAGE_RECORD_SCHEMA_VERSION, SemanticCoverageClassification,
+    SemanticCoverageDigestPart, SemanticCoverageRecord, SemanticCoverageScope,
+    SemanticCoverageStatusEffect,
 };
 
 type CoverageShape = (

@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use formula_types::IdentityFormulaRef;
 use snapshot_types::versioning::{
-    canonical_digest, CanonicalFormula, CanonicalFormulaRef, SemanticObjectDigest,
-    SemanticObjectKind,
+    CanonicalFormula, CanonicalFormulaRef, SemanticObjectDigest, SemanticObjectKind,
+    canonical_digest,
 };
 
 use crate::storage::engine::YrsComputeEngine;
 
-use super::semantic_ids::{canonical_cell_key, canonical_column_key, canonical_row_key};
 use super::SemanticStateReadError;
+use super::semantic_ids::{canonical_cell_key, canonical_column_key, canonical_row_key};
 
 pub(super) const UNSUPPORTED_CELL_FORMULAS_DOMAIN: &str = "unsupported-cell-formulas";
 

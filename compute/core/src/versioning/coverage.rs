@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use compute_document::schema::*;
 use serde::Serialize;
 use serde_json::{Number, Value};
-use snapshot_types::versioning::{canonical_digest, SemanticObjectDigest, SemanticObjectKind};
+use snapshot_types::versioning::{SemanticObjectDigest, SemanticObjectKind, canonical_digest};
 use yrs::{Map, Out, ReadTxn, Transact};
 
 use crate::storage::{
@@ -134,8 +134,8 @@ impl SemanticCoverageRecord {
     }
 }
 
-pub(super) fn semantic_coverage_record_objects(
-) -> Result<BTreeMap<String, SemanticObjectDigest>, SemanticStateReadError> {
+pub(super) fn semantic_coverage_record_objects()
+-> Result<BTreeMap<String, SemanticObjectDigest>, SemanticStateReadError> {
     let mut objects = BTreeMap::new();
     for record in semantic_coverage_records() {
         let object_id = record.object_id();

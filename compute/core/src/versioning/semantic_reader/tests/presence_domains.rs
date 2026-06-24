@@ -10,7 +10,7 @@ use snapshot_types::versioning::{
 
 use crate::storage::engine::YrsComputeEngine;
 use crate::storage::infra::grid_helpers::{get_sheet_submap, sheet_id_to_hex};
-use crate::versioning::{coverage_for_states, SemanticWorkbookStateReader};
+use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
 use yrs::{Map, Transact};
 
 use super::workbook;
@@ -88,9 +88,11 @@ fn engine_semantic_reader_marks_data_validation_presence_opaque_blocking() {
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 
-    assert!(!clean_state
-        .domains
-        .contains_key(super::super::DATA_VALIDATION_DOMAIN));
+    assert!(
+        !clean_state
+            .domains
+            .contains_key(super::super::DATA_VALIDATION_DOMAIN)
+    );
 
     engine
         .set_range_schema(&sheet_id, &validation_range_schema("vc06-validation"))
@@ -110,9 +112,11 @@ fn engine_semantic_reader_marks_data_validation_metadata_presence_opaque_blockin
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 
-    assert!(!clean_state
-        .domains
-        .contains_key(super::super::DATA_VALIDATION_DOMAIN));
+    assert!(
+        !clean_state
+            .domains
+            .contains_key(super::super::DATA_VALIDATION_DOMAIN)
+    );
 
     set_data_validation_declared_count(&engine, &sheet_id);
 
@@ -130,9 +134,11 @@ fn engine_semantic_reader_marks_conditional_formatting_presence_opaque_blocking(
     let sheet_id = engine.storage().sheet_order()[0];
     let clean_state = engine.read_semantic_workbook_state().expect("clean state");
 
-    assert!(!clean_state
-        .domains
-        .contains_key(super::super::CONDITIONAL_FORMATTING_DOMAIN));
+    assert!(
+        !clean_state
+            .domains
+            .contains_key(super::super::CONDITIONAL_FORMATTING_DOMAIN)
+    );
 
     engine
         .add_cf_rule(

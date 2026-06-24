@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use snapshot_types::versioning::{
-    canonical_digest, semantic_workbook_state_digest, ObjectDigest, SemanticChange,
-    SemanticChangeKind, SemanticCompletenessDiagnostic, SemanticDiagnosticSeverity,
-    SemanticDomainCoverage, SemanticDomainCoverageStatus, SemanticObjectDigest, SemanticObjectKind,
-    SemanticWorkbookDiff, SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass,
+    ObjectDigest, SemanticChange, SemanticChangeKind, SemanticCompletenessDiagnostic,
+    SemanticDiagnosticSeverity, SemanticDomainCoverage, SemanticDomainCoverageStatus,
+    SemanticObjectDigest, SemanticObjectKind, SemanticWorkbookDiff, SemanticWorkbookState,
+    VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
+    semantic_workbook_state_digest,
 };
 
 mod coverage;
@@ -30,7 +31,7 @@ pub enum SemanticStateReadError {
 
 pub trait SemanticWorkbookStateReader {
     fn read_semantic_workbook_state(&self)
-        -> Result<SemanticWorkbookState, SemanticStateReadError>;
+    -> Result<SemanticWorkbookState, SemanticStateReadError>;
 }
 
 pub fn diff_semantic_workbook_states(
@@ -348,8 +349,8 @@ mod tests {
 
     use serde_json::Value;
     use snapshot_types::versioning::{
-        CanonicalCellValue, SemanticCellState, SemanticDomainState, SemanticSheetState,
-        SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION,
+        CanonicalCellValue, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticCellState,
+        SemanticDomainState, SemanticSheetState,
     };
 
     use super::*;

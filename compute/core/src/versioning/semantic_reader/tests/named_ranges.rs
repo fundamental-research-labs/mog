@@ -1,14 +1,14 @@
 use domain_types::{DefinedName, DefinedNameInput, NamedRangeUpdate};
 use snapshot_types::versioning::{
-    semantic_workbook_state_digest, SemanticChangeKind, SemanticObjectKind,
-    VersionDomainCapabilityState,
+    SemanticChangeKind, SemanticObjectKind, VersionDomainCapabilityState,
+    semantic_workbook_state_digest,
 };
 use snapshot_types::{CellData, SheetSnapshot, WorkbookSnapshot};
 use value_types::{CellValue, FiniteF64};
 
 use crate::storage::engine::YrsComputeEngine;
 use crate::versioning::{
-    diff_semantic_workbook_states, SemanticWorkbookStateReader, NAMED_RANGES_DOMAIN,
+    NAMED_RANGES_DOMAIN, SemanticWorkbookStateReader, diff_semantic_workbook_states,
 };
 
 use super::{cell, workbook};
@@ -95,10 +95,12 @@ fn engine_semantic_reader_reports_named_range_create_update_and_delete() {
     let delete_diff =
         diff_semantic_workbook_states(&after_update, &after_delete).expect("delete diff");
 
-    assert!(after_delete.domains[NAMED_RANGES_DOMAIN]
-        .objects
-        .get(object_id)
-        .is_none());
+    assert!(
+        after_delete.domains[NAMED_RANGES_DOMAIN]
+            .objects
+            .get(object_id)
+            .is_none()
+    );
     assert!(delete_diff.changes.iter().any(|change| {
         change.kind == SemanticChangeKind::Removed
             && change.domain_id == NAMED_RANGES_DOMAIN

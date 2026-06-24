@@ -9,7 +9,7 @@ use value_types::CellValue;
 use yrs::{Any, Map, MapPrelim, Out, Transact};
 
 use crate::storage::engine::YrsComputeEngine;
-use crate::versioning::{coverage_for_states, SemanticWorkbookStateReader};
+use crate::versioning::{SemanticWorkbookStateReader, coverage_for_states};
 
 use super::{cell, workbook};
 

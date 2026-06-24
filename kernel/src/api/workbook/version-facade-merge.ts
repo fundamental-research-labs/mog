@@ -26,6 +26,7 @@ import { applyMergeWorkbookVersion } from './version-apply-merge';
 import { mergeWorkbookVersion } from './version-merge';
 import {
   type ActiveCheckoutWriteRefName,
+  detachedImplicitCheckoutWriteDiagnostic,
   expectedHeadFromActiveCheckout,
   readActiveCheckoutWriteContext,
   recordActiveCheckoutBranchCommit,
@@ -158,6 +159,12 @@ async function applyMergeInputForActiveCheckout(
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
   if (hasExplicitTargetRef(options)) return { ok: true, input, options };
+  if (activeCheckout.status === 'detached') {
+    return {
+      ok: false,
+      diagnostics: [detachedImplicitCheckoutWriteDiagnostic('applyMergeGraphWrite')],
+    };
+  }
   if (activeCheckout.status !== 'attached') return { ok: true, input, options };
 
   if (!isMergeCommitApplyInput(input) || input.ours !== activeCheckout.commitId) {
@@ -202,6 +209,12 @@ async function revertInputForActiveCheckout(
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
   if (hasExplicitTargetRef(input)) return { ok: true, input };
+  if (activeCheckout.status === 'detached') {
+    return {
+      ok: false,
+      diagnostics: [detachedImplicitCheckoutWriteDiagnostic('revertGraphWrite')],
+    };
+  }
   if (activeCheckout.status !== 'attached') return { ok: true, input };
 
   return {

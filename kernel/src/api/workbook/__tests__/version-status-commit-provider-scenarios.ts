@@ -174,6 +174,53 @@ export function registerVersionStatusCommitProviderScenarios() {
     });
   });
 
+  it('blocks direct WorkbookVersionImpl implicit commits from detached checkout', async () => {
+    const detachedCommitId = `commit:sha256:${'8'.repeat(64)}` as const;
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordCheckoutMaterialization({
+      commitId: detachedCommitId,
+      resolvedTarget: { kind: 'commit', commitId: detachedCommitId },
+    } as never);
+    const commit = jest.fn();
+    const version = createWorkbookVersion({
+      writeService: { commit },
+    });
+    attachWorkbookVersionSurfaceStatusService(versionContext(version), surfaceStatusService);
+
+    await expect(version.commit({ message: 'detached implicit commit' })).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'commitGraphWrite',
+                reason: 'detachedCheckout',
+                option: 'targetRef',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(commit).not.toHaveBeenCalled();
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: detachedCommitId,
+      detached: true,
+    });
+  });
+
   it('blocks explicit-target commits when the active checkout session is stale', async () => {
     const branchRef = 'refs/heads/scenario/stale-explicit-commit' as const;
     const checkedOutCommit = `commit:sha256:${'6'.repeat(64)}` as const;

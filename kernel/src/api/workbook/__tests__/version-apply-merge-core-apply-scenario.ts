@@ -186,6 +186,57 @@ export function registerCleanMergeApplyScenario(): void {
     });
   });
 
+  it('blocks implicit clean merge apply writes from detached checkout', async () => {
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordCheckoutMaterialization({
+      commitId: OURS,
+      resolvedTarget: { kind: 'commit', commitId: OURS },
+    } as never);
+    const merge = jest.fn();
+    const mergeCommit = jest.fn();
+    const version = workbookVersionWithVersioning({
+      mergeService: { merge },
+      surfaceStatusService,
+      writeService: { mergeCommit },
+    });
+
+    await expect(
+      version.applyMerge({ base: BASE, ours: OURS, theirs: THEIRS }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'applyMergeGraphWrite',
+                reason: 'detachedCheckout',
+                option: 'targetRef',
+              }),
+            }),
+          }),
+        ],
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: OURS,
+      detached: true,
+    });
+  });
+
   it('blocks apply writes when the active checkout session is stale', async () => {
     const branchRef = 'refs/heads/scenario/stale-active-merge' as const;
     const surfaceStatusService = createWorkbookVersionSurfaceStatusService({

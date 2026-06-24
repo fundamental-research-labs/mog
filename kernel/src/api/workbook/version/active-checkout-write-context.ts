@@ -80,6 +80,25 @@ export function expectedHeadFromActiveCheckout(
   };
 }
 
+export function detachedImplicitCheckoutWriteDiagnostic(
+  operation: ActiveCheckoutWriteOperation,
+): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_INVALID_OPTIONS',
+    'Version write is blocked because detached HEAD has no implicit targetRef; pass a concrete targetRef.',
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload: {
+        operation,
+        reason: 'detachedCheckout',
+        option: 'targetRef',
+      },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
 export function recordActiveCheckoutBranchCommit(
   ctx: DocumentContext,
   refName: ActiveCheckoutWriteRefName,

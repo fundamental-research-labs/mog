@@ -224,22 +224,11 @@ export function registerRevertProviderResultScenarios(): void {
     expect(readRef).toHaveBeenCalledWith(MAIN_REF);
   });
 
-  it('leaves detached checkout reverts detached when no target ref is supplied', async () => {
+  it('blocks detached checkout reverts when no target ref is supplied', async () => {
     const input = {
       target: { kind: 'commit', commitId: COMMIT_A },
       reason: 'detached-checkout-revert',
     } satisfies VersionRevertInput;
-    const providerResult: VersionRevertResult = {
-      schemaVersion: 1,
-      status: 'applied',
-      target: input.target,
-      commitRef: {
-        id: COMMIT_D,
-      },
-      reviewInvalidationIds: [],
-      diagnostics: [],
-      mutationGuarantee: 'revert-commit-created',
-    };
     const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
       readDirtyState: () => ({
         hasUncommittedLocalChanges: false,
@@ -251,20 +240,35 @@ export function registerRevertProviderResultScenarios(): void {
     });
     surfaceStatusService.recordCheckoutMaterialization({
       commitId: COMMIT_B,
-      resolvedTarget: { kind: 'commit', commitId: COMMIT_B },
-    } as never);
-    const revert = jest.fn(async () => providerResult);
+        resolvedTarget: { kind: 'commit', commitId: COMMIT_B },
+      } as never);
+    const revert = jest.fn();
     const readRef = jest.fn();
     const version = workbookVersionWithRevertService(revert, {
       readService: { readRef },
       surfaceStatusService,
     });
 
-    await expect(version.revert(input)).resolves.toStrictEqual({
-      ok: true,
-      value: providerResult,
+    await expect(version.revert(input)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_OPTIONS',
+            data: expect.objectContaining({
+              mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                operation: 'revertGraphWrite',
+                reason: 'detachedCheckout',
+                option: 'targetRef',
+              }),
+            }),
+          }),
+        ],
+      },
     });
-    expect(revert).toHaveBeenCalledWith(input, {});
+    expect(revert).not.toHaveBeenCalled();
     expect(readRef).not.toHaveBeenCalled();
     expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
       checkedOutCommitId: COMMIT_B,

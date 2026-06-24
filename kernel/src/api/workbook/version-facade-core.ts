@@ -24,6 +24,7 @@ import {
 } from './version-checkout';
 import {
   type ActiveCheckoutWriteRefName,
+  detachedImplicitCheckoutWriteDiagnostic,
   expectedHeadFromActiveCheckout,
   readActiveCheckoutWriteContext,
   recordActiveCheckoutBranchCommit,
@@ -284,6 +285,12 @@ async function commitOptionsForActiveCheckout(
     return { ok: false, diagnostics: activeCheckout.diagnostics };
   }
   if (hasExplicitTargetRef(options)) return { ok: true, options };
+  if (activeCheckout.status === 'detached') {
+    return {
+      ok: false,
+      diagnostics: [detachedImplicitCheckoutWriteDiagnostic('commitGraphWrite')],
+    };
+  }
   if (activeCheckout.status !== 'attached') return { ok: true, options };
 
   const targetRef = activeCheckout.refName;

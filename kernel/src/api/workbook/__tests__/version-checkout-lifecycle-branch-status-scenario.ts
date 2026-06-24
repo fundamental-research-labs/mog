@@ -137,6 +137,25 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         },
       });
 
+      const headCheckout = await wb.version.checkout({ kind: 'head' });
+      expect(headCheckout).toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+          plan: {
+            commitId: betaCommit.value.id,
+            target: {
+              kind: 'head',
+              refName: 'refs/heads/scenario/manual-smoke',
+              commitId: betaCommit.value.id,
+            },
+          },
+        },
+      });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'beta' });
+
       const mainCheckout = await wb.version.checkout({
         kind: 'ref',
         name: 'refs/heads/main',

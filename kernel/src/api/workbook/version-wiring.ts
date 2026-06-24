@@ -2,6 +2,10 @@ import type { DocumentContext } from '../../context';
 import { createProviderBackedBranchLifecycleService } from '../../document/version-store/branch-provider-service';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
+import type {
+  CheckoutHeadReader,
+  CheckoutMaterializationDiagnostic,
+} from '../../document/version-store/checkout-service';
 import { createWorkbookVersionCommitService } from '../../document/version-store/commit-service';
 import { createWorkbookVersionDiffService } from '../../document/version-store/diff-service';
 import { createWorkbookVersionMergeService } from '../../document/version-store/merge-service';
@@ -38,6 +42,7 @@ import {
   createSemanticMergeCommitCapture,
 } from './version/merge/version-merge-materializer';
 import { createProviderBackedWorkbookVersionProvenanceTruthService } from './version/provenance/version-provenance-truth-service';
+import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import type { WorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
@@ -160,16 +165,21 @@ export function attachWorkbookVersioning(
     (isCheckoutSnapshotMaterializer(existing.checkoutSnapshotMaterializer)
       ? existing.checkoutSnapshotMaterializer
       : undefined);
+  const checkoutHeadReaderFactory = createActiveCheckoutHeadReaderFactory(ctx);
   const checkoutService =
     config.provider && checkoutSnapshotMaterializer
       ? createProviderBackedCheckoutMaterializationService({
           provider: config.provider,
           snapshotMaterializer: checkoutSnapshotMaterializer,
+          checkoutHeadReaderFactory,
         })
       : (existing.checkoutService ??
         existing.checkoutMaterializationService ??
         (config.provider
-          ? createProviderBackedCheckoutMaterializationService({ provider: config.provider })
+          ? createProviderBackedCheckoutMaterializationService({
+              provider: config.provider,
+              checkoutHeadReaderFactory,
+            })
           : undefined));
   const mergeService =
     config.mergeService ??
@@ -309,6 +319,98 @@ export function attachWorkbookVersionSurfaceStatusService(
     surfaceStatusService: service,
     versionSurfaceStatusService: service,
   };
+}
+
+function createActiveCheckoutHeadReaderFactory(
+  ctx: DocumentContext,
+): (fallbackHeadReader: CheckoutHeadReader) => CheckoutHeadReader {
+  return (fallbackHeadReader) => ({
+    readHead: async () => {
+      const active = await readActiveCheckoutHead(ctx);
+      if (active.status === 'absent') return fallbackHeadReader.readHead();
+      if (active.status === 'degraded') {
+        return {
+          ok: false,
+          diagnostics: activeCheckoutHeadDiagnostics(
+            'active-checkout-head-degraded',
+            active.result.diagnostics,
+          ),
+        };
+      }
+
+      if (active.session.detached) {
+        return {
+          ok: true,
+          head: {
+            mode: 'detached',
+            commitId: active.head.id,
+            materializationId: `active-checkout:${active.head.id}`,
+          },
+          diagnostics: [],
+        };
+      }
+
+      const refName = activeCheckoutStorageRefName(
+        active.session.branchName ?? active.head.refName,
+      );
+      if (!refName) {
+        return {
+          ok: false,
+          diagnostics: activeCheckoutHeadDiagnostics('active-checkout-ref-missing'),
+        };
+      }
+
+      const refVersion = counterRefVersionFrom(active.head.refRevision);
+      return {
+        ok: true,
+        head: {
+          mode: 'attached',
+          refName,
+          commitId: active.head.id,
+          ...(refVersion ? { refVersion } : {}),
+        },
+        diagnostics: [],
+      };
+    },
+  });
+}
+
+function activeCheckoutStorageRefName(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const prefix = 'refs/heads/';
+  const refName = value.startsWith(prefix) ? value.slice(prefix.length) : value;
+  return refName.length > 0 ? refName : undefined;
+}
+
+function counterRefVersionFrom(
+  value: unknown,
+): { readonly kind: 'counter'; readonly value: string } | undefined {
+  return isRecord(value) && value.kind === 'counter' && typeof value.value === 'string'
+    ? Object.freeze({ kind: 'counter', value: value.value })
+    : undefined;
+}
+
+function activeCheckoutHeadDiagnostics(
+  reason: string,
+  sourceDiagnostics: readonly {
+    readonly code?: string;
+    readonly issueCode?: string;
+  }[] = [],
+): readonly CheckoutMaterializationDiagnostic[] {
+  const firstDiagnostic = sourceDiagnostics[0];
+  const firstDiagnosticCode = firstDiagnostic?.code ?? firstDiagnostic?.issueCode;
+  return [
+    {
+      code: 'VERSION_CHECKOUT_REF_READ_FAILED',
+      severity: 'error',
+      message: 'Active checkout HEAD could not be resolved.',
+      details: {
+        reason,
+        sourceDiagnosticCount: sourceDiagnostics.length,
+        ...(firstDiagnosticCode ? { sourceDiagnosticCode: firstDiagnosticCode } : {}),
+      },
+    },
+  ];
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

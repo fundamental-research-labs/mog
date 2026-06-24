@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 
 import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph';
+import { createProviderBackedCheckoutMaterializationService } from '../../../document/version-store/checkout-provider-service';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
@@ -116,6 +117,66 @@ describe('WorkbookVersion checkout provider planning', () => {
         },
         diagnostics: [],
       },
+    });
+  });
+
+  it('resolves provider-backed checkout service HEAD planning through an injected active branch reader', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+    const graph = await provider.openGraph(namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1'));
+    const childInput = await initializeInput('graph-1', 'scenario-target');
+    const child = await graph.commit({
+      ...childInput.rootWrite,
+      expectedHeadCommitId: initialized.rootCommit.id,
+      expectedMainRefVersion: initialized.initialHead.revision,
+    });
+    expectGraphWriteSuccess(child);
+    const branch = graph.refStore.createBranch({
+      name: 'scenario/checkout',
+      targetCommitId: child.commit.id,
+      expectedAbsent: true,
+      baseCommitId: initialized.rootCommit.id,
+      createdBy: AUTHOR,
+    });
+    expect(branch.ok).toBe(true);
+    if (!branch.ok) throw new Error(`expected branch create success: ${branch.error.code}`);
+    const checkoutService = createProviderBackedCheckoutMaterializationService({
+      provider,
+      checkoutHeadReaderFactory: () => ({
+        readHead: async () => ({
+          ok: true,
+          head: {
+            mode: 'attached',
+            refName: 'scenario/checkout',
+            commitId: child.commit.id,
+            refVersion: branch.ref.refVersion,
+            refIncarnationId: branch.ref.refIncarnationId,
+          },
+          diagnostics: [],
+        }),
+      }),
+    });
+
+    await expect(
+      checkoutService.planCheckout({ target: 'ref', refName: 'HEAD' }),
+    ).resolves.toMatchObject({
+      ok: true,
+      materialization: 'planned',
+      mutationGuarantee: 'no-workbook-mutation',
+      plan: {
+        strategy: 'fullSnapshot',
+        commitId: child.commit.id,
+        parentCommitIds: [initialized.rootCommit.id],
+        resolvedTarget: {
+          kind: 'head',
+          refName: 'scenario/checkout',
+          commitId: child.commit.id,
+          refVersion: branch.ref.refVersion,
+          refIncarnationId: branch.ref.refIncarnationId,
+        },
+      },
+      diagnostics: [],
     });
   });
 });

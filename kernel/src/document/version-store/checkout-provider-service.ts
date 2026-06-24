@@ -16,6 +16,7 @@ import {
 } from './checkout-access-diagnostics';
 import {
   createCheckoutMaterializationService,
+  type CheckoutHeadReader,
   type CheckoutHeadReadResult,
   type CheckoutMaterializationDiagnostic,
   type CheckoutMaterializationDiagnosticCode,
@@ -27,6 +28,9 @@ import type { CheckoutSnapshotMaterializer } from './checkout-apply';
 export interface ProviderBackedCheckoutMaterializationServiceOptions {
   readonly provider: VersionStoreProvider;
   readonly snapshotMaterializer?: CheckoutSnapshotMaterializer;
+  readonly checkoutHeadReaderFactory?: (
+    fallbackHeadReader: CheckoutHeadReader,
+  ) => CheckoutHeadReader;
 }
 
 const PROVIDER_REF_AUTHOR: VersionAuthor = Object.freeze({
@@ -38,10 +42,14 @@ const PROVIDER_REF_AUTHOR: VersionAuthor = Object.freeze({
 export class ProviderBackedCheckoutMaterializationService {
   private readonly provider: VersionStoreProvider;
   private readonly snapshotMaterializer?: CheckoutSnapshotMaterializer;
+  private readonly checkoutHeadReaderFactory?: (
+    fallbackHeadReader: CheckoutHeadReader,
+  ) => CheckoutHeadReader;
 
   constructor(options: ProviderBackedCheckoutMaterializationServiceOptions) {
     this.provider = options.provider;
     this.snapshotMaterializer = options.snapshotMaterializer;
+    this.checkoutHeadReaderFactory = options.checkoutHeadReaderFactory;
   }
 
   async planCheckout(
@@ -49,15 +57,21 @@ export class ProviderBackedCheckoutMaterializationService {
   ): Promise<CheckoutMaterializationResult> {
     const opened = await this.openVisibleGraph();
     if (!opened.ok) return opened.result;
-    return createGraphCheckoutService(opened.graph, this.snapshotMaterializer).planCheckout(
-      request,
-    );
+    return createGraphCheckoutService(
+      opened.graph,
+      this.snapshotMaterializer,
+      this.checkoutHeadReaderFactory,
+    ).planCheckout(request);
   }
 
   async checkout(request: CheckoutMaterializationRequest): Promise<CheckoutMaterializationResult> {
     const opened = await this.openVisibleGraph();
     if (!opened.ok) return opened.result;
-    return createGraphCheckoutService(opened.graph, this.snapshotMaterializer).checkout(request);
+    return createGraphCheckoutService(
+      opened.graph,
+      this.snapshotMaterializer,
+      this.checkoutHeadReaderFactory,
+    ).checkout(request);
   }
 
   private async openVisibleGraph(): Promise<
@@ -108,7 +122,17 @@ export function createProviderBackedCheckoutMaterializationService(
 function createGraphCheckoutService(
   graph: VersionGraphStore,
   snapshotMaterializer?: CheckoutSnapshotMaterializer,
+  checkoutHeadReaderFactory?: (
+    fallbackHeadReader: CheckoutHeadReader,
+  ) => CheckoutHeadReader,
 ) {
+  const fallbackHeadReader: CheckoutHeadReader = {
+    readHead: () => readGraphHead(graph),
+  };
+  const headReader = checkoutHeadReaderFactory
+    ? checkoutHeadReaderFactory(fallbackHeadReader)
+    : fallbackHeadReader;
+
   return createCheckoutMaterializationService({
     commitReader: {
       readCommit: (commitId) => graph.readCommit(commitId),
@@ -120,9 +144,7 @@ function createGraphCheckoutService(
       readSnapshotRoot: (dependency) => graph.getObjectRecord(dependency),
     },
     ...(snapshotMaterializer ? { snapshotMaterializer } : {}),
-    headReader: {
-      readHead: () => readGraphHead(graph),
-    },
+    headReader,
     refReader: {
       readRef: async (refName) => {
         const result = await graph.readRef(graphRefNameFromRefName(refName));

@@ -1,5 +1,5 @@
 use compute_text_measurement::FontDb;
-use compute_wire::ViewportRenderData;
+use compute_wire::{ViewportRenderCell, ViewportRenderData, flags as render_flags};
 use domain_types::CellFormat;
 
 use crate::borders::{self, CellBorderRefs};
@@ -27,24 +27,13 @@ pub fn render_cells(
     offset_y: f32,
     font_db: &FontDb,
 ) {
+    // Pass 1: fills. Text overflow must be painted after all adjacent blank
+    // cell fills, otherwise those fills cover the overflowed glyphs.
     for cell in &data.cells {
-        let local_row = cell.row.saturating_sub(data.start_row) as usize;
-        let local_col = cell.col.saturating_sub(data.start_col) as usize;
-
-        // Bounds check
-        if local_row + 1 >= row_positions.len() || local_col + 1 >= col_positions.len() {
+        let Some(rect) = cell_rect(data, cell, row_positions, col_positions, offset_x, offset_y)
+        else {
             continue;
-        }
-
-        let x = col_positions[local_col] as f32 + offset_x;
-        let y = row_positions[local_row] as f32 + offset_y;
-        let w = (col_positions[local_col + 1] - col_positions[local_col]) as f32;
-        let h = (row_positions[local_row + 1] - row_positions[local_row]) as f32;
-
-        // Skip hidden (zero-size) cells
-        if w < 0.5 || h < 0.5 {
-            continue;
-        }
+        };
 
         let format = data
             .format_palette
@@ -52,28 +41,35 @@ pub fn render_cells(
             .cloned()
             .unwrap_or_default();
 
-        // 1. Fill background
-        render_cell_fill(canvas, x, y, w, h, &format, cell.bg_color_override);
+        render_cell_fill(
+            canvas,
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            &format,
+            cell.bg_color_override,
+        );
+    }
 
-        // 2. Text
-        if let Some(ref text_str) = cell.formatted {
-            render_cell_text(
-                canvas,
-                CellText {
-                    rect: CssRect::new(x, y, w, h),
-                    text: text_str,
-                    format: &format,
-                    font_color_override: cell.font_color_override,
-                    font_db,
-                },
-            );
-        }
+    // Pass 2: borders. The live grid paints borders before text so overflowed
+    // labels remain readable across same-filled blank cells.
+    for cell in &data.cells {
+        let Some(rect) = cell_rect(data, cell, row_positions, col_positions, offset_x, offset_y)
+        else {
+            continue;
+        };
 
-        // 3. Borders
+        let format = data
+            .format_palette
+            .get(cell.format_idx as usize)
+            .cloned()
+            .unwrap_or_default();
+
         if let Some(ref borders) = format.borders {
             borders::render_cell_borders(
                 canvas,
-                CssRect::new(x, y, w, h),
+                rect,
                 CellBorderRefs {
                     top: borders.top.as_ref(),
                     right: borders.right.as_ref(),
@@ -83,6 +79,67 @@ pub fn render_cells(
             );
         }
     }
+
+    // Pass 3: text. This pass can safely draw into adjacent empty cells.
+    for cell in &data.cells {
+        let Some(rect) = cell_rect(data, cell, row_positions, col_positions, offset_x, offset_y)
+        else {
+            continue;
+        };
+
+        let Some(ref text_str) = cell.formatted else {
+            continue;
+        };
+
+        let format = data
+            .format_palette
+            .get(cell.format_idx as usize)
+            .cloned()
+            .unwrap_or_default();
+
+        render_cell_text(
+            canvas,
+            CellText {
+                cell,
+                data,
+                col_positions,
+                rect,
+                text: text_str,
+                format: &format,
+                font_color_override: cell.font_color_override,
+                font_db,
+            },
+        );
+    }
+}
+
+fn cell_rect(
+    data: &ViewportRenderData,
+    cell: &ViewportRenderCell,
+    row_positions: &[f64],
+    col_positions: &[f64],
+    offset_x: f32,
+    offset_y: f32,
+) -> Option<CssRect> {
+    let local_row = cell.row.checked_sub(data.start_row)? as usize;
+    let local_col = cell.col.checked_sub(data.start_col)? as usize;
+
+    if local_row + 1 >= row_positions.len() || local_col + 1 >= col_positions.len() {
+        return None;
+    }
+
+    let rect = CssRect::new(
+        col_positions[local_col] as f32 + offset_x,
+        row_positions[local_row] as f32 + offset_y,
+        (col_positions[local_col + 1] - col_positions[local_col]) as f32,
+        (row_positions[local_row + 1] - row_positions[local_row]) as f32,
+    );
+
+    if rect.w < 0.5 || rect.h < 0.5 {
+        return None;
+    }
+
+    Some(rect)
 }
 
 /// Render cell background fill.
@@ -115,6 +172,9 @@ fn render_cell_fill(
 }
 
 struct CellText<'a> {
+    cell: &'a ViewportRenderCell,
+    data: &'a ViewportRenderData,
+    col_positions: &'a [f64],
     rect: CssRect,
     text: &'a str,
     format: &'a CellFormat,
@@ -164,6 +224,7 @@ fn render_cell_text(canvas: &mut SheetCanvas, cell_text: CellText<'_>) {
     let text_w = text::measure_text_advance(&buzz_face, font_size, cell_text.text);
     let ascender = text::ascender_px(&buzz_face, font_size);
     let line_h = text::line_height_px(&buzz_face, font_size);
+    let clip_rect = text_clip_rect(&cell_text, text_w);
 
     // Horizontal alignment
     use domain_types::CellVerticalAlign;
@@ -185,8 +246,7 @@ fn render_cell_text(canvas: &mut SheetCanvas, cell_text: CellText<'_>) {
         _ => rect.y + rect.h - (line_h - ascender) - 2.0, // Bottom default, Justify, Distributed
     };
 
-    // Clip to cell bounds
-    canvas.set_clip(rect.x, rect.y, rect.w, rect.h);
+    canvas.set_clip(clip_rect.x, clip_rect.y, clip_rect.w, clip_rect.h);
     text::render_text(
         canvas,
         &buzz_face,
@@ -202,11 +262,198 @@ fn render_cell_text(canvas: &mut SheetCanvas, cell_text: CellText<'_>) {
     canvas.clear_clip();
 }
 
+fn text_clip_rect(cell_text: &CellText<'_>, text_w: f32) -> CssRect {
+    let rect = cell_text.rect;
+    let required_w = text_w + CELL_PADDING * 2.0;
+
+    if required_w <= rect.w
+        || !cell_value_can_overflow(cell_text.cell)
+        || cell_text.format.wrap_text.unwrap_or(false)
+        || cell_text.format.shrink_to_fit.unwrap_or(false)
+        || cell_in_merge(cell_text.data, cell_text.cell.row, cell_text.cell.col)
+    {
+        return rect;
+    }
+
+    use ooxml_types::styles::HorizontalAlign;
+    match cell_text
+        .format
+        .horizontal_align
+        .unwrap_or(HorizontalAlign::General)
+    {
+        HorizontalAlign::Right => overflow_left_clip_rect(cell_text, required_w),
+        HorizontalAlign::Center | HorizontalAlign::CenterContinuous => {
+            overflow_center_clip_rect(cell_text, required_w)
+        }
+        HorizontalAlign::Fill | HorizontalAlign::Distributed => rect,
+        // Text-valued General cells are left-aligned in Excel.
+        HorizontalAlign::General | HorizontalAlign::Left | HorizontalAlign::Justify => {
+            overflow_right_clip_rect(cell_text, required_w)
+        }
+    }
+}
+
+fn overflow_right_clip_rect(cell_text: &CellText<'_>, required_w: f32) -> CssRect {
+    let mut clip = cell_text.rect;
+    let row = cell_text.cell.row;
+    let max_col = cell_text.data.start_col + cell_text.data.viewport_cols.saturating_sub(1);
+
+    let mut col = cell_text.cell.col + 1;
+    while col <= max_col && clip.w < required_w {
+        if !cell_empty_for_overflow(cell_text.data, row, col)
+            || cell_in_merge(cell_text.data, row, col)
+        {
+            break;
+        }
+
+        if let Some(width) = col_width(cell_text.data, cell_text.col_positions, col) {
+            clip.w += width;
+        }
+        col += 1;
+    }
+
+    clip
+}
+
+fn overflow_left_clip_rect(cell_text: &CellText<'_>, required_w: f32) -> CssRect {
+    let mut clip = cell_text.rect;
+    let row = cell_text.cell.row;
+    let min_col = cell_text.data.start_col;
+    let mut col = cell_text.cell.col;
+
+    while col > min_col && clip.w < required_w {
+        col -= 1;
+        if !cell_empty_for_overflow(cell_text.data, row, col)
+            || cell_in_merge(cell_text.data, row, col)
+        {
+            break;
+        }
+
+        if let Some(width) = col_width(cell_text.data, cell_text.col_positions, col) {
+            clip.x -= width;
+            clip.w += width;
+        }
+    }
+
+    clip
+}
+
+fn overflow_center_clip_rect(cell_text: &CellText<'_>, required_w: f32) -> CssRect {
+    let mut clip = cell_text.rect;
+    let row = cell_text.cell.row;
+    let min_col = cell_text.data.start_col;
+    let max_col = cell_text.data.start_col + cell_text.data.viewport_cols.saturating_sub(1);
+    let mut left_col = cell_text.cell.col;
+    let mut right_col = cell_text.cell.col + 1;
+
+    while clip.w < required_w {
+        let need_left = clip.x > cell_text.rect.x + (cell_text.rect.w - required_w) / 2.0;
+        let mut extended = false;
+
+        if need_left && left_col > min_col {
+            let candidate = left_col - 1;
+            if cell_empty_for_overflow(cell_text.data, row, candidate)
+                && !cell_in_merge(cell_text.data, row, candidate)
+                && let Some(width) = col_width(cell_text.data, cell_text.col_positions, candidate)
+            {
+                clip.x -= width;
+                clip.w += width;
+                left_col = candidate;
+                extended = true;
+            }
+        }
+
+        if clip.w >= required_w {
+            break;
+        }
+
+        if right_col <= max_col
+            && cell_empty_for_overflow(cell_text.data, row, right_col)
+            && !cell_in_merge(cell_text.data, row, right_col)
+            && let Some(width) = col_width(cell_text.data, cell_text.col_positions, right_col)
+        {
+            clip.w += width;
+            right_col += 1;
+            extended = true;
+        }
+
+        if !extended {
+            break;
+        }
+    }
+
+    clip
+}
+
+fn col_width(data: &ViewportRenderData, col_positions: &[f64], col: u32) -> Option<f32> {
+    let local_col = col.checked_sub(data.start_col)? as usize;
+    if local_col + 1 >= col_positions.len() {
+        return None;
+    }
+    let width = (col_positions[local_col + 1] - col_positions[local_col]) as f32;
+    if width < 0.5 { None } else { Some(width) }
+}
+
+fn cell_value_can_overflow(cell: &ViewportRenderCell) -> bool {
+    (cell.flags & render_flags::VALUE_TYPE_MASK) == render_flags::VALUE_TYPE_TEXT
+        && cell
+            .formatted
+            .as_deref()
+            .is_some_and(|text| !text.is_empty())
+}
+
+fn cell_empty_for_overflow(data: &ViewportRenderData, row: u32, col: u32) -> bool {
+    let Some(cell) = cell_at(data, row, col) else {
+        return true;
+    };
+
+    match cell.flags & render_flags::VALUE_TYPE_MASK {
+        render_flags::VALUE_TYPE_NULL => true,
+        render_flags::VALUE_TYPE_TEXT => cell.formatted.as_deref().is_none_or(str::is_empty),
+        _ => false,
+    }
+}
+
+fn cell_at(data: &ViewportRenderData, row: u32, col: u32) -> Option<&ViewportRenderCell> {
+    if row < data.start_row
+        || col < data.start_col
+        || row >= data.start_row + data.viewport_rows
+        || col >= data.start_col + data.viewport_cols
+    {
+        return None;
+    }
+
+    let rel_row = row - data.start_row;
+    let rel_col = col - data.start_col;
+    let idx = (rel_row * data.viewport_cols + rel_col) as usize;
+    if let Some(cell) = data.cells.get(idx)
+        && cell.row == row
+        && cell.col == col
+    {
+        return Some(cell);
+    }
+
+    data.cells
+        .iter()
+        .find(|cell| cell.row == row && cell.col == col)
+}
+
+fn cell_in_merge(data: &ViewportRenderData, row: u32, col: u32) -> bool {
+    data.merges.iter().any(|merge| {
+        row >= merge.start_row
+            && row <= merge.end_row
+            && col >= merge.start_col
+            && col <= merge.end_col
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_helpers::*;
-    use compute_wire::{ViewportRenderCell, ViewportRenderData};
+    use compute_wire::{
+        RenderViewportMerge, ViewportRenderCell, ViewportRenderData, flags as render_flags,
+    };
 
     fn make_viewport_data(cells: Vec<ViewportRenderCell>) -> ViewportRenderData {
         ViewportRenderData {
@@ -229,9 +476,17 @@ mod tests {
             row,
             col,
             format_idx: 0,
-            flags: 0,
+            flags: if text.is_empty() {
+                render_flags::VALUE_TYPE_NULL
+            } else {
+                render_flags::VALUE_TYPE_TEXT
+            },
             number_value: f64::NAN,
-            formatted: Some(text.to_string()),
+            formatted: if text.is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            },
             error: None,
             bg_color_override: 0,
             font_color_override: 0,
@@ -249,7 +504,11 @@ mod tests {
             row,
             col,
             format_idx,
-            flags: 0,
+            flags: if text.is_empty() {
+                render_flags::VALUE_TYPE_NULL
+            } else {
+                render_flags::VALUE_TYPE_TEXT
+            },
             number_value: f64::NAN,
             formatted: if text.is_empty() {
                 None
@@ -484,11 +743,19 @@ mod tests {
     }
 
     #[test]
-    fn clipping_text_to_cell() {
+    fn text_overflows_right_into_empty_adjacent_cells() {
         let db = shared_font_db();
-        // Use a very long string that exceeds cell width (64px)
         let long_text = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let data = make_viewport_data(vec![make_cell(0, 0, long_text)]);
+        let blank_fill = CellFormat {
+            background_color: Some("#F5F5F5".to_string()),
+            ..Default::default()
+        };
+        let mut data = make_viewport_data(vec![
+            make_cell(0, 0, long_text),
+            make_cell_with_format(0, 1, "", 1),
+            make_cell_with_format(0, 2, "", 1),
+        ]);
+        data.format_palette.push(blank_fill);
         let mut canvas = SheetCanvas::new(320, 100, 1.0);
         render_cells(
             &mut canvas,
@@ -500,15 +767,172 @@ mod tests {
             db,
         );
 
-        // Text should be clipped at cell boundary (x=64)
-        // Check a few pixels past the boundary — should be white
-        assert_pixel_white(&canvas, 66, 10, "no text leak past cell right edge");
-        assert_pixel_white(&canvas, 70, 10, "no text leak at x=70");
-        assert_pixel_white(&canvas, 80, 10, "no text leak at x=80");
+        let overflow_bounds = find_text_horizontal_bounds(&canvas, 0, 20, 66, 192, 120);
+        assert!(
+            overflow_bounds.is_some(),
+            "long text should render into adjacent empty cells"
+        );
+        let (_left, right) = overflow_bounds.unwrap();
+        assert!(
+            right > 90,
+            "expected overflow text well past A1 boundary, right={right}"
+        );
 
-        // But text should exist inside the cell
         let bounds = find_text_horizontal_bounds(&canvas, 0, 20, 0, 64, 200);
         assert!(bounds.is_some(), "text should be rendered inside cell");
+    }
+
+    #[test]
+    fn text_overflow_stops_at_non_empty_adjacent_cell() {
+        let db = shared_font_db();
+        let blocker_format = CellFormat {
+            font_color: Some("#FFFFFF".to_string()),
+            ..Default::default()
+        };
+        let mut data = make_viewport_data(vec![
+            make_cell(0, 0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+            make_cell_with_format(0, 1, "occupied", 1),
+        ]);
+        data.format_palette.push(blocker_format);
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 66, 128, 120).is_none(),
+            "source text must not overflow into a non-empty adjacent cell"
+        );
+    }
+
+    #[test]
+    fn right_aligned_text_overflows_left_into_empty_adjacent_cells() {
+        let db = shared_font_db();
+        let format = CellFormat {
+            horizontal_align: Some(ooxml_types::styles::HorizontalAlign::Right),
+            ..Default::default()
+        };
+        let mut data = make_viewport_data(vec![
+            make_cell(0, 0, ""),
+            make_cell(0, 1, ""),
+            make_cell_with_format(0, 2, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 1),
+        ]);
+        data.format_palette.push(format);
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 64, 126, 120).is_some(),
+            "right-aligned long text should render left into adjacent empty cells"
+        );
+    }
+
+    #[test]
+    fn centered_text_overflows_both_directions_into_empty_adjacent_cells() {
+        let db = shared_font_db();
+        let format = CellFormat {
+            horizontal_align: Some(ooxml_types::styles::HorizontalAlign::Center),
+            ..Default::default()
+        };
+        let mut data = make_viewport_data(vec![
+            make_cell(0, 0, ""),
+            make_cell_with_format(0, 1, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 1),
+            make_cell(0, 2, ""),
+            make_cell(0, 3, ""),
+        ]);
+        data.format_palette.push(format);
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 8, 64, 120).is_some(),
+            "centered long text should render left into adjacent empty cells"
+        );
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 128, 192, 120).is_some(),
+            "centered long text should render right into adjacent empty cells"
+        );
+    }
+
+    #[test]
+    fn wrapped_text_does_not_overflow_into_adjacent_cells() {
+        let db = shared_font_db();
+        let format = CellFormat {
+            wrap_text: Some(true),
+            ..Default::default()
+        };
+        let mut data = make_viewport_data(vec![
+            make_cell_with_format(0, 0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 1),
+            make_cell(0, 1, ""),
+        ]);
+        data.format_palette.push(format);
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 66, 128, 120).is_none(),
+            "wrapped text must stay clipped to its source cell"
+        );
+    }
+
+    #[test]
+    fn text_in_merge_does_not_overflow_past_merge_bounds() {
+        let db = shared_font_db();
+        let mut data = make_viewport_data(vec![
+            make_cell(0, 0, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+            make_cell(0, 1, ""),
+        ]);
+        data.merges.push(RenderViewportMerge {
+            start_row: 0,
+            start_col: 0,
+            end_row: 0,
+            end_col: 0,
+        });
+        let mut canvas = SheetCanvas::new(320, 100, 1.0);
+        render_cells(
+            &mut canvas,
+            &data,
+            &data.row_positions,
+            &data.col_positions,
+            0.0,
+            0.0,
+            db,
+        );
+
+        assert!(
+            find_text_horizontal_bounds(&canvas, 0, 20, 66, 128, 120).is_none(),
+            "merged cells use merge rendering and must not also overflow as plain cells"
+        );
     }
 
     #[test]

@@ -10,6 +10,7 @@ import type {
 
 import { ensureProposalBranchHead } from './proposal-provider-branch-head-validation';
 import type { ProviderBackedAgentProposalServiceContext } from './proposal-provider-service-context';
+import { ensureProposalTargetBinding } from './proposal-provider-target-binding';
 import {
   invalidState,
   sanitizeProposalProviderDiagnostics,
@@ -22,6 +23,7 @@ import {
 import { proposalStoreUpdateResult } from './proposal-provider-service-store-results';
 import { isWorkbookCommitId, publicProposal } from './proposal-provider-service-utils';
 import {
+  proposalWorkspaceHandleWithTargetBinding,
   validateProposalWorkspaceCommitResult,
   validateProposalWorkspaceHandle,
 } from './proposal-provider-workspace-binding';
@@ -49,6 +51,14 @@ export async function startProviderBackedProposalWorkspace(
     );
   }
 
+  const targetBinding = await ensureProposalTargetBinding({
+    proposal: proposal.value,
+    operation: 'startProposalWorkspace',
+    expected: input,
+    resolveTargetHead: context.resolveTargetHead,
+  });
+  if (!targetBinding.ok) return sanitizeProposalProviderResult(targetBinding.result);
+
   const branchReady = await context.ensureProposalBranch(
     proposal.value,
     'startProposalWorkspace',
@@ -69,6 +79,7 @@ export async function startProviderBackedProposalWorkspace(
     handle: started.value,
   });
   if (!workspaceBinding.ok) return sanitizeProposalProviderResult(workspaceBinding.result);
+  const handle = proposalWorkspaceHandleWithTargetBinding(proposal.value, started.value);
 
   const updated = await store.value.updateProposal({
     clientRequestId: input.clientRequestId,
@@ -76,10 +87,10 @@ export async function startProviderBackedProposalWorkspace(
     expectedRevision: input.expectedRevision,
     status: 'workspace_open',
     trustedActor: input.actor,
-    workspaceId: started.value.workspaceId,
+    workspaceId: handle.workspaceId,
   });
   if (!updated.ok) return storeFailure(updated);
-  return started;
+  return { ok: true, value: handle };
 }
 
 export async function getProviderBackedProposalWorkspace(
@@ -91,6 +102,7 @@ export async function getProviderBackedProposalWorkspace(
       input,
       openStore: context.openStore,
       ...(context.workspaceService ? { workspaceService: context.workspaceService } : {}),
+      resolveTargetHead: context.resolveTargetHead,
     }),
   );
 }
@@ -104,6 +116,7 @@ export async function disposeProviderBackedAgentProposalWorkspace(
       input,
       openStore: context.openStore,
       ...(context.workspaceService ? { workspaceService: context.workspaceService } : {}),
+      resolveTargetHead: context.resolveTargetHead,
     }),
   );
 }
@@ -133,6 +146,14 @@ export async function commitProviderBackedProposalWorkspace(
       'Proposal workspace commits must use the workspace opened for the proposal.',
     );
   }
+
+  const targetBinding = await ensureProposalTargetBinding({
+    proposal: proposal.value,
+    operation: 'commitProposalWorkspace',
+    expected: input,
+    resolveTargetHead: context.resolveTargetHead,
+  });
+  if (!targetBinding.ok) return sanitizeProposalProviderResult(targetBinding.result);
 
   if (!context.workspaceService) return workspaceUnavailable('commitProposalWorkspace');
   const committed = await context.callWorkspaceService('commitProposalWorkspace', () =>

@@ -1,19 +1,19 @@
-import type { WorkbookCommit } from './commit-store';
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommit } from '../commit-store';
+import type { WorkbookCommitId } from '../object-digest';
 import {
   mapGraphDiagnostics,
   type VersionGraphStore,
   type VersionStoreDiagnostic,
-} from './provider';
+} from '../provider';
 import {
   metadataHeadCandidateNamesSupportedRef,
   metadataHeadCandidateTrustedBaseMismatchReason,
-} from './xlsx-import-root-validation';
+} from './validation';
 import type {
   XlsxVersionMetadataHeadCandidate,
   XlsxVersionMetadataTrustDowngradeReason,
-} from './xlsx-import-root-provenance';
-import type { XlsxVersionExistingGraphImportInput } from './xlsx-import-root-results';
+} from './provenance';
+import type { XlsxVersionExistingGraphImportInput } from './results';
 
 type XlsxVersionTrustedBaseReadResult =
   | {

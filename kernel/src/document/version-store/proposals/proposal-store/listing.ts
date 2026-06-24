@@ -64,6 +64,9 @@ function proposalSummary(record: AgentProposalRecord): AgentProposalSummary {
     targetRef: record.targetRef,
     baseCommitId: record.baseCommitId,
     targetHeadIdAtCreation: record.targetHeadIdAtCreation,
+    ...(record.targetRefVersionAtCreation === undefined
+      ? {}
+      : { targetRefVersionAtCreation: record.targetRefVersionAtCreation }),
     proposalBranchName: record.proposalBranchName,
     ...(record.proposalCommitId === undefined ? {} : { proposalCommitId: record.proposalCommitId }),
     status: record.status,

@@ -1,11 +1,11 @@
 import type { VersionHistoryRootPolicy } from '@mog-sdk/contracts/versioning';
 
-import type { WorkbookCommitId } from './object-digest';
-import type { VersionGraphNamespace } from './object-store';
-import type { VersionGraphStore, VersionStoreDiagnostic } from './provider';
-import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
-import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
-import type { XlsxVersionImportRootProvenance } from './xlsx-import-root-provenance';
+import type { WorkbookCommitId } from '../object-digest';
+import type { VersionGraphNamespace } from '../object-store';
+import type { VersionGraphStore, VersionStoreDiagnostic } from '../provider';
+import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
+import type { SnapshotRootByteSyncPort } from '../snapshot-root-capture';
+import type { XlsxVersionImportRootProvenance } from './provenance';
 
 export type XlsxVersionExistingGraphImportInput = {
   readonly namespace: VersionGraphNamespace;

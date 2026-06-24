@@ -1,11 +1,11 @@
-import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
-import type { WorkbookCommit } from './commit-store';
-import type { VersionGraphNamespace } from './object-store';
+import type { SemanticWorkbookStateEnvelope } from '../../../bridges/compute/compute-types.gen';
+import type { WorkbookCommit } from '../commit-store';
+import type { VersionGraphNamespace } from '../object-store';
 import {
   versionStoreDiagnostic,
   type VersionGraphStore,
   type VersionStoreDiagnostic,
-} from './provider';
+} from '../provider';
 
 export async function readCommitSemanticState(
   graph: VersionGraphStore,

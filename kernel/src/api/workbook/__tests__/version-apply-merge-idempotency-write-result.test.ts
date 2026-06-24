@@ -1,5 +1,5 @@
 import { alreadyMergedApplyMergeResult } from '../version/apply-merge/version-apply-merge-ancestry';
-import { mapApplyMergeWriteResult } from '../version/apply-merge/version-apply-merge-write-result';
+import { mapApplyMergeWriteResult } from '../version/apply-merge/write-result/version-apply-merge-write-result';
 import {
   createAlternatePreview,
   createCleanReviewFixture,

@@ -1,29 +1,29 @@
-import type { CommitVersionGraphInput } from './graph';
-import { createInMemoryVersionGraphStore } from './graph';
-import { createVersionObjectRecord } from './object-store';
-import { mapGraphDiagnostics, versionStoreDiagnostic } from './provider';
-import { captureWorkbookSnapshotRootRecord } from './snapshot-root-capture';
-import { evaluateVersionHistoryRootPolicy } from './version-history-root-policy';
+import type { CommitVersionGraphInput } from '../graph';
+import { createInMemoryVersionGraphStore } from '../graph';
+import { createVersionObjectRecord } from '../object-store';
+import { mapGraphDiagnostics, versionStoreDiagnostic } from '../provider';
+import { captureWorkbookSnapshotRootRecord } from '../snapshot-root-capture';
+import { evaluateVersionHistoryRootPolicy } from '../version-history-root-policy';
 import {
   createOrReadExternalChangeBranch,
   createOrReadImportNewRootBranch,
   externalChangeBranchName,
   importNewRootBranchName,
-} from './xlsx-import-root-branches';
-import { XLSX_IMPORT_CHANGE_AUTHOR } from './xlsx-import-root-constants';
+} from './branches';
+import { XLSX_IMPORT_CHANGE_AUTHOR } from './constants';
 import {
   importRootProvenanceWithoutTrustedCandidate,
   trustedVersionMetadataHeadCandidate,
   trustedVersionMetadataTrust,
   untrustedImportRootProvenance,
-} from './xlsx-import-root-provenance';
+} from './provenance';
 import type {
   XlsxVersionExistingGraphImportInput,
   XlsxVersionExistingGraphImportResult,
-} from './xlsx-import-root-results';
-import { readCommitSemanticState, semanticDigestKey } from './xlsx-import-root-semantic-state';
-import { readTrustedBaseCommit } from './xlsx-import-root-trusted-base';
-import { buildXlsxVersionImportRootWrite } from './xlsx-import-root-write';
+} from './results';
+import { readCommitSemanticState, semanticDigestKey } from './semantic-state';
+import { readTrustedBaseCommit } from './trusted-base';
+import { buildXlsxVersionImportRootWrite } from './write';
 
 export async function applyXlsxVersionImportChangeToExistingGraph(
   input: XlsxVersionExistingGraphImportInput,

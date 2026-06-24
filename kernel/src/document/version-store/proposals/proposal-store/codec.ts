@@ -147,6 +147,12 @@ function isAgentProposalRecord(value: unknown): value is AgentProposalRecord {
   if (typeof value.targetRef !== 'string') return false;
   if (typeof value.baseCommitId !== 'string') return false;
   if (typeof value.targetHeadIdAtCreation !== 'string') return false;
+  if (
+    value.targetRefVersionAtCreation !== undefined &&
+    !isRefVersion(value.targetRefVersionAtCreation)
+  ) {
+    return false;
+  }
   if (typeof value.proposalBranchName !== 'string') return false;
   if (!isAgentProposalStatus(value.status)) return false;
   if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1)
@@ -175,6 +181,15 @@ function isAgentProposalRecord(value: unknown): value is AgentProposalRecord {
   if (value.supersedeReason !== undefined && typeof value.supersedeReason !== 'string')
     return false;
   return true;
+}
+
+function isRefVersion(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.kind === 'counter' &&
+    typeof value.value === 'string' &&
+    /^(0|[1-9][0-9]*)$/.test(value.value)
+  );
 }
 
 function isAgentProposalAcceptance(value: unknown): value is AgentProposalAcceptance {

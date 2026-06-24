@@ -14,14 +14,14 @@ import {
   MERGE_PREVIEW_OBJECT_TYPE,
   mergePreviewArtifactRef,
   type MergePreviewArtifactPayload,
-} from '../../../../document/version-store/merge-attempt-artifacts';
-import type { ObjectDigest as InternalObjectDigest } from '../../../../document/version-store/object-digest';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
+} from '../../../../../document/version-store/merge-attempt-artifacts';
+import type { ObjectDigest as InternalObjectDigest } from '../../../../../document/version-store/object-digest';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
 import {
   invalidPreviewArtifactDiagnostic,
   persistedPreviewArtifactReadDiagnostic,
 } from './version-apply-merge-persisted-artifact-diagnostics';
-import { validateSealedResolutionPayloadRefs } from '../merge-review/version-merge-sealed-payload';
+import { validateSealedResolutionPayloadRefs } from '../../merge-review/version-merge-sealed-payload';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 

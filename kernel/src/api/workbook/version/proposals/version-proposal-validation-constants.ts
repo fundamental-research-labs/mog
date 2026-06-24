@@ -41,12 +41,20 @@ export const START_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set([
   'clientRequestId',
   'proposalId',
   'expectedRevision',
+  'expectedTargetHeadId',
+  'expectedTargetRefRevision',
   'actor',
 ]);
-export const GET_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set(['workspaceId']);
+export const GET_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set([
+  'workspaceId',
+  'expectedTargetHeadId',
+  'expectedTargetRefRevision',
+]);
 export const DISPOSE_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set([
   'clientRequestId',
   'workspaceId',
+  'expectedTargetHeadId',
+  'expectedTargetRefRevision',
   'actor',
 ]);
 export const COMMIT_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set([
@@ -54,6 +62,8 @@ export const COMMIT_PROPOSAL_WORKSPACE_KEYS: ReadonlySet<string> = new Set([
   'proposalId',
   'workspaceId',
   'expectedRevision',
+  'expectedTargetHeadId',
+  'expectedTargetRefRevision',
   'actor',
   'message',
   'verification',
@@ -91,6 +101,7 @@ export const ACCEPT_PROPOSAL_KEYS: ReadonlySet<string> = new Set([
   'proposalId',
   'expectedRevision',
   'expectedTargetHeadId',
+  'expectedTargetRefRevision',
   'actor',
   'resolutionPolicy',
 ]);

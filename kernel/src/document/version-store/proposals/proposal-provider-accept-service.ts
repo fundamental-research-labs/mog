@@ -1,4 +1,9 @@
-import type { AgentProposalAcceptResult, VersionResult } from '@mog-sdk/contracts/api';
+import type {
+  AgentProposalAcceptResult,
+  VersionDiagnostic,
+  VersionRecordRevision,
+  VersionResult,
+} from '@mog-sdk/contracts/api';
 
 import { ensureProposalBranchFastForwardFromExpectedHead } from './proposal-provider-branch-head-validation';
 import { fastForwardTargetRef } from './proposal-provider-accept-service-graph';
@@ -19,6 +24,7 @@ import {
 } from './proposal-provider-accept-service-review';
 import { openProposalStore } from './proposal-provider-accept-service-store';
 import type { AcceptProviderBackedAgentProposalOptions } from './proposal-provider-accept-service-types';
+import { refVersionsEqual, type RefVersion } from '../refs/ref-store';
 
 export async function acceptProviderBackedAgentProposal(
   options: AcceptProviderBackedAgentProposalOptions,
@@ -85,14 +91,34 @@ export async function acceptProviderBackedAgentProposal(
   if (!target.ok) return target.result;
 
   if (
+    options.input.expectedTargetRefRevision !== undefined &&
+    proposal.targetRefVersionAtCreation !== undefined &&
+    !recordRevisionsEqual(
+      options.input.expectedTargetRefRevision,
+      proposal.targetRefVersionAtCreation,
+    )
+  ) {
+    return invalidState(
+      'proposal_target_ref_revision_binding_mismatch',
+      ['matching_target_ref_revision'],
+      'Proposal acceptance must use the target ref revision recorded when the proposal was created.',
+    );
+  }
+
+  const targetRefDiagnostics = staleTargetRefDiagnostics(proposal, target.head.refVersion);
+  if (
     target.head.commitId !== options.input.expectedTargetHeadId ||
-    target.head.commitId !== proposal.baseCommitId
+    target.head.commitId !== proposal.baseCommitId ||
+    targetRefDiagnostics.length > 0
   ) {
     return markProposalStale({
       store: store.value,
       input: options.input,
       actualTargetHeadId: target.head.commitId,
-      targetHeadMoved: true,
+      targetHeadMoved:
+        target.head.commitId !== options.input.expectedTargetHeadId ||
+        target.head.commitId !== proposal.baseCommitId,
+      diagnostics: targetRefDiagnostics,
     });
   }
 
@@ -159,4 +185,51 @@ export async function acceptProviderBackedAgentProposal(
   if (!finalizedReview.ok) return finalizedReview.result;
 
   return ok(fastForwardAcceptResult(updated.value.id, accepted));
+}
+
+function staleTargetRefDiagnostics(
+  proposal: { readonly id: string; readonly targetRefVersionAtCreation?: RefVersion },
+  actualTargetRefRevision: RefVersion,
+): readonly VersionDiagnostic[] {
+  if (proposal.targetRefVersionAtCreation === undefined) {
+    return [
+      diagnostic('proposal_target_ref_revision_missing', 'error', {
+        proposalId: proposal.id,
+        actualTargetRefRevision: revisionLabel(actualTargetRefRevision),
+      }),
+    ];
+  }
+  if (refVersionsEqual(actualTargetRefRevision, proposal.targetRefVersionAtCreation)) return [];
+  return [
+    diagnostic('stale_proposal_target_ref_revision', 'warning', {
+      proposalId: proposal.id,
+      expectedTargetRefRevision: revisionLabel(proposal.targetRefVersionAtCreation),
+      actualTargetRefRevision: revisionLabel(actualTargetRefRevision),
+    }),
+  ];
+}
+
+function diagnostic(
+  code: string,
+  severity: VersionDiagnostic['severity'],
+  data: Readonly<Record<string, string | number | boolean | null>>,
+): VersionDiagnostic {
+  return {
+    code,
+    severity,
+    message:
+      code === 'proposal_target_ref_revision_missing'
+        ? 'Proposal record is missing the target ref revision required for acceptance.'
+        : 'Proposal target ref revision changed after the proposal was created.',
+    owner: 'version-store',
+    data,
+  };
+}
+
+function recordRevisionsEqual(left: VersionRecordRevision, right: RefVersion): boolean {
+  return left.kind === right.kind && left.value === right.value;
+}
+
+function revisionLabel(revision: VersionRecordRevision | RefVersion): string {
+  return `${revision.kind}:${revision.value}`;
 }

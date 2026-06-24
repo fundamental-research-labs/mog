@@ -1,12 +1,12 @@
 import type { VersionDiffStructuralMetadata } from '@mog-sdk/contracts/api';
 
-import type { VersionMergeCommitCaptureInput } from '../../../../document/version-store/commit-service';
+import type { VersionMergeCommitCaptureInput } from '../../../../../document/version-store/commit-service';
 import {
   failedStoreResult,
   versionStoreDiagnostic,
   type VersionStoreFailure,
-} from '../../../../document/version-store/provider';
-import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../merge/version-merge-materializer-support';
+} from '../../../../../document/version-store/provider';
+import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../../merge/version-merge-materializer-support';
 
 export function unsupportedMergeChange(
   input: VersionMergeCommitCaptureInput,

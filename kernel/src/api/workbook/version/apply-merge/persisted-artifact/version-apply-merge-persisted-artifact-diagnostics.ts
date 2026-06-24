@@ -4,12 +4,12 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { MergeApplyIntentStoreDiagnostic } from '../../../../document/version-store/merge-apply-intent-store';
-import { VersionObjectStoreError } from '../../../../document/version-store/object-store';
+import type { MergeApplyIntentStoreDiagnostic } from '../../../../../document/version-store/merge-apply-intent-store';
+import { VersionObjectStoreError } from '../../../../../document/version-store/object-store';
 import {
   isVersionObjectReadRepairDiagnosticCode,
   recoverabilityForVersionObjectRead,
-} from '../../version-object-read-diagnostics';
+} from '../../../version-object-read-diagnostics';
 
 export function mapProviderDiagnostics(
   diagnostics: readonly unknown[],

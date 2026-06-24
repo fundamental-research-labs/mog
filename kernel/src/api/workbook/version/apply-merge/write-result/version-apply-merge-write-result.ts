@@ -3,7 +3,7 @@ import type { VersionApplyMergeResult } from '@mog-sdk/contracts/api';
 import {
   mapCommitId,
   mapVersionApplyMergeAttemptMetadata,
-} from '../../version-attempt-metadata';
+} from '../../../version-attempt-metadata';
 import { mapWorkbookCommitRef } from './version-apply-merge-write-result-commit-ref';
 import {
   SUCCESS_WRITE_STATUSES,

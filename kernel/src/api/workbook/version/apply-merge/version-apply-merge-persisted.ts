@@ -19,7 +19,7 @@ import {
 import {
   applyPersistedMergePreviewArtifact,
   isPersistedMergePreviewArtifactInput,
-} from './version-apply-merge-persisted-artifact';
+} from './persisted-artifact/version-apply-merge-persisted-artifact';
 import {
   blockedApplyMergeResult,
   invalidApplyMergeOptionDiagnostic,

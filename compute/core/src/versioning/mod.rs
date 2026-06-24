@@ -11,7 +11,10 @@ use snapshot_types::versioning::{
 mod coverage;
 mod formula_reader;
 mod semantic_ids;
+mod semantic_merge;
 mod semantic_reader;
+
+pub use semantic_merge::*;
 
 const SHEETS_DOMAIN: &str = "sheets";
 const ROWS_COLUMNS_DOMAIN: &str = "rows-columns";

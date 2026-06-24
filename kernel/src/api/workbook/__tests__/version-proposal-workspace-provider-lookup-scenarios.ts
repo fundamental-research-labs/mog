@@ -2,6 +2,7 @@ import { expect, it } from '@jest/globals';
 
 import {
   ACTOR,
+  commitRef,
   graphWithRoot,
   misbasedLookupService,
   misboundLookupService,
@@ -90,5 +91,58 @@ export function registerProposalWorkspaceLookupScenarios(): void {
         actor: ACTOR,
       }),
     ).resolves.toEqual({ ok: true, value: { disposed: true } });
+  });
+
+  it('blocks stale workspace handles after the proposal target advances', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = workspaceLookupService();
+    const version = versionForProvider(graph.provider, workspaceService);
+    const opened = await openProposalWorkspace(version, 'workspace-target-advanced');
+    const movedMainCommitId = await commitRef(
+      graph.provider,
+      'refs/heads/main',
+      graph.rootCommitId,
+    );
+
+    await expect(
+      version.getProposalWorkspace({
+        workspaceId: opened.workspaceId,
+        expectedTargetHeadId: opened.targetHeadIdAtCreation,
+        expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.getProposalWorkspace',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'stale_proposal_target_head',
+            data: expect.objectContaining({
+              proposalId: opened.proposalId,
+              expectedTargetHeadId: graph.rootCommitId,
+              actualTargetHeadId: movedMainCommitId,
+            }),
+          }),
+        ],
+      },
+    });
+
+    await expect(
+      version.disposeProposalWorkspace({
+        clientRequestId: 'workspace-dispose-target-advanced',
+        workspaceId: opened.workspaceId,
+        expectedTargetHeadId: opened.targetHeadIdAtCreation,
+        expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+        actor: ACTOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.disposeProposalWorkspace',
+        diagnostics: [expect.objectContaining({ code: 'stale_proposal_target_head' })],
+      },
+    });
   });
 }

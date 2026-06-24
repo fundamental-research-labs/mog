@@ -1,13 +1,13 @@
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-} from './graph';
-import type { WorkbookCommit } from './commit-store';
-import { isObjectDigest, type ObjectDigest } from './object-digest';
+} from '../graph';
+import type { WorkbookCommit } from '../commit-store';
+import { isObjectDigest, type ObjectDigest } from '../object-digest';
 import type {
   XlsxVersionMetadataHeadCandidate,
   XlsxVersionMetadataTrustDowngradeReason,
-} from './xlsx-import-root-provenance';
+} from './provenance';
 
 export function metadataHeadCandidateNamesSupportedRef(
   candidate: XlsxVersionMetadataHeadCandidate,

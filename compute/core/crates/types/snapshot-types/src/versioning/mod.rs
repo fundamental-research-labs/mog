@@ -6,9 +6,11 @@ use serde_json::Value;
 use crate::MutationResult;
 
 mod public_contracts;
+mod semantic_merge;
 mod sha256;
 
 pub use public_contracts::*;
+pub use semantic_merge::*;
 
 pub const SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION: &str = "semantic-workbook-state.v1";
 

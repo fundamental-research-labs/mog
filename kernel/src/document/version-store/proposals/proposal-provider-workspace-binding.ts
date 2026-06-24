@@ -2,6 +2,7 @@ import type { AgentProposalWorkspaceHandle, VersionResult } from '@mog-sdk/contr
 
 import type { AgentProposalRecord } from './proposal-store';
 import type { ProviderBackedProposalWorkspaceCommitResult } from './proposal-workspace-lifecycle-service';
+import { publicRefVersion } from './proposal-provider-service-utils';
 
 export function validateProposalWorkspaceHandle(input: {
   readonly proposal: AgentProposalRecord;
@@ -59,7 +60,39 @@ function workspaceBindingMismatch(
     return 'proposal_workspace_branch_mismatch';
   }
   if (handle.baseCommitId !== proposal.baseCommitId) return 'proposal_workspace_base_mismatch';
+  if (handle.targetRef !== undefined && handle.targetRef !== proposal.targetRef) {
+    return 'proposal_workspace_target_ref_mismatch';
+  }
+  if (
+    handle.targetHeadIdAtCreation !== undefined &&
+    handle.targetHeadIdAtCreation !== proposal.targetHeadIdAtCreation
+  ) {
+    return 'proposal_workspace_target_head_mismatch';
+  }
+  if (
+    handle.targetRefRevisionAtCreation !== undefined &&
+    proposal.targetRefVersionAtCreation !== undefined &&
+    (handle.targetRefRevisionAtCreation.kind !== proposal.targetRefVersionAtCreation.kind ||
+      handle.targetRefRevisionAtCreation.value !== proposal.targetRefVersionAtCreation.value)
+  ) {
+    return 'proposal_workspace_target_ref_revision_mismatch';
+  }
   return null;
+}
+
+export function proposalWorkspaceHandleWithTargetBinding(
+  proposal: AgentProposalRecord,
+  handle: AgentProposalWorkspaceHandle,
+): AgentProposalWorkspaceHandle {
+  return {
+    ...handle,
+    targetRef: proposal.targetRef as AgentProposalWorkspaceHandle['targetRef'],
+    targetHeadIdAtCreation:
+      proposal.targetHeadIdAtCreation as AgentProposalWorkspaceHandle['targetHeadIdAtCreation'],
+    ...(proposal.targetRefVersionAtCreation === undefined
+      ? {}
+      : { targetRefRevisionAtCreation: publicRefVersion(proposal.targetRefVersionAtCreation) }),
+  };
 }
 
 function invalidState<T>(

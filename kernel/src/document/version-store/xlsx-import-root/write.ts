@@ -1,12 +1,12 @@
-import type { VersionGraphInitializeInput } from './provider';
-import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
+import type { VersionGraphInitializeInput } from '../provider';
+import { createVersionObjectRecord, type VersionGraphNamespace } from '../object-store';
 import {
   captureWorkbookSnapshotRootRecord,
   type SnapshotRootByteSyncPort,
-} from './snapshot-root-capture';
-import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
-import { XLSX_IMPORT_ROOT_AUTHOR } from './xlsx-import-root-constants';
-import type { XlsxVersionImportRootProvenance } from './xlsx-import-root-provenance';
+} from '../snapshot-root-capture';
+import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
+import { XLSX_IMPORT_ROOT_AUTHOR } from './constants';
+import type { XlsxVersionImportRootProvenance } from './provenance';
 
 export async function buildXlsxVersionImportRootWrite(input: {
   readonly namespace: VersionGraphNamespace;

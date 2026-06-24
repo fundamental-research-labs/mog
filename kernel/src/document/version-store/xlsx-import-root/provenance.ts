@@ -1,7 +1,7 @@
 import type { ImportDiagnosticDto } from '@mog-sdk/contracts/data/diagnostics';
 
-import type { WorkbookCommitId } from './object-digest';
-import type { VersionRecordRevision } from './registry';
+import type { WorkbookCommitId } from '../object-digest';
+import type { VersionRecordRevision } from '../registry';
 
 const MOG_VERSION_METADATA_SIDECAR_PART = 'customXml/mog-version-metadata.xml';
 

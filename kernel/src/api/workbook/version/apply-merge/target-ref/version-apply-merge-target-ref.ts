@@ -8,4 +8,7 @@ export type {
   ApplyMergeTargetRefCasValidationInput,
   ApplyMergeTargetRefCasValidationResult,
 } from './version-apply-merge-target-ref-cas';
-export { validateApplyMergeTargetRefCasProof } from './version-apply-merge-target-ref-cas';
+export {
+  validateApplyMergeTargetRefCasProof,
+  validateApplyMergeTargetRefCasProofForGraph,
+} from './version-apply-merge-target-ref-cas';

@@ -1,6 +1,6 @@
 import type { VersionRefName } from '@mog-sdk/contracts/api';
 
-import { validateApplyMergeTargetRefCasProof } from '../version/apply-merge/version-apply-merge-target-ref';
+import { validateApplyMergeTargetRefCasProof } from '../version/apply-merge/target-ref/version-apply-merge-target-ref';
 import {
   EXPECTED_TARGET_HEAD,
   TARGET_REF,

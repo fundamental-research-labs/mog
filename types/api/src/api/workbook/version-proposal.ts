@@ -11,6 +11,7 @@ import type {
 import type {
   VersionBranchName,
   VersionMainRefName,
+  VersionRecordRevision,
   VersionRefName,
   WorkbookCommitId,
 } from './version';
@@ -40,6 +41,7 @@ export interface AgentProposalSummary {
   readonly targetRef: VersionMainRefName | VersionRefName;
   readonly baseCommitId: WorkbookCommitId;
   readonly targetHeadIdAtCreation: WorkbookCommitId;
+  readonly targetRefRevisionAtCreation?: VersionRecordRevision;
   readonly proposalBranchName: VersionBranchName;
   readonly proposalCommitId?: WorkbookCommitId;
   readonly status: AgentProposalStatus;
@@ -64,6 +66,9 @@ export interface AgentProposalWorkspaceHandle {
   readonly proposalId: AgentProposalId;
   readonly proposalBranchName: VersionBranchName;
   readonly baseCommitId: WorkbookCommitId;
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly targetHeadIdAtCreation?: WorkbookCommitId;
+  readonly targetRefRevisionAtCreation?: VersionRecordRevision;
   readonly providerIdentity: string;
   readonly workbookSessionId: string;
 }
@@ -126,6 +131,8 @@ export interface StartProposalWorkspaceInput {
   readonly clientRequestId: string;
   readonly proposalId: AgentProposalId;
   readonly expectedRevision: number;
+  readonly expectedTargetHeadId?: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
   readonly actor: VersionAuthor;
 }
 
@@ -134,6 +141,8 @@ export interface CommitProposalWorkspaceInput {
   readonly proposalId: AgentProposalId;
   readonly workspaceId: string;
   readonly expectedRevision: number;
+  readonly expectedTargetHeadId?: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
   readonly actor: VersionAuthor;
   readonly message: string;
   readonly verification?: VerificationSummary;
@@ -141,11 +150,15 @@ export interface CommitProposalWorkspaceInput {
 
 export interface GetProposalWorkspaceInput {
   readonly workspaceId: string;
+  readonly expectedTargetHeadId?: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
 }
 
 export interface DisposeProposalWorkspaceInput {
   readonly clientRequestId: string;
   readonly workspaceId: string;
+  readonly expectedTargetHeadId?: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
   readonly actor: VersionAuthor;
 }
 
@@ -189,6 +202,7 @@ export interface AcceptAgentProposalInput {
   readonly proposalId: AgentProposalId;
   readonly expectedRevision: number;
   readonly expectedTargetHeadId: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
   readonly actor: VersionAuthor;
   readonly resolutionPolicy: AgentProposalAcceptResolutionPolicy;
 }

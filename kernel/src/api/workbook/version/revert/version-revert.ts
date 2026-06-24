@@ -13,7 +13,10 @@ import {
   revertDisabledDiagnostics,
   revertPreflightDiagnostics,
 } from './version-revert-diagnostics';
-import { validateRevertTargetRefCas } from './version-revert-planning';
+import {
+  prepareRevertTargetRefPreconditions,
+  validateRevertTargetRefCas,
+} from './version-revert-planning';
 import {
   getAttachedVersionRevertService,
   mapRevertProviderResult,
@@ -73,15 +76,24 @@ export async function revertWorkbookVersion(
     ]);
   }
 
+  const preconditioned = await prepareRevertTargetRefPreconditions(
+    ctx,
+    validated.input,
+    validated.options,
+  );
+  if (!preconditioned.ok) {
+    return versionFailureFromRevertDiagnostics(preconditioned.diagnostics);
+  }
+
   if (validated.options.dryRun !== true) {
-    const cas = await validateRevertTargetRefCas(ctx, validated.input);
+    const cas = await validateRevertTargetRefCas(ctx, preconditioned.input);
     if (!cas.ok) return versionFailureFromRevertDiagnostics(cas.diagnostics);
   }
 
   try {
     const result = mapRevertProviderResult(
-      await service.revert(validated.input, validated.options),
-      validated.input,
+      await service.revert(preconditioned.input, validated.options),
+      preconditioned.input,
       validated.options,
     );
     return result.ok

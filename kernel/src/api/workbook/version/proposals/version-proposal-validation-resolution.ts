@@ -14,6 +14,7 @@ import {
   isPlainInput,
   validateKnownKeys,
   validateOptionalProposalId,
+  validateOptionalRecordRevision,
   validateOptionalString,
   validateRequiredCommitId,
   validateRequiredProposalId,
@@ -34,6 +35,7 @@ export function normalizeAcceptProposalInput(
   validateRequiredProposalId(input, 'proposalId', 'acceptProposal', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'acceptProposal', diagnostics);
   validateRequiredCommitId(input, 'expectedTargetHeadId', 'acceptProposal', diagnostics);
+  validateOptionalRecordRevision(input, 'expectedTargetRefRevision', 'acceptProposal', diagnostics);
   validateTrustedAuthor(input, 'actor', 'acceptProposal', diagnostics);
   validateRequiredResolutionPolicy(input, 'resolutionPolicy', 'acceptProposal', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };

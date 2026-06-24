@@ -15,7 +15,9 @@ import {
 import {
   isPlainInput,
   validateKnownKeys,
+  validateOptionalCommitId,
   validateOptionalRecord,
+  validateOptionalRecordRevision,
   validateRequiredProposalId,
   validateRequiredRevision,
   validateRequiredString,
@@ -34,6 +36,13 @@ export function normalizeStartProposalWorkspaceInput(
   validateRequiredString(input, 'clientRequestId', 'startProposalWorkspace', diagnostics);
   validateRequiredProposalId(input, 'proposalId', 'startProposalWorkspace', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'startProposalWorkspace', diagnostics);
+  validateOptionalCommitId(input, 'expectedTargetHeadId', 'startProposalWorkspace', diagnostics);
+  validateOptionalRecordRevision(
+    input,
+    'expectedTargetRefRevision',
+    'startProposalWorkspace',
+    diagnostics,
+  );
   validateTrustedAuthor(input, 'actor', 'startProposalWorkspace', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -45,6 +54,13 @@ export function normalizeGetProposalWorkspaceInput(
   if (!isPlainInput(input, 'getProposalWorkspace', diagnostics)) return { ok: false, diagnostics };
   validateKnownKeys(input, GET_PROPOSAL_WORKSPACE_KEYS, 'getProposalWorkspace', diagnostics);
   validateRequiredString(input, 'workspaceId', 'getProposalWorkspace', diagnostics);
+  validateOptionalCommitId(input, 'expectedTargetHeadId', 'getProposalWorkspace', diagnostics);
+  validateOptionalRecordRevision(
+    input,
+    'expectedTargetRefRevision',
+    'getProposalWorkspace',
+    diagnostics,
+  );
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
 
@@ -63,6 +79,13 @@ export function normalizeDisposeProposalWorkspaceInput(
   );
   validateRequiredString(input, 'clientRequestId', 'disposeProposalWorkspace', diagnostics);
   validateRequiredString(input, 'workspaceId', 'disposeProposalWorkspace', diagnostics);
+  validateOptionalCommitId(input, 'expectedTargetHeadId', 'disposeProposalWorkspace', diagnostics);
+  validateOptionalRecordRevision(
+    input,
+    'expectedTargetRefRevision',
+    'disposeProposalWorkspace',
+    diagnostics,
+  );
   validateTrustedAuthor(input, 'actor', 'disposeProposalWorkspace', diagnostics);
   return diagnostics.length > 0 ? { ok: false, diagnostics } : { ok: true, input };
 }
@@ -79,6 +102,13 @@ export function normalizeCommitProposalWorkspaceInput(
   validateRequiredProposalId(input, 'proposalId', 'commitProposalWorkspace', diagnostics);
   validateRequiredString(input, 'workspaceId', 'commitProposalWorkspace', diagnostics);
   validateRequiredRevision(input, 'expectedRevision', 'commitProposalWorkspace', diagnostics);
+  validateOptionalCommitId(input, 'expectedTargetHeadId', 'commitProposalWorkspace', diagnostics);
+  validateOptionalRecordRevision(
+    input,
+    'expectedTargetRefRevision',
+    'commitProposalWorkspace',
+    diagnostics,
+  );
   validateTrustedAuthor(input, 'actor', 'commitProposalWorkspace', diagnostics);
   validateRequiredString(input, 'message', 'commitProposalWorkspace', diagnostics);
   validateOptionalRecord(input, 'verification', 'commitProposalWorkspace', diagnostics);

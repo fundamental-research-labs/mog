@@ -4,7 +4,7 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { validateApplyMergeTargetRefCasProof } from '../version/apply-merge/version-apply-merge-target-ref';
+import type { validateApplyMergeTargetRefCasProof } from '../version/apply-merge/target-ref/version-apply-merge-target-ref';
 import {
   createVersionGraphRegistry,
   namespaceForDocumentScope,

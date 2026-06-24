@@ -82,6 +82,7 @@ export async function createProviderBackedAgentProposal(
     targetRef: target.head.refName,
     baseCommitId,
     targetHeadIdAtCreation: target.head.commitId,
+    targetRefVersionAtCreation: target.head.refVersion,
     proposalBranchName: proposalBranchName.branchName,
     redactionPolicy: input.redactionPolicy,
     trustedIdentity: {

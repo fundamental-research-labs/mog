@@ -60,4 +60,49 @@ export function registerProposalWorkspaceCommitScenarios(): void {
       value: { status: 'workspace_open', revision: 2 },
     });
   });
+
+  it('rejects proposal workspace commits after the proposal target advances', async () => {
+    const graph = await graphWithRoot();
+    const workspaceService = staleHeadCheckingWorkspaceService(graph.provider);
+    const version = versionForProvider(graph.provider, workspaceService);
+    const opened = await openProposalWorkspace(version, 'workspace-stale-target');
+    const movedMainCommitId = await commitRef(
+      graph.provider,
+      'refs/heads/main',
+      graph.rootCommitId,
+    );
+
+    await expect(
+      version.commitProposalWorkspace({
+        clientRequestId: 'workspace-commit-stale-target',
+        proposalId: opened.proposalId,
+        workspaceId: opened.workspaceId,
+        expectedRevision: 2,
+        expectedTargetHeadId: opened.targetHeadIdAtCreation,
+        expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
+        actor: ACTOR,
+        message: 'Stale target workspace commit',
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.commitProposalWorkspace',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'stale_proposal_target_head',
+            data: expect.objectContaining({
+              proposalId: opened.proposalId,
+              expectedTargetHeadId: graph.rootCommitId,
+              actualTargetHeadId: movedMainCommitId,
+            }),
+          }),
+        ],
+      },
+    });
+    await expect(version.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'workspace_open', revision: 2 },
+    });
+  });
 }

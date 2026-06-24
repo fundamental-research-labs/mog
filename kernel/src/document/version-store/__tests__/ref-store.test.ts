@@ -105,6 +105,54 @@ describe('InMemoryRefStore branch CAS', () => {
 });
 
 describe('InMemoryRefStore delete invariants', () => {
+  it('rejects stale delete ref versions without tombstoning the live ref', () => {
+    const store = createStore();
+    expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
+
+    const created = store.createBranch({
+      name: 'scenario/delete-cas',
+      targetCommitId: COMMIT_A,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+    expectCreateOk(created);
+
+    const updated = store.updateRef({
+      name: 'scenario/delete-cas',
+      nextCommitId: COMMIT_B,
+      expectedHead: COMMIT_A,
+      expectedRefVersion: created.ref.refVersion,
+      updatedBy: AUTHOR,
+    });
+    expectMutationOk(updated);
+
+    const staleDelete = store.deleteRef({
+      name: 'scenario/delete-cas',
+      expectedHead: COMMIT_B,
+      expectedRefVersion: created.ref.refVersion,
+      deletedBy: AUTHOR,
+    });
+    expect(staleDelete.ok).toBe(false);
+    if (staleDelete.ok) throw new Error('expected stale delete ref version to fail');
+    expect(staleDelete.error.code).toBe('expectedRefVersionMismatch');
+    expect(staleDelete.conflict).toMatchObject({
+      code: 'expectedRefVersionMismatch',
+      expectedRefVersion: refVersion('0'),
+      actualRefVersion: refVersion('1'),
+      actualHead: COMMIT_B,
+    });
+
+    const stillLive = store.getRef('scenario/delete-cas');
+    expect(stillLive.ok).toBe(true);
+    if (!stillLive.ok) throw new Error('expected ref read to succeed');
+    expect(stillLive.ref).toMatchObject({
+      state: 'live',
+      name: 'scenario/delete-cas',
+      targetCommitId: COMMIT_B,
+      refVersion: refVersion('1'),
+    });
+  });
+
   it('rejects deleting the last live ref from the current store state', () => {
     const store = createStore();
     const main = store.initializeMain({

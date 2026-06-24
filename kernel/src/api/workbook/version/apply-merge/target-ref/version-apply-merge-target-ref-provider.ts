@@ -1,5 +1,5 @@
-import type { DocumentContext } from '../../../../context';
-import type { VersionStoreProvider } from '../../../../document/version-store/provider';
+import type { DocumentContext } from '../../../../../context';
+import type { VersionStoreProvider } from '../../../../../document/version-store/provider';
 import { isRecord } from './version-apply-merge-target-ref-utils';
 
 type MaybeVersionRuntimeContext = DocumentContext & {

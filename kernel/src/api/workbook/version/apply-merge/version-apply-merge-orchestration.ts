@@ -19,12 +19,12 @@ import {
 import {
   validateApplyMergeTargetRefCasProof,
   type ApplyMergeTargetRefCasValidationResult,
-} from './version-apply-merge-target-ref';
+} from './target-ref/version-apply-merge-target-ref';
 import {
   isApplyMergeWriteSuccessResult,
   isNonFastForwardWriteResult,
   mapApplyMergeWriteResult,
-} from './version-apply-merge-write-result';
+} from './write-result/version-apply-merge-write-result';
 import type { NormalizedApplyMergeOptions } from './version-apply-merge-validation';
 import { materializableMergePlanDiagnostics } from '../merge/version-merge-materializer-support';
 

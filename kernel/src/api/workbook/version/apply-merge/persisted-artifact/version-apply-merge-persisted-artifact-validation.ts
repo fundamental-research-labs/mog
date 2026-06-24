@@ -5,12 +5,12 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import type { MergePreviewArtifactPayload } from '../../../../document/version-store/merge-attempt-artifacts';
-import type { ObjectDigest as InternalObjectDigest } from '../../../../document/version-store/object-digest';
+import type { MergePreviewArtifactPayload } from '../../../../../document/version-store/merge-attempt-artifacts';
+import type { ObjectDigest as InternalObjectDigest } from '../../../../../document/version-store/object-digest';
 import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
-} from './version-apply-merge-persisted';
+} from '../version-apply-merge-persisted';
 import { resolutionMismatchDiagnostic } from './version-apply-merge-persisted-artifact-diagnostics';
 import {
   digestsEqual,

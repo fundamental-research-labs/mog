@@ -42,7 +42,13 @@ export function registerRevertProviderResultScenarios(): void {
 
     await expect(version.revert(input, { includeDiagnostics: true })).resolves.toStrictEqual({
       ok: true,
-      value: providerResult,
+      value: {
+        ...providerResult,
+        commitRef: {
+          ...providerResult.commitRef,
+          resolvedFrom: MAIN_REF,
+        },
+      },
     });
     expect(readRef).toHaveBeenCalledWith(MAIN_REF);
     expect(revert).toHaveBeenCalledWith(input, { includeDiagnostics: true });
@@ -108,7 +114,6 @@ export function registerRevertProviderResultScenarios(): void {
     const branchRef = 'refs/heads/scenario/direct-active-revert' as const;
     const input = {
       target: { kind: 'commit', commitId: COMMIT_A },
-      expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
       reason: 'direct-active-branch-revert',
     } satisfies VersionRevertInput;
     const providerResult: VersionRevertResult = {
@@ -117,12 +122,18 @@ export function registerRevertProviderResultScenarios(): void {
       target: input.target,
       commitRef: {
         id: COMMIT_D,
-        refName: branchRef,
-        refRevision: STALE_MAIN_REVISION,
       },
       reviewInvalidationIds: [],
       diagnostics: [],
       mutationGuarantee: 'revert-commit-created',
+    };
+    const publicResult: VersionRevertResult = {
+      ...providerResult,
+      commitRef: {
+        id: COMMIT_D,
+        refName: branchRef,
+        resolvedFrom: branchRef,
+      },
     };
     const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
       readDirtyState: () => ({
@@ -149,15 +160,115 @@ export function registerRevertProviderResultScenarios(): void {
 
     await expect(version.revert(input)).resolves.toStrictEqual({
       ok: true,
-      value: providerResult,
+      value: publicResult,
     });
-    expect(revert).toHaveBeenCalledWith({ ...input, targetRef: branchRef }, {});
+    expect(revert).toHaveBeenCalledWith(
+      {
+        ...input,
+        targetRef: branchRef,
+        expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
+      },
+      {},
+    );
     expect(readRef).toHaveBeenCalledWith(branchRef);
     expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
       checkedOutCommitId: COMMIT_D,
       branchName: 'scenario/direct-active-revert',
       refHeadAtMaterialization: COMMIT_D,
       detached: false,
+    });
+  });
+
+  it('adds target ref preconditions and public commit ref metadata for explicit target ref revert', async () => {
+    const input = {
+      target: { kind: 'commit', commitId: COMMIT_A },
+      targetRef: MAIN_REF,
+      reason: 'explicit-target-ref-revert',
+    } satisfies VersionRevertInput;
+    const providerResult: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'applied',
+      target: input.target,
+      commitRef: {
+        id: COMMIT_D,
+      },
+      reviewInvalidationIds: [],
+      diagnostics: [],
+      mutationGuarantee: 'revert-commit-created',
+    };
+    const revert = jest.fn(async () => providerResult);
+    const readRef = jest.fn(async () => ({
+      status: 'success',
+      ref: { name: MAIN_REF, commitId: COMMIT_B, revision: MAIN_REVISION },
+    }));
+    const version = workbookVersionWithRevertService(revert, { readService: { readRef } });
+
+    await expect(version.revert(input)).resolves.toStrictEqual({
+      ok: true,
+      value: {
+        ...providerResult,
+        commitRef: {
+          id: COMMIT_D,
+          refName: MAIN_REF,
+          resolvedFrom: MAIN_REF,
+        },
+      },
+    });
+    expect(revert).toHaveBeenCalledWith(
+      {
+        ...input,
+        expectedTargetHead: { commitId: COMMIT_B, revision: MAIN_REVISION },
+      },
+      {},
+    );
+    expect(readRef).toHaveBeenCalledWith(MAIN_REF);
+  });
+
+  it('leaves detached checkout reverts detached when no target ref is supplied', async () => {
+    const input = {
+      target: { kind: 'commit', commitId: COMMIT_A },
+      reason: 'detached-checkout-revert',
+    } satisfies VersionRevertInput;
+    const providerResult: VersionRevertResult = {
+      schemaVersion: 1,
+      status: 'applied',
+      target: input.target,
+      commitRef: {
+        id: COMMIT_D,
+      },
+      reviewInvalidationIds: [],
+      diagnostics: [],
+      mutationGuarantee: 'revert-commit-created',
+    };
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordCheckoutMaterialization({
+      commitId: COMMIT_B,
+      resolvedTarget: { kind: 'commit', commitId: COMMIT_B },
+    } as never);
+    const revert = jest.fn(async () => providerResult);
+    const readRef = jest.fn();
+    const version = workbookVersionWithRevertService(revert, {
+      readService: { readRef },
+      surfaceStatusService,
+    });
+
+    await expect(version.revert(input)).resolves.toStrictEqual({
+      ok: true,
+      value: providerResult,
+    });
+    expect(revert).toHaveBeenCalledWith(input, {});
+    expect(readRef).not.toHaveBeenCalled();
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: COMMIT_B,
+      detached: true,
     });
   });
 

@@ -1,5 +1,5 @@
-import type { VersionMergeCommitCaptureInput } from '../../../../document/version-store/commit-service';
-import type { VersionStoreFailure } from '../../../../document/version-store/provider';
+import type { VersionMergeCommitCaptureInput } from '../../../../../document/version-store/commit-service';
+import type { VersionStoreFailure } from '../../../../../document/version-store/provider';
 import { unsupportedMergeChange } from './version-merge-materialization-plan-diagnostics';
 import {
   parseCellEntity,
@@ -20,7 +20,7 @@ import {
   parseRowColumnTransition,
   parseSheetMetadataMergeValue,
 } from './version-merge-materialization-plan-values';
-import { inspectMaterializableMergeChange } from '../merge/version-merge-materializer-support';
+import { inspectMaterializableMergeChange } from '../../merge/version-merge-materializer-support';
 
 export type {
   ParsedCellMergeChange,

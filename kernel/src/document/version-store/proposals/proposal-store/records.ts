@@ -27,6 +27,7 @@ export function createProposalRecord(input: {
     targetRef: input.input.targetRef,
     baseCommitId: input.input.baseCommitId,
     targetHeadIdAtCreation: input.input.targetHeadIdAtCreation,
+    targetRefVersionAtCreation: input.input.targetRefVersionAtCreation,
     proposalBranchName: input.input.proposalBranchName,
     status: 'draft',
     revision: 1,

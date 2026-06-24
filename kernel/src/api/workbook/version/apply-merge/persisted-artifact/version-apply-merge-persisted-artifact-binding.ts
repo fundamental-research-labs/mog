@@ -7,16 +7,16 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { DocumentContext } from '../../../../context';
+import type { DocumentContext } from '../../../../../context';
 import {
   hasMergeApplyIntentStoreProvider,
   type MergeApplyIntentStore,
-} from '../../../../document/version-store/merge-apply-intent-store';
-import type { ObjectDigest as InternalObjectDigest } from '../../../../document/version-store/object-digest';
-import type { VersionGraphNamespace } from '../../../../document/version-store/object-store';
-import type { VersionStoreProvider } from '../../../../document/version-store/provider';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
-import { namespaceForRegistry } from '../../../../document/version-store/registry';
+} from '../../../../../document/version-store/merge-apply-intent-store';
+import type { ObjectDigest as InternalObjectDigest } from '../../../../../document/version-store/object-digest';
+import type { VersionGraphNamespace } from '../../../../../document/version-store/object-store';
+import type { VersionStoreProvider } from '../../../../../document/version-store/provider';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
+import { namespaceForRegistry } from '../../../../../document/version-store/registry';
 import {
   mapProviderDiagnostics,
   providerErrorDiagnostic,

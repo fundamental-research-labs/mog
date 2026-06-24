@@ -4,7 +4,7 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { ApplyMergeTargetRefCasValidationResult } from './version-apply-merge-target-ref';
+import type { ApplyMergeTargetRefCasValidationResult } from './target-ref/version-apply-merge-target-ref';
 
 export function blockedApplyMergeResult(
   base: WorkbookCommitId | null,

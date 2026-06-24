@@ -16,10 +16,14 @@ export const CREATED_AT = '2026-06-20T00:00:00.000Z';
 
 export type FakeGraphStore = ReturnType<typeof createFakeGraphStore>;
 
-export function createVersion(graphStore: FakeGraphStore) {
+export function createVersion(
+  graphStore: FakeGraphStore,
+  versioning: Record<string, unknown> = {},
+) {
   return new WorkbookVersionImpl({
     versioning: {
       graphStore,
+      ...versioning,
     },
   } as any);
 }

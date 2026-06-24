@@ -3,24 +3,24 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import type { DocumentContext } from '../../../../context';
+import type { DocumentContext } from '../../../../../context';
 import {
   idempotencyKeyForResolvedAttempt,
   intentIdForResolvedAttemptDigest,
   type MergeApplyIntentRecord,
   type MergeApplyIntentStore,
-} from '../../../../document/version-store/merge-apply-intent-store';
+} from '../../../../../document/version-store/merge-apply-intent-store';
 import {
   createMergeResolutionSetArtifactRecord,
   createResolvedMergeAttemptArtifactRecord,
   type MergePreviewArtifactPayload,
-} from '../../../../document/version-store/merge-attempt-artifacts';
-import type { VersionGraphNamespace } from '../../../../document/version-store/object-store';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
+} from '../../../../../document/version-store/merge-attempt-artifacts';
+import type { VersionGraphNamespace } from '../../../../../document/version-store/object-store';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
 import {
   isApplyMergeWriteSuccessResult,
   mapApplyMergeWriteResult,
-} from './version-apply-merge-write-result';
+} from '../write-result/version-apply-merge-write-result';
 import {
   applyMergeServiceUnavailableDiagnostic,
   blockedApplyMergeResult,
@@ -30,11 +30,11 @@ import {
   publicDiagnostic,
   resolutionMismatchDiagnostic,
 } from './version-apply-merge-persisted-artifact-diagnostics';
-import { materializableMergePlanDiagnostics } from '../merge/version-merge-materializer-support';
+import { materializableMergePlanDiagnostics } from '../../merge/version-merge-materializer-support';
 import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
-} from './version-apply-merge-persisted';
+} from '../version-apply-merge-persisted';
 import {
   recoverStagedMergeCommitIfAlreadyApplied,
   validatePreparedMergeApplyArtifactIntentRecord,
@@ -61,6 +61,7 @@ import {
   replayPreviewArtifact,
   resultFromTerminalArtifactIntent,
   staleTargetHeadArtifactResult,
+  staleTargetHeadBeforeMergeCommitWrite,
   staleTargetHeadBeforeStaging,
 } from './version-apply-merge-persisted-artifact-results';
 
@@ -183,6 +184,13 @@ export async function applyPersistedMergePreviewArtifact(
     resolutionMismatchDiagnostic,
   });
   if (recovered) return recovered;
+
+  const staleBeforeWrite = await staleTargetHeadBeforeMergeCommitWrite(
+    opened.graph,
+    input,
+    prepared.intent,
+  );
+  if (staleBeforeWrite) return staleBeforeWrite;
 
   const service = getAttachedVersionApplyMergeService(ctx);
   if (!service?.mergeCommit) {

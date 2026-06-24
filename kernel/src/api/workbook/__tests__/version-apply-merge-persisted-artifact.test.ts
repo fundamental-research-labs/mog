@@ -1,4 +1,29 @@
+import { jest } from '@jest/globals';
+
+import type { VersionCommitExpectedHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
+
 import {
+  idempotencyKeyForResolvedAttempt,
+  intentIdForResolvedAttemptDigest,
+  type MergeApplyIntentRecord,
+  type MergeApplyIntentStore,
+} from '../../../document/version-store/merge-apply-intent-store';
+import {
+  createMergePreviewArtifactRecord,
+  createMergeResolutionSetArtifactRecord,
+  createResolvedMergeAttemptArtifactRecord,
+  mergeResultIdForPreviewDigest,
+} from '../../../document/version-store/merge-attempt-artifacts';
+import { versionGraphNamespaceKey } from '../../../document/version-store/object-store';
+import {
+  createVersionGraphRegistry,
+  namespaceForDocumentScope,
+  type VersionDocumentScope,
+} from '../../../document/version-store/provider';
+import { versionDocumentScopeKey } from '../../../document/version-store/registry';
+import { applyPersistedMergeResult } from '../version/apply-merge/version-apply-merge-persisted';
+import {
+  PERSISTED_ARTIFACT_CREATED_AT,
   createPersistedMergeScenario,
   PERSISTED_ARTIFACT_TARGET_REF,
 } from './version-apply-merge-persisted-artifact-test-utils';
@@ -137,4 +162,150 @@ describe('WorkbookVersion persisted clean merge preview artifacts', () => {
       await fixture.cleanup();
     }
   });
+
+  it('rejects stale target ref CAS on staged artifact recovery before writing a merge commit', async () => {
+    const documentScope: VersionDocumentScope = {
+      documentId: 'persisted-artifact-stale-cas-recovery',
+    };
+    const namespace = namespaceForDocumentScope(documentScope, 'stale-cas-recovery');
+    const registry = await createVersionGraphRegistry({
+      documentScope,
+      graphId: namespace.graphId,
+      rootCommitId: BASE,
+      createdAt: PERSISTED_ARTIFACT_CREATED_AT,
+    });
+    const expectedTargetHead: VersionCommitExpectedHead = {
+      commitId: OURS,
+      revision: { kind: 'counter', value: '1' },
+    };
+    const preview = await createMergePreviewArtifactRecord(namespace, {
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [],
+      conflicts: [],
+    });
+    const resolutionSet = await createMergeResolutionSetArtifactRecord(namespace, []);
+    const resolvedAttempt = await createResolvedMergeAttemptArtifactRecord(namespace, {
+      resultDigest: preview.digest,
+      resolutionSetDigest: resolutionSet.digest,
+      targetRef: PERSISTED_ARTIFACT_TARGET_REF,
+      expectedTargetHead,
+    });
+    const record: MergeApplyIntentRecord = {
+      schemaVersion: 1,
+      recordKind: 'mergeApplyIntent',
+      intentId: intentIdForResolvedAttemptDigest(resolvedAttempt.digest),
+      idempotencyKey: idempotencyKeyForResolvedAttempt({
+        resolvedAttemptDigest: resolvedAttempt.digest,
+        targetRef: PERSISTED_ARTIFACT_TARGET_REF,
+        expectedTargetHead,
+      }),
+      namespaceKey: versionGraphNamespaceKey(namespace),
+      documentScopeKey: versionDocumentScopeKey(documentScope),
+      applyKind: 'mergeCommit',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: PERSISTED_ARTIFACT_TARGET_REF,
+      expectedTargetHead,
+      resultDigest: preview.digest,
+      resolutionSetDigest: resolutionSet.digest,
+      resolvedAttemptDigest: resolvedAttempt.digest,
+      state: 'staging',
+      createdAt: PERSISTED_ARTIFACT_CREATED_AT,
+      updatedAt: PERSISTED_ARTIFACT_CREATED_AT,
+    };
+    const store: MergeApplyIntentStore = {
+      namespace,
+      beginIntent: jest.fn(),
+      readByIntentId: jest.fn(),
+      readByIdempotencyKey: jest.fn(async () => ({
+        status: 'found',
+        record,
+        diagnostics: [],
+      })),
+      readRefCasProof: jest.fn(),
+      completeIntent: jest.fn(),
+    };
+    const putObjects = jest.fn();
+    const mergeCommit = jest.fn();
+    const graph = {
+      namespace,
+      getObjectRecord: jest.fn(async () => preview),
+      putObjects,
+      readRef: jest.fn(async () => ({
+        status: 'success',
+        ref: {
+          name: PERSISTED_ARTIFACT_TARGET_REF,
+          commitId: OURS,
+          revision: { kind: 'counter' as const, value: '2' },
+          updatedAt: PERSISTED_ARTIFACT_CREATED_AT,
+        },
+        diagnostics: [],
+      })),
+    };
+    const provider = {
+      accessContext: {},
+      readGraphRegistry: jest.fn(async () => ({
+        status: 'ok' as const,
+        registry,
+        diagnostics: [],
+      })),
+      openGraph: jest.fn(async () => graph),
+      openMergeApplyIntentStore: jest.fn(async () => store),
+    };
+
+    const result = await applyPersistedMergeResult(
+      {
+        versioning: {
+          provider,
+          writeService: { mergeCommit },
+        },
+      } as Parameters<typeof applyPersistedMergeResult>[0],
+      {
+        resultId: mergeResultIdForPreviewDigest(preview.digest),
+        resultDigest: preview.digest,
+        previewArtifactDigest: preview.digest,
+      },
+      { targetRef: PERSISTED_ARTIFACT_TARGET_REF, expectedTargetHead },
+    );
+
+    expect(result).toMatchObject({
+      status: 'staleTargetHead',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      targetRef: PERSISTED_ARTIFACT_TARGET_REF,
+      headBefore: OURS,
+      headAfter: OURS,
+      mutationGuarantee: 'ref-not-mutated',
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          recoverability: 'retry',
+          payload: expect.objectContaining({
+            operation: 'applyMerge',
+            reason: 'staleTargetHead',
+            expectedRevision: '1',
+            actualRevision: '2',
+          }),
+        }),
+      ],
+    });
+    expect(mergeCommit).not.toHaveBeenCalled();
+    expect(putObjects).not.toHaveBeenCalled();
+    expect(store.beginIntent).not.toHaveBeenCalled();
+    expect(store.readRefCasProof).not.toHaveBeenCalled();
+    expect(store.completeIntent).not.toHaveBeenCalled();
+  });
 });
+
+const BASE = commitId('0');
+const OURS = commitId('1');
+const THEIRS = commitId('2');
+
+function commitId(seed: string): WorkbookCommitId {
+  return `commit:sha256:${seed.repeat(64)}` as WorkbookCommitId;
+}

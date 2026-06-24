@@ -17,6 +17,7 @@ export const OTHER_DOCUMENT_SCOPE: VersionDocumentScope = {
 };
 export const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}` as const;
 export const HEAD_COMMIT_ID = `commit:sha256:${'2'.repeat(64)}` as const;
+export const TARGET_REF_VERSION = { kind: 'counter', value: '0' } as const;
 export const PROPOSAL_COMMIT_ID = `commit:sha256:${'3'.repeat(64)}` as const;
 export const ACCEPTED_COMMIT_ID = `commit:sha256:${'4'.repeat(64)}` as const;
 export const ACTOR = { kind: 'user', trust: 'trusted', displayName: 'Reviewer' } as const;
@@ -54,6 +55,7 @@ export function createProposalInput(
     targetRef: 'refs/heads/main',
     baseCommitId: BASE_COMMIT_ID,
     targetHeadIdAtCreation: HEAD_COMMIT_ID,
+    targetRefVersionAtCreation: TARGET_REF_VERSION,
     proposalBranchName: 'agent/agent-run-1/proposal-1',
     redactionPolicy: REDACTION_POLICY,
     trustedIdentity: {

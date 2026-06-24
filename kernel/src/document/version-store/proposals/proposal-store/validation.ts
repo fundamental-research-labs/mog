@@ -40,6 +40,13 @@ export function validateCreateProposalInput(
       'Proposal target head at creation is required.',
     );
   }
+  if (!isRefVersion(input.targetRefVersionAtCreation)) {
+    return invalidCreate(
+      'missing_target_ref_revision',
+      ['targetRefVersionAtCreation'],
+      'Proposal target ref revision at creation is required.',
+    );
+  }
   if (!input.proposalBranchName) {
     return invalidCreate(
       'missing_proposal_branch',
@@ -177,6 +184,15 @@ function allowedProposalTransitions(status: AgentProposalStatus): readonly Agent
     case 'superseded':
       return [];
   }
+}
+
+function isRefVersion(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.kind === 'counter' &&
+    typeof value.value === 'string' &&
+    /^(0|[1-9][0-9]*)$/.test(value.value)
+  );
 }
 
 function isVersionAuthor(value: unknown): value is VersionAuthor {

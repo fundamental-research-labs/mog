@@ -8,7 +8,7 @@ import {
   mapCommitId,
   mapPublicRevision,
   mapPublicTargetRef,
-} from '../../version-attempt-metadata';
+} from '../../../version-attempt-metadata';
 import { VERSION_HEAD_REF } from './version-apply-merge-write-result-constants';
 import { isRecord } from './version-apply-merge-write-result-shape';
 

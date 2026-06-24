@@ -7,7 +7,14 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { AgentProposalMetadataStore, AgentProposalRecord } from './proposal-store';
-import { validateProposalWorkspaceHandle } from './proposal-provider-workspace-binding';
+import {
+  proposalWorkspaceHandleWithTargetBinding,
+  validateProposalWorkspaceHandle,
+} from './proposal-provider-workspace-binding';
+import {
+  ensureProposalTargetBinding,
+  type ProposalTargetHeadResolver,
+} from './proposal-provider-target-binding';
 import { getOpenProposalForWorkspace } from './proposal-provider-workspace-lookup';
 import type { ProposalWorkspaceLifecycleService } from './proposal-workspace-lifecycle-service';
 
@@ -16,6 +23,7 @@ type WorkspaceAccessOperation = 'getProposalWorkspace' | 'disposeProposalWorkspa
 type WorkspaceAccessOptions = {
   readonly openStore: () => Promise<AgentProposalMetadataStore>;
   readonly workspaceService?: ProposalWorkspaceLifecycleService;
+  readonly resolveTargetHead: ProposalTargetHeadResolver;
 };
 
 type OpenProposalForWorkspaceResult =
@@ -32,6 +40,14 @@ export async function getProviderBackedProposalWorkspace(
   );
   if (!proposal.ok) return proposal.result;
 
+  const targetBinding = await ensureProposalTargetBinding({
+    proposal: proposal.proposal,
+    operation: 'getProposalWorkspace',
+    expected: options.input,
+    resolveTargetHead: options.resolveTargetHead,
+  });
+  if (!targetBinding.ok) return targetBinding.result;
+
   if (!options.workspaceService) return workspaceUnavailable('getProposalWorkspace');
   const workspace = await callWorkspaceService('getProposalWorkspace', () =>
     options.workspaceService!.getProposalWorkspace(options.input),
@@ -42,7 +58,10 @@ export async function getProviderBackedProposalWorkspace(
     handle: workspace.value,
   });
   if (!workspaceBinding.ok) return workspaceBinding.result;
-  return workspace;
+  return {
+    ok: true,
+    value: proposalWorkspaceHandleWithTargetBinding(proposal.proposal, workspace.value),
+  };
 }
 
 export async function disposeProviderBackedProposalWorkspace(
@@ -54,6 +73,14 @@ export async function disposeProviderBackedProposalWorkspace(
     options.input.workspaceId,
   );
   if (!proposal.ok) return proposal.result;
+
+  const targetBinding = await ensureProposalTargetBinding({
+    proposal: proposal.proposal,
+    operation: 'disposeProposalWorkspace',
+    expected: options.input,
+    resolveTargetHead: options.resolveTargetHead,
+  });
+  if (!targetBinding.ok) return targetBinding.result;
 
   if (!options.workspaceService) return workspaceUnavailable('disposeProposalWorkspace');
   return callWorkspaceService('disposeProposalWorkspace', () =>

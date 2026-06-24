@@ -4,12 +4,14 @@ import type {
   CreateAgentProposalInput,
   VersionBranchName,
   VersionMainRefName,
+  VersionRecordRevision,
   VersionRefName,
   VersionResult,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
 import type { BranchRecord } from '../branch-service';
+import type { RefVersion } from '../refs/ref-store';
 import { objectDigestFor } from '../merge-apply-intent-store';
 import type {
   AgentProposalRecord,
@@ -98,6 +100,9 @@ export function publicProposal(record: AgentProposalRecord): AgentProposal {
     targetRef: record.targetRef as VersionMainRefName | VersionRefName,
     baseCommitId: record.baseCommitId,
     targetHeadIdAtCreation: record.targetHeadIdAtCreation as WorkbookCommitId,
+    ...(record.targetRefVersionAtCreation === undefined
+      ? {}
+      : { targetRefRevisionAtCreation: publicRefVersion(record.targetRefVersionAtCreation) }),
     proposalBranchName: record.proposalBranchName as VersionBranchName,
     ...(record.proposalCommitId === undefined ? {} : { proposalCommitId: record.proposalCommitId }),
     status: record.status,
@@ -129,6 +134,9 @@ export function publicProposalSummary(
     targetRef: record.targetRef as VersionMainRefName | VersionRefName,
     baseCommitId: record.baseCommitId,
     targetHeadIdAtCreation: record.targetHeadIdAtCreation as WorkbookCommitId,
+    ...(record.targetRefVersionAtCreation === undefined
+      ? {}
+      : { targetRefRevisionAtCreation: publicRefVersion(record.targetRefVersionAtCreation) }),
     proposalBranchName: record.proposalBranchName as VersionBranchName,
     ...(record.proposalCommitId === undefined ? {} : { proposalCommitId: record.proposalCommitId }),
     status: record.status,
@@ -145,6 +153,10 @@ export function branchCommitId(branch: BranchRecord): WorkbookCommitId | null {
 
 export function isWorkbookCommitId(value: unknown): value is WorkbookCommitId {
   return typeof value === 'string' && WORKBOOK_COMMIT_ID_RE.test(value);
+}
+
+export function publicRefVersion(refVersion: RefVersion): VersionRecordRevision {
+  return { kind: refVersion.kind, value: refVersion.value };
 }
 
 function refSegment(value: string, maxLength: number): string {

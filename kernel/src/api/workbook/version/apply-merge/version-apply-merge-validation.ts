@@ -21,7 +21,7 @@ import {
   VERSION_BRANCH_REF_PREFIX,
   VERSION_MAIN_REF,
   isApplyTargetRefName,
-} from './version-apply-merge-target-ref';
+} from './target-ref/version-apply-merge-target-ref';
 import { normalizeVersionApplyMergeResolutions } from '../../version-merge-resolution-normalization';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;

@@ -38,7 +38,7 @@ import {
   isApplyMergeWriteSuccessResult,
   isNonFastForwardWriteResult,
   mapApplyMergeWriteResult,
-} from './version-apply-merge-write-result';
+} from './write-result/version-apply-merge-write-result';
 
 export async function completeAlreadyMergedIntent(
   provider: VersionStoreProvider,

@@ -7,19 +7,25 @@ import type {
   WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
-import type { MergeApplyIntentRecord } from '../../../../document/version-store/merge-apply-intent-store';
-import type { MergePreviewArtifactPayload } from '../../../../document/version-store/merge-attempt-artifacts';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
+import type { MergeApplyIntentRecord } from '../../../../../document/version-store/merge-apply-intent-store';
+import type { MergePreviewArtifactPayload } from '../../../../../document/version-store/merge-attempt-artifacts';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
 import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,
-} from './version-apply-merge-persisted';
+} from '../version-apply-merge-persisted';
+import {
+  validateApplyMergeTargetRefCasProofForGraph,
+  type ApplyMergeTargetRefCasValidationResult,
+} from '../target-ref/version-apply-merge-target-ref';
 import {
   blockedApplyMergeResult,
   mapProviderDiagnostics,
   providerErrorDiagnostic,
   resolutionMismatchDiagnostic,
 } from './version-apply-merge-persisted-artifact-diagnostics';
+
+type TargetRefCasFailure = Extract<ApplyMergeTargetRefCasValidationResult, { readonly ok: false }>;
 
 export function replayPreviewArtifact(
   input: NormalizedPersistedApplyMergeInput,
@@ -66,12 +72,25 @@ export async function staleTargetHeadBeforeStaging(
   payload: MergePreviewArtifactPayload,
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
 ): Promise<VersionApplyMergeResult | null> {
-  const current = await readCurrentTargetHead(graph, options.targetRef);
-  if (!current.ok) {
-    return blockedApplyMergeResult(payload.base, payload.ours, payload.theirs, current.diagnostics);
-  }
-  if (current.commitId === options.expectedTargetHead.commitId) return null;
-  return staleTargetHeadPreviewArtifactResult(input, payload, options, current.commitId);
+  const cas = await validateApplyMergeTargetRefCasProofForGraph(graph, {
+    targetRef: options.targetRef,
+    expectedTargetHead: options.expectedTargetHead,
+  });
+  if (cas.ok) return null;
+  return resultFromPreviewArtifactTargetRefCasFailure(graph, input, payload, options, cas);
+}
+
+export async function staleTargetHeadBeforeMergeCommitWrite(
+  graph: VersionGraphStore,
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+): Promise<VersionApplyMergeResult | null> {
+  const cas = await validateApplyMergeTargetRefCasProofForGraph(graph, {
+    targetRef: record.targetRef,
+    expectedTargetHead: record.expectedTargetHead,
+  });
+  if (cas.ok) return null;
+  return resultFromArtifactIntentTargetRefCasFailure(graph, input, record, cas);
 }
 
 export async function resultFromTerminalArtifactIntent(
@@ -127,6 +146,7 @@ export function staleTargetHeadArtifactResult(
   input: NormalizedPersistedApplyMergeInput,
   record: MergeApplyIntentRecord,
   currentHead: WorkbookCommitId,
+  diagnostics: readonly VersionStoreDiagnostic[] = [],
 ): VersionApplyMergeResult {
   return {
     ...artifactIntentMetadata(input, record),
@@ -137,7 +157,7 @@ export function staleTargetHeadArtifactResult(
     theirs: record.theirs,
     changes: [],
     conflicts: [],
-    diagnostics: [],
+    diagnostics,
     mutationGuarantee: 'ref-not-mutated',
   };
 }
@@ -167,6 +187,7 @@ function staleTargetHeadPreviewArtifactResult(
   payload: MergePreviewArtifactPayload,
   options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
   currentHead: WorkbookCommitId,
+  diagnostics: readonly VersionStoreDiagnostic[] = [],
 ): VersionApplyMergeResult {
   return {
     ...previewArtifactMetadata(input),
@@ -179,9 +200,55 @@ function staleTargetHeadPreviewArtifactResult(
     theirs: payload.theirs,
     changes: [],
     conflicts: [],
-    diagnostics: [],
+    diagnostics,
     mutationGuarantee: 'ref-not-mutated',
   };
+}
+
+async function resultFromPreviewArtifactTargetRefCasFailure(
+  graph: VersionGraphStore,
+  input: NormalizedPersistedApplyMergeInput,
+  payload: MergePreviewArtifactPayload,
+  options: Extract<NormalizedPersistedApplyMergeOptions, { readonly mode: 'apply' }>,
+  failure: TargetRefCasFailure,
+): Promise<VersionApplyMergeResult> {
+  if (failure.kind === 'blocked') {
+    return blockedApplyMergeResult(
+      payload.base,
+      payload.ours,
+      payload.theirs,
+      failure.diagnostics,
+    );
+  }
+
+  const current = await readCurrentTargetHead(graph, options.targetRef);
+  if (!current.ok) {
+    return blockedApplyMergeResult(payload.base, payload.ours, payload.theirs, current.diagnostics);
+  }
+  return staleTargetHeadPreviewArtifactResult(
+    input,
+    payload,
+    options,
+    current.commitId,
+    failure.diagnostics,
+  );
+}
+
+async function resultFromArtifactIntentTargetRefCasFailure(
+  graph: VersionGraphStore,
+  input: NormalizedPersistedApplyMergeInput,
+  record: MergeApplyIntentRecord,
+  failure: TargetRefCasFailure,
+): Promise<VersionApplyMergeResult> {
+  if (failure.kind === 'blocked') {
+    return blockedApplyMergeResult(record.base, record.ours, record.theirs, failure.diagnostics);
+  }
+
+  const current = await readCurrentTargetHead(graph, record.targetRef);
+  if (!current.ok) {
+    return blockedApplyMergeResult(record.base, record.ours, record.theirs, current.diagnostics);
+  }
+  return staleTargetHeadArtifactResult(input, record, current.commitId, failure.diagnostics);
 }
 
 function artifactIntentMetadata(

@@ -12,11 +12,11 @@ import type {
   MergeApplyRefCasProof,
   MergeApplyIntentStore,
   MergeApplyIntentStoreDiagnostic,
-} from '../../../../document/version-store/merge-apply-intent-store';
-import { computeMergeApplyRefCasProof } from '../../../../document/version-store/merge-apply-intent-store';
-import type { ObjectDigest } from '../../../../document/version-store/object-digest';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
-import type { NormalizedPersistedApplyMergeInput } from './version-apply-merge-persisted';
+} from '../../../../../document/version-store/merge-apply-intent-store';
+import { computeMergeApplyRefCasProof } from '../../../../../document/version-store/merge-apply-intent-store';
+import type { ObjectDigest } from '../../../../../document/version-store/object-digest';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
+import type { NormalizedPersistedApplyMergeInput } from '../version-apply-merge-persisted';
 
 type PreparedMergeApplyArtifactIntentIdentity = {
   readonly intentId: string;

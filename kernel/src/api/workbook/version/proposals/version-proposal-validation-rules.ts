@@ -207,6 +207,27 @@ export function validateOptionalCommitId(
   validateCommitId(input[key], operation, key, diagnostics);
 }
 
+export function validateOptionalRecordRevision(
+  input: Readonly<Record<string, unknown>>,
+  key: string,
+  operation: VersionProposalPublicOperation,
+  diagnostics: VersionStoreDiagnostic[],
+): void {
+  if (!(key in input)) return;
+  const value = input[key];
+  if (
+    isRecord(value) &&
+    typeof value.value === 'string' &&
+    ((value.kind === 'counter' && /^(0|[1-9][0-9]*)$/.test(value.value)) ||
+      (value.kind === 'opaque' && value.value.length > 0))
+  ) {
+    return;
+  }
+  diagnostics.push(
+    invalidOptionDiagnostic(operation, key, `${key} must be a version record revision.`),
+  );
+}
+
 export function validateRequiredCommitId(
   input: Readonly<Record<string, unknown>>,
   key: string,

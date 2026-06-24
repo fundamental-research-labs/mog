@@ -6,7 +6,7 @@ import { failedStoreResult, versionStoreDiagnostic } from '../../../../document/
 import { captureWorkbookSnapshotRootRecord } from '../../../../document/version-store/snapshot-root-capture';
 import { createSnapshotRootMaterializationService } from '../../../../document/version-store/snapshot-root-materialization-service';
 import { createDocumentLifecycleSnapshotRootHydrator } from '../../../document/snapshot-root-lifecycle-hydrator';
-import { parseMergeChanges } from '../apply-merge/version-merge-materialization-plan';
+import { parseMergeChanges } from '../apply-merge/materialization-plan/version-merge-materialization-plan';
 import {
   applyMergeChanges,
   MERGE_CAPTURE_AUTHOR,

@@ -11,6 +11,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { AgentProposalStatus } from './status';
+import type { RefVersion } from '../../refs/ref-store';
 import type { VersionDocumentScope } from '../../registry';
 
 export type { AgentProposalStatus } from './status';
@@ -37,6 +38,7 @@ export type AgentProposalSummary = {
   readonly targetRef: string;
   readonly baseCommitId: WorkbookCommitId;
   readonly targetHeadIdAtCreation: string;
+  readonly targetRefVersionAtCreation?: RefVersion;
   readonly proposalBranchName: string;
   readonly proposalCommitId?: WorkbookCommitId;
   readonly status: AgentProposalStatus;
@@ -69,6 +71,7 @@ export type CreateAgentProposalStoreInput = {
   readonly targetRef: string;
   readonly baseCommitId: WorkbookCommitId;
   readonly targetHeadIdAtCreation: string;
+  readonly targetRefVersionAtCreation: RefVersion;
   readonly proposalBranchName: string;
   readonly redactionPolicy: RedactionPolicy;
   readonly trustedIdentity: AgentProposalTrustedIdentity;

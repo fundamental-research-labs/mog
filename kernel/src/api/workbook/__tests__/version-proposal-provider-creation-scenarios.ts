@@ -6,6 +6,7 @@ import {
   versionForProvider,
 } from './version-proposal-provider-fixtures';
 import { commitMain, graphWithRoot } from './version-proposal-provider-graph-fixtures';
+import { graphCommittingWorkspaceService } from './version-proposal-provider-workspace-fixtures';
 
 export function registerProposalProviderCreationScenarios(): void {
   it('auto-attaches provider-backed proposal metadata without advertising workspace lifecycle', async () => {
@@ -21,6 +22,7 @@ export function registerProposalProviderCreationScenarios(): void {
         targetRef: 'refs/heads/main',
         baseCommitId: graph.rootCommitId,
         targetHeadIdAtCreation: graph.rootCommitId,
+        targetRefRevisionAtCreation: { kind: 'counter', value: '0' },
         proposalBranchName: expect.stringMatching(/^agent\/agent-run-1\//),
       },
     });
@@ -97,6 +99,49 @@ export function registerProposalProviderCreationScenarios(): void {
         status: 'success',
         ref: { commitId: movedMainCommitId },
       },
+    });
+  });
+
+  it('rejects workspace start after the proposal target advances', async () => {
+    const graph = await graphWithRoot();
+    const version = versionForProvider(graph.provider, {
+      proposalWorkspaceService: graphCommittingWorkspaceService(graph.provider),
+    });
+    const created = await version.createProposal(
+      createProposalInput('proposal-create-before-target-move'),
+    );
+    if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
+    const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
+
+    await expect(
+      version.startProposalWorkspace({
+        clientRequestId: 'workspace-open-after-target-move',
+        proposalId: created.value.id,
+        expectedRevision: 1,
+        expectedTargetHeadId: created.value.targetHeadIdAtCreation,
+        expectedTargetRefRevision: created.value.targetRefRevisionAtCreation,
+        actor: ACTOR,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.startProposalWorkspace',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'stale_proposal_target_head',
+            data: expect.objectContaining({
+              proposalId: created.value.id,
+              expectedTargetHeadId: graph.rootCommitId,
+              actualTargetHeadId: movedMainCommitId,
+            }),
+          }),
+        ],
+      },
+    });
+    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+      ok: true,
+      value: { status: 'draft', revision: 1 },
     });
   });
 }

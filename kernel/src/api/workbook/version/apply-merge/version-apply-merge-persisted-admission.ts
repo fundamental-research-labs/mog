@@ -13,7 +13,7 @@ import {
   intentIdForMergeResultId,
   type MergeApplyIntentRecord,
 } from '../../../../document/version-store/merge-apply-intent-store';
-import { mapPublicApplyTargetRef } from './version-apply-merge-target-ref';
+import { mapPublicApplyTargetRef } from './target-ref/version-apply-merge-target-ref';
 import { mapPublicExpectedTargetHead, mapPublicObjectDigest } from '../../version-attempt-metadata';
 import {
   invalidApplyMergeOptionDiagnostic,

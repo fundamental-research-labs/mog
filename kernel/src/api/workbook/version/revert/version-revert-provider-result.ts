@@ -61,7 +61,10 @@ export function mapRevertProviderResult(
     ? mapProviderDiagnostics(value.diagnostics, input)
     : [];
   const mutationGuarantee = toRevertMutationGuarantee(value.mutationGuarantee, status, options);
-  const commitRef = mapWorkbookCommitRef(value.commitRef ?? value.commit);
+  const commitRef = withInputTargetRef(
+    mapWorkbookCommitRef(value.commitRef ?? value.commit),
+    input,
+  );
   const reviewInvalidationIds = mapOptionalStringArray(value.reviewInvalidationIds);
 
   if (
@@ -140,6 +143,22 @@ function mapWorkbookCommitRef(value: unknown): WorkbookCommitRef | null {
     ...(refName ? { refName } : {}),
     ...(resolvedFrom ? { resolvedFrom } : {}),
     ...(refRevision ? { refRevision } : {}),
+  };
+}
+
+function withInputTargetRef(
+  commitRef: WorkbookCommitRef | null,
+  input: VersionRevertInput,
+): WorkbookCommitRef | null {
+  if (!commitRef) return null;
+  const targetRef = mapPublicTargetRef(input.targetRef);
+  if (!targetRef) return commitRef;
+  if (commitRef.refName && commitRef.refName !== targetRef) return commitRef;
+
+  return {
+    ...commitRef,
+    refName: commitRef.refName ?? targetRef,
+    resolvedFrom: commitRef.resolvedFrom ?? targetRef,
   };
 }
 

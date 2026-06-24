@@ -83,7 +83,7 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
       value: {
         status: 'stale',
         revision: 6,
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'stale_head',
             severity: 'warning',
@@ -92,7 +92,15 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
               actualTargetHeadId: movedMainCommitId,
             }),
           }),
-        ],
+          expect.objectContaining({
+            code: 'stale_proposal_target_ref_revision',
+            severity: 'warning',
+            data: expect.objectContaining({
+              expectedTargetHeadId: graph.rootCommitId,
+              actualTargetHeadId: movedMainCommitId,
+            }),
+          }),
+        ]),
       },
     });
     await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({

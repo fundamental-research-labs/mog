@@ -50,6 +50,7 @@ export function createProposalFingerprint(input: CreateAgentProposalStoreInput):
     targetRef: input.targetRef,
     baseCommitId: input.baseCommitId,
     targetHeadIdAtCreation: input.targetHeadIdAtCreation,
+    targetRefVersionAtCreation: input.targetRefVersionAtCreation,
     proposalBranchName: input.proposalBranchName,
     redactionPolicy: input.redactionPolicy,
     trustedIdentity: input.trustedIdentity,

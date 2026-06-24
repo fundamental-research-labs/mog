@@ -1,4 +1,4 @@
-import { parseCellAddress } from '../../../internal/utils';
+import { parseCellAddress } from '../../../../internal/utils';
 import type { RowColumnAxis } from './version-merge-materialization-plan-types';
 
 export type ParsedCellEntity = {

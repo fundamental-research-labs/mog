@@ -5,14 +5,14 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import type { DocumentContext } from '../../../../context';
+import type { DocumentContext } from '../../../../../context';
 import {
   VERSION_GRAPH_HEAD_REF,
   type VersionGraphRef,
   type VersionGraphSymbolicRef,
-} from '../../../../document/version-store/graph';
-import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
-import { namespaceForRegistry } from '../../../../document/version-store/registry';
+} from '../../../../../document/version-store/graph';
+import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
+import { namespaceForRegistry } from '../../../../../document/version-store/registry';
 import {
   mapProviderDiagnostics,
   missingRefRevisionDiagnostic,
@@ -68,6 +68,22 @@ export async function validateApplyMergeTargetRefCasProof(
       namespaceForRegistry(registry.registry),
       provider.accessContext,
     );
+    return validateApplyMergeTargetRefCasProofForGraph(graph, input);
+  } catch {
+    return { ok: false, kind: 'blocked', diagnostics: [providerErrorDiagnostic()] };
+  }
+}
+
+export async function validateApplyMergeTargetRefCasProofForGraph(
+  graph: VersionGraphStore,
+  input: ApplyMergeTargetRefCasValidationInput,
+): Promise<ApplyMergeTargetRefCasValidationResult> {
+  try {
+    const expectedRevisionDiagnostics = expectedTargetHeadRevisionDiagnostics(input);
+    if (expectedRevisionDiagnostics.length > 0) {
+      return { ok: false, kind: 'blocked', diagnostics: expectedRevisionDiagnostics };
+    }
+
     const target = await readTargetRef(graph, input.targetRef);
     if (!target.ok) return { ok: false, kind: 'blocked', diagnostics: target.diagnostics };
 

@@ -1,15 +1,15 @@
-import type { VersionGraphBranchRefName } from './graph';
-import { isObjectDigest, type WorkbookCommitId } from './object-digest';
-import type { VersionGraphNamespace } from './object-store';
-import { versionStoreDiagnostic, type VersionGraphStore } from './provider';
-import type { VersionRecordRevision } from './registry';
+import type { VersionGraphBranchRefName } from '../graph';
+import { isObjectDigest, type WorkbookCommitId } from '../object-digest';
+import type { VersionGraphNamespace } from '../object-store';
+import { versionStoreDiagnostic, type VersionGraphStore } from '../provider';
+import type { VersionRecordRevision } from '../registry';
 import {
   XLSX_EXTERNAL_CHANGE_BRANCH_PREFIX,
   XLSX_IMPORT_CHANGE_AUTHOR,
   XLSX_IMPORT_NEW_ROOT_BRANCH_PREFIX,
   XLSX_IMPORT_ROOT_AUTHOR,
-} from './xlsx-import-root-constants';
-import type { XlsxVersionExistingGraphImportResult } from './xlsx-import-root-results';
+} from './constants';
+import type { XlsxVersionExistingGraphImportResult } from './results';
 
 type XlsxImportRootBranchReadResult =
   | {

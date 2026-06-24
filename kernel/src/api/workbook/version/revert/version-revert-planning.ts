@@ -1,6 +1,8 @@
 import type {
+  VersionCommitExpectedHead,
   VersionRecordRevision,
   VersionRevertInput,
+  VersionRevertOptions,
   VersionStoreDiagnostic,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -16,6 +18,7 @@ import { providerErrorDiagnostic } from './version-revert-provider';
 import {
   invalidOptionDiagnostic,
   revertDiagnostic,
+  VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE,
   VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
 } from './version-revert-diagnostics';
 
@@ -43,6 +46,59 @@ type AttachedVersionServices = {
 export type RevertTargetRefCasResult =
   | { readonly ok: true; readonly checked: boolean }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+export type RevertTargetRefPreconditionResult =
+  | { readonly ok: true; readonly input: VersionRevertInput }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
+
+export async function prepareRevertTargetRefPreconditions(
+  ctx: DocumentContext,
+  input: VersionRevertInput,
+  options: VersionRevertOptions,
+): Promise<RevertTargetRefPreconditionResult> {
+  if (!input.targetRef) return { ok: true, input };
+
+  const targetRef = mapPublicTargetRef(input.targetRef);
+  if (!targetRef) {
+    return {
+      ok: false,
+      diagnostics: [
+        invalidOptionDiagnostic('targetRef', 'targetRef must name a public-safe version branch.'),
+      ],
+    };
+  }
+
+  const normalizedInput = input.targetRef === targetRef ? input : { ...input, targetRef };
+  if (normalizedInput.expectedTargetHead || options.dryRun === true) {
+    return { ok: true, input: normalizedInput };
+  }
+
+  const readService = getAttachedReadRefService(ctx);
+  if (!readService) {
+    return {
+      ok: false,
+      diagnostics: [targetRefCasUnavailableDiagnostic(targetRef)],
+    };
+  }
+
+  try {
+    const read = await readService.readRef(targetRef);
+    const current = mapReadRefResult(read);
+    if (!current) {
+      return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+    }
+
+    return {
+      ok: true,
+      input: {
+        ...normalizedInput,
+        expectedTargetHead: expectedHeadFromReadRef(current),
+      },
+    };
+  } catch {
+    return { ok: false, diagnostics: [providerErrorDiagnostic()] };
+  }
+}
 
 export async function validateRevertTargetRefCas(
   ctx: DocumentContext,
@@ -107,6 +163,30 @@ export async function validateRevertTargetRefCas(
   } catch {
     return { ok: false, diagnostics: [providerErrorDiagnostic()] };
   }
+}
+
+function expectedHeadFromReadRef(input: {
+  readonly commitId: WorkbookCommitId;
+  readonly revision: VersionRecordRevision;
+}): VersionCommitExpectedHead {
+  return {
+    commitId: input.commitId,
+    revision: input.revision,
+  };
+}
+
+function targetRefCasUnavailableDiagnostic(targetRef: string): VersionStoreDiagnostic {
+  return revertDiagnostic(
+    VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE,
+    'Version-control revert is rejected because required CAS preconditions cannot be proven.',
+    {
+      refName: targetRef,
+      reason: 'target-ref-cas',
+      expectedHeadProvided: false,
+    },
+    'retry',
+    'no-write-attempted',
+  );
 }
 
 function getAttachedReadRefService(ctx: DocumentContext): AttachedVersionReadRefService | null {

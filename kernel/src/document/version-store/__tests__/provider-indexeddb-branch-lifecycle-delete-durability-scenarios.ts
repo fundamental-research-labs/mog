@@ -45,6 +45,9 @@ export function registerIndexedDbBranchLifecycleDeleteDurabilityScenarios(): voi
         },
       },
     });
+    if (!deleted.ok) throw new Error('expected branch delete success');
+    await provider.close('test-teardown');
+
     const reloaded = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const reloadedBranchService = createProviderBackedBranchLifecycleService({
       provider: reloaded,
@@ -57,10 +60,44 @@ export function registerIndexedDbBranchLifecycleDeleteDurabilityScenarios(): voi
     expect(list.ok).toBe(true);
     if (!list.ok) throw new Error('expected branch list success');
     expect(list.branches.map((branch) => branch.name)).not.toContain('scenario/idb-delete');
+    const recreated = await reloadedBranchService.createBranch({
+      name: 'scenario/idb-delete',
+      targetCommitId: initialized.rootCommit.id,
+      expectedAbsent: true,
+      createdBy: AUTHOR,
+    });
+    expect(recreated.ok).toBe(false);
+    if (recreated.ok) throw new Error('expected reloaded tombstone create to fail');
+    expect(recreated).toMatchObject({
+      error: { code: 'refTombstoned' },
+      conflict: {
+        code: 'refTombstoned',
+        tombstoneRefVersion: deleted.branch.ref.refVersion,
+        previousRefIncarnationId: created.branch.ref.refIncarnationId,
+      },
+      diagnostics: [
+        expect.objectContaining({
+          code: 'refTombstoned',
+          refName: 'scenario/idb-delete',
+          commitId: initialized.rootCommit.id,
+          refVersion: deleted.branch.ref.refVersion,
+          tombstoneRefVersion: deleted.branch.ref.refVersion,
+          previousRefIncarnationId: created.branch.ref.refIncarnationId,
+        }),
+      ],
+    });
     const row = await readRefRecord(
       namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-branch-delete'),
       'scenario/idb-delete',
     );
-    expect(asRecord(row.record).state).toBe('tombstone');
+    expect(asRecord(row.record)).toMatchObject({
+      state: 'tombstone',
+      previousTargetCommitId: initialized.rootCommit.id,
+      previousProviderRefId: created.branch.ref.providerRefId,
+      previousProviderEpoch: created.branch.ref.providerEpoch,
+      previousRefIncarnationId: created.branch.ref.refIncarnationId,
+      refVersion: deleted.branch.ref.refVersion,
+    });
+    await reloaded.close('test-teardown');
   });
 }

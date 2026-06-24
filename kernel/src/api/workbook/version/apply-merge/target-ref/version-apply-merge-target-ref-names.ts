@@ -1,6 +1,6 @@
 import type { VersionMainRefName, VersionRefName } from '@mog-sdk/contracts/api';
 
-import { validateRefName } from '../../../../document/version-store/refs/ref-name';
+import { validateRefName } from '../../../../../document/version-store/refs/ref-name';
 
 export const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
 export const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';

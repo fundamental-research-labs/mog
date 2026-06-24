@@ -257,14 +257,20 @@ function MergeConflictResolutions({
             {conflictLabel(conflict, index)}
           </legend>
           <div className="flex flex-col gap-1">
-            {conflict.resolutionOptions.map((option) => (
-              <MergeConflictResolutionOptionRow
-                key={option.optionId}
-                option={option}
-                checked={selections[conflict.conflictId] === option.optionId}
-                onChange={() => onResolutionChange(conflict.conflictId, option.optionId)}
-              />
-            ))}
+            {conflict.resolutionOptions.length === 0 ? (
+              <p className="m-0 text-[11px] text-ss-warning">
+                {conflictResolutionUnavailableMessage(conflict)}
+              </p>
+            ) : (
+              conflict.resolutionOptions.map((option) => (
+                <MergeConflictResolutionOptionRow
+                  key={option.optionId}
+                  option={option}
+                  checked={selections[conflict.conflictId] === option.optionId}
+                  onChange={() => onResolutionChange(conflict.conflictId, option.optionId)}
+                />
+              ))
+            )}
           </div>
         </fieldset>
       ))}
@@ -373,6 +379,18 @@ function resolutionOptionLabel(kind: VersionMergeConflictResolutionOption['kind'
   if (kind === 'acceptOurs') return 'Ours';
   if (kind === 'acceptTheirs') return 'Source';
   return 'Base';
+}
+
+function conflictResolutionUnavailableMessage(conflict: VersionMergeConflict): string {
+  const diagnosticMessage = conflict.diagnostics?.find(
+    (diagnostic) => diagnostic.safeMessage.trim().length > 0,
+  )?.safeMessage;
+  return (
+    sanitizeVersionStatusText(
+      diagnosticMessage,
+      'No selectable resolution is available for this conflict.',
+    ) ?? 'No selectable resolution is available for this conflict.'
+  );
 }
 
 function formatDiffValue(value: VersionDiffValue): string {

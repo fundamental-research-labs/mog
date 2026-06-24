@@ -121,15 +121,20 @@ pub(super) fn build_render_cell_materials(
 
                 match render {
                     crate::projection::CellRender::Projection(proj) => {
-                        // Format inheritance: anchor-keyed cell format as the
-                        // CellId-cascade base, then positional cascade at
-                        // (row, col) layered on top by `get_effective_format`.
+                        // Imported array/projection members can have concrete
+                        // worksheet cells with their own XFs. Use that member
+                        // identity when present; purely generated spill cells
+                        // fall back to the formula anchor's format.
                         let anchor_id_hex = id_to_hex(proj.anchor_id.as_u128());
+                        let format_cell_id_hex = grid
+                            .cell_id_at(eff_row, eff_col)
+                            .map(|cell_id| id_to_hex(cell_id.as_u128()))
+                            .unwrap_or_else(|| anchor_id_hex.clone());
                         let table_fmt = resolve_table_format(sheet_id, row, col);
                         let mut effective = properties::get_effective_format(
                             &stores.storage,
                             sheet_id,
-                            &anchor_id_hex,
+                            &format_cell_id_hex,
                             row,
                             col,
                             table_fmt.as_ref(),

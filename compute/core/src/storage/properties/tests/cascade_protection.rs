@@ -372,6 +372,7 @@ fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
         &sid,
         2,
         &CellFormat {
+            number_format: Some("0.00".to_string()),
             horizontal_align: Some(ooxml_types::styles::HorizontalAlign::Center),
             vertical_align: Some(domain_types::CellVerticalAlign::Middle),
             wrap_text: Some(true),
@@ -389,6 +390,7 @@ fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
     let eff = get_effective_format(&storage, &sid, "imported-cell", 3, 2, None, Some(&gi), None);
 
     assert_eq!(eff.bold, Some(true));
+    assert_eq!(eff.number_format.as_deref(), Some("General"));
     assert_eq!(
         eff.horizontal_align,
         Some(ooxml_types::styles::HorizontalAlign::General)

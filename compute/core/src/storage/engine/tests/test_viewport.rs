@@ -2,10 +2,11 @@
 
 use super::super::*;
 use super::helpers::*;
-use crate::snapshot::SheetSnapshot;
+use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 use compute_pivot::types::{
     FieldId, PivotGrandTotals, PivotHeader, PivotRenderedBounds, PivotRow, PivotTableResult,
 };
+use domain_types::CellFormat;
 use value_types::CellValue;
 
 // -------------------------------------------------------------------
@@ -265,4 +266,85 @@ fn test_viewport_binary_renders_materialized_values_without_cell_ids() {
     assert_eq!(cell(1, 5).formatted.as_deref(), Some("250"));
     assert_eq!(cell(2, 4).formatted.as_deref(), Some("Grand Total"));
     assert_eq!(cell(2, 5).formatted.as_deref(), Some("250"));
+}
+
+#[test]
+fn projection_member_viewport_format_prefers_allocated_member_cell_style() {
+    let sid = sheet_id();
+    let snap = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: sid.to_uuid_string(),
+            name: "Sheet1".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                CellData {
+                    cell_id: cell_id_a1().to_uuid_string(),
+                    row: 0,
+                    col: 0,
+                    value: CellValue::Null,
+                    formula: Some("=SEQUENCE(3,1)".to_string()),
+                    identity_formula: None,
+                    array_ref: Some("A1:A3".to_string()),
+                },
+                CellData {
+                    cell_id: cell_id_a2().to_uuid_string(),
+                    row: 1,
+                    col: 0,
+                    value: num(0.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![],
+        tables: vec![],
+        pivot_tables: vec![],
+        data_table_regions: vec![],
+        iterative_calc: false,
+        max_iterations: 100,
+        max_change: value_types::FiniteF64::must(0.001),
+        calculation_settings: None,
+    };
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(0, 0, 0, 0)],
+            &CellFormat {
+                number_format: Some("$#,##0.00".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    engine
+        .set_format_for_ranges(
+            &sid,
+            &[(1, 0, 1, 0)],
+            &CellFormat {
+                number_format: Some("0%".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+    let viewport = engine.build_viewport_render_data(&sid, 0, 0, 3, 1);
+    let cell =
+        |row: usize, col: usize| &viewport.cells[row * viewport.viewport_cols as usize + col];
+    let number_format = |row: usize, col: usize| {
+        let format_idx = cell(row, col).format_idx as usize;
+        viewport.format_palette[format_idx].number_format.as_deref()
+    };
+
+    assert_eq!(cell(0, 0).formatted.as_deref(), Some("$1.00"));
+    assert_eq!(number_format(0, 0), Some("$#,##0.00"));
+
+    assert_eq!(cell(1, 0).formatted.as_deref(), Some("200%"));
+    assert_eq!(number_format(1, 0), Some("0%"));
+
+    assert_eq!(cell(2, 0).formatted.as_deref(), Some("$3.00"));
+    assert_eq!(number_format(2, 0), Some("$#,##0.00"));
 }

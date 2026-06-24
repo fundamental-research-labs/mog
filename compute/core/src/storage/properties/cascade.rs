@@ -157,12 +157,15 @@ fn materialize_cell_layer_format(cell_properties: Option<&CellProperties>) -> Ce
 
     let mut format = props.format.clone().unwrap_or_default();
     if props.style_id.is_some() {
-        materialize_imported_cell_xf_alignment_defaults(&mut format);
+        materialize_imported_cell_xf_defaults(&mut format);
     }
     format
 }
 
-fn materialize_imported_cell_xf_alignment_defaults(format: &mut CellFormat) {
+fn materialize_imported_cell_xf_defaults(format: &mut CellFormat) {
+    format
+        .number_format
+        .get_or_insert_with(|| "General".to_string());
     format
         .horizontal_align
         .get_or_insert(HorizontalAlign::General);

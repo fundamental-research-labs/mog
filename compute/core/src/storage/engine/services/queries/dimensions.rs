@@ -102,15 +102,17 @@ pub(in crate::storage::engine) fn get_data_bounds(
         }
     }
 
-    // 2. Expand bounds with sheet extent (includes materialized values: pivot output, spill arrays).
-    //    expand_extent() is called when writing to col_data, so sheet.rows/cols reflects the
-    //    farthest materialized cell even though those cells have no CellId.
-    if !sheet.col_data_is_empty() && sheet.rows > 0 && sheet.cols > 0 {
+    // 2. Expand bounds with non-null dense content (materialized values: pivot output,
+    //    spill arrays, range payloads). Dense storage may retain null padding after
+    //    clears, so raw sheet extents are not content bounds.
+    if let Some((dense_min_row, dense_min_col, dense_max_row, dense_max_col)) =
+        sheet.dense_content_bounds()
+    {
         found = true;
-        min_row = 0;
-        max_row = max_row.max(sheet.rows - 1);
-        min_col = 0;
-        max_col = max_col.max(sheet.cols - 1);
+        min_row = min_row.min(dense_min_row);
+        max_row = max_row.max(dense_max_row);
+        min_col = min_col.min(dense_min_col);
+        max_col = max_col.max(dense_max_col);
     }
 
     // 3. Expand bounds with format-only cells from CRDT properties.

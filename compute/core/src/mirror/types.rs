@@ -426,6 +426,36 @@ impl SheetMirror {
         self.col_data.is_empty()
     }
 
+    /// Bounds of non-null values in column-major dense storage.
+    ///
+    /// `col_data` is allowed to contain null padding and null-only columns after
+    /// clears, projection invalidation, and structural edits. Those storage
+    /// slots are not user-visible content and must not expand used-range
+    /// queries.
+    pub(crate) fn dense_content_bounds(&self) -> Option<(u32, u32, u32, u32)> {
+        let mut min_row = u32::MAX;
+        let mut max_row = 0u32;
+        let mut min_col = u32::MAX;
+        let mut max_col = 0u32;
+        let mut found = false;
+
+        for (&col, values) in &self.col_data {
+            for (row, value) in values.iter().enumerate() {
+                if value.is_null() {
+                    continue;
+                }
+                let row = row as u32;
+                found = true;
+                min_row = min_row.min(row);
+                max_row = max_row.max(row);
+                min_col = min_col.min(col);
+                max_col = max_col.max(col);
+            }
+        }
+
+        found.then_some((min_row, min_col, max_row, max_col))
+    }
+
     /// Number of cells in this sheet.
     pub fn cell_count(&self) -> usize {
         self.cells.len()

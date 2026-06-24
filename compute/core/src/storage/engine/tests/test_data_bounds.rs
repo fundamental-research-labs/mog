@@ -119,6 +119,40 @@ fn absent_far_clear_does_not_grow_empty_sheet() {
     );
 }
 
+#[test]
+fn clearing_far_written_footprint_shrinks_bounds_to_empty() {
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(empty_snapshot()).unwrap();
+    let sid = test_sheet_id();
+
+    engine
+        .set_cell_value_parsed(&sid, 0, 0, "anchor")
+        .expect("write A1");
+    engine
+        .set_cell_value_parsed(&sid, 0, 2, "=ZZ2")
+        .expect("write C1 formula");
+    engine
+        .set_cell_value_parsed(&sid, 0, 2, "formula overwritten")
+        .expect("overwrite C1 formula");
+    engine
+        .set_cell_value_parsed(&sid, 20, 701, "temporary far value")
+        .expect("write ZZ21");
+
+    let bounds = engine.get_data_bounds(&sid).expect("bounds before clear");
+    assert_eq!(bounds.min_row, 0);
+    assert_eq!(bounds.min_col, 0);
+    assert_eq!(bounds.max_row, 20);
+    assert_eq!(bounds.max_col, 701);
+
+    engine
+        .clear_range_by_position(sid, 0, 0, 20, 701)
+        .expect("clear used footprint");
+
+    assert!(
+        engine.get_data_bounds(&sid).is_none(),
+        "cleared null-only dense storage must not keep stale used bounds",
+    );
+}
+
 // -------------------------------------------------------------------
 // Test 2: Originator vs apply-via-update symmetry.
 // -------------------------------------------------------------------

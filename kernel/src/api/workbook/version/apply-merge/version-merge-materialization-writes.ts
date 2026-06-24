@@ -3,6 +3,7 @@ import type { VersionAuthor, VersionOperationContext } from '@mog-sdk/contracts/
 
 import type { DocumentContext } from '../../../../context';
 import type { VersionMergeCommitCaptureInput } from '../../../../document/version-store/commit-service';
+import * as SheetOps from '../../../workbook/operations/sheet-crud-operations';
 import * as CellOps from '../../../worksheet/operations/cell-operations';
 import * as FormatOps from '../../../worksheet/operations/format-operations';
 import type {
@@ -37,6 +38,14 @@ export async function applyMergeChanges(
     if (change.kind === 'rowColumnOrder') continue;
     const operationContext = mergeOperationContext(input, change, createdAt);
     const sheet = toSheetId(change.sheetId);
+    if (change.kind === 'sheetMetadata') {
+      if (change.merged.property === 'name') {
+        await SheetOps.renameSheet(ctx, sheet, change.merged.value, { operationContext });
+        continue;
+      }
+      await ctx.computeBridge.setTabColor(sheet, change.merged.value, { operationContext });
+      continue;
+    }
     if (change.kind === 'directCellFormat') {
       if (change.merged.kind === 'clear') {
         const result = await FormatOps.clearFormat(ctx, sheet, change.row, change.col, {
@@ -101,7 +110,7 @@ export function mergeMutationSegmentPayload(
     materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
     changeIds: changes.map((change) => change.structural.changeId),
     directEdits: changes.flatMap((change) =>
-      change.kind === 'rowColumnOrder'
+      change.kind === 'rowColumnOrder' || change.kind === 'sheetMetadata'
         ? []
         : [
             {
@@ -120,6 +129,17 @@ export function mergeMutationSegmentPayload(
               axis: change.axis,
               index: change.index,
               action: change.transition.kind,
+            },
+          ]
+        : [],
+    ),
+    sheetEdits: changes.flatMap((change) =>
+      change.kind === 'sheetMetadata'
+        ? [
+            {
+              sheetId: change.sheetId,
+              property: change.merged.property,
+              value: change.merged.value,
             },
           ]
         : [],

@@ -6,6 +6,8 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS = new Set([
   'cells.formulas',
   'cells.formats.direct',
   'rows-columns',
+  'sheet',
+  'sheets',
 ]);
 export const DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND = 'semantic-cell-merge-commit-materializer.v1';
 const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
@@ -14,9 +16,9 @@ const MATERIALIZABLE_MERGE_DOMAIN_IDS_BY_MATRIX_ROW_ID = new Map([
   ['cells.formulas', new Set(['cell', 'cells.values', 'cells.formulas'])],
   ['cells.formats.direct', new Set(['cells.formats', 'cells.formats.direct'])],
   ['rows-columns', new Set(['rows-columns'])],
+  ['sheets', new Set(['sheet', 'sheets'])],
 ]);
 const UNSUPPORTED_STRUCTURAL_MERGE_MATRIX_ROW_IDS = new Set([
-  'sheets',
   'tables',
   'filters.auto-filter',
   'charts.source-range',
@@ -36,8 +38,6 @@ const UNSUPPORTED_STRUCTURAL_MERGE_DOMAIN_IDS = new Set([
   'floating-objects.anchors',
   'row',
   'rows',
-  'sheet',
-  'sheets',
   'table',
   'tables',
 ]);

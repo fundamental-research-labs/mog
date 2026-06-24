@@ -8,6 +8,7 @@ export {
   cleanMergeResult,
   formulaChange,
   rowColumnChange,
+  sheetMetadataChange,
 } from './version-apply-merge-format-test-utils-changes';
 export {
   expectCommit,

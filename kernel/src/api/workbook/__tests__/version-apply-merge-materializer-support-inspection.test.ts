@@ -2,7 +2,11 @@ import {
   inspectMaterializableMergeChange,
   isMaterializableMergeDomainReference,
 } from '../version/merge/version-merge-materializer-support';
-import { rowColumnChange } from './version-apply-merge-materializer-support-test-utils';
+import {
+  rowColumnChange,
+  sheetNameChange,
+  sheetTabColorChange,
+} from './version-apply-merge-materializer-support-test-utils';
 
 describe('WorkbookVersion applyMerge materializer support inspection', () => {
   it.each([
@@ -21,6 +25,14 @@ describe('WorkbookVersion applyMerge materializer support inspection', () => {
     {
       label: 'column delete',
       change: rowColumnChange('merge-column-delete', 'column', 2, 'delete'),
+    },
+    {
+      label: 'sheet rename',
+      change: sheetNameChange(),
+    },
+    {
+      label: 'sheet tab color',
+      change: sheetTabColorChange(),
     },
   ])('accepts first-slice rows-columns $label merge changes', ({ change }) => {
     expect(inspectMaterializableMergeChange(change)).toEqual({ ok: true });
@@ -51,6 +63,18 @@ describe('WorkbookVersion applyMerge materializer support inspection', () => {
         domainId: 'sheets',
       }),
     ).toBe(false);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'sheets',
+        domainId: 'sheet',
+      }),
+    ).toBe(true);
+    expect(
+      isMaterializableMergeDomainReference({
+        matrixRowId: 'sheets',
+        domainId: 'sheets',
+      }),
+    ).toBe(true);
     expect(
       isMaterializableMergeDomainReference({
         matrixRowId: 'cells.formats.direct',

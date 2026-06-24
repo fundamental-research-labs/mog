@@ -11,7 +11,7 @@ import {
   OURS,
   TARGET_REF,
   THEIRS,
-  sheetNameNoopChange,
+  sheetLifecycleNoopChange,
 } from './version-apply-merge-materializer-support-test-utils';
 
 describe('WorkbookVersion applyMerge materializer support boundary diagnostics', () => {
@@ -33,7 +33,7 @@ describe('WorkbookVersion applyMerge materializer support boundary diagnostics',
       theirs: THEIRS,
       targetRef: TARGET_REF as any,
       expectedTargetHead: EXPECTED_TARGET_HEAD,
-      changes: [sheetNameNoopChange()],
+      changes: [sheetLifecycleNoopChange()],
       resolutionCount: 0,
     });
 
@@ -48,8 +48,8 @@ describe('WorkbookVersion applyMerge materializer support boundary diagnostics',
             materializer: DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
             structuralKind: 'metadata',
             domain: 'sheet',
-            propertyPath: 'name',
-            reason: 'unsupportedStructuralDomain',
+            propertyPath: 'sheet',
+            reason: 'unsupportedStructuralMetadata',
             noop: true,
           }),
         }),

@@ -1,18 +1,24 @@
 import type { VersionMergeCommitCaptureInput } from '../../../../document/version-store/commit-service';
 import type { VersionStoreFailure } from '../../../../document/version-store/provider';
 import { unsupportedMergeChange } from './version-merge-materialization-plan-diagnostics';
-import { parseCellEntity, parseRowColumnEntity } from './version-merge-materialization-plan-entities';
+import {
+  parseCellEntity,
+  parseRowColumnEntity,
+  parseSheetEntity,
+} from './version-merge-materialization-plan-entities';
 import { compareParsedMergeChanges } from './version-merge-materialization-plan-ordering';
 import {
   parseCellStructural,
   parseDirectFormatStructural,
   parseRowColumnStructural,
+  parseSheetMetadataStructural,
 } from './version-merge-materialization-plan-structural';
 import type { ParsedMergeChange } from './version-merge-materialization-plan-types';
 import {
   parseCellMergeValue,
   parseDirectFormatMergeValue,
   parseRowColumnTransition,
+  parseSheetMetadataMergeValue,
 } from './version-merge-materialization-plan-values';
 import { inspectMaterializableMergeChange } from '../merge/version-merge-materializer-support';
 
@@ -21,6 +27,7 @@ export type {
   ParsedDirectFormatMergeChange,
   ParsedMergeChange,
   ParsedRowColumnMergeChange,
+  ParsedSheetMetadataMergeChange,
   RowColumnAxis,
   RowColumnTransition,
 } from './version-merge-materialization-plan-types';
@@ -47,7 +54,8 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
     const structural =
       parseCellStructural(change.structural) ??
       parseDirectFormatStructural(change.structural) ??
-      parseRowColumnStructural(change.structural);
+      parseRowColumnStructural(change.structural) ??
+      parseSheetMetadataStructural(change.structural);
     if (!structural) {
       return unsupportedMergeChange(input, index, change.structural);
     }
@@ -99,6 +107,31 @@ export function parseMergeChanges(input: VersionMergeCommitCaptureInput):
         axis: target.axis,
         index: target.index,
         transition,
+      });
+      continue;
+    }
+    if (structural.domain === 'sheet' || structural.domain === 'sheets') {
+      const sheetId = parseSheetEntity(structural.entityId);
+      if (!sheetId) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedEntityId',
+        });
+      }
+      const property = structural.propertyPath[0] as 'name' | 'tabColor';
+      const merged = parseSheetMetadataMergeValue(change.merged, property);
+      if (!merged) {
+        return unsupportedMergeChange(input, index, structural, {
+          reason: 'unsupportedMergedValue',
+        });
+      }
+      parsed.push({
+        kind: 'sheetMetadata',
+        itemIndex: index,
+        change,
+        structural,
+        sheetId,
+        property,
+        merged,
       });
       continue;
     }

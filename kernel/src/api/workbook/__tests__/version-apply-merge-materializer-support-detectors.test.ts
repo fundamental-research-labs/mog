@@ -17,11 +17,11 @@ import {
 describe('WorkbookVersion applyMerge materializer support detector rows', () => {
   it.each([
     {
-      label: 'registry sheet row',
-      matrixRowId: 'sheets',
-      domainId: 'sheets',
-      expectedMatrixRowId: 'sheets',
-      expectedDomain: 'sheets',
+      label: 'unsupported workbook metadata row',
+      matrixRowId: 'workbook-metadata',
+      domainId: 'workbook-metadata',
+      expectedMatrixRowId: 'workbook-metadata',
+      expectedDomain: 'workbook-metadata',
     },
     {
       label: 'unsupported view-state row',

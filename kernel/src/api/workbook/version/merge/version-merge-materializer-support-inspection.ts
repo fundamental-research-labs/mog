@@ -14,6 +14,8 @@ import {
   parseMaterializableStructural,
   parseRowColumnEntity,
   parseRowColumnMergeValue,
+  parseSheetEntity,
+  parseSheetMetadataMergeValue,
 } from './version-merge-materializer-support-values';
 
 export function inspectMaterializableMergeChange(
@@ -51,6 +53,18 @@ export function inspectMaterializableMergeChange(
       }
     }
     return { ok: true };
+  }
+  if (structural.domain === 'sheet' || structural.domain === 'sheets') {
+    if (!parseSheetEntity(structural.entityId)) {
+      return unsupported(structural, 'unsupportedEntityId');
+    }
+    const property = structural.propertyPath[0];
+    if (property !== 'name' && property !== 'tabColor') {
+      return unsupported(structural, 'unsupportedPropertyPath');
+    }
+    return parseSheetMetadataMergeValue(change.merged, property)
+      ? { ok: true }
+      : unsupported(structural, 'unsupportedMergedValue');
   }
   if (!parseCellEntity(structural.entityId)) {
     return unsupported(structural, 'unsupportedEntityId');

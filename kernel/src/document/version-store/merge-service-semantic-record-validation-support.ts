@@ -23,6 +23,8 @@ const SUPPORTED_SEMANTIC_MERGE_DOMAINS = new Set([
   'cells.formulas',
   'cells.formats.direct',
   'rows-columns',
+  'sheet',
+  'sheets',
 ]);
 
 export function stableMergePairStructural(
@@ -41,6 +43,9 @@ export function stableMergePairStructural(
   }
   if (left.domain === 'rows-columns' && right.domain === 'rows-columns') {
     return { ...left, domain: 'rows-columns', propertyPath: ['order'] };
+  }
+  if (isSheetMetadataMergeDomain(left.domain) && isSheetMetadataMergeDomain(right.domain)) {
+    return { ...left, domain: 'sheet' };
   }
   if (left.domain === 'cells.formats.direct' && right.domain === 'cells.formats.direct') {
     return { ...left, domain: 'cells.formats.direct', propertyPath: ['format'] };
@@ -92,6 +97,22 @@ export function inspectSupportedSemanticValueChange(
       : { ok: false, reason: 'unsupportedRowsColumnsTransition' };
   }
 
+  if (isSheetMetadataMergeDomain(structural.domain)) {
+    if (!hasMaterializableSheetEntity(structural.entityId)) {
+      return { ok: false, reason: 'unsupportedEntityId' };
+    }
+    if (
+      structural.propertyPath.length !== 1 ||
+      (structural.propertyPath[0] !== 'name' && structural.propertyPath[0] !== 'tabColor')
+    ) {
+      return { ok: false, reason: 'unsupportedPropertyPath' };
+    }
+    const property = structural.propertyPath[0];
+    return isSupportedSheetMetadataDiffValue(after, property)
+      ? { ok: true }
+      : { ok: false, reason: 'unsupportedSheetMetadataValue' };
+  }
+
   if (!hasMaterializableCellEntity(structural.entityId)) {
     return { ok: false, reason: 'unsupportedEntityId' };
   }
@@ -110,8 +131,28 @@ export function semanticMergePropertyKey(
   if (structural.domain === 'rows-columns') {
     return JSON.stringify(['rows-columns', structural.entityId, ['order']]);
   }
+  if (isSheetMetadataMergeDomain(structural.domain)) {
+    return JSON.stringify(['sheet', structural.entityId, structural.propertyPath]);
+  }
   if (structural.domain === 'cells.formats.direct') {
     return JSON.stringify(['cells.formats.direct', structural.entityId, ['format']]);
   }
   return JSON.stringify([structural.domain, structural.entityId, structural.propertyPath]);
+}
+
+function isSheetMetadataMergeDomain(domain: string): boolean {
+  return domain === 'sheet' || domain === 'sheets';
+}
+
+function hasMaterializableSheetEntity(entityId: string): boolean {
+  return entityId.length > 0 && !entityId.includes('!');
+}
+
+function isSupportedSheetMetadataDiffValue(
+  value: VersionDiffValue,
+  property: 'name' | 'tabColor',
+): boolean {
+  if (value.kind !== 'value') return false;
+  if (property === 'name') return typeof value.value === 'string' && value.value.length > 0;
+  return value.value === null || typeof value.value === 'string';
 }

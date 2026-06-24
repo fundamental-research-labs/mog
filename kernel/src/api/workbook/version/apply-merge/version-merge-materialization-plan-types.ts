@@ -45,10 +45,21 @@ export type ParsedRowColumnMergeChange = {
   readonly transition: RowColumnTransition;
 };
 
+export type ParsedSheetMetadataMergeChange = {
+  readonly kind: 'sheetMetadata';
+  readonly itemIndex: number;
+  readonly change: VersionMergeChange;
+  readonly structural: MaterializableMergeStructural;
+  readonly sheetId: string;
+  readonly property: SheetMetadataProperty;
+  readonly merged: SheetMetadataMergeValue;
+};
+
 export type ParsedMergeChange =
   | ParsedCellMergeChange
   | ParsedDirectFormatMergeChange
-  | ParsedRowColumnMergeChange;
+  | ParsedRowColumnMergeChange
+  | ParsedSheetMetadataMergeChange;
 
 export type CellMergeValue =
   | {
@@ -100,4 +111,16 @@ export type RowColumnTransition =
       readonly sheetId: string;
       readonly axis: RowColumnAxis;
       readonly index: number;
+    };
+
+export type SheetMetadataProperty = 'name' | 'tabColor';
+
+export type SheetMetadataMergeValue =
+  | {
+      readonly property: 'name';
+      readonly value: string;
+    }
+  | {
+      readonly property: 'tabColor';
+      readonly value: string | null;
     };

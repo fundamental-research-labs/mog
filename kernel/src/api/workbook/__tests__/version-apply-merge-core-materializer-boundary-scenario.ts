@@ -28,11 +28,29 @@ export function registerUnsupportedDomainMergeScenario(): void {
       theirs: THEIRS,
       changes: [
         {
-          structural: metadata('merge-change-sheet-name', 'sheet-1', 'sheet', ['name']),
-          base: { kind: 'value', value: 'Sheet1' },
-          ours: { kind: 'value', value: 'Sheet1' },
-          theirs: { kind: 'value', value: 'Renamed' },
-          merged: { kind: 'value', value: 'Renamed' },
+          structural: metadata('merge-change-sheet-lifecycle', 'sheet-2', 'sheet', ['sheet']),
+          base: { kind: 'value', value: null },
+          ours: { kind: 'value', value: null },
+          theirs: {
+            kind: 'value',
+            value: {
+              kind: 'object',
+              fields: [
+                { key: 'name', value: 'Inserted' },
+                { key: 'index', value: 1 },
+              ],
+            },
+          },
+          merged: {
+            kind: 'value',
+            value: {
+              kind: 'object',
+              fields: [
+                { key: 'name', value: 'Inserted' },
+                { key: 'index', value: 1 },
+              ],
+            },
+          },
         },
       ],
       conflicts: [],

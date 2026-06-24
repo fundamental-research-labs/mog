@@ -1,6 +1,13 @@
 import type { VersionDiffStructuralMetadata } from '@mog-sdk/contracts/api';
 
-import type { MaterializableMergeStructural } from './version-merge-materialization-plan-types';
+import type {
+  MaterializableMergeStructural,
+  SheetMetadataProperty,
+} from './version-merge-materialization-plan-types';
+
+type ParsedSheetMetadataStructural = MaterializableMergeStructural & {
+  readonly propertyPath: readonly [SheetMetadataProperty];
+};
 
 export function parseCellStructural(
   structural: VersionDiffStructuralMetadata,
@@ -49,4 +56,16 @@ export function parseRowColumnStructural(
     return null;
   }
   return structural;
+}
+
+export function parseSheetMetadataStructural(
+  structural: VersionDiffStructuralMetadata,
+): ParsedSheetMetadataStructural | null {
+  if (structural.kind !== 'metadata') return null;
+  if (structural.domain !== 'sheet' && structural.domain !== 'sheets') return null;
+  if (structural.propertyPath.length !== 1) return null;
+  const property = structural.propertyPath[0];
+  return property === 'name' || property === 'tabColor'
+    ? (structural as ParsedSheetMetadataStructural)
+    : null;
 }

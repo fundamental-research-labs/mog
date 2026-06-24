@@ -14,8 +14,10 @@ export {
   floatingObjectAnchorChange,
   rowColumnChange,
   sheetLifecycleChange,
+  sheetLifecycleNoopChange,
   sheetNameChange,
   sheetNameNoopChange,
+  sheetTabColorChange,
   tableDefinitionChange,
 } from './version-apply-merge-materializer-support-change-utils';
 

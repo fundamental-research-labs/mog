@@ -11,6 +11,8 @@ import type {
   DirectFormatMergeValue,
   RowColumnMergeValue,
   RowColumnTransition,
+  SheetMetadataMergeValue,
+  SheetMetadataProperty,
 } from './version-merge-materialization-plan-types';
 
 export function parseCellMergeValue(value: VersionDiffValue, domain: string): CellMergeValue | null {
@@ -42,6 +44,21 @@ export function parseRowColumnTransition(
     return { kind: 'delete', sheetId: target.sheetId, axis: target.axis, index: target.index };
   }
   return null;
+}
+
+export function parseSheetMetadataMergeValue(
+  value: VersionDiffValue,
+  property: SheetMetadataProperty,
+): SheetMetadataMergeValue | null {
+  if (value.kind !== 'value') return null;
+  if (property === 'name') {
+    return typeof value.value === 'string' && value.value.length > 0
+      ? { property, value: value.value }
+      : null;
+  }
+  return value.value === null || typeof value.value === 'string'
+    ? { property, value: value.value }
+    : null;
 }
 
 function parseSemanticCellValue(value: VersionSemanticValue): CellMergeValue | null {

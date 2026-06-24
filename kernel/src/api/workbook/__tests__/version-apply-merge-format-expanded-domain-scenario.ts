@@ -13,6 +13,7 @@ import {
   installVersionDomainDetectorNoopsOnWorkbook,
   requireRefRevision,
   rowColumnChange,
+  sheetMetadataChange,
   withVersionManifest,
 } from './version-apply-merge-format-test-utils';
 
@@ -105,6 +106,8 @@ export function registerExpandedDomainFormatScenario() {
         rowColumnChange('merge-row-delete', sheetId, 'row', 3, 'delete'),
         rowColumnChange('merge-column-insert', sheetId, 'column', 4, 'insert'),
         rowColumnChange('merge-column-delete', sheetId, 'column', 2, 'delete'),
+        sheetMetadataChange('merge-sheet-rename', sheetId, 'name', 'Sheet1', 'Forecast Sheet'),
+        sheetMetadataChange('merge-sheet-tab-color', sheetId, 'tabColor', null, '#33AAFF'),
       ]);
 
       const applied = await sourceWb.version.applyMerge(
@@ -139,6 +142,8 @@ export function registerExpandedDomainFormatScenario() {
       if (!checkoutMerged.ok) {
         throw new Error(`expected merged checkout success: ${checkoutMerged.error.code}`);
       }
+      expect(mergedWb.activeSheet.name).toBe('Forecast Sheet');
+      await expect(mergedWb.activeSheet.view.getTabColor()).resolves.toBe('#33AAFF');
       await expect(mergedWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 1 });
       await expect(mergedWb.activeSheet.getFormula('A2')).resolves.toBe('=A1+1');
       await expect(mergedWb.activeSheet.getCell('A2')).resolves.toMatchObject({ value: 2 });

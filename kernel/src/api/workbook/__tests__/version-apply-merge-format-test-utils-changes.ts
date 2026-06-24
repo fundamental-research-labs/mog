@@ -58,6 +58,35 @@ export function rowColumnChange(
   };
 }
 
+export function sheetMetadataChange(
+  changeId: string,
+  sheetId: string,
+  property: 'name',
+  base: string,
+  value: string,
+): VersionMergeChange;
+export function sheetMetadataChange(
+  changeId: string,
+  sheetId: string,
+  property: 'tabColor',
+  base: string | null,
+  value: string | null,
+): VersionMergeChange;
+export function sheetMetadataChange(
+  changeId: string,
+  sheetId: string,
+  property: 'name' | 'tabColor',
+  base: string | null,
+  value: string | null,
+): VersionMergeChange {
+  return {
+    structural: metadata(changeId, sheetId, 'sheet', [property]),
+    base: { kind: 'value', value: base },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
 function rowColumnValue(
   sheetId: string,
   axis: 'row' | 'column',

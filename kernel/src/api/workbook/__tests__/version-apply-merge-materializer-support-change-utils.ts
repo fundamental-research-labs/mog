@@ -56,6 +56,15 @@ export function sheetNameChange(): VersionMergeChange {
   };
 }
 
+export function sheetTabColorChange(): VersionMergeChange {
+  return {
+    structural: mergeMetadata('merge-sheet-tab-color', 'sheet-1', 'sheet', ['tabColor']),
+    base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value: '#33AAFF' },
+    merged: { kind: 'value', value: '#33AAFF' },
+  };
+}
+
 export function sheetNameNoopChange(): VersionMergeChange {
   const value = { kind: 'value' as const, value: 'Sheet1' };
   return {
@@ -73,6 +82,19 @@ export function sheetLifecycleChange(): VersionMergeChange {
   return {
     structural: mergeMetadata('merge-sheet-create', 'sheet-2', 'sheet', ['sheet']),
     base: { kind: 'value', value: null },
+    theirs: { kind: 'value', value },
+    merged: { kind: 'value', value },
+  };
+}
+
+export function sheetLifecycleNoopChange(): VersionMergeChange {
+  const value = semanticObject([
+    { key: 'name', value: 'Inserted' },
+    { key: 'index', value: 1 },
+  ]);
+  return {
+    structural: mergeMetadata('merge-sheet-create-noop', 'sheet-2', 'sheet', ['sheet']),
+    base: { kind: 'value', value },
     theirs: { kind: 'value', value },
     merged: { kind: 'value', value },
   };

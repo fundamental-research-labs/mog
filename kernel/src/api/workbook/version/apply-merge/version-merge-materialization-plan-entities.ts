@@ -39,6 +39,10 @@ export function parseRowColumnEntity(entityId: string): ParsedRowColumnEntity | 
   return { sheetId, axis, index };
 }
 
+export function parseSheetEntity(entityId: string): string | null {
+  return entityId.length > 0 && !entityId.includes('!') ? entityId : null;
+}
+
 function isSheetIndex(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0;
 }

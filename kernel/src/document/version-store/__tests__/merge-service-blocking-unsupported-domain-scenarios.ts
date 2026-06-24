@@ -38,8 +38,8 @@ export function registerMergeServiceUnsupportedDomainBlockingScenarios() {
         expect.objectContaining({
           issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
           payload: expect.objectContaining({
-            domain: 'sheet',
-            propertyPath: 'name',
+            domain: 'filters',
+            propertyPath: 'state',
           }),
         }),
       ],
@@ -49,7 +49,7 @@ export function registerMergeServiceUnsupportedDomainBlockingScenarios() {
     expect(JSON.stringify(result)).not.toContain('active');
   });
 
-  it('blocks same-property metadata-domain changes before conflict classification', async () => {
+  it('classifies same-property sheet metadata changes as conflicts', async () => {
     const graph = await graphWithRootAndDetachedChildren({
       oursSemanticPayload: validSemanticPayload([
         valueChange('ours-sheet-name', 'sheet', 'sheet-1', ['name'], 'Sheet1', 'Forecast'),
@@ -67,22 +67,24 @@ export function registerMergeServiceUnsupportedDomainBlockingScenarios() {
     });
 
     expect(result).toMatchObject({
-      status: 'blocked',
+      status: 'conflicted',
       changes: [],
-      conflicts: [],
-      diagnostics: [
+      conflicts: [
         expect.objectContaining({
-          issueCode: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',
-          payload: expect.objectContaining({
+          conflictKind: 'same-property',
+          structural: expect.objectContaining({
             domain: 'sheet',
-            propertyPath: 'name',
+            entityId: 'sheet-1',
+            propertyPath: ['name'],
           }),
+          base: { kind: 'value', value: 'Sheet1' },
+          ours: { kind: 'value', value: 'Forecast' },
+          theirs: { kind: 'value', value: 'Budget' },
         }),
       ],
+      diagnostics: [],
       mutationGuarantee: 'preview-only',
     });
-    expect(JSON.stringify(result)).not.toContain('Forecast');
-    expect(JSON.stringify(result)).not.toContain('Budget');
   });
 
   it('blocks unsupported semantic domains without fabricating merge output', async () => {

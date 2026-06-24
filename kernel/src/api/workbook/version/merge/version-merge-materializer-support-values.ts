@@ -27,6 +27,12 @@ export function parseMaterializableStructural(
       ? structural
       : null;
   }
+  if (structural.domain === 'sheet' || structural.domain === 'sheets') {
+    return structural.propertyPath.length === 1 &&
+      (structural.propertyPath[0] === 'name' || structural.propertyPath[0] === 'tabColor')
+      ? structural
+      : null;
+  }
   if (
     structural.domain !== 'cell' &&
     structural.domain !== 'cells.values' &&
@@ -71,6 +77,10 @@ export function parseRowColumnEntity(entityId: string): RowColumnTarget | null {
   return { sheetId, axis, index };
 }
 
+export function parseSheetEntity(entityId: string): boolean {
+  return entityId.length > 0 && !entityId.includes('!');
+}
+
 export function parseCellMergeValue(value: VersionDiffValue, domain: string): boolean {
   if (value.kind !== 'value') return false;
   if (domain === 'cells.formulas') return isMaterializableFormulaCellValue(value.value);
@@ -110,6 +120,15 @@ export function parseRowColumnMergeValue(
   const index = fields.get('index');
   if (axis !== target.axis || sheetId !== target.sheetId || index !== target.index) return null;
   return { kind: 'present', sheetId: target.sheetId, axis: target.axis, index: target.index };
+}
+
+export function parseSheetMetadataMergeValue(
+  value: VersionDiffValue,
+  property: 'name' | 'tabColor',
+): boolean {
+  if (value.kind !== 'value') return false;
+  if (property === 'name') return typeof value.value === 'string' && value.value.length > 0;
+  return value.value === null || typeof value.value === 'string';
 }
 
 function isMaterializableSemanticCellValue(value: VersionSemanticValue): boolean {

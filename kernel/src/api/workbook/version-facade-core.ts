@@ -9,6 +9,8 @@ import type {
   VersionGetHeadOptions,
   VersionHead,
   VersionListCommitsOptions,
+  VersionMainRefName,
+  VersionRefName,
   VersionResult,
   VersionSemanticDiffPage,
   VersionStoreDiagnostic,
@@ -23,6 +25,7 @@ import {
   type VersionCheckoutTransactionGuard,
 } from './version-checkout';
 import { commitWorkbookVersion } from './version/commit/version-commit';
+import { publicDiagnostic } from './version/commit/version-commit-diagnostics';
 import { diffWorkbookVersion } from './version/diff/version-diff';
 import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
@@ -103,7 +106,15 @@ export async function commitWorkbookVersionFacade(
   ctx: DocumentContext,
   options: VersionCommitOptions = {},
 ): Promise<VersionResult<WorkbookCommitSummary>> {
-  return commitWorkbookVersion(ctx, options);
+  const commitOptions = await commitOptionsForActiveCheckout(ctx, options);
+  if (!commitOptions.ok) {
+    return versionFailureFromStoreDiagnostics('commit', commitOptions.diagnostics);
+  }
+  const result = await commitWorkbookVersion(ctx, commitOptions.options);
+  if (result.ok && commitOptions.activeCheckoutRefName) {
+    recordActiveCheckoutBranchCommit(ctx, commitOptions.activeCheckoutRefName, result.value.id);
+  }
+  return result;
 }
 
 export async function checkoutWorkbookVersionFacade(
@@ -129,4 +140,111 @@ export async function diffWorkbookVersionFacade(
     await diffWorkbookVersion(ctx, base, target, options),
     options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT,
   );
+}
+
+async function commitOptionsForActiveCheckout(
+  ctx: DocumentContext,
+  options: VersionCommitOptions,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly options: VersionCommitOptions;
+      readonly activeCheckoutRefName?: VersionMainRefName | VersionRefName;
+    }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  if (hasExplicitTargetRef(options)) return { ok: true, options };
+
+  const surface = await getWorkbookVersionFacadeSurfaceStatus(
+    ctx,
+    getWorkbookVersionFacadeStatus(ctx),
+  );
+  const current = surface.current;
+  if (!current.checkedOutCommitId) return { ok: true, options };
+  if (current.stale) {
+    return {
+      ok: false,
+      diagnostics: [staleImplicitCheckoutCommitDiagnostic()],
+    };
+  }
+  if (!current.branchName || current.detached) return { ok: true, options };
+
+  const targetRef = refNameFromBranchName(current.branchName);
+  return {
+    ok: true,
+    activeCheckoutRefName: targetRef,
+    options: {
+      ...options,
+      targetRef,
+    },
+  };
+}
+
+function hasExplicitTargetRef(options: VersionCommitOptions): boolean {
+  return Object.prototype.hasOwnProperty.call(options, 'targetRef');
+}
+
+function refNameFromBranchName(branchName: string): VersionMainRefName | VersionRefName {
+  return branchName === 'main' ? 'refs/heads/main' : (`refs/heads/${branchName}` as VersionRefName);
+}
+
+function staleImplicitCheckoutCommitDiagnostic(): VersionStoreDiagnostic {
+  return publicDiagnostic(
+    'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
+    'Version write is blocked because the active checkout session is stale relative to its branch head.',
+    {
+      severity: 'error',
+      recoverability: 'retry',
+      payload: {
+        operation: 'commitGraphWrite',
+        reason: 'staleCheckoutSession',
+      },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
+}
+
+function recordActiveCheckoutBranchCommit(
+  ctx: DocumentContext,
+  refName: VersionMainRefName | VersionRefName,
+  commitId: string,
+): void {
+  const recorder = readSurfaceStatusRecorder(ctx);
+  recorder?.recordActiveCheckoutBranchCommit?.({ commitId, refName });
+}
+
+function readSurfaceStatusRecorder(ctx: DocumentContext): {
+  readonly recordActiveCheckoutBranchCommit?: (input: {
+    readonly commitId: string;
+    readonly refName: string;
+  }) => void;
+} | null {
+  const runtime = ctx as {
+    readonly versioning?: unknown;
+    readonly versionStore?: unknown;
+    readonly version?: unknown;
+  };
+  const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
+  if (!isRecord(services)) return null;
+  for (const candidate of [
+    services.surfaceStatusService,
+    services.versionSurfaceStatusService,
+    services.statusService,
+    services.dirtyStatusService,
+    services,
+  ]) {
+    if (!isRecord(candidate)) continue;
+    const method = candidate.recordActiveCheckoutBranchCommit;
+    if (typeof method !== 'function') continue;
+    return {
+      recordActiveCheckoutBranchCommit: (input) => {
+        Reflect.apply(method, candidate, [input]);
+      },
+    };
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }

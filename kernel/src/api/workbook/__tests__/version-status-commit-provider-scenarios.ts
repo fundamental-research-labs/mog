@@ -5,7 +5,13 @@ import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
 } from '../../../document/version-store/provider';
+import { attachWorkbookVersionSurfaceStatusService } from '../version-wiring';
+import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
 import { VERSION_STATUS_CREATED_AT as CREATED_AT } from './version-status-test-utils';
+import {
+  createWorkbookVersion,
+  versionContext,
+} from './version-commit-snapshot-root-helpers-versioning';
 import {
   DOCUMENT_SCOPE,
   createEmptyNormalCommitCapture,
@@ -79,6 +85,91 @@ export function registerVersionStatusCommitProviderScenarios() {
       head: {
         id: committed.id,
         refRevision: { kind: 'counter', value: '1' },
+      },
+    });
+  });
+
+  it('routes direct WorkbookVersionImpl implicit commits through the active checkout branch', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-direct-active-branch', 'root'),
+    );
+    expectInitializeSuccess(initialized);
+    const captureNormalCommit = jest.fn(createNormalCommitCapture('direct-active-branch-child'));
+    const version = createWorkbookVersion({
+      provider,
+      captureNormalCommit,
+    });
+    const branchResult = await version.createBranch({
+      name: 'scenario/direct-active-branch' as any,
+      targetCommitId: initialized.rootCommit.id,
+      expectedAbsent: true,
+    });
+    if (!branchResult.ok) {
+      throw new Error(`expected branch create success: ${branchResult.error.code}`);
+    }
+    const branch = branchResult.value;
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+    });
+    surfaceStatusService.recordActiveCheckoutBranchCommit({
+      commitId: initialized.rootCommit.id,
+      refName: branch.name,
+    });
+    attachWorkbookVersionSurfaceStatusService(versionContext(version), surfaceStatusService);
+
+    const committedResult = await version.commit({
+      expectedHead: {
+        commitId: initialized.rootCommit.id,
+        revision: branch.revision,
+      },
+    });
+    if (!committedResult.ok) {
+      throw new Error(
+        `expected direct active-branch commit success: ${committedResult.error.code}`,
+      );
+    }
+    const committed = committedResult.value;
+
+    expect(captureNormalCommit).toHaveBeenCalledTimes(1);
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: committed.id,
+      branchName: 'scenario/direct-active-branch',
+      refHeadAtMaterialization: committed.id,
+      detached: false,
+    });
+    await expect(version.readRef(branch.name)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: branch.name,
+          commitId: committed.id,
+        },
+      },
+    });
+    await expect(version.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: VERSION_GRAPH_MAIN_REF,
+          commitId: initialized.rootCommit.id,
+        },
+      },
+    });
+    await expect(version.getHead()).resolves.toMatchObject({
+      ok: true,
+      value: {
+        id: committed.id,
+        refName: branch.name,
+        resolvedFrom: branch.name,
       },
     });
   });

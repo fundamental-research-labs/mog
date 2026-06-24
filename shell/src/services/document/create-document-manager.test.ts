@@ -55,16 +55,26 @@ function makeHandle(
   documentId: string,
   dispose?: () => Promise<void> | void,
   workbook: jest.Mock = jest.fn(async () => ({})),
-  options: { readonly isReadOnly?: boolean | (() => boolean) } = {},
+  options: {
+    readonly isImportDurabilityPending?: boolean | (() => boolean);
+    readonly isReadOnly?: boolean | (() => boolean);
+  } = {},
 ): DocumentHandle {
   const readIsReadOnly = () =>
     typeof options.isReadOnly === 'function' ? options.isReadOnly() : options.isReadOnly === true;
+  const readIsImportDurabilityPending = () =>
+    typeof options.isImportDurabilityPending === 'function'
+      ? options.isImportDurabilityPending()
+      : options.isImportDurabilityPending === true;
   return {
     documentId,
     dispose: jest.fn(dispose ?? (() => undefined)),
     workbook,
     get isReadOnly() {
       return readIsReadOnly();
+    },
+    get isImportDurabilityPending() {
+      return readIsImportDurabilityPending();
     },
   } as unknown as DocumentHandle;
 }
@@ -161,7 +171,9 @@ describe('createDocumentManager import identity', () => {
 
   it('injects IndexedDB providerSelection into XLSX import workbooks by default', async () => {
     const originalWorkbook = jest.fn(async () => ({}));
-    const handle = makeHandle('file-xlsx', undefined, originalWorkbook);
+    const handle = makeHandle('file-xlsx', undefined, originalWorkbook, {
+      isImportDurabilityPending: true,
+    });
     const hostResult = {
       dispose: jest.fn(),
     };
@@ -174,7 +186,11 @@ describe('createDocumentManager import identity', () => {
 
     await returnedHandle.workbook();
 
-    expectDefaultIndexedDbProviderSelection(originalWorkbook);
+    expect(capturedWorkbookConfig(originalWorkbook)?.versioning?.providerSelection).toMatchObject({
+      kind: 'indexeddb',
+      requireDurablePersistence: true,
+      initializeTiming: 'deferred',
+    });
   });
 
   it('injects IndexedDB providerSelection into CSV import workbooks by default', async () => {

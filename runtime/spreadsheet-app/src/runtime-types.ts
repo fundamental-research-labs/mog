@@ -114,12 +114,13 @@ export function decorateRuntimeOwnedHandleWithDefaultVersioning(
 }
 
 function createDefaultVersionProviderSelection(
-  handle: Pick<DocumentHandle, 'isReadOnly'>,
+  handle: Pick<DocumentHandle, 'isImportDurabilityPending' | 'isReadOnly'>,
 ): DefaultVersionProviderSelection {
-  if (handle.isReadOnly === true) {
-    return { ...DEFAULT_VERSION_PROVIDER_SELECTION, readOnly: true };
-  }
-  return DEFAULT_VERSION_PROVIDER_SELECTION;
+  return {
+    ...DEFAULT_VERSION_PROVIDER_SELECTION,
+    ...(handle.isReadOnly === true ? { readOnly: true } : {}),
+    ...(handle.isImportDurabilityPending === true ? { initializeTiming: 'deferred' as const } : {}),
+  };
 }
 
 export function attachRuntimeDefaultVersioning(environment: {

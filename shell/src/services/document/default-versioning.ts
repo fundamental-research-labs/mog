@@ -54,10 +54,11 @@ export function decorateHandleWithDefaultIndexedDbVersioning(
 function createDefaultVersionProviderSelection(
   handle: DocumentHandle,
 ): DefaultVersionProviderSelection {
-  if (handle.isReadOnly === true) {
-    return { ...DEFAULT_VERSION_PROVIDER_SELECTION, readOnly: true };
-  }
-  return DEFAULT_VERSION_PROVIDER_SELECTION;
+  return {
+    ...DEFAULT_VERSION_PROVIDER_SELECTION,
+    ...(handle.isReadOnly === true ? { readOnly: true } : {}),
+    ...(handle.isImportDurabilityPending === true ? { initializeTiming: 'deferred' as const } : {}),
+  };
 }
 
 function createDefaultDomainSupportManifest(documentId: string): DomainSupportManifest {

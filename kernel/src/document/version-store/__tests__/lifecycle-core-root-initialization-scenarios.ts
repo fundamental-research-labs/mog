@@ -70,6 +70,38 @@ export function registerLifecycleCoreRootInitializationScenarios(): void {
       await second.versioning?.provider?.dispose('test-teardown');
     });
 
+    it('can defer missing root initialization while still attaching the provider', async () => {
+      const documentId = `${DOCUMENT_ID}-deferred-root`;
+      const namespace = namespaceForDocumentScope({ documentId }, GRAPH_ID);
+      const rootBuilder = jest.fn(() => rootWrite('deferred-root', namespace));
+      const baseVersioningConfig = versioningConfig(rootBuilder);
+
+      const result = await resolveDocumentWorkbookVersioningLifecycle({
+        documentId,
+        versioning: {
+          ...baseVersioningConfig,
+          providerSelection: {
+            ...baseVersioningConfig.providerSelection!,
+            initializeTiming: 'deferred',
+          },
+        },
+      });
+
+      expect(result.diagnostics).toEqual([]);
+      const provider = result.versioning?.provider;
+      if (!provider) throw new Error('expected lifecycle to attach a provider');
+      const writeService = createWorkbookVersionCommitService({
+        provider,
+        captureNormalCommit: emptyAuthoredCapture,
+      });
+      await expect(writeService.readHead()).resolves.toMatchObject({
+        status: 'degraded',
+      });
+      expect(rootBuilder).not.toHaveBeenCalled();
+
+      await provider.dispose('test-teardown');
+    });
+
     it('fails closed before materializing existing-no-history roots rejected by policy', async () => {
       const namespace = namespaceForDocumentScope({ documentId: DOCUMENT_ID }, GRAPH_ID);
       const rootBuilder = jest.fn(() => rootWrite('policy-blocked-root', namespace));

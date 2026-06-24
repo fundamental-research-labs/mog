@@ -142,6 +142,25 @@ test('runtime attachment default versioning opens provider read-only when docume
   assert.equal(capturedConfigs[0].versioning?.providerSelection?.readOnly, true);
 });
 
+test('runtime attachment default versioning defers import root initialization while import durability is pending', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  const handle = {
+    documentId: 'runtime-default-versioning-import-doc',
+    isImportDurabilityPending: true,
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  } as DocumentHandle;
+
+  decorateRuntimeOwnedHandleWithDefaultVersioning(handle);
+  await handle.workbook({ name: 'Runtime default versioning imported workbook' });
+
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.kind, 'indexeddb');
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.requireDurablePersistence, true);
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.initializeTiming, 'deferred');
+});
+
 test('runtime attachment default versioning preserves caller versioning overrides', async () => {
   const capturedConfigs: WorkbookConfig[] = [];
   const handle = {
@@ -218,6 +237,48 @@ test('spreadsheet app shell document loading propagates read-only handles to def
   assert.equal(capturedConfigs[0].versioning?.providerSelection?.kind, 'indexeddb');
   assert.equal(capturedConfigs[0].versioning?.providerSelection?.requireDurablePersistence, true);
   assert.equal(capturedConfigs[0].versioning?.providerSelection?.readOnly, true);
+});
+
+test('spreadsheet app shell document loading defers default versioning for imported handles', async () => {
+  const capturedConfigs: WorkbookConfig[] = [];
+  const handle = {
+    documentId: 'runtime-shell-default-versioning-import-doc',
+    eventBus: {
+      onAll() {
+        return undefined;
+      },
+    },
+    registerChartImageExporter() {
+      // Test handle only records that the runtime installs the exporter.
+    },
+    dispose() {
+      return undefined;
+    },
+    isImportDurabilityPending: true,
+    workbook: async (config?: WorkbookConfig) => {
+      capturedConfigs.push(config ?? {});
+      return {};
+    },
+  };
+  const shell = {
+    documentManager: {
+      async loadDocument() {
+        return handle;
+      },
+    },
+  } as never;
+
+  const loaded = await loadDocumentForSource(
+    shell,
+    'runtime-shell-default-versioning-import-doc',
+    { kind: 'xlsx-bytes', bytes: new Uint8Array([1, 2, 3]) },
+  );
+
+  await loaded.handle.workbook();
+
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.kind, 'indexeddb');
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.requireDurablePersistence, true);
+  assert.equal(capturedConfigs[0].versioning?.providerSelection?.initializeTiming, 'deferred');
 });
 
 test('runtime version feature gates fail closed until default versioning is attached', () => {

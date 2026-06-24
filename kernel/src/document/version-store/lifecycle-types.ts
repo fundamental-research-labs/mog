@@ -80,6 +80,15 @@ export type VersionStoreLifecycleProviderSelection = {
   readonly readOnly?: boolean;
   readonly requireDurablePersistence?: boolean;
   /**
+   * Controls whether missing-root initialization blocks provider selection.
+   * The default is `blocking`, which preserves the historical contract for
+   * API callers that expect `workbook()` to return with a durable root graph.
+   * Browser imports can opt into `deferred` so first paint is not gated on
+   * capturing the XLSX import root. Provider reads remain degraded until a
+   * later capture path records the missing root graph.
+   */
+  readonly initializeTiming?: 'blocking' | 'deferred';
+  /**
    * Optional root graph initializer for documents whose selected durable store
    * has no visible version graph yet. Hosts must provide this explicitly so
    * IndexedDB never becomes an implicit default.

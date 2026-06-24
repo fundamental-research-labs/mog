@@ -62,13 +62,17 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
     createDefaultVersionStoreProviderRegistry(),
   );
 
-  const diagnostics = await initializeSelectedProviderWhenAbsent({
+  const initializationInput = {
     documentScope,
     provider,
     initialize: providerSelection.initialize,
     xlsxImportRootExistingGraph: config.xlsxImportRootExistingGraph,
     requireDurablePersistence: providerSelection.requireDurablePersistence,
-  });
+  };
+  const diagnostics =
+    providerSelection.initializeTiming === 'deferred'
+      ? []
+      : await initializeSelectedProviderWhenAbsent(initializationInput);
 
   return {
     versioning: resolveSemanticMutationCapture({

@@ -64,6 +64,7 @@ import {
 import { createHandleLiveness, type HandleLiveness } from '../lifecycle/handle-liveness';
 import { createDocumentByteSyncPort } from './document-sync-port';
 import { createComputeBridgeSemanticStateReader } from '../../document/version-store/semantic-state-reader';
+import { deferVersionRootCapturePorts } from '../../document/version-store/deferred-root-capture-ports';
 import { withDocumentRootInitializer } from '../../document/version-store/document-root-initializer';
 import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';
 
@@ -865,14 +866,29 @@ function createDocumentHandle(
         const { createWorkbookFromConfig } = await loadWorkbookModule();
         const { resolveDocumentWorkbookVersioningLifecycle } =
           await import('../../document/version-store/lifecycle');
+        const shouldDeferRootInitialization =
+          config.versioning?.providerSelection?.initializeTiming === 'deferred';
+        const waitForDeferredRootReadiness = async () => {
+          if (!shouldDeferRootInitialization || !lifecycle.isImportDurabilityPending) return;
+          await lifecycle.awaitImportDurability();
+        };
+        const snapshotRootByteSyncPort =
+          config.versioning?.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort();
+        const semanticStateReader =
+          config.versioning?.semanticStateReader ??
+          createComputeBridgeSemanticStateReader(lifecycle.computeBridge);
+        const rootCapturePorts = shouldDeferRootInitialization
+          ? deferVersionRootCapturePorts({
+              snapshotRootByteSyncPort,
+              semanticStateReader,
+              waitForReadiness: waitForDeferredRootReadiness,
+            })
+          : { snapshotRootByteSyncPort, semanticStateReader };
         const versioningWithDefaultPorts = config.versioning
           ? {
               ...config.versioning,
-              snapshotRootByteSyncPort:
-                config.versioning.snapshotRootByteSyncPort ?? ownerHandle.createSyncPort(),
-              semanticStateReader:
-                config.versioning.semanticStateReader ??
-                createComputeBridgeSemanticStateReader(lifecycle.computeBridge),
+              snapshotRootByteSyncPort: rootCapturePorts.snapshotRootByteSyncPort,
+              semanticStateReader: rootCapturePorts.semanticStateReader,
             }
           : undefined;
         const versioningWithInitialRoot = versioningWithDefaultPorts

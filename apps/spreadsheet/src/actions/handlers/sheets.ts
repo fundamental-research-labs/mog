@@ -25,6 +25,7 @@
 import type { ActionHandler, ActionResult, AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import { type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 
+import { singleCellRange } from '../../systems/shared/types';
 import { getUIStore, handled, notHandled } from './handler-utils';
 
 // =============================================================================
@@ -123,6 +124,7 @@ export const COPY_SHEET_TO_POSITION: AsyncActionHandler = async (deps) => {
   }
 
   const { sourceSheetId, beforeSheetId, newName } = pendingCopySheet;
+  const sourceActiveCell = deps.accessors.selection.getActiveCell();
 
   let targetIndex: number | undefined;
   if (beforeSheetId !== null) {
@@ -139,6 +141,14 @@ export const COPY_SHEET_TO_POSITION: AsyncActionHandler = async (deps) => {
   // Copy the sheet via unified Workbook API.
   try {
     await wb.sheets.copy(sourceSheetId, newName, targetIndex);
+    deps.commands.selection.setSelection(
+      [singleCellRange(sourceActiveCell)],
+      sourceActiveCell,
+      sourceActiveCell,
+      null,
+      null,
+      'restore',
+    );
   } catch {
     // Copy failed
     getUIStore(deps).getState().clearPendingCopySheet();

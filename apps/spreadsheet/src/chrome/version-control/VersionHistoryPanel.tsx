@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { useWorkbook } from '../../internal-api';
 import { VersionActions } from './VersionActionStatus';
 import { VersionHistoryDiffPreview } from './VersionHistoryDiffPreview';
+import { VersionMergeControls } from './VersionMergeControls';
 import { ReviewProposalSurface } from './ReviewProposalSurface';
 import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
@@ -106,6 +107,22 @@ export function VersionHistoryPanelContent({
               onCreateBranch={actions.handleCreateBranch}
               onStageRollback={actions.handleStageRollback}
               onPromotePendingRemote={actions.handlePromotePendingRemote}
+            />
+            <VersionMergeControls
+              sourceRefs={actions.mergeSources}
+              selectedSourceRefName={actions.mergeSourceRefName}
+              currentHeadId={actions.currentMergeTarget?.commitId}
+              currentRefName={actions.currentMergeTarget?.refName}
+              previewState={actions.mergePreviewState}
+              resolutionSelections={actions.mergeResolutionSelections}
+              previewEnabled={actions.canPreviewMerge}
+              applyEnabled={actions.canApplyMerge}
+              previewDisabledReason={actions.mergePreviewDisabledReason}
+              applyDisabledReason={actions.mergeApplyDisabledReason}
+              onSourceRefNameChange={actions.setMergeSourceRefName}
+              onPreviewMerge={actions.handlePreviewMerge}
+              onApplyMerge={actions.handleApplyMerge}
+              onResolutionChange={actions.handleMergeResolutionChange}
             />
             <RefList
               refs={data.refs}

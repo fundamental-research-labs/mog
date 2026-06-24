@@ -42,6 +42,8 @@ export type VersionHistoryWorkbook = {
     | 'createBranch'
     | 'checkout'
     | 'promotePendingRemote'
+    | 'merge'
+    | 'applyMerge'
     | 'revert'
     | 'diff'
     | 'listReviews'

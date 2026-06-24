@@ -29,7 +29,7 @@ function redactSensitiveVersionDiagnosticText(message: string): string {
       `principal ${REDACTED_PRINCIPAL}`,
     )
     .replace(
-      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+)/gi,
+      /\bprincipal\b\s+(?:"[^"]*"|'[^']*'|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|principal:[^\s,;)}]+|[^\s,;)}]+)/gi,
       `principal ${REDACTED_PRINCIPAL}`,
     )
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED_PRINCIPAL)

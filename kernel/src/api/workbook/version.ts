@@ -191,7 +191,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     input: VersionApplyMergeInput,
     options: VersionApplyMergeOptions = {},
   ): Promise<VersionResult<VersionApplyMergeResult>> {
-    return applyMergeWorkbookVersionFacade(this.ctx, input, options);
+    return applyMergeWorkbookVersionFacade(
+      this.ctx,
+      input,
+      options,
+      this.options.checkoutTransactionGuard,
+    );
   }
 
   async revert(

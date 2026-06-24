@@ -2,8 +2,11 @@ import { expect, it, jest } from '@jest/globals';
 
 import type { VersionMergeResult } from '@mog-sdk/contracts/api';
 
+import { WorkbookVersionImpl } from '../version';
 import {
   BASE,
+  DIGEST_A,
+  DIGEST_B,
   EXPECTED_TARGET_HEAD,
   MERGE,
   metadata,
@@ -13,6 +16,7 @@ import {
   workbookVersionWithVersioning,
 } from './version-apply-merge-test-utils';
 import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
+import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
 
 export function registerCleanMergeApplyScenario(): void {
   it('applies clean merge plans through a two-parent merge commit write service', async () => {
@@ -224,6 +228,205 @@ export function registerCleanMergeApplyScenario(): void {
         }),
         statusRevision: 2,
         reason: 'branch-ref-moved',
+      }),
+    ]);
+  });
+
+  it('materializes the active checkout target ref during clean merge apply when requested', async () => {
+    const branchName = 'scenario/direct-active-merge';
+    const branchRef = `refs/heads/${branchName}` as const;
+    const activeRevision = { kind: 'counter' as const, value: '5' };
+    const mergeRevision = { kind: 'counter' as const, value: '6' };
+    let currentBranchHead = OURS;
+    let currentBranchRevision = activeRevision;
+    const result: VersionMergeResult = {
+      status: 'clean',
+      base: BASE,
+      ours: OURS,
+      theirs: THEIRS,
+      changes: [
+        {
+          structural: metadata('merge-change-materialized-active-branch', 'sheet-1!B2'),
+          base: { kind: 'value', value: null },
+          ours: { kind: 'value', value: 'ours' },
+          theirs: { kind: 'value', value: 'theirs' },
+          merged: { kind: 'value', value: 'theirs' },
+        },
+      ],
+      conflicts: [],
+      diagnostics: [],
+      mutationGuarantee: 'preview-only',
+    };
+    const activeCheckoutStateChanges: unknown[] = [];
+    const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
+      readDirtyState: () => ({
+        hasUncommittedLocalChanges: false,
+        calculationState: 'done',
+        checkoutInProgress: false,
+        revision: 0,
+        contextGeneration: 0,
+      }),
+      notifyActiveCheckoutStateChanged: (change) => activeCheckoutStateChanges.push(change),
+    });
+    surfaceStatusService.recordActiveCheckoutBranchCommit({
+      commitId: OURS,
+      refName: branchRef,
+    });
+    const readRef = jest.fn(async (name: string) => ({
+      status: 'success',
+      ref: { name, commitId: currentBranchHead, revision: currentBranchRevision },
+    }));
+    const merge = jest.fn(async () => result);
+    const mergeCommit = jest.fn(async () => {
+      currentBranchHead = MERGE;
+      currentBranchRevision = mergeRevision;
+      return {
+        status: 'success',
+        commitRef: {
+          id: MERGE,
+          refName: branchRef,
+          resolvedFrom: branchRef,
+          refRevision: currentBranchRevision,
+        },
+        diagnostics: [],
+      };
+    });
+    const checkout = jest.fn(async () => {
+      surfaceStatusService.recordCheckoutMaterialization({
+        strategy: 'fullSnapshot',
+        commitId: MERGE,
+        resolvedTarget: {
+          kind: 'ref',
+          refName: branchName,
+          commitId: MERGE,
+          refVersion: mergeRevision,
+          refIncarnationId: 'ref-incarnation:direct-active-merge',
+        },
+        snapshotRoot: {},
+        plan: {
+          strategy: 'fullSnapshot',
+          resolvedTarget: {
+            kind: 'ref',
+            refName: branchName,
+            commitId: MERGE,
+            refVersion: mergeRevision,
+            refIncarnationId: 'ref-incarnation:direct-active-merge',
+          },
+          commitId: MERGE,
+          parentCommitIds: [OURS, THEIRS],
+          snapshotRootDigest: DIGEST_A,
+          semanticChangeSetDigest: DIGEST_B,
+          mutationSegmentDigests: [],
+          requiredDependencies: [],
+          requiredDependencyDigests: [],
+        },
+      } as never);
+      return {
+        ok: true,
+        materialization: 'applied',
+        plan: {
+          strategy: 'fullSnapshot',
+          resolvedTarget: {
+            kind: 'ref',
+            refName: branchName,
+            commitId: MERGE,
+            refVersion: mergeRevision,
+            refIncarnationId: 'ref-incarnation:direct-active-merge',
+          },
+          commitId: MERGE,
+          parentCommitIds: [OURS, THEIRS],
+          snapshotRootDigest: DIGEST_A,
+          semanticChangeSetDigest: DIGEST_B,
+          mutationSegmentDigests: [],
+          requiredDependencies: [],
+          requiredDependencyDigests: [],
+        },
+        diagnostics: [],
+        mutationGuarantee: 'workbook-state-materialized',
+      };
+    });
+    let transactionSequence = 0;
+    const checkoutTransactionGuard = {
+      beginCheckoutTransaction: jest.fn(() => ({
+        ok: true as const,
+        token: { id: ++transactionSequence },
+      })),
+      endCheckoutTransaction: jest.fn(),
+    };
+    const version = new WorkbookVersionImpl(
+      {
+        versioning: {
+          mergeService: { merge },
+          readService: { readRef },
+          surfaceStatusService,
+          writeService: { mergeCommit },
+          checkoutService: { checkout },
+          ...versionDomainSupportManifestRuntime(),
+        },
+      } as any,
+      { checkoutTransactionGuard },
+    );
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        {
+          targetRef: branchRef,
+          expectedTargetHead: {
+            commitId: OURS,
+            revision: activeRevision,
+          },
+          materializeActiveCheckout: true,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'applied',
+        commitRef: {
+          id: MERGE,
+          refName: branchRef,
+        },
+      },
+    });
+    expect(checkoutTransactionGuard.beginCheckoutTransaction).toHaveBeenCalledTimes(2);
+    expect(checkoutTransactionGuard.endCheckoutTransaction).toHaveBeenCalledTimes(2);
+    expect(checkout).toHaveBeenCalledWith({ target: 'ref', refName: branchName });
+    expect(surfaceStatusService.readActiveCheckoutSession()).toMatchObject({
+      checkedOutCommitId: MERGE,
+      branchName,
+      refHeadAtMaterialization: MERGE,
+      detached: false,
+    });
+    await expect(version.getSurfaceStatus()).resolves.toMatchObject({
+      current: {
+        checkedOutCommitId: MERGE,
+        branchName,
+        currentRefHeadId: MERGE,
+        stale: false,
+      },
+    });
+    expect(activeCheckoutStateChanges).toEqual([
+      expect.objectContaining({
+        activeCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: OURS,
+          branchName,
+        }),
+        previousActiveCheckoutSession: null,
+        statusRevision: 1,
+        reason: 'branch-head-advanced',
+      }),
+      expect.objectContaining({
+        activeCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: MERGE,
+          branchName,
+        }),
+        previousActiveCheckoutSession: expect.objectContaining({
+          checkedOutCommitId: OURS,
+          branchName,
+        }),
+        statusRevision: 2,
+        reason: 'checkout-materialized',
       }),
     ]);
   });

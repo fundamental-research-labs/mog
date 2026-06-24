@@ -125,6 +125,7 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     options: VersionApplyMergeOptions,
     result: VersionApplyMergeResult,
   ): void {
+    if (options.materializeActiveCheckout) return;
     if (currentToken === 'stale' || currentToken?.source !== 'checkout-session') return;
     if (!currentToken.refName) return;
     const targetRef = normalizeRefName(result.targetRef ?? options.targetRef);

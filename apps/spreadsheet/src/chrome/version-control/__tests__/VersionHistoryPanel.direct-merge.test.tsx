@@ -160,6 +160,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     expect(firstCallArgs(workbook.version.applyMerge)[0]?.[1]).toEqual(
       expect.objectContaining({
         targetRef: CURRENT_REF,
+        materializeActiveCheckout: true,
         expectedTargetHead: {
           commitId: HEAD_COMMIT_ID,
           revision: REF_REVISION,
@@ -167,11 +168,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         },
       }),
     );
-    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
-    expect(firstCallArgs(workbook.version.checkout)[0]?.[0]).toEqual({
-      kind: 'ref',
-      name: CURRENT_REF,
-    });
+    expect(workbook.version.checkout).not.toHaveBeenCalled();
   });
 
   it('refreshes the merge target ref revision immediately before apply', async () => {
@@ -234,6 +231,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     expect(firstCallArgs(workbook.version.applyMerge)[0]?.[1]).toEqual(
       expect.objectContaining({
         targetRef: CURRENT_REF,
+        materializeActiveCheckout: true,
         expectedTargetHead: {
           commitId: HEAD_COMMIT_ID,
           revision: freshRevision,
@@ -243,7 +241,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     );
   });
 
-  it('keeps merge apply pending until the public checkout and history refresh complete', async () => {
+  it('keeps merge apply pending until the post-apply history refresh completes', async () => {
     const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
     const getSurfaceStatus = jest
       .fn<DirectMergeVersionHistoryWorkbook['version']['getSurfaceStatus']>()
@@ -261,7 +259,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await user.click(applyButton);
 
     await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    expect(workbook.version.checkout).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
         'Refreshing version history',
@@ -446,6 +444,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         mode: 'apply',
         includeDiagnostics: true,
         targetRef: CURRENT_REF,
+        materializeActiveCheckout: true,
         expectedTargetHead: {
           commitId: HEAD_COMMIT_ID,
           revision: REF_REVISION,
@@ -453,17 +452,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
         },
       }),
     );
-    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
-    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
-      firstInvocationOrder(workbook.version.checkout),
-    );
-    expect(firstCallArgs(workbook.version.checkout)[0]).toEqual([
-      {
-        kind: 'ref',
-        name: CURRENT_REF,
-      },
-      { includeDiagnostics: true },
-    ]);
+    expect(workbook.version.checkout).not.toHaveBeenCalled();
   });
 
   it('restores a conflicted direct merge preview and selected resolution after remount', async () => {

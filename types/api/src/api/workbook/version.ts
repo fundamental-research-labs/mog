@@ -766,6 +766,7 @@ export interface VersionApplyMergeOptions {
   readonly targetRef?: VersionMainRefName | VersionRefName;
   readonly expectedTargetHead?: VersionCommitExpectedHead;
   readonly includeDiagnostics?: boolean;
+  readonly materializeActiveCheckout?: boolean;
 }
 
 export type VersionApplyMergeMutationGuarantee =

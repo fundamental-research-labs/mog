@@ -34,6 +34,7 @@ const VERSION_APPLY_MERGE_OPTION_KEYS = new Set([
   'targetRef',
   'expectedTargetHead',
   'includeDiagnostics',
+  'materializeActiveCheckout',
 ]);
 
 export type NormalizedPersistedApplyMergeInput = {
@@ -53,6 +54,7 @@ export type NormalizedPersistedApplyMergeOptions =
       readonly mode: 'apply';
       readonly targetRef: VersionMainRefName | VersionRefName;
       readonly expectedTargetHead: VersionCommitExpectedHead;
+      readonly materializeActiveCheckout?: boolean;
     };
 
 export function normalizePersistedApplyMergeInput(
@@ -165,6 +167,19 @@ export function normalizePersistedApplyMergeOptions(
       ),
     );
   }
+  let materializeActiveCheckout: boolean | undefined;
+  if (input.materializeActiveCheckout !== undefined) {
+    if (typeof input.materializeActiveCheckout !== 'boolean') {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'materializeActiveCheckout',
+          'materializeActiveCheckout must be a boolean.',
+        ),
+      );
+    } else {
+      materializeActiveCheckout = input.materializeActiveCheckout;
+    }
+  }
 
   if (mode === 'preview') {
     if (input.targetRef !== undefined) {
@@ -177,6 +192,14 @@ export function normalizePersistedApplyMergeOptions(
         invalidApplyMergeOptionDiagnostic(
           'expectedTargetHead',
           'expectedTargetHead is valid only in apply mode.',
+        ),
+      );
+    }
+    if (materializeActiveCheckout !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'materializeActiveCheckout',
+          'materializeActiveCheckout is valid only in apply mode.',
         ),
       );
     }
@@ -202,7 +225,14 @@ export function normalizePersistedApplyMergeOptions(
     );
   }
 
-  return targetRef && expectedTargetHead ? { mode: 'apply', targetRef, expectedTargetHead } : null;
+  return targetRef && expectedTargetHead
+    ? {
+        mode: 'apply',
+        targetRef,
+        expectedTargetHead,
+        ...(materializeActiveCheckout === undefined ? {} : { materializeActiveCheckout }),
+      }
+    : null;
 }
 
 export function validatePersistedIntentRecord(

@@ -31,6 +31,7 @@ const VERSION_APPLY_MERGE_OPTION_KEYS = new Set([
   'targetRef',
   'expectedTargetHead',
   'includeDiagnostics',
+  'materializeActiveCheckout',
 ]);
 const VERSION_APPLY_MERGE_EXPECTED_HEAD_KEYS = new Set([
   'commitId',
@@ -65,6 +66,7 @@ export type NormalizedApplyMergeOptions =
       readonly includeDiagnostics?: boolean;
       readonly targetRef: VersionMainRefName | VersionRefName;
       readonly expectedTargetHead: VersionCommitExpectedHead;
+      readonly materializeActiveCheckout?: boolean;
     };
 
 export function isApplyMergePersistedInput(
@@ -196,6 +198,20 @@ function normalizeApplyMergeOptions(
     }
   }
 
+  let materializeActiveCheckout: boolean | undefined;
+  if (input.materializeActiveCheckout !== undefined) {
+    if (typeof input.materializeActiveCheckout !== 'boolean') {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'materializeActiveCheckout',
+          'materializeActiveCheckout must be a boolean.',
+        ),
+      );
+    } else {
+      materializeActiveCheckout = input.materializeActiveCheckout;
+    }
+  }
+
   if (mode === 'preview') {
     if (input.targetRef !== undefined) {
       diagnostics.push(
@@ -210,13 +226,27 @@ function normalizeApplyMergeOptions(
         ),
       );
     }
+    if (materializeActiveCheckout !== undefined) {
+      diagnostics.push(
+        invalidApplyMergeOptionDiagnostic(
+          'materializeActiveCheckout',
+          'materializeActiveCheckout is valid only in apply mode.',
+        ),
+      );
+    }
     return diagnostics.length === 0 ? { ...baseOptions, mode: 'preview' } : null;
   }
 
   const targetRef = validateTargetRef(input.targetRef, diagnostics);
   const expectedTargetHead = validateExpectedTargetHead(input.expectedTargetHead, diagnostics);
   return diagnostics.length === 0 && targetRef && expectedTargetHead
-    ? { ...baseOptions, mode: 'apply', targetRef, expectedTargetHead }
+    ? {
+        ...baseOptions,
+        mode: 'apply',
+        targetRef,
+        expectedTargetHead,
+        ...(materializeActiveCheckout === undefined ? {} : { materializeActiveCheckout }),
+      }
     : null;
 }
 

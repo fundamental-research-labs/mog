@@ -740,6 +740,7 @@ export function useVersionHistoryPanelActions({
       workbook.version.applyMerge(input, {
         mode: 'apply',
         includeDiagnostics: true,
+        materializeActiveCheckout: true,
         ...(currentMergeTarget.refName ? { targetRef: currentMergeTarget.refName } : {}),
         expectedTargetHead: expectedTargetHead.value,
       }),
@@ -794,23 +795,7 @@ export function useVersionHistoryPanelActions({
     setMergePreviewState({ kind: 'idle' });
     setMergeResolutionSelections({});
 
-    if ('commitRef' in result.value) {
-      const checkoutTarget = result.value.commitRef.refName
-        ? { kind: 'ref' as const, name: result.value.commitRef.refName }
-        : { kind: 'commit' as const, id: result.value.commitRef.id };
-      if (!setRunningAction(action, 'Materializing merge')) return;
-      const checkoutResult = await readVersionResult('VERSION_UI_MERGE_CHECKOUT_FAILED', () =>
-        workbook.version.checkout(checkoutTarget, { includeDiagnostics: true }),
-      );
-      if (!isActionCurrent(action)) return;
-      if (!checkoutResult.ok) {
-        completeAction(action, { status: 'error', diagnostic: checkoutResult.diagnostic });
-        return;
-      }
-      setSelectedCommitId(checkoutResult.value.plan.commitId);
-    } else {
-      setSelectedCommitId(undefined);
-    }
+    setSelectedCommitId('commitRef' in result.value ? result.value.commitRef.id : undefined);
     await refreshThenCompleteAction(action, {
       status: 'success',
       message: mergeApplyActionMessage(result.value),

@@ -158,6 +158,100 @@ fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
 }
 
 #[test]
+fn imported_col_style_ranges_only_apply_to_positional_cells() {
+    let (storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
+
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        0,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(12000)),
+            ..Default::default()
+        },
+    );
+    insert_col_format_range(
+        &storage,
+        &sid,
+        crate::mirror::RangeId::from_raw(700),
+        1,
+        1,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(11000)),
+            font_color: Some("#777777".to_string()),
+            ..Default::default()
+        },
+        Some(50),
+    );
+    insert_col_format_range(
+        &storage,
+        &sid,
+        crate::mirror::RangeId::from_raw(701),
+        2,
+        2,
+        &CellFormat {
+            font_size: Some(domain_types::FontSize::from_millipoints(10000)),
+            font_color: Some("#123456".to_string()),
+            ..Default::default()
+        },
+        None,
+    );
+    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+    hydrate_col_format_ranges(&storage, &sid, sheet_mirror);
+
+    let sheet_mirror = mirror.get_sheet(&sid).unwrap();
+    let populated_imported_col = get_effective_format(
+        &storage,
+        &sid,
+        "allocated-b5",
+        4,
+        1,
+        None,
+        Some(&gi),
+        Some(sheet_mirror),
+    );
+    assert_eq!(
+        populated_imported_col.font_size,
+        Some(domain_types::FontSize::from_millipoints(12000)),
+        "allocated cells should keep workbook Normal instead of XLSX column defaults"
+    );
+    assert_ne!(
+        populated_imported_col.font_color.as_deref(),
+        Some("#777777"),
+        "allocated cells should not inherit XLSX column-default color"
+    );
+
+    let virtual_imported_col =
+        get_positional_format(&storage, &sid, 5, 1, Some(&gi), Some(sheet_mirror));
+    assert_eq!(
+        virtual_imported_col.font_size,
+        Some(domain_types::FontSize::from_millipoints(11000)),
+        "positional empty cells still inherit XLSX column defaults"
+    );
+    assert_eq!(virtual_imported_col.font_color.as_deref(), Some("#777777"));
+
+    let populated_user_sparse_col = get_effective_format(
+        &storage,
+        &sid,
+        "allocated-c5",
+        4,
+        2,
+        None,
+        Some(&gi),
+        Some(sheet_mirror),
+    );
+    assert_eq!(
+        populated_user_sparse_col.font_size,
+        Some(domain_types::FontSize::from_millipoints(10000)),
+        "user sparse column ranges should keep applying to allocated cells"
+    );
+    assert_eq!(
+        populated_user_sparse_col.font_color.as_deref(),
+        Some("#123456")
+    );
+}
+
+#[test]
 fn test_overlapping_format_ranges() {
     let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
 

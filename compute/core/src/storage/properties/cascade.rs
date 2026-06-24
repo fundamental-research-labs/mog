@@ -35,7 +35,7 @@ pub fn get_effective_format(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, false);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&after_col_range, &col_fmt);
@@ -77,7 +77,7 @@ pub fn get_effective_format_preloaded(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, false);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&after_col_range, &col_fmt);
@@ -113,7 +113,7 @@ pub fn get_positional_format(
 ) -> CellFormat {
     let base = workbook_base_format(storage);
 
-    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror);
+    let after_col_range = apply_col_format_range_layer(&base, col, sheet_mirror, true);
 
     let col_fmt = get_col_format(storage, sheet_id, col, grid_index).unwrap_or_default();
     let after_col = merge_formats(&after_col_range, &col_fmt);
@@ -190,6 +190,7 @@ fn apply_col_format_range_layer(
     base: &CellFormat,
     col: u32,
     sheet_mirror: Option<&SheetMirror>,
+    include_imported_xlsx_ranges: bool,
 ) -> CellFormat {
     let mirror = match sheet_mirror {
         Some(m) => m,
@@ -202,7 +203,14 @@ fn apply_col_format_range_layer(
     }
 
     let mut range_fmt = CellFormat::default();
-    for (_id, fmt) in &matching {
+    for (id, fmt) in &matching {
+        // Excel treats imported `<col style>` defaults as positional defaults
+        // for empty cells; populated cells keep workbook Normal unless another
+        // cell/row/user-authored column layer applies.
+        if !include_imported_xlsx_ranges && mirror.col_range_xlsx_style_id_cache().contains_key(id)
+        {
+            continue;
+        }
         range_fmt = merge_formats(&range_fmt, fmt);
     }
     merge_formats(base, &range_fmt)

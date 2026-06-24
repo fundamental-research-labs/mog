@@ -173,6 +173,172 @@ const buf = await wb.toXlsx();
 `MogSdkError` details such as `issue`, `requestedPath`, `cwd`, `absolutePath`,
 and `filesystemCode`.
 
+### Version Store and Version History
+
+`versionStore` is selected when the workbook is created. It configures the
+storage provider for the version graph; commits, refs, checkout, and merge are
+all public `wb.version.*` operations after the workbook is open.
+
+```typescript
+const wb = await createWorkbook({
+  documentId: 'budget-2026',
+  versionStore: {
+    kind: 'memory-durable-snapshot',
+    workspaceId: 'finance',
+    principalScope: 'analyst-1',
+  },
+});
+```
+
+Supported public store kinds are:
+
+- `memory` / `in-memory`: ephemeral version history for one process.
+- `memory-durable-snapshot`: durable-snapshot provider selection for local
+  version-history workflows.
+- `indexeddb`: IndexedDB-backed version history where the host exposes
+  IndexedDB.
+- `browser`: browser-friendly alias that currently maps to IndexedDB.
+
+`node-file`, `filesystem`, `node:fs`, and related durable Node filesystem
+aliases are intentionally unsupported in this SDK release. They fail closed
+with `MogSdkVersionStoreConfigError`; the SDK does not silently fall back to
+memory when a durable file store was requested. Use `workspaceId` and
+`principalScope` for public scope partitioning, and pass workbook import
+sources to `createWorkbook(...)`, not to `versionStore`.
+
+Commit, branch, and checkout all return `VersionResult` receipts. Check
+`ok` before reading `value`; checkout also reports whether workbook state was
+materialized.
+
+```typescript
+await wb.activeSheet.setCell('A1', 'Base forecast');
+const baseResult = await wb.version.commit({ message: 'Initial budget model' });
+if (!baseResult.ok) throw new Error(baseResult.error.reason);
+const baseCommit = baseResult.value;
+
+const scenarioRefName = 'refs/heads/scenario/budget-q1';
+const branchResult = await wb.version.createBranch({
+  name: scenarioRefName,
+  targetCommitId: baseCommit.id,
+  expectedAbsent: true,
+});
+if (!branchResult.ok) throw new Error(branchResult.error.reason);
+const scenarioRef = branchResult.value;
+
+const checkoutResult = await wb.version.checkout({
+  kind: 'ref',
+  name: scenarioRef.name,
+});
+if (!checkoutResult.ok) throw new Error(checkoutResult.error.reason);
+if (checkoutResult.value.materialization !== 'applied') {
+  throw new Error('Checkout did not materialize workbook state');
+}
+
+await wb.activeSheet.setCell('B2', 1200);
+const scenarioHeadResult = await wb.version.getHead();
+if (!scenarioHeadResult.ok || !scenarioHeadResult.value.refRevision) {
+  throw new Error(
+    scenarioHeadResult.ok
+      ? 'Checked-out branch head is missing its ref revision'
+      : scenarioHeadResult.error.reason,
+  );
+}
+
+const scenarioCommitResult = await wb.version.commit({
+  message: 'Scenario revenue upside',
+  expectedHead: {
+    commitId: scenarioHeadResult.value.id,
+    revision: scenarioHeadResult.value.refRevision,
+  },
+});
+if (!scenarioCommitResult.ok) throw new Error(scenarioCommitResult.error.reason);
+const scenarioCommit = scenarioCommitResult.value;
+```
+
+Merge preview is read-only. `applyMerge` is the mutating operation; pass a
+concrete `targetRef` and a freshly-read `expectedTargetHead` so a moved target
+ref returns `staleTargetHead` instead of applying over newer work.
+
+```typescript
+const mainRefResult = await wb.version.readRef('refs/heads/main');
+if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
+  throw new Error(
+    mainRefResult.ok
+      ? mainRefResult.value.diagnostics[0]?.safeMessage ?? 'Main ref unavailable'
+      : mainRefResult.error.reason,
+  );
+}
+
+const expectedTargetHead = {
+  commitId: mainRefResult.value.ref.commitId,
+  revision: mainRefResult.value.ref.revision,
+};
+
+const previewResult = await wb.version.merge(
+  {
+    base: baseCommit.id,
+    ours: expectedTargetHead.commitId,
+    theirs: scenarioCommit.id,
+  },
+  {
+    mode: 'preview',
+    targetRef: 'refs/heads/main',
+    expectedTargetHead,
+    persistReviewRecord: true,
+  },
+);
+if (!previewResult.ok) throw new Error(previewResult.error.reason);
+
+const preview = previewResult.value;
+if (preview.status === 'blocked') {
+  throw new Error(preview.diagnostics.map((item) => item.safeMessage).join('\n'));
+}
+
+const resolutions =
+  preview.status === 'conflicted'
+    ? preview.conflicts.map((conflict) => {
+        const option =
+          conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs') ??
+          conflict.resolutionOptions[0];
+        if (!option) throw new Error(`No resolution option for ${conflict.conflictId}`);
+        return {
+          conflictId: conflict.conflictId,
+          expectedConflictDigest: conflict.conflictDigest,
+          optionId: option.optionId,
+          kind: option.kind,
+        };
+      })
+    : [];
+
+const applyResult = await wb.version.applyMerge(
+  {
+    base: baseCommit.id,
+    ours: expectedTargetHead.commitId,
+    theirs: scenarioCommit.id,
+    resolutions,
+  },
+  {
+    mode: 'apply',
+    targetRef: 'refs/heads/main',
+    expectedTargetHead,
+  },
+);
+if (!applyResult.ok) throw new Error(applyResult.error.reason);
+
+const applied = applyResult.value;
+if (applied.status === 'blocked' || applied.status === 'staleTargetHead') {
+  throw new Error(applied.diagnostics.map((item) => item.safeMessage).join('\n'));
+}
+if (applied.status === 'conflicted') {
+  throw new Error(`Merge still has ${applied.requiredResolutionCount} unresolved conflicts`);
+}
+if (applied.status === 'planned') {
+  throw new Error('applyMerge planned the merge but did not mutate the target ref');
+}
+
+const newMainHead = applied.commitRef.id;
+```
+
 ### Formulas
 
 Each `setCell` mutation triggers automatic recalc in Rust. Formulas are evaluated by the time `setCell` returns — no manual `calculate()` needed.

@@ -1,3 +1,8 @@
+import {
+  createPublicVersionDomainSupportManifest,
+  type DomainSupportManifest,
+} from '@mog-sdk/contracts/versioning';
+
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS = [
   'memory',
   'in-memory',
@@ -504,6 +509,12 @@ export interface MogSdkVersionStoreLifecycleProviderSelection {
 
 export interface MogSdkVersionStoreLifecycleConfig {
   readonly providerSelection: MogSdkVersionStoreLifecycleProviderSelection;
+  readonly domainSupportManifest: DomainSupportManifest;
+}
+
+export interface MogSdkVersionStoreLifecycleOptions {
+  readonly runtime: MogSdkVersionStoreRuntime;
+  readonly documentId?: string;
 }
 
 export function isMogSdkVersionStoreConfigError(
@@ -514,7 +525,7 @@ export function isMogSdkVersionStoreConfigError(
 
 export function createSdkVersionStoreLifecycleConfig(
   versionStore: MogSdkVersionStoreConfig | undefined,
-  options: { readonly runtime: MogSdkVersionStoreRuntime },
+  options: MogSdkVersionStoreLifecycleOptions,
 ): MogSdkVersionStoreLifecycleConfig | undefined {
   if (versionStore === undefined) return undefined;
 
@@ -693,7 +704,7 @@ function isAuthorityClaimValue(value: unknown): boolean {
 function lifecycleConfig(
   kind: MogSdkVersionStoreLifecycleProviderSelection['kind'],
   config: Readonly<Record<string, unknown>> | null,
-  options: { readonly runtime: MogSdkVersionStoreRuntime },
+  options: MogSdkVersionStoreLifecycleOptions,
   defaultRequireDurablePersistence?: boolean,
 ): MogSdkVersionStoreLifecycleConfig {
   const workspaceId = optionalStringField(config, 'workspaceId', options);
@@ -715,6 +726,9 @@ function lifecycleConfig(
       ...(readOnly !== undefined ? { readOnly } : {}),
       ...(requireDurablePersistence !== undefined ? { requireDurablePersistence } : {}),
     },
+    domainSupportManifest: createPublicVersionDomainSupportManifest(
+      options.documentId ? { workbookId: options.documentId } : {},
+    ),
   };
 }
 

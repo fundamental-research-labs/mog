@@ -68,6 +68,7 @@ export type {
   MogSdkVersionStoreDiagnostic,
   MogSdkVersionStoreDiagnosticCode,
   MogSdkVersionStoreLifecycleConfig,
+  MogSdkVersionStoreLifecycleOptions,
   MogSdkVersionStoreLifecycleProviderSelection,
   MogSdkVersionStoreRuntime,
   MogSdkVersionStoreScopeOptions,

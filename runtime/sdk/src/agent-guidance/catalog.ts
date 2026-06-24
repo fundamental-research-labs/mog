@@ -117,6 +117,96 @@ if (receipt.status === "applied") {
     .map((effect) => effect.range);
 }`;
 
+const versionCommitSnippet = `const commitResult = await wb.version.commit({
+  message: "Update forecast inputs",
+});
+if (!commitResult.ok) {
+  throw new Error(commitResult.error.reason);
+}
+const commitId = commitResult.value.id;`;
+
+const versionBranchSnippet = `const branchResult = await wb.version.createBranch({
+  name: "refs/heads/scenario/budget-q1",
+  targetCommitId: commitId,
+  expectedAbsent: true,
+});
+if (!branchResult.ok) {
+  throw new Error(branchResult.error.reason);
+}
+const branchRef = branchResult.value;`;
+
+const versionCheckoutSnippet = `const checkoutResult = await wb.version.checkout({
+  kind: "ref",
+  name: "refs/heads/scenario/budget-q1",
+});
+if (!checkoutResult.ok) {
+  throw new Error(checkoutResult.error.reason);
+}
+if (checkoutResult.value.materialization !== "applied") {
+  throw new Error("Checkout planned but did not materialize workbook state");
+}`;
+
+const versionMergePreviewSnippet = `const previewResult = await wb.version.merge(
+  { base: baseCommitId, ours: mainCommitId, theirs: branchCommitId },
+  {
+    mode: "preview",
+    targetRef: "refs/heads/main",
+    expectedTargetHead,
+    persistReviewRecord: true,
+  },
+);
+if (!previewResult.ok) {
+  throw new Error(previewResult.error.reason);
+}
+const preview = previewResult.value;
+if (preview.status === "blocked") {
+  throw new Error(preview.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+const resolutions = preview.status === "conflicted"
+  ? preview.conflicts.map((conflict) => {
+      const option =
+        conflict.resolutionOptions.find((candidate) => candidate.kind === "acceptTheirs") ??
+        conflict.resolutionOptions[0];
+      if (!option) {
+        throw new Error("No resolution option for " + conflict.conflictId);
+      }
+      return {
+        conflictId: conflict.conflictId,
+        expectedConflictDigest: conflict.conflictDigest,
+        optionId: option.optionId,
+        kind: option.kind,
+      };
+    })
+  : [];`;
+
+const versionApplyMergeSnippet = `const applyResult = await wb.version.applyMerge(
+  {
+    base: baseCommitId,
+    ours: expectedTargetHead.commitId,
+    theirs: branchCommitId,
+    resolutions,
+  },
+  {
+    mode: "apply",
+    targetRef: "refs/heads/main",
+    expectedTargetHead,
+  },
+);
+if (!applyResult.ok) {
+  throw new Error(applyResult.error.reason);
+}
+const applied = applyResult.value;
+if (applied.status === "blocked" || applied.status === "staleTargetHead") {
+  throw new Error(applied.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+if (applied.status === "conflicted") {
+  throw new Error("Merge still has " + applied.requiredResolutionCount + " unresolved conflicts");
+}
+if (applied.status === "planned") {
+  throw new Error("applyMerge planned the merge but did not mutate the target ref");
+}
+const newHeadId = applied.commitRef.id;`;
+
 export const apiGuidanceCatalog = [
   {
     id: 'officejs.bootstrap',
@@ -444,6 +534,53 @@ export const apiGuidanceCatalog = [
     ],
     confidence: 0.86,
     blocking: true,
+  },
+  {
+    id: 'mog-version.public-api-examples',
+    dialect: 'mog-version',
+    category: 'workbook',
+    matchers: [
+      { id: 'mog-version.workbook-commit-guess', kind: 'call', symbol: 'wb.commit' },
+      { id: 'mog-version.workbook-branch-guess', kind: 'call', symbol: 'wb.branch' },
+      { id: 'mog-version.workbook-create-branch-guess', kind: 'call', symbol: 'wb.createBranch' },
+      { id: 'mog-version.workbook-checkout-guess', kind: 'call', symbol: 'wb.checkout' },
+      { id: 'mog-version.workbook-preview-merge-guess', kind: 'call', symbol: 'wb.previewMerge' },
+      { id: 'mog-version.workbook-merge-preview-guess', kind: 'call', symbol: 'wb.mergePreview' },
+      { id: 'mog-version.workbook-apply-merge-guess', kind: 'call', symbol: 'wb.applyMerge' },
+    ],
+    message:
+      'Workbook version history APIs are exposed through the `wb.version` public API slice.',
+    suggestion:
+      'Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, and `wb.version.applyMerge`; every operation returns a VersionResult and merge calls also return status receipts.',
+    mogReplacements: [
+      {
+        path: 'wb.version.commit',
+        snippet: versionCommitSnippet,
+        note: 'Commit captures the current workbook working state and advances the active or explicit target ref.',
+      },
+      {
+        path: 'wb.version.createBranch',
+        snippet: versionBranchSnippet,
+        note: 'Create public refs under refs/heads/scenario/* or refs/heads/agent/* for branch workflows.',
+      },
+      {
+        path: 'wb.version.checkout',
+        snippet: versionCheckoutSnippet,
+        note: 'Checkout refuses dirty or unsafe state and reports whether workbook state was materialized.',
+      },
+      {
+        path: 'wb.version.merge',
+        snippet: versionMergePreviewSnippet,
+        note: 'Merge is preview-only; inspect blocked/conflicted/clean/fast-forward statuses before applying.',
+      },
+      {
+        path: 'wb.version.applyMerge',
+        snippet: versionApplyMergeSnippet,
+        note: 'Apply merge with a concrete target ref and expected target head so stale refs fail closed.',
+      },
+    ],
+    confidence: 0.86,
+    blocking: false,
   },
   {
     id: 'officejs.formatting',

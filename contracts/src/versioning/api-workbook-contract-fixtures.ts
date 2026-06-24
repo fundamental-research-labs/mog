@@ -7,16 +7,21 @@ import type {
   GetVersionHeadInput,
   ListVersionCommitsInput,
   ListVersionRefsInput,
+  ObjectDigest,
   Paged,
+  RedactedVersionAuthor,
   VersionApplyMergeInput,
   VersionApplyMergeOptions,
+  VersionApplyMergeResolution,
   VersionApplyMergeResult,
   VersionBranchName,
   VersionBranchRefReadResult,
   VersionCheckoutOptions,
   VersionCheckoutTarget,
+  VersionCommitExpectedHead,
   VersionCommitish,
   VersionCommitOptions,
+  VersionCounterRecordRevision,
   VersionCreateBranchOptions,
   VersionDeleteRefOptions,
   VersionDiagnostic,
@@ -30,9 +35,12 @@ import type {
   VersionMainRefName,
   VersionMergeConflictDetailResult,
   VersionMergeEndpointDeniedStatus,
+  VersionMergeChange,
+  VersionMergeConflict,
   VersionMergeInput,
   VersionMergeOptions,
   VersionMergeResult,
+  VersionMergeResultId,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
   VersionProposalApi,
@@ -53,6 +61,8 @@ import type {
   VersionSurfaceStatus,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  WorkbookCommitId,
+  WorkbookCommitRef,
   WorkbookCommitSummary,
   WorkbookVersion,
   WorkbookVersionDiagnostic,
@@ -266,6 +276,534 @@ type PublicVersionPrivateDiagnosticFieldName =
   | 'access_token'
   | 'secret'
   | 'secrets';
+
+type WorkbookVersionBasicContractFixtureSurface = {
+  readonly commitOptions: readonly VersionCommitOptions[];
+  readonly commitSummary: WorkbookCommitSummary;
+  readonly branchCreateOptions: readonly VersionCreateBranchOptions[];
+  readonly branchRef: VersionRef;
+  readonly checkoutTargets: readonly VersionCheckoutTarget[];
+  readonly checkoutOptions: VersionCheckoutOptions;
+  readonly checkoutResults: readonly CheckoutVersionResult[];
+  readonly mergeInput: VersionMergeInput;
+  readonly mergeOptions: VersionMergeOptions;
+  readonly mergeResults: readonly VersionMergeResult[];
+  readonly applyMergeInputs: readonly VersionApplyMergeInput[];
+  readonly applyMergeOptions: readonly VersionApplyMergeOptions[];
+  readonly applyMergeResults: readonly VersionApplyMergeResult[];
+};
+
+const versionBaseCommitId = 'commit:sha256:version-contract-base' as WorkbookCommitId;
+const versionOursCommitId = 'commit:sha256:version-contract-ours' as WorkbookCommitId;
+const versionTheirsCommitId = 'commit:sha256:version-contract-theirs' as WorkbookCommitId;
+const versionMergeCommitId = 'commit:sha256:version-contract-merge' as WorkbookCommitId;
+const versionMainRefName: VersionMainRefName = 'refs/heads/main';
+const versionScenarioBranchName = 'scenario/budget' as VersionBranchName;
+const versionScenarioRefName = 'refs/heads/scenario/budget' as VersionRefName;
+const versionMergeResultId = 'merge-result:version-contract-basic' as VersionMergeResultId;
+
+const versionCounterRevision = {
+  kind: 'counter',
+  value: '7',
+} satisfies VersionCounterRecordRevision;
+
+const versionDigest = {
+  algorithm: 'sha256',
+  digest: 'version-contract-basic-digest',
+  byteLength: 128,
+} satisfies ObjectDigest;
+
+const versionAuthorFixture = {
+  actorKind: 'user',
+  displayName: 'Version contract fixture author',
+  redacted: false,
+} satisfies RedactedVersionAuthor;
+
+const versionStoreDiagnosticFixture = {
+  issueCode: 'VERSION_MISSING_DEPENDENCY',
+  severity: 'error',
+  recoverability: 'retry',
+  messageTemplateId: 'version.contract.fixture.missingDependency',
+  safeMessage: 'Version contract fixture diagnostic.',
+  payload: {
+    dependency: 'objectStore',
+  },
+  redacted: false,
+  mutationGuarantee: 'no-write-attempted',
+} satisfies VersionStoreDiagnostic;
+
+const versionRefConflictDiagnosticFixture = {
+  issueCode: 'VERSION_REF_CONFLICT',
+  severity: 'error',
+  recoverability: 'retry',
+  messageTemplateId: 'version.contract.fixture.refConflict',
+  safeMessage: 'Version contract fixture stale target head.',
+  payload: {
+    targetRef: versionMainRefName,
+  },
+  redacted: false,
+  mutationGuarantee: 'ref-not-mutated',
+} satisfies VersionStoreDiagnostic;
+
+const versionExpectedHeadFixture = {
+  commitId: versionOursCommitId,
+  revision: versionCounterRevision,
+  symbolicHeadRevision: versionCounterRevision,
+} satisfies VersionCommitExpectedHead;
+
+const workbookCommitSummaryFixture = {
+  id: versionOursCommitId,
+  parents: [versionBaseCommitId],
+  createdAt: '2026-06-23T00:00:00.000Z',
+  author: versionAuthorFixture,
+  annotation: {
+    title: {
+      kind: 'text',
+      value: 'Budget scenario',
+    },
+    message: {
+      kind: 'text',
+      value: 'Capture budget scenario edits.',
+    },
+    tags: [
+      {
+        kind: 'text',
+        value: 'scenario',
+      },
+    ],
+  },
+  diagnostics: [versionStoreDiagnosticFixture],
+} satisfies WorkbookCommitSummary;
+
+const workbookVersionCommitOptionFixtures = [
+  {
+    message: 'Capture budget scenario edits.',
+    targetRef: versionScenarioBranchName,
+    redactionPolicy: {
+      mode: 'default',
+      redactSecrets: true,
+      redactExternalLinks: true,
+      redactAgentTrace: true,
+    },
+    expectedHead: versionExpectedHeadFixture,
+    mode: {
+      kind: 'normal',
+    },
+  },
+  {
+    message: 'Create workbook root.',
+    targetRef: versionMainRefName,
+    mode: {
+      kind: 'root',
+    },
+  },
+  {
+    message: 'Import external workbook root.',
+    targetRef: versionScenarioRefName,
+    mode: {
+      kind: 'import-root',
+    },
+  },
+] satisfies readonly VersionCommitOptions[];
+
+const workbookVersionBranchCreateFixtures = [
+  {
+    name: versionScenarioBranchName,
+    targetCommitId: versionOursCommitId,
+    baseCommitId: versionBaseCommitId,
+    expectedAbsent: true,
+  },
+  {
+    name: versionScenarioRefName,
+    targetCommitId: versionTheirsCommitId,
+  },
+] satisfies readonly VersionCreateBranchOptions[];
+
+const workbookVersionBranchRefFixture = {
+  name: versionScenarioRefName,
+  commitId: versionOursCommitId,
+  revision: versionCounterRevision,
+  updatedAt: '2026-06-23T00:01:00.000Z',
+} satisfies VersionRef;
+
+const workbookVersionCheckoutTargets = [
+  {
+    kind: 'head',
+  },
+  {
+    kind: 'commit',
+    id: versionOursCommitId,
+  },
+  {
+    kind: 'ref',
+    name: versionScenarioBranchName,
+  },
+  {
+    kind: 'ref',
+    name: versionMainRefName,
+  },
+] satisfies readonly VersionCheckoutTarget[];
+
+const workbookVersionCheckoutOptionsFixture = {
+  includeDiagnostics: true,
+  requireClean: true,
+} satisfies VersionCheckoutOptions;
+
+const workbookVersionCheckoutPlanFixture = {
+  strategy: 'fullSnapshot',
+  target: {
+    kind: 'ref',
+    refName: versionScenarioRefName,
+    commitId: versionOursCommitId,
+    refRevision: versionCounterRevision,
+    refIncarnationId: 'ref-incarnation:version-contract-basic',
+  },
+  commitId: versionOursCommitId,
+  parentCommitIds: [versionBaseCommitId],
+  requiredDependencies: [
+    {
+      role: 'snapshotRoot',
+      objectType: 'version.snapshotRoot',
+    },
+    {
+      role: 'semanticChangeSet',
+      objectType: 'version.semanticChangeSet',
+      index: 0,
+    },
+  ],
+  requiredDependencyCount: 2,
+} satisfies CheckoutVersionResult['plan'];
+
+const workbookVersionCheckoutResultFixtures = [
+  {
+    status: 'success',
+    materialization: 'planned',
+    plan: workbookVersionCheckoutPlanFixture,
+    diagnostics: [],
+    mutationGuarantee: 'no-workbook-mutation',
+  },
+  {
+    status: 'success',
+    materialization: 'applied',
+    plan: workbookVersionCheckoutPlanFixture,
+    diagnostics: [versionStoreDiagnosticFixture],
+    mutationGuarantee: 'workbook-state-materialized',
+  },
+] satisfies readonly CheckoutVersionResult[];
+
+const versionMergeInputFixture = {
+  base: versionBaseCommitId,
+  ours: versionOursCommitId,
+  theirs: versionTheirsCommitId,
+} satisfies VersionMergeInput;
+
+const versionMergeOptionsFixture = {
+  mode: 'preview',
+  includeDiagnostics: true,
+  targetRef: versionMainRefName,
+  expectedTargetHead: versionExpectedHeadFixture,
+  persistReviewRecord: true,
+} satisfies VersionMergeOptions;
+
+const versionMergeChangeFixture = {
+  structural: {
+    kind: 'metadata',
+    changeId: 'change:version-contract-basic',
+    domain: 'cells.values',
+    entityId: 'sheet:fixture!A1',
+    propertyPath: ['value'],
+  },
+  base: {
+    kind: 'value',
+    value: null,
+  },
+  ours: {
+    kind: 'value',
+    value: 10,
+  },
+  theirs: {
+    kind: 'value',
+    value: 20,
+  },
+  merged: {
+    kind: 'value',
+    value: 20,
+  },
+  display: {
+    address: {
+      kind: 'value',
+      value: 'Fixture!A1',
+    },
+  },
+  diagnostics: [],
+} satisfies VersionMergeChange;
+
+const versionMergeConflictFixture = {
+  conflictId: 'conflict:version-contract-basic',
+  conflictDigest: 'conflict-digest:version-contract-basic',
+  conflictKind: 'same-property',
+  structural: versionMergeChangeFixture.structural,
+  base: versionMergeChangeFixture.base,
+  ours: versionMergeChangeFixture.ours,
+  theirs: versionMergeChangeFixture.theirs,
+  resolutionOptions: [
+    {
+      optionId: 'resolution:accept-ours',
+      conflictId: 'conflict:version-contract-basic',
+      kind: 'acceptOurs',
+      value: versionMergeChangeFixture.ours,
+      recalcRequired: false,
+      diagnostics: [],
+    },
+    {
+      optionId: 'resolution:accept-theirs',
+      conflictId: 'conflict:version-contract-basic',
+      kind: 'acceptTheirs',
+      value: versionMergeChangeFixture.theirs,
+      recalcRequired: true,
+    },
+    {
+      optionId: 'resolution:accept-base',
+      conflictId: 'conflict:version-contract-basic',
+      kind: 'acceptBase',
+      value: versionMergeChangeFixture.base,
+      recalcRequired: false,
+    },
+  ],
+  display: versionMergeChangeFixture.display,
+  diagnostics: [],
+} satisfies VersionMergeConflict;
+
+const workbookVersionMergeResultFixtures = [
+  {
+    status: 'clean',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [versionMergeChangeFixture],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+    resultId: versionMergeResultId,
+    previewArtifactDigest: versionDigest,
+    resultDigest: versionDigest,
+    attemptPersistence: 'persisted',
+    attemptKind: 'applyable',
+    expiresAt: '2026-06-23T00:10:00.000Z',
+    targetRef: versionMainRefName,
+    expectedTargetHead: versionExpectedHeadFixture,
+    applicationPlanDigest: versionDigest,
+    applyEligibilityDigest: versionDigest,
+  },
+  {
+    status: 'conflicted',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [versionMergeChangeFixture],
+    conflicts: [versionMergeConflictFixture],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+    resultId: versionMergeResultId,
+    attemptPersistence: 'persisted',
+    attemptKind: 'reviewOnly',
+  },
+  {
+    status: 'fastForward',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  },
+  {
+    status: 'alreadyMerged',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    mutationGuarantee: 'preview-only',
+  },
+  {
+    status: 'blocked',
+    base: null,
+    ours: null,
+    theirs: null,
+    changes: [],
+    conflicts: [],
+    diagnostics: [versionStoreDiagnosticFixture],
+    mutationGuarantee: 'preview-only',
+  },
+] satisfies readonly VersionMergeResult[];
+
+const versionApplyMergeResolutionFixture = {
+  conflictId: versionMergeConflictFixture.conflictId,
+  expectedConflictDigest: versionMergeConflictFixture.conflictDigest,
+  optionId: 'resolution:accept-theirs',
+  kind: 'acceptTheirs',
+} satisfies VersionApplyMergeResolution;
+
+const workbookVersionApplyMergeInputFixtures = [
+  {
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    resolutions: [versionApplyMergeResolutionFixture],
+  },
+  {
+    resultId: versionMergeResultId,
+    resultDigest: versionDigest,
+    previewArtifactDigest: versionDigest,
+    resolutionSetDigest: versionDigest,
+    resolvedAttemptDigest: versionDigest,
+    resolutions: [versionApplyMergeResolutionFixture],
+  },
+] satisfies readonly VersionApplyMergeInput[];
+
+const workbookVersionApplyMergeOptionFixtures = [
+  {
+    mode: 'preview',
+    targetRef: versionMainRefName,
+    expectedTargetHead: versionExpectedHeadFixture,
+    includeDiagnostics: true,
+  },
+  {
+    mode: 'apply',
+    targetRef: versionScenarioRefName,
+    includeDiagnostics: true,
+  },
+] satisfies readonly VersionApplyMergeOptions[];
+
+const versionMergeCommitRefFixture = {
+  id: versionMergeCommitId,
+  refName: versionMainRefName,
+  resolvedFrom: 'HEAD',
+  refRevision: versionCounterRevision,
+} satisfies WorkbookCommitRef;
+
+const workbookVersionApplyMergeResultFixtures = [
+  {
+    status: 'planned',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [versionMergeChangeFixture],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 1,
+    mutationGuarantee: 'preview-only',
+    resultId: versionMergeResultId,
+    previewArtifactDigest: versionDigest,
+    resultDigest: versionDigest,
+    resolutionSetDigest: versionDigest,
+    resolvedAttemptDigest: versionDigest,
+    targetRef: versionMainRefName,
+    headBefore: versionOursCommitId,
+    applicationPlanDigest: versionDigest,
+  },
+  {
+    status: 'applied',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    commitRef: versionMergeCommitRefFixture,
+    changes: [versionMergeChangeFixture],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 1,
+    mutationGuarantee: 'merge-commit-created',
+    headBefore: versionOursCommitId,
+    headAfter: versionMergeCommitId,
+    applicationPlanDigest: versionDigest,
+  },
+  {
+    status: 'fastForwarded',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    commitRef: versionMergeCommitRefFixture,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 0,
+    mutationGuarantee: 'ref-fast-forwarded',
+  },
+  {
+    status: 'alreadyApplied',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    commitRef: versionMergeCommitRefFixture,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 0,
+    mutationGuarantee: 'ref-not-mutated',
+  },
+  {
+    status: 'alreadyMerged',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    commitRef: versionMergeCommitRefFixture,
+    changes: [],
+    conflicts: [],
+    diagnostics: [],
+    resolutionCount: 0,
+    mutationGuarantee: 'ref-not-mutated',
+  },
+  {
+    status: 'conflicted',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [versionMergeChangeFixture],
+    conflicts: [versionMergeConflictFixture],
+    diagnostics: [],
+    requiredResolutionCount: 1,
+    mutationGuarantee: 'no-write-attempted',
+  },
+  {
+    status: 'blocked',
+    base: null,
+    ours: null,
+    theirs: null,
+    changes: [],
+    conflicts: [],
+    diagnostics: [versionStoreDiagnosticFixture],
+    mutationGuarantee: 'no-write-attempted',
+  },
+  {
+    status: 'staleTargetHead',
+    base: versionBaseCommitId,
+    ours: versionOursCommitId,
+    theirs: versionTheirsCommitId,
+    changes: [],
+    conflicts: [],
+    diagnostics: [versionRefConflictDiagnosticFixture],
+    mutationGuarantee: 'ref-not-mutated',
+  },
+] satisfies readonly VersionApplyMergeResult[];
+
+const workbookVersionBasicContractFixtures = {
+  commitOptions: workbookVersionCommitOptionFixtures,
+  commitSummary: workbookCommitSummaryFixture,
+  branchCreateOptions: workbookVersionBranchCreateFixtures,
+  branchRef: workbookVersionBranchRefFixture,
+  checkoutTargets: workbookVersionCheckoutTargets,
+  checkoutOptions: workbookVersionCheckoutOptionsFixture,
+  checkoutResults: workbookVersionCheckoutResultFixtures,
+  mergeInput: versionMergeInputFixture,
+  mergeOptions: versionMergeOptionsFixture,
+  mergeResults: workbookVersionMergeResultFixtures,
+  applyMergeInputs: workbookVersionApplyMergeInputFixtures,
+  applyMergeOptions: workbookVersionApplyMergeOptionFixtures,
+  applyMergeResults: workbookVersionApplyMergeResultFixtures,
+} satisfies WorkbookVersionBasicContractFixtureSurface;
 
 type _ContractsApiWorkbookEntryMatchesRoot = Assert<
   IsEqual<WorkbookVersion, WorkbookEntryWorkbookVersion>

@@ -62,6 +62,7 @@ export type {
   MogSdkVersionStoreDiagnostic,
   MogSdkVersionStoreDiagnosticCode,
   MogSdkVersionStoreLifecycleConfig,
+  MogSdkVersionStoreLifecycleOptions,
   MogSdkVersionStoreLifecycleProviderSelection,
   MogSdkVersionStoreRuntime,
   MogSdkVersionStoreScopeOptions,
@@ -164,8 +165,11 @@ export async function createWorkbook(
     };
   }
 
-  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, { runtime: 'wasm' });
   const documentId = opts.documentId ?? createPortableRandomUUID();
+  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, {
+    runtime: 'wasm',
+    documentId,
+  });
   const hostResult = createNodeHeadlessHost({
     documentId,
     operation: xlsxBytes ? 'import' : 'create',

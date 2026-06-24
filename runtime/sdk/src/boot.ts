@@ -362,7 +362,11 @@ export async function createWorkbook(
     };
   }
 
-  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, { runtime: 'node' });
+  const documentId = opts.documentId ?? createPortableRandomUUID();
+  const versioning = createSdkVersionStoreLifecycleConfig(opts.versionStore, {
+    runtime: 'node',
+    documentId,
+  });
   // Default timezone for headless — headless hosts cannot infer user TZ.
   const timezone = opts.userTimezone ?? 'UTC';
 
@@ -377,7 +381,6 @@ export async function createWorkbook(
   // raw construction path would bypass source-handle validation, operation
   // gates, and principal/resource binding.
   // -------------------------------------------------------------------------
-  const documentId = opts.documentId ?? createPortableRandomUUID();
   const hostResult: NodeHeadlessHostResult = createNodeHeadlessHost({
     documentId,
     operation: xlsxBytes ? 'import' : 'create',

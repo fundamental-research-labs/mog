@@ -1,6 +1,7 @@
 import {
   MogSdkVersionStoreConfigError,
   createSdkVersionStoreLifecycleConfig,
+  type MogSdkVersionStoreLifecycleConfig,
 } from '../src/version-store';
 
 function captureVersionStoreConfigError(
@@ -16,33 +17,52 @@ function captureVersionStoreConfigError(
   throw new Error('Expected version-store config to fail');
 }
 
+function expectPublicDomainSupportManifest(
+  config: MogSdkVersionStoreLifecycleConfig | undefined,
+  workbookId?: string,
+): void {
+  if (!config) throw new Error('Expected version-store lifecycle config');
+  const manifest = config.domainSupportManifest;
+
+  expect(manifest.schemaVersion).toBe('domain-support-manifest.v2');
+  expect(manifest.domains.length).toBeGreaterThan(0);
+  if (workbookId) {
+    expect(manifest.workbookId).toBe(workbookId);
+  } else {
+    expect(manifest).not.toHaveProperty('workbookId');
+  }
+}
+
 describe('SDK version-store config', () => {
   it('preserves absent config as the SDK default lifecycle path', () => {
     expect(createSdkVersionStoreLifecycleConfig(undefined, { runtime: 'node' })).toBeUndefined();
   });
 
   it('maps in-memory config to the memory provider selection', () => {
-    expect(
-      createSdkVersionStoreLifecycleConfig(
-        { kind: 'in-memory', workspaceId: 'workspace-1', principalScope: 'principal-1' },
-        { runtime: 'node' },
-      ),
-    ).toEqual({
-      providerSelection: {
-        kind: 'memory',
-        workspaceId: 'workspace-1',
-        principalScope: 'principal-1',
-      },
+    const config = createSdkVersionStoreLifecycleConfig(
+      { kind: 'in-memory', workspaceId: 'workspace-1', principalScope: 'principal-1' },
+      { runtime: 'node', documentId: 'document-memory' },
+    );
+
+    expect(config?.providerSelection).toEqual({
+      kind: 'memory',
+      workspaceId: 'workspace-1',
+      principalScope: 'principal-1',
     });
+    expectPublicDomainSupportManifest(config, 'document-memory');
   });
 
   it('maps browser config to durable IndexedDB provider selection', () => {
-    expect(createSdkVersionStoreLifecycleConfig({ kind: 'browser' }, { runtime: 'wasm' })).toEqual({
-      providerSelection: {
-        kind: 'indexeddb',
-        requireDurablePersistence: true,
-      },
+    const config = createSdkVersionStoreLifecycleConfig(
+      { kind: 'browser' },
+      { runtime: 'wasm', documentId: 'document-browser' },
+    );
+
+    expect(config?.providerSelection).toEqual({
+      kind: 'indexeddb',
+      requireDurablePersistence: true,
     });
+    expectPublicDomainSupportManifest(config, 'document-browser');
   });
 
   it('rejects non-canonical provider ids before selecting a provider', () => {
@@ -75,27 +95,33 @@ describe('SDK version-store config', () => {
         requireDurablePersistence: false,
         workspaceId: 'workspace-1',
       },
-      { runtime: 'wasm' },
+      { runtime: 'wasm', documentId: 'document-stable-order' },
     );
 
-    expect(JSON.stringify(config)).toBe(
-      '{"providerSelection":{"kind":"indexeddb","workspaceId":"workspace-1","principalScope":"principal-1","readOnly":true,"requireDurablePersistence":false}}',
+    expect(Object.keys(config ?? {})).toEqual(['providerSelection', 'domainSupportManifest']);
+    expect(JSON.stringify(config?.providerSelection)).toBe(
+      '{"kind":"indexeddb","workspaceId":"workspace-1","principalScope":"principal-1","readOnly":true,"requireDurablePersistence":false}',
     );
+    expect(Object.keys(config?.domainSupportManifest ?? {}).slice(0, 3)).toEqual([
+      'schemaVersion',
+      'generatedAt',
+      'workbookId',
+    ]);
+    expectPublicDomainSupportManifest(config, 'document-stable-order');
   });
 
   it('maps explicit IndexedDB config to the existing registry provider kind', () => {
-    expect(
-      createSdkVersionStoreLifecycleConfig(
-        { kind: 'indexeddb', readOnly: true, requireDurablePersistence: false },
-        { runtime: 'wasm' },
-      ),
-    ).toEqual({
-      providerSelection: {
-        kind: 'indexeddb',
-        readOnly: true,
-        requireDurablePersistence: false,
-      },
+    const config = createSdkVersionStoreLifecycleConfig(
+      { kind: 'indexeddb', readOnly: true, requireDurablePersistence: false },
+      { runtime: 'wasm', documentId: 'document-indexeddb' },
+    );
+
+    expect(config?.providerSelection).toEqual({
+      kind: 'indexeddb',
+      readOnly: true,
+      requireDurablePersistence: false,
     });
+    expectPublicDomainSupportManifest(config, 'document-indexeddb');
   });
 
   it('fails closed for unsupported Node durable file config', () => {

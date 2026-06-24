@@ -266,7 +266,9 @@ export function ValueFilterList({
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.currentTarget.value)}
         onKeyDown={(event) => {
-          event.stopPropagation();
+          if (!(searchTerm === '' && (event.key === 'Home' || event.key === 'End'))) {
+            event.stopPropagation();
+          }
           if (event.key === 'Enter') {
             handleApply();
           }

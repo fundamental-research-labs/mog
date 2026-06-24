@@ -21,7 +21,7 @@
  * @see FilterButtonOverlay.tsx - Uses this content with real DOM triggers
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { FilterDropdownData, Worksheet } from '@mog-sdk/contracts/api';
 import { toCellId } from '@mog-sdk/contracts/cell-identity';
@@ -29,7 +29,7 @@ import type { ColumnFilterCriteria, FilterOperator } from '@mog-sdk/contracts/fi
 import { cellRangeToA1 } from '@mog/spreadsheet-utils/a1';
 import { useActiveSheetId, useWorkbook } from '../../infra/context';
 
-import { MenuItem } from '@mog/shell/components/ui';
+import { cn, MenuItem } from '@mog/shell/components/ui';
 import { ColorFiltersMenu } from './ColorFiltersMenu';
 import { ConditionFilterPanel } from './ConditionFilterPanel';
 import { DateFiltersMenu } from './DateFiltersMenu';
@@ -57,6 +57,7 @@ export interface FilterDropdownContentProps {
 
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
+type SubmenuPlacement = 'right' | 'left';
 
 type FilterOperationReceipt = {
   readonly status: string;
@@ -69,6 +70,15 @@ type PendingFilterActionGlobal = typeof globalThis & {
 };
 
 const FILTER_ACTION_APPLY_DELAY_MS = 100;
+const SUBMENU_PANEL_WIDTH_PX = 180;
+const SUBMENU_PANEL_GAP_PX = 4;
+
+function submenuPanelClassName(placement: SubmenuPlacement): string {
+  return cn(
+    'absolute top-0 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px] max-h-[min(480px,calc(100vh-16px))] overflow-y-auto overscroll-contain',
+    placement === 'right' ? 'left-full ml-1' : 'right-full mr-1',
+  );
+}
 
 function trackPendingFilterAction(action: () => Promise<void>): void {
   const global = globalThis as PendingFilterActionGlobal;
@@ -190,12 +200,14 @@ export function FilterDropdownContent({
 }: FilterDropdownContentProps): React.ReactElement | null {
   const activeSheetId = useActiveSheetId();
   const wb = useWorkbook();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<FilterTab>('values');
 
   // Submenu state (B4: Excel-parity quickwins)
   const [activeSubmenu, setActiveSubmenu] = useState<ActiveSubmenu>(null);
+  const [submenuPlacement, setSubmenuPlacement] = useState<SubmenuPlacement>('right');
 
   // Pending operator for condition panel (when switching from submenu)
   const [pendingOperator, setPendingOperator] = useState<FilterOperator | null>(null);
@@ -378,6 +390,68 @@ export function FilterDropdownContent({
     setActiveSubmenu(null);
   }, []);
 
+  const openSubmenu = useCallback(
+    (submenu: NonNullable<ActiveSubmenu>, trigger?: HTMLElement | null) => {
+      const triggerElement =
+        trigger ??
+        contentRef.current?.querySelector<HTMLButtonElement>(
+          `button[data-filter-submenu-trigger="${submenu}"]`,
+        );
+      const rect = triggerElement?.getBoundingClientRect();
+      if (rect && typeof window !== 'undefined') {
+        const spaceRight = window.innerWidth - rect.right;
+        const spaceLeft = rect.left;
+        const preferredPlacement =
+          spaceRight >= SUBMENU_PANEL_WIDTH_PX + SUBMENU_PANEL_GAP_PX ||
+          spaceRight >= spaceLeft
+            ? 'right'
+            : 'left';
+        setSubmenuPlacement(preferredPlacement);
+      }
+      setActiveSubmenu(submenu);
+    },
+    [],
+  );
+
+  const handleSubmenuTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>, submenu: NonNullable<ActiveSubmenu>) => {
+      if (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        openSubmenu(submenu);
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'Escape') {
+        setActiveSubmenu(null);
+      }
+    },
+    [openSubmenu],
+  );
+
+  const focusMenuCommand = useCallback((position: 'first' | 'last') => {
+    const commands = Array.from(
+      contentRef.current?.querySelectorAll<HTMLButtonElement>(
+        'button[data-filter-menu-command="true"]:not(:disabled)',
+      ) ?? [],
+    ).filter((button) => button.offsetParent !== null);
+    const target = position === 'first' ? commands[0] : commands.at(-1);
+    target?.focus();
+  }, []);
+
+  const handleContentKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Home') {
+        event.preventDefault();
+        event.stopPropagation();
+        focusMenuCommand('first');
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        event.stopPropagation();
+        focusMenuCommand('last');
+      }
+    },
+    [focusMenuCommand],
+  );
+
   // Don't render if missing required data (col is now required for correct API calls)
   if (!filterId || !headerCellId || col === undefined) {
     return null;
@@ -398,16 +472,18 @@ export function FilterDropdownContent({
 
   return (
     <div
+      ref={contentRef}
       className="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
       data-testid="filter-dropdown-content"
+      onKeyDown={handleContentKeyDown}
     >
       {/* Sort buttons section */}
       <div className="shrink-0 border-b border-ss-border py-1">
-        <MenuItem onSelect={handleSortAsc}>
+        <MenuItem data-filter-menu-command="true" onSelect={handleSortAsc}>
           <span className="text-ss-text-secondary mr-2">↑</span>
           Sort A to Z
         </MenuItem>
-        <MenuItem onSelect={handleSortDesc}>
+        <MenuItem data-filter-menu-command="true" onSelect={handleSortDesc}>
           <span className="text-ss-text-secondary mr-2">↓</span>
           Sort Z to A
         </MenuItem>
@@ -416,9 +492,11 @@ export function FilterDropdownContent({
         {hasColors && (
           <div className="relative">
             <MenuItem
-              onSelect={() =>
-                setActiveSubmenu(activeSubmenu === 'sortByColor' ? null : 'sortByColor')
-              }
+              data-filter-menu-command="true"
+              data-filter-submenu-trigger="sortByColor"
+              onSelect={() => openSubmenu('sortByColor')}
+              onMouseEnter={(event) => openSubmenu('sortByColor', event.currentTarget)}
+              onKeyDown={(event) => handleSubmenuTriggerKeyDown(event, 'sortByColor')}
               className="justify-between"
             >
               <svg
@@ -442,7 +520,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'sortByColor' && (
-              <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px]">
+              <div className={submenuPanelClassName(submenuPlacement)}>
                 <SortByColorMenu
                   sheetId={activeSheetId}
                   filterId={filterId}
@@ -466,14 +544,18 @@ export function FilterDropdownContent({
         {columnType === 'number' && (
           <div className="relative">
             <MenuItem
-              onSelect={() => setActiveSubmenu(activeSubmenu === 'number' ? null : 'number')}
+              data-filter-menu-command="true"
+              data-filter-submenu-trigger="number"
+              onSelect={() => openSubmenu('number')}
+              onMouseEnter={(event) => openSubmenu('number', event.currentTarget)}
+              onKeyDown={(event) => handleSubmenuTriggerKeyDown(event, 'number')}
               className="justify-between"
             >
               <span className="flex-1">Number Filters</span>
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'number' && (
-              <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px]">
+              <div className={submenuPanelClassName(submenuPlacement)}>
                 <NumberFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -489,14 +571,18 @@ export function FilterDropdownContent({
         {columnType === 'date' && (
           <div className="relative">
             <MenuItem
-              onSelect={() => setActiveSubmenu(activeSubmenu === 'date' ? null : 'date')}
+              data-filter-menu-command="true"
+              data-filter-submenu-trigger="date"
+              onSelect={() => openSubmenu('date')}
+              onMouseEnter={(event) => openSubmenu('date', event.currentTarget)}
+              onKeyDown={(event) => handleSubmenuTriggerKeyDown(event, 'date')}
               className="justify-between"
             >
               <span className="flex-1">Date Filters</span>
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'date' && (
-              <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px]">
+              <div className={submenuPanelClassName(submenuPlacement)}>
                 <DateFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -514,14 +600,18 @@ export function FilterDropdownContent({
         {(columnType === 'text' || columnType === 'mixed') && (
           <div className="relative">
             <MenuItem
-              onSelect={() => setActiveSubmenu(activeSubmenu === 'text' ? null : 'text')}
+              data-filter-menu-command="true"
+              data-filter-submenu-trigger="text"
+              onSelect={() => openSubmenu('text')}
+              onMouseEnter={(event) => openSubmenu('text', event.currentTarget)}
+              onKeyDown={(event) => handleSubmenuTriggerKeyDown(event, 'text')}
               className="justify-between"
             >
               <span className="flex-1">Text Filters</span>
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'text' && (
-              <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px]">
+              <div className={submenuPanelClassName(submenuPlacement)}>
                 <TextFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -537,14 +627,18 @@ export function FilterDropdownContent({
         {hasColors && (
           <div className="relative">
             <MenuItem
-              onSelect={() => setActiveSubmenu(activeSubmenu === 'color' ? null : 'color')}
+              data-filter-menu-command="true"
+              data-filter-submenu-trigger="color"
+              onSelect={() => openSubmenu('color')}
+              onMouseEnter={(event) => openSubmenu('color', event.currentTarget)}
+              onKeyDown={(event) => handleSubmenuTriggerKeyDown(event, 'color')}
               className="justify-between"
             >
               <span className="flex-1">Filter by Color</span>
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'color' && (
-              <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px]">
+              <div className={submenuPanelClassName(submenuPlacement)}>
                 <ColorFiltersMenu
                   sheetId={activeSheetId}
                   filterId={filterId}

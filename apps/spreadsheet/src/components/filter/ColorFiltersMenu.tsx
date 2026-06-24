@@ -127,7 +127,7 @@ export function ColorFiltersMenu({
   }
 
   return (
-    <div className="color-filters-menu flex flex-col">
+    <div className="color-filters-menu flex max-h-[min(480px,calc(100vh-16px))] flex-col overflow-y-auto overscroll-contain">
       {backgroundColors.length > 0 && (
         <>
           <div className="px-3 py-1.5 text-caption font-medium text-ss-text-secondary">

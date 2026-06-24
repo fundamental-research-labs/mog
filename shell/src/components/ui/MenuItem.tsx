@@ -16,7 +16,7 @@
  *
  */
 
-import type { ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { forwardRef, useState } from 'react';
 
 import { cn, menuItemClasses, menuSeparatorClasses } from './radix/styles';
@@ -25,7 +25,8 @@ import { cn, menuItemClasses, menuSeparatorClasses } from './radix/styles';
 // MenuItem
 // =============================================================================
 
-export interface MenuItemProps {
+export interface MenuItemProps
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'className' | 'disabled'> {
   /** Item content (text label) */
   children: ReactNode;
   /** Icon displayed on the left side */
@@ -68,17 +69,44 @@ export interface MenuItemProps {
  * ```
  */
 export const MenuItem = forwardRef<HTMLButtonElement, MenuItemProps>(
-  ({ children, icon, shortcut, disabled, destructive, className, onSelect }, ref) => {
+  (
+    {
+      children,
+      icon,
+      shortcut,
+      disabled,
+      destructive,
+      className,
+      onSelect,
+      onClick,
+      onMouseEnter,
+      onMouseLeave,
+      ...buttonProps
+    },
+    ref,
+  ) => {
     const [isHighlighted, setIsHighlighted] = useState(false);
 
     return (
       <button
+        {...buttonProps}
         ref={ref}
         type="button"
         disabled={disabled}
-        onClick={() => !disabled && onSelect?.()}
-        onMouseEnter={() => setIsHighlighted(true)}
-        onMouseLeave={() => setIsHighlighted(false)}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!event.defaultPrevented && !disabled) {
+            onSelect?.();
+          }
+        }}
+        onMouseEnter={(event) => {
+          setIsHighlighted(true);
+          onMouseEnter?.(event);
+        }}
+        onMouseLeave={(event) => {
+          setIsHighlighted(false);
+          onMouseLeave?.(event);
+        }}
         className={cn(
           menuItemClasses,
           'w-full text-left',

@@ -91,9 +91,11 @@ export function getFilterButtonHitBounds(
 ): { x: number; y: number; width: number; height: number } {
   const icon = getFilterButtonIconBounds(x, y, width, height);
   const hitSize = Math.max(1, Math.min(FILTER_BUTTON_HIT_SIZE, width, height));
+  const centeredX = icon.x + (icon.width - hitSize) / 2;
+  const centeredY = icon.y + (icon.height - hitSize) / 2;
   return {
-    x: icon.x,
-    y: icon.y - (hitSize - icon.height) / 2,
+    x: Math.min(Math.max(centeredX, x), x + width - hitSize),
+    y: Math.min(Math.max(centeredY, y), y + height - hitSize),
     width: hitSize,
     height: hitSize,
   };

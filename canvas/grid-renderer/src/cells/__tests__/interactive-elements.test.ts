@@ -122,7 +122,7 @@ describe('collectInteractiveElements', () => {
     const el = collector.elements[0];
     expect(el.type).toBe('filter-button');
     expect(el.bounds).toEqual({
-      x: 307,
+      x: 304,
       y: 54.5,
       width: 16,
       height: 16,

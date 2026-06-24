@@ -21,6 +21,8 @@ import {
   fetchRoomSnapshotForHostBootstrap,
   projectImportDiagnostic,
   validateAndResolveImportSource,
+  xlsxImportRootSource,
+  xlsxVersionMetadataTrust,
   type AuthorizedRoomBootstrap,
   type DocumentByteSyncPort,
   type DocumentHandle,
@@ -325,12 +327,8 @@ export async function importHostBackedDocument(
     lifecycleInput,
   });
 
-  lifecycle.createFromXlsx(
-    lifecycleInput.documentId,
-    {},
-    { type: 'bytes', data: resolvedSource.bytes },
-    options.importOptions,
-  );
+  const importSource = { type: 'bytes' as const, data: resolvedSource.bytes };
+  lifecycle.createFromXlsx(lifecycleInput.documentId, {}, importSource, options.importOptions);
   await lifecycle.waitForReady();
   if (options.interactiveDeferredImportToken !== INTERNAL_INTERACTIVE_DEFERRED_IMPORT) {
     // Match the direct DocumentFactory import contract: host-backed handles are
@@ -339,10 +337,16 @@ export async function importHostBackedDocument(
   }
 
   const context = lifecycle.documentContext;
+  const versionMetadataTrust = await xlsxVersionMetadataTrust(
+    importSource,
+    lifecycleInput.documentId,
+    options.importOptions,
+  );
   const importDiagnostics = (await lifecycle.computeBridge.getImportDiagnostics()).map(
     projectImportDiagnostic,
   );
-  const importWarnings = documentImportWarningsFromDiagnostics(importDiagnostics);
+  const rootDiagnostics = [...versionMetadataTrust.diagnostics, ...importDiagnostics];
+  const importWarnings = documentImportWarningsFromDiagnostics(rootDiagnostics);
   const handle = _createDocumentHandleInternal(
     lifecycleInput.documentId,
     lifecycle,
@@ -351,8 +355,12 @@ export async function importHostBackedDocument(
     importWarnings,
     {
       kind: 'xlsx',
-      source: { sourceType: 'bytes', byteLength: resolvedSource.bytes.byteLength },
-      diagnostics: importDiagnostics,
+      source: xlsxImportRootSource(importSource),
+      diagnostics: rootDiagnostics,
+      versionMetadataTrust: versionMetadataTrust.trust,
+      ...(versionMetadataTrust.versionMetadataHeadCandidate
+        ? { versionMetadataHeadCandidate: versionMetadataTrust.versionMetadataHeadCandidate }
+        : {}),
     },
   );
   return { handle, importWarnings };

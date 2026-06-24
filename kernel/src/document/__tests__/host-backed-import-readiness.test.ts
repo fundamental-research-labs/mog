@@ -13,6 +13,8 @@ const validateAndResolveImportSourceMock = jest.fn();
 const createDocumentHandleInternalMock = jest.fn();
 const documentImportWarningsFromDiagnosticsMock = jest.fn();
 const projectImportDiagnosticMock = jest.fn();
+const xlsxImportRootSourceMock = jest.fn();
+const xlsxVersionMetadataTrustMock = jest.fn();
 const order: string[] = [];
 const INTERNAL_INTERACTIVE_DEFERRED_IMPORT = Symbol('internal-interactive-deferred-import');
 
@@ -50,6 +52,8 @@ jest.unstable_mockModule('@mog-sdk/kernel/host-lifecycle-internal', () => ({
   fetchRoomSnapshotForHostBootstrap: jest.fn(),
   projectImportDiagnostic: projectImportDiagnosticMock,
   validateAndResolveImportSource: validateAndResolveImportSourceMock,
+  xlsxImportRootSource: xlsxImportRootSourceMock,
+  xlsxVersionMetadataTrust: xlsxVersionMetadataTrustMock,
 }));
 
 const { importHostBackedDocument } = await import('@mog/kernel-host-internal');
@@ -114,6 +118,17 @@ describe('host-backed XLSX import readiness', () => {
     createDocumentHandleInternalMock.mockReturnValue({ kind: 'mock-handle' });
     documentImportWarningsFromDiagnosticsMock.mockReturnValue([]);
     projectImportDiagnosticMock.mockImplementation((diagnostic) => diagnostic);
+    xlsxImportRootSourceMock.mockImplementation((source) => ({
+      sourceType: 'bytes',
+      byteLength: source.data.byteLength,
+    }));
+    xlsxVersionMetadataTrustMock.mockResolvedValue({
+      trust: {
+        status: 'absent',
+        sidecarPart: 'customXml/mog-version-metadata.xml',
+      },
+      diagnostics: [],
+    });
   });
 
   it('does not return a handle until import durability has completed', async () => {
@@ -151,6 +166,22 @@ describe('host-backed XLSX import readiness', () => {
     expect(result).toEqual({ handle: { kind: 'mock-handle' }, importWarnings: [] });
     expect(awaitImportDurabilityMock).toHaveBeenCalledTimes(1);
     expect(getImportDiagnosticsMock).toHaveBeenCalledTimes(1);
+    expect(createDocumentHandleInternalMock).toHaveBeenCalledWith(
+      'doc-import-001',
+      expect.any(MockDocumentLifecycleSystem),
+      { kind: 'mock-document-context' },
+      undefined,
+      [],
+      {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 4 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'absent',
+          sidecarPart: 'customXml/mog-version-metadata.xml',
+        },
+      },
+    );
     expect(order).toEqual(['create', 'ready', 'durability-start', 'durability-end']);
   });
 
@@ -164,6 +195,22 @@ describe('host-backed XLSX import readiness', () => {
     expect(result).toEqual({ handle: { kind: 'mock-handle' }, importWarnings: [] });
     expect(awaitImportDurabilityMock).not.toHaveBeenCalled();
     expect(getImportDiagnosticsMock).toHaveBeenCalledTimes(1);
+    expect(createDocumentHandleInternalMock).toHaveBeenCalledWith(
+      'doc-import-001',
+      expect.any(MockDocumentLifecycleSystem),
+      { kind: 'mock-document-context' },
+      undefined,
+      [],
+      {
+        kind: 'xlsx',
+        source: { sourceType: 'bytes', byteLength: 4 },
+        diagnostics: [],
+        versionMetadataTrust: {
+          status: 'absent',
+          sidecarPart: 'customXml/mog-version-metadata.xml',
+        },
+      },
+    );
     expect(order).toEqual(['create', 'ready']);
   });
 

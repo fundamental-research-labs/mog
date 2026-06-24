@@ -97,7 +97,7 @@ function StyleStackButton({ icon, label, onClick, isOpen }: StyleStackButtonProp
       <button
         type="button"
         onClick={onClick}
-        className="flex h-5 min-w-[134px] items-center gap-1.5 rounded px-1.5 text-ribbon leading-none text-ss-text-secondary transition-colors duration-ss-fast hover:bg-ss-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-ss-primary"
+        className="flex h-5 min-w-[132px] items-center gap-1.5 rounded px-1.5 text-ribbon-compact leading-none text-ss-text-secondary transition-colors duration-ss-fast hover:bg-ss-surface-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-ss-primary"
         aria-label={label}
         aria-expanded={isOpen}
         aria-haspopup="menu"

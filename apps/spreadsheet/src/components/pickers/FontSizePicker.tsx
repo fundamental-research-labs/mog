@@ -298,19 +298,19 @@ export function FontSizePicker({
         onFocus={handleFocus}
         className={`
  ${isCompact ? 'w-10' : 'w-12'} h-7 px-1
- border rounded
- bg-ss-surface text-ss-text-secondary text-ribbon text-center
+ border border-transparent rounded
+ bg-transparent text-ss-text-secondary text-ribbon text-center
  cursor-pointer outline-none
  transition-colors duration-ss-fast
  hover:bg-ss-surface-hover
  ${
    error
      ? 'border-ss-error ring-1 ring-ss-error/20'
-     : isSmallFont
+   : isSmallFont
        ? 'border-ss-warning ring-1 ring-ss-warning/20 bg-ss-warning-bg'
-       : isOpen
-         ? 'border-ss-primary ring-1 ring-ss-primary/20'
-         : 'border-ss-border'
+   : isOpen
+        ? 'bg-ss-primary-light text-ss-primary'
+        : ''
  }
  `}
         title={

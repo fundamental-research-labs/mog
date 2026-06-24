@@ -155,7 +155,13 @@ export const SplitButton = React.memo(function SplitButton({
  disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none
  `;
 
-  const hoverStyles = 'hover:bg-ss-surface-hover hover:shadow-ss-button-hover';
+  const quietSplitStyles = `
+ bg-transparent text-ss-text-secondary border-transparent
+ group-hover/split-button:bg-ss-surface-hover
+ group-hover/split-button:border-ss-border-button-hover
+ group-hover/split-button:shadow-ss-button-hover
+ `;
+  const openSplitStyles = 'bg-ss-primary-light text-ss-primary border-ss-primary-light';
   const activeStyles = 'active:bg-ss-surface-active active:shadow-ss-button-active';
 
   if (variant === 'large') {
@@ -167,7 +173,7 @@ export const SplitButton = React.memo(function SplitButton({
       : 'px-3 py-1 min-w-[44px]'; // Full sizing
 
     return (
-      <div id={id} className={`flex flex-row items-stretch ${className}`}>
+      <div id={id} className={`group/split-button flex flex-row items-stretch ${className}`}>
         {/* Main Button - Large */}
         <button
           type="button"
@@ -182,9 +188,9 @@ export const SplitButton = React.memo(function SplitButton({
  ${mainButtonClasses}
  h-[var(--ribbon-content-height)]
  text-ss-text-secondary
- border border-ss-border rounded-l
+ border border-r-0 rounded-l
  cursor-pointer select-none
- ${hoverStyles}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
         >
@@ -208,9 +214,9 @@ export const SplitButton = React.memo(function SplitButton({
  ${buttonBase}
  px-1 min-w-[16px]
  h-[var(--ribbon-content-height)]
- border border-l-0 border-ss-border rounded-r
+ border border-l rounded-r
  cursor-pointer select-none
- ${isOpen ? 'bg-ss-primary-light text-ss-primary' : `text-ss-text-secondary ${hoverStyles}`}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
         >
@@ -222,7 +228,7 @@ export const SplitButton = React.memo(function SplitButton({
 
   // Small variant (default)
   return (
-    <div id={id} className={`flex flex-row items-stretch ${className}`}>
+    <div id={id} className={`group/split-button flex flex-row items-stretch ${className}`}>
       {/* Main Button - Small */}
       <button
         type="button"
@@ -235,9 +241,9 @@ export const SplitButton = React.memo(function SplitButton({
  ${buttonBase}
  w-6 h-7
  text-ss-text-secondary
- border border-ss-border rounded-l
+ border border-r-0 rounded-l
  cursor-pointer select-none
- ${hoverStyles}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
       >
@@ -257,9 +263,9 @@ export const SplitButton = React.memo(function SplitButton({
         className={`
  ${buttonBase}
  px-0.5 min-w-[14px] h-7
- border border-l-0 border-ss-border rounded-r
+ border border-l rounded-r
  cursor-pointer select-none
- ${isOpen ? 'bg-ss-primary-light text-ss-primary' : `text-ss-text-secondary ${hoverStyles}`}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
       >

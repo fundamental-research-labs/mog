@@ -14,6 +14,7 @@ use super::sync_authored_cells::{
 use super::{YrsComputeEngine, construction, services, viewport};
 
 mod axis_capacity;
+mod repair;
 mod runtime_settings;
 
 impl YrsComputeEngine {
@@ -65,6 +66,8 @@ impl YrsComputeEngine {
                     .map(|g| (*sid, g.col_count() as usize))
             })
             .collect();
+
+        repair::repair_orphaned_cell_bindings_after_sync(self)?;
 
         let workbook_snap = construction::build_workbook_snapshot_from_yrs(&self.stores.storage)?;
 

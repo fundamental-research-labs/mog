@@ -3,6 +3,7 @@
 use super::super::*;
 use super::helpers::*;
 use super::sync_helpers::*;
+use formula_types::StructureChange;
 use snapshot_types::WorkbookSnapshot;
 
 #[test]
@@ -28,6 +29,42 @@ fn sync_forked_engines_share_default_sheet_history() {
 
     let _ = sync_a_to_b_diff(&engine_a, &mut engine_b);
     assert_cell_is_42(&engine_b, &sheet_id);
+}
+
+#[test]
+fn sync_concurrent_row_delete_and_cell_write_drops_orphaned_cell_payload() {
+    let (room_state, sheet_id) = canonical_room_state();
+    let (mut engine_a, mut engine_b) = fork_engine_pair_from_state(&room_state);
+
+    for row in 0..5 {
+        engine_a
+            .set_cell_value_as_text(&sheet_id, row, 0, &(row + 1).to_string())
+            .expect("seed row");
+    }
+    sync_bidirectional(&mut engine_a, &mut engine_b);
+
+    engine_a
+        .structure_change(
+            &sheet_id,
+            &StructureChange::DeleteRows {
+                at: 0,
+                count: 5,
+                deleted_cell_ids: vec![],
+            },
+        )
+        .expect("engine A delete rows");
+    engine_b
+        .set_cell_value_as_text(&sheet_id, 0, 0, "99")
+        .expect("engine B write A1");
+
+    sync_a_to_b_diff(&engine_a, &mut engine_b);
+    sync_a_to_b_diff(&engine_b, &mut engine_a);
+
+    assert_eq!(
+        engine_a.get_cell_value(&sheet_id, 0, 0),
+        engine_b.get_cell_value(&sheet_id, 0, 0),
+        "engines must converge after a write races with row-axis deletion",
+    );
 }
 
 #[test]

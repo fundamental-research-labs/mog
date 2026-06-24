@@ -153,9 +153,7 @@ fn common_explicit_rich_run_color(
     runs: &[&domain_types::RichTextRun],
     theme_colors: &[String],
 ) -> Option<String> {
-    let mut colors = runs
-        .iter()
-        .map(|run| rich_run_color(run, theme_colors));
+    let mut colors = runs.iter().map(|run| rich_run_color(run, theme_colors));
     let first = colors.next()??;
     if colors.all(|color| color.as_deref() == Some(first.as_str())) {
         Some(first)

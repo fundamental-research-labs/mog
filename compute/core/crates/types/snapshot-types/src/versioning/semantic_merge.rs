@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    canonical_digest, ObjectDigest, SemanticObjectKind, VersionDomainCapabilityState,
-    VersionDomainClass,
+    ObjectDigest, SemanticObjectKind, VersionDomainCapabilityState, VersionDomainClass,
+    canonical_digest,
 };
 
 pub const SEMANTIC_MERGE_POLICY_MANIFEST_SCHEMA_VERSION: &str = "semantic-merge-policy-manifest.v1";

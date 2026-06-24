@@ -92,4 +92,5 @@ describe('WorksheetFiltersImpl.listHeaderInfo', () => {
     expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
     expect(result.map((entry) => entry.filterId)).toEqual(['right-filter', 'sheet-filter']);
   });
+
 });

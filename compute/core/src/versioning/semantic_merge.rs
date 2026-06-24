@@ -1,10 +1,10 @@
 use std::collections::BTreeSet;
 
 use snapshot_types::versioning::{
-    canonical_digest, first_slice_semantic_merge_policy_manifest,
-    semantic_merge_policy_manifest_digest, ObjectDigest, SemanticDomainCoverageStatus,
-    SemanticMergeBranch, SemanticMergeBranchEvidence, SemanticMergeEvidence,
-    SemanticMergePolicyManifest, SemanticWorkbookDiff, SemanticWorkbookState,
+    ObjectDigest, SemanticDomainCoverageStatus, SemanticMergeBranch, SemanticMergeBranchEvidence,
+    SemanticMergeEvidence, SemanticMergePolicyManifest, SemanticWorkbookDiff,
+    SemanticWorkbookState, canonical_digest, first_slice_semantic_merge_policy_manifest,
+    semantic_merge_policy_manifest_digest,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -120,10 +120,10 @@ mod tests {
 
     use serde_json::Value;
     use snapshot_types::versioning::{
-        semantic_merge_evidence_digest, semantic_workbook_state_digest, CanonicalCellValue,
-        SemanticCellState, SemanticDomainState, SemanticObjectDigest, SemanticObjectKind,
-        SemanticSheetState, VersionDomainCapabilityState, VersionDomainClass,
-        SEMANTIC_MERGE_FIRST_SLICE_POLICY_ID, SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION,
+        CanonicalCellValue, SEMANTIC_MERGE_FIRST_SLICE_POLICY_ID,
+        SEMANTIC_WORKBOOK_STATE_SCHEMA_VERSION, SemanticCellState, SemanticDomainState,
+        SemanticObjectDigest, SemanticObjectKind, SemanticSheetState, VersionDomainCapabilityState,
+        VersionDomainClass, semantic_merge_evidence_digest, semantic_workbook_state_digest,
     };
 
     use super::*;

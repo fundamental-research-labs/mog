@@ -570,10 +570,7 @@ mod tests {
         assert_eq!(first.changes[0].change_id, "updated:cell:sheet-1:1:1");
         assert_eq!(first.changes[0].kind, SemanticChangeKind::Updated);
         assert_eq!(first.changes[0].domain_id, CELL_VALUES_DOMAIN);
-        assert_eq!(
-            first.changes[2].change_id,
-            "updated:value:cell:sheet-1:1:1"
-        );
+        assert_eq!(first.changes[2].change_id, "updated:value:cell:sheet-1:1:1");
         assert_eq!(first.changes[2].kind, SemanticChangeKind::Updated);
         assert_eq!(first.changes[2].object_kind, SemanticObjectKind::CellValue);
         assert_eq!(first.changes[2].domain_id, CELL_VALUES_DOMAIN);

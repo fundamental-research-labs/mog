@@ -29,11 +29,18 @@ import {
   recordActiveCheckoutBranchCommit,
 } from './version/active-checkout-write-context';
 import { commitWorkbookVersion } from './version/commit/version-commit';
+import {
+  providerErrorDiagnostic as diffProviderErrorDiagnostic,
+} from './version/diff/version-diff-diagnostics';
 import { diffWorkbookVersion } from './version/diff/version-diff';
+import {
+  providerErrorDiagnostic as listCommitsProviderErrorDiagnostic,
+} from './version/list-commits/version-list-commits-diagnostics';
 import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
 import { listWorkbookVersionCommits } from './version/list-commits/version-list-commits';
 import {
+  VERSION_HEAD_REF,
   degradedHead,
   mapHeadResult,
   mapLegacyHeadResult,
@@ -102,7 +109,14 @@ export async function listWorkbookVersionFacadeCommits(
 ): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'listCommits', 'version:read');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listCommits', gateDiagnostics);
-  return listWorkbookVersionCommits(ctx, options);
+  const activeCheckoutOptions = await listCommitsOptionsForActiveCheckout(ctx, options);
+  if (!activeCheckoutOptions.ok) {
+    return versionFailureFromStoreDiagnostics(
+      'listCommits',
+      activeCheckoutOptions.diagnostics,
+    );
+  }
+  return listWorkbookVersionCommits(ctx, activeCheckoutOptions.options);
 }
 
 export async function commitWorkbookVersionFacade(
@@ -139,9 +153,118 @@ export async function diffWorkbookVersionFacade(
 ): Promise<VersionResult<VersionSemanticDiffPage>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'diff', 'version:diff');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('diff', gateDiagnostics);
+  const activeCheckoutSelectors = await diffCommitishForActiveCheckout(ctx, base, target);
+  if (!activeCheckoutSelectors.ok) {
+    return versionFailureFromStoreDiagnostics('diff', activeCheckoutSelectors.diagnostics);
+  }
   return versionResultFromDiffPage(
-    await diffWorkbookVersion(ctx, base, target, options),
+    await diffWorkbookVersion(
+      ctx,
+      activeCheckoutSelectors.base,
+      activeCheckoutSelectors.target,
+      options,
+    ),
     options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT,
+  );
+}
+
+async function listCommitsOptionsForActiveCheckout(
+  ctx: DocumentContext,
+  options: VersionListCommitsOptions,
+): Promise<
+  | { readonly ok: true; readonly options: VersionListCommitsOptions }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  if (options.pageToken !== undefined || options.from !== undefined) {
+    return { ok: true, options };
+  }
+  if (options.ref !== undefined && options.ref !== VERSION_HEAD_REF) {
+    return { ok: true, options };
+  }
+
+  const activeCheckout = await readActiveCheckoutHead(ctx);
+  if (activeCheckout.status === 'absent') return { ok: true, options };
+  if (activeCheckout.status === 'degraded') {
+    return { ok: false, diagnostics: activeCheckout.result.diagnostics };
+  }
+  if (activeCheckout.session.detached) {
+    const { ref: _ref, ...rest } = options;
+    return {
+      ok: true,
+      options: {
+        ...rest,
+        from: activeCheckout.head.id,
+      },
+    };
+  }
+  if (!activeCheckout.head.refName) {
+    return {
+      ok: false,
+      diagnostics: [listCommitsProviderErrorDiagnostic()],
+    };
+  }
+
+  return {
+    ok: true,
+    options: {
+      ...options,
+      ref: activeCheckout.head.refName,
+    },
+  };
+}
+
+async function diffCommitishForActiveCheckout(
+  ctx: DocumentContext,
+  base: VersionCommitish,
+  target: VersionCommitish,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly base: VersionCommitish;
+      readonly target: VersionCommitish;
+    }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  if (!isSymbolicHeadCommitish(base) && !isSymbolicHeadCommitish(target)) {
+    return { ok: true, base, target };
+  }
+
+  const activeCheckout = await readActiveCheckoutHead(ctx);
+  if (activeCheckout.status === 'absent') return { ok: true, base, target };
+  if (activeCheckout.status === 'degraded') {
+    return { ok: false, diagnostics: activeCheckout.result.diagnostics };
+  }
+
+  const resolved = activeCheckout.session.detached
+    ? ({ kind: 'commit', id: activeCheckout.head.id } as const)
+    : activeCheckout.head.refName
+      ? ({ kind: 'ref', name: activeCheckout.head.refName } as const)
+      : null;
+  if (!resolved) {
+    return {
+      ok: false,
+      diagnostics: [
+        diffProviderErrorDiagnostic({
+          reason: 'active-checkout-head-missing-ref',
+        }),
+      ],
+    };
+  }
+
+  return {
+    ok: true,
+    base: isSymbolicHeadCommitish(base) ? resolved : base,
+    target: isSymbolicHeadCommitish(target) ? resolved : target,
+  };
+}
+
+function isSymbolicHeadCommitish(value: VersionCommitish): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'kind' in value &&
+    value.kind === 'ref' &&
+    value.name === VERSION_HEAD_REF
   );
 }
 

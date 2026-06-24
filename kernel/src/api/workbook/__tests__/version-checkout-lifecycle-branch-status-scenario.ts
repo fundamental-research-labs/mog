@@ -165,6 +165,45 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
       });
       expect(wb.isDirty).toBe(false);
 
+      const explicitHeadCommits = await version.listCommits({ ref: 'HEAD' });
+      expect(explicitHeadCommits).toMatchObject({ ok: true });
+      if (!explicitHeadCommits.ok) {
+        throw new Error(`expected HEAD commit listing success: ${explicitHeadCommits.error.code}`);
+      }
+      expect(explicitHeadCommits.value.items.map((commit) => commit.id)).toContain(
+        betaCommit.value.id,
+      );
+
+      const implicitCurrentCommits = await version.listCommits();
+      expect(implicitCurrentCommits).toMatchObject({ ok: true });
+      if (!implicitCurrentCommits.ok) {
+        throw new Error(
+          `expected active checkout commit listing success: ${implicitCurrentCommits.error.code}`,
+        );
+      }
+      expect(implicitCurrentCommits.value.items.map((commit) => commit.id)).toContain(
+        betaCommit.value.id,
+      );
+
+      const headDiff = await version.diff(mainAlpha.id, { kind: 'ref', name: 'HEAD' });
+      expect(headDiff).toMatchObject({ ok: true });
+      if (!headDiff.ok) throw new Error(`expected HEAD diff success: ${headDiff.error.code}`);
+      expect(
+        headDiff.value.items.some(
+          (entry) => entry.after.kind === 'value' && entry.after.value === 'beta',
+        ),
+      ).toBe(true);
+
+      await expect(version.checkout({ kind: 'ref', name: 'HEAD' })).resolves.toMatchObject({
+        ok: true,
+        value: {
+          plan: {
+            commitId: betaCommit.value.id,
+            target: { kind: 'head', refName: 'refs/heads/scenario/manual-smoke' },
+          },
+        },
+      });
+
       wb.emit({
         type: 'security:policies-reloaded',
         timestamp: Date.now(),

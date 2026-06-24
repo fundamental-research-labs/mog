@@ -25,6 +25,7 @@ import { prepareExternalFormulaWrite } from '../../../services/external-formulas
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
+import { calendarPartsInTz } from './calendar-tz';
 import {
   withDirectEditRange,
   type MutationAdmissionOptions,
@@ -295,7 +296,7 @@ export async function setRange(
   sheetId: SheetId,
   startRow: number,
   startCol: number,
-  values: CellValuePrimitive[][],
+  values: Array<Array<CellValuePrimitive | Date>>,
   options?: MutationAdmissionOptions,
 ): Promise<void> {
   if (!isValidAddress(startRow, startCol)) {
@@ -311,12 +312,19 @@ export async function setRange(
   }
 
   const edits: Parameters<typeof ctx.computeBridge.setCellsByPosition>[1] = [];
+  const dateWrites: Array<{ row: number; col: number; date: Date }> = [];
 
   for (let r = 0; r < values.length; r++) {
     for (let c = 0; c < values[r].length; c++) {
       const row = startRow + r;
       const col = startCol + c;
       const value = values[r][c];
+      if (value instanceof Date) {
+        await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+        dateWrites.push({ row, col, date: value });
+        continue;
+      }
+
       const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
       // Route every SDK value through the shared helper so the
       // Literal/Parse/Clear distinction is preserved structurally — no
@@ -326,10 +334,33 @@ export async function setRange(
   }
 
   await ctx.awaitMaterialized?.('allSheets');
-  if (options) {
+  if (edits.length > 0 && options) {
     await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
-  } else {
+  } else if (edits.length > 0) {
     await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+  }
+  for (const dateWrite of dateWrites) {
+    const parts = calendarPartsInTz(dateWrite.date, ctx.userTimezone);
+    if (options) {
+      await ctx.computeBridge.setDateValue(
+        sheetId,
+        dateWrite.row,
+        dateWrite.col,
+        parts.year,
+        parts.month,
+        parts.day,
+        options,
+      );
+    } else {
+      await ctx.computeBridge.setDateValue(
+        sheetId,
+        dateWrite.row,
+        dateWrite.col,
+        parts.year,
+        parts.month,
+        parts.day,
+      );
+    }
   }
 }
 

@@ -18,6 +18,7 @@ function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
   const order: string[] = [];
   return {
     order,
+    userTimezone: 'UTC',
     awaitMaterialized: jest.fn().mockImplementation(async (scope: string) => {
       order.push(`await:${scope}`);
     }),
@@ -25,6 +26,9 @@ function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
       setCellsByPosition: jest.fn().mockImplementation(async () => {
         order.push('setCellsByPosition');
+      }),
+      setDateValue: jest.fn().mockImplementation(async () => {
+        order.push('setDateValue');
       }),
       clearRangeByPosition: jest.fn().mockImplementation(async () => {
         order.push('clearRangeByPosition');
@@ -196,6 +200,43 @@ describe('setRange', () => {
 
     expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
       { row: 0, col: 0, input: { kind: 'parse', text: '=SUM(A1:A10)' } },
+    ]);
+  });
+
+  it('routes Date values through setDateValue instead of string coercion', async () => {
+    const ctx = createMockCtx();
+    await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [
+      ['start', new Date('2026-01-01T00:00:00.000Z')],
+      [new Date('2026-02-01T00:00:00.000Z'), null],
+    ]);
+
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
+      { row: 0, col: 0, input: { kind: 'parse', text: 'start' } },
+      { row: 1, col: 1, input: { kind: 'clear' } },
+    ]);
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      0,
+      1,
+      2026,
+      1,
+      1,
+    );
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      1,
+      0,
+      2026,
+      2,
+      1,
+    );
+    expect(ctx.order).toEqual([
+      'await:allSheets',
+      'setCellsByPosition',
+      'setDateValue',
+      'setDateValue',
     ]);
   });
 

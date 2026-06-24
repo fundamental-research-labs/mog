@@ -1,4 +1,7 @@
 import type {
+  VersionApplyMergeInput,
+  VersionApplyMergeOptions,
+  VersionApplyMergeResult,
   VersionCommitOptions,
   VersionMainRefName,
   VersionRecordRevision,
@@ -82,6 +85,18 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     return result;
   }
 
+  override async applyMerge(
+    input: VersionApplyMergeInput,
+    options: VersionApplyMergeOptions = {},
+  ): Promise<VersionResult<VersionApplyMergeResult>> {
+    const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
+    const result = await super.applyMerge(input, options);
+    if (result.ok) {
+      this.recordCheckoutBranchApplyMerge(beforeSaveHead, options, result.value);
+    }
+    return result;
+  }
+
   private commitOptionsForRuntimeHead(
     options: VersionCommitOptions,
     currentToken: RuntimeSaveHeadTokenState,
@@ -119,6 +134,24 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     const service = readSurfaceStatusService(this.readVersionContext());
     service?.recordActiveCheckoutBranchCommit?.({
       commitId: commitSummary.id,
+      refName: currentToken.refName,
+    });
+  }
+
+  private recordCheckoutBranchApplyMerge(
+    currentToken: RuntimeSaveHeadTokenState,
+    options: VersionApplyMergeOptions,
+    result: VersionApplyMergeResult,
+  ): void {
+    if (currentToken === 'stale' || currentToken?.source !== 'checkout-session') return;
+    if (!currentToken.refName) return;
+    const targetRef = normalizeRefName(result.targetRef ?? options.targetRef);
+    if (targetRef !== currentToken.refName) return;
+    if (!('commitRef' in result)) return;
+
+    const service = readSurfaceStatusService(this.readVersionContext());
+    service?.recordActiveCheckoutBranchCommit?.({
+      commitId: result.commitRef.id,
       refName: currentToken.refName,
     });
   }

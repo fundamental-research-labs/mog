@@ -23,11 +23,18 @@ describe('WorkbookVersion basic production flow', () => {
     const mainHandle = await createMaterializerDocumentHandle(documentScope);
     const branchHandle = await createMaterializerDocumentHandle(documentScope);
     const verifyHandle = await createMaterializerDocumentHandle(documentScope);
-    installVersionDomainDetectorNoopsOnHandles(mainHandle, branchHandle, verifyHandle);
+    const revertVerifyHandle = await createMaterializerDocumentHandle(documentScope);
+    installVersionDomainDetectorNoopsOnHandles(
+      mainHandle,
+      branchHandle,
+      verifyHandle,
+      revertVerifyHandle,
+    );
 
     let mainWb: Workbook | undefined;
     let branchWb: Workbook | undefined;
     let verifyWb: Workbook | undefined;
+    let revertVerifyWb: Workbook | undefined;
 
     try {
       mainWb = await mainHandle.workbook({ versioning: withVersionManifest({ provider }) });
@@ -169,6 +176,7 @@ describe('WorkbookVersion basic production flow', () => {
         throw new Error(`expected applied merge result, got ${applied.value.status}`);
       }
       const mergeCommitId = applied.value.commitRef.id;
+      const mergeHead = await expectHead(mainWb);
 
       const mainCommits = await mainWb.version.listCommits();
       if (!mainCommits.ok)
@@ -236,10 +244,88 @@ describe('WorkbookVersion basic production flow', () => {
       await expect(verifyWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
       await expect(verifyWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'branch' });
       await expect(verifyWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'main' });
+
+      const revertedMerge = await mainWb.version.revert({
+        target: { kind: 'mergeCommit', commitId: mergeCommitId, mainlineParent: 1 },
+        targetRef: MATERIALIZER_TARGET_REF as any,
+        expectedTargetHead: {
+          commitId: mergeCommitId,
+          revision: requireRefRevision(mergeHead),
+        },
+        reason: 'regression-test-basic-flow-revert-merge',
+      });
+      if (!revertedMerge.ok) {
+        throw new Error(`expected merge revert success: ${revertedMerge.error.code}`);
+      }
+      expect(revertedMerge.value).toMatchObject({
+        status: 'applied',
+        target: { kind: 'mergeCommit', commitId: mergeCommitId, mainlineParent: 1 },
+        mutationGuarantee: 'revert-commit-created',
+        commitRef: {
+          refName: MATERIALIZER_TARGET_REF,
+          resolvedFrom: MATERIALIZER_TARGET_REF,
+        },
+      });
+      if (revertedMerge.value.status !== 'applied' || !revertedMerge.value.commitRef) {
+        throw new Error(`expected applied merge revert result, got ${revertedMerge.value.status}`);
+      }
+      const revertCommitId = revertedMerge.value.commitRef.id;
+
+      const revertedCommits = await mainWb.version.listCommits();
+      if (!revertedCommits.ok)
+        throw new Error(`expected reverted listCommits success: ${revertedCommits.error.code}`);
+      expect(revertedCommits.value.items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: revertCommitId,
+            parents: [mergeCommitId],
+          }),
+          expect.objectContaining({
+            id: mergeCommitId,
+            parents: [oursCommit.id, branchCommit.id],
+          }),
+        ]),
+      );
+
+      revertVerifyWb = await revertVerifyHandle.workbook({
+        versioning: withVersionManifest({ provider }),
+      });
+      installVersionDomainDetectorNoopsOnWorkbook(revertVerifyWb);
+      revertVerifyWb.markClean();
+      const revertedCheckout = await revertVerifyWb.version.checkout({
+        kind: 'ref',
+        name: MATERIALIZER_TARGET_REF,
+      });
+      if (!revertedCheckout.ok) {
+        throw new Error(`expected reverted main checkout success: ${revertedCheckout.error.code}`);
+      }
+      expect(revertedCheckout.value).toMatchObject({
+        status: 'success',
+        materialization: 'applied',
+        mutationGuarantee: 'workbook-state-materialized',
+      });
+      await expect(revertVerifyWb.version.getHead()).resolves.toMatchObject({
+        ok: true,
+        value: {
+          id: revertCommitId,
+          refName: MATERIALIZER_TARGET_REF,
+        },
+      });
+      await expect(revertVerifyWb.activeSheet.getCell('A1')).resolves.toMatchObject({
+        value: 'base',
+      });
+      await expect(revertVerifyWb.activeSheet.getCell('B1')).resolves.toMatchObject({
+        value: null,
+      });
+      await expect(revertVerifyWb.activeSheet.getCell('C1')).resolves.toMatchObject({
+        value: 'main',
+      });
     } finally {
+      if (revertVerifyWb) await revertVerifyWb.close('skipSave');
       if (verifyWb) await verifyWb.close('skipSave');
       if (branchWb) await branchWb.close('skipSave');
       if (mainWb) await mainWb.close('skipSave');
+      await revertVerifyHandle.dispose();
       await verifyHandle.dispose();
       await branchHandle.dispose();
       await mainHandle.dispose();

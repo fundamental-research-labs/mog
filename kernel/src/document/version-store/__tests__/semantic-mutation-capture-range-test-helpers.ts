@@ -7,7 +7,7 @@ import type {
 } from '../commit-service';
 import type { WorkbookCommitId } from '../object-digest';
 import type { VersionGraphNamespace } from '../object-store';
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
 
 const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',
@@ -26,7 +26,7 @@ const NOW = new Date('2026-06-20T00:00:00.000Z');
 export const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 
 export function createRangeSemanticMutationCapture() {
-  return createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+  return createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
 }
 
 export function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {

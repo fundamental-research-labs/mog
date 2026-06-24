@@ -11,6 +11,7 @@ import {
   READ_ONLY_PROVIDER_DIAGNOSTIC_CODES,
   capabilityState,
   createCheckoutAndRevertFeatureGateVersion,
+  createMissingSemanticReaderSurfaceVersion,
   createReadOnlyProviderBackedSurfaceVersion,
   createStaleManifestSurfaceVersion,
 } from './version-surface-status-derivation-test-utils';
@@ -76,6 +77,23 @@ describe('WorkbookVersion surface status derivation hardening', () => {
       expect(surfaceReady.planCheckout).not.toHaveBeenCalled();
       expect(surfaceReady.merge).not.toHaveBeenCalled();
       expect(surfaceReady.mergeCommit).not.toHaveBeenCalled();
+    });
+
+    it('disables provider-backed commits when semantic capture has no Rust reader', async () => {
+      const surfaceReady = createMissingSemanticReaderSurfaceVersion();
+
+      const surface = await surfaceReady.version.getSurfaceStatus();
+
+      expect(capabilityState(surface, 'version:commit')).toMatchObject({
+        enabled: false,
+        dependency: 'storage',
+        reason: 'Normal provider-backed commits require a Rust semantic state reader.',
+        retryable: true,
+      });
+      expect(surface.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+        'version.surfaceStatus.semanticStateReaderUnavailable',
+      );
+      expect(surfaceReady.commit).not.toHaveBeenCalled();
     });
   });
 

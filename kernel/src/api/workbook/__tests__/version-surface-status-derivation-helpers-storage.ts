@@ -71,3 +71,17 @@ export function createStaleManifestSurfaceVersion() {
     },
   );
 }
+
+export function createMissingSemanticReaderSurfaceVersion() {
+  return createSurfaceReadyVersionWithContext(
+    {},
+    {
+      snapshotRootByteSyncPort: { encodeDiff: jest.fn() },
+      semanticMutationCapture: {
+        mutationCapture: { recordMutationResult: jest.fn() },
+        captureNormalCommit: jest.fn(),
+        capturePendingRemoteSegment: jest.fn(),
+      },
+    },
+  );
+}

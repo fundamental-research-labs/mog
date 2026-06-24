@@ -7,7 +7,7 @@ import type {
 } from '../commit-service';
 import type { WorkbookCommitId } from '../object-digest';
 import type { VersionGraphNamespace } from '../object-store';
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
 
 const DOCUMENT_SCOPE = {
   workspaceId: 'workspace-1',
@@ -38,7 +38,7 @@ const NOW = new Date('2026-06-20T00:00:00.000Z');
 export const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 
 export function createLaneSemanticMutationCapture() {
-  return createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+  return createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
 }
 
 export function sheetRenameResult(sheetId: string, oldName: string, name: string): MutationResult {
@@ -102,7 +102,7 @@ export function syncCollaboration(
 }
 
 export function pendingRemoteSnapshots(
-  capture: ReturnType<typeof createSemanticMutationCapture>,
+  capture: ReturnType<typeof createRustBackedTestSemanticMutationCapture>,
 ): any[] {
   const mutationCapture = capture.mutationCapture as unknown as {
     snapshotPendingRemoteMutations(): readonly any[];
@@ -113,7 +113,8 @@ export function pendingRemoteSnapshots(
 export function capturedChanges(
   captured: Extract<VersionNormalCommitCaptureResult, { status: 'success' }>,
 ): any[] {
-  return (captured.input.semanticChangeSetRecord.preimage.payload as any).changes;
+  const payload = captured.input.semanticChangeSetRecord.preimage.payload as any;
+  return payload.reviewChanges ?? payload.changes;
 }
 
 export function captureInput(): VersionNormalCommitCaptureInput {

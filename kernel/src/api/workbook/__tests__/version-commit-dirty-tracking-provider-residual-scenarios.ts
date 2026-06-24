@@ -1,7 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 
 import { createInMemoryVersionStoreProvider } from '../../../document/version-store/provider';
-import { createSemanticMutationCapture } from '../../../document/version-store/semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from '../../../document/version-store/__tests__/semantic-mutation-capture-test-helpers';
 import {
   cellWriteResult,
   createMockEventBus,
@@ -19,7 +19,7 @@ export function registerProviderResidualDirtyTrackingScenarios(): void {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-gap', 'root'));
     expectInitializeSuccess(initialized);
-    const semanticMutationCapture = createSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
     const wb = createWorkbook({
       eventBus,
       versioning: {

@@ -28,6 +28,10 @@ import {
   createSemanticMutationCapture,
   type SemanticMutationCaptureServices,
 } from '../../document/version-store/semantic-mutation-capture';
+import {
+  createComputeBridgeSemanticStateReader,
+  type VersionSemanticStateReaderPort,
+} from '../../document/version-store/semantic-state-reader';
 import type { WorkbookVersioningConfig } from './types';
 import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
@@ -57,12 +61,14 @@ export function attachWorkbookVersioning(
   )
     ? existing.semanticMutationCapture
     : undefined;
+  const semanticStateReader =
+    config.semanticStateReader ?? semanticStateReaderFromComputeBridge(ctx.computeBridge);
   const semanticCapture =
     config.semanticMutationCapture ??
     existingSemanticCapture ??
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
       ? createSemanticMutationCapture({
-          semanticStateReader: config.semanticStateReader,
+          semanticStateReader,
           requireOperationContext: true,
         })
       : undefined);
@@ -216,7 +222,7 @@ export function attachWorkbookVersioning(
       ? { snapshotRootByteSyncPort: config.snapshotRootByteSyncPort }
       : {}),
     ...(checkoutSnapshotMaterializer ? { checkoutSnapshotMaterializer } : {}),
-    ...(config.semanticStateReader ? { semanticStateReader: config.semanticStateReader } : {}),
+    ...(semanticStateReader ? { semanticStateReader } : {}),
     ...(writeService
       ? {
           writeService,
@@ -329,6 +335,21 @@ function isPendingRemotePromotionService(
 
 function isCheckoutSnapshotMaterializer(value: unknown): value is CheckoutSnapshotMaterializer {
   return isRecord(value) && typeof value.applySnapshot === 'function';
+}
+
+function semanticStateReaderFromComputeBridge(
+  bridge: unknown,
+): VersionSemanticStateReaderPort | undefined {
+  if (
+    !isRecord(bridge) ||
+    typeof bridge.semanticWorkbookStateEnvelope !== 'function' ||
+    typeof bridge.diffSemanticWorkbookStates !== 'function'
+  ) {
+    return undefined;
+  }
+  return createComputeBridgeSemanticStateReader(
+    bridge as unknown as Parameters<typeof createComputeBridgeSemanticStateReader>[0],
+  );
 }
 
 function providerWriteActivityTrackerFrom(

@@ -7,7 +7,7 @@ import type {
 } from '../commit-service';
 import type { WorkbookCommitId } from '../object-digest';
 import type { VersionGraphNamespace } from '../object-store';
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
 
 const DOCUMENT_SCOPE = {
   workspaceId: 'workspace-1',
@@ -33,7 +33,7 @@ const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 
 describe('semantic mutation capture dirty state', () => {
   it('keeps uncaptured normal mutations in the capture state after successful finalization', async () => {
-    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+    const capture = createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
 
     capture.mutationCapture.recordMutationResult({
       operation: 'compute_unsupported_normal_local_write',

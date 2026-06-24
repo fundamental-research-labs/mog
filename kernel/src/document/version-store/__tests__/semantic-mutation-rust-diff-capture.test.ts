@@ -13,6 +13,28 @@ const CELL_BEFORE_DIGEST = digest('3');
 const CELL_AFTER_DIGEST = digest('4');
 
 describe('Rust-backed semantic mutation capture', () => {
+  it('rejects review-projected changes when no Rust semantic reader is available', async () => {
+    const result = await buildRustBackedSemanticChangeSetPayload({
+      commit: captureInput(),
+      reviewChanges: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'mutation-1:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_CHANGE_SET' })],
+    });
+  });
+
   it('preserves semantic diff diagnostics without rejecting normal commit capture', async () => {
     const before = semanticState('alpha');
     const after = semanticState('beta');

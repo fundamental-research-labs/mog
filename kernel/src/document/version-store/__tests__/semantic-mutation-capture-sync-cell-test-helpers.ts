@@ -6,7 +6,7 @@ import type {
   VersionNormalCommitCaptureResult,
 } from '../commit-service';
 import type { VersionGraphNamespace } from '../object-store';
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
 
 const DOCUMENT_SCOPE = {
   workspaceId: 'workspace-1',
@@ -37,7 +37,7 @@ const NOW = new Date('2026-06-20T00:00:00.000Z');
 const COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as const;
 
 export function createSyncCellSemanticMutationCapture() {
-  return createSemanticMutationCapture({ author: LOCAL_AUTHOR, now: () => NOW });
+  return createRustBackedTestSemanticMutationCapture({ author: LOCAL_AUTHOR, now: () => NOW });
 }
 
 export function syncCellMutationResult(overrides: Partial<MutationResult> = {}): MutationResult {
@@ -84,7 +84,7 @@ export function pendingRemoteOperationContext(): VersionOperationContext {
 }
 
 export function pendingRemoteSnapshots(
-  capture: ReturnType<typeof createSemanticMutationCapture>,
+  capture: ReturnType<typeof createRustBackedTestSemanticMutationCapture>,
 ): any[] {
   const mutationCapture = capture.mutationCapture as unknown as {
     snapshotPendingRemoteMutations(): readonly any[];

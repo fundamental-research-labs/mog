@@ -25,6 +25,15 @@ export function registerGroupedOperationReceiptsScenario(): void {
     const groupId = 'sheet-add-group-1';
 
     const ctx = versionContext(version);
+    await ctx.versioning.mutationCapture.recordPreMutation({
+      operation: 'compute_create_sheet_with_default_col_width',
+      operationContext: operationContext({
+        operationId: 'sheet-add-create',
+        groupId,
+        sheetIds: ['sheet-created'],
+        domainIds: ['sheets'],
+      }),
+    });
     ctx.versioning.mutationCapture.recordMutationResult({
       operation: 'compute_create_sheet_with_default_col_width',
       operationContext: operationContext({

@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { createSemanticMutationCapture } from '../../../document/version-store/semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from '../../../document/version-store/__tests__/semantic-mutation-capture-test-helpers';
 import {
   cellWriteResult,
   commitId,
@@ -18,7 +18,7 @@ import {
 export function registerWriteServiceCommitDirtyTrackingScenarios(): void {
   it('rejects a derived-only dirty marker before a permissive write service can commit', async () => {
     const eventBus = createMockEventBus();
-    const semanticMutationCapture = createSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
     const commit = jest.fn(async () => ({
       status: 'success',
       commit: commitSummary('child'),
@@ -59,7 +59,7 @@ export function registerWriteServiceCommitDirtyTrackingScenarios(): void {
 
   it('rejects a semantic no-op dirty marker before a permissive write service can commit', async () => {
     const eventBus = createMockEventBus();
-    const semanticMutationCapture = createSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
     const commit = jest.fn(async () => ({
       status: 'success',
       commit: commitSummary('child'),

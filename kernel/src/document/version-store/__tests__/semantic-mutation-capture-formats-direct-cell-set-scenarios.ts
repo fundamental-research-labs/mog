@@ -1,15 +1,14 @@
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
 import {
   captureInput,
+  createFormatSemanticMutationCapture,
   expectCaptureSuccess,
   mutationResult,
-  NOW,
   operationContext,
 } from './semantic-mutation-capture-formats-helpers';
 
 export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): void {
   it('captures a single-cell direct format property change as cells.formats.direct', async () => {
-    const capture = createSemanticMutationCapture({ now: () => NOW });
+    const capture = createFormatSemanticMutationCapture();
 
     capture.mutationCapture.recordMutationResult({
       operation: 'compute_set_format_for_ranges',
@@ -31,9 +30,10 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
       schemaVersion: 1,
-      changes: [
+      source: { kind: 'rustSemanticDiff' },
+      reviewChanges: [
         {
           structural: {
             kind: 'metadata',
@@ -67,7 +67,7 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
   });
 
   it('captures multi-cell direct format property changes per resolved cell', async () => {
-    const capture = createSemanticMutationCapture({ now: () => NOW });
+    const capture = createFormatSemanticMutationCapture();
 
     capture.mutationCapture.recordMutationResult({
       operation: 'compute_set_format_for_ranges',
@@ -100,7 +100,7 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    const changes = captured.input.semanticChangeSetRecord.preimage.payload.changes as Array<{
+    const changes = captured.input.semanticChangeSetRecord.preimage.payload.reviewChanges as Array<{
       structural: { changeId: string; entityId: string };
       after: { value: unknown };
       display: { address: { value: string } };

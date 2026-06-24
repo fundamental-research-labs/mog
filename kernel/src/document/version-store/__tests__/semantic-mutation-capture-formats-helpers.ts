@@ -6,6 +6,7 @@ import type {
   VersionNormalCommitCaptureResult,
 } from '../commit-service';
 import type { VersionGraphNamespace } from '../object-store';
+import { createRustBackedTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
 
 const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',
@@ -40,6 +41,10 @@ export function operationContext(): VersionOperationContext {
     capturePolicy: 'commitEligible',
     writeAdmissionMode: 'capture',
   };
+}
+
+export function createFormatSemanticMutationCapture() {
+  return createRustBackedTestSemanticMutationCapture({ now: () => NOW });
 }
 
 export function captureInput(): VersionNormalCommitCaptureInput {

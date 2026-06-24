@@ -12,16 +12,10 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
   readonly reviewChanges: readonly unknown[];
 }): Promise<{ readonly status: 'success'; readonly payload: unknown } | VersionStoreFailure> {
   if (!input.semanticStateReader) {
-    if (input.reviewChanges.length === 0) {
-      return failedSemanticCapture(
-        input,
-        'Normal version commits require a non-empty semantic change set.',
-      );
-    }
-    return {
-      status: 'success',
-      payload: { schemaVersion: 1, changes: input.reviewChanges },
-    };
+    return failedSemanticCapture(
+      input,
+      'Normal version commits require a Rust semantic state reader.',
+    );
   }
 
   if (input.semanticStateCaptureFailure) {

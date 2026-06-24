@@ -1,15 +1,14 @@
-import { createSemanticMutationCapture } from '../semantic-mutation-capture';
 import {
   captureInput,
+  createFormatSemanticMutationCapture,
   expectCaptureSuccess,
   mutationResult,
-  NOW,
   operationContext,
 } from './semantic-mutation-capture-formats-helpers';
 
 export function registerSemanticMutationCaptureDirectCellClearFormatScenarios(): void {
   it('captures direct format clears as removals', async () => {
-    const capture = createSemanticMutationCapture({ now: () => NOW });
+    const capture = createFormatSemanticMutationCapture();
 
     capture.mutationCapture.recordMutationResult({
       operation: 'compute_clear_format_for_ranges',
@@ -27,7 +26,7 @@ export function registerSemanticMutationCaptureDirectCellClearFormatScenarios():
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload.changes).toEqual([
+    expect(captured.input.semanticChangeSetRecord.preimage.payload.reviewChanges).toEqual([
       {
         structural: {
           kind: 'metadata',

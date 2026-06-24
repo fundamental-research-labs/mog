@@ -31,9 +31,10 @@ export function describeSheetMetadataScenarios(): void {
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
       schemaVersion: 1,
-      changes: [
+      source: { kind: 'rustSemanticDiff' },
+      reviewChanges: [
         {
           structural: {
             kind: 'metadata',
@@ -87,9 +88,10 @@ export function describeSheetMetadataScenarios(): void {
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect(captured.input.semanticChangeSetRecord.preimage.payload).toEqual({
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
       schemaVersion: 1,
-      changes: [
+      source: { kind: 'rustSemanticDiff' },
+      reviewChanges: [
         {
           structural: {
             kind: 'metadata',

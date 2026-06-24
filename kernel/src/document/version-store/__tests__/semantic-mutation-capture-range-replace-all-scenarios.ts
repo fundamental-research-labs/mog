@@ -66,10 +66,13 @@ export function describeRangeReplaceAllScenarios(): void {
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
-    expect((captured.input.semanticChangeSetRecord.preimage.payload as any).changes).toHaveLength(2);
+    expect(
+      (captured.input.semanticChangeSetRecord.preimage.payload as any).reviewChanges,
+    ).toHaveLength(2);
     expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
       schemaVersion: 1,
-      changes: [
+      source: { kind: 'rustSemanticDiff' },
+      reviewChanges: [
         {
           structural: { entityId: 'sheet-1!A1' },
           before: { kind: 'value', value: 'old total' },

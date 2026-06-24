@@ -1,7 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 
 import { createInMemoryVersionStoreProvider } from '../../../document/version-store/provider';
-import { createSemanticMutationCapture } from '../../../document/version-store/semantic-mutation-capture';
+import { createRustBackedTestSemanticMutationCapture } from '../../../document/version-store/__tests__/semantic-mutation-capture-test-helpers';
 import {
   cellWriteResult,
   createMockEventBus,
@@ -21,7 +21,7 @@ export function registerProviderCommitDirtyTrackingScenarios(): void {
       await initializeInput('graph-clean', 'root'),
     );
     expectInitializeSuccess(initialized);
-    const semanticMutationCapture = createSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
     const wb = createWorkbook({
       eventBus,
       versioning: {
@@ -59,7 +59,7 @@ export function registerProviderCommitDirtyTrackingScenarios(): void {
       await initializeInput('graph-stale-dirty', 'root'),
     );
     expectInitializeSuccess(initialized);
-    const semanticMutationCapture = createSemanticMutationCapture();
+    const semanticMutationCapture = createRustBackedTestSemanticMutationCapture();
     const encodeDiff = jest.fn(async () => new Uint8Array([0x03]));
     const wb = createWorkbook({
       eventBus,

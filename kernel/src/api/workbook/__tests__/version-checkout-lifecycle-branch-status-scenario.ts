@@ -156,6 +156,91 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
       });
       await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'beta' });
 
+      const branchHeadBeforeRevert = await version.getHead();
+      if (!branchHeadBeforeRevert.ok || !branchHeadBeforeRevert.value.refRevision) {
+        throw new Error('expected checked-out branch head with ref revision before revert');
+      }
+      const branchRevert = await version.revert({
+        target: { kind: 'commit', commitId: betaCommit.value.id },
+        expectedTargetHead: {
+          commitId: betaCommit.value.id,
+          revision: branchHeadBeforeRevert.value.refRevision,
+        },
+        reason: 'regression-test-implicit-active-branch-revert',
+      });
+      expect(branchRevert).toMatchObject({
+        ok: true,
+        value: {
+          status: 'applied',
+          mutationGuarantee: 'revert-commit-created',
+          commitRef: {
+            refName: 'refs/heads/scenario/manual-smoke',
+            resolvedFrom: 'refs/heads/scenario/manual-smoke',
+          },
+        },
+      });
+      if (
+        !branchRevert.ok ||
+        branchRevert.value.status !== 'applied' ||
+        !branchRevert.value.commitRef
+      ) {
+        throw new Error('expected active branch revert to create a revert commit');
+      }
+      const branchRevertCommitId = branchRevert.value.commitRef.id;
+
+      await expect(
+        version.readRef('refs/heads/scenario/manual-smoke' as any),
+      ).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/scenario/manual-smoke',
+            commitId: branchRevertCommitId,
+          },
+        },
+      });
+      await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'refs/heads/main',
+            commitId: mainAlpha.id,
+          },
+        },
+      });
+      await expect(version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          headCommitId: branchRevertCommitId,
+          checkedOutCommitId: branchRevertCommitId,
+          branchName: 'scenario/manual-smoke',
+          refHeadAtMaterialization: branchRevertCommitId,
+          currentRefHeadId: branchRevertCommitId,
+          detached: false,
+          stale: false,
+        },
+      });
+
+      const revertedHeadCheckout = await wb.version.checkout({ kind: 'head' });
+      expect(revertedHeadCheckout).toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          mutationGuarantee: 'workbook-state-materialized',
+          plan: {
+            commitId: branchRevertCommitId,
+            target: {
+              kind: 'head',
+              refName: 'refs/heads/scenario/manual-smoke',
+              commitId: branchRevertCommitId,
+            },
+          },
+        },
+      });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'alpha' });
+
       const mainCheckout = await wb.version.checkout({
         kind: 'ref',
         name: 'refs/heads/main',
@@ -176,7 +261,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         ok: true,
         value: { status: 'success' },
       });
-      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'beta' });
+      await expect(wb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'alpha' });
     } finally {
       if (wb) await wb.close('skipSave');
       await handle.dispose();

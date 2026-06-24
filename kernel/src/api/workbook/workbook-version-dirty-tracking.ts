@@ -7,8 +7,12 @@ import type {
   VersionRecordRevision,
   VersionRefName,
   VersionRefSelector,
+  VersionRevertInput,
+  VersionRevertOptions,
+  VersionRevertResult,
   VersionResult,
   VersionStoreDiagnostic,
+  WorkbookCommitId,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
 
@@ -97,6 +101,23 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     return result;
   }
 
+  override async revert(
+    input: VersionRevertInput,
+    options: VersionRevertOptions = {},
+  ): Promise<VersionResult<VersionRevertResult>> {
+    const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
+    const revertInput = this.revertInputForRuntimeHead(input, beforeSaveHead);
+    if (!revertInput.ok) {
+      return versionFailureFromStoreDiagnostics('revert', revertInput.diagnostics);
+    }
+
+    const result = await super.revert(revertInput.input, options);
+    if (result.ok) {
+      this.recordCheckoutBranchRevert(beforeSaveHead, revertInput.input, result.value);
+    }
+    return result;
+  }
+
   private commitOptionsForRuntimeHead(
     options: VersionCommitOptions,
     currentToken: RuntimeSaveHeadTokenState,
@@ -148,6 +169,57 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     const targetRef = normalizeRefName(result.targetRef ?? options.targetRef);
     if (targetRef !== currentToken.refName) return;
     if (!('commitRef' in result)) return;
+
+    const service = readSurfaceStatusService(this.readVersionContext());
+    service?.recordActiveCheckoutBranchCommit?.({
+      commitId: result.commitRef.id,
+      refName: currentToken.refName,
+    });
+  }
+
+  private revertInputForRuntimeHead(
+    input: VersionRevertInput,
+    currentToken: RuntimeSaveHeadTokenState,
+  ):
+    | { readonly ok: true; readonly input: VersionRevertInput }
+    | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] } {
+    if (hasExplicitTargetRef(input)) return { ok: true, input };
+    if (currentToken === 'stale') {
+      return {
+        ok: false,
+        diagnostics: [staleImplicitCheckoutWriteDiagnostic('revertGraphWrite')],
+      };
+    }
+    if (currentToken?.source !== 'checkout-session' || !currentToken.refName) {
+      return { ok: true, input };
+    }
+    return {
+      ok: true,
+      input: {
+        ...input,
+        targetRef: currentToken.refName,
+        ...(input.expectedTargetHead || !currentToken.refRevision
+          ? {}
+          : {
+              expectedTargetHead: {
+                commitId: currentToken.commitId as WorkbookCommitId,
+                revision: currentToken.refRevision,
+              },
+            }),
+      },
+    };
+  }
+
+  private recordCheckoutBranchRevert(
+    currentToken: RuntimeSaveHeadTokenState,
+    input: VersionRevertInput,
+    result: VersionRevertResult,
+  ): void {
+    if (currentToken === 'stale' || currentToken?.source !== 'checkout-session') return;
+    if (!currentToken.refName) return;
+    if (result.status !== 'applied' || !result.commitRef) return;
+    const targetRef = normalizeRefName(result.commitRef.refName ?? input.targetRef);
+    if (targetRef !== currentToken.refName) return;
 
     const service = readSurfaceStatusService(this.readVersionContext());
     service?.recordActiveCheckoutBranchCommit?.({
@@ -213,7 +285,7 @@ function refNameFromBranchName(branchName: string): VersionMainRefName | Version
   return branchName === 'main' ? 'refs/heads/main' : (`refs/heads/${branchName}` as VersionRefName);
 }
 
-function hasExplicitTargetRef(options: VersionCommitOptions): boolean {
+function hasExplicitTargetRef(options: VersionCommitOptions | VersionRevertInput): boolean {
   return isRecord(options) && Object.prototype.hasOwnProperty.call(options, 'targetRef');
 }
 
@@ -225,14 +297,18 @@ function normalizeRefName(value: unknown): VersionMainRefName | VersionRefName |
 }
 
 function staleImplicitCheckoutCommitDiagnostic(): VersionStoreDiagnostic {
+  return staleImplicitCheckoutWriteDiagnostic('commitGraphWrite');
+}
+
+function staleImplicitCheckoutWriteDiagnostic(operation: string): VersionStoreDiagnostic {
   return publicDiagnostic(
     'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD',
-    'Commit is blocked because the active checkout session is stale relative to its branch head.',
+    'Version write is blocked because the active checkout session is stale relative to its branch head.',
     {
       severity: 'error',
       recoverability: 'retry',
       payload: {
-        operation: 'commitGraphWrite',
+        operation,
         reason: 'staleCheckoutSession',
       },
       mutationGuarantee: 'no-write-attempted',

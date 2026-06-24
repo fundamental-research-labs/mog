@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { VersionMergeResultId } from '@mog-sdk/contracts/api';
 
-import { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
+import { recoverPersistedMergeApplyPostCas } from '../version/apply-merge/version-apply-merge-recovery';
 import {
   RESULT_DIGEST,
   artifactFixture,

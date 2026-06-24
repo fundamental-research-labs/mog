@@ -1,4 +1,4 @@
-import { addMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { addMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   COPIED_DOCUMENT_ID,
   DOCUMENT_ID,

@@ -2,7 +2,7 @@ import type { VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { MogSdkError } from '../../errors';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 
 const EXPORT_OPERATION = 'workbook.toXlsx';
 

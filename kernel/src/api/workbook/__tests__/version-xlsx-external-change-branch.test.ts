@@ -1,6 +1,6 @@
 import { PUBLIC_VERSION_DOMAIN_POLICY_REGISTRY } from '@mog-sdk/contracts/versioning';
 
-import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph';
 import { applyXlsxVersionImportChangeToExistingGraph } from '../../../document/version-store/xlsx-import-root';
 import {
   CREATED_AT,

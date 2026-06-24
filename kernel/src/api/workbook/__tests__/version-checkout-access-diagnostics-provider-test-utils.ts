@@ -1,4 +1,4 @@
-import type { VersionGraphReadRefResult } from '../../../document/version-store/graph-store';
+import type { VersionGraphReadRefResult } from '../../../document/version-store/graph';
 import type { VersionStoreProvider } from '../../../document/version-store/provider';
 
 export function providerWithDeniedRef<T extends VersionStoreProvider>(

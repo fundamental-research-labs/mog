@@ -6,7 +6,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
-import { readVersionCheckoutAdmissionBlock } from './version-checkout-admission';
+import { readVersionCheckoutAdmissionBlock } from './version/checkout/version-checkout-admission';
 import { validateVersionOperationGate } from './version-operation-gate';
 import {
   revertAdmissionDiagnostic,

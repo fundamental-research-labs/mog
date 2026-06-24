@@ -9,7 +9,7 @@ import { namespaceForDocumentScope } from '../../../document/version-store/provi
 import {
   createIndexedDbVersionStoreProvider,
   INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
-} from '../../../document/version-store/provider-indexeddb-backend';
+} from '../../../document/version-store/provider-indexeddb/backend';
 import { withVersionManifest } from './version-domain-support-test-utils';
 import {
   expectCommit,

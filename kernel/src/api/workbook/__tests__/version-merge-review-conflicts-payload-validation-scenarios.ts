@@ -3,7 +3,7 @@ import type { VersionSemanticValue } from '@mog-sdk/contracts/api';
 import {
   normalizeMergeReviewConflicts,
   validateResolutionPayloadPurpose,
-} from '../version-merge-review-conflicts';
+} from '../version/merge-review/version-merge-review-conflicts';
 import {
   conflictRecord,
   diffValue,

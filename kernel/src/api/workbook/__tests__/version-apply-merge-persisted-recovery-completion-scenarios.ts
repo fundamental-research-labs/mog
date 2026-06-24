@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { applyPersistedMergeResult } from '../version-apply-merge-persisted';
+import { applyPersistedMergeResult } from '../version/apply-merge/version-apply-merge-persisted';
 import {
   BASE,
   EXPECTED_TARGET_HEAD,

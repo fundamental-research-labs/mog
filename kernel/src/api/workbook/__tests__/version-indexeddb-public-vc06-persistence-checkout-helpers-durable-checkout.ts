@@ -2,7 +2,7 @@ import type { VersionHead, Workbook, WorkbookCommitSummary } from '@mog-sdk/cont
 
 import { DocumentFactory } from '../../document/document-factory';
 import { withVersionManifest } from './version-domain-support-test-utils';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import type { VersionDocumentScope } from '../../../document/version-store/provider';
 import { rootWrite } from './version-indexeddb-public-vc06-persistence-checkout-helpers-root-write';
 import type { DurableCheckoutScenario } from './version-indexeddb-public-vc06-persistence-checkout-helpers-scenario';

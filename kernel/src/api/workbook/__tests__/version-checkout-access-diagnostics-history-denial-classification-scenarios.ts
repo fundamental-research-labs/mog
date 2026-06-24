@@ -4,7 +4,7 @@ import {
   historyDenialClassForCheckoutIssue,
   recoverabilityForCheckoutIssue,
   safeMessageForCheckoutIssue,
-} from '../version-checkout-diagnostics';
+} from '../version/checkout/version-checkout-diagnostics';
 
 export function registerCheckoutAccessDiagnosticsHistoryDenialClassificationScenarios(): void {
   it('classifies access, stale, and corrupt checkout history denials deterministically', () => {

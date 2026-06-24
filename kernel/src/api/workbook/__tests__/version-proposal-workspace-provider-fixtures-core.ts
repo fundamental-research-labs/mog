@@ -4,7 +4,7 @@ import {
   createInMemoryVersionStoreProvider,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
-import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposal-workspace-lifecycle-service';
+import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import { WorkbookVersionImpl } from '../version';
 import { attachWorkbookVersioning } from '../version-wiring';
 

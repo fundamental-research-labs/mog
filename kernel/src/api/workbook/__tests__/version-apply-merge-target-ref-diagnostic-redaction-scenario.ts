@@ -1,4 +1,4 @@
-import { validateApplyMergeTargetRefCasProof } from '../version-apply-merge-target-ref';
+import { validateApplyMergeTargetRefCasProof } from '../version/apply-merge/version-apply-merge-target-ref';
 import {
   EXPECTED_TARGET_HEAD,
   TARGET_REF,

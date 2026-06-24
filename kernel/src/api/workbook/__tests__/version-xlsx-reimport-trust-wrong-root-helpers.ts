@@ -11,7 +11,7 @@ import {
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphCommitRef,
   type VersionGraphRef,
-} from '../../../document/version-store/graph-store';
+} from '../../../document/version-store/graph';
 import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
 import type { VersionGraphNamespace } from '../../../document/version-store/object-store';
 import type { VersionSemanticStateReaderPort } from '../../../document/version-store/semantic-state-reader';

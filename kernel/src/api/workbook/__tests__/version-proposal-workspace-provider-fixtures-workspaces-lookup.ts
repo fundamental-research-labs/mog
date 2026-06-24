@@ -1,6 +1,6 @@
 import type { AgentProposalWorkspaceHandle } from '@mog-sdk/contracts/api';
 
-import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposal-workspace-lifecycle-service';
+import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 
 export function workspaceLookupService(): ProposalWorkspaceLifecycleService {
   const handles = new Map<string, AgentProposalWorkspaceHandle>();

@@ -1,7 +1,7 @@
 import type { VersionHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { type MogWorkbookVersionXlsxMetadata } from '../xlsx-version-metadata';
-import { REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS } from '../version-xlsx-metadata-export-gate';
+import { type MogWorkbookVersionXlsxMetadata } from '../version/xlsx-metadata/xlsx-version-metadata';
+import { REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS } from '../version/xlsx-metadata/version-xlsx-metadata-export-gate';
 
 import {
   REF_REVISION,

@@ -1,7 +1,7 @@
 import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import { withVersionManifest } from './version-domain-support-test-utils';
 import {
   DOCUMENT_ID,

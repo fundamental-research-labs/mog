@@ -1,4 +1,4 @@
-import { type maybeAddMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { type maybeAddMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export function metadataExportContext(input: {
   readonly documentId: string;

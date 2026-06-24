@@ -1,7 +1,7 @@
 import { expect } from '@jest/globals';
 
 import type { WorkbookCommitCompletenessDiagnostic } from '../../../document/version-store/commit-store';
-import type { VersionGraphWriteResult } from '../../../document/version-store/graph-store';
+import type { VersionGraphWriteResult } from '../../../document/version-store/graph';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,

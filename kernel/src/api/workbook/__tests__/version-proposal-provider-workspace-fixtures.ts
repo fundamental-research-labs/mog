@@ -1,5 +1,5 @@
 import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
-import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposal-workspace-lifecycle-service';
+import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import { namespaceForDocumentScope } from '../../../document/version-store/provider';
 import {
   DOCUMENT_SCOPE,

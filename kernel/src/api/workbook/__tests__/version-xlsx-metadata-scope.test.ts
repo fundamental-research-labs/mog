@@ -1,8 +1,8 @@
 import type { ObjectDigest, VersionHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../context';
-import { createMogWorkbookVersionXlsxMetadata } from '../xlsx-version-metadata';
-import { authorizeMetadataSinkWrite } from '../version-xlsx-metadata-export-gate';
+import { createMogWorkbookVersionXlsxMetadata } from '../version/xlsx-metadata/xlsx-version-metadata';
+import { authorizeMetadataSinkWrite } from '../version/xlsx-metadata/version-xlsx-metadata-export-gate';
 
 const PROVIDER_DOCUMENT_ID = 'vc10-xlsx-metadata-provider-scope';
 const PROVIDER_WORKSPACE_ID = 'vc10-xlsx-metadata-provider-workspace';

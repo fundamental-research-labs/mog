@@ -3,7 +3,7 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphCommitRef,
-} from '../../../document/version-store/graph-store';
+} from '../../../document/version-store/graph';
 import type { ObjectDigest } from '../../../document/version-store/object-digest';
 import type { XlsxVersionImportRootProvenance } from '../../../document/version-store/xlsx-import-root';
 import { SIDE_CAR_PART } from './version-xlsx-external-change-branch-helpers-constants';

@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { VersionCommitExpectedHead } from '@mog-sdk/contracts/api';
 
-import { applyPersistedMergeResult } from '../version-apply-merge-persisted';
+import { applyPersistedMergeResult } from '../version/apply-merge/version-apply-merge-persisted';
 import type { MergeApplyIntentStore } from '../../../document/version-store/merge-apply-intent-store';
 import {
   createVersionGraphRegistry,

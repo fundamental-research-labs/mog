@@ -3,7 +3,7 @@ import { expect, it, jest } from '@jest/globals';
 import {
   hasAttachedPendingRemotePromotionService,
   promotePendingRemoteWorkbookVersion,
-} from '../version-pending-remote';
+} from '../version/pending/remote';
 import {
   COMMIT_ID,
   SEGMENT_ID,

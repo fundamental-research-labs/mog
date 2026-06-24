@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 
 import type { Workbook } from '@mog-sdk/contracts/api';
 
-import { removeMogVersionMetadataFromXlsx } from '../xlsx-version-metadata';
+import { removeMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   DOCUMENT_ID,
   WORKSPACE_ID,

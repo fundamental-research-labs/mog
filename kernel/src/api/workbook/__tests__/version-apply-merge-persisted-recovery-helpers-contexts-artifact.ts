@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type { applyPersistedMergeResult } from '../version-apply-merge-persisted';
+import type { applyPersistedMergeResult } from '../version/apply-merge/version-apply-merge-persisted';
 import type {
   MergeApplyIntentRecord,
   MergeApplyIntentStore,

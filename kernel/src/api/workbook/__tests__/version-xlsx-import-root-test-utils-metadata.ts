@@ -1,6 +1,6 @@
 import type { ObjectDigest, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import type { MogWorkbookVersionXlsxMetadata } from '../xlsx-version-metadata';
+import type { MogWorkbookVersionXlsxMetadata } from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export function testVersionMetadata(input: {
   readonly documentId: string;

@@ -113,9 +113,9 @@ import {
   attachWorkbookVersioning,
   attachWorkbookVersionSurfaceStatusService,
 } from './version-wiring';
-import { rebindVersioningAfterCheckout } from './version-checkout-rebind';
+import { rebindVersioningAfterCheckout } from './version/checkout/version-checkout-rebind';
 import { readVersionLiveCollaborationStatus } from './version-live-collaboration-status';
-import { readVersionPendingProviderWrites } from './version-pending-provider-writes';
+import { readVersionPendingProviderWrites } from './version/pending/provider-writes';
 import {
   getKnownSheetNames,
   resolveSheetNameToId as resolveWorkbookSheetNameToId,
@@ -129,7 +129,7 @@ import {
 } from './save-errors';
 import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
 import { removeMogVersionMetadataPackageInventoryFromXlsx } from './xlsx-clean-export-package';
-import { maybeAddMogVersionMetadataToXlsx } from './xlsx-version-metadata';
+import { maybeAddMogVersionMetadataToXlsx } from './version/xlsx-metadata/xlsx-version-metadata';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -187,7 +187,7 @@ import { WorkbookChangesImpl } from './changes';
 import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
-import { reconcileCheckoutActiveSheet } from './version-checkout-materializer-active-sheet';
+import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
 import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
 import {
   applyWorkbookReadOnlyMode,

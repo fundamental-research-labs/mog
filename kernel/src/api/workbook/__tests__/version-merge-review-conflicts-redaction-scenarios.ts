@@ -1,7 +1,7 @@
 import {
   normalizeMergeReviewConflicts,
   selectConflictDetailValue,
-} from '../version-merge-review-conflicts';
+} from '../version/merge-review/version-merge-review-conflicts';
 import {
   expectNoDiagnosticLeaks,
   redactedValueConflict,

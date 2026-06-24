@@ -5,12 +5,12 @@ import type { VersionHead } from '@mog-sdk/contracts/api';
 import {
   maybeAddMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   authorizeMetadataSinkWrite,
   REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS,
   type MogVersionMetadataExportSinkAuthorization,
-} from '../version-xlsx-metadata-export-gate';
+} from '../version/xlsx-metadata/version-xlsx-metadata-export-gate';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
   createSourceXlsx,

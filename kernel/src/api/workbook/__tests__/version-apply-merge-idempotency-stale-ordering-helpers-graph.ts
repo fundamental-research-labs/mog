@@ -1,6 +1,6 @@
 import type { VersionRecordRevision, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import type { CommitVersionGraphInput } from '../../../document/version-store/graph-store';
+import type { CommitVersionGraphInput } from '../../../document/version-store/graph';
 import type { VersionObjectType } from '../../../document/version-store/object-digest';
 import {
   createVersionObjectRecord,

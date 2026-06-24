@@ -4,7 +4,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 import { sanitizePublicDiagnosticPayload } from './version-surface-status-derivation-diagnostics';
 import type {
   VersionDomainSupportOperation,

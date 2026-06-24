@@ -73,6 +73,17 @@ export function describeCleanMaterializerMergeScenario(): void {
         },
       });
 
+      const sourceCheckoutMerged = await sourceWb.version.checkout({
+        kind: 'commit',
+        id: mergeCommitId,
+      });
+      if (!sourceCheckoutMerged.ok) {
+        throw new Error(`expected source checkout success: ${sourceCheckoutMerged.error.code}`);
+      }
+      await expect(sourceWb.activeSheet.getCell('A1')).resolves.toMatchObject({ value: 'base' });
+      await expect(sourceWb.activeSheet.getCell('B1')).resolves.toMatchObject({ value: 'ours' });
+      await expect(sourceWb.activeSheet.getCell('C1')).resolves.toMatchObject({ value: 'theirs' });
+
       const mergedWb = await fixture.openMergedWorkbook();
       const checkoutMerged = await mergedWb.version.checkout({
         kind: 'commit',

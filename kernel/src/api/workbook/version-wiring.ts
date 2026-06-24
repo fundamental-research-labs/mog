@@ -8,7 +8,7 @@ import { createWorkbookVersionMergeService } from '../../document/version-store/
 import {
   createProviderBackedAgentProposalService,
   hasAgentProposalMetadataStoreProvider,
-} from '../../document/version-store/proposal-provider-service';
+} from '../../document/version-store/proposals/proposal-provider-service';
 import {
   createProviderBackedWorkbookVersionReviewService,
   hasWorkbookVersionReviewRecordStoreProvider,

@@ -9,7 +9,7 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import type { VersionCheckoutAdmissionBlock } from './version-checkout-admission';
+import type { VersionCheckoutAdmissionBlock } from './version/checkout/version-checkout-admission';
 
 export const VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE = 'VERSION_REVERT_UNAVAILABLE';
 export const VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE = 'VERSION_REVERT_TARGET_REJECTED';

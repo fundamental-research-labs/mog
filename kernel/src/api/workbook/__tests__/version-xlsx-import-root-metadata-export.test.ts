@@ -6,7 +6,7 @@ import { DocumentFactory } from '../../document/document-factory';
 import {
   addMogVersionMetadataToXlsx,
   readAndValidateMogVersionMetadataFromXlsx,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   withExportSupportedVersionManifest,
   withVersionManifest,

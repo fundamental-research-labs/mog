@@ -8,16 +8,16 @@ import {
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
-} from '../../document/version-store/graph-store';
+} from '../../document/version-store/graph';
 import { selectVersionStoreProvider } from '../../document/version-store/provider-registry';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb/backend';
 import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';
 import {
   MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
   type MogWorkbookVersionXlsxMetadata,
   type MogWorkbookVersionXlsxMetadataExpectedHead,
-} from '../workbook/xlsx-version-metadata';
+} from '../workbook/version/xlsx-metadata/xlsx-version-metadata';
 import type { XlsxDocumentImportOptions } from './xlsx-document-import-types';
 
 export async function xlsxVersionMetadataTrust(

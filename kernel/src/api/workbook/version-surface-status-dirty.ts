@@ -2,7 +2,7 @@ import type { VersionDiagnostic, VersionSurfaceStatus } from '@mog-sdk/contracts
 
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
 import type { VersionLiveCollaborationDirtyStatus } from './version-live-collaboration-status';
-import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
+import type { VersionPendingProviderWritesStatus } from './version/pending/provider-writes';
 import { readVersionSurfacePendingProviderWritesStatus } from './version-surface-status-service-provider-writes';
 import { projectDirtyStatus } from './version-surface-status-dirty-projector';
 import type {

@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { readVersionPendingProviderWrites } from '../version-pending-provider-writes';
+import { readVersionPendingProviderWrites } from '../version/pending/provider-writes';
 import { createCtx } from './version-pending-provider-writes-test-utils';
 
 export function registerPendingProviderWritesActivityScenarios(): void {

@@ -1,7 +1,7 @@
 import type {
   MogWorkbookVersionXlsxMetadata,
   MogWorkbookVersionXlsxMetadataExpectedHead,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export function trustedVersionMetadata(
   documentId: string,

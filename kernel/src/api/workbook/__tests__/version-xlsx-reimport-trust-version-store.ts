@@ -5,12 +5,12 @@ import {
   namespaceForDocumentScope,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import {
   createDefaultVersionStoreProviderRegistry,
   selectVersionStoreProvider,
 } from '../../../document/version-store/provider-registry';
-import type { MogWorkbookVersionXlsxMetadataExpectedHead } from '../xlsx-version-metadata';
+import type { MogWorkbookVersionXlsxMetadataExpectedHead } from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export async function readLocalExpectedHead(
   documentId: string,

@@ -2,8 +2,8 @@ import { jest } from '@jest/globals';
 
 import type { WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { applyPersistedMergeResult } from '../version-apply-merge-persisted';
-import { recoverStagedMergeCommitIfAlreadyApplied } from '../version-apply-merge-persisted-artifact-recovery';
+import { applyPersistedMergeResult } from '../version/apply-merge/version-apply-merge-persisted';
+import { recoverStagedMergeCommitIfAlreadyApplied } from '../version/apply-merge/version-apply-merge-persisted-artifact-recovery';
 import type { MergeApplyIntentRecord } from '../../../document/version-store/merge-apply-intent-store';
 import {
   ADVANCED,

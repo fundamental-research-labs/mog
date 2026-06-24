@@ -9,7 +9,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { mapPublicExpectedTargetHead } from './version-attempt-metadata';
-import { mapPublicApplyTargetRef } from './version-apply-merge-target-ref';
+import { mapPublicApplyTargetRef } from './version/apply-merge/version-apply-merge-target-ref';
 import { invalidMergeOptionDiagnostic } from './version-merge-public-diagnostics';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;

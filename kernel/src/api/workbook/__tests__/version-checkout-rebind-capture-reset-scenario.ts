@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { rebindVersioningAfterCheckout } from '../version-checkout-rebind';
+import { rebindVersioningAfterCheckout } from '../version/checkout/version-checkout-rebind';
 import {
   createDocumentContext,
   OPERATION_CONTEXT,

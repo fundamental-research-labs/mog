@@ -2,7 +2,7 @@ import { namespaceForDocumentScope } from '../../../document/version-store/provi
 import {
   proposalWorkspaceStaleHeadResult,
   type ProposalWorkspaceLifecycleService,
-} from '../../../document/version-store/proposal-workspace-lifecycle-service';
+} from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import {
   DOCUMENT_SCOPE,
   type InMemoryVersionStoreProvider,

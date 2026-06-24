@@ -3,7 +3,7 @@ import { expect, jest } from '@jest/globals';
 import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../../context';
-import { checkoutRebindIdentityDiagnosticDetails } from '../version-checkout-rebind';
+import { checkoutRebindIdentityDiagnosticDetails } from '../version/checkout/version-checkout-rebind';
 
 export const PROVIDER_DOCUMENT_ID = 'provider-rebind-doc';
 export const BASE_COMMIT_ID = `commit:sha256:${'1'.repeat(64)}`;

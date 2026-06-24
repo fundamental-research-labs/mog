@@ -1,7 +1,7 @@
 import { expect } from '@jest/globals';
 
 import type { VersionGraphNamespace } from '../../../document/version-store/object-store';
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import type { Workbook } from './version-indexeddb-persisted-apply-recovery-test-utils';
 import type { MergeCommitRecoveryStage } from './version-indexeddb-persisted-apply-recovery-merge-commit-types';
 import {

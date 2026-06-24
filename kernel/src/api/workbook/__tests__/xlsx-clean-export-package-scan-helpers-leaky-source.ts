@@ -5,7 +5,7 @@ import {
   addMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
   type MogWorkbookVersionXlsxMetadata,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   decodeUtf8,
   encodeUtf8,

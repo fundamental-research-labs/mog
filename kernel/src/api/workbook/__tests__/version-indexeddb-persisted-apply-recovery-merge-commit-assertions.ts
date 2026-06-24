@@ -2,7 +2,7 @@ import { expect } from '@jest/globals';
 
 import type { VersionApplyMergeResult } from '@mog-sdk/contracts/api';
 
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import { intentIdForResolvedAttemptDigest } from './version-indexeddb-persisted-apply-recovery-test-utils';
 import type { MergeCommitRecoveryStage } from './version-indexeddb-persisted-apply-recovery-merge-commit-types';
 

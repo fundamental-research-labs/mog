@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { promotePendingRemoteWorkbookVersion } from '../version-pending-remote';
+import { promotePendingRemoteWorkbookVersion } from '../version/pending/remote';
 import {
   BATCH_STATUS_ID,
   RAW_BATCH_ID,

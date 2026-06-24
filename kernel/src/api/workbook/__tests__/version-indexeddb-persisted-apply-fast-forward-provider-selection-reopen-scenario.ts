@@ -1,7 +1,7 @@
 import { it } from '@jest/globals';
 import type { Workbook } from '@mog-sdk/contracts/api';
 
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import { DocumentFactory } from '../../document/document-factory';
 import { withVersionManifest } from './version-domain-support-test-utils';
 import { INDEXEDDB_PERSISTED_APPLY_DOCUMENT_ID as DOCUMENT_ID } from './version-indexeddb-persisted-apply-test-utils';

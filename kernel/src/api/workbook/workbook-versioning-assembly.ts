@@ -3,7 +3,7 @@ import type { CheckoutSnapshotApplyInput } from '../../document/version-store/ch
 import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
 import type { SnapshotRootFreshLifecycleMaterialization } from '../document/snapshot-root-lifecycle-hydrator';
 import type { WorkbookVersioningConfig } from './types';
-import { createWorkbookCheckoutSnapshotMaterializer } from './version-checkout-materializer';
+import { createWorkbookCheckoutSnapshotMaterializer } from './version/checkout/version-checkout-materializer';
 
 export function withDefaultWorkbookCheckoutMaterializer(
   versioning: WorkbookVersioningConfig | undefined,

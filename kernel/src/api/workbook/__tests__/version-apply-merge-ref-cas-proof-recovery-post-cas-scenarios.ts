@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
+import { recoverPersistedMergeApplyPostCas } from '../version/apply-merge/version-apply-merge-recovery';
 import { computeMergeApplyRefCasProof } from '../../../document/version-store/merge-apply-intent-store';
 import { namespaceForDocumentScope } from '../../../document/version-store/provider';
 import { createFinalizingCompleteIntent } from './version-apply-merge-ref-cas-proof-recovery-helpers';

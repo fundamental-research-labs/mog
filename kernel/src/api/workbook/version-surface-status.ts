@@ -12,7 +12,7 @@ import {
   getVersionControlGateStatus,
 } from './version-merge-capability';
 import { hasAttachedVersionMergeService } from './version-merge';
-import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
+import { hasAttachedPendingRemotePromotionService } from './version/pending/remote';
 import { hasAttachedVersionRefLifecycleService } from './version-refs';
 import {
   getAttachedVersionSurfaceStatusService,

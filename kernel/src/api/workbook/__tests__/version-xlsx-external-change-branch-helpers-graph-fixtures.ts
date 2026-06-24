@@ -6,7 +6,7 @@ import {
   createInMemoryVersionGraphStore,
   type VersionGraphCommitRef,
   type VersionGraphRef,
-} from '../../../document/version-store/graph-store';
+} from '../../../document/version-store/graph';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,

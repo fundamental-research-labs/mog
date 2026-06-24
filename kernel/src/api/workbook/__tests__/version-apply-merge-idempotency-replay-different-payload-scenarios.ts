@@ -2,7 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { VersionRefName } from '@mog-sdk/contracts/api';
 
-import type { MergeVersionGraphInput } from '../../../document/version-store/graph-store';
+import type { MergeVersionGraphInput } from '../../../document/version-store/graph';
 import { intentIdForResolvedAttemptDigest } from '../../../document/version-store/merge-apply-intent-store';
 import {
   AUTHOR,

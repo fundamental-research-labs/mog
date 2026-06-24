@@ -1,4 +1,4 @@
-import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposal-workspace-lifecycle-service';
+import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import { WorkbookVersionImpl } from '../version';
 import { attachWorkbookVersioning } from '../version-wiring';
 import { DOCUMENT_SCOPE } from './version-proposal-accept-provider-helpers-fixtures';

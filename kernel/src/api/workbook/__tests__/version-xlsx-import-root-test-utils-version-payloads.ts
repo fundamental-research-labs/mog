@@ -6,7 +6,7 @@ import {
   namespaceForDocumentScope,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import {
   createDefaultVersionStoreProviderRegistry,
   selectVersionStoreProvider,

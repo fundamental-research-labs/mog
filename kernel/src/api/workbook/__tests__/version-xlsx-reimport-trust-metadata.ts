@@ -3,7 +3,7 @@ import type { ObjectDigest, WorkbookCommitId } from '@mog-sdk/contracts/api';
 import type {
   MogWorkbookVersionXlsxMetadata,
   MogWorkbookVersionXlsxMetadataTrustReason,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import { DOCUMENT_ID, WORKSPACE_ID } from './version-xlsx-reimport-trust-constants';
 
 export function expectMetadataWarning(

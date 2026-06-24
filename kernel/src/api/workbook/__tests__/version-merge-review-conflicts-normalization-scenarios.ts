@@ -1,4 +1,4 @@
-import { normalizeMergeReviewConflicts } from '../version-merge-review-conflicts';
+import { normalizeMergeReviewConflicts } from '../version/merge-review/version-merge-review-conflicts';
 import {
   expectNoDiagnosticLeaks,
   formulaConflict,

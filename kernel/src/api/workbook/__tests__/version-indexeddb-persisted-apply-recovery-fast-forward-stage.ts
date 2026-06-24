@@ -1,6 +1,6 @@
 import { expect } from '@jest/globals';
 
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import {
   AUTHOR,
   DOCUMENT_ID,

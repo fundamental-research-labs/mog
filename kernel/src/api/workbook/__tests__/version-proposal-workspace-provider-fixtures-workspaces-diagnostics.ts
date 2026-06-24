@@ -1,4 +1,4 @@
-import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposal-workspace-lifecycle-service';
+import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import { workspaceLookupService } from './version-proposal-workspace-provider-fixtures-workspaces-lookup';
 
 export function unsafeStartDiagnosticWorkspaceService(): ProposalWorkspaceLifecycleService {

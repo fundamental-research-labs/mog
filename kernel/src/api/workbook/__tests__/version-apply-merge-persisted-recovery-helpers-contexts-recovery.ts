@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import type { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
+import type { recoverPersistedMergeApplyPostCas } from '../version/apply-merge/version-apply-merge-recovery';
 import {
   computeMergeApplyRefCasProof,
   type MergeApplyIntentRecord,

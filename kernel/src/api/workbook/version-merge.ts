@@ -10,7 +10,7 @@ import {
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
 import { publicMergeBaseGateResult } from './version-merge-base-gate';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 import { blockedMergeResult, mapMergeResult } from './version-merge-result-mapping';
 import {
   mergeUnavailableDiagnostic,

@@ -1,7 +1,7 @@
 import { expect } from '@jest/globals';
 
 import type { WorkbookCommit } from '../../../document/version-store/commit-store';
-import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph';
 import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
 import type { XlsxVersionExistingGraphImportResult } from '../../../document/version-store/xlsx-import-root';
 import {

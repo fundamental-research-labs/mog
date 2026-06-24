@@ -2,7 +2,7 @@ import { expect } from '@jest/globals';
 
 import type { VersionApplyMergeResult } from '@mog-sdk/contracts/api';
 
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import type { FastForwardRecoveryStage } from './version-indexeddb-persisted-apply-recovery-fast-forward-types';
 
 export async function expectRecoveredFastForwardAlreadyApplied(

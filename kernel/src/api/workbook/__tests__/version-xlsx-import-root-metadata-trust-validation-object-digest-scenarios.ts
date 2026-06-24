@@ -1,4 +1,4 @@
-import { readAndValidateMogVersionMetadataFromXlsx } from '../xlsx-version-metadata';
+import { readAndValidateMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import { expectedMetadataTrustHead } from './version-xlsx-import-root-metadata-trust-validation-helpers';
 import {
   createDigestBoundMetadataTrustXlsx,

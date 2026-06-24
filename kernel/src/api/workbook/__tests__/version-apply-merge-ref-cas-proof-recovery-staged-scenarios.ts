@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { recoverStagedMergeCommitIfAlreadyApplied } from '../version-apply-merge-persisted-artifact-recovery';
+import { recoverStagedMergeCommitIfAlreadyApplied } from '../version/apply-merge/version-apply-merge-persisted-artifact-recovery';
 import type { MergeApplyIntentStore } from '../../../document/version-store/merge-apply-intent-store';
 import { namespaceForDocumentScope } from '../../../document/version-store/provider';
 import {

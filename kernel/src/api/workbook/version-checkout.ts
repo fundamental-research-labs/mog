@@ -9,19 +9,22 @@ import type { DocumentContext } from '../../context';
 import {
   readVersionCheckoutAdmissionState,
   revalidateVersionCheckoutAdmissionLease,
-} from './version-checkout-admission';
+} from './version/checkout/version-checkout-admission';
 import {
   checkoutAdmissionDiagnostic,
   degradedCheckout,
   providerErrorDiagnostic,
   serviceUnavailableDiagnostic,
-} from './version-checkout-diagnostic-factories';
+} from './version/checkout/version-checkout-diagnostic-factories';
 import {
   isMaterializerUnavailableResult,
   mapCheckoutResult,
-} from './version-checkout-result-mapping';
-import { getAttachedCheckoutMaterializationService } from './version-checkout-service';
-import { validateCheckoutOptions, validateCheckoutTarget } from './version-checkout-validation';
+} from './version/checkout/version-checkout-result-mapping';
+import { getAttachedCheckoutMaterializationService } from './version/checkout/version-checkout-service';
+import {
+  validateCheckoutOptions,
+  validateCheckoutTarget,
+} from './version/checkout/version-checkout-validation';
 import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
 import { validateVersionOperationGate } from './version-operation-gate';
 
@@ -29,8 +32,8 @@ export {
   checkoutDirtyWorkingStateDiagnostic,
   checkoutWriteFenceStaleDiagnostic,
   checkoutWriteFenceUnavailableDiagnostic,
-} from './version-checkout-diagnostic-factories';
-export { hasAttachedVersionCheckoutService } from './version-checkout-service';
+} from './version/checkout/version-checkout-diagnostic-factories';
+export { hasAttachedVersionCheckoutService } from './version/checkout/version-checkout-service';
 
 export type VersionCheckoutTransactionToken = object;
 

@@ -1,4 +1,4 @@
-import type { MogWorkbookVersionXlsxMetadataExpectedHead } from '../xlsx-version-metadata';
+import type { MogWorkbookVersionXlsxMetadataExpectedHead } from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export function expectedMetadataTrustHead(
   input: Pick<MogWorkbookVersionXlsxMetadataExpectedHead, 'commitId'> &

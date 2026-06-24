@@ -1,4 +1,4 @@
-import type { VersionGraphWriteResult } from '../../../document/version-store/graph-store';
+import type { VersionGraphWriteResult } from '../../../document/version-store/graph';
 import type { VersionObjectPutBatchResult } from '../../../document/version-store/object-store';
 import type { VersionGraphInitializeResult } from '../../../document/version-store/provider';
 import type { VersionGraphWriteSuccess } from './version-apply-merge-idempotency-stale-ordering-helpers-core';

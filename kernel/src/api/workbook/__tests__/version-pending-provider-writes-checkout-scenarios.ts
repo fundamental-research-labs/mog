@@ -1,7 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 
 import { checkoutWorkbookVersion } from '../version-checkout';
-import { readVersionPendingProviderWrites } from '../version-pending-provider-writes';
+import { readVersionPendingProviderWrites } from '../version/pending/provider-writes';
 import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
 import {
   cleanSurfaceDirtyStatus,

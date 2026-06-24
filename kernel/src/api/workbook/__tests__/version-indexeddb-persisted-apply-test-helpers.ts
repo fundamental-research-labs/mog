@@ -7,7 +7,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { MergeApplyIntentStore } from '../../../document/version-store/merge-apply-intent-store';
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import type { VersionGraphInitializeResult } from '../../../document/version-store/provider';
 

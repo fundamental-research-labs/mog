@@ -1,4 +1,4 @@
-import { addMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { addMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   createSourceXlsx,
   METADATA_TRUST_DOCUMENT_ID,

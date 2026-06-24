@@ -1,6 +1,6 @@
 import type { VersionHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import { maybeAddMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { maybeAddMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   blockedMetadataSink,
   createSourceXlsx,

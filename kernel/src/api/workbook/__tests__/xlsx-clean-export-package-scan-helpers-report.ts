@@ -2,7 +2,7 @@ import {
   scanXlsxCleanExportPackageDiagnostics,
   type XlsxCleanExportPackageDiagnostic,
 } from '../xlsx-clean-export-package';
-import { MOG_VERSION_METADATA_PART } from '../xlsx-version-metadata';
+import { MOG_VERSION_METADATA_PART } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   decodeUtf8,
   readZipArchive,

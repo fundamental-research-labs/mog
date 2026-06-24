@@ -3,7 +3,7 @@ import {
   addMogVersionMetadataToXlsx,
   maybeAddMogVersionMetadataToXlsx,
   readAndValidateMogVersionMetadataFromXlsx,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 
 import {
   CLEAN_EXPORT_DOCUMENT_ID,

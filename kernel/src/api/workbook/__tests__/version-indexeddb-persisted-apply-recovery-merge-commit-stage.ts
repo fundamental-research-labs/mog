@@ -1,4 +1,4 @@
-import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import type { IndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import {
   DOCUMENT_ID,
   DOCUMENT_SCOPE,

@@ -9,7 +9,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { VersionGraphWriteResult } from '../../../document/version-store/graph-store';
+import type { VersionGraphWriteResult } from '../../../document/version-store/graph';
 import type { ObjectDigest } from '../../../document/version-store/object-digest';
 import type { VersionGraphNamespace } from '../../../document/version-store/object-store';
 import type { InMemoryVersionStoreProvider } from '../../../document/version-store/provider';

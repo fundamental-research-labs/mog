@@ -1,6 +1,6 @@
 import { expect, it } from '@jest/globals';
 
-import { mapApplyMergeWriteResult } from '../version-apply-merge-write-result';
+import { mapApplyMergeWriteResult } from '../version/apply-merge/version-apply-merge-write-result';
 import { commitId } from './version-merge-base-gate-test-utils';
 
 export function describeMergeBaseApplyScenarios() {

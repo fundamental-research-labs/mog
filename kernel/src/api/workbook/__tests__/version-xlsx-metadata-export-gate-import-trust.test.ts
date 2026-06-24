@@ -4,7 +4,7 @@ import {
   addMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
   COPIED_METADATA_DOCUMENT_ID,

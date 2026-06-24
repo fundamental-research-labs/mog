@@ -13,8 +13,8 @@ import {
   scanXlsxCleanExportPackageDiagnostics,
   XlsxCleanExportPackageError,
 } from '../xlsx-clean-export-package';
-import { readAndValidateMogVersionMetadataFromXlsx } from '../xlsx-version-metadata';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { readAndValidateMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
   ACTIVE_CONTENT_SECRET,

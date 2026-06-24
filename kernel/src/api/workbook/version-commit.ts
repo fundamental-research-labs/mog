@@ -5,7 +5,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 import { validateVersionOperationGate } from './version-operation-gate';
 import { serviceUnavailableDiagnostic } from './version-commit-diagnostics';
 import {

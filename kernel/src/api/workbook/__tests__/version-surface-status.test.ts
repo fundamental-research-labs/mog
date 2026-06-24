@@ -5,7 +5,7 @@ import { jest } from '@jest/globals';
 import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb-backend';
+import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import { WorkbookVersionImpl } from '../version';
 import { withVersionManifest } from './version-domain-support-test-utils';

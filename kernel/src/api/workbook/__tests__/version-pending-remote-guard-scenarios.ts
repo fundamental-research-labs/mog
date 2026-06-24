@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { promotePendingRemoteWorkbookVersion } from '../version-pending-remote';
+import { promotePendingRemoteWorkbookVersion } from '../version/pending/remote';
 import { SEGMENT_ID, authorizedCtx, createCtx } from './version-pending-remote-test-utils';
 
 export function registerPendingRemoteGuardScenarios(): void {

@@ -1,7 +1,7 @@
 import {
   type MogVersionMetadataExportSink,
   type MogVersionMetadataExportSinkAuthorization,
-} from '../version-xlsx-metadata-export-gate';
+} from '../version/xlsx-metadata/version-xlsx-metadata-export-gate';
 
 export function blockedMetadataSink(
   writes: { count: number } = { count: 0 },

@@ -3,8 +3,8 @@ import {
   maybeAddMogVersionMetadataToXlsx,
   MOG_VERSION_METADATA_PART,
   readAndValidateMogVersionMetadataFromXlsx,
-} from '../xlsx-version-metadata';
-import { REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS } from '../version-xlsx-metadata-export-gate';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
+import { REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS } from '../version/xlsx-metadata/version-xlsx-metadata-export-gate';
 import {
   createSourceXlsx,
   expectedMetadataHead,

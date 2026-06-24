@@ -4,7 +4,7 @@ import { versionDocumentScopeKey } from '../../../document/version-store/provide
 import {
   checkoutRebindIdentityDiagnosticDetails,
   rebindVersioningAfterCheckout,
-} from '../version-checkout-rebind';
+} from '../version/checkout/version-checkout-rebind';
 import {
   captureError,
   createDocumentContext,

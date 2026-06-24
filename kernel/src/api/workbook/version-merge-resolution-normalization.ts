@@ -1,6 +1,6 @@
 import type { VersionApplyMergeResolution, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
-import { normalizeSealedResolutionPayloadRefInput } from './version-merge-sealed-payload';
+import { normalizeSealedResolutionPayloadRefInput } from './version/merge-review/version-merge-sealed-payload';
 
 const RESOLUTION_KEYS = new Set([
   'conflictId',

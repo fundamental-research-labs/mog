@@ -1,4 +1,4 @@
-import type { VersionGraphWriteResult } from '../../../document/version-store/graph-store';
+import type { VersionGraphWriteResult } from '../../../document/version-store/graph';
 import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,

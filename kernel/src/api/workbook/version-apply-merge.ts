@@ -8,31 +8,31 @@ import type { DocumentContext } from '../../context';
 import {
   alreadyMergedApplyMergeResult,
   plannedAncestryApplyMergeResult,
-} from './version-apply-merge-ancestry';
+} from './version/apply-merge/version-apply-merge-ancestry';
 import {
   finalizeApplyMergePlan,
   tryApplyFastForwardMerge,
   validateApplyModeTargetRefCasProof,
-} from './version-apply-merge-orchestration';
-import { applyPersistedMergeResult } from './version-apply-merge-persisted';
+} from './version/apply-merge/version-apply-merge-orchestration';
+import { applyPersistedMergeResult } from './version/apply-merge/version-apply-merge-persisted';
 import {
   applyMergeServiceUnavailableDiagnostic,
   blockedApplyMergeResult,
   resolutionMismatchDiagnostic,
   resultFromTargetRefCasFailure,
-} from './version-apply-merge-results';
-import { planResolvedConflicts } from './version-apply-merge-resolution-plan';
+} from './version/apply-merge/version-apply-merge-results';
+import { planResolvedConflicts } from './version/apply-merge/version-apply-merge-resolution-plan';
 import {
   isApplyMergePersistedInput,
   validateApplyMergeRequest,
-} from './version-apply-merge-validation';
+} from './version/apply-merge/version-apply-merge-validation';
 import { mergeWorkbookVersion } from './version-merge';
 import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
 } from './version-merge-capability';
 import { materializableMergePlanDiagnostics } from './version-merge-materializer-support';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 
 export async function applyMergeWorkbookVersion(
   ctx: DocumentContext,

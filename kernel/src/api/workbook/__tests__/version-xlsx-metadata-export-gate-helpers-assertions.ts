@@ -1,4 +1,4 @@
-import { MOG_VERSION_METADATA_PART } from '../xlsx-version-metadata';
+import { MOG_VERSION_METADATA_PART } from '../version/xlsx-metadata/xlsx-version-metadata';
 
 export async function expectMogMetadataExportBlocked(
   exportAttempt: Promise<Uint8Array>,

@@ -4,7 +4,7 @@ import type { TrustedExportSeed } from './version-xlsx-reimport-trust-workbook-t
 import {
   addMogVersionMetadataToXlsx,
   readAndValidateMogVersionMetadataFromXlsx,
-} from '../xlsx-version-metadata';
+} from '../version/xlsx-metadata/xlsx-version-metadata';
 import { readLocalExpectedHead } from './version-xlsx-reimport-trust-version-store';
 import {
   createSourceXlsx,

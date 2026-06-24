@@ -1,7 +1,7 @@
 import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
-import { addMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { addMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import { withExportSupportedVersionManifest } from './version-domain-support-test-utils';
 import {
   CLEAN_EXPORT_DOCUMENT_ID,

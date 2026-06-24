@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 
 import type { Workbook } from '@mog-sdk/contracts/api';
 
-import { addMogVersionMetadataToXlsx } from '../xlsx-version-metadata';
+import { addMogVersionMetadataToXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import {
   DOCUMENT_ID,
   WORKSPACE_ID,

@@ -17,7 +17,7 @@ import {
   namespaceForDocumentScope,
   type VersionDocumentScope,
 } from '../../../document/version-store/provider';
-import { REVIEW_EXTENSION_OBJECT_TYPE } from '../version-merge-review-artifacts';
+import { REVIEW_EXTENSION_OBJECT_TYPE } from '../version/merge-review/version-merge-review-artifacts';
 import {
   conflictDigestObject,
   internalSha256Digest,

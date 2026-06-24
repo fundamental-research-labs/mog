@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { promotePendingRemoteWorkbookVersion } from '../version-pending-remote';
+import { promotePendingRemoteWorkbookVersion } from '../version/pending/remote';
 import {
   COMMIT_ID,
   DROPPED_SEGMENT_ID,

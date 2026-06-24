@@ -1,6 +1,6 @@
 import type { WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import type { MogWorkbookVersionXlsxMetadataTrustReason } from '../xlsx-version-metadata';
+import type { MogWorkbookVersionXlsxMetadataTrustReason } from '../version/xlsx-metadata/xlsx-version-metadata';
 import type { TrustedExportSeed } from './version-xlsx-reimport-trust-workbook';
 
 export type UntrustedMetadataCase = {

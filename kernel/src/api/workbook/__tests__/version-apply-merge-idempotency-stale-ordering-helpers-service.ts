@@ -4,7 +4,7 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { MergeVersionGraphInput } from '../../../document/version-store/graph-store';
+import type { MergeVersionGraphInput } from '../../../document/version-store/graph';
 import type { ObjectDigest } from '../../../document/version-store/object-digest';
 import type { VersionGraphNamespace } from '../../../document/version-store/object-store';
 import type { VersionGraphStore } from '../../../document/version-store/provider-graph-store';

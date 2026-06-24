@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { recoverPersistedMergeApplyPostCas } from '../version-apply-merge-recovery';
+import { recoverPersistedMergeApplyPostCas } from '../version/apply-merge/version-apply-merge-recovery';
 import {
   BASE,
   OURS,

@@ -1,6 +1,6 @@
 import type { VersionDiagnostic } from '@mog-sdk/contracts/api';
 
-import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
+import type { VersionPendingProviderWritesStatus } from './version/pending/provider-writes';
 
 type MaybePromise<T> = T | Promise<T>;
 type DiagnosticProjector = (value: unknown) => readonly VersionDiagnostic[] | null;

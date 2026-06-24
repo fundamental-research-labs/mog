@@ -8,7 +8,7 @@ import type {
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
 import type { HostCapabilityDecision } from './version-merge-capability';
 import type { VersionLiveCollaborationDirtyStatus } from './version-live-collaboration-status';
-import type { VersionPendingProviderWritesStatus } from './version-pending-provider-writes';
+import type { VersionPendingProviderWritesStatus } from './version/pending/provider-writes';
 
 export type MaybePromise<T> = T | Promise<T>;
 export type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;

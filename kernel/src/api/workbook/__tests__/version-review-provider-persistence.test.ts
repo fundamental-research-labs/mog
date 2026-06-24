@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 
-import { createIndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb-backend';
+import { createIndexedDbVersionStoreProvider } from '../../../document/version-store/provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import {
   DOCUMENT_SCOPE,

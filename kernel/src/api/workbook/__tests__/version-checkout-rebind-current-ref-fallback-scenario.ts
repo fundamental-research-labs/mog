@@ -3,7 +3,7 @@ import { expect, it } from '@jest/globals';
 import {
   checkoutRebindIdentityDiagnosticDetails,
   rebindVersioningAfterCheckout,
-} from '../version-checkout-rebind';
+} from '../version/checkout/version-checkout-rebind';
 import {
   BASE_COMMIT_ID,
   captureError,

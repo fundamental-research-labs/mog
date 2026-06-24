@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../../../document/version-store/graph';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,

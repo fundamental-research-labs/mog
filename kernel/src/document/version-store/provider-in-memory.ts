@@ -13,6 +13,7 @@ import { readInMemoryGraphRegistry, initializeInMemoryGraph } from './provider-i
 import { createInMemoryVersionStoreProviderState } from './provider-in-memory-state';
 import {
   openInMemoryAgentProposalMetadataStore,
+  openInMemoryActiveCheckoutMaterializationStore,
   openInMemoryAppliedSyncUpdateIdentityStore,
   openInMemoryMergeApplyIntentStore,
   openInMemoryPendingRemoteSegmentStore,
@@ -39,6 +40,7 @@ import type { InMemoryAgentProposalMetadataStore } from './proposals/proposal-st
 import type { VersionDocumentScope } from './registry';
 import type { InMemoryWorkbookVersionReviewRecordStore } from './review-service';
 import type { InMemorySyncBatchStatusStore } from './sync-batch-status-store';
+import type { ActiveCheckoutMaterializationStore } from './active-checkout-materialization-store';
 
 export type { InMemoryVersionStoreProviderOptions } from './provider-in-memory-types';
 
@@ -105,6 +107,10 @@ export class InMemoryVersionStoreProvider implements VersionStoreProvider {
 
   async openAgentProposalMetadataStore(): Promise<InMemoryAgentProposalMetadataStore> {
     return openInMemoryAgentProposalMetadataStore(this.state);
+  }
+
+  async openActiveCheckoutMaterializationStore(): Promise<ActiveCheckoutMaterializationStore> {
+    return openInMemoryActiveCheckoutMaterializationStore(this.state);
   }
 
   async scanDocumentIntegrity(

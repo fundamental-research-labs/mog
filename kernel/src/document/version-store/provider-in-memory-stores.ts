@@ -1,4 +1,8 @@
 import { InMemoryAppliedSyncUpdateIdentityStore } from './applied-sync-update-identity-store';
+import {
+  createActiveCheckoutMaterializationMemoryStore,
+  type ActiveCheckoutMaterializationStore,
+} from './active-checkout-materialization-store';
 import { InMemoryMergeApplyIntentStore } from './merge-apply-intent-store';
 import type { VersionGraphNamespace } from './object-store';
 import { InMemoryPendingRemoteSegmentStore } from './pending-remote-segment-store';
@@ -70,4 +74,13 @@ export async function openInMemoryAgentProposalMetadataStore(
     documentScope: state.documentScope,
     backend: state.backend.proposalMetadataBackend,
   });
+}
+
+export async function openInMemoryActiveCheckoutMaterializationStore(
+  state: InMemoryVersionStoreProviderState,
+): Promise<ActiveCheckoutMaterializationStore> {
+  return createActiveCheckoutMaterializationMemoryStore(
+    state.backend.activeCheckoutMaterializationBackend,
+    state.documentScope,
+  );
 }

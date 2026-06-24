@@ -59,6 +59,13 @@ export function createWorkbookVersionSurfaceStatusService(
           : cleanLiveCollaborationStatus(),
       ),
     readActiveCheckoutSession: () => cloneCheckoutSession(activeCheckoutSession),
+    restoreActiveCheckoutMaterialization: (session) => {
+      if (activeCheckoutSession) return cloneCheckoutSession(activeCheckoutSession);
+      const restored = restorableCheckoutSession(session);
+      if (!restored) return null;
+      activeCheckoutSession = restored;
+      return cloneCheckoutSession(activeCheckoutSession);
+    },
     recordCheckoutMaterialization: (materialization) => {
       setActiveCheckoutSession(
         checkoutSessionFromMaterialization(materialization),
@@ -174,6 +181,16 @@ function freezeCheckoutSession(
   return Object.freeze({ ...session });
 }
 
+function restorableCheckoutSession(
+  session: VersionSurfaceCheckoutSession,
+): VersionSurfaceCheckoutSession | null {
+  if (session.detached) {
+    return session.checkedOutCommitId ? freezeCheckoutSession(session) : null;
+  }
+  if (!session.branchName || !session.refHeadAtMaterialization) return null;
+  return freezeCheckoutSession(session);
+}
+
 function checkoutSessionsEqual(
   left: VersionSurfaceCheckoutSession | null,
   right: VersionSurfaceCheckoutSession | null,
@@ -191,8 +208,8 @@ function checkoutSessionsEqual(
 function branchNameFromRefName(refName: string): string | null {
   const prefix = 'refs/heads/';
   if (refName === 'main') return 'main';
-  if (!refName.startsWith(prefix)) return null;
-  return refName.slice(prefix.length);
+  if (refName.startsWith(prefix)) return refName.slice(prefix.length);
+  return refName.length > 0 ? refName : null;
 }
 
 function dirtyStatusFromState(

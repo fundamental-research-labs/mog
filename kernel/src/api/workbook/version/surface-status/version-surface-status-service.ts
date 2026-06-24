@@ -8,6 +8,7 @@ export {
   getAttachedVersionSurfaceStatusService,
   readCheckoutSessionCurrentStatus,
   readVersionSurfaceCheckoutSession,
+  restoreVersionSurfaceCheckoutSession,
 } from './version-surface-status-current';
 export {
   conservativeDirtyStatus,

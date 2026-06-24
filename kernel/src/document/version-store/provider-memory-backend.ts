@@ -40,6 +40,10 @@ import {
   AgentProposalMetadataMemoryBackend,
   type AgentProposalMetadataMemoryBackendSnapshot,
 } from './proposals/proposal-store';
+import {
+  ActiveCheckoutMaterializationMemoryBackend,
+  type ActiveCheckoutMaterializationRecord,
+} from './active-checkout-materialization-store';
 
 export type InMemoryVersionProviderDurability = 'ephemeral' | 'snapshot-test-double';
 
@@ -57,6 +61,7 @@ export type InMemoryVersionDocumentProviderBackendSnapshot = {
   readonly syncBatchStatuses?: SyncBatchStatusMemoryBackendSnapshot;
   readonly reviewRecords?: WorkbookVersionReviewRecordMemoryBackendSnapshot;
   readonly proposalMetadataRecords?: AgentProposalMetadataMemoryBackendSnapshot;
+  readonly activeCheckoutMaterializations?: readonly ActiveCheckoutMaterializationRecord[];
 };
 
 export class InMemoryVersionDocumentProviderBackend {
@@ -68,6 +73,7 @@ export class InMemoryVersionDocumentProviderBackend {
   readonly syncBatchStatusBackend: SyncBatchStatusMemoryBackend;
   readonly reviewRecordBackend: WorkbookVersionReviewRecordMemoryBackend;
   readonly proposalMetadataBackend: AgentProposalMetadataMemoryBackend;
+  readonly activeCheckoutMaterializationBackend: ActiveCheckoutMaterializationMemoryBackend;
 
   constructor(
     options: {
@@ -77,6 +83,7 @@ export class InMemoryVersionDocumentProviderBackend {
       readonly syncBatchStatusBackend?: SyncBatchStatusMemoryBackend;
       readonly reviewRecordBackend?: WorkbookVersionReviewRecordMemoryBackend;
       readonly proposalMetadataBackend?: AgentProposalMetadataMemoryBackend;
+      readonly activeCheckoutMaterializationBackend?: ActiveCheckoutMaterializationMemoryBackend;
     } = {},
   ) {
     this.mergeApplyIntentBackend =
@@ -91,6 +98,9 @@ export class InMemoryVersionDocumentProviderBackend {
       options.reviewRecordBackend ?? new WorkbookVersionReviewRecordMemoryBackend();
     this.proposalMetadataBackend =
       options.proposalMetadataBackend ?? new AgentProposalMetadataMemoryBackend();
+    this.activeCheckoutMaterializationBackend =
+      options.activeCheckoutMaterializationBackend ??
+      new ActiveCheckoutMaterializationMemoryBackend();
   }
 
   readRegistryRecord(
@@ -157,6 +167,8 @@ export class InMemoryVersionDocumentProviderBackend {
       syncBatchStatuses: this.syncBatchStatusBackend.exportSnapshot(),
       reviewRecords: this.reviewRecordBackend.exportSnapshot(),
       proposalMetadataRecords: this.proposalMetadataBackend.exportSnapshot(),
+      activeCheckoutMaterializations:
+        this.activeCheckoutMaterializationBackend.exportSnapshot(),
     });
   }
 
@@ -182,6 +194,10 @@ export class InMemoryVersionDocumentProviderBackend {
       proposalMetadataBackend: AgentProposalMetadataMemoryBackend.fromSnapshot(
         snapshot.proposalMetadataRecords ?? { rows: [] },
       ),
+      activeCheckoutMaterializationBackend:
+        ActiveCheckoutMaterializationMemoryBackend.fromSnapshot(
+          snapshot.activeCheckoutMaterializations ?? [],
+        ),
     });
     for (const [scope, record] of snapshot.registries) {
       backend.registries.set(versionDocumentScopeKey(scope), cloneRegistryRecord(record));

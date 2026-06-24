@@ -51,6 +51,7 @@ import type { WorkbookVersionProvenanceTruthService } from './version/provenance
 import type { VersionLiveCollaborationStatusReader } from './version/live-collaboration/version-live-collaboration-status';
 import type { DomainSupportManifestValidationOptions } from '../../document/version-store/domain-support-manifest-validator';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
+import type { VersionCheckoutTransactionGuard } from './version-checkout';
 
 // =============================================================================
 // Lazy CodeExecutor Types
@@ -94,6 +95,7 @@ export interface WorkbookVersioningConfig {
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly ensureProviderInitialized?: () => MaybePromise<readonly VersionStoreDiagnostic[]>;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;
+  readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
   readonly readLiveCollaborationStatus?: VersionLiveCollaborationStatusReader;
   readonly domainSupportManifest?: DomainSupportManifest | null;
   readonly readDomainSupportManifest?: () => MaybePromise<DomainSupportManifest | null | undefined>;

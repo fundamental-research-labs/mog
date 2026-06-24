@@ -19,7 +19,7 @@ import {
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
   readActiveCheckoutWriteContext,
-} from '../active-checkout-write-context';
+} from '../active-checkout/active-checkout-write-context';
 import {
   providerErrorDiagnostic as checkoutProviderErrorDiagnostic,
   serviceUnavailableDiagnostic as checkoutServiceUnavailableDiagnostic,

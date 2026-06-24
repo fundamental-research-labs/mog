@@ -233,6 +233,9 @@ export function attachWorkbookVersioning(
       ? { snapshotRootByteSyncPort: config.snapshotRootByteSyncPort }
       : {}),
     ...(checkoutSnapshotMaterializer ? { checkoutSnapshotMaterializer } : {}),
+    ...(config.checkoutTransactionGuard
+      ? { checkoutTransactionGuard: config.checkoutTransactionGuard }
+      : {}),
     ...(semanticStateReader ? { semanticStateReader } : {}),
     ...(writeService
       ? {

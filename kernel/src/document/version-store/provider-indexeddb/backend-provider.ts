@@ -35,6 +35,7 @@ import { IndexedDbAppliedSyncUpdateIdentityStore } from '../provider-indexeddb-a
 import { IndexedDbSyncBatchStatusStore } from '../provider-indexeddb-sync-batch-statuses';
 import { IndexedDbWorkbookVersionReviewRecordStore } from '../provider-indexeddb-review-records';
 import { IndexedDbAgentProposalMetadataStore } from '../provider-indexeddb-proposals';
+import { IndexedDbActiveCheckoutMaterializationStore } from '../provider-indexeddb-active-checkouts';
 import {
   indexedDbBackendLifecycleUnavailableDiagnostic,
   indexedDbBackendLifecycleUnavailableFailure,
@@ -168,6 +169,13 @@ export class IndexedDbVersionStoreProvider implements VersionStoreProvider {
 
   async openAgentProposalMetadataStore(): Promise<IndexedDbAgentProposalMetadataStore> {
     return new IndexedDbAgentProposalMetadataStore({
+      documentScope: this.documentScope,
+      getDb: () => this.getDb(),
+    });
+  }
+
+  async openActiveCheckoutMaterializationStore(): Promise<IndexedDbActiveCheckoutMaterializationStore> {
+    return new IndexedDbActiveCheckoutMaterializationStore({
       documentScope: this.documentScope,
       getDb: () => this.getDb(),
     });

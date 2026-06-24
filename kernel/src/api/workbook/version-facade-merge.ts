@@ -39,6 +39,7 @@ import {
   materializeAppliedMergeTargetRef,
   prepareActiveCheckoutMergeMaterialization,
 } from './version/apply-merge/version-apply-merge-active-checkout-materialization';
+import { writePersistedActiveCheckoutMaterialization } from './version/active-checkout/version-active-checkout-persistence';
 import { invalidApplyMergeOptionDiagnostic } from './version/apply-merge/version-apply-merge-results';
 import {
   getMergeConflictDetailWorkbookVersion,
@@ -106,6 +107,12 @@ export async function applyMergeWorkbookVersionFacade(
       return versionFailureFromStoreDiagnostics('applyMerge', materialized.diagnostics);
     }
     materializedActiveCheckout = true;
+    await writePersistedActiveCheckoutMaterialization(ctx, {
+      checkedOutCommitId: commitRef.id,
+      branchName: branchNameFromRefName(materialization.targetRef),
+      refHeadAtMaterialization: commitRef.id,
+      detached: false,
+    });
   }
   const publicResult = versionResultFromApplyMerge(result);
   if (
@@ -122,6 +129,10 @@ export async function applyMergeWorkbookVersionFacade(
     );
   }
   return publicResult;
+}
+
+function branchNameFromRefName(refName: string): string {
+  return refName.startsWith('refs/heads/') ? refName.slice('refs/heads/'.length) : refName;
 }
 
 export async function revertWorkbookVersionFacade(

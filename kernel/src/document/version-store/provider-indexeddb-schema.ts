@@ -8,7 +8,7 @@
  */
 
 export const VERSION_STORE_INDEXEDDB_NAME = 'mog-version-store';
-export const VERSION_STORE_INDEXEDDB_VERSION = 2;
+export const VERSION_STORE_INDEXEDDB_VERSION = 3;
 
 export const REGISTRIES_STORE = 'registries';
 export const OBJECTS_STORE = 'objects';
@@ -19,6 +19,7 @@ export const PARENT_INDEXES_STORE = 'parentIndexes';
 export const INDEX_MANIFESTS_STORE = 'indexManifests';
 export const INTENTS_STORE = 'intents';
 export const PROPOSALS_STORE = 'proposals';
+export const ACTIVE_CHECKOUTS_STORE = 'activeCheckouts';
 
 export const VERSION_STORE_INDEXEDDB_STORES = Object.freeze([
   REGISTRIES_STORE,
@@ -30,6 +31,7 @@ export const VERSION_STORE_INDEXEDDB_STORES = Object.freeze([
   INDEX_MANIFESTS_STORE,
   INTENTS_STORE,
   PROPOSALS_STORE,
+  ACTIVE_CHECKOUTS_STORE,
 ] as const);
 
 export type VersionStoreIndexedDbStoreName = (typeof VERSION_STORE_INDEXEDDB_STORES)[number];
@@ -47,6 +49,7 @@ function attemptOpen(resolve: (db: IDBDatabase) => void, reject: (error: unknown
     const db = request.result;
     createV1Stores(db);
     createV2Stores(db);
+    createV3Stores(db);
   };
 
   request.onsuccess = () => {
@@ -118,6 +121,13 @@ function createV2Stores(db: IDBDatabase): void {
     store.createIndex('agentRunId', 'agentRunId', { unique: false });
     store.createIndex('status', 'status', { unique: false });
     store.createIndex('updatedAt', 'updatedAt', { unique: false });
+  }
+}
+
+function createV3Stores(db: IDBDatabase): void {
+  if (!db.objectStoreNames.contains(ACTIVE_CHECKOUTS_STORE)) {
+    const store = db.createObjectStore(ACTIVE_CHECKOUTS_STORE);
+    store.createIndex('documentScopeKey', 'documentScopeKey', { unique: true });
   }
 }
 

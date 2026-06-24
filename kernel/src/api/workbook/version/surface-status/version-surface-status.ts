@@ -6,6 +6,8 @@ import type {
 
 import type { DocumentContext } from '../../../../context';
 import { hasAttachedVersionCheckoutService } from '../../version-checkout';
+import { readPersistedActiveCheckoutMaterialization } from '../active-checkout/version-active-checkout-persistence';
+import { restoreAttachedActiveCheckoutMaterialization } from '../active-checkout/version-active-checkout-restore';
 import { hasAttachedVersionWriteService } from '../commit/version-commit';
 import {
   getVersionHostCapabilityDecisions,
@@ -173,14 +175,31 @@ export async function getWorkbookVersionSurfaceStatus(
     featureGate.enabled && storage.ready
       ? await deriveVersionSurfaceCapabilityBlocks({ ctx, services, availability })
       : {};
-  const activeCheckoutSession = redactCurrentStatus
+  let activeCheckoutSession = redactCurrentStatus
     ? null
     : await readVersionSurfaceCheckoutSession(surfaceStatusService, diagnostics);
-  const current = featureGate.enabled
+  let current = featureGate.enabled
     ? redactCurrentStatus
       ? redactedVersionSurfaceCurrentStatus()
       : await readVersionSurfaceCurrentStatus(readService, diagnostics, activeCheckoutSession)
     : defaultVersionSurfaceCurrentStatus();
+  if (featureGate.enabled && !redactCurrentStatus && !activeCheckoutSession) {
+    const restorableSession = await readPersistedActiveCheckoutMaterialization(ctx);
+    activeCheckoutSession = restorableSession
+      ? await restoreAttachedActiveCheckoutMaterialization({
+          ctx,
+          surfaceStatusService,
+          session: restorableSession,
+        })
+      : null;
+    if (activeCheckoutSession) {
+      current = await readVersionSurfaceCurrentStatus(
+        readService,
+        diagnostics,
+        activeCheckoutSession,
+      );
+    }
+  }
   const rawDirty = await readVersionSurfaceDirtyStatus(surfaceStatusService, diagnostics);
   const dirty = redactDirtyStatus ? redactVersionSurfaceDirtyStatus(rawDirty) : rawDirty;
   diagnostics.push(...dirty.diagnostics);

@@ -57,6 +57,21 @@ export async function readVersionSurfaceCheckoutSession(
   return null;
 }
 
+export async function restoreVersionSurfaceCheckoutSession(
+  service: AttachedVersionSurfaceStatusService | null,
+  session: VersionSurfaceCheckoutSession,
+): Promise<VersionSurfaceCheckoutSession | null> {
+  if (!service?.restoreActiveCheckoutMaterialization) return null;
+  try {
+    const restored = projectCheckoutSession(
+      await service.restoreActiveCheckoutMaterialization(session),
+    );
+    return restored ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function readCheckoutSessionCurrentStatus(input: {
   readonly session: VersionSurfaceCheckoutSession;
   readonly readRef?: (name: string) => Promise<unknown> | unknown;
@@ -146,11 +161,23 @@ function toSurfaceStatusService(value: unknown): AttachedVersionSurfaceStatusSer
     bindMethod(value, 'readDirtyStatus') ?? bindMethod(value, 'getDirtyStatus');
   const readActiveCheckoutSession =
     bindMethod(value, 'readActiveCheckoutSession') ?? bindMethod(value, 'getActiveCheckoutSession');
-  if (!readDirtyStatus && !readActiveCheckoutSession) return null;
+  const restoreActiveCheckoutMaterialization = bindMethod(
+    value,
+    'restoreActiveCheckoutMaterialization',
+  );
+  if (!readDirtyStatus && !readActiveCheckoutSession && !restoreActiveCheckoutMaterialization) {
+    return null;
+  }
   return {
     ...(readDirtyStatus ? { readDirtyStatus: () => readDirtyStatus() } : {}),
     ...(readActiveCheckoutSession
       ? { readActiveCheckoutSession: () => readActiveCheckoutSession() }
+      : {}),
+    ...(restoreActiveCheckoutMaterialization
+      ? {
+          restoreActiveCheckoutMaterialization: (session: VersionSurfaceCheckoutSession) =>
+            restoreActiveCheckoutMaterialization(session),
+        }
       : {}),
   };
 }

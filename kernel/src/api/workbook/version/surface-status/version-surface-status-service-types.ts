@@ -69,6 +69,9 @@ export type VersionSurfaceActiveCheckoutStateChanged = {
 export type WorkbookVersionSurfaceStatusService = {
   readDirtyStatus(): MaybePromise<VersionSurfaceStatus['dirty']>;
   readActiveCheckoutSession(): VersionSurfaceCheckoutSession | null;
+  restoreActiveCheckoutMaterialization(
+    input: VersionSurfaceCheckoutSession,
+  ): VersionSurfaceCheckoutSession | null;
   recordCheckoutMaterialization(input: CheckoutSnapshotApplyInput): void;
   recordActiveCheckoutBranchCommit(input: VersionSurfaceBranchCommitMaterialization): void;
   recordActiveCheckoutBranchRefMove(input: VersionSurfaceBranchRefMove): void;
@@ -77,6 +80,9 @@ export type WorkbookVersionSurfaceStatusService = {
 export type AttachedVersionSurfaceStatusService = {
   readDirtyStatus?: () => MaybePromise<unknown>;
   readActiveCheckoutSession?: () => MaybePromise<unknown>;
+  restoreActiveCheckoutMaterialization?: (
+    input: VersionSurfaceCheckoutSession,
+  ) => MaybePromise<unknown>;
 };
 
 export type CreateWorkbookVersionSurfaceStatusServiceInput = {

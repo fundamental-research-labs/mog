@@ -360,7 +360,10 @@ export abstract class WorkbookImplFoundation {
       },
     );
     if (versioning) {
-      attachWorkbookVersioning(this.ctx, versioning);
+      attachWorkbookVersioning(this.ctx, {
+        ...versioning,
+        checkoutTransactionGuard: this.checkoutTransactions.guard,
+      });
     }
     attachWorkbookVersionSurfaceStatusService(this.ctx, this.versionSurfaceStatusService);
     this._liveness = createWorkbookLiveness(config, this.ctx);

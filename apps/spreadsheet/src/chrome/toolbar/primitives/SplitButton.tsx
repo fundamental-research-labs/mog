@@ -33,6 +33,7 @@ import { useRibbonButtonVisible } from '../visibility/RibbonVisibilityContext';
 import { DropdownArrowIcon } from './ToolbarIcons';
 
 type SplitButtonVariant = 'small' | 'large';
+type SplitButtonWidth = 'normal' | 'narrow';
 
 interface SplitButtonProps {
   /** Optional ID for keytip positioning */
@@ -43,6 +44,8 @@ interface SplitButtonProps {
   label?: string;
   /** Size variant */
   variant?: SplitButtonVariant;
+  /** Width variant for large ribbon buttons. */
+  width?: SplitButtonWidth;
   /** Whether the dropdown is currently open */
   isOpen?: boolean;
   /** Whether the entire button is disabled */
@@ -118,6 +121,7 @@ export const SplitButton = React.memo(function SplitButton({
   icon,
   label,
   variant = 'small',
+  width = 'normal',
   isOpen = false,
   disabled = false,
   title,
@@ -168,9 +172,17 @@ export const SplitButton = React.memo(function SplitButton({
     // Adjust sizing based on collapse mode
     // In icons mode, use more compact sizing
     const isCompact = groupMode === 'icons' || groupMode === 'compact';
+    const isNarrow = width === 'narrow';
     const mainButtonClasses = isCompact
       ? 'px-2 py-1 min-w-[32px]' // Compact sizing
-      : 'px-3 py-1 min-w-[44px]'; // Full sizing
+      : isNarrow
+        ? 'px-2 py-1 min-w-[38px]'
+        : 'px-3 py-1 min-w-[44px]'; // Full sizing
+    const iconSizeClasses = isNarrow
+      ? 'h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)]'
+      : 'h-5 w-5';
+    const dropdownButtonClasses = isNarrow ? 'px-0.5 min-w-[14px]' : 'px-1 min-w-[16px]';
+    const labelTextClasses = isNarrow ? 'text-ribbon-compact' : 'text-ribbon';
 
     return (
       <div id={id} className={`group/split-button flex flex-row items-stretch ${className}`}>
@@ -194,9 +206,9 @@ export const SplitButton = React.memo(function SplitButton({
  ${activeStyles}
  `}
         >
-          <span className="flex items-center justify-center w-5 h-5">{icon}</span>
+          <span className={`flex items-center justify-center ${iconSizeClasses}`}>{icon}</span>
           {showLabel && (
-            <span className="text-ribbon leading-tight whitespace-nowrap">{label}</span>
+            <span className={`${labelTextClasses} leading-tight whitespace-nowrap`}>{label}</span>
           )}
         </button>
 
@@ -212,7 +224,7 @@ export const SplitButton = React.memo(function SplitButton({
           data-testid={dropdownTestId}
           className={`
  ${buttonBase}
- px-1 min-w-[16px]
+ ${dropdownButtonClasses}
  h-[var(--ribbon-content-height)]
  border border-l rounded-r
  cursor-pointer select-none
@@ -247,7 +259,9 @@ export const SplitButton = React.memo(function SplitButton({
  ${activeStyles}
  `}
       >
-        {icon}
+        <span className="flex h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)] items-center justify-center">
+          {icon}
+        </span>
       </button>
 
       {/* Dropdown Trigger - Small */}

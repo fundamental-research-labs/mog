@@ -60,6 +60,7 @@
   --ribbon-group-items-gap: 3px; /* gap between items horizontally within a group */
 
   /* Ribbon buttons */
+  --ribbon-icon-size: 14px;
   --ribbon-button-gap: 2px; /* gap between button rows vertically */
   --ribbon-button-icon-gap: 2px; /* gap between icon and label within a button */
   --ribbon-button-inline-gap: 1px; /* tight gap between adjacent icon buttons (B/I/U row) */

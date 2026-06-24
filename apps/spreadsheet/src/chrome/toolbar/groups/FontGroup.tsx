@@ -141,6 +141,10 @@ const DEFAULT_BORDER: { borders: CellBorders; preset: BorderPresetMode } = {
   preset: null,
 };
 
+const FONT_SIZE_STEP_ICON_STYLE = {
+  '--ribbon-icon-size': '15px',
+} as React.CSSProperties;
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -579,7 +583,11 @@ export const FontGroup = React.memo(function FontGroup() {
           <Tooltip title="Increase Font Size">
             <RibbonButton
               layout="icon-only"
-              icon={<FontSizeIncreaseIcon />}
+              icon={
+                <span className="translate-y-px" style={FONT_SIZE_STEP_ICON_STYLE}>
+                  <FontSizeIncreaseIcon />
+                </span>
+              }
               onClick={() => dispatch('INCREASE_FONT_SIZE')}
               disabled={!canFormatCells}
               id="increase-font-size"
@@ -591,7 +599,11 @@ export const FontGroup = React.memo(function FontGroup() {
           <Tooltip title="Decrease Font Size">
             <RibbonButton
               layout="icon-only"
-              icon={<FontSizeDecreaseIcon />}
+              icon={
+                <span className="translate-y-px" style={FONT_SIZE_STEP_ICON_STYLE}>
+                  <FontSizeDecreaseIcon />
+                </span>
+              }
               onClick={() => dispatch('DECREASE_FONT_SIZE')}
               disabled={!canFormatCells}
               id="decrease-font-size"

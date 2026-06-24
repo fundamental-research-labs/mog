@@ -36,12 +36,14 @@ import { StyleGallery } from '../../../components/pickers/StyleGallery';
 import { TableStyleGallery } from '../../../components/pickers/TableStyleGallery';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useToolbarActions } from '../../../hooks/toolbar/use-toolbar-actions';
-import { ConditionalFormattingMenu } from '../galleries/ConditionalFormattingMenu';
+import {
+  ConditionalFormattingMenu,
+  ConditionalFormattingStackIcon,
+} from '../galleries/ConditionalFormattingMenu';
 import { keyTipRegistry } from '../keytips';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
 import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
-import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
 import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
@@ -53,7 +55,13 @@ import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
  */
 function FormatAsTableIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
       {/* Table icon with header */}
       <rect x="2" y="2" width="16" height="4" fill="#4472c4" rx="1" />
       <rect x="2" y="7" width="16" height="3" fill="#d6dce5" stroke="#8faadc" strokeWidth="0.3" />
@@ -65,7 +73,13 @@ function FormatAsTableIcon() {
 
 function CellStylesIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
       <rect x="1.5" y="2" width="11" height="12" rx="1" fill="#ffffff" stroke="#6b7280" />
       <path d="M5.2 2v12M8.9 2v12M1.5 6h11M1.5 10h11" stroke="#9ca3af" strokeWidth="0.7" />
       <rect x="2.3" y="2.8" width="2.2" height="2.5" fill="#d8eadc" />
@@ -186,7 +200,7 @@ export const StylesGroup = React.memo(function StylesGroup() {
     <ToolbarGroup
       label="Styles"
       collapseConfig={STYLES_COLLAPSE_CONFIG}
-      dropdownIcon={<ConditionalFormatIcon />}
+      dropdownIcon={<ConditionalFormattingStackIcon />}
     >
       <div className="flex flex-col justify-center gap-0.5">
         <ConditionalFormattingMenu variant="stacked" />

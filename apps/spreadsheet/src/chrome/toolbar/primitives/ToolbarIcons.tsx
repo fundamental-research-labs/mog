@@ -259,7 +259,7 @@ type SvgComponent = ComponentType<SVGProps<SVGSVGElement>>;
 // Icon Wrapper Utilities
 // =============================================================================
 
-const iconStyle = { width: 16, height: 16 };
+const iconStyle = { width: 'var(--ribbon-icon-size)', height: 'var(--ribbon-icon-size)' };
 const iconStyleLarge = { width: 20, height: 20 };
 const iconStyleXL = { width: 24, height: 24 };
 

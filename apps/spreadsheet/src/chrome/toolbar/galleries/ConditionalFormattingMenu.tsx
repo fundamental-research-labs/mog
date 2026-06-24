@@ -103,9 +103,15 @@ const TOP_BOTTOM_RULES: Array<{ label: string; type: QuickRuleDialogType; descri
 // Trigger Icon
 // =============================================================================
 
-function ConditionalFormattingStackIcon() {
+export function ConditionalFormattingStackIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
       <rect x="1.5" y="2" width="13" height="12" rx="1" fill="#ffffff" stroke="#6b7280" />
       <path d="M5.8 2v12M10.2 2v12M1.5 6.1h13M1.5 10.4h13" stroke="#9ca3af" strokeWidth="0.7" />
       <rect x="2.4" y="2.9" width="2.6" height="2.4" fill="#f7c7c7" />

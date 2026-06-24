@@ -15,6 +15,7 @@ mod chart_auxiliary_registration;
 mod chart_extents;
 mod chart_frame_transform;
 mod chart_replay;
+mod chart_source_completion;
 mod differential_formats;
 mod doc_props;
 mod export_context;

@@ -563,8 +563,7 @@ fn export_single_sheet(
     let (all_fobjs, slicers, slicer_anchors, timelines, timeline_anchors) =
         export_floating_objects_for_sheet(stores, mirror, sheet_id);
 
-    let (charts, floating_objects) =
-        chart_sources::split_charts_for_sheet_export(all_fobjs, mirror, sheet_id, &name);
+    let (charts, floating_objects) = chart_sources::split_charts_for_sheet_export(all_fobjs);
 
     let (
         original_sheet_id,

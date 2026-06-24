@@ -8,6 +8,8 @@ use crate::write::pivot_writer;
 
 pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
     let (remapped_output, registry_dxfs) = differential_formats::remap_for_export(output);
+    let mut remapped_output = remapped_output;
+    super::chart_source_completion::complete_chart_sources_for_xlsx_export(&mut remapped_output);
     let mut style_export = build_style_export_plan(&remapped_output);
     style_export.writer.dxfs = registry_dxfs;
 

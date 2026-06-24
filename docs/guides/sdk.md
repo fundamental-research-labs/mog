@@ -284,9 +284,8 @@ The basic public flow is:
 1. Pass `documentId` plus a supported `versionStore` to `createWorkbook(...)`.
 2. Before each commit, read the current head and pass `expectedHead` with the
    head commit ID and ref revision.
-3. Create scenario or agent branches with `wb.version.createBranch(...)`, then
-   checkout the branch through `wb.version.checkout(...)` after the workbook is
-   clean.
+3. Create branches with `wb.version.createBranch(...)`, then checkout the
+   branch through `wb.version.checkout(...)` after the workbook is clean.
 4. Preview merges with `wb.version.merge(...)`. Preview is read-only.
 5. If the preview is conflicted, choose a resolution for every conflict and pass
    those conflict IDs, digests, option IDs, and option kinds to
@@ -309,7 +308,7 @@ stores with `workspaceId` and `principalScope`; pass workbook import sources to
 import { createWorkbook } from '@mog-sdk/sdk';
 
 const mainRef = 'refs/heads/main';
-const scenarioRef = 'refs/heads/scenario/budget-q1';
+const budgetRef = 'refs/heads/budget-q1';
 
 function failFromDiagnostics(diagnostics) {
   return diagnostics.map((diagnostic) => diagnostic.safeMessage ?? 'Version diagnostic').join('\n');
@@ -352,14 +351,14 @@ try {
 
   await valueOf(
     wb.version.createBranch({
-      name: scenarioRef,
+      name: budgetRef,
       targetCommitId: baseCommit.id,
       expectedAbsent: true,
     }),
   );
 
   const checkout = await valueOf(
-    wb.version.checkout({ kind: 'ref', name: scenarioRef }, { requireClean: true }),
+    wb.version.checkout({ kind: 'ref', name: budgetRef }, { requireClean: true }),
   );
   if (checkout.materialization !== 'applied') {
     throw new Error('Checkout did not materialize workbook state');

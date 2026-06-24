@@ -147,7 +147,6 @@ export type {
   VersionRefListResult,
   VersionRefMutationResult,
   VersionRefName,
-  VersionRefNamespace,
   VersionRefReadResult,
   VersionRefSelector,
   VersionRevertCasAdmission,

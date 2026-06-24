@@ -13,10 +13,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { validateRefName } from '../../../../document/version-store/refs/ref-name';
-import {
-  invalidApplyMergeOptionDiagnostic,
-  publicDiagnostic,
-} from './version-apply-merge-results';
+import { invalidApplyMergeOptionDiagnostic, publicDiagnostic } from './version-apply-merge-results';
 import {
   VERSION_BRANCH_REF_PREFIX,
   VERSION_MAIN_REF,
@@ -296,7 +293,7 @@ function validateTargetRef(
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic(
         'targetRef',
-        'targetRef must name main, scenario/*, or agent/*.',
+        'targetRef must name main or a valid public branch.',
       ),
     );
     return undefined;

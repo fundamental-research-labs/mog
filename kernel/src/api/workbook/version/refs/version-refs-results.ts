@@ -162,8 +162,8 @@ function refMatchesPrefix(
   ref: VersionRef,
   prefix: Extract<ParsedRefPrefix, { readonly ok: true }>,
 ): boolean {
+  if (prefix.prefix === undefined) return true;
   const branchName = ref.name.slice(VERSION_BRANCH_REF_PREFIX.length);
-  if (branchName === 'main') return prefix.includeMain && prefix.namespace === undefined;
-  if (prefix.namespace === undefined) return true;
-  return branchName.startsWith(`${prefix.namespace}/`);
+  if (prefix.prefix.endsWith('/')) return branchName.startsWith(prefix.prefix);
+  return branchName === prefix.prefix || branchName.startsWith(`${prefix.prefix}/`);
 }

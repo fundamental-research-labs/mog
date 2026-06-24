@@ -1,7 +1,7 @@
 import type { RefName } from './ref-name';
-import { diagnostic, failure } from './ref-store-diagnostics';
+import { failure } from './ref-store-diagnostics';
 import { compareLiveRefs, compareTombstoneRefs } from './ref-store-ordering';
-import { isCanonicalRefNamespace, matchesRefNamespacePrefix } from './ref-store-ref-names';
+import { matchesRefNamePrefix, parseCanonicalRefPrefix } from './ref-store-ref-names';
 import { cloneLiveRefRecord, cloneTombstoneRefRecord } from './ref-store-revisions';
 import { refTombstoned } from './ref-store-tombstones';
 import type {
@@ -58,21 +58,17 @@ export function listMemoryRefs(
   state: InMemoryRefStoreState,
   input: ListRefsInput = {},
 ): ListRefsResult {
-  const prefix = input.prefix;
-  if (prefix !== undefined && !isCanonicalRefNamespace(prefix)) {
-    const diagnostics = [
-      diagnostic(
-        'invalidRefPrefix',
-        'Ref list prefix must be scenario, agent, import, or review.',
-        String(prefix),
-      ),
-    ];
-    return failure('invalidRefPrefix', 'Invalid ref namespace prefix.', diagnostics);
+  const parsedPrefix =
+    input.prefix === undefined ? undefined : parseCanonicalRefPrefix(String(input.prefix));
+  if (parsedPrefix?.ok === false) {
+    const diagnostics = parsedPrefix.diagnostics;
+    return failure('invalidRefPrefix', 'Invalid ref prefix.', diagnostics);
   }
+  const prefix = parsedPrefix?.prefix;
 
   const liveRefs = [...state.records.values()]
     .filter((record): record is LiveRefRecord => record.state === 'live')
-    .filter((record) => matchesRefNamespacePrefix(record.name, prefix))
+    .filter((record) => matchesRefNamePrefix(record.name, prefix))
     .sort(compareLiveRefs)
     .map(cloneLiveRefRecord);
 
@@ -87,7 +83,7 @@ export function listMemoryRefs(
 
   const tombstones = [...state.records.values()]
     .filter((record): record is TombstoneRefRecord => record.state === 'tombstone')
-    .filter((record) => matchesRefNamespacePrefix(record.name, prefix))
+    .filter((record) => matchesRefNamePrefix(record.name, prefix))
     .sort(compareTombstoneRefs)
     .map(cloneTombstoneRefRecord);
 

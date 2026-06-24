@@ -1,9 +1,10 @@
 import {
-  REF_NAMESPACES,
+  REF_NAME_STORAGE_PREFIX,
+  validateRefNamePrefix,
   validateRefName,
   type RefName,
   type RefNameDiagnostic,
-  type RefNamespace,
+  type RefNamePrefix,
 } from './ref-name';
 import { redactedDiagnostic } from './ref-store-diagnostics';
 import type { VersionDiagnostic } from './ref-store-types';
@@ -24,18 +25,34 @@ export function parseCanonicalRefName(value: RefName | string): ParsedRefNameRes
   };
 }
 
-export function matchesRefNamespacePrefix(
-  name: RefName,
-  prefix: RefNamespace | undefined,
-): boolean {
+export type ParsedRefPrefixResult =
+  | { readonly ok: true; readonly prefix: RefNamePrefix }
+  | { readonly ok: false; readonly diagnostics: readonly VersionDiagnostic[] };
+
+export function parseCanonicalRefPrefix(value: string): ParsedRefPrefixResult {
+  const prefix = value.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? value.slice(REF_NAME_STORAGE_PREFIX.length)
+    : value;
+  const parsed = validateRefNamePrefix(prefix, 'prefix');
+  if (parsed.ok) {
+    return { ok: true, prefix: parsed.prefix };
+  }
+
+  return {
+    ok: false,
+    diagnostics: refNameDiagnosticsToVersionDiagnostics(parsed.diagnostics),
+  };
+}
+
+export function matchesRefNamePrefix(name: RefName, prefix: RefNamePrefix | undefined): boolean {
   if (prefix === undefined) {
     return true;
   }
-  return name.startsWith(`${prefix}/`);
-}
-
-export function isCanonicalRefNamespace(value: unknown): value is RefNamespace {
-  return typeof value === 'string' && (REF_NAMESPACES as readonly string[]).includes(value);
+  const prefixValue = prefix as string;
+  if (prefixValue.endsWith('/')) {
+    return name.startsWith(prefixValue);
+  }
+  return name === prefixValue || name.startsWith(`${prefixValue}/`);
 }
 
 function refNameDiagnosticsToVersionDiagnostics(

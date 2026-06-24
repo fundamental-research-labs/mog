@@ -1,9 +1,9 @@
-export const REF_NAMESPACES = Object.freeze(['scenario', 'agent', 'import', 'review'] as const);
-
-export type RefNamespace = (typeof REF_NAMESPACES)[number];
-
 export type RefName = string & {
   readonly __brand: 'RefName';
+};
+
+export type RefNamePrefix = string & {
+  readonly __brand: 'RefNamePrefix';
 };
 
 export type RefNameValidationIssue =
@@ -16,8 +16,9 @@ export type RefNameValidationIssue =
   | 'containsControl'
   | 'containsUppercase'
   | 'reservedDetached'
+  | 'reservedMainPrefix'
+  | 'reservedRefsPrefix'
   | 'reservedSystemRef'
-  | 'unknownNamespace'
   | 'leadingSlash'
   | 'trailingSlash'
   | 'emptySegment'
@@ -40,13 +41,16 @@ export type RefNameValidationResult =
   | { readonly ok: true; readonly name: RefName; readonly diagnostics: readonly [] }
   | { readonly ok: false; readonly diagnostics: readonly RefNameDiagnostic[] };
 
+export type RefNamePrefixValidationResult =
+  | { readonly ok: true; readonly prefix: RefNamePrefix; readonly diagnostics: readonly [] }
+  | { readonly ok: false; readonly diagnostics: readonly RefNameDiagnostic[] };
+
 export const REF_NAME_MAX_BYTES = 128;
 export const REF_NAME_STORAGE_PREFIX = 'refs/heads/';
 
 export const REF_NAME_PATTERN =
-  /^(main|(scenario|agent|import|review)\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*)$/;
+  /^(main|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*)$/;
 
-const REF_NAMESPACE_SET = new Set<string>(REF_NAMESPACES);
 const UPPER_HEX = '0123456789ABCDEF';
 
 export class RefNameValidationError extends Error {
@@ -101,6 +105,18 @@ export function validateRefName(value: unknown, paramName = 'refName'): RefNameV
     diagnostics.push(diagnostic('reservedDetached', `${paramName} "detached" is reserved.`, value));
   }
 
+  if (value.startsWith('main/')) {
+    diagnostics.push(
+      diagnostic('reservedMainPrefix', `${paramName} must not start with main/.`, value),
+    );
+  }
+
+  if (value === 'refs' || value.startsWith('refs/')) {
+    diagnostics.push(
+      diagnostic('reservedRefsPrefix', `${paramName} under refs/* is reserved.`, value),
+    );
+  }
+
   if (value === 'refs/system' || value.startsWith('refs/system/')) {
     diagnostics.push(
       diagnostic('reservedSystemRef', `${paramName} under refs/system/* is reserved.`, value),
@@ -109,19 +125,6 @@ export function validateRefName(value: unknown, paramName = 'refName'): RefNameV
 
   collectCharacterDiagnostics(value, paramName, diagnostics);
   collectPathDiagnostics(value, paramName, diagnostics);
-
-  if (value !== 'main') {
-    const namespace = value.split('/', 1)[0] ?? '';
-    if (!REF_NAMESPACE_SET.has(namespace)) {
-      diagnostics.push(
-        diagnostic(
-          'unknownNamespace',
-          `${paramName} must be main or start with scenario/, agent/, import/, or review/.`,
-          value,
-        ),
-      );
-    }
-  }
 
   if (!REF_NAME_PATTERN.test(value)) {
     diagnostics.push(
@@ -136,11 +139,39 @@ export function validateRefName(value: unknown, paramName = 'refName'): RefNameV
   return { ok: true, name: value as RefName, diagnostics: [] };
 }
 
-export function getRefNamespace(name: RefName): RefNamespace | null {
-  if (name === 'main') {
-    return null;
+export function validateRefNamePrefix(
+  value: unknown,
+  paramName = 'refPrefix',
+): RefNamePrefixValidationResult {
+  if (typeof value !== 'string') {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('notString', `${paramName} must be a string RefName prefix.`, undefined),
+      ],
+    };
   }
-  return name.slice(0, name.indexOf('/')) as RefNamespace;
+
+  if (value.length === 0) {
+    return {
+      ok: false,
+      diagnostics: [diagnostic('empty', `${paramName} must not be empty.`, value)],
+    };
+  }
+
+  if (value.startsWith('main/')) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('reservedMainPrefix', `${paramName} must not start with main/.`, value),
+      ],
+    };
+  }
+
+  const validationTarget = value.endsWith('/') ? value.slice(0, -1) : value;
+  const parsed = validateRefName(validationTarget, paramName);
+  if (!parsed.ok) return parsed;
+  return { ok: true, prefix: value as RefNamePrefix, diagnostics: [] };
 }
 
 export function encodeRefNameForStorage(name: RefName): string {

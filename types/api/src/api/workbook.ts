@@ -118,7 +118,7 @@ export type {
   VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPromotePendingRemoteSkippedSegment, VersionPromotePendingRemoteSkipReason, VersionPromotePendingRemoteStatus,
   VersionRecordRevision, VersionRedactedValue, VersionRedactionClass,
   VersionRef, VersionRefListResult, VersionRefMutationResult, VersionRefName,
-  VersionRefNamespace, VersionRefReadResult, VersionRefSelector, VersionDiagnostic, VersionDiagnosticSeverity, VersionError,
+  VersionRefReadResult, VersionRefSelector, VersionDiagnostic, VersionDiagnosticSeverity, VersionError,
   VersionPutMergeResolutionPayloadRequest, VersionPutMergeResolutionPayloadResult,
   VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
   VersionStoreDiagnostic,
@@ -134,7 +134,19 @@ export type {
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
 export type * from './workbook/version-proposal';
-export type { VersionRevertCasAdmission, VersionRevertDomainAdmission, VersionRevertHistoryGapAdmission, VersionRevertInput, VersionRevertMutationGuarantee, VersionRevertOptions, VersionRevertPreflightAdmission, VersionRevertResult, VersionRevertReviewInvalidationAdmission, VersionRevertStaleHeadAdmission, VersionRevertTarget } from './workbook/version-revert';
+export type {
+  VersionRevertCasAdmission,
+  VersionRevertDomainAdmission,
+  VersionRevertHistoryGapAdmission,
+  VersionRevertInput,
+  VersionRevertMutationGuarantee,
+  VersionRevertOptions,
+  VersionRevertPreflightAdmission,
+  VersionRevertResult,
+  VersionRevertReviewInvalidationAdmission,
+  VersionRevertStaleHeadAdmission,
+  VersionRevertTarget,
+} from './workbook/version-revert';
 export type * from './workbook/version-revert';
 export type * from './workbook/version-review';
 export type * from './workbook/xlsx-export';

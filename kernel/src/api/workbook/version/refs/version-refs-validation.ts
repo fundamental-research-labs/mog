@@ -10,9 +10,8 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import {
-  REF_NAMESPACES,
+  validateRefNamePrefix,
   validateRefName,
-  type RefNamespace,
 } from '../../../../document/version-store/refs/ref-name';
 import {
   VERSION_BRANCH_REF_PREFIX,
@@ -23,14 +22,11 @@ import {
   invalidCommitDiagnostic,
   invalidOptionsDiagnostic,
   invalidRefNameDiagnostic,
-  invalidRefPrefixDiagnostic,
   noWriteAttemptedForMutation,
   publicDiagnostic,
   type VersionRefOperation,
 } from './version-refs-public-diagnostics';
 import { isRecord, toCommitId, toCounterRevision } from './version-refs-values';
-
-const REF_NAMESPACE_SET = new Set<string>(REF_NAMESPACES);
 
 export type ParsedBranchName =
   | {
@@ -43,8 +39,7 @@ export type ParsedBranchName =
 export type ParsedRefPrefix =
   | {
       readonly ok: true;
-      readonly namespace?: RefNamespace;
-      readonly includeMain: boolean;
+      readonly prefix?: string;
     }
   | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] };
 
@@ -207,21 +202,31 @@ export function parsePublicBranchName(
 }
 
 export function validateRefListPrefix(value: VersionListRefsOptions['prefix']): ParsedRefPrefix {
-  if (value === undefined) return { ok: true, includeMain: true };
-  if (typeof value !== 'string') {
-    return { ok: false, diagnostics: [invalidRefNameDiagnostic('listRefs')] };
-  }
+  if (value === undefined) return { ok: true };
 
-  const prefix = value.startsWith(VERSION_BRANCH_REF_PREFIX)
-    ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
-    : value;
-  if (REF_NAMESPACE_SET.has(prefix)) {
-    return { ok: true, namespace: prefix as RefNamespace, includeMain: false };
+  const prefix =
+    typeof value === 'string' && value.startsWith(VERSION_BRANCH_REF_PREFIX)
+      ? value.slice(VERSION_BRANCH_REF_PREFIX.length)
+      : value;
+  const parsed = validateRefNamePrefix(prefix, 'prefix');
+  if (parsed.ok) {
+    return { ok: true, prefix: parsed.prefix };
   }
 
   return {
     ok: false,
-    diagnostics: [invalidRefPrefixDiagnostic('listRefs')],
+    diagnostics: parsed.diagnostics.map((item) =>
+      publicDiagnostic(
+        'VERSION_INVALID_OPTIONS',
+        'listRefs',
+        'The supplied ref prefix is invalid.',
+        {
+          severity: 'error',
+          recoverability: 'none',
+          payload: { option: 'prefix', issue: item.issue, refName: 'redacted' },
+        },
+      ),
+    ),
   };
 }
 

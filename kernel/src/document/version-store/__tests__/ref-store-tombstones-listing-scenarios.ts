@@ -9,7 +9,7 @@ import {
 } from './ref-store-test-helpers';
 
 export const registerRefStoreTombstoneListingScenarios = (): void => {
-  it('uses namespace filters and orders live refs before tombstones', () => {
+  it('uses branch-prefix filters and orders live refs before tombstones', () => {
     const store = createStore([
       '2026-06-20T00:00:00.000Z',
       '2026-06-20T00:00:01.000Z',
@@ -24,8 +24,8 @@ export const registerRefStoreTombstoneListingScenarios = (): void => {
 
     expectMutationOk(store.initializeMain({ targetCommitId: COMMIT_A, createdBy: AUTHOR }));
 
-    const liveB = createBranch(store, 'scenario/live-b');
-    const liveA = createBranch(store, 'scenario/live-a');
+    const liveB = createBranch(store, 'scenario/live/b');
+    const liveA = createBranch(store, 'scenario/live/a');
     const deletedAlpha = createBranch(store, 'scenario/deleted-alpha');
     const deletedLate = createBranch(store, 'scenario/deleted-late');
     const agentDeleted = createBranch(store, 'agent/deleted');
@@ -74,16 +74,18 @@ export const registerRefStoreTombstoneListingScenarios = (): void => {
     expectListOk(allRefs);
     expect(allRefs.refs.map((ref) => ref.name)).toEqual([
       'main',
-      'scenario/live-a',
-      'scenario/live-b',
+      'scenario/live/a',
+      'scenario/live/b',
       'scenario/deleted-late',
       'agent/deleted',
       'scenario/deleted-alpha',
     ]);
 
-    const arbitraryPrefix = store.listRefs({ prefix: 'scenario/live' as 'scenario' });
-    expect(arbitraryPrefix.ok).toBe(false);
-    if (arbitraryPrefix.ok) throw new Error('expected arbitrary prefix to fail');
-    expect(arbitraryPrefix.error.code).toBe('invalidRefPrefix');
+    const arbitraryPrefix = store.listRefs({
+      prefix: 'scenario/live',
+      includeTombstones: true,
+    });
+    expectListOk(arbitraryPrefix);
+    expect(arbitraryPrefix.refs.map((ref) => ref.name)).toEqual([liveA.name, liveB.name]);
   });
 };

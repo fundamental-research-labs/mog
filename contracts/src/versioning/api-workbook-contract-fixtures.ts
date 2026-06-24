@@ -303,8 +303,8 @@ const versionTheirsCommitId = 'commit:sha256:version-contract-theirs' as Workboo
 const versionMergeCommitId = 'commit:sha256:version-contract-merge' as WorkbookCommitId;
 const versionRevertCommitId = 'commit:sha256:version-contract-revert' as WorkbookCommitId;
 const versionMainRefName: VersionMainRefName = 'refs/heads/main';
-const versionScenarioBranchName = 'scenario/budget' as VersionBranchName;
-const versionScenarioRefName = 'refs/heads/scenario/budget' as VersionRefName;
+const versionBranchName = 'budget' as VersionBranchName;
+const versionBranchRefName = 'refs/heads/budget' as VersionRefName;
 const versionMergeResultId = 'merge-result:version-contract-basic' as VersionMergeResultId;
 
 const versionCounterRevision = {
@@ -398,7 +398,7 @@ const workbookCommitSummaryFixture = {
 const workbookVersionCommitOptionFixtures = [
   {
     message: 'Capture budget scenario edits.',
-    targetRef: versionScenarioBranchName,
+    targetRef: versionBranchName,
     redactionPolicy: {
       mode: 'default',
       redactSecrets: true,
@@ -419,7 +419,7 @@ const workbookVersionCommitOptionFixtures = [
   },
   {
     message: 'Import external workbook root.',
-    targetRef: versionScenarioRefName,
+    targetRef: versionBranchRefName,
     mode: {
       kind: 'import-root',
     },
@@ -428,19 +428,19 @@ const workbookVersionCommitOptionFixtures = [
 
 const workbookVersionBranchCreateFixtures = [
   {
-    name: versionScenarioBranchName,
+    name: versionBranchName,
     targetCommitId: versionOursCommitId,
     baseCommitId: versionBaseCommitId,
     expectedAbsent: true,
   },
   {
-    name: versionScenarioRefName,
+    name: versionBranchRefName,
     targetCommitId: versionTheirsCommitId,
   },
 ] satisfies readonly VersionCreateBranchOptions[];
 
 const workbookVersionBranchRefFixture = {
-  name: versionScenarioRefName,
+  name: versionBranchRefName,
   commitId: versionOursCommitId,
   revision: versionCounterRevision,
   updatedAt: '2026-06-23T00:01:00.000Z',
@@ -482,7 +482,7 @@ const workbookVersionCheckoutTargets = [
   },
   {
     kind: 'ref',
-    name: versionScenarioBranchName,
+    name: versionBranchName,
   },
   {
     kind: 'ref',
@@ -499,7 +499,7 @@ const workbookVersionCheckoutPlanFixture = {
   strategy: 'fullSnapshot',
   target: {
     kind: 'ref',
-    refName: versionScenarioRefName,
+    refName: versionBranchRefName,
     commitId: versionOursCommitId,
     refRevision: versionCounterRevision,
     refIncarnationId: 'ref-incarnation:version-contract-basic',
@@ -719,7 +719,7 @@ const workbookVersionApplyMergeOptionFixtures = [
   },
   {
     mode: 'apply',
-    targetRef: versionScenarioRefName,
+    targetRef: versionBranchRefName,
     expectedTargetHead: versionExpectedHeadFixture,
     includeDiagnostics: true,
     materializeActiveCheckout: true,

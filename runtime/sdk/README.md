@@ -221,7 +221,7 @@ and pass `expectedHead` / `expectedTargetHead` so stale writes fail closed.
 import { createWorkbook } from '@mog-sdk/sdk';
 
 const mainRef = 'refs/heads/main';
-const scenarioRef = 'refs/heads/scenario/budget-q1';
+const budgetRef = 'refs/heads/budget-q1';
 
 function diagnosticText(diagnostics) {
   return diagnostics.map((diagnostic) => diagnostic.safeMessage ?? 'Version diagnostic').join('\n');
@@ -270,14 +270,14 @@ try {
   wb.markClean();
 
   const branchResult = await wb.version.createBranch({
-    name: scenarioRef,
+    name: budgetRef,
     targetCommitId: baseCommit.id,
     expectedAbsent: true,
   });
   if (!branchResult.ok) throw new Error(branchResult.error.reason);
 
   const checkoutResult = await wb.version.checkout(
-    { kind: 'ref', name: scenarioRef },
+    { kind: 'ref', name: budgetRef },
     { requireClean: true },
   );
   if (!checkoutResult.ok) throw new Error(checkoutResult.error.reason);
@@ -462,19 +462,19 @@ if (!baseResult.ok) throw new Error(baseResult.error.reason);
 const baseCommit = baseResult.value;
 wb.markClean();
 
-const scenarioRefName = 'refs/heads/scenario/budget-q1';
+const budgetRefName = 'refs/heads/budget-q1';
 const branchResult = await wb.version.createBranch({
-  name: scenarioRefName,
+  name: budgetRefName,
   targetCommitId: baseCommit.id,
   expectedAbsent: true,
 });
 if (!branchResult.ok) throw new Error(branchResult.error.reason);
-const scenarioRef = branchResult.value;
+const budgetRef = branchResult.value;
 
 const checkoutResult = await wb.version.checkout(
   {
     kind: 'ref',
-    name: scenarioRef.name,
+    name: budgetRef.name,
   },
   { requireClean: true },
 );

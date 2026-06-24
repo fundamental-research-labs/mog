@@ -1,7 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { WorkbookCommitId } from './object-digest';
-import { REF_NAME_STORAGE_PREFIX, type RefName, type RefNamespace } from './refs/ref-name';
+import { REF_NAME_STORAGE_PREFIX, type RefName, type RefNamePrefix } from './refs/ref-name';
 import type {
   CreateBranchResult as RefStoreCreateBranchResult,
   DeleteRefResult as RefStoreDeleteRefResult,
@@ -76,7 +76,7 @@ export interface ReadBranchInput {
 }
 
 export interface ListBranchesInput {
-  readonly prefix?: RefNamespace;
+  readonly prefix?: RefNamePrefix | string;
 }
 
 export interface FastForwardBranchInput {
@@ -174,7 +174,10 @@ export interface BranchRefStore {
     readonly protected?: boolean;
   }): RefStoreCreateBranchResult;
   getRef(name: RefName): RefStoreGetRefResult;
-  listRefs(input?: { readonly includeTombstones?: false; readonly prefix?: RefNamespace }):
+  listRefs(input?: {
+    readonly includeTombstones?: false;
+    readonly prefix?: RefNamePrefix | string;
+  }):
     | RefStoreListRefsResult
     | {
         readonly ok: true;

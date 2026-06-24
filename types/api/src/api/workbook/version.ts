@@ -194,7 +194,6 @@ export type VersionRefName = string & {
   readonly __brand?: 'VersionRefName';
 };
 export type VersionRefSelector = 'HEAD' | VersionMainRefName | VersionRefName;
-export type VersionRefNamespace = 'scenario' | 'agent' | 'import' | 'review';
 export type VersionBranchName = string & {
   readonly __brand?: 'VersionBranchName';
 };
@@ -373,11 +372,11 @@ export interface VersionListCommitsOptions {
 
 export interface VersionListRefsOptions {
   /**
-   * Optional branch namespace filter. Examples: `scenario` or
-   * `refs/heads/scenario`. Branch-name prefixes such as `scenario/budget`
-   * are not accepted; `main` is returned only when no prefix is supplied.
+   * Optional branch-name prefix filter. Examples: `budget` or
+   * `refs/heads/budget`. `main` is included when it matches the supplied
+   * prefix, or when no prefix is supplied.
    */
-  readonly prefix?: VersionRefNamespace | `refs/heads/${VersionRefNamespace}`;
+  readonly prefix?: VersionBranchName | VersionRefName | string;
   readonly includeDiagnostics?: boolean;
 }
 

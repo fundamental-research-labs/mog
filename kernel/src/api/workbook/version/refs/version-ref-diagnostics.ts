@@ -36,13 +36,14 @@ const SAFE_BRANCH_DIAGNOSTIC_ISSUES = new Set([
   'nonAscii',
   'notString',
   'providerDenied',
+  'reservedMainPrefix',
+  'reservedRefsPrefix',
   'reservedSymbolicHead',
   'reservedDetached',
   'reservedSystemRef',
   'segmentEndsWithLock',
   'tooLong',
   'trailingSlash',
-  'unknownNamespace',
 ]);
 const SAFE_BRANCH_DIAGNOSTIC_OPTIONS = new Set(['expectedOldCommitId', 'expectedRefVersion']);
 const SAFE_BRANCH_DIAGNOSTIC_CONFLICTS = new Set([

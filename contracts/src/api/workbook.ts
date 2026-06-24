@@ -113,7 +113,6 @@ export type {
   VersionRefListResult,
   VersionRefMutationResult,
   VersionRefName,
-  VersionRefNamespace,
   VersionRefReadResult,
   VersionRefSelector,
   VersionResult,
@@ -152,4 +151,16 @@ export type {
   WorkbookVersionRolloutStage,
   WorkbookVersionStatus,
 } from '@mog/types-api/api/workbook/version';
-export type { VersionRevertCasAdmission, VersionRevertDomainAdmission, VersionRevertHistoryGapAdmission, VersionRevertInput, VersionRevertMutationGuarantee, VersionRevertOptions, VersionRevertPreflightAdmission, VersionRevertResult, VersionRevertReviewInvalidationAdmission, VersionRevertStaleHeadAdmission, VersionRevertTarget } from '@mog/types-api/api/workbook';
+export type {
+  VersionRevertCasAdmission,
+  VersionRevertDomainAdmission,
+  VersionRevertHistoryGapAdmission,
+  VersionRevertInput,
+  VersionRevertMutationGuarantee,
+  VersionRevertOptions,
+  VersionRevertPreflightAdmission,
+  VersionRevertResult,
+  VersionRevertReviewInvalidationAdmission,
+  VersionRevertStaleHeadAdmission,
+  VersionRevertTarget,
+} from '@mog/types-api/api/workbook';

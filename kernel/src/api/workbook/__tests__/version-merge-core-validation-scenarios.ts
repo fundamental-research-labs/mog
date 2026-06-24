@@ -39,7 +39,7 @@ export function registerVersionMergeCoreValidationScenarios(): void {
     expect(merge).not.toHaveBeenCalled();
   });
 
-  it('blocks non-applyable target refs and expected-head mismatches before the merge service is called', async () => {
+  it('blocks unsafe target refs and expected-head mismatches before the merge service is called', async () => {
     const merge = jest.fn();
     const version = workbookVersionWithMergeService(merge);
     const input = {
@@ -51,7 +51,7 @@ export function registerVersionMergeCoreValidationScenarios(): void {
     await expect(
       version.merge(input, {
         mode: 'preview',
-        targetRef: 'refs/heads/review/not-applyable' as any,
+        targetRef: 'refs/heads/not-applyable.lock' as any,
         expectedTargetHead: EXPECTED_TARGET_HEAD as any,
         persistReviewRecord: true,
       }),

@@ -1,9 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import {
-  createVersion,
-  ROOT_COMMIT_ID,
-} from './version-diff-selector-test-utils';
+import { createVersion, ROOT_COMMIT_ID } from './version-diff-selector-test-utils';
 
 export function registerSelectorRefAuthorizationScenarios(): void {
   it('rejects unsafe branch refs before calling the attached diff service', async () => {
@@ -13,7 +10,7 @@ export function registerSelectorRefAuthorizationScenarios(): void {
     const version = createVersion(diff);
 
     const result = await version.diff(
-      { kind: 'ref', name: 'refs/heads/private-review' as any },
+      { kind: 'ref', name: 'refs/heads/private-review.lock' as any },
       { kind: 'ref', name: 'HEAD' },
     );
 
@@ -38,12 +35,12 @@ export function registerSelectorRefAuthorizationScenarios(): void {
         ],
       },
     });
-    expect(JSON.stringify(result)).not.toContain('private-review');
+    expect(JSON.stringify(result)).not.toContain('private-review.lock');
     expect(diff).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['unsupported ref namespace', { kind: 'ref', name: 'refs/heads/private-review' }],
+    ['unsafe branch ref', { kind: 'ref', name: 'refs/heads/private-review.lock' }],
     ['tag ref', { kind: 'ref', name: 'refs/tags/v1' }],
     ['system ref', { kind: 'ref', name: 'refs/system/secret' }],
     ['malformed branch ref', { kind: 'ref', name: 'refs/heads/scenario/../secret' }],

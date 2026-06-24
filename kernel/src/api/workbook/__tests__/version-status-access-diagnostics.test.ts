@@ -25,7 +25,7 @@ describe('WorkbookVersion status access diagnostics', () => {
       }),
     });
 
-    const result = await wb.version.readRef('refs/heads/private-review');
+    const result = await wb.version.readRef('refs/heads/private-review.lock');
     expect(result).toMatchObject({
       ok: false,
       error: { code: 'target_unavailable' },
@@ -138,7 +138,7 @@ describe('WorkbookVersion status access diagnostics', () => {
     });
 
     const result = await wb.version.diff(
-      { kind: 'ref', name: 'refs/heads/private-review' as any },
+      { kind: 'ref', name: 'refs/heads/private-review.lock' as any },
       { kind: 'ref', name: 'HEAD' },
     );
 
@@ -148,7 +148,7 @@ describe('WorkbookVersion status access diagnostics', () => {
         payload: expect.objectContaining({ refName: 'redacted' }),
       }),
     });
-    expect(JSON.stringify(result)).not.toContain('private-review');
+    expect(JSON.stringify(result)).not.toContain('private-review.lock');
     expect(graphStore.diff).not.toHaveBeenCalled();
   });
 });

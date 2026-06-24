@@ -28,8 +28,8 @@ const theirsCommitId = 'commit:sha256:version-basic-flow-theirs' as WorkbookApi.
 const mergeCommitId = 'commit:sha256:version-basic-flow-merge' as WorkbookApi.WorkbookCommitId;
 const revertCommitId = 'commit:sha256:version-basic-flow-revert' as WorkbookApi.WorkbookCommitId;
 const mainRefName: WorkbookApi.VersionMainRefName = 'refs/heads/main';
-const scenarioBranchName = 'scenario/basic-flow' as WorkbookApi.VersionBranchName;
-const scenarioRefName = 'refs/heads/scenario/basic-flow' as WorkbookApi.VersionRefName;
+const branchName = 'basic-flow' as WorkbookApi.VersionBranchName;
+const branchRefName = 'refs/heads/basic-flow' as WorkbookApi.VersionRefName;
 const mergeResultId = 'merge-result:version-basic-flow' as WorkbookApi.VersionMergeResultId;
 
 const counterRevision = {
@@ -62,7 +62,7 @@ const expectedHead = {
   symbolicHeadRevision: counterRevision,
 } satisfies WorkbookApi.VersionCommitExpectedHead;
 const branchRef = {
-  name: scenarioRefName,
+  name: branchRefName,
   commitId: oursCommitId,
   revision: counterRevision,
   updatedAt: '2026-06-24T00:00:00.000Z',
@@ -90,7 +90,7 @@ const mergeResolution = {
 
 export const WORKBOOK_VERSION_BASIC_FLOW_CONTRACT_FIXTURES = Object.freeze({
   commitOptions: [
-    { message: 'Capture scenario edits.', targetRef: scenarioBranchName, expectedHead },
+    { message: 'Capture branch edits.', targetRef: branchName, expectedHead },
     { message: 'Create workbook root.', targetRef: mainRefName, mode: { kind: 'root' } },
   ],
   commitSummary: {
@@ -101,24 +101,24 @@ export const WORKBOOK_VERSION_BASIC_FLOW_CONTRACT_FIXTURES = Object.freeze({
     annotation: { title: { kind: 'text', value: 'Basic flow' } },
   },
   branchCreateOptions: [
-    { name: scenarioBranchName, targetCommitId: oursCommitId, baseCommitId, expectedAbsent: true },
-    { name: scenarioRefName, targetCommitId: theirsCommitId },
+    { name: branchName, targetCommitId: oursCommitId, baseCommitId, expectedAbsent: true },
+    { name: branchRefName, targetCommitId: theirsCommitId },
   ],
   branchFastForwardOptions: {
-    name: scenarioBranchName,
+    name: branchName,
     nextCommitId: theirsCommitId,
     expectedHead: oursCommitId,
     expectedRefRevision: counterRevision,
   },
   branchUpdateOptions: {
-    name: scenarioRefName,
+    name: branchRefName,
     nextCommitId: mergeCommitId,
     expectedHead: oursCommitId,
     expectedRefRevision: counterRevision,
   },
   branchRef,
   refDeleteOptions: {
-    name: scenarioRefName,
+    name: branchRefName,
     expectedHead: oursCommitId,
     expectedRefRevision: counterRevision,
   },
@@ -183,7 +183,7 @@ export const WORKBOOK_VERSION_BASIC_FLOW_CONTRACT_FIXTURES = Object.freeze({
     },
     {
       target: { kind: 'range', baseCommitId, headCommitId: theirsCommitId },
-      targetRef: scenarioBranchName,
+      targetRef: branchName,
     },
     {
       target: { kind: 'mergeCommit', commitId: mergeCommitId, mainlineParent: 1 },

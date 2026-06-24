@@ -161,7 +161,7 @@ function normalizeMergeOptions(
       diagnostics.push(
         invalidMergeOptionDiagnostic(
           'targetRef',
-          'targetRef must name main, scenario/*, or agent/*.',
+          'targetRef must name main or a valid public branch.',
         ),
       );
     } else {

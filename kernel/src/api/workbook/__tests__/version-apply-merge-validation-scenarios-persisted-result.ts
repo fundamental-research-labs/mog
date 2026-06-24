@@ -40,7 +40,7 @@ export function registerApplyMergeValidationPersistedResultTests(): void {
           resultDigest: DIGEST_A,
         } as any,
         {
-          targetRef: 'refs/heads/review/not-applyable' as any,
+          targetRef: 'refs/heads/not-applyable.lock' as any,
           expectedTargetHead: EXPECTED_TARGET_HEAD,
         },
       ),

@@ -27,26 +27,26 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
 
     await expect(
       wb.version.createBranch({
-        name: 'scenario/provider-ref' as any,
+        name: 'scenario/provider/ref' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
     ).resolves.toMatchObject({
       ok: true,
       value: {
-        name: 'refs/heads/scenario/provider-ref',
+        name: 'refs/heads/scenario/provider/ref',
         commitId: initialized.rootCommit.id,
         revision: { kind: 'counter', value: '0' },
       },
     });
 
     await expect(
-      wb.version.readRef('refs/heads/scenario/provider-ref' as any),
+      wb.version.readRef('refs/heads/scenario/provider/ref' as any),
     ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
         ref: {
-          name: 'refs/heads/scenario/provider-ref',
+          name: 'refs/heads/scenario/provider/ref',
           commitId: initialized.rootCommit.id,
           revision: { kind: 'counter', value: '0' },
         },
@@ -59,7 +59,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
       value: {
         items: [
           expect.objectContaining({
-            name: 'refs/heads/scenario/provider-ref',
+            name: 'refs/heads/scenario/provider/ref',
             commitId: initialized.rootCommit.id,
           }),
         ],
@@ -70,22 +70,21 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     await expect(
       wb.version.listRefs({ prefix: 'refs/heads/scenario/provider' as any }),
     ).resolves.toMatchObject({
-      ok: false,
-      error: {
-        diagnostics: [
+      ok: true,
+      value: {
+        items: [
           expect.objectContaining({
-            code: 'VERSION_INVALID_OPTIONS',
-            data: expect.objectContaining({
-              payload: expect.objectContaining({ option: 'prefix' }),
-            }),
+            name: 'refs/heads/scenario/provider/ref',
+            commitId: initialized.rootCommit.id,
           }),
         ],
+        limit: 50,
       },
     });
 
     await expect(
       wb.version.fastForwardBranch({
-        name: 'scenario/provider-ref' as any,
+        name: 'scenario/provider/ref' as any,
         nextCommitId: child.commit.id,
         expectedHead: initialized.rootCommit.id,
         expectedRefRevision: { kind: 'counter', value: '0' },
@@ -93,7 +92,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     ).resolves.toMatchObject({
       ok: true,
       value: {
-        name: 'refs/heads/scenario/provider-ref',
+        name: 'refs/heads/scenario/provider/ref',
         commitId: child.commit.id,
         revision: { kind: 'counter', value: '1' },
       },

@@ -510,12 +510,12 @@
         },
         {
           "path": "wb.version.createBranch",
-          "snippet": "const targetHeadResult = await wb.version.getHead();\nif (!targetHeadResult.ok) {\n  throw new Error(targetHeadResult.error.reason);\n}\nconst branchResult = await wb.version.createBranch({\n  name: \"refs/heads/scenario/budget-q1\",\n  targetCommitId: targetHeadResult.value.id,\n  expectedAbsent: true,\n});\nif (!branchResult.ok) {\n  throw new Error(branchResult.error.reason);\n}\nconst branchRef = branchResult.value;",
-          "note": "Create public refs under refs/heads/scenario/* or refs/heads/agent/* for branch workflows."
+          "snippet": "const targetHeadResult = await wb.version.getHead();\nif (!targetHeadResult.ok) {\n  throw new Error(targetHeadResult.error.reason);\n}\nconst branchResult = await wb.version.createBranch({\n  name: \"refs/heads/budget-q1\",\n  targetCommitId: targetHeadResult.value.id,\n  expectedAbsent: true,\n});\nif (!branchResult.ok) {\n  throw new Error(branchResult.error.reason);\n}\nconst branchRef = branchResult.value;",
+          "note": "Create public refs under refs/heads/<branch-name> for branch workflows."
         },
         {
           "path": "wb.version.checkout",
-          "snippet": "wb.markClean();\nconst checkoutResult = await wb.version.checkout({\n  kind: \"ref\",\n  name: \"refs/heads/scenario/budget-q1\",\n}, {\n  requireClean: true,\n});\nif (!checkoutResult.ok) {\n  throw new Error(checkoutResult.error.reason);\n}\nif (checkoutResult.value.materialization !== \"applied\") {\n  throw new Error(\"Checkout planned but did not materialize workbook state\");\n}",
+          "snippet": "wb.markClean();\nconst checkoutResult = await wb.version.checkout({\n  kind: \"ref\",\n  name: \"refs/heads/budget-q1\",\n}, {\n  requireClean: true,\n});\nif (!checkoutResult.ok) {\n  throw new Error(checkoutResult.error.reason);\n}\nif (checkoutResult.value.materialization !== \"applied\") {\n  throw new Error(\"Checkout planned but did not materialize workbook state\");\n}",
           "note": "Checkout refuses dirty or unsafe state and reports whether workbook state was materialized."
         },
         {

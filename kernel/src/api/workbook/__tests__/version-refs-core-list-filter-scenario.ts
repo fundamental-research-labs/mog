@@ -3,51 +3,56 @@ import { expect, it } from '@jest/globals';
 import { COMMIT_A, createWorkbookVersionWithBranchService } from './version-refs-test-utils';
 
 export function registerPublicRefListFilterScenario(): void {
-  it('filters listRefs by namespace only without mutating state', async () => {
+  it('filters listRefs by branch-name prefix without mutating state', async () => {
     const { version } = createWorkbookVersionWithBranchService();
 
-    await version.createBranch({ name: 'scenario/budget' as any, targetCommitId: COMMIT_A });
-    await version.createBranch({ name: 'scenario/forecast/q1' as any, targetCommitId: COMMIT_A });
-    await version.createBranch({ name: 'agent/run-1' as any, targetCommitId: COMMIT_A });
+    await version.createBranch({ name: 'budget' as any, targetCommitId: COMMIT_A });
+    await version.createBranch({ name: 'budget/forecast/q1' as any, targetCommitId: COMMIT_A });
+    await version.createBranch({ name: 'analysis/run-1' as any, targetCommitId: COMMIT_A });
 
-    const scenarioRefs = await version.listRefs({ prefix: 'scenario' as any });
-    expect(scenarioRefs.ok).toBe(true);
-    if (!scenarioRefs.ok) throw new Error(`expected listRefs success: ${scenarioRefs.error.code}`);
-    expect(scenarioRefs.value.items).toEqual(
+    const budgetRefs = await version.listRefs({ prefix: 'budget' as any });
+    expect(budgetRefs.ok).toBe(true);
+    if (!budgetRefs.ok) throw new Error(`expected listRefs success: ${budgetRefs.error.code}`);
+    expect(budgetRefs.value.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'refs/heads/scenario/budget' }),
-        expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
+        expect.objectContaining({ name: 'refs/heads/budget' }),
+        expect.objectContaining({ name: 'refs/heads/budget/forecast/q1' }),
       ]),
     );
-    expect(scenarioRefs.value.items).toHaveLength(2);
+    expect(budgetRefs.value.items).toHaveLength(2);
 
-    const fullNamespaceRefs = await version.listRefs({ prefix: 'refs/heads/scenario' as any });
-    expect(fullNamespaceRefs).toMatchObject({
+    const fullPrefixRefs = await version.listRefs({ prefix: 'refs/heads/budget/forecast' as any });
+    expect(fullPrefixRefs).toMatchObject({
       ok: true,
       value: {
-        items: [
-          expect.objectContaining({ name: 'refs/heads/scenario/budget' }),
-          expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
-        ],
+        items: [expect.objectContaining({ name: 'refs/heads/budget/forecast/q1' })],
         limit: 50,
       },
     });
-    expect(fullNamespaceRefs.ok && fullNamespaceRefs.value.items).toHaveLength(2);
+    expect(fullPrefixRefs.ok && fullPrefixRefs.value.items).toHaveLength(1);
 
     await expect(
-      version.listRefs({ prefix: 'refs/heads/scenario/forecast' as any }),
+      version.listRefs({ prefix: 'refs/heads/budget//forecast' as any }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'VERSION_INVALID_OPTIONS',
             data: expect.objectContaining({
               payload: expect.objectContaining({ option: 'prefix' }),
             }),
           }),
-        ],
+        ]),
+      },
+    });
+
+    await expect(version.listRefs({ prefix: 'main' as any })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        items: [expect.objectContaining({ name: 'refs/heads/main' })],
+        limit: 50,
       },
     });
 
@@ -57,9 +62,9 @@ export function registerPublicRefListFilterScenario(): void {
     expect(allRefs.value.items).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'refs/heads/main' }),
-        expect.objectContaining({ name: 'refs/heads/agent/run-1' }),
-        expect.objectContaining({ name: 'refs/heads/scenario/budget' }),
-        expect.objectContaining({ name: 'refs/heads/scenario/forecast/q1' }),
+        expect.objectContaining({ name: 'refs/heads/analysis/run-1' }),
+        expect.objectContaining({ name: 'refs/heads/budget' }),
+        expect.objectContaining({ name: 'refs/heads/budget/forecast/q1' }),
       ]),
     );
     expect(allRefs.value.items).toHaveLength(4);

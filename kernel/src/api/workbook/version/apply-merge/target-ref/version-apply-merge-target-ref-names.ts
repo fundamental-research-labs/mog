@@ -18,13 +18,9 @@ export function mapPublicApplyTargetRef(
     parsed.name === 'main'
       ? VERSION_MAIN_REF
       : (`${VERSION_BRANCH_REF_PREFIX}${parsed.name}` as VersionRefName);
-  return isApplyTargetRefName(targetRef) ? targetRef : undefined;
+  return targetRef;
 }
 
 export function isApplyTargetRefName(value: VersionMainRefName | VersionRefName): boolean {
-  return (
-    value === VERSION_MAIN_REF ||
-    value.startsWith(`${VERSION_BRANCH_REF_PREFIX}scenario/`) ||
-    value.startsWith(`${VERSION_BRANCH_REF_PREFIX}agent/`)
-  );
+  return value === VERSION_MAIN_REF || value.startsWith(VERSION_BRANCH_REF_PREFIX);
 }

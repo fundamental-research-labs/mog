@@ -109,7 +109,7 @@ export async function listWorkbookVersionRefs(
 
   try {
     const result = await service.listBranches(
-      prefix.namespace === undefined ? {} : { prefix: prefix.namespace },
+      prefix.prefix === undefined ? {} : { prefix: prefix.prefix },
     );
     return mapBranchListResult(result, prefix);
   } catch {
@@ -190,12 +190,9 @@ async function advanceWorkbookVersionBranch(
     return degradedMutation(null, [protectedMainDiagnostic(operation)]);
   }
 
-  const operationGateDiagnostics = validateVersionOperationGate(
-    ctx,
-    operation,
-    'version:branch',
-    { mutates: true },
-  );
+  const operationGateDiagnostics = validateVersionOperationGate(ctx, operation, 'version:branch', {
+    mutates: true,
+  });
   if (operationGateDiagnostics.length > 0) {
     return degradedMutation(null, operationGateDiagnostics);
   }

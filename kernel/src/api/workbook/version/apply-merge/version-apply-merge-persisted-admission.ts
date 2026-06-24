@@ -212,7 +212,7 @@ export function normalizePersistedApplyMergeOptions(
     diagnostics.push(
       invalidApplyMergeOptionDiagnostic(
         'targetRef',
-        'targetRef must name main, scenario/*, or agent/*.',
+        'targetRef must name main or a valid public branch.',
       ),
     );
   }

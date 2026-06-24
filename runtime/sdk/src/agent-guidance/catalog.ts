@@ -153,7 +153,7 @@ if (!targetHeadResult.ok) {
   throw new Error(targetHeadResult.error.reason);
 }
 const branchResult = await wb.version.createBranch({
-  name: "refs/heads/scenario/budget-q1",
+  name: "refs/heads/budget-q1",
   targetCommitId: targetHeadResult.value.id,
   expectedAbsent: true,
 });
@@ -165,7 +165,7 @@ const branchRef = branchResult.value;`;
 const versionCheckoutSnippet = `wb.markClean();
 const checkoutResult = await wb.version.checkout({
   kind: "ref",
-  name: "refs/heads/scenario/budget-q1",
+  name: "refs/heads/budget-q1",
 }, {
   requireClean: true,
 });
@@ -644,10 +644,13 @@ export const apiGuidanceCatalog = [
       { id: 'mog-version.workbook-apply-merge-guess', kind: 'call', symbol: 'wb.applyMerge' },
       { id: 'mog-version.workbook-revert-guess', kind: 'call', symbol: 'wb.revert' },
       { id: 'mog-version.create-version-store-guess', kind: 'call', symbol: 'createVersionStore' },
-      { id: 'mog-version.workbook-version-store-guess', kind: 'member-chain', symbol: 'wb.versionStore' },
+      {
+        id: 'mog-version.workbook-version-store-guess',
+        kind: 'member-chain',
+        symbol: 'wb.versionStore',
+      },
     ],
-    message:
-      'Workbook version history APIs are exposed through the `wb.version` public API slice.',
+    message: 'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
       'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.',
     mogReplacements: [
@@ -664,7 +667,7 @@ export const apiGuidanceCatalog = [
       {
         path: 'wb.version.createBranch',
         snippet: versionBranchSnippet,
-        note: 'Create public refs under refs/heads/scenario/* or refs/heads/agent/* for branch workflows.',
+        note: 'Create public refs under refs/heads/<branch-name> for branch workflows.',
       },
       {
         path: 'wb.version.checkout',

@@ -1,7 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { ObjectDigest, WorkbookCommitId } from '../object-digest';
-import type { RefName, RefNamespace } from './ref-name';
+import type { RefName, RefNamePrefix } from './ref-name';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 
 export type ProviderEpoch =
@@ -153,7 +153,7 @@ export interface DeleteRefInput {
 
 export interface ListRefsInput {
   readonly includeTombstones?: boolean;
-  readonly prefix?: RefNamespace;
+  readonly prefix?: RefNamePrefix | string;
 }
 
 export interface GetRefOptions {

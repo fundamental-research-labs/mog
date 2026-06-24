@@ -103,19 +103,6 @@ export function invalidRefNameDiagnostic(operation: VersionRefOperation): Versio
   );
 }
 
-export function invalidRefPrefixDiagnostic(operation: VersionRefOperation): VersionStoreDiagnostic {
-  return publicDiagnostic(
-    'VERSION_INVALID_OPTIONS',
-    operation,
-    'The version ref lifecycle options are invalid for this method.',
-    {
-      severity: 'error',
-      recoverability: 'none',
-      payload: { option: 'prefix' },
-    },
-  );
-}
-
 export function invalidCommitDiagnostic(
   operation: VersionRefOperation,
   option: string,

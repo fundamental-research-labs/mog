@@ -114,8 +114,8 @@ export function registerApplyMergeValidationTargetOptionsTests(): void {
     expect(checkout).not.toHaveBeenCalled();
   });
 
-  it.each(['refs/heads/review/not-applyable', 'refs/heads/import/not-applyable'])(
-    'blocks apply mode targetRef %s before preview or writes',
+  it.each(['refs/heads/not-applyable.lock', 'refs/heads/main/not-applyable'])(
+    'blocks unsafe apply mode targetRef %s before preview or writes',
     async (targetRef) => {
       const merge = jest.fn();
       const fastForwardMerge = jest.fn();

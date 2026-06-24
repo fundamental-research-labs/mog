@@ -20,8 +20,8 @@ describe('WorkbookVersion listCommits selector option validation', () => {
       ],
       ['malformed commit id', { from: 'commit:sha256:bad' }, 'VERSION_INVALID_COMMIT_ID', 'from'],
       [
-        'unknown ref namespace',
-        { ref: 'refs/heads/private-review' },
+        'unsafe branch ref',
+        { ref: 'refs/heads/private-review.lock' },
         'VERSION_INVALID_OPTIONS',
         'ref',
       ],
@@ -89,7 +89,7 @@ describe('WorkbookVersion listCommits selector option validation', () => {
       expect(JSON.stringify(result)).not.toContain(
         typeof options === 'object' && options && 'ref' in options
           ? String((options as { ref?: unknown }).ref)
-          : 'refs/heads/private-review',
+          : 'refs/heads/private-review.lock',
       );
       expect(graphStore.listCommits).not.toHaveBeenCalled();
     }

@@ -75,7 +75,7 @@ pub(crate) fn resolve_color_point_value(point: &CFColorPoint, stats: &RangeStati
 /// `computeColorScaleColor` function.
 ///
 /// - Resolves min/max (and optionally mid) color point values.
-/// - If min == max, returns the min color directly.
+/// - If min == max, returns the max color directly.
 /// - For 3-color scales: interpolates min->mid or mid->max depending on
 ///   which half the value falls in.
 /// - For 2-color scales: interpolates min->max.
@@ -96,9 +96,9 @@ pub fn compute_color_scale(
     let min_val = resolve_color_point_value(&color_scale.min_point, stats);
     let max_val = resolve_color_point_value(&color_scale.max_point, stats);
 
-    // Edge case: all values identical (use epsilon to avoid exact float comparison)
+    // Excel resolves singleton color-scale ranges to the max color.
     if (max_val - min_val).abs() < 1e-12 {
-        return ColorScaleResult { color: min_color };
+        return ColorScaleResult { color: max_color };
     }
 
     // 3-color scale

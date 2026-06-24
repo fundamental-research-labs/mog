@@ -227,7 +227,7 @@ fn test_two_color_above_max() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn test_equal_min_max_returns_min_color() {
+fn test_equal_min_max_returns_max_color() {
     let stats = make_stats(&[5.0, 5.0, 5.0]);
     let cs = CFColorScale {
         min_point: make_color_point(CFValueType::Min, None, "#FF0000"),
@@ -236,7 +236,7 @@ fn test_equal_min_max_returns_min_color() {
     };
 
     let result = compute_color_scale(5.0, &cs, &stats);
-    assert_eq!(result.color, Color::rgb(255, 0, 0)); // min color
+    assert_eq!(result.color, Color::rgb(0, 255, 0)); // max color
 }
 
 // -----------------------------------------------------------------------

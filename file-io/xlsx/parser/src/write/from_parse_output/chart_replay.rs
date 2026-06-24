@@ -6,6 +6,12 @@ pub(super) fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpe
     !can_serialize_current_imported_chart_space(chart_spec)
 }
 
+// TODO(chart-export): replace these paired predicates with an explicit
+// ChartExportPlan, e.g. ReplayImportedChartSpace vs ReconstructFromModel.
+// ChartSpec still mixes public chart semantics, imported OOXML replay authority,
+// and XLSX source/cache readiness; keeping the export mode as a single planned
+// value would make roundtrip-preservation changes unable to accidentally change
+// SDK-generated chart export behavior.
 pub(super) fn should_complete_sources_for_xlsx_export(
     chart_spec: &domain_types::ChartSpec,
 ) -> bool {

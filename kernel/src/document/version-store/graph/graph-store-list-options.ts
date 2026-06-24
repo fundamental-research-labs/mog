@@ -4,7 +4,8 @@ import {
   type ParsedGraphRefSelector,
 } from './graph-store-refs';
 import { graphMetadataCompletenessDetails } from './graph-store-traversal';
-import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
+import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
+import type { RefVersion } from '../refs/ref-store';
 import type {
   VersionGraphListCommitsOptions,
   VersionGraphRefSelector,
@@ -18,8 +19,20 @@ export const VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_TOKEN_BYTES = 2048;
 
 const VERSION_GRAPH_LIST_COMMITS_PAGE_TOKEN_RE = /^[A-Za-z0-9_-][A-Za-z0-9_.:-]*$/;
 const VERSION_GRAPH_OPERATION_PAGE_TOKEN_RE = /^mog-v[a-z0-9-]+-v[0-9]+\.[A-Za-z0-9_.:-]+$/;
+const VERSION_GRAPH_LIST_COMMITS_CURSOR_CACHE_MAX_ENTRIES = 512;
 
 type ParsedGraphListRefSelector = Extract<ParsedGraphRefSelector, { readonly ok: true }>;
+
+export type ParsedListCommitsPageCursorRoot = {
+  readonly commitId: WorkbookCommitId;
+  readonly namespaceKey: string;
+  readonly readRevision: RefVersion;
+};
+
+export type ParsedListCommitsPageCursor = {
+  readonly root: ParsedListCommitsPageCursorRoot;
+  readonly offset: number;
+};
 
 export type ParsedListCommitsTarget =
   | {
@@ -29,6 +42,10 @@ export type ParsedListCommitsTarget =
   | {
       readonly kind: 'commit';
       readonly commitId: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'pageCursor';
+      readonly cursor: ParsedListCommitsPageCursor;
     };
 
 type GraphDiagnosticFactory = (
@@ -36,6 +53,9 @@ type GraphDiagnosticFactory = (
   message: string,
   options?: Omit<VersionGraphStoreDiagnostic, 'code' | 'severity' | 'message'>,
 ) => VersionGraphStoreDiagnostic;
+
+const LIST_COMMITS_CURSOR_CACHE = new Map<string, ParsedListCommitsPageCursor>();
+let listCommitsCursorSequence = 0;
 
 export function parseListCommitsOptions(
   options: VersionGraphListCommitsOptions,
@@ -73,41 +93,52 @@ export function parseListCommitsOptions(
     };
   }
 
+  const pageCursor = parseListCommitsPageToken(options.pageToken, diagnostic);
+  if (!pageCursor.ok) {
+    return { ok: false, diagnostics: pageCursor.diagnostics };
+  }
+
+  if (
+    pageCursor.cursor !== undefined &&
+    (options.ref !== undefined || options.from !== undefined)
+  ) {
+    return {
+      ok: false,
+      diagnostics: [
+        staleListCommitsPageTokenDiagnostic(
+          diagnostic,
+          'listCommits pageToken cannot be combined with a new root selector.',
+          {
+            cursorCategory: 'refScopeMismatch',
+            cursorRootMismatch: true,
+          },
+        ),
+      ],
+    };
+  }
+
   if (options.pageToken !== undefined) {
-    const pageToken = classifyListCommitsPageToken(options.pageToken);
-    if (pageToken.kind === 'invalid') {
+    if (pageCursor.cursor === undefined) {
       return {
         ok: false,
         diagnostics: [
-          diagnostic('VERSION_INVALID_OPTIONS', pageToken.message, {
-            operation: 'listCommits',
-            option: 'pageToken',
-            details: pageToken.details,
-          }),
+          diagnostic(
+            'VERSION_INVALID_OPTIONS',
+            'listCommits pageToken is malformed or unsupported.',
+            {
+              operation: 'listCommits',
+              option: 'pageToken',
+              details: { category: 'malformedCursor' },
+            },
+          ),
         ],
       };
     }
 
     return {
-      ok: false,
-      diagnostics: [
-        diagnostic(
-          'VERSION_STALE_PAGE_CURSOR',
-          pageToken.kind === 'stale'
-            ? pageToken.message
-            : 'listCommits page tokens are not implemented by this in-memory graph store slice.',
-          {
-            operation: 'listCommits',
-            option: 'pageToken',
-            details: graphMetadataCompletenessDetails(
-              'stale',
-              pageToken.kind === 'stale'
-                ? pageToken.details
-                : { cursorCategory: 'unsupportedCursor', pageTokenUnsupported: true },
-            ),
-          },
-        ),
-      ],
+      ok: true,
+      pageSize,
+      target: { kind: 'pageCursor', cursor: pageCursor.cursor },
     };
   }
 
@@ -160,7 +191,7 @@ export function parseListCommitsOptions(
 }
 
 function classifyListCommitsPageToken(token: unknown):
-  | { readonly kind: 'valid' }
+  | { readonly kind: 'valid'; readonly cursor: ParsedListCommitsPageCursor }
   | {
       readonly kind: 'invalid' | 'stale';
       readonly message: string;
@@ -193,14 +224,22 @@ function classifyListCommitsPageToken(token: unknown):
       token.slice(VERSION_GRAPH_LIST_COMMITS_PAGE_TOKEN_PREFIX.length),
     )
   ) {
-    return { kind: 'valid' };
+    const cursor = LIST_COMMITS_CURSOR_CACHE.get(token);
+    if (cursor === undefined) {
+      return {
+        kind: 'stale',
+        message: 'listCommits pageToken is stale or no longer available.',
+        details: { cursorCategory: 'staleCursor' },
+      };
+    }
+    return { kind: 'valid', cursor };
   }
 
   if (VERSION_GRAPH_OPERATION_PAGE_TOKEN_RE.test(token)) {
     return {
       kind: 'stale',
       message: 'listCommits pageToken belongs to a different version read operation.',
-      details: { category: 'wrongOperationCursor' },
+      details: { cursorCategory: 'wrongOperationCursor' },
     };
   }
 
@@ -209,4 +248,83 @@ function classifyListCommitsPageToken(token: unknown):
     message: 'listCommits pageToken is malformed or unsupported.',
     details: { category: 'malformedCursor' },
   };
+}
+
+function parseListCommitsPageToken(
+  token: string | undefined,
+  diagnostic: GraphDiagnosticFactory,
+):
+  | { readonly ok: true; readonly cursor?: ParsedListCommitsPageCursor }
+  | { readonly ok: false; readonly diagnostics: readonly VersionGraphStoreDiagnostic[] } {
+  if (token === undefined) return { ok: true };
+
+  const pageToken = classifyListCommitsPageToken(token);
+  if (pageToken.kind === 'valid') return { ok: true, cursor: pageToken.cursor };
+
+  if (pageToken.kind === 'invalid') {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('VERSION_INVALID_OPTIONS', pageToken.message, {
+          operation: 'listCommits',
+          option: 'pageToken',
+          details: pageToken.details,
+        }),
+      ],
+    };
+  }
+
+  return {
+    ok: false,
+    diagnostics: [
+      staleListCommitsPageTokenDiagnostic(diagnostic, pageToken.message, pageToken.details),
+    ],
+  };
+}
+
+export function publicListCommitsPageTokenFor(cursor: ParsedListCommitsPageCursor): string {
+  evictListCommitsCursorCache();
+  const publicToken = `${VERSION_GRAPH_LIST_COMMITS_PAGE_TOKEN_PREFIX}${nextCursorHandle()}`;
+  LIST_COMMITS_CURSOR_CACHE.set(publicToken, cursor);
+  return publicToken;
+}
+
+function staleListCommitsPageTokenDiagnostic(
+  diagnostic: GraphDiagnosticFactory,
+  message: string,
+  details: Readonly<Record<string, string | number | boolean | null>>,
+): VersionGraphStoreDiagnostic {
+  return diagnostic('VERSION_STALE_PAGE_CURSOR', message, {
+    operation: 'listCommits',
+    option: 'pageToken',
+    details: graphMetadataCompletenessDetails('stale', details),
+  });
+}
+
+function nextCursorHandle(): string {
+  listCommitsCursorSequence = (listCommitsCursorSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `${randomCursorSegment()}.${Date.now().toString(36)}.${listCommitsCursorSequence.toString(36)}`;
+}
+
+function randomCursorSegment(): string {
+  const bytes = new Uint8Array(16);
+  const cryptoLike = (
+    globalThis as { readonly crypto?: { getRandomValues?: <T extends Uint8Array>(array: T) => T } }
+  ).crypto;
+  if (cryptoLike?.getRandomValues) {
+    cryptoLike.getRandomValues(bytes);
+  } else {
+    for (let index = 0; index < bytes.length; index++) {
+      bytes[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function evictListCommitsCursorCache(): void {
+  while (LIST_COMMITS_CURSOR_CACHE.size >= VERSION_GRAPH_LIST_COMMITS_CURSOR_CACHE_MAX_ENTRIES) {
+    const oldest = LIST_COMMITS_CURSOR_CACHE.keys().next().value;
+    if (!oldest) return;
+    LIST_COMMITS_CURSOR_CACHE.delete(oldest);
+  }
 }

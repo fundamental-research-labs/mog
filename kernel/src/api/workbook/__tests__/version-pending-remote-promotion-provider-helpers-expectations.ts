@@ -3,7 +3,7 @@ import { expect } from '@jest/globals';
 import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
 import type { PendingRemoteSegmentStore } from '../../../document/version-store/pending-remote-segment-store';
 import type { VersionGraphStore } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
+import type { RefVersion } from '../../../document/version-store/refs/ref-store';
 import type { PendingSegmentFixture } from './version-pending-remote-promotion-provider-helpers-pending-segments';
 
 export async function expectReadHeadSuccess(graph: VersionGraphStore): Promise<{

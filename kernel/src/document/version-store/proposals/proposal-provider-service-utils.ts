@@ -9,8 +9,8 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import type { BranchRecord } from './branch-service';
-import { objectDigestFor } from './merge-apply-intent-store';
+import type { BranchRecord } from '../branch-service';
+import { objectDigestFor } from '../merge-apply-intent-store';
 import type {
   AgentProposalRecord,
   AgentProposalSummary as StoreAgentProposalSummary,
@@ -19,7 +19,7 @@ import {
   sanitizeProposalProviderDiagnostics,
   sanitizeProposalProviderValue,
 } from './proposal-provider-service-diagnostics';
-import { validateRefName } from './ref-name';
+import { validateRefName } from '../refs/ref-name';
 
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;

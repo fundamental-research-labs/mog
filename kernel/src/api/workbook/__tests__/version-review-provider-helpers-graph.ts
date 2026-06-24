@@ -1,7 +1,7 @@
 import type {
   CommitVersionGraphInput,
   VersionGraphInitializeResult,
-} from '../../../document/version-store/graph-store';
+} from '../../../document/version-store/graph';
 import type {
   VersionObjectType,
   WorkbookCommitId,
@@ -16,7 +16,7 @@ import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
 } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
+import type { RefVersion } from '../../../document/version-store/refs/ref-store';
 import { DOCUMENT_SCOPE, GRAPH_AUTHOR } from './version-review-provider-helpers-constants';
 
 function expectInitializeSuccess(

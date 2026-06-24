@@ -11,7 +11,7 @@ import {
   VERSION_DIFF_MAX_PAGE_LIMIT,
   VERSION_DIFF_PUBLIC_CURSOR_MAX_LENGTH,
 } from '@mog-sdk/contracts/versioning';
-import { validateRefName } from '../../document/version-store/ref-name';
+import { validateRefName } from '../../document/version-store/refs/ref-name';
 import {
   VERSION_COMMIT_SELECTOR_KEYS,
   VERSION_DIFF_OPTION_KEYS,

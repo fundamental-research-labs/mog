@@ -22,7 +22,7 @@ import {
   type InMemoryWorkbookCommitStore,
   type WorkbookCommitCompletenessDiagnostic,
 } from '../commit-store';
-import type { RefMutationResult, RefVersion } from '../ref-store';
+import type { RefMutationResult, RefVersion } from '../refs/ref-store';
 
 export const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',

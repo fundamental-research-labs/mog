@@ -1,42 +1,42 @@
-import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store';
-import { mergeApplyRefCasProofStorageKey } from './merge-apply-intent-store';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from '../graph';
+import { mergeApplyRefCasProofStorageKey } from '../merge-apply-intent-store';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
   type VersionGraphNamespace,
-} from './object-store';
+} from '../object-store';
 import {
   INDEX_MANIFESTS_STORE,
   INTENTS_STORE,
   REFS_STORE,
   SYMBOLIC_REFS_STORE,
   VERSION_STORE_INDEXEDDB_STORES,
-} from './provider-indexeddb-schema';
-import { normalizeVersionDocumentScope, versionDocumentScopeKey } from './registry';
-import { refVersionsEqual } from './ref-store';
-import { idbRequest, idbTransactionDone, readAllByIndex } from './provider-indexeddb-internal-idb';
-import { cloneJson } from './provider-indexeddb-internal-json';
-import { refKey } from './provider-indexeddb-internal-keys';
+} from '../provider-indexeddb-schema';
+import { normalizeVersionDocumentScope, versionDocumentScopeKey } from '../registry';
+import { refVersionsEqual } from '../refs/ref-store';
+import { idbRequest, idbTransactionDone, readAllByIndex } from './internal-idb';
+import { cloneJson } from './internal-json';
+import { refKey } from './internal-keys';
 import type {
   StoredIndexManifest,
   StoredIntent,
   StoredRefCasProofIntent,
   StoredRefRecord,
   StoredSymbolicRef,
-} from './provider-indexeddb-internal-records';
-import { liveMainFromSnapshot } from './provider-indexeddb-internal-snapshots';
+} from './internal-records';
+import { liveMainFromSnapshot } from './internal-snapshots';
 import {
   RefAlreadyExistsError,
   RefCasConflictError,
   RefStoreManifestConflictError,
-} from './provider-indexeddb-internal-persistence-errors';
-import { writeObjectRecords } from './provider-indexeddb-internal-persistence-objects';
+} from './internal-persistence-errors';
+import { writeObjectRecords } from './internal-persistence-objects';
 import {
   refCasProofRowForMode,
   refWritePlanForMode,
   type RefWritePlan,
-} from './provider-indexeddb-internal-persistence-refs';
-import type { PersistGraphSnapshotOptions } from './provider-indexeddb-internal-persistence-types';
+} from './internal-persistence-refs';
+import type { PersistGraphSnapshotOptions } from './internal-persistence-types';
 
 export async function persistGraphSnapshot(
   options: PersistGraphSnapshotOptions,

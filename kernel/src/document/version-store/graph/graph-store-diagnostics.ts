@@ -1,4 +1,4 @@
-import type { WorkbookCommitStoreDiagnostic } from './commit-store';
+import type { WorkbookCommitStoreDiagnostic } from '../commit-store';
 import type {
   VersionGraphRef,
   VersionGraphStoreDiagnostic,
@@ -6,8 +6,8 @@ import type {
 } from './graph-store-types';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import { VERSION_GRAPH_MAIN_REF, graphRefNameFromRefName } from './graph-store-refs';
-import { objectDigestFromWorkbookCommitId, type WorkbookCommitId } from './object-digest';
-import type { LiveRefRecord, VersionDiagnostic } from './ref-store';
+import { objectDigestFromWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
+import type { LiveRefRecord, VersionDiagnostic } from '../refs/ref-store';
 
 export function mapCommitDiagnostics(
   diagnostics: readonly WorkbookCommitStoreDiagnostic[],

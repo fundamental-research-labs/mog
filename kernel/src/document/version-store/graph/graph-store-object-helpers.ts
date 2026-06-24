@@ -2,20 +2,20 @@ import {
   createInMemoryWorkbookCommitStore,
   type InMemoryWorkbookCommitStore,
   type ReadWorkbookCommitResult,
-} from './commit-store';
-import type { WorkbookCommitId } from './object-digest';
+} from '../commit-store';
+import type { WorkbookCommitId } from '../object-digest';
 import {
   createInMemoryVersionObjectStore,
   normalizeVersionGraphNamespace,
   type InMemoryVersionObjectStore,
   type VersionGraphNamespace,
-} from './object-store';
+} from '../object-store';
 import {
   assertRefStoreSnapshotManifestInvariants,
   assertSnapshotRefTargetsReadable,
   type InMemoryVersionGraphStoreSnapshot,
 } from './graph-store-snapshot';
-import { createInMemoryRefStore, type InMemoryRefStore } from './ref-store';
+import { createInMemoryRefStore, type InMemoryRefStore } from '../refs/ref-store';
 
 export type InMemoryVersionGraphStoreParts = {
   readonly namespace: VersionGraphNamespace;

@@ -1,9 +1,9 @@
 import type { VersionMainRefName, VersionRefName, WorkbookCommitId } from '@mog-sdk/contracts/api';
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { CreateBranchResult, ReadBranchResult } from './branch-service';
-import type { VersionStoreProvider } from './provider';
-import type { RefVersion } from './ref-store';
+import type { CreateBranchResult, ReadBranchResult } from '../branch-service';
+import type { VersionStoreProvider } from '../provider';
+import type { RefVersion } from '../refs/ref-store';
 
 export type MaybePromise<T> = T | Promise<T>;
 

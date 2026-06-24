@@ -3,17 +3,17 @@ import {
   VERSION_GRAPH_MAIN_REF,
   type InMemoryVersionGraphStoreSnapshot,
   type VersionGraphRef,
-} from './graph-store';
-import { graphRefFromLiveRef } from './graph-store-refs';
+} from '../graph';
+import { graphRefFromLiveRef } from '../graph/graph-store-refs';
 import {
   objectDigestFromWorkbookCommitId,
   workbookCommitIdFromObjectDigest,
   type WorkbookCommitId,
-} from './object-digest';
-import type { VersionGraphInitializeResult } from './provider';
-import { cloneVersionGraphRegistry, type VersionGraphRegistry } from './registry';
-import type { LiveRefRecord } from './ref-store';
-import { cloneJson } from './provider-indexeddb-internal-json';
+} from '../object-digest';
+import type { VersionGraphInitializeResult } from '../provider';
+import { cloneVersionGraphRegistry, type VersionGraphRegistry } from '../registry';
+import type { LiveRefRecord } from '../refs/ref-store';
+import { cloneJson } from './internal-json';
 
 export function liveMainFromSnapshot(snapshot: InMemoryVersionGraphStoreSnapshot): LiveRefRecord {
   const main = snapshot.refStore.records.find(

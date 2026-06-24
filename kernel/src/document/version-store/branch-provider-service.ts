@@ -14,7 +14,7 @@ import {
   type ReadBranchResult,
 } from './branch-service';
 import type { VersionGraphStore, VersionStoreProvider } from './provider';
-import type { VersionDiagnostic } from './ref-store';
+import type { VersionDiagnostic } from './refs/ref-store';
 import { namespaceForRegistry } from './registry';
 
 type BranchProviderOperation =

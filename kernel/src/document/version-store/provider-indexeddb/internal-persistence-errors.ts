@@ -1,5 +1,5 @@
-import type { WorkbookCommitId } from './object-digest';
-import type { RefRecord, RefVersion } from './ref-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { RefRecord, RefVersion } from '../refs/ref-store';
 
 export class RefCasConflictError extends Error {
   readonly expectedHead?: WorkbookCommitId;

@@ -1,12 +1,12 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
-import { parseRefName } from '../ref-name';
+import { parseRefName } from '../refs/ref-name';
 import {
   createInMemoryRefStore,
   type RefVersion,
   type TombstoneRefRecord,
-} from '../ref-store';
+} from '../refs/ref-store';
 
 export const COMMIT_A = commit('aa');
 export const COMMIT_B = commit('bb');

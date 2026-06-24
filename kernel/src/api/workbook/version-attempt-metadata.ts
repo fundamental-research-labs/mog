@@ -12,7 +12,7 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import { validateRefName } from '../../document/version-store/ref-name';
+import { validateRefName } from '../../document/version-store/refs/ref-name';
 
 const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 const OBJECT_DIGEST_RE = /^[0-9a-f]{64}$/;

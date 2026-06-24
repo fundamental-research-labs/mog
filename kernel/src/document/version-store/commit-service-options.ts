@@ -4,13 +4,13 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphBranchRefName,
-} from './graph-store';
+} from './graph';
 import {
   versionStoreDiagnostic,
   type VersionStoreDiagnostic,
   type VersionStoreProvider,
 } from './provider';
-import { REF_NAME_STORAGE_PREFIX, validateRefName } from './ref-name';
+import { REF_NAME_STORAGE_PREFIX, validateRefName } from './refs/ref-name';
 
 type NormalizedCommitTargetRefResult =
   | {

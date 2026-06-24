@@ -16,8 +16,8 @@ import {
   parseRefVersionForResult,
   visibleBranchFromLiveRef,
 } from './branch-service-validation';
-import { refNameStorageKey, type RefName } from './ref-name';
-import { createInMemoryRefStore, type VersionDiagnostic } from './ref-store';
+import { refNameStorageKey, type RefName } from './refs/ref-name';
+import { createInMemoryRefStore, type VersionDiagnostic } from './refs/ref-store';
 import type {
   BranchRecord,
   BranchRefName,

@@ -1,6 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { ObjectDigest, WorkbookCommitId } from './object-digest';
+import type { ObjectDigest, WorkbookCommitId } from '../object-digest';
 import type { RefName, RefNamespace } from './ref-name';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
 

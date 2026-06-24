@@ -1,14 +1,14 @@
-import type { WorkbookCommitPayload } from './commit-store';
-import type { VersionGraphSymbolicRef } from './graph-store';
+import type { WorkbookCommitPayload } from '../commit-store';
+import type { VersionGraphSymbolicRef } from '../graph';
 import type {
   MergeApplyRefCasProof,
   MergeApplyRefCasProofLookup,
-} from './merge-apply-intent-store';
-import type { ObjectDigest, WorkbookCommitId } from './object-digest';
-import type { VersionGraphNamespace, VersionObjectRecord } from './object-store';
-import type { VersionGraphRegistry } from './registry';
-import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
-import type { RefRecord } from './ref-store';
+} from '../merge-apply-intent-store';
+import type { ObjectDigest, WorkbookCommitId } from '../object-digest';
+import type { VersionGraphNamespace, VersionObjectRecord } from '../object-store';
+import type { VersionGraphRegistry } from '../registry';
+import type { InMemoryRefStoreSnapshot } from '../refs/ref-store-snapshot';
+import type { RefRecord } from '../refs/ref-store';
 
 export type RegistryRecordRead =
   | { readonly status: 'absent' }

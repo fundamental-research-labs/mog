@@ -1,9 +1,9 @@
 import type {
   CommitVersionGraphInput,
   InitializeVersionGraphInput,
-} from '../graph-store';
+} from '../graph';
 import type { WorkbookCommitId } from '../object-digest';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 import { AUTHOR, objectRecord } from './graph-store-recovery-test-helpers-fixtures';
 
 export async function graphInput(label: string): Promise<InitializeVersionGraphInput> {

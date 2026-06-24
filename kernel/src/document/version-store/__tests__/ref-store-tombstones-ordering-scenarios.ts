@@ -1,4 +1,4 @@
-import { compareTombstoneRefs } from '../ref-store-ordering';
+import { compareTombstoneRefs } from '../refs/ref-store-ordering';
 import { tombstoneFixture } from './ref-store-test-helpers';
 
 export const registerRefStoreTombstoneOrderingScenarios = (): void => {

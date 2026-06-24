@@ -3,7 +3,7 @@ import {
   REF_NAME_STORAGE_PREFIX,
   validateRefName,
   type RefName,
-} from './ref-name';
+} from './refs/ref-name';
 import {
   branchFromLiveRef,
   diagnostic,
@@ -21,7 +21,7 @@ import {
   type LiveRefRecord,
   type RefVersion,
   type VersionDiagnostic,
-} from './ref-store';
+} from './refs/ref-store';
 
 const RESERVED_REF_PREFIXES = Object.freeze(['refs/system', 'refs/imports', 'refs/hidden']);
 

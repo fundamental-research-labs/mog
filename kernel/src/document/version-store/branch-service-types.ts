@@ -1,7 +1,7 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { WorkbookCommitId } from './object-digest';
-import { REF_NAME_STORAGE_PREFIX, type RefName, type RefNamespace } from './ref-name';
+import { REF_NAME_STORAGE_PREFIX, type RefName, type RefNamespace } from './refs/ref-name';
 import type {
   CreateBranchResult as RefStoreCreateBranchResult,
   DeleteRefResult as RefStoreDeleteRefResult,
@@ -13,7 +13,7 @@ import type {
   RefVersion,
   TombstoneRefRecord,
   VersionDiagnostic,
-} from './ref-store';
+} from './refs/ref-store';
 
 export type BranchRefName = `${typeof REF_NAME_STORAGE_PREFIX}${string}`;
 

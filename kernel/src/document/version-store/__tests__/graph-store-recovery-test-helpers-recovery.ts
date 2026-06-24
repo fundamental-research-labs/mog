@@ -8,7 +8,7 @@ import {
   type InMemoryVersionObjectStore,
   type VersionObjectMemoryBackend,
 } from '../object-store';
-import type { InMemoryRefStore } from '../ref-store';
+import type { InMemoryRefStore } from '../refs/ref-store';
 import { AUTHOR, NAMESPACE, objectRecord } from './graph-store-recovery-test-helpers-fixtures';
 
 export async function persistRootCommitWithSemanticDependencyGap(

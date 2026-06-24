@@ -5,9 +5,9 @@ import type {
 import type {
   CommitVersionGraphInput,
   InitializeVersionGraphInput,
-} from '../graph-store';
+} from '../graph';
 import type { VersionGraphNamespace } from '../object-store';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 import {
   AUTHOR,
   NAMESPACE,

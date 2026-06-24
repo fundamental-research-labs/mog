@@ -1,6 +1,6 @@
-import { createInMemoryVersionGraphStore } from '../graph-store';
+import { createInMemoryVersionGraphStore } from '../graph';
 import { InMemoryVersionObjectStore, VersionObjectMemoryBackend } from '../object-store';
-import { createInMemoryRefStore } from '../ref-store';
+import { createInMemoryRefStore } from '../refs/ref-store';
 import {
   NAMESPACE,
   expectClosureFailed,

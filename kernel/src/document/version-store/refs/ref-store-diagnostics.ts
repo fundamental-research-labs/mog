@@ -1,4 +1,4 @@
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommitId } from '../object-digest';
 import type {
   RefFailureResult,
   RefMutationConflict,

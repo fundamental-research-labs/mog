@@ -1,10 +1,10 @@
 import { InMemoryVersionObjectStore } from '../object-store';
-import { createInMemoryRefStore } from '../ref-store';
+import { createInMemoryRefStore } from '../refs/ref-store';
 import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   createInMemoryVersionGraphStore,
-} from '../graph-store';
+} from '../graph';
 import {
   AUTHOR,
   NAMESPACE,

@@ -1,5 +1,5 @@
 import type { WorkbookCommitId } from './object-digest';
-import type { RefName } from './ref-name';
+import type { RefName } from './refs/ref-name';
 import type {
   CheckoutHeadReader,
   CheckoutMaterializationDiagnostic,

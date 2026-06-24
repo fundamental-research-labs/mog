@@ -12,8 +12,8 @@ import type {
   ReadBranchInput,
   ReadBranchResult,
 } from './branch-service';
-import type { InMemoryVersionGraphStore } from './graph-store';
-import { createGraphBranchLifecycle } from './graph-store-branch-lifecycle';
+import type { InMemoryVersionGraphStore } from './graph';
+import { createGraphBranchLifecycle } from './graph/graph-store-branch-lifecycle';
 import { parseWorkbookCommitId } from './object-digest';
 import type { VersionGraphNamespace } from './object-store';
 import {
@@ -22,9 +22,9 @@ import {
   RefStoreManifestConflictError,
   errorMessage,
   persistGraphSnapshot,
-} from './provider-indexeddb-internal';
+} from './provider-indexeddb/internal';
 import { loadGraphSnapshot } from './provider-indexeddb-reload';
-import type { VersionDiagnostic } from './ref-store';
+import type { VersionDiagnostic } from './refs/ref-store';
 import type { VersionDocumentScope } from './registry';
 
 export interface IndexedDbGraphBranchLifecycle {

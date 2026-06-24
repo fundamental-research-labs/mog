@@ -11,14 +11,14 @@ import {
 import {
   objectDigestFromWorkbookCommitId,
   type WorkbookCommitId,
-} from './object-digest';
-import type { RefName } from './ref-name';
+} from '../object-digest';
+import type { RefName } from '../refs/ref-name';
 import type {
   InMemoryRefStore,
   LiveRefRecord,
   VersionDiagnostic,
-} from './ref-store';
-import { refVersionsEqual } from './ref-store';
+} from '../refs/ref-store';
+import { refVersionsEqual } from '../refs/ref-store';
 import type {
   FastForwardVersionGraphInput,
   VersionGraphClosureReadResult,

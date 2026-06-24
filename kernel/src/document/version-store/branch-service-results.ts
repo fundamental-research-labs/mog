@@ -1,5 +1,5 @@
 import type { WorkbookCommitId } from './object-digest';
-import { refNameStorageKey, type RefName, type RefNameDiagnostic } from './ref-name';
+import { refNameStorageKey, type RefName, type RefNameDiagnostic } from './refs/ref-name';
 import type {
   BranchFailureResult,
   BranchRecord,
@@ -15,7 +15,7 @@ import type {
   RefVersion,
   TombstoneRefRecord,
   VersionDiagnostic,
-} from './ref-store';
+} from './refs/ref-store';
 
 export function branchFromLiveRef(ref: LiveRefRecord): BranchRecord {
   const cloned = cloneLiveRefRecord(ref);

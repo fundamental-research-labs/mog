@@ -1,5 +1,5 @@
 import { checkoutAccessDeniedDiagnosticDetails } from './checkout-access-diagnostics';
-import type { RefName } from './ref-name';
+import type { RefName } from './refs/ref-name';
 import type {
   CheckoutMaterializationDiagnostic,
   CheckoutMaterializationDiagnosticCode,

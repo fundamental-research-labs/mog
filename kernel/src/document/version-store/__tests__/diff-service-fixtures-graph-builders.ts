@@ -1,11 +1,11 @@
-import type { VersionGraphNamespace } from '../graph-store';
+import type { VersionGraphNamespace } from '../graph';
 import type { WorkbookCommitId } from '../object-digest';
 import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
   type VersionGraphInitializeResult,
 } from '../provider';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 import {
   DIFF_SERVICE_DOCUMENT_SCOPE,
   type DiffServiceProvider,

@@ -1,4 +1,4 @@
-import type { InMemoryWorkbookCommitStore } from './commit-store';
+import type { InMemoryWorkbookCommitStore } from '../commit-store';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import {
   collectReachableGraphCommits,
@@ -6,9 +6,9 @@ import {
   readGraphBranchRef,
   readGraphMainRef,
 } from './graph-store-read-helpers';
-import type { WorkbookCommitId } from './object-digest';
-import type { RefName } from './ref-name';
-import type { InMemoryRefStore, LiveRefRecord } from './ref-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { RefName } from '../refs/ref-name';
+import type { InMemoryRefStore, LiveRefRecord } from '../refs/ref-store';
 
 export type GraphStoreRefHelpers = {
   readCommitFromRef(

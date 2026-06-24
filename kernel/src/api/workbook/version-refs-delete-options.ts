@@ -4,7 +4,7 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import { validateRefName } from '../../document/version-store/ref-name';
+import { validateRefName } from '../../document/version-store/refs/ref-name';
 import {
   invalidCommitDiagnostic,
   invalidOptionsDiagnostic,

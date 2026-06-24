@@ -4,7 +4,7 @@ import type {
   VersionGraphInitializeResult,
   VersionStoreProvider,
 } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
+import type { RefVersion } from '../../../document/version-store/refs/ref-store';
 import { commitInput } from './version-diff-projection-helpers-graph-inputs';
 
 export function expectInitializeSuccess(

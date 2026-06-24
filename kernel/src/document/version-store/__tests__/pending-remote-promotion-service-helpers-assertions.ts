@@ -1,6 +1,6 @@
 import type { WorkbookCommitId } from '../object-digest';
 import type { VersionGraphStore } from '../provider';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 
 export async function expectReadHeadSuccess(graph: VersionGraphStore): Promise<{
   readonly commitId: WorkbookCommitId;

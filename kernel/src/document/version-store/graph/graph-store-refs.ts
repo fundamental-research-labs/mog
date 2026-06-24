@@ -2,8 +2,8 @@ import {
   REF_NAME_STORAGE_PREFIX,
   validateRefName,
   type RefName,
-} from './ref-name';
-import type { LiveRefRecord } from './ref-store';
+} from '../refs/ref-name';
+import type { LiveRefRecord } from '../refs/ref-store';
 import type {
   VersionGraphCommitRef,
   VersionGraphRef,

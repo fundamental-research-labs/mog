@@ -2,8 +2,8 @@ import {
   createInMemoryRefStore,
   type LiveRefRecord,
   type RefVersion,
-} from '../ref-store';
-import type { InMemoryRefStoreSnapshot } from '../ref-store-snapshot';
+} from '../refs/ref-store';
+import type { InMemoryRefStoreSnapshot } from '../refs/ref-store-snapshot';
 import { expectCreateOk } from './ref-store-helpers-assertions';
 import { AUTHOR, COMMIT_A } from './ref-store-helpers-fixtures';
 

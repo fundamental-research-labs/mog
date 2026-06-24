@@ -2,14 +2,14 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphSymbolicRef,
-} from './graph-store';
-import { maxGeneratedRefRecordId } from './graph-store-snapshot';
+} from './graph';
+import { maxGeneratedRefRecordId } from './graph/graph-store-snapshot';
 import type { VersionGraphNamespace } from './object-store';
 import {
   cloneJson,
   type StoredIndexManifest,
   type StoredRefRecord,
-} from './provider-indexeddb-internal';
+} from './provider-indexeddb/internal';
 import { throwLoadError } from './provider-indexeddb-reload-errors';
 import {
   hasOnlyKeys,
@@ -28,7 +28,7 @@ import type {
   RowValidationContext,
 } from './provider-indexeddb-reload-validation-types';
 import { REFS_STORE, SYMBOLIC_REFS_STORE } from './provider-indexeddb-schema';
-import { parseRefVersion, refVersionsEqual, type LiveRefRecord, type RefRecord } from './ref-store';
+import { parseRefVersion, refVersionsEqual, type LiveRefRecord, type RefRecord } from './refs/ref-store';
 
 export function validateStoredRefRecord(
   value: unknown,

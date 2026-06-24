@@ -9,9 +9,9 @@ import type {
   WorkbookCommitCompletenessDiagnostic,
   WorkbookCommitStoreDiagnostic,
 } from './commit-store';
-import type { VersionGraphStoreDiagnostic } from './graph-store';
-import type { RefName, RefNameDiagnostic } from './ref-name';
-import type { GetRefResult, RefVersion, VersionDiagnostic } from './ref-store';
+import type { VersionGraphStoreDiagnostic } from './graph';
+import type { RefName, RefNameDiagnostic } from './refs/ref-name';
+import type { GetRefResult, RefVersion, VersionDiagnostic } from './refs/ref-store';
 import type { VersionObjectStoreDiagnostic } from './object-store';
 import type { VersionStoreDiagnostic as ProviderVersionStoreDiagnostic } from './provider';
 import {

@@ -1,12 +1,12 @@
-import { VERSION_GRAPH_MAIN_REF } from './graph-store';
-import type { InMemoryVersionGraphStoreSnapshot } from './graph-store';
+import { VERSION_GRAPH_MAIN_REF } from '../graph';
+import type { InMemoryVersionGraphStoreSnapshot } from '../graph';
 import {
   computeMergeApplyRefCasProof,
   type MergeApplyRefCasProofLookup,
-} from './merge-apply-intent-store';
-import type { LiveRefRecord } from './ref-store';
-import type { StoredRefCasProofIntent } from './provider-indexeddb-internal-records';
-import type { PersistGraphSnapshotMode } from './provider-indexeddb-internal-persistence-types';
+} from '../merge-apply-intent-store';
+import type { LiveRefRecord } from '../refs/ref-store';
+import type { StoredRefCasProofIntent } from './internal-records';
+import type { PersistGraphSnapshotMode } from './internal-persistence-types';
 
 export type RefWritePlan =
   | { readonly kind: 'all' }

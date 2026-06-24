@@ -5,23 +5,23 @@ import type {
   InMemoryWorkbookCommitStore,
   WorkbookCommit,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store';
+} from '../commit-store';
 import type {
   ObjectDigest,
   VersionDependencyRef,
   WorkbookCommitId,
-} from './object-digest';
+} from '../object-digest';
 import type {
   InMemoryVersionObjectStore,
   VersionGraphNamespace,
   VersionObjectStoreDiagnostic,
-} from './object-store';
+} from '../object-store';
 import type {
   InMemoryRefStore,
   ProviderEpoch,
   RefVersion,
   VersionDiagnostic,
-} from './ref-store';
+} from '../refs/ref-store';
 import type { VersionGraphStoreOperation } from './graph-store-operation';
 import type {
   VERSION_GRAPH_HEAD_REF,
@@ -128,6 +128,7 @@ export type VersionGraphCommitPageResult =
   | {
       readonly status: 'success';
       readonly commits: readonly VersionGraphCommitSummary[];
+      readonly nextPageToken?: string;
       readonly readRevision: RefVersion;
       readonly order: 'topological-newest';
       readonly pageSize: number;

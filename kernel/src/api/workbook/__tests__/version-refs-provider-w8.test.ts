@@ -1,6 +1,6 @@
 import { createInMemoryBranchService } from '../../../document/version-store/branch-service';
 import { createInMemoryVersionStoreProvider } from '../../../document/version-store/provider';
-import { createInMemoryRefStore } from '../../../document/version-store/ref-store';
+import { createInMemoryRefStore } from '../../../document/version-store/refs/ref-store';
 import { WorkbookVersionImpl } from '../version';
 import {
   AUX_COMMIT_ID,

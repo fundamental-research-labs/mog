@@ -1,13 +1,13 @@
 import { parseWorkbookCommitId } from './object-digest';
 import { normalizeVersionGraphNamespace, type VersionGraphNamespace } from './object-store';
-import { cloneJson } from './provider-indexeddb-internal';
+import { cloneJson } from './provider-indexeddb/internal';
 import {
   throwLoadError,
   type GraphSnapshotLoadDetails,
 } from './provider-indexeddb-reload-errors';
 import type { RowValidationContext } from './provider-indexeddb-reload-validation-types';
-import { parseRefName } from './ref-name';
-import { parseRefVersion } from './ref-store';
+import { parseRefName } from './refs/ref-name';
+import { parseRefVersion } from './refs/ref-store';
 
 export function validateStoredRowEnvelope(
   value: unknown,

@@ -1,8 +1,8 @@
-import type { ReadWorkbookCommitResult } from './commit-store';
-import type { WorkbookCommitId } from './object-digest';
-import type { VersionGraphNamespace, VersionObjectRecord } from './object-store';
-import type { RefRecord } from './ref-store';
-import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';
+import type { ReadWorkbookCommitResult } from '../commit-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { VersionGraphNamespace, VersionObjectRecord } from '../object-store';
+import type { RefRecord } from '../refs/ref-store';
+import type { InMemoryRefStoreSnapshot } from '../refs/ref-store-snapshot';
 
 export type InMemoryVersionGraphStoreSnapshot = {
   readonly namespace: VersionGraphNamespace;

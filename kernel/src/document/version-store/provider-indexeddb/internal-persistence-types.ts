@@ -1,8 +1,8 @@
-import type { InMemoryVersionGraphStoreSnapshot } from './graph-store';
-import type { MergeApplyIntentApplyKind } from './merge-apply-intent-store';
-import type { WorkbookCommitId } from './object-digest';
-import type { VersionDocumentScope } from './registry';
-import type { RefVersion } from './ref-store';
+import type { InMemoryVersionGraphStoreSnapshot } from '../graph';
+import type { MergeApplyIntentApplyKind } from '../merge-apply-intent-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { VersionDocumentScope } from '../registry';
+import type { RefVersion } from '../refs/ref-store';
 
 export type PersistGraphSnapshotOptions = {
   readonly db: IDBDatabase;

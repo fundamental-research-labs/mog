@@ -2,7 +2,7 @@ import type {
   InMemoryWorkbookCommitStore,
   WorkbookCommit,
   WorkbookCommitStoreDiagnostic,
-} from './commit-store';
+} from '../commit-store';
 import {
   danglingRefDiagnostic,
   diagnostic,
@@ -16,9 +16,9 @@ import {
   graphRefNameFromRefName,
 } from './graph-store-refs';
 import { uniqueSortedCommitIds } from './graph-store-traversal';
-import type { WorkbookCommitId } from './object-digest';
-import type { RefName } from './ref-name';
-import type { InMemoryRefStore, LiveRefRecord } from './ref-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { RefName } from '../refs/ref-name';
+import type { InMemoryRefStore, LiveRefRecord } from '../refs/ref-store';
 import type { VersionGraphStoreDiagnostic } from './graph-store-types';
 
 export type GraphLiveRefReadResult =

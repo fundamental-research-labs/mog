@@ -1,4 +1,4 @@
-import type { CommitVersionGraphInput, InitializeVersionGraphInput } from '../graph-store';
+import type { CommitVersionGraphInput, InitializeVersionGraphInput } from '../graph';
 import type {
   VersionDependencyRef,
   VersionObjectType,
@@ -9,7 +9,7 @@ import {
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 import { AUTHOR, NAMESPACE } from './graph-store-snapshot-test-helpers-constants';
 
 async function objectRecord(

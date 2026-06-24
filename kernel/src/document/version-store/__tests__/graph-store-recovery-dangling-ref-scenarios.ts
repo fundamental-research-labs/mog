@@ -1,6 +1,6 @@
-import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph-store';
+import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph';
 import { InMemoryVersionObjectStore } from '../object-store';
-import { createInMemoryRefStore } from '../ref-store';
+import { createInMemoryRefStore } from '../refs/ref-store';
 import {
   NAMESPACE,
   commit,

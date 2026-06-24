@@ -1,4 +1,4 @@
-import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
+import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
 import { diagnostic, failure } from './ref-store-diagnostics';
 import { parseCanonicalRefName } from './ref-store-ref-names';
 import { RefStoreValidationError, parseRefVersion } from './ref-store-revisions';

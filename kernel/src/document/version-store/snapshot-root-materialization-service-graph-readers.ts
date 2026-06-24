@@ -4,11 +4,11 @@ import {
   type CheckoutHeadReadResult,
   type CheckoutMaterializationDiagnostic,
 } from './checkout-service';
-import { VERSION_GRAPH_MAIN_REF, type VersionGraphRef } from './graph-store';
+import { VERSION_GRAPH_MAIN_REF, type VersionGraphRef } from './graph';
 import type { VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore } from './provider';
-import { parseRefName, type RefName } from './ref-name';
-import type { GetRefResult, LiveRefRecord, VersionDiagnostic } from './ref-store';
+import { parseRefName, type RefName } from './refs/ref-name';
+import type { GetRefResult, LiveRefRecord, VersionDiagnostic } from './refs/ref-store';
 import { cloneRefVersion } from './snapshot-root-materialization-service-utils';
 
 const MATERIALIZATION_REF_AUTHOR: VersionAuthor = Object.freeze({

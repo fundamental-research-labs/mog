@@ -1,6 +1,6 @@
 import { expect, it } from '@jest/globals';
 
-import { createInMemoryRefStore } from '../../../document/version-store/ref-store';
+import { createInMemoryRefStore } from '../../../document/version-store/refs/ref-store';
 import { WorkbookVersionImpl } from '../version';
 import { AUTHOR, COMMIT_A, refVersion } from './version-refs-test-utils';
 

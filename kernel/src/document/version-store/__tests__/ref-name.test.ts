@@ -7,7 +7,7 @@ import {
   refNameStorageKey,
   validateRefName,
   type RefNameValidationIssue,
-} from '../ref-name';
+} from '../refs/ref-name';
 
 const VALID_REF_NAMES = [
   'main',

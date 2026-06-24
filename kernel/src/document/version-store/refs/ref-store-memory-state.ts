@@ -1,6 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommitId } from '../object-digest';
 import type { RefName } from './ref-name';
 import { diagnostic } from './ref-store-diagnostics';
 import { parseCanonicalRefName } from './ref-store-ref-names';

@@ -1,12 +1,12 @@
-import type { WorkbookCommit } from './commit-store';
-import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
+import type { WorkbookCommit } from '../commit-store';
+import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
 import type {
   VersionGraphCommitSummary,
   VersionGraphStoreDiagnostic,
   VersionGraphWriteSuccess,
 } from './graph-store-types';
 import { graphRefFromLiveRef } from './graph-store-refs';
-import type { LiveRefRecord } from './ref-store';
+import type { LiveRefRecord } from '../refs/ref-store';
 
 type InvalidCommitDiagnosticFactory = (
   code: 'VERSION_INVALID_COMMIT_ID',

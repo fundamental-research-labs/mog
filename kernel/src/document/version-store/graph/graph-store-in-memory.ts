@@ -2,7 +2,7 @@ import {
   createInMemoryWorkbookCommitStore,
   type InMemoryWorkbookCommitStore,
   type ReadWorkbookCommitResult,
-} from './commit-store';
+} from '../commit-store';
 import {
   createGraphBranchLifecycle,
   type GraphBranchLifecycle,
@@ -44,7 +44,7 @@ import type {
   VersionGraphRefSelector,
   VersionGraphWriteResult,
 } from './graph-store-types';
-import type { VersionDependencyRef, WorkbookCommitId } from './object-digest';
+import type { VersionDependencyRef, WorkbookCommitId } from '../object-digest';
 import {
   createInMemoryVersionObjectStore,
   normalizeVersionGraphNamespace,
@@ -53,11 +53,11 @@ import {
   type VersionGraphNamespace,
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
-} from './object-store';
+} from '../object-store';
 import {
   createInMemoryRefStore,
   type InMemoryRefStore,
-} from './ref-store';
+} from '../refs/ref-store';
 
 export class InMemoryVersionGraphStore {
   readonly namespace: VersionGraphNamespace;
@@ -189,7 +189,7 @@ export class InMemoryVersionGraphStore {
   }
 
   private readContext(): GraphStoreReadContext {
-    return { refs: this.refs };
+    return { cursorNamespaceKey: this.namespaceKey, refs: this.refs };
   }
 
   private branchService(): GraphBranchLifecycle {

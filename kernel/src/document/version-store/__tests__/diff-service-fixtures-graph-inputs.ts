@@ -1,7 +1,7 @@
 import type {
   CommitVersionGraphInput,
   VersionGraphNamespace,
-} from '../graph-store';
+} from '../graph';
 import type { VersionObjectType, WorkbookCommitId } from '../object-digest';
 import {
   createVersionObjectRecord,
@@ -11,7 +11,7 @@ import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
 } from '../provider';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 import {
   DIFF_SERVICE_AUTHOR,
   DIFF_SERVICE_CREATED_AT,

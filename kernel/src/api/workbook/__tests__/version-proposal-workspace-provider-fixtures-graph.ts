@@ -1,7 +1,7 @@
 import { expect } from '@jest/globals';
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type { CommitVersionGraphInput } from '../../../document/version-store/graph-store';
+import type { CommitVersionGraphInput } from '../../../document/version-store/graph';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
@@ -16,7 +16,7 @@ import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
 } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
+import type { RefVersion } from '../../../document/version-store/refs/ref-store';
 import {
   DOCUMENT_SCOPE,
   type InMemoryVersionStoreProvider,

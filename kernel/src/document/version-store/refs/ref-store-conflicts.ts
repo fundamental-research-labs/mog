@@ -1,4 +1,4 @@
-import type { WorkbookCommitId } from './object-digest';
+import type { WorkbookCommitId } from '../object-digest';
 import type { RefName } from './ref-name';
 import { diagnostic, failure } from './ref-store-diagnostics';
 import { cloneRefVersion } from './ref-store-revisions';

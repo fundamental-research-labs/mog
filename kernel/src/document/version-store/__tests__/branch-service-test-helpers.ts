@@ -11,13 +11,13 @@ import {
   type ReadBranchResult,
 } from '../branch-service';
 import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
-import { parseRefName, type RefName } from '../ref-name';
+import { parseRefName, type RefName } from '../refs/ref-name';
 import {
   createInMemoryRefStore,
   type LiveRefRecord,
   type RefMutationResult,
   type RefVersion,
-} from '../ref-store';
+} from '../refs/ref-store';
 
 export const COMMIT_A = commit('aa');
 export const COMMIT_B = commit('bb');

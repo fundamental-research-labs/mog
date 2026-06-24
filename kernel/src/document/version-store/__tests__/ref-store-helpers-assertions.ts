@@ -6,8 +6,8 @@ import {
   type GetRefResult,
   type ListRefsResult,
   type RefMutationResult,
-} from '../ref-store';
-import type { InMemoryRefStoreSnapshot } from '../ref-store-snapshot';
+} from '../refs/ref-store';
+import type { InMemoryRefStoreSnapshot } from '../refs/ref-store-snapshot';
 
 export function expectMutationOk(
   result: RefMutationResult,

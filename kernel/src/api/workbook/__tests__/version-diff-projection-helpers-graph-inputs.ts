@@ -4,7 +4,7 @@ import {
   namespaceForDocumentScope,
   type VersionGraphInitializeInput,
 } from '../../../document/version-store/provider';
-import type { RefVersion } from '../../../document/version-store/ref-store';
+import type { RefVersion } from '../../../document/version-store/refs/ref-store';
 import { AUTHOR, CREATED_AT, DOCUMENT_SCOPE } from './version-diff-projection-helpers-constants';
 import { graphContentInput } from './version-diff-projection-helpers-records';
 import { validSemanticPayload } from './version-diff-projection-fixtures';

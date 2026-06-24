@@ -1,5 +1,5 @@
 import type { ObjectDigest } from './object-digest';
-import type { RefVersion } from './ref-store';
+import type { RefVersion } from './refs/ref-store';
 
 export function cloneDigest(digest: ObjectDigest): ObjectDigest {
   return Object.freeze({ algorithm: digest.algorithm, digest: digest.digest });

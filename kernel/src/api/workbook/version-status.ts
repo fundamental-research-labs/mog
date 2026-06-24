@@ -8,11 +8,11 @@ import type {
 import { observeMutationAdmission } from '../../bridges/compute/mutation-admission';
 import type { DocumentContext } from '../../context';
 import { VERSION_OBJECT_SCHEMA_VERSION } from '../../document/version-store/object-store';
-import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/ref-name';
+import { REF_NAME_STORAGE_PREFIX } from '../../document/version-store/refs/ref-name';
 import { hasAttachedVersionCheckoutService } from './version-checkout';
 import { hasAttachedVersionWriteService } from './version-commit';
 import { hasAttachedVersionMergeService } from './version-merge';
-import { hasAttachedPendingRemotePromotionService } from './version-pending-remote';
+import { hasAttachedPendingRemotePromotionService } from './version/pending/remote';
 import { projectWorkbookVersionProvenanceStatusDiagnostics } from './version-provenance-truth-service';
 import { hasAttachedVersionRefLifecycleService } from './version-refs';
 import {

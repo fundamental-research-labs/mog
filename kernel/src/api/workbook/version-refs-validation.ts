@@ -13,7 +13,7 @@ import {
   REF_NAMESPACES,
   validateRefName,
   type RefNamespace,
-} from '../../document/version-store/ref-name';
+} from '../../document/version-store/refs/ref-name';
 import {
   VERSION_BRANCH_REF_PREFIX,
   VERSION_HEAD_REF,

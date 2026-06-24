@@ -1,4 +1,4 @@
-import { createInMemoryRefStore } from '../ref-store';
+import { createInMemoryRefStore } from '../refs/ref-store';
 
 import {
   AUTHOR,

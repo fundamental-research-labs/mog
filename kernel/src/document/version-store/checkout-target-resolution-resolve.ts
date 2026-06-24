@@ -1,6 +1,6 @@
 import type { WorkbookCommitId } from './object-digest';
-import type { RefName } from './ref-name';
-import type { RefVersion, GetRefResult } from './ref-store';
+import type { RefName } from './refs/ref-name';
+import type { RefVersion, GetRefResult } from './refs/ref-store';
 import type {
   CheckoutHeadReader,
   CheckoutHeadReadResult,

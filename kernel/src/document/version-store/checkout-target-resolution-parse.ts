@@ -1,5 +1,5 @@
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
-import { validateRefName, type RefName, type RefNameDiagnostic } from './ref-name';
+import { validateRefName, type RefName, type RefNameDiagnostic } from './refs/ref-name';
 import type { CheckoutMaterializationResult } from './checkout-service';
 import {
   checkoutDiagnostic as diagnostic,

@@ -1,7 +1,7 @@
-import { parseVc04ParentCommitIds, parseWorkbookMergeParentCommitId } from './commit-store/parents';
-import type { WorkbookCommitStoreDiagnostic } from './commit-store';
-import type { WorkbookCommitId } from './object-digest';
-import type { LiveRefRecord } from './ref-store';
+import { parseVc04ParentCommitIds, parseWorkbookMergeParentCommitId } from '../commit-store/parents';
+import type { WorkbookCommitStoreDiagnostic } from '../commit-store';
+import type { WorkbookCommitId } from '../object-digest';
+import type { LiveRefRecord } from '../refs/ref-store';
 import type { VersionGraphStoreDiagnostic } from './graph-store-types';
 import { graphRefNameFromRefName } from './graph-store-refs';
 

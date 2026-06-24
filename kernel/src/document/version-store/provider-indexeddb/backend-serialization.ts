@@ -1,4 +1,4 @@
-import { REF_NAME_STORAGE_PREFIX } from './ref-name';
+import { REF_NAME_STORAGE_PREFIX } from '../refs/ref-name';
 
 export function storageRefNameFromGraphRefName(name: string): string {
   return name.startsWith(REF_NAME_STORAGE_PREFIX)

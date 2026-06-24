@@ -1,4 +1,4 @@
-import type { InMemoryWorkbookCommitStore } from './commit-store';
+import type { InMemoryWorkbookCommitStore } from '../commit-store';
 import {
   graphWriteSuccess,
   parseGraphCommitExpectedHead,
@@ -23,9 +23,9 @@ import type {
   MergeVersionGraphInput,
   VersionGraphWriteResult,
 } from './graph-store-types';
-import type { VersionGraphNamespace } from './object-store';
-import type { InMemoryRefStore } from './ref-store';
-import { refVersionsEqual } from './ref-store';
+import type { VersionGraphNamespace } from '../object-store';
+import type { InMemoryRefStore } from '../refs/ref-store';
+import { refVersionsEqual } from '../refs/ref-store';
 
 export type GraphStoreWriteContext = {
   readonly namespace: VersionGraphNamespace;

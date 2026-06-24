@@ -1,9 +1,9 @@
 import type { VersionCommitOptions } from '@mog-sdk/contracts/api';
 
-import type { VersionGraphRef, VersionGraphSymbolicRef } from './graph-store';
+import type { VersionGraphRef, VersionGraphSymbolicRef } from './graph';
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
 import { versionStoreDiagnostic, type VersionStoreDiagnostic } from './provider';
-import { refVersionsEqual, type RefVersion } from './ref-store';
+import { refVersionsEqual, type RefVersion } from './refs/ref-store';
 import type {
   VersionMergeCommitCaptureSuccess,
   VersionNormalCommitCaptureFinalizeResult,

@@ -2,7 +2,7 @@ import {
   VERSION_GRAPH_HEAD_REF,
   createInMemoryVersionGraphStoreFromSnapshot,
   type InMemoryVersionGraphStore,
-} from './graph-store';
+} from './graph';
 import {
   normalizeVersionGraphNamespace,
   versionGraphNamespaceKey,
@@ -15,7 +15,7 @@ import {
   idbTransactionDone,
   type StoredObjectRecord,
   type StoredRefRecord,
-} from './provider-indexeddb-internal';
+} from './provider-indexeddb/internal';
 import { throwLoadError } from './provider-indexeddb-reload-errors';
 import {
   documentScopeKeyForNamespace,
@@ -32,7 +32,7 @@ import {
   REFS_STORE,
   SYMBOLIC_REFS_STORE,
 } from './provider-indexeddb-schema';
-import type { RefRecord } from './ref-store';
+import type { RefRecord } from './refs/ref-store';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,

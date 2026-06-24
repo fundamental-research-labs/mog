@@ -9,13 +9,13 @@ import type {
   CommitVersionGraphInput,
   InitializeVersionGraphInput,
   VersionGraphWriteResult,
-} from '../graph-store';
+} from '../graph';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
-import type { RefVersion } from '../ref-store';
+import type { RefVersion } from '../refs/ref-store';
 
 export const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-object-batch',

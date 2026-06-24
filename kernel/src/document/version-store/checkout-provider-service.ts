@@ -2,14 +2,14 @@ import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import {
   type VersionGraphRef,
-} from './graph-store';
-import { graphRefNameFromRefName } from './graph-store-refs';
+} from './graph';
+import { graphRefNameFromRefName } from './graph/graph-store-refs';
 import { type VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore, VersionStoreDiagnostic, VersionStoreProvider } from './provider';
 import { VersionStoreProviderError } from './provider';
 import { namespaceForRegistry } from './registry';
-import type { LiveRefRecord, RefVersion, VersionDiagnostic } from './ref-store';
-import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from './ref-name';
+import type { LiveRefRecord, RefVersion, VersionDiagnostic } from './refs/ref-store';
+import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from './refs/ref-name';
 import {
   checkoutAccessDeniedDiagnosticDetails,
   hasCheckoutAccessDeniedDiagnostic,

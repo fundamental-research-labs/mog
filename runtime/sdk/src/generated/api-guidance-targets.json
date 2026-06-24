@@ -4841,7 +4841,7 @@
       "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -4860,7 +4860,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -4936,7 +4936,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -4974,7 +4974,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -4989,11 +4989,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5069,7 +5069,7 @@
       "typeText": "Promise<VersionResult<{readonly disposed:true}>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5088,7 +5088,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5164,7 +5164,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5183,7 +5183,7 @@
       "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5221,7 +5221,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5236,11 +5236,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5316,7 +5316,7 @@
       "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5354,7 +5354,7 @@
       "typeText": "Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5373,7 +5373,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5411,7 +5411,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5487,6 +5487,25 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
+        "file": "types/api/src/api/workbook/version-proposal.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.revert",
+      "stableId": "WorkbookVersion.revert",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "revert",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
+      "typeText": "Promise<VersionResult<VersionRevertResult>>",
+      "compatibility": [],
+      "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
       },
       "ownerPackage": "@mog/types-api"
@@ -5525,7 +5544,7 @@
       "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5544,7 +5563,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -5582,7 +5601,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -11900,6 +11919,25 @@
       "asyncModel": "promise",
       "signature": "getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/layout.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.layout.getFilterHiddenRowsBitmap",
+      "stableId": "WorksheetLayout.getFilterHiddenRowsBitmap",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetLayout",
+      "member": "getFilterHiddenRowsBitmap",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getFilterHiddenRowsBitmap(): Promise<Set<number>>;",
+      "typeText": "Promise<Set<number>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/layout.ts"
@@ -19026,6 +19064,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.view.setFrozenPanes",
+      "stableId": "WorksheetView.setFrozenPanes",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetView",
+      "member": "setFrozenPanes",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFrozenPanes(rows: number, cols: number): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/view.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.view.setGridlines",
       "stableId": "WorksheetView.setGridlines",
       "root": "subApi",
@@ -24133,7 +24190,7 @@
       "typeText": "Promise<VersionResult<AgentProposalAcceptResult>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24152,7 +24209,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24228,7 +24285,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24266,7 +24323,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24281,11 +24338,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24361,7 +24418,7 @@
       "typeText": "Promise<VersionResult<{readonly disposed:true}>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24380,7 +24437,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24456,7 +24513,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24475,7 +24532,7 @@
       "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24513,7 +24570,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24528,11 +24585,11 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24608,7 +24665,7 @@
       "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24646,7 +24703,7 @@
       "typeText": "Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24665,7 +24722,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24703,7 +24760,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24779,6 +24836,25 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
+        "file": "types/api/src/api/workbook/version-proposal.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.revert": {
+      "schemaVersion": "1",
+      "path": "wb.version.revert",
+      "stableId": "WorkbookVersion.revert",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "revert",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
+      "typeText": "Promise<VersionResult<VersionRevertResult>>",
+      "compatibility": [],
+      "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
       },
       "ownerPackage": "@mog/types-api"
@@ -24817,7 +24893,7 @@
       "typeText": "Promise<VersionResult<AgentProposalWorkspaceHandle>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24836,7 +24912,7 @@
       "typeText": "Promise<VersionResult<AgentProposal>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-proposal.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24874,7 +24950,7 @@
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
+        "file": "types/api/src/api/workbook/version-review.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -31192,6 +31268,25 @@
       "asyncModel": "promise",
       "signature": "getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/layout.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.layout.getFilterHiddenRowsBitmap": {
+      "schemaVersion": "1",
+      "path": "ws.layout.getFilterHiddenRowsBitmap",
+      "stableId": "WorksheetLayout.getFilterHiddenRowsBitmap",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetLayout",
+      "member": "getFilterHiddenRowsBitmap",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getFilterHiddenRowsBitmap(): Promise<Set<number>>;",
+      "typeText": "Promise<Set<number>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/layout.ts"
@@ -38310,6 +38405,25 @@
       "asyncModel": "promise",
       "signature": "getViewOptions(): Promise<ViewOptions>;",
       "typeText": "Promise<ViewOptions>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/view.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.view.setFrozenPanes": {
+      "schemaVersion": "1",
+      "path": "ws.view.setFrozenPanes",
+      "stableId": "WorksheetView.setFrozenPanes",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetView",
+      "member": "setFrozenPanes",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setFrozenPanes(rows: number, cols: number): Promise<void>;",
+      "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/worksheet/view.ts"

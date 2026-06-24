@@ -45,6 +45,10 @@ import type {
   VersionProposalApi as ApiRootVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as ApiRootPutMergeResolutionPayloadResult,
   VersionRefMutationResult as ApiRootRefMutationResult,
+  VersionRefReadResult as ApiRootRefReadResult,
+  VersionRevertInput as ApiRootRevertInput,
+  VersionRevertOptions as ApiRootRevertOptions,
+  VersionRevertResult as ApiRootRevertResult,
   VersionResult as ApiRootVersionResult,
   VersionSaveMergeResolutionsRequest as ApiRootSaveMergeResolutionsRequest,
   VersionHead as ApiRootVersionHead,
@@ -52,6 +56,7 @@ import type {
   VersionSemanticValue as ApiRootSemanticValue,
   VersionSealedResolutionPayloadRef as ApiRootSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ApiRootStoreDiagnostic,
+  VersionSymbolicRefReadResult as ApiRootSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as ApiRootSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as ApiRootUpdateBranchOptions,
   WorkbookDiffPage as ApiRootDiffPage,
@@ -106,6 +111,10 @@ import type {
   VersionProposalApi as PackageApiVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as PackageApiPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageApiRefMutationResult,
+  VersionRefReadResult as PackageApiRefReadResult,
+  VersionRevertInput as PackageApiRevertInput,
+  VersionRevertOptions as PackageApiRevertOptions,
+  VersionRevertResult as PackageApiRevertResult,
   VersionResult as PackageApiVersionResult,
   VersionSaveMergeResolutionsRequest as PackageApiSaveMergeResolutionsRequest,
   VersionHead as PackageApiVersionHead,
@@ -113,6 +122,7 @@ import type {
   VersionSemanticValue as PackageApiSemanticValue,
   VersionSealedResolutionPayloadRef as PackageApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageApiStoreDiagnostic,
+  VersionSymbolicRefReadResult as PackageApiSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as PackageApiSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as PackageApiUpdateBranchOptions,
   WorkbookDiffPage as PackageApiDiffPage,
@@ -167,6 +177,10 @@ import type {
   VersionProposalApi as PackageWorkbookVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as PackageWorkbookPutMergeResolutionPayloadResult,
   VersionRefMutationResult as PackageWorkbookRefMutationResult,
+  VersionRefReadResult as PackageWorkbookRefReadResult,
+  VersionRevertInput as PackageWorkbookRevertInput,
+  VersionRevertOptions as PackageWorkbookRevertOptions,
+  VersionRevertResult as PackageWorkbookRevertResult,
   VersionResult as PackageWorkbookVersionResult,
   VersionSaveMergeResolutionsRequest as PackageWorkbookSaveMergeResolutionsRequest,
   VersionHead as PackageWorkbookVersionHead,
@@ -174,6 +188,7 @@ import type {
   VersionSemanticValue as PackageWorkbookSemanticValue,
   VersionSealedResolutionPayloadRef as PackageWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as PackageWorkbookStoreDiagnostic,
+  VersionSymbolicRefReadResult as PackageWorkbookSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as PackageWorkbookSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as PackageWorkbookUpdateBranchOptions,
   WorkbookDiffPage as PackageWorkbookDiffPage,
@@ -228,6 +243,10 @@ import type {
   VersionProposalApi as WorkbookNamespaceVersionProposalApi,
   VersionPutMergeResolutionPayloadResult as WorkbookNamespacePutMergeResolutionPayloadResult,
   VersionRefMutationResult as WorkbookNamespaceRefMutationResult,
+  VersionRefReadResult as WorkbookNamespaceRefReadResult,
+  VersionRevertInput as WorkbookNamespaceRevertInput,
+  VersionRevertOptions as WorkbookNamespaceRevertOptions,
+  VersionRevertResult as WorkbookNamespaceRevertResult,
   VersionResult as WorkbookNamespaceVersionResult,
   VersionSaveMergeResolutionsRequest as WorkbookNamespaceSaveMergeResolutionsRequest,
   VersionHead as WorkbookNamespaceVersionHead,
@@ -235,6 +254,7 @@ import type {
   VersionSemanticValue as WorkbookNamespaceSemanticValue,
   VersionSealedResolutionPayloadRef as WorkbookNamespaceSealedResolutionPayloadRef,
   VersionStoreDiagnostic as WorkbookNamespaceStoreDiagnostic,
+  VersionSymbolicRefReadResult as WorkbookNamespaceSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as WorkbookNamespaceSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as WorkbookNamespaceUpdateBranchOptions,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
@@ -491,8 +511,23 @@ type _WorkbookNamespaceDeleteExpectedRefRevisionRejectsOpaque = Assert<
 type _WorkbookNamespaceExportsBranchRead = Assert<
   IsEqual<WorkbookNamespaceBranchRefReadResult, PackageWorkbookBranchRefReadResult>
 >;
+type _WorkbookNamespaceExportsRefRead = Assert<
+  IsEqual<WorkbookNamespaceRefReadResult, PackageWorkbookRefReadResult>
+>;
+type _WorkbookNamespaceExportsSymbolicRefRead = Assert<
+  IsEqual<WorkbookNamespaceSymbolicRefReadResult, PackageWorkbookSymbolicRefReadResult>
+>;
 type _WorkbookNamespaceExportsBranchMutation = Assert<
   IsEqual<WorkbookNamespaceRefMutationResult, PackageWorkbookRefMutationResult>
+>;
+type _WorkbookNamespaceExportsRevertInput = Assert<
+  IsEqual<WorkbookNamespaceRevertInput, PackageWorkbookRevertInput>
+>;
+type _WorkbookNamespaceExportsRevertOptions = Assert<
+  IsEqual<WorkbookNamespaceRevertOptions, PackageWorkbookRevertOptions>
+>;
+type _WorkbookNamespaceExportsRevertResult = Assert<
+  IsEqual<WorkbookNamespaceRevertResult, PackageWorkbookRevertResult>
 >;
 type _WorkbookNamespaceExportsStoreDiagnostic = Assert<
   IsEqual<WorkbookNamespaceStoreDiagnostic, PackageWorkbookStoreDiagnostic>
@@ -675,9 +710,18 @@ type _ApiRootDeleteExpectedRefRevisionRejectsOpaque = Assert<
 type _ApiRootExportsBranchRead = Assert<
   IsEqual<ApiRootBranchRefReadResult, PackageApiBranchRefReadResult>
 >;
+type _ApiRootExportsRefRead = Assert<IsEqual<ApiRootRefReadResult, PackageApiRefReadResult>>;
+type _ApiRootExportsSymbolicRefRead = Assert<
+  IsEqual<ApiRootSymbolicRefReadResult, PackageApiSymbolicRefReadResult>
+>;
 type _ApiRootExportsBranchMutation = Assert<
   IsEqual<ApiRootRefMutationResult, PackageApiRefMutationResult>
 >;
+type _ApiRootExportsRevertInput = Assert<IsEqual<ApiRootRevertInput, PackageApiRevertInput>>;
+type _ApiRootExportsRevertOptions = Assert<
+  IsEqual<ApiRootRevertOptions, PackageApiRevertOptions>
+>;
+type _ApiRootExportsRevertResult = Assert<IsEqual<ApiRootRevertResult, PackageApiRevertResult>>;
 type _ApiRootExportsStoreDiagnostic = Assert<
   IsEqual<ApiRootStoreDiagnostic, PackageApiStoreDiagnostic>
 >;

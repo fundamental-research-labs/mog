@@ -440,6 +440,79 @@
       "blocking": true
     },
     {
+      "id": "mog-version.public-api-examples",
+      "dialect": "mog-version",
+      "category": "workbook",
+      "matchers": [
+        {
+          "id": "mog-version.workbook-commit-guess",
+          "kind": "call",
+          "symbol": "wb.commit"
+        },
+        {
+          "id": "mog-version.workbook-branch-guess",
+          "kind": "call",
+          "symbol": "wb.branch"
+        },
+        {
+          "id": "mog-version.workbook-create-branch-guess",
+          "kind": "call",
+          "symbol": "wb.createBranch"
+        },
+        {
+          "id": "mog-version.workbook-checkout-guess",
+          "kind": "call",
+          "symbol": "wb.checkout"
+        },
+        {
+          "id": "mog-version.workbook-preview-merge-guess",
+          "kind": "call",
+          "symbol": "wb.previewMerge"
+        },
+        {
+          "id": "mog-version.workbook-merge-preview-guess",
+          "kind": "call",
+          "symbol": "wb.mergePreview"
+        },
+        {
+          "id": "mog-version.workbook-apply-merge-guess",
+          "kind": "call",
+          "symbol": "wb.applyMerge"
+        }
+      ],
+      "message": "Workbook version history APIs are exposed through the `wb.version` public API slice.",
+      "suggestion": "Use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, and `wb.version.applyMerge`; every operation returns a VersionResult and merge calls also return status receipts.",
+      "mogReplacements": [
+        {
+          "path": "wb.version.commit",
+          "snippet": "const commitResult = await wb.version.commit({\n  message: \"Update forecast inputs\",\n});\nif (!commitResult.ok) {\n  throw new Error(commitResult.error.reason);\n}\nconst commitId = commitResult.value.id;",
+          "note": "Commit captures the current workbook working state and advances the active or explicit target ref."
+        },
+        {
+          "path": "wb.version.createBranch",
+          "snippet": "const branchResult = await wb.version.createBranch({\n  name: \"refs/heads/scenario/budget-q1\",\n  targetCommitId: commitId,\n  expectedAbsent: true,\n});\nif (!branchResult.ok) {\n  throw new Error(branchResult.error.reason);\n}\nconst branchRef = branchResult.value;",
+          "note": "Create public refs under refs/heads/scenario/* or refs/heads/agent/* for branch workflows."
+        },
+        {
+          "path": "wb.version.checkout",
+          "snippet": "const checkoutResult = await wb.version.checkout({\n  kind: \"ref\",\n  name: \"refs/heads/scenario/budget-q1\",\n});\nif (!checkoutResult.ok) {\n  throw new Error(checkoutResult.error.reason);\n}\nif (checkoutResult.value.materialization !== \"applied\") {\n  throw new Error(\"Checkout planned but did not materialize workbook state\");\n}",
+          "note": "Checkout refuses dirty or unsafe state and reports whether workbook state was materialized."
+        },
+        {
+          "path": "wb.version.merge",
+          "snippet": "const previewResult = await wb.version.merge(\n  { base: baseCommitId, ours: mainCommitId, theirs: branchCommitId },\n  {\n    mode: \"preview\",\n    targetRef: \"refs/heads/main\",\n    expectedTargetHead,\n    persistReviewRecord: true,\n  },\n);\nif (!previewResult.ok) {\n  throw new Error(previewResult.error.reason);\n}\nconst preview = previewResult.value;\nif (preview.status === \"blocked\") {\n  throw new Error(preview.diagnostics.map((diagnostic) => diagnostic.safeMessage).join(\"\\n\"));\n}\nconst resolutions = preview.status === \"conflicted\"\n  ? preview.conflicts.map((conflict) => {\n      const option =\n        conflict.resolutionOptions.find((candidate) => candidate.kind === \"acceptTheirs\") ??\n        conflict.resolutionOptions[0];\n      if (!option) {\n        throw new Error(\"No resolution option for \" + conflict.conflictId);\n      }\n      return {\n        conflictId: conflict.conflictId,\n        expectedConflictDigest: conflict.conflictDigest,\n        optionId: option.optionId,\n        kind: option.kind,\n      };\n    })\n  : [];",
+          "note": "Merge is preview-only; inspect blocked/conflicted/clean/fast-forward statuses before applying."
+        },
+        {
+          "path": "wb.version.applyMerge",
+          "snippet": "const applyResult = await wb.version.applyMerge(\n  {\n    base: baseCommitId,\n    ours: expectedTargetHead.commitId,\n    theirs: branchCommitId,\n    resolutions,\n  },\n  {\n    mode: \"apply\",\n    targetRef: \"refs/heads/main\",\n    expectedTargetHead,\n  },\n);\nif (!applyResult.ok) {\n  throw new Error(applyResult.error.reason);\n}\nconst applied = applyResult.value;\nif (applied.status === \"blocked\" || applied.status === \"staleTargetHead\") {\n  throw new Error(applied.diagnostics.map((diagnostic) => diagnostic.safeMessage).join(\"\\n\"));\n}\nif (applied.status === \"conflicted\") {\n  throw new Error(\"Merge still has \" + applied.requiredResolutionCount + \" unresolved conflicts\");\n}\nif (applied.status === \"planned\") {\n  throw new Error(\"applyMerge planned the merge but did not mutate the target ref\");\n}\nconst newHeadId = applied.commitRef.id;",
+          "note": "Apply merge with a concrete target ref and expected target head so stale refs fail closed."
+        }
+      ],
+      "confidence": 0.86,
+      "blocking": false
+    },
+    {
       "id": "officejs.formatting",
       "dialect": "officejs",
       "category": "formatting",

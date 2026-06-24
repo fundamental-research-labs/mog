@@ -631,11 +631,22 @@ function parseDeprecation(docstring: string): DeprecationMetadata {
   };
 }
 
+function collectOverloadReturnTypeRefs(overloads: InterfaceTypeElement[] | undefined): string[] {
+  const seen = new Set<string>();
+  for (const overload of overloads ?? []) {
+    const returnTypeText =
+      getMemberReturnTypeNode(overload.member)?.getText(overload.sourceFile) ?? '';
+    for (const typeName of collectTypeRefs(returnTypeText)) seen.add(typeName);
+  }
+  return [...seen];
+}
+
 function createMemberEntry(options: {
   interfaceName: string;
   memberName: string;
   member: ts.TypeElement;
   sourceFile: ts.SourceFile;
+  overloads?: InterfaceTypeElement[];
   canonicalPath: string;
   root: ApiRoot;
   parentRoot?: 'workbook' | 'worksheet';
@@ -647,6 +658,7 @@ function createMemberEntry(options: {
     memberName,
     member,
     sourceFile,
+    overloads,
     canonicalPath,
     root,
     parentRoot,
@@ -664,7 +676,9 @@ function createMemberEntry(options: {
   return {
     signature,
     docstring,
-    usedTypes: collectTypeRefs(signature),
+    usedTypes: Array.from(
+      new Set([...collectTypeRefs(signature), ...collectOverloadReturnTypeRefs(overloads)]),
+    ),
     stableId: `${interfaceName}.${memberName}`,
     canonicalPath,
     root,
@@ -806,6 +820,7 @@ function extractInterface(
       memberName: name,
       member: chosen.member,
       sourceFile: chosen.sourceFile,
+      overloads,
       canonicalPath: `${options.pathPrefix}.${name}`,
       root: options.root,
       ...(options.parentRoot ? { parentRoot: options.parentRoot } : {}),

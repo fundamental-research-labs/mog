@@ -120,6 +120,7 @@ const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookNotifications: 'notifications',
   WorkbookTheme: 'theme',
   WorkbookSlicers: 'slicers',
+  WorkbookVersion: 'version',
   WorkbookViewport: 'viewport',
 };
 

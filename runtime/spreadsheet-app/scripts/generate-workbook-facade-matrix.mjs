@@ -120,7 +120,7 @@ const VERSION_PROPOSAL_METHOD_NAMES = new Set([
 ]);
 const VERSION_REVERT_METHOD_NAMES = new Set(['revert']);
 const VERSION_PROVENANCE_METHOD_NAMES = new Set(['promotePendingRemote']);
-const VERSION_SPEC_SUPPLEMENT_METHOD_NAMES = new Set(['revert']);
+const VERSION_SPEC_SUPPLEMENT_METHOD_NAMES = new Set([]);
 const VERSION_METHOD_GROUPS = [
   ['review', VERSION_REVIEW_METHOD_NAMES],
   ['proposal', VERSION_PROPOSAL_METHOD_NAMES],

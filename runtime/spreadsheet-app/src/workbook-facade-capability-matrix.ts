@@ -5287,6 +5287,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capability: 'workbook:read',
     },
+    getFilterHiddenRowsBitmap: {
+      decision: 'allow',
+      capability: 'workbook:read',
+    },
     getHiddenColumnsBitmap: {
       decision: 'allow',
       capability: 'workbook:read',
@@ -6581,6 +6585,10 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     getViewOptions: {
       decision: 'allow',
       capability: 'workbook:read',
+    },
+    setFrozenPanes: {
+      decision: 'allow',
+      capability: 'workbook:write',
     },
     setGridlines: {
       decision: 'allow',

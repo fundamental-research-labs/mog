@@ -1,5 +1,6 @@
 mod cells;
 mod chart_sources;
+mod comment_package_metadata;
 mod dimensions;
 mod named_ranges;
 mod pivot_cache_reconciliation;
@@ -13,6 +14,7 @@ pub(in crate::storage::engine) use cells::{
     export_authored_style_runs_for_sheet, export_cells_for_sheet,
     export_col_style_ranges_for_sheet, export_row_col_styles_for_sheet,
 };
+pub(in crate::storage::engine) use comment_package_metadata::export_comment_package_metadata;
 pub(in crate::storage::engine) use dimensions::{
     ExportedTableProjectionInput, TableExportProjection, export_dimensions_for_sheet,
     export_tables_for_sheet, finalize_table_export_projection,
@@ -489,7 +491,7 @@ fn export_single_sheet(
         .map(|c| data_max_col.max(c + 1))
         .unwrap_or(data_max_col);
     let _sheet_max_col = max_col;
-    let (stored_rows, stored_cols, legacy_comment_authors, comment_package, drawing_package) = {
+    let (stored_rows, stored_cols) = {
         let txn = stores.storage.doc().transact();
         if let Some(meta) = get_meta_for_export(&txn, stores.storage.sheets(), sheet_id) {
             let rows = match meta.get(&txn, KEY_ROWS) {
@@ -500,29 +502,13 @@ fn export_single_sheet(
                 Some(Out::Any(Any::Number(n))) => Some(n.max(0.0) as u32),
                 _ => None,
             };
-            let legacy_comment_authors = match meta.get(&txn, "legacyCommentAuthors") {
-                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).unwrap_or_default(),
-                _ => Vec::new(),
-            };
-            let comment_package = match meta.get(&txn, "commentPackage") {
-                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).ok(),
-                _ => None,
-            };
-            let drawing_package = match meta.get(&txn, "drawingPackage") {
-                Some(Out::Any(Any::String(s))) => serde_json::from_str(&s).ok(),
-                _ => None,
-            };
-            (
-                rows,
-                cols,
-                legacy_comment_authors,
-                comment_package,
-                drawing_package,
-            )
+            (rows, cols)
         } else {
-            (None, None, Vec::new(), None, None)
+            (None, None)
         }
     };
+    let (legacy_comment_authors, comment_package, drawing_package) =
+        export_comment_package_metadata(stores, sheet_id);
     let dims_max_row = sheet_dimensions
         .row_heights
         .last()

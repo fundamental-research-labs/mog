@@ -325,18 +325,18 @@ pub(crate) fn hydrate_sheet(
     if !sheet.legacy_comment_authors.is_empty()
         && let Ok(json) = serde_json::to_string(&sheet.legacy_comment_authors)
     {
-        sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
     }
     if let Some(comment_package) = &sheet.comment_package
         && !comment_package.is_empty()
         && let Ok(json) = serde_json::to_string(comment_package)
     {
-        sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
     }
     if let Some(drawing_package) = &sheet.drawing_package
         && let Ok(json) = serde_json::to_string(drawing_package)
     {
-        sheet_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
     }
 
     // --- Comments (yrs_schema::comment) ---
@@ -749,18 +749,18 @@ pub(crate) fn hydrate_sheet_with_allocation(
     if !sheet.legacy_comment_authors.is_empty()
         && let Ok(json) = serde_json::to_string(&sheet.legacy_comment_authors)
     {
-        sheet_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "legacyCommentAuthors", Any::String(Arc::from(json)));
     }
     if let Some(comment_package) = &sheet.comment_package
         && !comment_package.is_empty()
         && let Ok(json) = serde_json::to_string(comment_package)
     {
-        sheet_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "commentPackage", Any::String(Arc::from(json)));
     }
     if let Some(drawing_package) = &sheet.drawing_package
         && let Ok(json) = serde_json::to_string(drawing_package)
     {
-        sheet_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
+        meta_map.insert(txn, "drawingPackage", Any::String(Arc::from(json)));
     }
     hydrate_comments(txn, &comments_map, &pos_map, &sheet.comments, persons);
     hydrate_sparklines(

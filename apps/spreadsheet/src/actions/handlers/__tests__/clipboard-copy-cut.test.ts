@@ -33,6 +33,7 @@ function createDeps({
   hiddenRows = [],
   hiddenCols = [],
   filterHiddenRows = [],
+  filterSummaries = [],
   selectionRange = { startRow: 10, startCol: 0, endRow: 10, endCol: 2 },
   rangeData = [
     [
@@ -47,6 +48,13 @@ function createDeps({
   hiddenRows?: number[];
   hiddenCols?: number[];
   filterHiddenRows?: number[];
+  filterSummaries?: Array<{
+    id: string;
+    filterKind: 'autoFilter';
+    range: { startRow: number; startCol: number; endRow: number; endCol: number };
+    activeColumnCount: number;
+    hasActiveCriteria: boolean;
+  }>;
   selectionRange?: { startRow: number; startCol: number; endRow: number; endCol: number };
   rangeData?: Array<Array<{ value?: unknown; formatted?: string; formula?: string } | undefined>>;
   mergedRegions?: Array<{ startRow: number; startCol: number; endRow: number; endCol: number }>;
@@ -66,6 +74,9 @@ function createDeps({
       isRowHidden: jest.fn(async (row: number) => hiddenRows.includes(row)),
       isColumnHidden: jest.fn(async (col: number) => hiddenCols.includes(col)),
       getFilterHiddenRowsBitmap: jest.fn(async () => new Set(filterHiddenRows)),
+    },
+    filters: {
+      listSummaries: jest.fn().mockResolvedValue(filterSummaries),
     },
     formats: {
       get: jest.fn(async (row: number, col: number) => formatByCell.get(`${row},${col}`)),
@@ -190,6 +201,15 @@ describe('clipboard copy/cut actions', () => {
         selectionRange: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
         hiddenRows: [1],
         filterHiddenRows: [2, 4],
+        filterSummaries: [
+          {
+            id: 'filter-1',
+            filterKind: 'autoFilter',
+            range: { startRow: 0, startCol: 0, endRow: 4, endCol: 1 },
+            activeColumnCount: 1,
+            hasActiveCriteria: true,
+          },
+        ],
         rangeData: [
           [
             { value: 'Name', formatted: 'Name' },
@@ -227,6 +247,34 @@ describe('clipboard copy/cut actions', () => {
         'Visible',
         'keep',
       ]);
+    });
+
+    it('preserves all selected rows when filter-hidden rows are outside the copied columns', async () => {
+      const { deps, clipboardCommands } = createDeps({
+        selectionRange: { startRow: 1, startCol: 3, endRow: 3, endCol: 3 },
+        filterHiddenRows: [2, 4],
+        filterSummaries: [
+          {
+            id: 'filter-1',
+            filterKind: 'autoFilter',
+            range: { startRow: 0, startCol: 0, endRow: 5, endCol: 1 },
+            activeColumnCount: 1,
+            hasActiveCriteria: true,
+          },
+        ],
+        rangeData: [
+          [{ value: 's1', formatted: 's1' }],
+          [{ value: 's2', formatted: 's2' }],
+          [{ value: 's3', formatted: 's3' }],
+        ],
+      });
+
+      const data = await runClipboardAction(action, command, deps, clipboardCommands);
+      const systemClipboard = await readSystemClipboardPayload();
+
+      expect(systemClipboard.text).toBe('s1\ns2\ns3');
+      expect(data.textSignature).toBe(systemClipboard.text);
+      expect(Object.values(data.cells).map((cell) => cell.raw)).toEqual(['s1', 's2', 's3']);
     });
 
     it('serializes merged covered cells as blank TSV fields', async () => {

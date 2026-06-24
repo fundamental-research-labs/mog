@@ -28,7 +28,7 @@ import type {
   ActionResult,
   AsyncActionHandler,
 } from '@mog-sdk/contracts/actions';
-import type { Comment } from '@mog-sdk/contracts/api';
+import type { Comment, FilterSummaryInfo } from '@mog-sdk/contracts/api';
 import type { ClipboardData } from '@mog-sdk/contracts/actors';
 import { cellId } from '@mog-sdk/contracts/cell-identity';
 import type {
@@ -167,6 +167,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     rangeSchemas,
     conditionalFormats,
     commentEntries,
+    filterSummaries,
   ] = await Promise.all([
     ws.getRange(minRow, minCol, maxRow, maxCol),
     ws.structure.getMergedRegions(),
@@ -198,9 +199,12 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
           .catch(() => [`${r},${c}`, []] as [string, Comment[]]);
       }),
     ),
+    ws.filters.listSummaries({ scope: 'available' }).catch((): FilterSummaryInfo[] => []),
   ]);
   formatEntries = fetchedFormats;
   const commentsByPosition = new Map<string, Comment[]>(commentEntries);
+  const copyIntersectsActiveFilter =
+    filterHiddenRows.size > 0 && rangesIntersectAnyFilter(captureRanges, filterSummaries);
 
   // Build lookup maps for sync access from 2D CellData[][] array.
   // ws.getRange() returns {value, format, formatted} but buildClipboardCellData
@@ -277,12 +281,12 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
       };
     },
   );
-  if (filterHiddenRows.size > 0) {
+  if (copyIntersectsActiveFilter) {
     systemClipboardExportOptions.isRowHidden = (_sid, row) => filterHiddenRows.has(row);
   }
 
   const filteredCopyStoreReader: ClipboardStoreReader =
-    filterHiddenRows.size > 0
+    copyIntersectsActiveFilter
       ? {
           ...storeReader,
           isRowHidden: (_sid, row) => filterHiddenRows.has(row),
@@ -297,7 +301,7 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
         captureRanges,
         sheetId,
         filteredCopyStoreReader,
-        filterHiddenRows.size > 0 ? { skipHidden: true } : undefined,
+        copyIntersectsActiveFilter ? { skipHidden: true } : undefined,
       );
       data.sourceRanges = clipRanges;
       return data;
@@ -323,6 +327,19 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
       );
     },
   };
+}
+
+function rangesIntersectAnyFilter(ranges: CellRange[], filters: FilterSummaryInfo[]): boolean {
+  return ranges.some((range) => filters.some((filter) => rangesIntersect(range, filter.range)));
+}
+
+function rangesIntersect(left: CellRange, right: FilterSummaryInfo['range']): boolean {
+  return (
+    left.startRow <= right.endRow &&
+    left.endRow >= right.startRow &&
+    left.startCol <= right.endCol &&
+    left.endCol >= right.startCol
+  );
 }
 
 async function createSparseFullShapeCopyCutDeps(

@@ -63,6 +63,28 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           refRevision: created.value.revision,
         },
       });
+      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
+            revision: created.value.revision,
+          },
+        },
+      });
+      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
+            revision: created.value.revision,
+          },
+        },
+      });
 
       await wb.activeSheet.setCell('A1', 'beta');
       const branchHeadBeforeCommit = await version.getHead();
@@ -94,6 +116,26 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           ref: {
             name: 'refs/heads/scenario/manual-smoke',
             commitId: betaCommit.value.id,
+          },
+        },
+      });
+      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
+          },
+        },
+      });
+      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
           },
         },
       });
@@ -197,6 +239,26 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           ref: {
             name: 'refs/heads/scenario/manual-smoke',
             commitId: branchRevertCommitId,
+          },
+        },
+      });
+      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
+          },
+        },
+      });
+      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+        ok: true,
+        value: {
+          status: 'success',
+          ref: {
+            name: 'HEAD',
+            target: 'refs/heads/scenario/manual-smoke',
           },
         },
       });

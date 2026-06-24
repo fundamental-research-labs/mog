@@ -278,6 +278,7 @@ export function setupEditorCommitCoordination(config: EditorCommitCoordinationCo
     const wasEditing =
       previousState?.matches('editing') ||
       previousState?.matches('formulaEditing') ||
+      previousState?.matches('richTextEditing') ||
       previousState?.matches('imeComposing');
     const isValidating = state.matches('validating');
     const didCommit = previousState?.matches('committing') && state.matches('inactive');

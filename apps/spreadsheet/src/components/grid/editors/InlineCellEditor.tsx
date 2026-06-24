@@ -178,6 +178,7 @@ export function InlineCellEditor({ workbookSettings, rendererSkin }: InlineCellE
   // A.5: Track expanded width for content that overflows cell bounds
   const [expandedWidth, setExpandedWidth] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+  const focusedEditSessionRef = useRef<string | null>(null);
 
   // Scroll sync: wrapper div ref that receives imperative CSS transforms on scroll
   const scrollSyncRef = useRef<HTMLDivElement>(null);
@@ -240,6 +241,33 @@ export function InlineCellEditor({ workbookSettings, rendererSkin }: InlineCellE
     // The closure captures the latest effectiveCellRect from each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorDisplayValue, expandedWidth]);
+
+  const editSessionKey =
+    isEditingOnActiveSheet && editingCell
+      ? `${editingSheetId}:${editingCell.row}:${editingCell.col}`
+      : null;
+
+  // React autoFocus is not reliable after the grid's double-click path focuses
+  // the canvas container first. The inline textarea owns the edit keystream, so
+  // focus it once when a new in-cell edit session mounts.
+  useLayoutEffect(() => {
+    if (!editSessionKey || isFormulaBarFocused) {
+      focusedEditSessionRef.current = null;
+      return;
+    }
+    const el = inputRef.current;
+    if (!el || focusedEditSessionRef.current === editSessionKey) return;
+
+    focusedEditSessionRef.current = editSessionKey;
+    const selectionStart = hasSelection
+      ? Math.min(cursorPosition, selectionAnchor)
+      : cursorPosition;
+    const selectionEnd = hasSelection ? Math.max(cursorPosition, selectionAnchor) : cursorPosition;
+    el.focus({ preventScroll: true });
+    if (el.selectionStart !== selectionStart || el.selectionEnd !== selectionEnd) {
+      el.setSelectionRange(selectionStart, selectionEnd);
+    }
+  }, [editSessionKey, isFormulaBarFocused, cursorPosition, selectionAnchor, hasSelection]);
 
   // Sync textarea cursor position from editor state.
   //

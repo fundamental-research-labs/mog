@@ -92,6 +92,26 @@ describe('Auto-commit lifecycle (no manual completeCommit)', () => {
     expect(sim.isEditing()).toBe(false);
     expect(sim.activeCell()).toEqual({ row: 3, col: 3 });
   });
+
+  it('rich text edit and commit auto-completes', async () => {
+    sim = createIntegrationSimulator({
+      activeCell: { row: 0, col: 0 },
+    });
+
+    sim.startEditing('Hello World');
+    sim.system.access.commands.editor.startRichTextEditing([{ text: 'Hello World' }]);
+    sim.system.access.commands.editor.charSelectionChanged(0, 5);
+    sim.system.access.commands.editor.applyCharFormat({ bold: true });
+
+    const editorActor = (sim.system as any).editorActor;
+    expect(editorActor.getSnapshot().matches('richTextEditing')).toBe(true);
+
+    sim.commitEdit('none');
+    await sim.flush();
+
+    expect(editorActor.getSnapshot().matches('inactive')).toBe(true);
+    expect(sim.activeCell()).toEqual({ row: 0, col: 0 });
+  });
 });
 
 // =============================================================================

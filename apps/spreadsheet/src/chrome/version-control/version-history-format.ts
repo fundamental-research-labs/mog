@@ -55,6 +55,15 @@ export function shortCommitId(id: string): string {
 }
 
 export function versionDiffPreviewState(page: VersionSemanticDiffPage): VersionDiffPreviewState {
+  if (page.items.length > 0 && page.items.every((entry) => entry.structural.kind !== 'metadata')) {
+    return {
+      kind: 'redacted',
+      label: 'Restricted entries',
+      title: 'Restricted diff entries',
+      message: 'Some diff records are hidden by access policy.',
+    };
+  }
+
   const diagnostics = page.items.flatMap((entry) => entry.diagnostics ?? []);
   if (diagnostics.some(isStaleDiffDiagnostic)) {
     return {
@@ -88,14 +97,6 @@ export function versionDiffPreviewState(page: VersionSemanticDiffPage): VersionD
       message: 'This preview contains conflict records, not an applied clean diff.',
     };
   }
-  if (page.items.every((entry) => entry.structural.kind !== 'metadata')) {
-    return {
-      kind: 'redacted',
-      label: 'Restricted entries',
-      title: 'Restricted diff entries',
-      message: 'Some diff records are hidden by access policy.',
-    };
-  }
   return {
     kind: 'changes',
     label: 'Changes',
@@ -105,7 +106,7 @@ export function versionDiffPreviewState(page: VersionSemanticDiffPage): VersionD
 }
 
 export function versionDiffEntryLabel(entry: VersionDiffEntry): string {
-  if (entry.structural.kind !== 'metadata') return 'Restricted change';
+  if (entry.structural.kind !== 'metadata') return 'Redacted change';
   const path = entry.structural.propertyPath.join('.');
   const label = path ? `${entry.structural.domain} ${path}` : entry.structural.domain;
   return isConflictDiffEntry(entry) ? `Conflict ${label}` : label;

@@ -62,6 +62,20 @@ const parentDiffPreviewCases: readonly ParentDiffPreviewCase[] = [
     'Conflicts only',
     'Conflicts only',
   ],
+  [
+    'redacted',
+    semanticDiffPage([
+      {
+        structural: { kind: 'redacted', reason: 'permission-denied' },
+        before: { kind: 'redacted', reason: 'redaction-policy' },
+        after: { kind: 'redacted', reason: 'historical-acl-unavailable' },
+        diagnostics: [diffDiagnostic('VERSION_PERMISSION_DENIED', 'unsupported')],
+      },
+    ]),
+    'redacted',
+    'Restricted diff entries',
+    'Restricted entries',
+  ],
 ];
 
 describe('VersionHistoryPanelContent action flows', () => {
@@ -142,6 +156,106 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(
       within(screen.getByTestId('version-history-action-result')).getByRole('status'),
     ).toHaveTextContent('Committed changes');
+  });
+
+  it('does not announce commit success until the post-commit history refresh resolves', async () => {
+    const commitResult =
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>>();
+    const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
+    const getSurfaceStatus = jest
+      .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
+      .mockResolvedValueOnce(createSurfaceStatus())
+      .mockImplementationOnce(async () => refreshedSurface.promise);
+    const workbook = createWorkbook({
+      getSurfaceStatus,
+      commit: jest.fn(async () => commitResult.promise),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
+    await user.click(screen.getByTestId('version-history-commit-button'));
+
+    commitResult.resolve({
+      ok: true,
+      value: {
+        id: HEAD_COMMIT_ID,
+        parents: [PARENT_COMMIT_ID],
+        createdAt: '2026-06-22T10:15:00.000Z',
+        author: { redacted: false, displayName: 'Reviewer' },
+        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+        'Refreshing version history',
+      ),
+    );
+    expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
+      'Committed changes',
+    );
+
+    refreshedSurface.resolve(createSurfaceStatus());
+    await expectActionResult('Committed changes', 'success');
+  });
+
+  it('does not announce branch creation until refreshed refs include the new checkout action', async () => {
+    const branchName = 'refs/heads/review/version-panel';
+    const branchResult =
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
+    const refreshedRefs =
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['listRefs']>>>();
+    const listRefs = jest
+      .fn<VersionHistoryWorkbook['version']['listRefs']>()
+      .mockImplementationOnce(() => createWorkbook().version.listRefs())
+      .mockImplementationOnce(async () => refreshedRefs.promise);
+    const workbook = createWorkbook({
+      listRefs,
+      createBranch: jest.fn(async () => branchResult.promise),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await user.click(screen.getByTestId('version-history-create-branch-button'));
+
+    branchResult.resolve({
+      ok: true,
+      value: {
+        name: branchName,
+        commitId: HEAD_COMMIT_ID,
+        revision: { kind: 'counter', value: '3' },
+      },
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
+        'Refreshing version history',
+      ),
+    );
+    expect(screen.queryByTestId(checkoutBranchTestId(branchName))).not.toBeInTheDocument();
+
+    refreshedRefs.resolve({
+      ok: true,
+      value: {
+        items: [
+          {
+            name: 'refs/heads/main',
+            commitId: HEAD_COMMIT_ID,
+            revision: REF_REVISION,
+          },
+          {
+            name: branchName,
+            commitId: HEAD_COMMIT_ID,
+            revision: { kind: 'counter', value: '3' },
+          },
+        ],
+        limit: 2,
+      },
+    });
+    await expectActionResult('Created review/version-panel', 'success');
+    expect(await screen.findByTestId(checkoutBranchTestId(branchName))).toBeEnabled();
   });
 
   it('refreshes commit availability when workbook edits dirty an open panel', async () => {
@@ -272,6 +386,9 @@ describe('VersionHistoryPanelContent action flows', () => {
       expect(parentDiff).toHaveAttribute('data-state', state);
       expect(parentDiff).toHaveTextContent(title);
       expect(within(parentDiff).getByRole('status')).toHaveTextContent(`State ${label}`);
+      if (state === 'redacted') {
+        expect(parentDiff).toHaveTextContent('Redacted change');
+      }
       expect(parentDiff).not.toHaveTextContent('No semantic changes');
     },
   );

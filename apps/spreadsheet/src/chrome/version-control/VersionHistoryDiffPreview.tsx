@@ -71,7 +71,7 @@ export function VersionHistoryDiffPreview({
         >
           <div className="font-medium text-ss-text">{state.title}</div>
           <div className="text-ss-text-secondary">{state.message}</div>
-          {state.kind === 'conflict-only' ? (
+          {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
             <ol className="mt-1 flex flex-col gap-1 m-0 p-0 list-none">
               {diffPreview.page.items.map((entry, index) => (
                 <li key={index} className="text-[11px] text-ss-text-secondary truncate">

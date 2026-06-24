@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   AgentProposalSummary,
   Paged,
@@ -79,8 +79,11 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   readonly loading: boolean;
 } {
   const [loadState, setLoadState] = useState<VersionHistoryLoadState>({ status: 'loading' });
+  const pendingRefreshRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const inFlightLoadRef = useRef<Promise<void> | undefined>(undefined);
+  const queuedRefreshRef = useRef(false);
 
-  const load = useCallback(async () => {
+  const runLoad = useCallback(async () => {
     setLoadState((current) => ({
       status: 'loading',
       previous:
@@ -155,6 +158,34 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     setLoadState({ status: 'ready', data });
   }, [workbook]);
 
+  const load = useCallback(async () => {
+    if (pendingRefreshRef.current !== undefined) {
+      clearTimeout(pendingRefreshRef.current);
+      pendingRefreshRef.current = undefined;
+    }
+
+    if (inFlightLoadRef.current) {
+      queuedRefreshRef.current = true;
+      await inFlightLoadRef.current;
+      return;
+    }
+
+    const refresh = (async () => {
+      do {
+        queuedRefreshRef.current = false;
+        await runLoad();
+      } while (queuedRefreshRef.current);
+    })();
+    inFlightLoadRef.current = refresh;
+    try {
+      await refresh;
+    } finally {
+      if (inFlightLoadRef.current === refresh) {
+        inFlightLoadRef.current = undefined;
+      }
+    }
+  }, [runLoad]);
+
   useEffect(() => {
     void load();
   }, [load]);
@@ -162,13 +193,17 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   useEffect(() => {
     if (!workbook.on) return undefined;
 
-    let pendingRefresh: ReturnType<typeof setTimeout> | undefined;
     const scheduleRefresh = () => {
-      if (pendingRefresh !== undefined) {
-        clearTimeout(pendingRefresh);
+      if (inFlightLoadRef.current) {
+        queuedRefreshRef.current = true;
+        return;
       }
-      pendingRefresh = setTimeout(() => {
-        pendingRefresh = undefined;
+
+      if (pendingRefreshRef.current !== undefined) {
+        clearTimeout(pendingRefreshRef.current);
+      }
+      pendingRefreshRef.current = setTimeout(() => {
+        pendingRefreshRef.current = undefined;
         void load();
       }, VERSION_HISTORY_REFRESH_DELAY_MS);
     };
@@ -178,8 +213,9 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     );
 
     return () => {
-      if (pendingRefresh !== undefined) {
-        clearTimeout(pendingRefresh);
+      if (pendingRefreshRef.current !== undefined) {
+        clearTimeout(pendingRefreshRef.current);
+        pendingRefreshRef.current = undefined;
       }
       for (const unsubscribe of unsubscriptions) {
         unsubscribe?.();

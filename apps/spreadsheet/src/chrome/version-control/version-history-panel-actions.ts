@@ -109,8 +109,9 @@ export function useVersionHistoryPanelActions({
 
     setCommitMessage('');
     setSelectedCommitId(result.value.id);
-    setActionState({ status: 'success', message: 'Committed changes' });
+    setActionState({ status: 'running', label: 'Refreshing version history' });
     await load();
+    setActionState({ status: 'success', message: 'Committed changes' });
   }, [canCommit, commitMessage, data, load, workbook]);
 
   const handleCreateBranch = useCallback(async () => {
@@ -137,11 +138,12 @@ export function useVersionHistoryPanelActions({
 
     setBranchName('');
     setSelectedCommitId(result.value.commitId);
+    setActionState({ status: 'running', label: 'Refreshing version history' });
+    await load();
     setActionState({
       status: 'success',
       message: `Created ${displayBranchName(result.value.name)}`,
     });
-    await load();
   }, [branchName, canCreateBranch, data, load, selectedOrHeadCommitId, workbook]);
 
   const handleStageRollback = useCallback(async () => {
@@ -211,11 +213,12 @@ export function useVersionHistoryPanelActions({
       return;
     }
 
+    setActionState({ status: 'running', label: 'Refreshing version history' });
+    await load();
     setActionState({
       status: 'success',
       message: remotePromotionActionMessage(result.value),
     });
-    await load();
   }, [canPromoteRemote, data, load, workbook]);
 
   const handleCheckoutRef = useCallback(
@@ -238,8 +241,9 @@ export function useVersionHistoryPanelActions({
       }
 
       setSelectedCommitId(result.value.plan.commitId);
-      setActionState({ status: 'success', message: `Checked out ${displayBranchName(ref.name)}` });
+      setActionState({ status: 'running', label: 'Refreshing version history' });
       await load();
+      setActionState({ status: 'success', message: `Checked out ${displayBranchName(ref.name)}` });
     },
     [canCheckout, load, workbook],
   );

@@ -66,7 +66,7 @@ export function buildVersionSurfaceCapabilityStates(
       diagnostics,
       capability,
       'hostCapability',
-      'Host policy denies this version capability.',
+      hostCapabilityDeniedReason(capability),
       false,
       'version.surfaceStatus.hostCapabilityDenied',
     );
@@ -382,4 +382,8 @@ function disabledCapability(
     surfaceDiagnostic(code, retryable ? 'warning' : 'info', reason, dependency, { capability }),
   );
   return { enabled: false, dependency, reason, retryable };
+}
+
+function hostCapabilityDeniedReason(capability: SurfaceVersionCapability): string {
+  return `Host policy denies ${capability}.`;
 }

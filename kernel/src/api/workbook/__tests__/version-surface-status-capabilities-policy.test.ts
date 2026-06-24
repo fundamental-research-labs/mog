@@ -78,7 +78,7 @@ describe('WorkbookVersion surface status policy capabilities', () => {
   });
 
   it.each(HOST_DENIAL_SPLIT_CAPABILITIES)(
-    'redacts host-denied disabled reason for %s without collapsing sibling capabilities',
+    'reports capability-specific host-denied disabled reason for %s without collapsing sibling capabilities',
     async (deniedCapability) => {
       const { version } = createSplitCapabilityReadyVersion({
         policySnapshot: {
@@ -92,11 +92,9 @@ describe('WorkbookVersion surface status policy capabilities', () => {
       expect(disabled).toMatchObject({
         enabled: false,
         dependency: 'hostCapability',
-        reason: 'Host policy denies this version capability.',
+        reason: `Host policy denies ${deniedCapability}.`,
         retryable: false,
       });
-      expect(disabled.reason).not.toContain('version:');
-      expect(disabled.reason).not.toContain(deniedCapability);
 
       const diagnostic = surface.diagnostics.find(
         (entry) =>
@@ -105,7 +103,7 @@ describe('WorkbookVersion surface status policy capabilities', () => {
       );
       expect(diagnostic).toMatchObject({
         dependency: 'hostCapability',
-        message: 'Host policy denies this version capability.',
+        message: `Host policy denies ${deniedCapability}.`,
         data: { capability: deniedCapability },
       });
 

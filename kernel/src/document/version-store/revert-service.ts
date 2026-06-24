@@ -1,10 +1,7 @@
 import type {
-  VersionDiagnosticPublicPayload,
   VersionRevertInput,
   VersionRevertOptions,
-  VersionRevertResult,
   VersionRevertTarget,
-  VersionStoreDiagnostic as PublicVersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
@@ -19,7 +16,6 @@ import {
   VERSION_GRAPH_HEAD_REF,
   VERSION_GRAPH_MAIN_REF,
   type VersionGraphBranchRefName,
-  type VersionGraphRef,
 } from './graph';
 import { createVersionObjectRecord, type VersionObjectRecord } from './object-store';
 import {
@@ -31,26 +27,9 @@ import {
   type VersionStoreProvider,
 } from './provider';
 import { REF_NAME_STORAGE_PREFIX, validateRefName } from './refs/ref-name';
-
-type RevertProviderFailure = {
-  readonly status: 'failed';
-  readonly diagnostics: readonly unknown[];
-  readonly mutationGuarantee: 'no-write-attempted' | 'ref-not-mutated' | 'registry-not-visible';
-  readonly retryable?: boolean;
-};
-
-type RevertProviderResult = VersionRevertResult | RevertProviderFailure;
-
-type RevertPlan =
-  | {
-      readonly ok: true;
-      readonly restoreCommit: WorkbookCommit;
-      readonly commitsToInvert: readonly WorkbookCommit[];
-    }
-  | {
-      readonly ok: false;
-      readonly result: RevertProviderResult;
-    };
+import { revertDiagnostic } from './revert-service/diagnostics';
+import { planTopOfRefRevert } from './revert-service/planning';
+import type { RevertProviderResult } from './revert-service/types';
 
 export type WorkbookVersionRevertServiceOptions = {
   readonly provider: VersionStoreProvider;
@@ -208,129 +187,6 @@ export function createWorkbookVersionRevertService(
   options: WorkbookVersionRevertServiceOptions,
 ): WorkbookVersionRevertService {
   return new WorkbookVersionRevertService(options);
-}
-
-function planTopOfRefRevert(
-  target: VersionRevertTarget,
-  current: VersionGraphRef,
-  commitsById: ReadonlyMap<string, WorkbookCommit>,
-): RevertPlan {
-  switch (target.kind) {
-    case 'commit':
-      return planCommitRevert(target, current, commitsById);
-    case 'range':
-      return planRangeRevert(target, current, commitsById);
-    case 'mergeCommit':
-      return planMergeCommitRevert(target, current, commitsById);
-  }
-}
-
-function planCommitRevert(
-  target: Extract<VersionRevertTarget, { readonly kind: 'commit' }>,
-  current: VersionGraphRef,
-  commitsById: ReadonlyMap<string, WorkbookCommit>,
-): RevertPlan {
-  const targetCommit = commitsById.get(target.commitId);
-  if (!targetCommit) return rejectedHistoryGap(target, { commitId: target.commitId });
-  if (current.commitId !== target.commitId) {
-    return requiresReview(target, {
-      reason: 'nonTipCommitRevert',
-      expectedHead: target.commitId,
-      actualHead: current.commitId,
-      targetRef: current.name,
-    });
-  }
-
-  const parentId = targetCommit.payload.parentCommitIds[0];
-  if (!parentId) {
-    return rejectedHistoryGap(target, { reason: 'rootCommitRevert', commitId: target.commitId });
-  }
-  const restoreCommit = commitsById.get(parentId);
-  if (!restoreCommit) return rejectedHistoryGap(target, { commitId: parentId });
-  return { ok: true, restoreCommit, commitsToInvert: [targetCommit] };
-}
-
-function planRangeRevert(
-  target: Extract<VersionRevertTarget, { readonly kind: 'range' }>,
-  current: VersionGraphRef,
-  commitsById: ReadonlyMap<string, WorkbookCommit>,
-): RevertPlan {
-  if (current.commitId !== target.headCommitId) {
-    return requiresReview(target, {
-      reason: 'nonTipRangeRevert',
-      expectedHead: target.headCommitId,
-      actualHead: current.commitId,
-      targetRef: current.name,
-    });
-  }
-
-  const restoreCommit = commitsById.get(target.baseCommitId);
-  if (!restoreCommit) return rejectedHistoryGap(target, { commitId: target.baseCommitId });
-
-  const path = firstParentPathExclusive(target.headCommitId, target.baseCommitId, commitsById);
-  if (!path) {
-    return rejectedHistoryGap(target, {
-      reason: 'baseNotFirstParentAncestor',
-      baseCommitId: target.baseCommitId,
-      headCommitId: target.headCommitId,
-    });
-  }
-  return { ok: true, restoreCommit, commitsToInvert: path };
-}
-
-function planMergeCommitRevert(
-  target: Extract<VersionRevertTarget, { readonly kind: 'mergeCommit' }>,
-  current: VersionGraphRef,
-  commitsById: ReadonlyMap<string, WorkbookCommit>,
-): RevertPlan {
-  const mergeCommit = commitsById.get(target.commitId);
-  if (!mergeCommit) return rejectedHistoryGap(target, { commitId: target.commitId });
-  if (current.commitId !== target.commitId) {
-    return requiresReview(target, {
-      reason: 'nonTipMergeCommitRevert',
-      expectedHead: target.commitId,
-      actualHead: current.commitId,
-      targetRef: current.name,
-    });
-  }
-  if (target.mainlineParent !== 1) {
-    return requiresReview(target, {
-      reason: 'nonFirstMainlineParentRequiresHistoricalSemanticDiff',
-      commitId: target.commitId,
-      mainlineParent: target.mainlineParent,
-    });
-  }
-
-  const restoreCommitId = mergeCommit.payload.parentCommitIds[target.mainlineParent - 1];
-  if (!restoreCommitId) {
-    return rejectedHistoryGap(target, {
-      reason: 'missingMainlineParent',
-      commitId: target.commitId,
-      mainlineParent: target.mainlineParent,
-    });
-  }
-  const restoreCommit = commitsById.get(restoreCommitId);
-  if (!restoreCommit) return rejectedHistoryGap(target, { commitId: restoreCommitId });
-  return { ok: true, restoreCommit, commitsToInvert: [mergeCommit] };
-}
-
-function firstParentPathExclusive(
-  headCommitId: string,
-  baseCommitId: string,
-  commitsById: ReadonlyMap<string, WorkbookCommit>,
-): readonly WorkbookCommit[] | null {
-  const path: WorkbookCommit[] = [];
-  let cursor = commitsById.get(headCommitId);
-
-  while (cursor) {
-    if (cursor.id === baseCommitId) return path;
-    path.push(cursor);
-    const parentId = cursor.payload.parentCommitIds[0];
-    if (!parentId) return null;
-    cursor = commitsById.get(parentId);
-  }
-
-  return null;
 }
 
 async function buildRevertSemanticChangeSetRecord(input: {
@@ -538,73 +394,6 @@ function normalizeRevertTargetRef(
   return {
     ok: true,
     refName: `${REF_NAME_STORAGE_PREFIX}${parsed.name}` as VersionGraphBranchRefName,
-  };
-}
-
-function requiresReview(
-  target: VersionRevertTarget,
-  payload: VersionDiagnosticPublicPayload,
-): RevertPlan {
-  return {
-    ok: false,
-    result: {
-      schemaVersion: 1,
-      status: 'requires-review',
-      target,
-      diagnostics: [
-        revertDiagnostic(
-          'VERSION_REVERT_REQUIRES_REVIEW',
-          'Version revert requires a review workflow for this target shape.',
-          payload,
-          'unsupported',
-          'ref-not-mutated',
-        ),
-      ],
-      mutationGuarantee: 'ref-not-mutated',
-    },
-  };
-}
-
-function rejectedHistoryGap(
-  target: VersionRevertTarget,
-  payload: VersionDiagnosticPublicPayload,
-): RevertPlan {
-  return {
-    ok: false,
-    result: {
-      schemaVersion: 1,
-      status: 'rejected',
-      target,
-      diagnostics: [
-        revertDiagnostic(
-          'VERSION_REVERT_HISTORY_GAP',
-          'Version revert target is not fully reachable from the target ref history.',
-          payload,
-          'repair',
-          'ref-not-mutated',
-        ),
-      ],
-      mutationGuarantee: 'ref-not-mutated',
-    },
-  };
-}
-
-function revertDiagnostic(
-  issueCode: string,
-  safeMessage: string,
-  payload: VersionDiagnosticPublicPayload,
-  recoverability: PublicVersionStoreDiagnostic['recoverability'],
-  mutationGuarantee: NonNullable<PublicVersionStoreDiagnostic['mutationGuarantee']>,
-): PublicVersionStoreDiagnostic {
-  return {
-    issueCode,
-    severity: 'error',
-    recoverability,
-    messageTemplateId: `version.revert.${issueCode}`,
-    safeMessage,
-    payload: { operation: 'revert', ...payload },
-    redacted: true,
-    mutationGuarantee,
   };
 }
 

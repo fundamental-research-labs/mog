@@ -175,8 +175,18 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
 
   async completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult> {
     try {
-      const existing = await this.findByIntentId(input.intentId);
+      const db = await this.getDb();
+      const tx = db.transaction(INTENTS_STORE, 'readwrite');
+      const store = tx.objectStore(INTENTS_STORE);
+      const done = idbTransactionDone(tx);
+      const existing = await findByIntentIdInStore(
+        store,
+        this.namespaceKey,
+        this.documentScopeKey,
+        input.intentId,
+      );
       if (!existing) {
+        await done;
         return {
           status: 'missing',
           record: null,
@@ -190,6 +200,7 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
         };
       }
       if (!objectDigestsEqual(existing.resolvedAttemptDigest, input.resolvedAttemptDigest)) {
+        await done;
         return {
           status: 'conflict',
           record: existing,
@@ -203,6 +214,7 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
         };
       }
       if (existing.terminal) {
+        await done;
         return mergeApplyIntentTerminalsEqual(existing.terminal, input.terminal)
           ? { status: 'completed', record: existing, diagnostics: [] }
           : {
@@ -224,10 +236,13 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
         updatedAt: input.completedAt,
         terminal: cloneJson(input.terminal),
       };
-      const db = await this.getDb();
-      const tx = db.transaction(INTENTS_STORE, 'readwrite');
-      tx.objectStore(INTENTS_STORE).put(storedIntent(completed), mergeApplyIntentStorageKey(this.namespace, completed.idempotencyKey));
-      await idbTransactionDone(tx);
+      await idbRequest(
+        store.put(
+          storedIntent(completed),
+          mergeApplyIntentStorageKey(this.namespace, completed.idempotencyKey),
+        ),
+      );
+      await done;
       return { status: 'completed', record: completed, diagnostics: [] };
     } catch {
       return {
@@ -247,28 +262,12 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
   private async findByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentRecord | null> {
     const db = await this.getDb();
     const tx = db.transaction(INTENTS_STORE, 'readonly');
-    const store = tx.objectStore(INTENTS_STORE);
-    const record = await new Promise<MergeApplyIntentRecord | null>((resolve, reject) => {
-      const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(this.namespaceKey));
-      request.onerror = () => reject(request.error ?? new Error('merge apply intent cursor failed'));
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (!cursor) {
-          resolve(null);
-          return;
-        }
-        const candidate = decodeStoredMergeApplyIntent(
-          cursor.value,
-          this.namespaceKey,
-          this.documentScopeKey,
-        );
-        if (candidate?.intentId === intentId) {
-          resolve(candidate);
-          return;
-        }
-        cursor.continue();
-      };
-    });
+    const record = await findByIntentIdInStore(
+      tx.objectStore(INTENTS_STORE),
+      this.namespaceKey,
+      this.documentScopeKey,
+      intentId,
+    );
     await idbTransactionDone(tx);
     return record;
   }
@@ -284,6 +283,35 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
       ...input,
     });
   }
+}
+
+function findByIntentIdInStore(
+  store: IDBObjectStore,
+  namespaceKey: string,
+  documentScopeKey: string,
+  intentId: MergeApplyIntentId,
+): Promise<MergeApplyIntentRecord | null> {
+  return new Promise<MergeApplyIntentRecord | null>((resolve, reject) => {
+    const request = store.index('namespaceKey').openCursor(IDBKeyRange.only(namespaceKey));
+    request.onerror = () => reject(request.error ?? new Error('merge apply intent cursor failed'));
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) {
+        resolve(null);
+        return;
+      }
+      const candidate = decodeStoredMergeApplyIntent(
+        cursor.value,
+        namespaceKey,
+        documentScopeKey,
+      );
+      if (candidate?.intentId === intentId) {
+        resolve(candidate);
+        return;
+      }
+      cursor.continue();
+    };
+  });
 }
 
 function storedIntent(record: MergeApplyIntentRecord): StoredMergeApplyIntent {

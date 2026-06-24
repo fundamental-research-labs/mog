@@ -355,6 +355,19 @@ async function prepareActiveCheckoutMergeMaterialization(
       ],
     };
   }
+  const service = getAttachedCheckoutMaterializationService(ctx);
+  if (!service?.checkout) {
+    return {
+      ok: false,
+      diagnostics: [
+        checkoutServiceUnavailableDiagnostic({
+          operation: 'applyMerge.materializeActiveCheckout',
+          targetKind: 'ref',
+          refName: options.targetRef,
+        }),
+      ],
+    };
+  }
 
   const activeCheckout = await readActiveCheckoutWriteContext(ctx, 'applyMergeGraphWrite');
   if (activeCheckout.status === 'blocked' || activeCheckout.status === 'stale') {

@@ -431,6 +431,52 @@ export function registerCleanMergeApplyScenario(): void {
     ]);
   });
 
+  it('blocks active checkout materialization before merge writes when checkout service is unavailable', async () => {
+    const merge = jest.fn();
+    const mergeCommit = jest.fn();
+    const checkoutTransactionGuard = {
+      beginCheckoutTransaction: jest.fn(() => ({
+        ok: true as const,
+        token: {},
+      })),
+      endCheckoutTransaction: jest.fn(),
+    };
+    const version = new WorkbookVersionImpl(
+      {
+        versioning: {
+          mergeService: { merge },
+          writeService: { mergeCommit },
+          ...versionDomainSupportManifestRuntime(),
+        },
+      } as any,
+      { checkoutTransactionGuard },
+    );
+
+    await expect(
+      version.applyMerge(
+        { base: BASE, ours: OURS, theirs: THEIRS },
+        {
+          targetRef: TARGET_REF as any,
+          expectedTargetHead: EXPECTED_TARGET_HEAD,
+          materializeActiveCheckout: true,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_CHECKOUT_SERVICE_UNAVAILABLE',
+          }),
+        ],
+      },
+    });
+    expect(merge).not.toHaveBeenCalled();
+    expect(mergeCommit).not.toHaveBeenCalled();
+    expect(checkoutTransactionGuard.beginCheckoutTransaction).not.toHaveBeenCalled();
+  });
+
   it('blocks implicit clean merge apply writes from detached checkout', async () => {
     const surfaceStatusService = createWorkbookVersionSurfaceStatusService({
       readDirtyState: () => ({

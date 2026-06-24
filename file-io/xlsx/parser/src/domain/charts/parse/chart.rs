@@ -136,7 +136,11 @@ pub(super) fn parse_display_options(xml: &[u8], chart_start: usize) -> DisplayOp
     let mut opts = DisplayOptions::default();
 
     if let Some(start) = find_tag_simd(xml, b"plotVisOnly", chart_start) {
-        opts.plot_vis_only = attrs::parse_bool_attr(&xml[start..], b"val=\"");
+        opts.plot_vis_only = Some(attrs::parse_bool_attr_with_default(
+            &xml[start..],
+            b"val=\"",
+            true,
+        ));
     }
 
     if let Some(start) = find_tag_simd(xml, b"dispBlanksAs", chart_start) {
@@ -160,6 +164,36 @@ mod tests {
     fn parse_display_options_preserves_show_data_labels_over_max_absence() {
         let opts = parse_display_options(b"<c:chart></c:chart>", 0);
         assert_eq!(opts.show_data_lbls_over_max, None);
+    }
+
+    #[test]
+    fn parse_display_options_preserves_plot_visible_only_absence() {
+        let opts = parse_display_options(b"<c:chart></c:chart>", 0);
+        assert_eq!(opts.plot_vis_only, None);
+    }
+
+    #[test]
+    fn parse_display_options_preserves_plot_visible_only_explicit_false() {
+        let opts = parse_display_options(br#"<c:chart><c:plotVisOnly val="0"/></c:chart>"#, 0);
+        assert_eq!(opts.plot_vis_only, Some(false));
+    }
+
+    #[test]
+    fn parse_display_options_preserves_plot_visible_only_explicit_true() {
+        let opts = parse_display_options(br#"<c:chart><c:plotVisOnly val="1"/></c:chart>"#, 0);
+        assert_eq!(opts.plot_vis_only, Some(true));
+    }
+
+    #[test]
+    fn parse_display_options_preserves_plot_visible_only_implicit_true() {
+        let opts = parse_display_options(br#"<c:chart><c:plotVisOnly/></c:chart>"#, 0);
+        assert_eq!(opts.plot_vis_only, Some(true));
+    }
+
+    #[test]
+    fn parse_display_options_accepts_plot_visible_only_on_literal() {
+        let opts = parse_display_options(br#"<c:chart><c:plotVisOnly val="on"/></c:chart>"#, 0);
+        assert_eq!(opts.plot_vis_only, Some(true));
     }
 
     #[test]

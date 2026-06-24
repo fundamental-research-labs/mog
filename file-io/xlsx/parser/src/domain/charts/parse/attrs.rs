@@ -8,11 +8,29 @@ pub(super) fn parse_bool_attr(xml: &[u8], attr: &[u8]) -> bool {
         if let Some((start, end)) = extract_quoted_value(xml, value_start) {
             if start < end {
                 let val = &xml[start..end];
-                return val == b"1" || val == b"true" || val == b"True";
+                return is_true_bool_value(val);
             }
         }
     }
     false
+}
+
+pub(super) fn parse_bool_attr_with_default(xml: &[u8], attr: &[u8], default: bool) -> bool {
+    if let Some(attr_pos) = find_attr_simd(xml, attr, 0) {
+        let value_start = attr_pos + attr.len();
+        if let Some((start, end)) = extract_quoted_value(xml, value_start) {
+            if start < end {
+                let val = &xml[start..end];
+                return is_true_bool_value(val);
+            }
+        }
+        return false;
+    }
+    default
+}
+
+fn is_true_bool_value(val: &[u8]) -> bool {
+    val == b"1" || val.eq_ignore_ascii_case(b"true") || val.eq_ignore_ascii_case(b"on")
 }
 
 pub(super) fn parse_string_attr(xml: &[u8], attr: &[u8]) -> Option<String> {

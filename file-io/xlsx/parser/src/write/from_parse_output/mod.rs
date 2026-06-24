@@ -83,6 +83,16 @@ pub use export_report::{
 };
 pub use sheet_ext_merge::strip_modeled_x14_data_validations_from_ext_lst;
 
+/// Returns whether XLSX export must reconstruct the chart XML from modeled
+/// fields instead of replaying the current imported standard chart part.
+///
+/// Runtime export uses this before completing live source references, because
+/// cache materialization is a modeled edit and would invalidate replay-current
+/// imported chart authority.
+pub fn chart_space_requires_reconstruction(chart_spec: &domain_types::ChartSpec) -> bool {
+    chart_replay::should_reconstruct_chart_space(chart_spec)
+}
+
 fn worksheet_legacy_vml_path(
     sheet_idx: usize,
     comments: &[WorksheetCommentsGraphEntry],

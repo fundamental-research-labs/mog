@@ -61,7 +61,7 @@ pub(super) fn build_chart_space(chart: &Chart) -> ooxml_types::charts::ChartSpac
                 extensions: chart.plot_area.extensions.clone(),
             },
             legend: chart.legend.clone(),
-            plot_vis_only: Some(chart.display_options.plot_vis_only),
+            plot_vis_only: chart.display_options.plot_vis_only,
             disp_blanks_as: chart.display_options.disp_blanks_as,
             show_d_lbls_over_max: chart.display_options.show_data_lbls_over_max,
             show_all_field_buttons: chart.show_all_field_buttons,
@@ -94,6 +94,25 @@ mod tests {
         let chart_space = build_chart_space(&chart);
 
         assert_eq!(chart_space.chart.show_d_lbls_over_max, None);
+    }
+
+    #[test]
+    fn build_chart_space_preserves_plot_visible_only_absence() {
+        let chart = Chart::default();
+
+        let chart_space = build_chart_space(&chart);
+
+        assert_eq!(chart_space.chart.plot_vis_only, None);
+    }
+
+    #[test]
+    fn build_chart_space_preserves_plot_visible_only_explicit_false() {
+        let mut chart = Chart::default();
+        chart.display_options.plot_vis_only = Some(false);
+
+        let chart_space = build_chart_space(&chart);
+
+        assert_eq!(chart_space.chart.plot_vis_only, Some(false));
     }
 
     #[test]

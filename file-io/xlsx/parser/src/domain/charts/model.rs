@@ -153,7 +153,7 @@ pub struct PlotArea {
 #[derive(Debug, Clone, Default)]
 pub struct DisplayOptions {
     /// Plot visible cells only
-    pub plot_vis_only: bool,
+    pub plot_vis_only: Option<bool>,
     /// How to display blank cells
     pub disp_blanks_as: Option<DisplayBlanksAs>,
     /// Show data labels over maximum

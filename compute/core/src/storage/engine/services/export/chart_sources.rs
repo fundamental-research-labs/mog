@@ -167,9 +167,12 @@ pub(super) fn split_charts_for_sheet_export(
     for floating_object in floating_objects {
         if matches!(&floating_object.data, FloatingObjectData::Chart(_)) {
             if let Some(mut spec) = ChartSpec::from_floating_object(&floating_object) {
-                complete_chart_series_source_refs_for_export(
-                    &mut spec, mirror, sheet_id, sheet_name,
-                );
+                if xlsx_parser::write::from_parse_output::chart_space_requires_reconstruction(&spec)
+                {
+                    complete_chart_series_source_refs_for_export(
+                        &mut spec, mirror, sheet_id, sheet_name,
+                    );
+                }
                 charts.push(spec);
             }
         } else {

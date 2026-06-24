@@ -165,6 +165,56 @@ fn imported_standard_chart_metadata_survives_yrs_without_auxiliary_package_repla
     assert!(!archive.contains("xl/charts/colors2.xml"));
 }
 
+#[test]
+fn imported_current_standard_chart_skips_source_completion_before_replay_planning() {
+    let input = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Data".to_string(),
+            rows: 20,
+            cols: 8,
+            cells: vec![
+                chart_text_cell(0, 0, "Quarter"),
+                chart_text_cell(0, 1, "Revenue"),
+                chart_text_cell(0, 2, "Profit"),
+                chart_text_cell(1, 0, "Q1"),
+                chart_number_cell(1, 1, 100.0),
+                chart_number_cell(1, 2, 25.0),
+                chart_text_cell(2, 0, "Q2"),
+                chart_number_cell(2, 1, 125.0),
+                chart_number_cell(2, 2, 35.0),
+            ],
+            charts: vec![imported_current_standard_chart2()],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let engine = engine_from_parse_output_normal(&input);
+    let exported = engine.export_to_parse_output().unwrap().parse_output;
+    let chart = &exported.sheets[0].charts[0];
+
+    for series in &chart.series {
+        assert_eq!(series.value_cache, None);
+        assert_eq!(series.category_cache, None);
+        assert_eq!(series.bubble_size_cache, None);
+    }
+    let fingerprint = standard_chart_projection_fingerprint(chart);
+    assert_eq!(
+        chart
+            .standard_chart_provenance
+            .as_ref()
+            .and_then(|provenance| provenance.projection_fingerprint.as_deref()),
+        Some(fingerprint.as_str())
+    );
+    assert_eq!(
+        chart
+            .standard_chart_export_authority
+            .as_ref()
+            .and_then(|authority| authority.projection_fingerprint.as_deref()),
+        Some(fingerprint.as_str())
+    );
+}
+
 fn chart_text_cell(row: u32, col: u32, text: &str) -> CellData {
     CellData {
         row,

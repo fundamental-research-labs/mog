@@ -84,6 +84,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       semanticMutationCapture: config.semanticMutationCapture,
       semanticStateReader: config.semanticStateReader,
       pendingRemotePromotionService: config.pendingRemotePromotionService,
+      revertService: config.revertService,
       reviewService: config.reviewService,
       providerWriteActivityTracker: config.providerWriteActivityTracker,
       snapshotRootByteSyncPort: config.snapshotRootByteSyncPort,

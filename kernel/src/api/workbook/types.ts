@@ -35,6 +35,7 @@ import type {
 import type { WorkbookVersionMergeService } from '../../document/version-store/merge-service';
 import type { PendingRemotePromotionService } from '../../document/version-store/pending-remote-promotion-service';
 import type { ProposalWorkspaceLifecycleService } from '../../document/version-store/proposals/proposal-workspace-lifecycle-service';
+import type { WorkbookVersionRevertService } from '../../document/version-store/revert-service';
 import type { WorkbookVersionReviewService } from '../../document/version-store/review-service';
 import type { VersionProviderWriteActivityTracker } from '../../document/version-store/provider-write-activity';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
@@ -73,6 +74,7 @@ export interface WorkbookVersioningConfig {
     'readHead' | 'readRef' | 'listCommits' | 'commit' | 'mergeCommit'
   >;
   readonly mergeService?: Pick<WorkbookVersionMergeService, 'merge'>;
+  readonly revertService?: Pick<WorkbookVersionRevertService, 'revert'>;
   readonly reviewService?: WorkbookVersionReviewService;
   readonly proposalService?: unknown;
   readonly proposalWorkspaceService?: ProposalWorkspaceLifecycleService;
@@ -114,7 +116,7 @@ export interface WorkbookConfig {
    * UI state provider (active sheet, selection, active objects).
    * Optional — when omitted, the workbook creates a default headless provider
    * that tracks activeSheetId internally and returns null for all UI queries.
-  */
+   */
   stateProvider?: WorkbookStateProvider;
   /** Document-scoped host feature gates visible to version surface admission. */
   featureGates?: FeatureGates;

@@ -18,6 +18,7 @@ import type {
 } from './provider';
 import type { VersionStoreProviderKind } from './provider-registry';
 import type { VersionProviderWriteActivityTracker } from './provider-write-activity';
+import type { WorkbookVersionRevertService } from './revert-service';
 import type { WorkbookVersionReviewService } from './review-service';
 import type { SemanticMutationCaptureServices } from './semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
@@ -27,12 +28,7 @@ import type { XlsxVersionExistingGraphImportInput } from './xlsx-import-root';
 
 type MaybePromise<T> = T | Promise<T>;
 
-export type VersionLiveCollaborationState =
-  | 'absent'
-  | 'disabled'
-  | 'idle'
-  | 'active'
-  | 'unknown';
+export type VersionLiveCollaborationState = 'absent' | 'disabled' | 'idle' | 'active' | 'unknown';
 
 export type VersionLiveCollaborationStatus = {
   readonly state: VersionLiveCollaborationState;
@@ -62,6 +58,7 @@ export type ResolvedWorkbookVersioningConfig = {
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
   >;
+  readonly revertService?: Pick<WorkbookVersionRevertService, 'revert'>;
   readonly reviewService?: WorkbookVersionReviewService;
   readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;

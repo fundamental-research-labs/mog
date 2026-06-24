@@ -9,6 +9,7 @@ import {
   createProviderBackedAgentProposalService,
   hasAgentProposalMetadataStoreProvider,
 } from '../../document/version-store/proposals/proposal-provider-service';
+import { createWorkbookVersionRevertService } from '../../document/version-store/revert-service';
 import {
   createProviderBackedWorkbookVersionReviewService,
   hasWorkbookVersionReviewRecordStoreProvider,
@@ -32,9 +33,7 @@ import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
   createSemanticMergeCommitCapture,
 } from './version/merge/version-merge-materializer';
-import {
-  createProviderBackedWorkbookVersionProvenanceTruthService,
-} from './version/provenance/version-provenance-truth-service';
+import { createProviderBackedWorkbookVersionProvenanceTruthService } from './version/provenance/version-provenance-truth-service';
 import type { WorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
@@ -121,8 +120,16 @@ export function attachWorkbookVersioning(
     config.provenanceTruthService ??
     existing.provenanceTruthService ??
     existing.provenanceAdmissionService;
+  const revertService =
+    config.revertService ??
+    existing.revertService ??
+    existing.versionRevertService ??
+    (config.provider
+      ? createWorkbookVersionRevertService({ provider: config.provider })
+      : undefined);
   if (
     !writeService &&
+    !revertService &&
     !semanticCapture &&
     !pendingRemotePromotionService &&
     !providerWriteActivityTracker &&
@@ -153,11 +160,11 @@ export function attachWorkbookVersioning(
           provider: config.provider,
           snapshotMaterializer: checkoutSnapshotMaterializer,
         })
-      : existing.checkoutService ??
+      : (existing.checkoutService ??
         existing.checkoutMaterializationService ??
         (config.provider
           ? createProviderBackedCheckoutMaterializationService({ provider: config.provider })
-          : undefined);
+          : undefined));
   const mergeService =
     config.mergeService ??
     existing.mergeService ??
@@ -234,6 +241,7 @@ export function attachWorkbookVersioning(
     ...(diffService ? { diffService } : {}),
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
+    ...(revertService ? { revertService, versionRevertService: revertService } : {}),
     ...(branchService ? { branchService } : {}),
     ...(reviewService ? { reviewService, versionReviewService: reviewService } : {}),
     ...(proposalService

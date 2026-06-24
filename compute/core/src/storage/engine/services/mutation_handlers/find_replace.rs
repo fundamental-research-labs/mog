@@ -38,7 +38,8 @@ pub(in crate::storage::engine) fn replace_all_in_range(
         return Ok((0, RecalcResult::empty()));
     }
 
-    // Build regex (same logic as find_in_range)
+    // replaceAll intentionally performs literal replacement for the public text
+    // replacement API. Regex search syntax is only part of the read-side find API.
     let escaped = regex::escape(text);
     let pattern = if options.whole_cell.unwrap_or(false) {
         format!("^(?:{escaped})$")

@@ -254,12 +254,13 @@ pub struct ChartStatistics {
 }
 
 // -------------------------------------------------------------------
-// Find in Range (literal text search)
+// Find in Range (regex pattern search)
 // -------------------------------------------------------------------
 
-/// Options for literal text find-in-range operations.
+/// Options for regex find-in-range operations.
 ///
-/// The `text` field is matched literally (regex-escaped internally).
+/// The `text` field is interpreted as a regex pattern. Plain text without
+/// regex metacharacters continues to behave as substring search.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FindInRangeOptions {

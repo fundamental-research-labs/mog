@@ -257,24 +257,23 @@ pub(in crate::storage::engine) fn sign_check(
 }
 
 // -------------------------------------------------------------------
-// Find in Range (literal text search via regex crate)
+// Find in Range (regex pattern search)
 // -------------------------------------------------------------------
 
 use crate::engine_types::queries::{FindInRangeOptions, FindInRangeResult};
 
 /// Build a compiled regex from `FindInRangeOptions`.
 ///
-/// The search text is regex-escaped (literal match). Case-insensitive
-/// and whole-cell anchoring are applied based on options.
+/// The search text is interpreted as a regex pattern. Case-insensitive and
+/// whole-cell anchoring are applied based on options.
 fn build_find_regex(options: &FindInRangeOptions) -> Option<regex::Regex> {
     if options.text.is_empty() {
         return None;
     }
-    let escaped = regex::escape(&options.text);
     let pattern = if options.whole_cell.unwrap_or(false) {
-        format!("^(?:{escaped})$")
+        format!("^(?:{})$", options.text)
     } else {
-        escaped
+        options.text.clone()
     };
     let case_insensitive = !options.case_sensitive.unwrap_or(false);
     regex::RegexBuilder::new(&pattern)
@@ -283,7 +282,7 @@ fn build_find_regex(options: &FindInRangeOptions) -> Option<regex::Regex> {
         .ok()
 }
 
-/// Find the first cell matching literal text in a range.
+/// Find the first cell matching a regex pattern in a range.
 pub(in crate::storage::engine) fn find_in_range(
     engine: &crate::storage::engine::YrsComputeEngine,
     sheet_id: &SheetId,
@@ -341,7 +340,7 @@ pub(in crate::storage::engine) fn find_in_range(
     result
 }
 
-/// Find all cells matching literal text in a range.
+/// Find all cells matching a regex pattern in a range.
 pub(in crate::storage::engine) fn find_all_in_range(
     engine: &crate::storage::engine::YrsComputeEngine,
     sheet_id: &SheetId,

@@ -70,6 +70,8 @@ mod validation;
 #[cfg(test)]
 mod integration_tests_direct_edit_results;
 #[cfg(test)]
+mod integration_tests_find_in_range;
+#[cfg(test)]
 mod integration_tests_old_value;
 #[cfg(test)]
 mod integration_tests_replace_all;

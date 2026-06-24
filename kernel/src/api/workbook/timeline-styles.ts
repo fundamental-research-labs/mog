@@ -13,6 +13,12 @@ import type {
   WorkbookTimelineStyles,
   TimelineStyleInfo,
   NamedTimelineStyle,
+  VersionDiffEntry,
+  VersionDiffValue,
+  VersionMergeChange,
+  VersionMergeConflict,
+  WorkbookCommitSummary,
+  WorkbookVersionReviewDiffChange,
 } from '@mog-sdk/contracts/api';
 import type { SlicerCustomStyle } from '@mog-sdk/contracts/data/slicers';
 
@@ -26,7 +32,7 @@ import { KernelError } from '../../errors';
  */
 const TIMELINE_NS = '__timeline__';
 
-const BUILT_IN_TIMELINE_STYLES = [
+export const BUILT_IN_TIMELINE_STYLES = [
   'light1',
   'light2',
   'light3',
@@ -41,6 +47,19 @@ const BUILT_IN_TIMELINE_STYLES = [
   'dark6',
 ] as const;
 
+export type TimelineStyleName = (typeof BUILT_IN_TIMELINE_STYLES)[number];
+
+export const DEFAULT_TIMELINE_STYLE: TimelineStyleName = 'light1';
+
+export type VersionTimelineVersionEntry = WorkbookCommitSummary;
+export type VersionTimelineDiffEntry = VersionDiffEntry | WorkbookVersionReviewDiffChange;
+export type VersionTimelineMergeEntry = VersionMergeChange | VersionMergeConflict;
+
+export type VersionTimelineStyleEntry =
+  | { readonly kind: 'version'; readonly entry: VersionTimelineVersionEntry }
+  | { readonly kind: 'diff'; readonly entry: VersionTimelineDiffEntry }
+  | { readonly kind: 'merge'; readonly entry: VersionTimelineMergeEntry };
+
 /**
  * Dependencies injected from WorkbookImpl.
  */
@@ -53,19 +72,11 @@ export class WorkbookTimelineStylesImpl implements WorkbookTimelineStyles {
 
   async getDefault(): Promise<string> {
     const style = await this.deps.ctx.computeBridge.getDefaultSlicerStyle();
-    // Timeline default is stored separately — use a namespaced key.
-    // For now, fall back to 'light1' since the Rust layer doesn't have a
-    // separate default for timeline styles yet.
-    return style ?? 'light1';
+    return style ?? DEFAULT_TIMELINE_STYLE;
   }
 
   async setDefault(style: string | null): Promise<void> {
-    // Timeline default shares the bridge — a future Rust extension can
-    // add a dedicated key. For now this is a no-op placeholder that
-    // matches the contract without corrupting the slicer default.
-    // Consumers can still call setDefault(); it will resolve once
-    // Rust-side storage gains a dedicated timeline default key.
-    void style;
+    await this.deps.ctx.computeBridge.setDefaultSlicerStyle(style);
   }
 
   async getCount(): Promise<number> {
@@ -97,7 +108,7 @@ export class WorkbookTimelineStylesImpl implements WorkbookTimelineStyles {
       makeUniqueName ?? false,
     );
     const resolved = extractMutationData<string>(result);
-    if (resolved !== undefined) return resolved.replace(TIMELINE_NS, '');
+    if (resolved !== undefined) return toPublicTimelineStyleName(resolved);
     if (makeUniqueName) {
       throw new Error(
         `addSlicerStyle with makeUniqueName=true did not return the resolved name for "${name}"`,
@@ -111,7 +122,7 @@ export class WorkbookTimelineStylesImpl implements WorkbookTimelineStyles {
     const result = await this.deps.ctx.computeBridge.getSlicerStyle(nsName);
     if (!result) return null;
     return {
-      name: result.name.replace(TIMELINE_NS, ''),
+      name: toPublicTimelineStyleName(result.name),
       readOnly: result.readOnly,
       style: result.style,
     };
@@ -129,6 +140,111 @@ export class WorkbookTimelineStylesImpl implements WorkbookTimelineStyles {
     if (!styleId) {
       throw new KernelError('COMPUTE_ERROR', 'Failed to duplicate timeline style');
     }
-    return styleId.replace(TIMELINE_NS, '');
+    return toPublicTimelineStyleName(styleId);
   }
+}
+
+export function mapTimelineEntryStyle(entry: VersionTimelineStyleEntry): TimelineStyleName {
+  switch (entry.kind) {
+    case 'version':
+      return timelineStyleForVersionEntry(entry.entry);
+    case 'diff':
+      return timelineStyleForDiffEntry(entry.entry);
+    case 'merge':
+      return timelineStyleForMergeEntry(entry.entry);
+  }
+}
+
+export function mapTimelineEntryStyleInfo(entry: VersionTimelineStyleEntry): TimelineStyleInfo {
+  const name = mapTimelineEntryStyle(entry);
+  return {
+    name,
+    isDefault: name === DEFAULT_TIMELINE_STYLE,
+  };
+}
+
+export function timelineStyleForVersionEntry(entry: VersionTimelineVersionEntry): TimelineStyleName {
+  if (hasDiagnostics(entry)) return 'dark5';
+  if (entry.orphan === true) return 'dark6';
+  if (entry.parents.length > 1) return 'dark1';
+  if (entry.parents.length === 0) return 'light1';
+  return 'light2';
+}
+
+export function timelineStyleForDiffEntry(entry: VersionTimelineDiffEntry): TimelineStyleName {
+  if (hasDiagnostics(entry)) return 'dark5';
+
+  const reviewKind = reviewDiffChangeKind(entry);
+  if (reviewKind) return styleForReviewDiffChangeKind(reviewKind);
+
+  const diffEntry = entry as VersionDiffEntry;
+  if (isRedactedDiffValue(diffEntry.structural) || isRedactedDiffValue(diffEntry.before)) {
+    return 'dark5';
+  }
+  if (isRedactedDiffValue(diffEntry.after)) return 'dark5';
+  if (
+    diffEntry.structural.kind === 'metadata' &&
+    diffEntry.structural.propertyPath[0] === 'order'
+  ) {
+    return 'light5';
+  }
+  if (isEmptyDiffValue(diffEntry.before) && !isEmptyDiffValue(diffEntry.after)) return 'light3';
+  if (!isEmptyDiffValue(diffEntry.before) && isEmptyDiffValue(diffEntry.after)) return 'light6';
+  return 'light4';
+}
+
+export function timelineStyleForMergeEntry(entry: VersionTimelineMergeEntry): TimelineStyleName {
+  if (isVersionMergeConflict(entry)) return 'dark6';
+  if (hasDiagnostics(entry)) return 'dark5';
+  if (entry.ours && entry.theirs) return 'dark2';
+  return 'dark3';
+}
+
+function toPublicTimelineStyleName(name: string): string {
+  return name.startsWith(TIMELINE_NS) ? name.slice(TIMELINE_NS.length) : name;
+}
+
+function hasDiagnostics(entry: { readonly diagnostics?: readonly unknown[] }): boolean {
+  return Array.isArray(entry.diagnostics) && entry.diagnostics.length > 0;
+}
+
+function isVersionMergeConflict(entry: VersionTimelineMergeEntry): entry is VersionMergeConflict {
+  return 'conflictId' in entry;
+}
+
+function reviewDiffChangeKind(
+  entry: VersionTimelineDiffEntry,
+): WorkbookVersionReviewDiffChange['kind'] | null {
+  return 'target' in entry && 'entity' in entry ? entry.kind : null;
+}
+
+function styleForReviewDiffChangeKind(
+  kind: WorkbookVersionReviewDiffChange['kind'],
+): TimelineStyleName {
+  switch (kind) {
+    case 'create':
+      return 'light3';
+    case 'update':
+      return 'light4';
+    case 'move':
+    case 'reorder':
+      return 'light5';
+    case 'delete':
+      return 'light6';
+  }
+}
+
+function isEmptyDiffValue(value: VersionDiffValue): boolean {
+  return (
+    value.kind === 'value' &&
+    (value.value === null ||
+      (typeof value.value === 'object' &&
+        value.value !== null &&
+        !Array.isArray(value.value) &&
+        value.value.kind === 'blank'))
+  );
+}
+
+function isRedactedDiffValue(value: { readonly kind: string }): boolean {
+  return value.kind === 'redacted';
 }

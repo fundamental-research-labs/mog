@@ -575,6 +575,7 @@
     appearance: none;
     width: 10px;
     height: 8px;
+    margin-top: -2px;
     border-radius: 4px;
     border: 1px solid var(--color-ss-text-tertiary);
     background: var(--color-ss-surface);

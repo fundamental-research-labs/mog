@@ -261,7 +261,7 @@ fn date_monthly_clamps_to_month_end() {
     let result = generate_series_values(&pat, &src, 2, 1, &locale(), &[]);
     let nums = extract_numbers(&result);
     assert_eq!(nums[0], ymd_to_serial(2024, 2, 29)); // leap year
-    assert_eq!(nums[1], ymd_to_serial(2024, 3, 29)); // clamped from 31
+    assert_eq!(nums[1], ymd_to_serial(2024, 3, 31)); // preserves Jan 31 anchor
 }
 
 #[test]
@@ -275,6 +275,19 @@ fn date_monthly_jan31_non_leap() {
     let result = generate_series_values(&pat, &src, 1, 1, &locale(), &[]);
     let nums = extract_numbers(&result);
     assert_eq!(nums[0], ymd_to_serial(2025, 2, 28));
+}
+
+#[test]
+fn date_monthly_jan30_does_not_become_month_end_after_february() {
+    let serial_jan30 = ymd_to_serial(2025, 1, 30);
+    let mut pat = default_pattern(FillPatternType::Date);
+    pat.date_unit = Some(DateUnit::Month);
+    pat.step = Some(1.0);
+    let src = vec![cv_num(serial_jan30)];
+    let result = generate_series_values(&pat, &src, 2, 1, &locale(), &[]);
+    let nums = extract_numbers(&result);
+    assert_eq!(nums[0], ymd_to_serial(2025, 2, 28));
+    assert_eq!(nums[1], ymd_to_serial(2025, 3, 30));
 }
 
 // -----------------------------------------------------------------------

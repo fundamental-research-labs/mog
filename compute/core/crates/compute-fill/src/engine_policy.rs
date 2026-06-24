@@ -87,12 +87,22 @@ fn determine_pattern(
             step: Some(1.0),
             ..copy_pattern()
         },
-        FillMode::Months => FillPattern {
-            pattern_type: FillPatternType::Date,
-            date_unit: Some(DateUnit::Month),
-            step: Some(1.0),
-            ..copy_pattern()
-        },
+        FillMode::Months => {
+            let detected = detect_fill_pattern(source_values, custom_lists, locale);
+            if matches!(
+                detected.pattern_type,
+                FillPatternType::Month | FillPatternType::MonthShort
+            ) {
+                detected
+            } else {
+                FillPattern {
+                    pattern_type: FillPatternType::Date,
+                    date_unit: Some(DateUnit::Month),
+                    step: Some(1.0),
+                    ..copy_pattern()
+                }
+            }
+        }
         FillMode::Years => FillPattern {
             pattern_type: FillPatternType::Date,
             date_unit: Some(DateUnit::Year),
@@ -120,5 +130,59 @@ fn determine_pattern(
                 detect_fill_pattern(source_values, custom_lists, locale)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn request(mode: FillMode) -> FillRequest {
+        FillRequest {
+            source_range: FillRangeSpec {
+                start_row: 0,
+                start_col: 0,
+                end_row: 0,
+                end_col: 0,
+            },
+            target_range: FillRangeSpec {
+                start_row: 0,
+                start_col: 0,
+                end_row: 3,
+                end_col: 0,
+            },
+            direction: FillDirection::Down,
+            mode,
+            include_formulas: true,
+            include_values: true,
+            include_formats: true,
+            step_value: 1.0,
+        }
+    }
+
+    #[test]
+    fn months_mode_preserves_full_month_text_pattern() {
+        let pattern = determine_lane_pattern(
+            FillMode::Months,
+            &[CellValue::Text("January".into())],
+            &request(FillMode::Months),
+            &[],
+            &LocaleNames::default(),
+        );
+
+        assert_eq!(pattern.pattern_type, FillPatternType::Month);
+    }
+
+    #[test]
+    fn months_mode_preserves_short_month_text_pattern() {
+        let pattern = determine_lane_pattern(
+            FillMode::Months,
+            &[CellValue::Text("Jan".into())],
+            &request(FillMode::Months),
+            &[],
+            &LocaleNames::default(),
+        );
+
+        assert_eq!(pattern.pattern_type, FillPatternType::MonthShort);
     }
 }

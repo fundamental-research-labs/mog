@@ -329,17 +329,123 @@ fn test_effective_format_preloaded_no_ranges_uses_supplied_cell_format() {
     )
     .unwrap();
 
-    let cell_format = CellFormat {
-        bold: Some(true),
+    let cell_properties = CellProperties {
+        format: Some(CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        }),
         ..Default::default()
     };
-    let eff =
-        get_effective_format_preloaded(&storage, &sid, 3, 2, None, &cell_format, Some(&gi), None);
+    let eff = get_effective_format_preloaded(
+        &storage,
+        &sid,
+        3,
+        2,
+        None,
+        Some(&cell_properties),
+        Some(&gi),
+        None,
+    );
 
     assert_eq!(eff.bold, Some(true));
     assert_eq!(eff.font_color, Some("#FF0000".to_string()));
     assert_eq!(eff.number_format, Some("0.00".to_string()));
     assert_eq!(eff.font_family, Some("Calibri".to_string()));
+}
+
+#[test]
+fn test_imported_cell_xf_blocks_row_col_alignment_defaults() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+    insert_style_palette_entry(
+        storage.doc(),
+        storage.workbook_map(),
+        7,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+    insert_compact_cell_properties(&storage, &sid, "imported-cell", r#"{"s":7}"#);
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            horizontal_align: Some(ooxml_types::styles::HorizontalAlign::Center),
+            vertical_align: Some(domain_types::CellVerticalAlign::Middle),
+            wrap_text: Some(true),
+            indent: Some(2),
+            text_rotation: Some(45),
+            shrink_to_fit: Some(true),
+            reading_order: Some("rtl".to_string()),
+            auto_indent: Some(true),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+
+    let eff = get_effective_format(&storage, &sid, "imported-cell", 3, 2, None, Some(&gi), None);
+
+    assert_eq!(eff.bold, Some(true));
+    assert_eq!(
+        eff.horizontal_align,
+        Some(ooxml_types::styles::HorizontalAlign::General)
+    );
+    assert_eq!(
+        eff.vertical_align,
+        Some(domain_types::CellVerticalAlign::Bottom)
+    );
+    assert_eq!(eff.wrap_text, Some(false));
+    assert_eq!(eff.indent, Some(0));
+    assert_eq!(eff.text_rotation, Some(0));
+    assert_eq!(eff.shrink_to_fit, Some(false));
+    assert_eq!(eff.reading_order.as_deref(), Some("context"));
+    assert_eq!(eff.auto_indent, Some(false));
+}
+
+#[test]
+fn test_user_sparse_cell_format_still_inherits_row_col_alignment() {
+    let (mut storage, sid, gi) = storage_with_sheet();
+
+    set_col_format(
+        &mut storage,
+        &sid,
+        2,
+        &CellFormat {
+            horizontal_align: Some(ooxml_types::styles::HorizontalAlign::Center),
+            vertical_align: Some(domain_types::CellVerticalAlign::Middle),
+            wrap_text: Some(true),
+            ..Default::default()
+        },
+        Some(&gi),
+    )
+    .unwrap();
+    set_cell_format(
+        storage.doc(),
+        storage.workbook_map(),
+        storage.sheets(),
+        &sid,
+        "user-cell",
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+
+    let eff = get_effective_format(&storage, &sid, "user-cell", 3, 2, None, Some(&gi), None);
+
+    assert_eq!(eff.bold, Some(true));
+    assert_eq!(
+        eff.horizontal_align,
+        Some(ooxml_types::styles::HorizontalAlign::Center)
+    );
+    assert_eq!(
+        eff.vertical_align,
+        Some(domain_types::CellVerticalAlign::Middle)
+    );
+    assert_eq!(eff.wrap_text, Some(true));
 }
 
 #[test]

@@ -305,21 +305,25 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
 
                     let cell_id_hex = id_to_hex(cell_id.as_u128());
 
-                    // Pre-fetch cell-level format (one CRDT read) — used
-                    // both for the skip check and for effective format build.
-                    let cell_fmt = properties::get_cell_format(
+                    // Pre-fetch cell properties once for both the skip check
+                    // and effective format build.
+                    let cell_props = properties::get_properties(
                         engine.stores.storage.doc(),
                         engine.stores.storage.workbook_map(),
                         engine.stores.storage.sheets(),
                         sheet_id,
                         &cell_id_hex,
                     );
+                    let has_cell_format = cell_props
+                        .as_ref()
+                        .map(|props| props.format.is_some() || props.style_id.is_some())
+                        .unwrap_or(false);
 
                     // Skip truly empty cells: no value, no formula, no cell-level formatting,
                     // AND no explicit row/column format.
                     if matches!(value, CellValue::Null)
                         && formula.is_none()
-                        && cell_fmt.is_none()
+                        && !has_cell_format
                         && !has_row_fmt
                         && !has_col_fmt
                         && !has_range_fmt
@@ -338,7 +342,7 @@ pub(in crate::storage::engine) fn for_each_cell_in_range(
                         row,
                         col,
                         table_fmt.as_ref(),
-                        &cell_fmt.unwrap_or_default(),
+                        cell_props.as_ref(),
                         engine.stores.grid_indexes.get(sheet_id),
                         sheet_mirror,
                     );

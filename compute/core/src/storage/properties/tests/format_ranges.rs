@@ -548,8 +548,11 @@ fn test_effective_format_preloaded_with_ranges() {
         },
     );
 
-    let cell_fmt = CellFormat {
-        bold: Some(true),
+    let cell_props = CellProperties {
+        format: Some(CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        }),
         ..Default::default()
     };
 
@@ -560,7 +563,7 @@ fn test_effective_format_preloaded_with_ranges() {
         5,
         5,
         None,
-        &cell_fmt,
+        Some(&cell_props),
         Some(&gi),
         Some(sheet_mirror),
     );

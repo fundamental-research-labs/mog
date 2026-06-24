@@ -7,9 +7,29 @@ import {
   sheetAddressDisplay,
   validSemanticPayload,
 } from './version-diff-projection-fixtures';
-import { createVersion, graphWithRootAndChild } from './version-diff-projection-test-utils';
+import {
+  createVersion,
+  graphWithMergeTarget,
+  graphWithRootAndChild,
+} from './version-diff-projection-test-utils';
 
 export function registerProjectionSemanticScenarios(): void {
+  it('projects materialized merge semantic changes from merge base to merge commit', async () => {
+    const graph = await graphWithMergeTarget({ materializedMergeProof: true });
+    const version = createVersion(graph.provider);
+
+    const result = await version.diff(graph.baseCommitId, graph.mergeCommitId);
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        items: [graph.mergeChange],
+        readRevision: { kind: 'counter', value: '2' },
+        order: 'semantic-change-order',
+      },
+    });
+  });
+
   it('projects multi-sheet edits and sheet rename/add/delete changes', async () => {
     const changes = [
       semanticRecord({

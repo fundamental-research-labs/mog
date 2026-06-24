@@ -124,18 +124,37 @@ export class WorkbookVersionDiffService {
       ]);
     }
 
-    if (
-      targetCommit.payload.parentCommitIds.length !== 1 ||
-      targetCommit.payload.parentCommitIds[0] !== resolvedBase.commitId
-    ) {
+    let semanticPayload: unknown | undefined;
+    const directParentDiff =
+      targetCommit.payload.parentCommitIds.length === 1 &&
+      targetCommit.payload.parentCommitIds[0] === resolvedBase.commitId;
+    if (!directParentDiff && targetCommit.payload.parentCommitIds.length === 2) {
+      const candidate = await readSemanticChangeSet(
+        opened.objectStore,
+        targetCommit.payload.semanticChangeSetDigest,
+      );
+      if (!candidate.ok) return degradedDiffPage(candidate.diagnostics);
+      if (
+        isProvenMaterializedMergeDiff(
+          candidate.payload,
+          resolvedBase.commitId,
+          targetCommit.payload.parentCommitIds,
+        )
+      ) {
+        semanticPayload = candidate.payload;
+      }
+    }
+
+    if (!directParentDiff && semanticPayload === undefined) {
       return degradedDiffPage([
         diagnostic(
           'VERSION_UNMATERIALIZABLE_COMMIT',
-          'This semantic diff slice supports only direct parent-child commit diffs.',
+          'This semantic diff slice supports only direct parent-child diffs or materialized merge diffs proven by the target semantic change-set.',
           {
             details: {
               parentCount: targetCommit.payload.parentCommitIds.length,
               parentMatchesBase: targetCommit.payload.parentCommitIds[0] === resolvedBase.commitId,
+              mergeProofMatchesBase: false,
             },
           },
         ),
@@ -151,13 +170,16 @@ export class WorkbookVersionDiffService {
       return degradedDiffPage(completenessDiagnostics);
     }
 
-    const semanticRecord = await readSemanticChangeSet(
-      opened.objectStore,
-      targetCommit.payload.semanticChangeSetDigest,
-    );
-    if (!semanticRecord.ok) return degradedDiffPage(semanticRecord.diagnostics);
+    if (semanticPayload === undefined) {
+      const semanticRecord = await readSemanticChangeSet(
+        opened.objectStore,
+        targetCommit.payload.semanticChangeSetDigest,
+      );
+      if (!semanticRecord.ok) return degradedDiffPage(semanticRecord.diagnostics);
+      semanticPayload = semanticRecord.payload;
+    }
 
-    const entries = mapSemanticChangeSet(semanticRecord.payload);
+    const entries = mapSemanticChangeSet(semanticPayload);
     if (!entries.ok) return degradedDiffPage(entries.diagnostics);
 
     const offset = pageStartOffset(entries.items, pageToken.cursor);
@@ -191,6 +213,23 @@ export class WorkbookVersionDiffService {
       changeSetDigest: targetCommit.payload.semanticChangeSetDigest,
     };
   }
+}
+
+function isProvenMaterializedMergeDiff(
+  payload: unknown,
+  baseCommitId: WorkbookCommitId,
+  parentCommitIds: readonly WorkbookCommitId[],
+): boolean {
+  if (!isRecord(payload) || !isRecord(payload.merge)) return false;
+  return (
+    payload.merge.baseCommitId === baseCommitId &&
+    payload.merge.oursCommitId === parentCommitIds[0] &&
+    payload.merge.theirsCommitId === parentCommitIds[1]
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }
 
 export function createWorkbookVersionDiffService(

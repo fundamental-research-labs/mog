@@ -30,7 +30,9 @@ export async function graphWithRootAndChild(options: { readonly semanticPayload:
   };
 }
 
-export async function graphWithMergeTarget() {
+export async function graphWithMergeTarget(
+  options: { readonly materializedMergeProof?: boolean } = {},
+) {
   const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
   const initialized = await provider.initializeGraph(await initializeInput('graph-merge', 'root'));
   expectInitializeSuccess(initialized);
@@ -73,11 +75,32 @@ export async function graphWithMergeTarget() {
     throw new Error(`expected theirs commit: ${theirs.diagnostics[0]?.code}`);
   }
 
+  const mergeChange = defaultCellChange('merge');
+  const mergePayload = {
+    ...validSemanticPayload('merge', [mergeChange]),
+    ...(options.materializedMergeProof
+      ? {
+          merge: {
+            baseCommitId: initialized.rootCommit.id,
+            oursCommitId: ours.commit.id,
+            theirsCommitId: theirs.commit.id,
+            targetRef: 'refs/heads/main',
+            expectedTargetHead: {
+              commitId: ours.commit.id,
+              revision: ours.main.revision,
+            },
+            resolutionCount: 0,
+            materializer: 'test-materializer',
+          },
+        }
+      : {}),
+  };
+
   const merge = await graph.mergeCommit({
     ...(await graphContentInput(
       namespace,
       'merge',
-      validSemanticPayload('merge', [defaultCellChange('merge')]),
+      mergePayload,
     )),
     expectedHeadCommitId: ours.commit.id,
     expectedMainRefVersion: ours.main.revision,
@@ -89,8 +112,10 @@ export async function graphWithMergeTarget() {
 
   return {
     provider,
+    baseCommitId: initialized.rootCommit.id,
     oursCommitId: ours.commit.id,
     theirsCommitId: theirs.commit.id,
     mergeCommitId: merge.commit.id,
+    mergeChange,
   };
 }

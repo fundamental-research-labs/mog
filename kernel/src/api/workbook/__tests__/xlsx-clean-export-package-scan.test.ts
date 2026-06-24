@@ -13,6 +13,7 @@ import {
   scanXlsxCleanExportPackageDiagnostics,
   XlsxCleanExportPackageError,
 } from '../xlsx-clean-export-package';
+import { scanXlsxCleanExportPackageInventoryDiagnostics } from '../xlsx-clean-export-package-scan';
 import { readAndValidateMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version-store/provider-indexeddb/backend';
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
@@ -146,6 +147,31 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
       unsafePackageDiagnostics: [],
       redactionLeaks: [],
     });
+  });
+
+  it('allows ordinary external hyperlink relationships', () => {
+    const diagnostics = scanXlsxCleanExportPackageInventoryDiagnostics(
+      [
+        '[Content_Types].xml',
+        'xl/workbook.xml',
+        'xl/worksheets/sheet1.xml',
+        'xl/worksheets/_rels/sheet1.xml.rels',
+      ],
+      [
+        {
+          path: 'xl/worksheets/_rels/sheet1.xml.rels',
+          xml: [
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+            '<Relationship Id="rId1"',
+            ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"',
+            ' Target="https://example.com" TargetMode="External"/>',
+            '</Relationships>',
+          ].join(''),
+        },
+      ],
+    );
+
+    expect(diagnostics).toEqual([]);
   });
 
   it('detects macro, embedded, external connection, and customXml package variants', async () => {

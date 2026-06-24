@@ -46,7 +46,7 @@ export function scanRelationshipsXml(
     const type = xmlAttribute(tag, 'Type') ?? '';
     const target = xmlAttribute(tag, 'Target') ?? '';
     const targetMode = xmlAttribute(tag, 'TargetMode') ?? '';
-    if (isExternalRelationship(target, targetMode)) {
+    if (isExternalRelationship(target, targetMode) && !isHyperlinkRelationshipType(type)) {
       addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT');
     }
     scanRelationshipTypeAndTarget(type, target, counts);
@@ -59,4 +59,8 @@ export function scanRelationshipsXml(
       addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_DANGLING_PACKAGE_REFERENCE');
     }
   }
+}
+
+function isHyperlinkRelationshipType(type: string): boolean {
+  return type.toLowerCase().endsWith('/hyperlink');
 }

@@ -11,7 +11,8 @@
  * stayed on `<body>`, so subsequent printable keystrokes never reached
  * the grid div's React `onKeyDown` and the type-to-edit fallback never
  * triggered. After the fix, `focusGrid()` calls
- * `gridContainer.focus()` unconditionally inside `requestAnimationFrame`.
+ * `gridContainer.focus()` inside `requestAnimationFrame` when the grid layer
+ * still owns focus.
  */
 
 import { createActor } from 'xstate';
@@ -83,5 +84,24 @@ describe('focusGrid DOM restore', () => {
     const snapshot = system.getFocusSnapshot();
     expect(snapshot.state).toBe('grid');
     expect(snapshot.shouldGridHandle).toBe(true);
+  });
+
+  it('does not steal focus from a newer editor layer before the scheduled grid focus runs', async () => {
+    system.setGridContainer(gridContainer);
+    const editor = document.createElement('textarea');
+    editor.setAttribute('data-testid', 'inline-cell-editor');
+    document.body.appendChild(editor);
+
+    try {
+      system.focusGrid();
+      system.focusEditor();
+      editor.focus();
+      await flushRaf();
+
+      expect(system.getFocusSnapshot().state).toBe('editor');
+      expect(document.activeElement).toBe(editor);
+    } finally {
+      document.body.removeChild(editor);
+    }
   });
 });

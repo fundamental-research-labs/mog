@@ -14,7 +14,7 @@ import {
   parseDirectFormatMergeValue,
   parseRowColumnTransition,
 } from './version-merge-materialization-plan-values';
-import { inspectMaterializableMergeChange } from '../../version-merge-materializer-support';
+import { inspectMaterializableMergeChange } from '../merge/version-merge-materializer-support';
 
 export type {
   ParsedCellMergeChange,

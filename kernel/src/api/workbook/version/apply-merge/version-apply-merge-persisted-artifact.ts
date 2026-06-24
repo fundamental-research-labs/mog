@@ -30,7 +30,7 @@ import {
   publicDiagnostic,
   resolutionMismatchDiagnostic,
 } from './version-apply-merge-persisted-artifact-diagnostics';
-import { materializableMergePlanDiagnostics } from '../../version-merge-materializer-support';
+import { materializableMergePlanDiagnostics } from '../merge/version-merge-materializer-support';
 import type {
   NormalizedPersistedApplyMergeInput,
   NormalizedPersistedApplyMergeOptions,

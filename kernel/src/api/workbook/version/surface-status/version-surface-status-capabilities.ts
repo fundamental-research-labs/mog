@@ -5,7 +5,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
-import type { HostCapabilityDecision, HostCapabilityDecisions } from '../../version-merge-capability';
+import type { HostCapabilityDecision, HostCapabilityDecisions } from '../merge/version-merge-capability';
 import type {
   RemotePromoteSurfaceCapabilityInput,
   SurfaceHostCapabilityDecisions,

@@ -8,7 +8,7 @@ import type {
   VersionHistoryDeniedSummaryKind,
 } from '@mog-sdk/contracts/versioning';
 
-import { VERSION_CAPABILITY_KEYS } from '../../version-merge-capability';
+import { VERSION_CAPABILITY_KEYS } from '../merge/version-merge-capability';
 
 type VersionHistoryAllowedProjection = {
   readonly kind: 'allowed';

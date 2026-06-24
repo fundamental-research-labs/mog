@@ -11,7 +11,7 @@ import {
   getVersionMergeCapabilityDecision,
   type VersionMergeCapabilityDisabledReason,
   type VersionMergePublicCapability,
-} from '../../version-merge-capability';
+} from '../merge/version-merge-capability';
 import { isRecord } from './version-proposal-guards';
 import { capabilityUnavailable } from './version-proposal-service-diagnostics';
 import type { VersionProposalPublicOperation } from './version-proposal-types';

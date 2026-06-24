@@ -6,7 +6,7 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import type { NormalizedMergeReviewConflictSet } from './version-merge-review-conflicts-set';
 import {
   findExpectedConflict,

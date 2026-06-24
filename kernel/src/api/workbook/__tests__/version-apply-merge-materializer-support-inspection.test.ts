@@ -1,7 +1,7 @@
 import {
   inspectMaterializableMergeChange,
   isMaterializableMergeDomainReference,
-} from '../version-merge-materializer-support';
+} from '../version/merge/version-merge-materializer-support';
 import { rowColumnChange } from './version-apply-merge-materializer-support-test-utils';
 
 describe('WorkbookVersion applyMerge materializer support inspection', () => {

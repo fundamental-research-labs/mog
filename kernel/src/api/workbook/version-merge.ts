@@ -8,10 +8,10 @@ import type { DocumentContext } from '../../context';
 import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
-} from './version-merge-capability';
+} from './version/merge/version-merge-capability';
 import { publicMergeBaseGateResult } from './version-merge-base-gate';
 import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
-import { blockedMergeResult, mapMergeResult } from './version-merge-result-mapping';
+import { blockedMergeResult, mapMergeResult } from './version/merge/version-merge-result-mapping';
 import {
   mergeUnavailableDiagnostic,
   providerErrorDiagnostic,

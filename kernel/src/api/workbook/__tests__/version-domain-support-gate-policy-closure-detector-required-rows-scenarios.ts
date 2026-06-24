@@ -1,6 +1,6 @@
 import { expect, it } from '@jest/globals';
 
-import { validateVersionDomainSupportManifestGate } from '../version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from '../version/domain-support/version-domain-support-gate';
 import {
   mutableDomainDetectorBridge,
 } from './version-domain-support-gate-policy-closure-test-utils';

@@ -1,7 +1,7 @@
 import type { VersionCapability, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
-import { getVersionHostCapabilityDecisions } from '../../version-merge-capability';
+import { getVersionHostCapabilityDecisions } from '../merge/version-merge-capability';
 import { REQUIRED_PROMOTION_CAPABILITIES } from './remote-constants';
 import { noWriteDiagnostic } from './remote-diagnostics';
 import type { MaybeVersionRuntimeContext } from './remote-types';

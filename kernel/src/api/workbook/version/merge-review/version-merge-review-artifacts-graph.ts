@@ -5,7 +5,7 @@ import type { VersionGraphNamespace } from '../../../../document/version-store/o
 import type { VersionStoreProvider } from '../../../../document/version-store/provider';
 import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
 import { namespaceForRegistry } from '../../../../document/version-store/registry';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import {
   mapMergeReviewProviderDiagnostics,
   mergeReviewDiagnostic,

@@ -10,7 +10,7 @@ import { hasAttachedVersionWriteService } from '../commit/version-commit';
 import {
   getVersionHostCapabilityDecisions,
   getVersionControlGateStatus,
-} from '../../version-merge-capability';
+} from '../merge/version-merge-capability';
 import { hasAttachedVersionMergeService } from '../../version-merge';
 import { hasAttachedPendingRemotePromotionService } from '../pending/remote';
 import { hasAttachedVersionRefLifecycleService } from '../refs/version-refs';

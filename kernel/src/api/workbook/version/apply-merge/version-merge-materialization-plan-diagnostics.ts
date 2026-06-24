@@ -6,7 +6,7 @@ import {
   versionStoreDiagnostic,
   type VersionStoreFailure,
 } from '../../../../document/version-store/provider';
-import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../../version-merge-materializer-support';
+import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../merge/version-merge-materializer-support';
 
 export function unsupportedMergeChange(
   input: VersionMergeCommitCaptureInput,

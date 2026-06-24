@@ -23,7 +23,7 @@ import type {
 import {
   VERSION_CAPABILITY_KEYS,
   type VersionMergePublicOperation,
-} from './version-merge-capability';
+} from './version/merge/version-merge-capability';
 import {
   projectVersionHistoryDiagnosticsForAccess,
   projectVersionStoreDiagnosticsForPublicResult,

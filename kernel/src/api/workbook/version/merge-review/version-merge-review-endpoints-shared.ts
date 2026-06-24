@@ -16,7 +16,7 @@ import {
   type VersionMergePublicCapability,
   type VersionMergePublicOperation,
   versionMergeCapabilityDisabledDiagnostic,
-} from '../../version-merge-capability';
+} from '../merge/version-merge-capability';
 import {
   mergeReviewDiagnostic,
   persistedReviewArtifactReadDiagnostics,

@@ -11,7 +11,7 @@ import type {
 import {
   isMaterializableMergeDomainReference,
   unsupportedDetectedMergeDomainDiagnostic,
-} from '../../version-merge-materializer-support';
+} from '../merge/version-merge-materializer-support';
 import { mergeDomainSupportDetectorRows } from './version-domain-support-gate-domain-rows';
 import type {
   VersionDomainSupportManifestGateOperation,

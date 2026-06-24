@@ -4,7 +4,7 @@ import type { Workbook, WorkbookInternal } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../context';
 import { DocumentFactory } from '../../document/document-factory';
-import { validateVersionDomainSupportManifestGate } from '../version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from '../version/domain-support/version-domain-support-gate';
 import {
   VERSION_DOMAIN_DETECTOR_NOOP_SYNTHETIC_SHEET_ID,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW as NOW,

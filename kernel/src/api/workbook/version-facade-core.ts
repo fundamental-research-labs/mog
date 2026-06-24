@@ -24,9 +24,9 @@ import {
 } from './version-checkout';
 import { commitWorkbookVersion } from './version/commit/version-commit';
 import { diffWorkbookVersion } from './version/diff/version-diff';
-import { readActiveCheckoutHead } from './version-active-checkout-head';
+import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
-import { listWorkbookVersionCommits } from './version-list-commits';
+import { listWorkbookVersionCommits } from './version/list-commits/version-list-commits';
 import {
   degradedHead,
   mapHeadResult,
@@ -41,7 +41,7 @@ import {
   versionResultFromHead,
 } from './version-result';
 import { getAttachedVersionReadService } from './version-service-attachments';
-import { getWorkbookVersionStatus } from './version-status';
+import { getWorkbookVersionStatus } from './version/status/version-status';
 import { getWorkbookVersionSurfaceStatus } from './version/surface-status/version-surface-status';
 
 export function getWorkbookVersionFacadeStatus(

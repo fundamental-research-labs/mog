@@ -12,7 +12,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { mapPublicObjectDigest } from '../../version-attempt-metadata';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';
 import { normalizeVersionApplyMergeResolutions } from '../../version-merge-resolution-normalization';
 

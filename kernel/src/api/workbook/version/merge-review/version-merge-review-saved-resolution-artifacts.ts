@@ -11,7 +11,7 @@ import {
   persistedReviewArtifactReadDiagnostics,
   toInternalSha256Digest,
 } from './version-merge-review-artifacts';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import {
   invalidArtifactDigestDiagnostic,
   invalidReviewArtifactDiagnostic,

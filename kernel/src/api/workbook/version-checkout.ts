@@ -25,7 +25,7 @@ import {
   validateCheckoutOptions,
   validateCheckoutTarget,
 } from './version/checkout/version-checkout-validation';
-import { validateVersionDomainSupportManifestGate } from './version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 import { validateVersionOperationGate } from './version-operation-gate';
 
 export {

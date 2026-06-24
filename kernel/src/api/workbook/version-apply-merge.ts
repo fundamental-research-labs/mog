@@ -30,8 +30,8 @@ import { mergeWorkbookVersion } from './version-merge';
 import {
   getVersionMergeCapabilityDecision,
   versionMergeCapabilityDisabledDiagnostic,
-} from './version-merge-capability';
-import { materializableMergePlanDiagnostics } from './version-merge-materializer-support';
+} from './version/merge/version-merge-capability';
+import { materializableMergePlanDiagnostics } from './version/merge/version-merge-materializer-support';
 import { validateVersionDomainSupportManifestGate } from './version/domain-support/version-domain-support-gate';
 
 export async function applyMergeWorkbookVersion(

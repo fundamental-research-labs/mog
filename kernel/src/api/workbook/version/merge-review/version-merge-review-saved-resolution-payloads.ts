@@ -6,7 +6,7 @@ import type {
 } from '../../../../document/version-store/merge-attempt-artifacts';
 import { isObjectDigest as isVersionObjectDigest } from '../../../../document/version-store/object-digest';
 import { mapPublicExpectedTargetHead, mapPublicTargetRef } from '../../version-attempt-metadata';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import { normalizeVersionApplyMergeResolutions } from '../../version-merge-resolution-normalization';
 import { invalidReviewArtifactDiagnostic } from './version-merge-review-saved-resolution-diagnostics';
 import { hasUnknownKeys, isRecord } from './version-merge-review-saved-resolution-utils';

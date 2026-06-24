@@ -1,7 +1,7 @@
 import type { VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { ResolvedMergeAttemptArtifactPayload } from '../../../../document/version-store/merge-attempt-artifacts';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';
 import type { NormalizedGetMergeConflictDetailInput } from './version-merge-review-normalization';
 import { canonicalJson, digestsEqual } from './version-merge-review-saved-resolution-utils';

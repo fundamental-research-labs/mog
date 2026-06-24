@@ -1,6 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import { validateVersionDomainSupportManifestGate } from '../version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from '../version/domain-support/version-domain-support-gate';
 import {
   POLICY_CLOSURE_DETECTOR_SHEET_ID,
 } from './version-domain-support-gate-policy-closure-test-utils';

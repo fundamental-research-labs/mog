@@ -1,7 +1,7 @@
 import { expect, it } from '@jest/globals';
 
 import { REQUIRED_FIRST_SLICE_DOMAIN_IDS } from '../../../document/version-store/domain-support-manifest-validator';
-import { validateVersionDomainSupportManifestGate } from '../version-domain-support-gate';
+import { validateVersionDomainSupportManifestGate } from '../version/domain-support/version-domain-support-gate';
 import {
   mutableDomainDetectorBridge,
 } from './version-domain-support-gate-policy-closure-test-utils';

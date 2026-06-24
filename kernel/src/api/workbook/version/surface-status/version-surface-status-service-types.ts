@@ -6,7 +6,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { CheckoutSnapshotApplyInput } from '../../../../document/version-store/checkout-apply';
-import type { HostCapabilityDecision } from '../../version-merge-capability';
+import type { HostCapabilityDecision } from '../merge/version-merge-capability';
 import type { VersionLiveCollaborationDirtyStatus } from '../live-collaboration/version-live-collaboration-status';
 import type { VersionPendingProviderWritesStatus } from '../pending/provider-writes';
 

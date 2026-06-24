@@ -6,7 +6,7 @@ import type {
   VersionSurfaceStage,
 } from '@mog-sdk/contracts/api';
 
-import type { VersionControlGateStatus } from '../../version-merge-capability';
+import type { VersionControlGateStatus } from '../merge/version-merge-capability';
 import {
   isSurfaceHostCapabilityDenied,
   remotePromoteSurfaceCapabilityState,

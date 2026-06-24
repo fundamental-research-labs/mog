@@ -26,7 +26,7 @@ import {
   mapApplyMergeWriteResult,
 } from './version-apply-merge-write-result';
 import type { NormalizedApplyMergeOptions } from './version-apply-merge-validation';
-import { materializableMergePlanDiagnostics } from '../../version-merge-materializer-support';
+import { materializableMergePlanDiagnostics } from '../merge/version-merge-materializer-support';
 
 type MaybePromise<T> = T | Promise<T>;
 type BoundMethod = (...args: readonly unknown[]) => MaybePromise<unknown>;

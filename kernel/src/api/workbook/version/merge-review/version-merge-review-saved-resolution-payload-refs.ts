@@ -2,7 +2,7 @@ import type { VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { MergeResolutionSetArtifactPayload } from '../../../../document/version-store/merge-attempt-artifacts';
 import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import type { NormalizedMergeReviewConflictSet } from './version-merge-review-conflicts';
 import type { NormalizedGetMergeConflictDetailInput } from './version-merge-review-normalization';
 import type { SavedResolutionPayloadTarget } from './version-merge-review-saved-resolution-types';

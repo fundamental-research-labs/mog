@@ -8,7 +8,7 @@ import type { DocumentContext } from '../../context';
 import {
   getVersionControlGateStatus,
   getVersionHostCapabilityDecisions,
-} from './version-merge-capability';
+} from './version/merge/version-merge-capability';
 
 export function validateVersionOperationGate(
   ctx: DocumentContext,

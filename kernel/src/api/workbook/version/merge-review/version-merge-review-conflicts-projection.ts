@@ -7,7 +7,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { projectReviewAccessDiffValue } from '../../../../document/version-store/review-access-projection';
-import type { VersionMergePublicOperation } from '../../version-merge-capability';
+import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
 import { invalidPreviewArtifactDiagnostic } from './version-merge-review-artifacts';
 
 const REDACTED_VALUE_REASONS = new Set([

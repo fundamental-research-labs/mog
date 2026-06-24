@@ -31,7 +31,7 @@ import type { WorkbookVersioningConfig } from './types';
 import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
   createSemanticMergeCommitCapture,
-} from './version-merge-materializer';
+} from './version/merge/version-merge-materializer';
 import {
   createProviderBackedWorkbookVersionProvenanceTruthService,
 } from './version/provenance/version-provenance-truth-service';

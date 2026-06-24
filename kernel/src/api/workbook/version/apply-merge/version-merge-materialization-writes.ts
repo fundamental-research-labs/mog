@@ -10,7 +10,7 @@ import type {
   ParsedRowColumnMergeChange,
   RowColumnTransition,
 } from './version-merge-materialization-plan';
-import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../../version-merge-materializer-support';
+import { DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND } from '../merge/version-merge-materializer-support';
 
 export const MERGE_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
   authorId: 'mog.version-merge',

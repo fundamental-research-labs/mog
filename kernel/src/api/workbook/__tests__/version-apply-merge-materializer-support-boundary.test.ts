@@ -2,7 +2,7 @@ import { namespaceForDocumentScope } from '../../../document/version-store/provi
 import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
   createSemanticMergeCommitCapture,
-} from '../version-merge-materializer';
+} from '../version/merge/version-merge-materializer';
 import {
   BASE,
   CREATED_AT,

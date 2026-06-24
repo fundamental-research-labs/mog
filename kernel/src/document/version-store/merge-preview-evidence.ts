@@ -8,6 +8,8 @@ import type {
   VersionRedactedValue,
 } from '@mog-sdk/contracts/api';
 
+import { canonicalJsonStringify } from './merge-apply-intent-store-json';
+
 const SEMANTIC_MERGE_DOMAIN_ORDER = new Map(
   [
     'cell',
@@ -66,7 +68,7 @@ export async function stableMergeConflictIdentity(
   theirs: VersionDiffValue,
 ): Promise<{ readonly conflictId: string; readonly conflictDigest: string }> {
   const sideValues = [ours, theirs].sort(compareDiffValues);
-  const canonical = JSON.stringify({
+  const canonical = canonicalJsonStringify({
     schemaVersion: 1,
     conflictKind: 'same-property',
     key: mergePropertyKey(structural),
@@ -156,7 +158,7 @@ async function stableMergeChangeId(
   base: VersionDiffValue,
   afterValues: readonly VersionDiffValue[],
 ): Promise<string> {
-  const canonical = JSON.stringify({
+  const canonical = canonicalJsonStringify({
     schemaVersion: 1,
     status,
     key: mergePropertyKey(structural),
@@ -172,7 +174,7 @@ async function stableMergeResolutionOptionId(
   identity: { readonly conflictId: string; readonly conflictDigest: string },
   kind: VersionMergeConflictResolutionOptionKind,
 ): Promise<string> {
-  const canonical = JSON.stringify({
+  const canonical = canonicalJsonStringify({
     schemaVersion: 1,
     conflictId: identity.conflictId,
     conflictDigest: identity.conflictDigest,
@@ -204,11 +206,15 @@ function structuralSortKey(
 }
 
 function semanticValuesEqual(left: VersionDiffValue, right: VersionDiffValue): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return canonicalDiffValue(left) === canonicalDiffValue(right);
 }
 
 function compareDiffValues(left: VersionDiffValue, right: VersionDiffValue): number {
-  return compareStrings(JSON.stringify(left), JSON.stringify(right));
+  return compareStrings(canonicalDiffValue(left), canonicalDiffValue(right));
+}
+
+function canonicalDiffValue(value: VersionDiffValue): string {
+  return canonicalJsonStringify(value);
 }
 
 function compareStrings(left: string, right: string): number {

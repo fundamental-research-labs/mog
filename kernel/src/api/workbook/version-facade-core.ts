@@ -22,8 +22,8 @@ import {
   checkoutWorkbookVersion,
   type VersionCheckoutTransactionGuard,
 } from './version-checkout';
-import { commitWorkbookVersion } from './version-commit';
-import { diffWorkbookVersion } from './version-diff';
+import { commitWorkbookVersion } from './version/commit/version-commit';
+import { diffWorkbookVersion } from './version/diff/version-diff';
 import { readActiveCheckoutHead } from './version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
 import { listWorkbookVersionCommits } from './version-list-commits';
@@ -42,7 +42,7 @@ import {
 } from './version-result';
 import { getAttachedVersionReadService } from './version-service-attachments';
 import { getWorkbookVersionStatus } from './version-status';
-import { getWorkbookVersionSurfaceStatus } from './version-surface-status';
+import { getWorkbookVersionSurfaceStatus } from './version/surface-status/version-surface-status';
 
 export function getWorkbookVersionFacadeStatus(
   ctx: DocumentContext,

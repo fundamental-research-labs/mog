@@ -35,7 +35,7 @@ import {
   listWorkbookVersionRefs,
   readWorkbookVersionRef,
   updateWorkbookVersionBranch,
-} from './version-refs';
+} from './version/refs/version-refs';
 import {
   versionFailureFromStoreDiagnostics,
   versionResultFromRefList,

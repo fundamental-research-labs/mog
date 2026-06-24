@@ -28,7 +28,7 @@ import {
   saveMergeResolutionsWorkbookVersion,
 } from './version/merge-review/version-merge-review-endpoints';
 import { promotePendingRemoteWorkbookVersion } from './version/pending/remote';
-import { revertWorkbookVersion } from './version-revert';
+import { revertWorkbookVersion } from './version/revert/version-revert';
 import { versionResultFromApplyMerge, versionResultFromMerge } from './version-result';
 
 export async function mergeWorkbookVersionFacade(

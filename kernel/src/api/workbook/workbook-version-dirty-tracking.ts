@@ -13,7 +13,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
-import { publicDiagnostic } from './version-commit-diagnostics';
+import { publicDiagnostic } from './version/commit/version-commit-diagnostics';
 import { WorkbookVersionImpl } from './version';
 import { versionFailureFromStoreDiagnostics } from './version-result';
 import type { VersionCheckoutTransactionGuard } from './version-checkout';

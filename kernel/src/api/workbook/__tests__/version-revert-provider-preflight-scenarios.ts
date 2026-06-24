@@ -4,7 +4,7 @@ import type { VersionRevertInput, VersionRevertResult } from '@mog-sdk/contracts
 import {
   VERSION_REVERT_PENDING_PROVIDER_WRITES_DIAGNOSTIC_CODE,
   VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
-} from '../version-revert';
+} from '../version/revert/version-revert';
 import {
   COMMIT_A,
   COMMIT_B,

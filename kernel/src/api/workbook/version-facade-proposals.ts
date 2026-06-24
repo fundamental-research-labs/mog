@@ -36,7 +36,7 @@ import {
   rejectWorkbookVersionProposal,
   startWorkbookVersionProposalWorkspace,
   supersedeWorkbookVersionProposal,
-} from './version-proposal';
+} from './version/proposals/version-proposal';
 
 export async function createWorkbookVersionProposalFacade(
   ctx: DocumentContext,

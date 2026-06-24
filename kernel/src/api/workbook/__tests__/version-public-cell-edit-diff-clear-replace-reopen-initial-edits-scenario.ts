@@ -2,7 +2,7 @@ import {
   expectedCellDiff,
   expectedSemanticDigest,
   readSemanticChangeSetPayload,
-} from './version-public-cell-edit-diff.helpers';
+} from './version/public-cell-edit-diff.helpers';
 import type {
   InitialPublicCellEditCommitEvidence,
   PublicCellEditDiffInitializedGraph,

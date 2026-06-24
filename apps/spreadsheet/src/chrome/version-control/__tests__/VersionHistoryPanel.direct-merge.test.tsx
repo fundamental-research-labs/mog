@@ -11,6 +11,7 @@ import type {
 import {
   HEAD_COMMIT_ID,
   LATEST_COMMIT_ID,
+  MERGE_COMMIT_ID,
   PARENT_COMMIT_ID,
   REF_REVISION,
   cleanMergeResult,
@@ -19,10 +20,12 @@ import {
   createWorkbook,
   expectDisabledButtonReason,
   failedInvalidState,
+  mergeResolutionFor,
   mergeApplyButtonTestId,
   mergePreviewButtonTestId,
   mergeSourceRefSelectTestId,
   renderVersionHistoryPanel,
+  sameCellMergeConflict,
   type DirectMergeVersionHistoryWorkbook,
 } from './VersionHistoryPanel.test-utils';
 
@@ -154,6 +157,89 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     expect(workbook.version.applyMerge).not.toHaveBeenCalled();
   });
 
+  it('applies a conflicted direct merge after selecting a resolution', async () => {
+    const conflict = sameCellMergeConflict();
+    const expectedResolution = mergeResolutionFor(conflict, 'acceptTheirs');
+    const workbook = createDirectMergeWorkbook({
+      merge: jest.fn<DirectMergeVersionHistoryWorkbook['version']['merge']>(
+        async (input) => ({
+          ok: true,
+          value: conflictedMergeResult(input.base, input.ours, input.theirs, conflict),
+        }),
+      ),
+      checkout: jest.fn<DirectMergeVersionHistoryWorkbook['version']['checkout']>(async () => ({
+        ok: true,
+        value: {
+          status: 'success',
+          materialization: 'applied',
+          plan: {
+            strategy: 'fullSnapshot',
+            target: {
+              kind: 'ref',
+              refName: CURRENT_REF,
+              commitId: MERGE_COMMIT_ID,
+              refRevision: { kind: 'counter', value: '5' },
+            },
+            commitId: MERGE_COMMIT_ID,
+            parentCommitIds: [HEAD_COMMIT_ID, LATEST_COMMIT_ID],
+            requiredDependencies: [],
+            requiredDependencyCount: 0,
+          },
+          diagnostics: [],
+          mutationGuarantee: 'workbook-state-materialized',
+        },
+      })),
+    });
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    expect(screen.getByTestId(mergeSourceRefSelectTestId())).toHaveValue(INCOMING_REF);
+    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
+
+    await waitFor(() => expect(workbook.version.merge).toHaveBeenCalledTimes(1));
+
+    const applyButton = screen.getByTestId(mergeApplyButtonTestId());
+    await waitFor(() =>
+      expectDisabledButtonReason(applyButton, 'Select a resolution for each conflict.'),
+    );
+    await user.click(applyButton);
+    expect(workbook.version.applyMerge).not.toHaveBeenCalled();
+
+    await user.click(screen.getByLabelText(/^Source\s*-\s*theirs$/));
+    await waitFor(() => expect(applyButton).toBeEnabled());
+    await user.click(applyButton);
+
+    await waitFor(() => expect(workbook.version.applyMerge).toHaveBeenCalledTimes(1));
+    expect(firstCallArgs(workbook.version.applyMerge)[0]?.[0]).toEqual({
+      base: PARENT_COMMIT_ID,
+      ours: HEAD_COMMIT_ID,
+      theirs: LATEST_COMMIT_ID,
+      resolutions: [expectedResolution],
+    });
+    expect(firstCallArgs(workbook.version.applyMerge)[0]?.[1]).toEqual(
+      expect.objectContaining({
+        mode: 'apply',
+        includeDiagnostics: true,
+        targetRef: CURRENT_REF,
+        expectedTargetHead: {
+          commitId: HEAD_COMMIT_ID,
+          revision: REF_REVISION,
+        },
+      }),
+    );
+    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    expect(firstInvocationOrder(workbook.version.applyMerge)).toBeLessThan(
+      firstInvocationOrder(workbook.version.checkout),
+    );
+    expect(firstCallArgs(workbook.version.checkout)[0]).toEqual([
+      {
+        kind: 'ref',
+        name: CURRENT_REF,
+      },
+      { includeDiagnostics: true },
+    ]);
+  });
+
   it('sanitizes direct merge status messages', async () => {
     const reason = `Merge preview failed for principal principal-secret on refs/heads/private at ${PRIVATE_COMMIT_ID}. token=raw-token`;
     const workbook = createDirectMergeWorkbook({
@@ -260,4 +346,12 @@ function disabledCapability(reason: string): VersionCapabilityState {
 
 function firstCallArgs<Args extends unknown[]>(fn: (...args: Args) => unknown): Args[] {
   return (fn as unknown as { readonly mock: { readonly calls: Args[] } }).mock.calls;
+}
+
+function firstInvocationOrder<Args extends unknown[]>(fn: (...args: Args) => unknown): number {
+  const [order] = (
+    fn as unknown as { readonly mock: { readonly invocationCallOrder: readonly number[] } }
+  ).mock.invocationCallOrder;
+  if (order === undefined) throw new Error('Expected mock to have at least one invocation');
+  return order;
 }

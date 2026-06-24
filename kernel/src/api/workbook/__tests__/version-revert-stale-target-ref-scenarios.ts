@@ -3,7 +3,7 @@ import { expect, it } from '@jest/globals';
 import {
   VERSION_REVERT_CAS_UNAVAILABLE_DIAGNOSTIC_CODE,
   VERSION_REVERT_STALE_HEAD_DIAGNOSTIC_CODE,
-} from '../version-revert';
+} from '../version/revert/version-revert';
 import {
   COMMIT_B,
   COMMIT_C,

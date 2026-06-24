@@ -9,7 +9,7 @@ import {
   VERSION_REVERT_REVIEW_INVALIDATION_DIAGNOSTIC_CODE,
   VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
   VERSION_REVERT_UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODE,
-} from '../version-revert';
+} from '../version/revert/version-revert';
 import {
   COMMIT_B,
   MAIN_REF,

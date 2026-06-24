@@ -34,8 +34,8 @@ import {
 } from './version-merge-materializer';
 import {
   createProviderBackedWorkbookVersionProvenanceTruthService,
-} from './version-provenance-truth-service';
-import type { WorkbookVersionSurfaceStatusService } from './version-surface-status-service';
+} from './version/provenance/version-provenance-truth-service';
+import type { WorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
   versioning?: unknown;

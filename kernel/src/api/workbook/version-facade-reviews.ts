@@ -22,7 +22,7 @@ import {
   getWorkbookVersionReviewDiff,
   listWorkbookVersionReviews,
   updateWorkbookVersionReviewStatus,
-} from './version-review';
+} from './version/review/version-review';
 
 export async function listWorkbookVersionFacadeReviews(
   ctx: DocumentContext,

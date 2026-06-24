@@ -8,7 +8,7 @@ import {
   DOCUMENT_SCOPE,
   expectInitializeSuccess,
   initializeInput,
-} from './version-public-cell-edit-diff.helpers';
+} from './version/public-cell-edit-diff.helpers';
 import { commitClearReplacePublicCellEdits } from './version-public-cell-edit-diff-clear-replace-reopen-clear-replace-scenario';
 import { commitInitialPublicCellEdits } from './version-public-cell-edit-diff-clear-replace-reopen-initial-edits-scenario';
 import { verifyPublicCellEditDiffAfterReopen } from './version-public-cell-edit-diff-clear-replace-reopen-reopen-scenario';

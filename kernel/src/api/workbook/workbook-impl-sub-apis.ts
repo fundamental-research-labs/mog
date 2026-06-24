@@ -114,7 +114,7 @@ import {
   attachWorkbookVersionSurfaceStatusService,
 } from './version-wiring';
 import { rebindVersioningAfterCheckout } from './version/checkout/version-checkout-rebind';
-import { readVersionLiveCollaborationStatus } from './version-live-collaboration-status';
+import { readVersionLiveCollaborationStatus } from './version/live-collaboration/version-live-collaboration-status';
 import { readVersionPendingProviderWrites } from './version/pending/provider-writes';
 import {
   getKnownSheetNames,
@@ -188,7 +188,7 @@ import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
-import { createWorkbookVersionSurfaceStatusService } from './version-surface-status-service';
+import { createWorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 import {
   applyWorkbookReadOnlyMode,
   createWorkbookFeatureGateBinder,

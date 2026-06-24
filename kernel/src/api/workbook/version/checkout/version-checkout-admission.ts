@@ -22,7 +22,7 @@ import {
   readCheckoutSessionCurrentStatus,
   readVersionSurfaceCheckoutSession,
   readVersionSurfaceDirtyStatus,
-} from '../../version-surface-status-service';
+} from '../surface-status/version-surface-status-service';
 
 export type {
   VersionCheckoutAdmissionBlock,

@@ -1,4 +1,4 @@
-import { expectedCellDiff } from './version-public-cell-edit-diff.helpers';
+import { expectedCellDiff } from './version/public-cell-edit-diff.helpers';
 import type {
   PublicCellEditDiffCommit,
   PublicCellEditDiffInitializedGraph,

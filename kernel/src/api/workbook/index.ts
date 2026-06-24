@@ -31,5 +31,5 @@ export type {
   VersionLiveCollaborationState,
   VersionLiveCollaborationStatus,
   VersionLiveCollaborationStatusReader,
-} from './version-live-collaboration-status';
+} from './version/live-collaboration/version-live-collaboration-status';
 export type { Workbook } from '@mog-sdk/contracts/api';

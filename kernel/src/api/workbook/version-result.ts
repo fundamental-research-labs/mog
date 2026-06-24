@@ -27,7 +27,7 @@ import {
 import {
   projectVersionHistoryDiagnosticsForAccess,
   projectVersionStoreDiagnosticsForPublicResult,
-} from './version-history-diagnostic-projection';
+} from './version/history-diagnostics/version-history-diagnostic-projection';
 
 type VersionResultOperation =
   | 'getHead'

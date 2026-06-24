@@ -5,6 +5,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { MergeDiagnostic } from './merge-service-diagnostics';
+import { canonicalJsonStringify } from './merge-apply-intent-store-json';
 import { diagnostic } from './merge-service-diagnostics';
 import {
   compareMergeChanges,
@@ -18,6 +19,8 @@ import {
   type SemanticValueChange,
 } from './merge-service-semantic-records';
 
+// Boundary: semantic record production owns domain-specific diff meaning. This
+// service only reconciles canonical preview evidence into public merge results.
 export async function classifyValueChanges(
   ours: readonly SemanticValueChange[],
   theirs: readonly SemanticValueChange[],
@@ -125,5 +128,5 @@ export async function classifyValueChanges(
 }
 
 function semanticValuesEqual(left: VersionDiffValue, right: VersionDiffValue): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return canonicalJsonStringify(left) === canonicalJsonStringify(right);
 }

@@ -4,7 +4,7 @@ import type { VersionRevertInput } from '@mog-sdk/contracts/api';
 import {
   VERSION_REVERT_TARGET_REJECTED_DIAGNOSTIC_CODE,
   VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
-} from '../version-revert';
+} from '../version/revert/version-revert';
 import {
   COMMIT_A,
   COMMIT_B,

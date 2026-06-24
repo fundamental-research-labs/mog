@@ -10,7 +10,7 @@ import type {
 import type {
   readCheckoutSessionCurrentStatus,
   readVersionSurfaceDirtyStatus,
-} from '../../version-surface-status-service';
+} from '../surface-status/version-surface-status-service';
 
 export function checkoutLeaseFromDirtyStatus(
   dirty: Awaited<ReturnType<typeof readVersionSurfaceDirtyStatus>>,

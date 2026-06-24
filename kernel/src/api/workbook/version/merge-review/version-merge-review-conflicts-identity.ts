@@ -6,6 +6,7 @@ import type {
   VersionSemanticValue,
 } from '@mog-sdk/contracts/api';
 
+import { canonicalJsonStringify } from '../../../../document/version-store/merge-apply-intent-store-json';
 import {
   compareJsonValues,
   compareSemanticFields,
@@ -19,7 +20,7 @@ export async function stableReviewConflictIdentity(
   theirs: VersionDiffValue,
 ): Promise<{ readonly conflictId: string; readonly conflictDigest: string }> {
   const sideValues = [identityDiffValue(ours), identityDiffValue(theirs)].sort(compareJsonValues);
-  const canonical = JSON.stringify({
+  const canonical = canonicalJsonStringify({
     schemaVersion: 1,
     conflictKind: 'same-property',
     key: mergeReviewPropertyKey(structural),
@@ -38,7 +39,7 @@ export async function stableReviewResolutionOptionId(
   identity: { readonly conflictId: string; readonly conflictDigest: string },
   kind: VersionMergeConflictResolutionOptionKind,
 ): Promise<string> {
-  const canonical = JSON.stringify({
+  const canonical = canonicalJsonStringify({
     schemaVersion: 1,
     conflictId: identity.conflictId,
     conflictDigest: identity.conflictDigest,

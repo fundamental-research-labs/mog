@@ -10,7 +10,7 @@ import {
   expectedRowOrderDiff,
   initializeInput,
   readSemanticChangeSetPayload,
-} from './version-public-cell-edit-diff.helpers';
+} from './version/public-cell-edit-diff.helpers';
 
 export function registerPublicRowInsertionScenario(): void {
   it('commits a public row insertion with rows-columns review diff evidence', async () => {

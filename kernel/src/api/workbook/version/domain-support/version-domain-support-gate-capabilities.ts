@@ -2,7 +2,7 @@ import type { DocumentContext } from '../../../../context';
 import {
   hasAttachedVersionReviewReadService,
   hasAttachedVersionReviewWriteService,
-} from '../../version-review-service-discovery';
+} from '../review/version-review-service-discovery';
 import {
   hasMethod,
   isRecord,

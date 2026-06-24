@@ -1,4 +1,4 @@
-import { projectVersionHistoryDiagnosticsForAccess } from '../version-history-diagnostic-projection';
+import { projectVersionHistoryDiagnosticsForAccess } from '../version/history-diagnostics/version-history-diagnostic-projection';
 import { sensitiveDiagnostic } from './version-history-diagnostic-projection-access-fixtures';
 import { expectNoForbiddenDetails } from './version-history-diagnostic-projection-test-utils';
 

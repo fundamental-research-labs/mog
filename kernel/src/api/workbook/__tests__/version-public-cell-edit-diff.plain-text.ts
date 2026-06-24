@@ -11,7 +11,7 @@ import {
   expectedSemanticDigest,
   initializeInput,
   readSemanticChangeSetPayload,
-} from './version-public-cell-edit-diff.helpers';
+} from './version/public-cell-edit-diff.helpers';
 
 export function registerPublicPlainTextEditScenario(): void {
   it('commits a single plain text edit from public APIs', async () => {

@@ -1,6 +1,6 @@
 import { jest } from '@jest/globals';
 
-import { createWorkbookVersionSurfaceStatusService } from '../version-surface-status-service';
+import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
 import { createSurfaceReadyVersionWithContext } from './version-surface-status-test-utils';
 
 export function createMalformedProviderWriteActivityStatusService() {

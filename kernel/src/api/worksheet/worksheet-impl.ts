@@ -203,7 +203,6 @@ import {
   normalizeFormulaA1,
   normalizeFormulaExpression,
   normalizeFormulaGrid,
-  shouldEscapeAsLiteralText,
   type ExplicitTextWriteOptions,
   type FormulaCellWriteOptions,
   type NormalizedSetCellsEntry,
@@ -774,12 +773,9 @@ export class WorksheetImpl implements Worksheet {
       return;
     }
 
-    // Prefix formula-shaped text with apostrophe to force literal storage.
-    if (
-      isExplicitTextWrite(options) &&
-      typeof value === 'string' &&
-      shouldEscapeAsLiteralText(value)
-    ) {
+    // Prefix explicit text writes with Excel's literal marker so parsing never
+    // coerces numeric-looking IDs, dates, or formula-shaped strings.
+    if (isExplicitTextWrite(options) && typeof value === 'string') {
       value = "'" + value;
     }
 
@@ -827,11 +823,7 @@ export class WorksheetImpl implements Worksheet {
       return;
     }
 
-    if (
-      isExplicitTextWrite(options) &&
-      typeof value === 'string' &&
-      shouldEscapeAsLiteralText(value)
-    ) {
+    if (isExplicitTextWrite(options) && typeof value === 'string') {
       value = "'" + value;
     }
 

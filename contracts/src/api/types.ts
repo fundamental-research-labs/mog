@@ -410,9 +410,9 @@ export interface Note {
 export interface CellWriteOptions {
   /** If true, value is treated as a formula (prefixed with =) */
   asFormula?: boolean;
-  /** If true, string values starting with "=" are stored as literal text, not formulas. */
+  /** If true, string values are stored as literal text without numeric/date/formula coercion. */
   literal?: boolean;
-  /** Alias for `literal`; use when formula-shaped text should be stored as text. */
+  /** Alias for `literal`; use when text must be preserved exactly. */
   asText?: boolean;
 }
 

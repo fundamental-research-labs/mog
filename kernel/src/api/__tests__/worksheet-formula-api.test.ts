@@ -281,6 +281,21 @@ describe('Worksheet formula API ergonomics', () => {
     );
   });
 
+  it('setCell stores numeric-looking strings literally when asText is explicit', async () => {
+    (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
+
+    await ws.setCell('A1', '90210', { asText: true });
+
+    expect(CellOps.setCell).toHaveBeenCalledWith(
+      ctx,
+      SHEET_ID,
+      0,
+      0,
+      "'90210",
+      expectVersionOperationOptions('worksheet.setCell', ['cells']),
+    );
+  });
+
   it('setFormula normalizes bare formulas before delegating to the cell write path', async () => {
     (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
 

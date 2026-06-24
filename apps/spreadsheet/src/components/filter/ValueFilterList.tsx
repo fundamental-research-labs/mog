@@ -219,28 +219,14 @@ export function ValueFilterList({
   }, []);
 
   const handleSelectAll = useCallback(() => {
-    setCheckedKeys((prev) => {
-      const next = new Set(prev);
-      // Add all filtered values
-      for (const item of filteredItems) {
-        next.add(valueToKey(item.value));
-      }
-      return next;
-    });
-    if (blankVisible) setIsBlankChecked(true);
-  }, [filteredItems, blankVisible]);
+    setCheckedKeys(new Set(items.map((item) => valueToKey(item.value))));
+    if (hasBlank) setIsBlankChecked(true);
+  }, [items, hasBlank]);
 
   const handleSelectNone = useCallback(() => {
-    setCheckedKeys((prev) => {
-      const next = new Set(prev);
-      // Remove all filtered values
-      for (const item of filteredItems) {
-        next.delete(valueToKey(item.value));
-      }
-      return next;
-    });
-    if (blankVisible) setIsBlankChecked(false);
-  }, [filteredItems, blankVisible]);
+    setCheckedKeys(new Set());
+    if (hasBlank) setIsBlankChecked(false);
+  }, [hasBlank]);
 
   const handleApply = useCallback(() => {
     // Convert checked keys back to values

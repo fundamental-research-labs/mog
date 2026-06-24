@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ValueFilterList } from '../ValueFilterList';
 
 describe('ValueFilterList', () => {
-  it('keeps hidden blank selection when searched Clear and Select All operate on visible values', () => {
+  it('applies Clear and Select All to the full checklist while search is narrowed', () => {
     const onApply = jest.fn();
 
     render(
@@ -20,11 +20,23 @@ describe('ValueFilterList', () => {
       />,
     );
 
+    expect(screen.getByTestId('filter-value-blank')).toBeChecked();
+
     fireEvent.change(screen.getByPlaceholderText('Search (* and ? wildcards)'), {
       target: { value: 'Apple' },
     });
 
     fireEvent.click(screen.getByTestId('filter-value-clear'));
+
+    fireEvent.change(screen.getByPlaceholderText('Search (* and ? wildcards)'), {
+      target: { value: '' },
+    });
+
+    expect(screen.getByTestId('filter-value-blank')).not.toBeChecked();
+
+    fireEvent.change(screen.getByPlaceholderText('Search (* and ? wildcards)'), {
+      target: { value: 'Apple' },
+    });
     fireEvent.click(screen.getByTestId('filter-value-select-all'));
 
     fireEvent.change(screen.getByPlaceholderText('Search (* and ? wildcards)'), {

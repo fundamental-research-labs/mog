@@ -86,10 +86,18 @@ fn compare_values(value: &CellValue, threshold: f64, operator: &CellValueSingleO
             CellValueSingleOp::NotEqual => !float_eq(n, threshold),
         }
     } else {
-        // Non-numeric cell value: it is inherently not equal to any number,
-        // so NotEqual should return true. All other operators (including Equal)
-        // return false because ordering is undefined for mixed types.
-        matches!(operator, CellValueSingleOp::NotEqual)
+        // Excel orders text after numbers for mixed text/number comparisons:
+        // `" "` > 1 is true, while `" "` < 1 is false. Keep non-text values
+        // such as blanks, errors, arrays, and images out of ordering rules.
+        match value {
+            CellValue::Text(_) => match operator {
+                CellValueSingleOp::GreaterThan | CellValueSingleOp::GreaterThanOrEqual => true,
+                CellValueSingleOp::LessThan | CellValueSingleOp::LessThanOrEqual => false,
+                CellValueSingleOp::Equal => false,
+                CellValueSingleOp::NotEqual => true,
+            },
+            _ => matches!(operator, CellValueSingleOp::NotEqual),
+        }
     }
 }
 
@@ -178,15 +186,6 @@ pub fn evaluate_cell_value(value: &CellValue, comparison: &CellValueComparison) 
         } => {
             // If threshold has a numeric value, try numeric comparison
             if let Some(thresh_num) = threshold.number {
-                let num_value = to_number(value);
-                if num_value.is_none()
-                    && !matches!(
-                        operator,
-                        CellValueSingleOp::Equal | CellValueSingleOp::NotEqual
-                    )
-                {
-                    return false;
-                }
                 compare_values(value, thresh_num, operator)
             } else {
                 // Non-numeric threshold -- string comparison for Equal/NotEqual

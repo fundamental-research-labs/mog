@@ -204,11 +204,26 @@ fn test_not_equal_string() {
 fn test_text_cell_with_numeric_threshold() {
     let cmp = single(CellValueSingleOp::GreaterThan, "10");
 
-    // Text "abc" > 10 -> false (non-numeric value with numeric operator)
+    // Excel orders text after numbers for mixed text/number comparisons.
     assert_eq!(
         evaluate_cell_value(&CellValue::Text("abc".into()), &cmp),
-        false
+        true
     );
+}
+
+#[test]
+fn test_text_cell_orders_after_numeric_threshold() {
+    let gt = single(CellValueSingleOp::GreaterThan, "1");
+    let gte = single(CellValueSingleOp::GreaterThanOrEqual, "1");
+    let lt = single(CellValueSingleOp::LessThan, "1");
+    let lte = single(CellValueSingleOp::LessThanOrEqual, "1");
+
+    let text = CellValue::Text(" ".into());
+
+    assert_eq!(evaluate_cell_value(&text, &gt), true);
+    assert_eq!(evaluate_cell_value(&text, &gte), true);
+    assert_eq!(evaluate_cell_value(&text, &lt), false);
+    assert_eq!(evaluate_cell_value(&text, &lte), false);
 }
 
 #[test]

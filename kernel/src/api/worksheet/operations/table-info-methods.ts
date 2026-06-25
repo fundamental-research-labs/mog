@@ -12,8 +12,8 @@ type OperationalTableInfo = TableInfo & {
 export function attachTableInfoMethods(
   table: TableInfo,
   operations: {
-    setTotalsRow(tableName: string, visible: boolean): Promise<void>;
-    setTotalsFunction(tableName: string, columnName: string, func: string): Promise<void>;
+    setTotalsRow(tableName: string, visible: boolean): Promise<unknown>;
+    setTotalsFunction(tableName: string, columnName: string, func: string): Promise<unknown>;
   },
 ): TableInfo {
   const info = table as OperationalTableInfo;
@@ -26,9 +26,12 @@ export function attachTableInfoMethods(
     }
   }
 
-  info.setTotalsRow = (visible: boolean) => operations.setTotalsRow(info.name, visible);
-  info.setTotalsFunction = (columnName: string, func: string) =>
-    operations.setTotalsFunction(info.name, columnName, func);
+  info.setTotalsRow = async (visible: boolean) => {
+    await operations.setTotalsRow(info.name, visible);
+  };
+  info.setTotalsFunction = async (columnName: string, func: string) => {
+    await operations.setTotalsFunction(info.name, columnName, func);
+  };
   info.containsCell = (row: number, col: number): boolean => {
     const parsed = parseCellRange(info.range);
     if (!parsed) return false;

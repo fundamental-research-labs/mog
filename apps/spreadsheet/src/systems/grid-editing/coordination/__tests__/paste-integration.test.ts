@@ -237,6 +237,76 @@ describe('Clipboard Paste Integration', () => {
     clipboardActor.stop();
   });
 
+  it('applies comments after normal internal copy paste uses the core copy path', async () => {
+    const sheetId = 'sheet-1' as SheetId;
+    const sourceRange = { startRow: 0, startCol: 0, endRow: 0, endCol: 0 };
+    const clipboardData: ClipboardData = {
+      sourceSheetId: sheetId,
+      sourceRanges: [sourceRange],
+      cells: {
+        '0,0': {
+          raw: 'src',
+          comments: [
+            {
+              rowOffset: 0,
+              colOffset: 0,
+              author: 'User',
+              content: 'Copy comment test',
+              createdAt: 1234,
+              resolved: false,
+              commentType: 'threadedComment',
+              threadId: 'thread-1',
+              parentId: null,
+            },
+          ],
+        },
+      },
+      textSignature: 'src',
+    };
+
+    const copyRange = jest.fn(async () => {});
+    const addComment = jest.fn(async () => {});
+    const store: PasteStoreOperations = {
+      setCellValues: jest.fn(),
+      setCellFormat: jest.fn(),
+      getCellData: jest.fn(),
+      copyRange,
+      addComment,
+    };
+
+    const clipboardActor = createActor(clipboardMachine);
+    clipboardActor.start();
+
+    const cleanup = setupClipboardPasteIntegration({
+      clipboardActor,
+      store,
+      getActiveSheetId: () => sheetId,
+    });
+
+    clipboardActor.send({ type: 'COPY', ranges: [sourceRange], data: clipboardData });
+    clipboardActor.send({ type: 'PASTE', targetCell: { row: 3, col: 4 } });
+    await waitForPendingClipboardPaste();
+
+    expect(copyRange).toHaveBeenCalledTimes(1);
+    expect(addComment).toHaveBeenCalledWith(
+      sheetId,
+      3,
+      4,
+      [{ text: 'Copy comment test' }],
+      'User',
+      expect.objectContaining({
+        commentType: 'threadedComment',
+        resolved: false,
+        threadId: 'thread-1',
+        parentId: null,
+      }),
+    );
+    expect(clipboardActor.getSnapshot().matches('hasCopy')).toBe(true);
+
+    cleanup();
+    clipboardActor.stop();
+  });
+
   it('uses the hidden-row-skipping fallback when the paste target row is hidden', async () => {
     const sheetId = 'sheet-1' as SheetId;
     const sourceRange = { startRow: 20, startCol: 29, endRow: 20, endCol: 29 };

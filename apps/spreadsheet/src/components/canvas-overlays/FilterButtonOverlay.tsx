@@ -284,7 +284,7 @@ export const FilterButtonOverlay = memo(function FilterButtonOverlay({
         side="bottom"
         align="start"
         sideOffset={4}
-        className="flex flex-col p-0 overflow-visible"
+        className="flex flex-col overflow-hidden p-0"
         style={{
           width: '280px',
           height: popoverHeight,

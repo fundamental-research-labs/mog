@@ -57,12 +57,14 @@ export interface FilterDropdownContentProps {
 
 type FilterTab = 'values' | 'conditions';
 type ActiveSubmenu = 'number' | 'text' | 'date' | 'color' | 'sortByColor' | null;
-type SubmenuPlacement = 'right' | 'left';
-
 type FilterOperationReceipt = {
   readonly status: string;
   readonly effects: readonly unknown[];
   readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+type SubmenuPanelPosition = {
+  readonly left: number;
+  readonly top: number;
 };
 
 type PendingFilterActionGlobal = typeof globalThis & {
@@ -73,11 +75,18 @@ const FILTER_ACTION_APPLY_DELAY_MS = 100;
 const SUBMENU_PANEL_WIDTH_PX = 180;
 const SUBMENU_PANEL_GAP_PX = 4;
 
-function submenuPanelClassName(placement: SubmenuPlacement): string {
+function submenuPanelClassName(): string {
   return cn(
-    'absolute top-0 pointer-events-auto bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px] max-h-[min(480px,calc(100vh-16px))] overflow-y-auto overscroll-contain',
-    placement === 'right' ? 'left-full ml-1' : 'right-full mr-1',
+    'fixed pointer-events-auto bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[180px] max-h-[min(480px,calc(100vh-16px))] overflow-y-auto overscroll-contain',
   );
+}
+
+function submenuPanelStyle(position: SubmenuPanelPosition | null): React.CSSProperties | undefined {
+  if (!position) return undefined;
+  return {
+    left: position.left,
+    top: position.top,
+  };
 }
 
 function trackPendingFilterAction(action: () => Promise<void>): void {
@@ -207,7 +216,7 @@ export function FilterDropdownContent({
 
   // Submenu state (B4: Excel-parity quickwins)
   const [activeSubmenu, setActiveSubmenu] = useState<ActiveSubmenu>(null);
-  const [submenuPlacement, setSubmenuPlacement] = useState<SubmenuPlacement>('right');
+  const [submenuPosition, setSubmenuPosition] = useState<SubmenuPanelPosition | null>(null);
 
   // Pending operator for condition panel (when switching from submenu)
   const [pendingOperator, setPendingOperator] = useState<FilterOperator | null>(null);
@@ -300,6 +309,7 @@ export function FilterDropdownContent({
     }
     // Reset submenu and pending operator when content mounts
     setActiveSubmenu(null);
+    setSubmenuPosition(null);
     setPendingOperator(null);
   }, [currentCriteria]);
 
@@ -406,7 +416,16 @@ export function FilterDropdownContent({
           spaceRight >= spaceLeft
             ? 'right'
             : 'left';
-        setSubmenuPlacement(preferredPlacement);
+        const left =
+          preferredPlacement === 'right'
+            ? rect.right + SUBMENU_PANEL_GAP_PX
+            : rect.left - SUBMENU_PANEL_WIDTH_PX - SUBMENU_PANEL_GAP_PX;
+        setSubmenuPosition({
+          left: Math.max(8, Math.min(left, window.innerWidth - SUBMENU_PANEL_WIDTH_PX - 8)),
+          top: Math.max(8, Math.min(rect.top, window.innerHeight - 16)),
+        });
+      } else {
+        setSubmenuPosition(null);
       }
       setActiveSubmenu(submenu);
     },
@@ -418,10 +437,11 @@ export function FilterDropdownContent({
       if (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         event.stopPropagation();
-        openSubmenu(submenu);
+        openSubmenu(submenu, event.currentTarget);
       }
       if (event.key === 'ArrowLeft' || event.key === 'Escape') {
         setActiveSubmenu(null);
+        setSubmenuPosition(null);
       }
     },
     [openSubmenu],
@@ -520,7 +540,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'sortByColor' && (
-              <div className={submenuPanelClassName(submenuPlacement)}>
+              <div className={submenuPanelClassName()} style={submenuPanelStyle(submenuPosition)}>
                 <SortByColorMenu
                   sheetId={activeSheetId}
                   filterId={filterId}
@@ -555,7 +575,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'number' && (
-              <div className={submenuPanelClassName(submenuPlacement)}>
+              <div className={submenuPanelClassName()} style={submenuPanelStyle(submenuPosition)}>
                 <NumberFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -582,7 +602,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'date' && (
-              <div className={submenuPanelClassName(submenuPlacement)}>
+              <div className={submenuPanelClassName()} style={submenuPanelStyle(submenuPosition)}>
                 <DateFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -611,7 +631,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'text' && (
-              <div className={submenuPanelClassName(submenuPlacement)}>
+              <div className={submenuPanelClassName()} style={submenuPanelStyle(submenuPosition)}>
                 <TextFiltersMenu
                   filterId={filterId}
                   headerCellId={brandedHeaderCellId}
@@ -638,7 +658,7 @@ export function FilterDropdownContent({
               <span className="text-ss-text-secondary">›</span>
             </MenuItem>
             {activeSubmenu === 'color' && (
-              <div className={submenuPanelClassName(submenuPlacement)}>
+              <div className={submenuPanelClassName()} style={submenuPanelStyle(submenuPosition)}>
                 <ColorFiltersMenu
                   sheetId={activeSheetId}
                   filterId={filterId}

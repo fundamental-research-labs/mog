@@ -3,22 +3,44 @@ import type {
   ProviderInboundProofField,
   SyncUpdateDiagnosticEvidence,
 } from '@mog-sdk/types-document/storage/inbound-updates';
-import {
-  PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
-  PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
-} from '@mog-sdk/types-document/storage/inbound-updates';
 import type { VersionSyncOperationContext } from './sync-provenance';
 
+const VERSION_SYNC_PROVENANCE_PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS = Object.freeze([
+  'sourceKind',
+  'originKind',
+  'stableOriginId',
+  'providerRefId',
+  'storageScope',
+  'authorityRef',
+  'authorState',
+  'provenanceRedactionPolicy',
+  'provenancePayloadHash',
+  'decisionId',
+  'sessionId',
+  'epoch',
+  'providerEpoch',
+  'updateId',
+  'payloadKind',
+  'payloadHash',
+] as const satisfies readonly ProviderInboundProofField[]);
+
+const VERSION_SYNC_PROVENANCE_PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS = Object.freeze([
+  'remoteSessionId',
+  'remoteAuthorRef',
+  'correlationId',
+  'causationIds',
+] as const satisfies readonly ProviderInboundProofField[]);
+
 export const VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_REQUIRED_FIELDS = Object.freeze([
-  ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+  ...VERSION_SYNC_PROVENANCE_PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
   'providerId',
   'providerKind',
-  ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+  ...VERSION_SYNC_PROVENANCE_PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
 ] as const satisfies readonly ProviderInboundProofField[]);
 
 export const VERSION_SYNC_PROVENANCE_PROVIDER_MIXED_AUTHORITY_PROOF_V2_REQUIRED_FIELDS =
   Object.freeze([
-    ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+    ...VERSION_SYNC_PROVENANCE_PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
     'providerId',
     'providerKind',
   ] as const satisfies readonly ProviderInboundProofField[]);

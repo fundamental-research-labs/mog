@@ -25,6 +25,7 @@ import { serialToDate } from '@mog/spreadsheet-utils/datetime';
 import React, { useCallback, useState } from 'react';
 import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
 import { MenuItem, MenuSeparator } from '@mog/shell/components/ui';
+import { FilterSubmenu } from './FilterSubmenu';
 
 export interface DateFiltersMenuProps {
   /** Filter ID from the filter dropdown context */
@@ -335,6 +336,20 @@ export function DateFiltersMenu({
     onClose();
   }, [filterId, headerCellId, setPendingFilterConfig, onSwitchToConditions, onClose]);
 
+  const handlePeriodTriggerKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLButtonElement>) => {
+      if (event.key === 'ArrowRight' || event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowPeriodSubmenu(true);
+      }
+      if (event.key === 'ArrowLeft' || event.key === 'Escape') {
+        setShowPeriodSubmenu(false);
+      }
+    },
+    [],
+  );
+
   return (
     <div className="date-filters-menu flex flex-col max-h-[400px] overflow-y-auto">
       {/* Operator-based filters */}
@@ -384,36 +399,45 @@ export function DateFiltersMenu({
       <MenuItem onSelect={applyYearToDateFilter}>Year to Date</MenuItem>
 
       {/* All Dates in Period submenu */}
-      <div className="relative">
-        <MenuItem
-          onSelect={() => setShowPeriodSubmenu(!showPeriodSubmenu)}
-          className="flex items-center justify-between"
-        >
-          <span>All Dates in Period</span>
-          <span className="text-ss-text-secondary">›</span>
-        </MenuItem>
-        {showPeriodSubmenu && (
-          <div className="absolute left-full top-0 ml-1 bg-ss-surface border border-ss-border rounded shadow-ss-lg z-ss-popover min-w-[120px] max-h-[300px] overflow-y-auto">
-            <MenuItem onSelect={() => applyPeriodFilter('q1')}>Quarter 1</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('q2')}>Quarter 2</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('q3')}>Quarter 3</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('q4')}>Quarter 4</MenuItem>
-            <MenuSeparator />
-            <MenuItem onSelect={() => applyPeriodFilter('jan')}>January</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('feb')}>February</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('mar')}>March</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('apr')}>April</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('may')}>May</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('jun')}>June</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('jul')}>July</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('aug')}>August</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('sep')}>September</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('oct')}>October</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('nov')}>November</MenuItem>
-            <MenuItem onSelect={() => applyPeriodFilter('dec')}>December</MenuItem>
-          </div>
-        )}
-      </div>
+      <FilterSubmenu
+        open={showPeriodSubmenu}
+        onOpenChange={setShowPeriodSubmenu}
+        minWidth={120}
+        maxHeight={300}
+        trigger={
+          <MenuItem
+            aria-haspopup="menu"
+            aria-expanded={showPeriodSubmenu}
+            onSelect={() => setShowPeriodSubmenu(true)}
+            onMouseEnter={() => setShowPeriodSubmenu(true)}
+            onKeyDown={handlePeriodTriggerKeyDown}
+            className="flex items-center justify-between"
+          >
+            <span>All Dates in Period</span>
+            <span className="text-ss-text-secondary">›</span>
+          </MenuItem>
+        }
+      >
+        <div className="date-period-filters-menu flex flex-col">
+          <MenuItem onSelect={() => applyPeriodFilter('q1')}>Quarter 1</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('q2')}>Quarter 2</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('q3')}>Quarter 3</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('q4')}>Quarter 4</MenuItem>
+          <MenuSeparator />
+          <MenuItem onSelect={() => applyPeriodFilter('jan')}>January</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('feb')}>February</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('mar')}>March</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('apr')}>April</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('may')}>May</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('jun')}>June</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('jul')}>July</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('aug')}>August</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('sep')}>September</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('oct')}>October</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('nov')}>November</MenuItem>
+          <MenuItem onSelect={() => applyPeriodFilter('dec')}>December</MenuItem>
+        </div>
+      </FilterSubmenu>
 
       <MenuSeparator />
 

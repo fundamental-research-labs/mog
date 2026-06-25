@@ -8,22 +8,27 @@
  * @module systems/testing-foundation
  */
 
-import type {
-  CellCoord,
-  CoordinateSystem,
-  DocumentPoint,
-  DocumentRect,
-  FrozenPanes,
-  HeaderVisibility,
-  LayerPoint,
-  LayerRect,
-  ScrollViewport,
-  ViewportPoint,
-  ViewportPositionIndexLike,
-  ViewportMergeIndexLike,
-  ViewportRect,
-  VisibleRegions,
+import {
+  COL_HEADER_HEIGHT,
+  ROW_HEADER_WIDTH,
+  type CellCoord,
+  type CoordinateSystem,
+  type DocumentPoint,
+  type DocumentRect,
+  type FrozenPanes,
+  type HeaderVisibility,
+  type HitTestResult,
+  type LayerPoint,
+  type LayerRect,
+  type ScrollViewport,
+  type ViewportPoint,
+  type ViewportPositionIndexLike,
+  type ViewportMergeIndexLike,
+  type ViewportRect,
+  type VisibleRegions,
 } from '@mog-sdk/contracts/rendering';
+
+import type { CellRange } from '@mog-sdk/contracts/core';
 
 import {
   documentPoint,
@@ -34,10 +39,7 @@ import {
   viewportRect,
 } from '@mog/spreadsheet-utils/rendering/coordinates';
 
-import type { CellRange } from '@mog-sdk/contracts/core';
-import type { HitTestResult } from '@mog-sdk/contracts/rendering';
-import { ViewportPositionIndex } from '@mog/grid-renderer';
-import { ViewportMergeIndex } from '@mog/grid-renderer';
+import { ViewportPositionIndex, ViewportMergeIndex } from '@mog/grid-renderer';
 
 // =============================================================================
 // Options
@@ -115,9 +117,6 @@ export function createMockCoordinateSystem(
     showRowHeaders: true,
     showColumnHeaders: true,
   };
-
-  const ROW_HEADER_WIDTH = 50;
-  const COL_HEADER_HEIGHT = 24;
 
   function getEffectiveHeaderWidth(): number {
     return headerVisibility.showRowHeaders !== false ? ROW_HEADER_WIDTH : 0;

@@ -64,7 +64,9 @@ function expectFloatingObjectMutationOptions(
     writeAdmissionMode: 'capture',
   };
   if (options.grouped) {
-    operationContext.groupId = expect.stringMatching(new RegExp(`^${escapeRegExp(operationIdPrefix)}:`));
+    operationContext.groupId = expect.stringMatching(
+      new RegExp(`^${escapeRegExp(operationIdPrefix)}:`),
+    );
   }
   return expect.objectContaining({
     operationContext: expect.objectContaining(operationContext),

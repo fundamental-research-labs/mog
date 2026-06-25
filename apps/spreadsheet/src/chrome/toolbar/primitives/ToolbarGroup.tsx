@@ -104,7 +104,11 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   return (
     <RibbonVisibilityGroup group={groupVisibility.groupKey}>
       <GroupRenderModeProvider value={renderMode}>
-        <div className="relative flex px-[var(--ribbon-group-padding-x)] group/toolbar-group">
+        <div
+          className="relative flex px-[var(--ribbon-group-padding-x)] group/toolbar-group"
+          role="group"
+          aria-label={label}
+        >
           {/* Content area - fixed height from design token */}
           <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
             {children}

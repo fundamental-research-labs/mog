@@ -10,15 +10,13 @@
 
 import type { CellRange } from '@mog-sdk/contracts/core';
 import type { SelectionRenderState } from '@mog-sdk/contracts/rendering';
-import { ViewportPositionIndex, ViewportMergeIndex } from '@mog/grid-renderer';
+import {
+  COL_HEADER_HEIGHT,
+  ROW_HEADER_WIDTH,
+  ViewportPositionIndex,
+  ViewportMergeIndex,
+} from '@mog/grid-renderer';
 import { GridRendererImpl } from '../grid-renderer';
-
-// =============================================================================
-// Constants (must match contracts)
-// =============================================================================
-
-const ROW_HEADER_WIDTH = 50;
-const COL_HEADER_HEIGHT = 24;
 
 // =============================================================================
 // Helpers

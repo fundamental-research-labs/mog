@@ -162,7 +162,7 @@ describe('ribbon visibility config', () => {
       },
     );
 
-    expect(screen.getByText('Themes')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Themes' })).toBeInTheDocument();
     expect(screen.queryByTestId('ribbon-dropdown-theme-colors')).not.toBeInTheDocument();
   });
 
@@ -263,7 +263,7 @@ describe('ribbon visibility config', () => {
       },
     );
 
-    expect(screen.getByText('Illustrations')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Illustrations' })).toBeInTheDocument();
     expect(screen.queryByText('Pictures')).not.toBeInTheDocument();
   });
 });

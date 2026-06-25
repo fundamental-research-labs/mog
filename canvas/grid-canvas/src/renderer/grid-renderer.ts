@@ -1075,8 +1075,8 @@ export class GridRendererImpl implements GridRenderer {
       mergeIndex,
       groupingData: this.groupingAdapter,
       coordSystem: this.gridCoords,
-      rowHeaderWidth: 50,
-      colHeaderHeight: 24,
+      rowHeaderWidth: ROW_HEADER_WIDTH,
+      colHeaderHeight: COL_HEADER_HEIGHT,
     });
     this.engine.registerHitTestProvider(gridHitTest, 0); // cells, headers
 

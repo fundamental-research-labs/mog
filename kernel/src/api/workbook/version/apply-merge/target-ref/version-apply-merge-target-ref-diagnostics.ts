@@ -6,6 +6,7 @@ import type {
 
 import { mapPublicApplyTargetRef } from './version-apply-merge-target-ref-names';
 import { isRecord } from './version-apply-merge-target-ref-utils';
+import { mapPublicVersionDiagnosticRefName } from '../../version-public-ref-selectors';
 
 type MissingRevisionReason =
   | 'missingExpectedTargetRefRevision'
@@ -117,8 +118,7 @@ function publicDiagnostic(
 
 function safePublicRefName(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const mapped = mapPublicApplyTargetRef(value);
-  return mapped === value ? mapped : null;
+  return mapPublicVersionDiagnosticRefName(value);
 }
 
 function isRecoverability(value: unknown): value is VersionStoreDiagnostic['recoverability'] {

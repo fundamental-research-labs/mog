@@ -2,7 +2,10 @@ import type {
   RefName,
   RefNameValidationIssue,
 } from '../../../document/version-store/refs/ref-name';
-import { validateRefName } from '../../../document/version-store/refs/ref-name';
+import {
+  REF_NAME_STORAGE_PREFIX,
+  validateRefName,
+} from '../../../document/version-store/refs/ref-name';
 
 export type PublicVersionBranchRefIssue = RefNameValidationIssue | 'reservedPublicNamespace';
 
@@ -25,6 +28,8 @@ const RESERVED_PUBLIC_REF_NAMESPACES = new Set([
   'system',
 ]);
 
+const PUBLIC_DIAGNOSTIC_REF_NAMESPACES = new Set(['scenario']);
+
 export function validatePublicVersionBranchRefName(
   value: unknown,
   paramName = 'refName',
@@ -46,4 +51,20 @@ export function validatePublicVersionBranchRefName(
   }
 
   return { ok: true, name: parsed.name };
+}
+
+export function mapPublicVersionDiagnosticRefName(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const branchName = value.startsWith(REF_NAME_STORAGE_PREFIX)
+    ? value.slice(REF_NAME_STORAGE_PREFIX.length)
+    : value;
+  const parsed = validatePublicVersionBranchRefName(branchName);
+  if (!parsed.ok) return null;
+  if (parsed.name === 'main') return `${REF_NAME_STORAGE_PREFIX}main`;
+
+  const topLevelNamespace = parsed.name.split('/')[0];
+  if (!topLevelNamespace || !PUBLIC_DIAGNOSTIC_REF_NAMESPACES.has(topLevelNamespace)) {
+    return null;
+  }
+  return `${REF_NAME_STORAGE_PREFIX}${parsed.name}`;
 }

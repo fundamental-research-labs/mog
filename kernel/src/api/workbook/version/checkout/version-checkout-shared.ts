@@ -9,6 +9,7 @@ import {
   REF_NAME_STORAGE_PREFIX,
   validateRefName,
 } from '../../../../document/version-store/refs/ref-name';
+import { mapPublicVersionDiagnosticRefName } from '../version-public-ref-selectors';
 
 export const VERSION_HEAD_REF = 'HEAD';
 export const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
@@ -53,7 +54,7 @@ export function publicRefNameForBranch(name: string): VersionMainRefName | Versi
 
 export function safePublicDiagnosticRefName(value: string): string {
   if (value === VERSION_HEAD_REF || value === VERSION_MAIN_REF) return value;
-  const publicRef = toPublicRefName(value);
+  const publicRef = mapPublicVersionDiagnosticRefName(value);
   return publicRef ?? 'redacted';
 }
 

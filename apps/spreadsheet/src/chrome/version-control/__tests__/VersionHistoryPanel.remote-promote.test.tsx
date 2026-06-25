@@ -118,9 +118,10 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
         includeDiagnostics: true,
       }),
     );
+    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
     expectDisabledButtonReason(
       screen.getByRole('button', { name: 'Promote remote' }),
-      'Version status is refreshing.',
+      'Wait for the current version action to finish.',
     );
 
     await act(async () => {

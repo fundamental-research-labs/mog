@@ -39,30 +39,42 @@ export function usePivotInteractionLifecycle({
   stopEditingPivot,
 }: UsePivotInteractionLifecycleOptions): void {
   const selectedOrEditingMissReloadKeyRef = useRef<string | null>(null);
+  const selectedOrEditingMissRecoveryKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const targetPivotId = editingPivotId ?? selectedPivotId;
     if (!targetPivotId) {
+      selectedOrEditingMissReloadKeyRef.current = null;
+      selectedOrEditingMissRecoveryKeyRef.current = null;
+      return;
+    }
+
+    if (!hasLoadedPivotEntries) {
       selectedOrEditingMissReloadKeyRef.current = null;
       return;
     }
 
     if (findPivotEntryById(pivotEntries, targetPivotId)) {
       selectedOrEditingMissReloadKeyRef.current = null;
+      selectedOrEditingMissRecoveryKeyRef.current = null;
       return;
     }
 
     const reloadKey = `${sheetId}:${targetPivotId}`;
     if (selectedOrEditingMissReloadKeyRef.current === reloadKey) return;
     selectedOrEditingMissReloadKeyRef.current = reloadKey;
+    selectedOrEditingMissRecoveryKeyRef.current = reloadKey;
 
     let cancelled = false;
     const refreshMaterializedConfigs = async () => {
       try {
         const entries = await loadPivotEntries();
         if (cancelled) return;
-        setPivotEntries(entries);
-        if (findPivotEntryById(entries, targetPivotId)) return;
+        if (findPivotEntryById(entries, targetPivotId)) {
+          selectedOrEditingMissRecoveryKeyRef.current = null;
+          setPivotEntries(entries);
+          return;
+        }
       } catch {
         // Fall through to the materialization-backed retry below.
       }
@@ -76,9 +88,15 @@ export function usePivotInteractionLifecycle({
 
       try {
         const entries = await loadPivotEntries();
-        if (!cancelled) setPivotEntries(entries);
+        if (!cancelled) {
+          selectedOrEditingMissRecoveryKeyRef.current = null;
+          setPivotEntries(entries);
+        }
       } catch {
-        if (!cancelled) setPivotEntries([]);
+        if (!cancelled) {
+          selectedOrEditingMissRecoveryKeyRef.current = null;
+          setPivotEntries([]);
+        }
       }
     };
 
@@ -86,9 +104,13 @@ export function usePivotInteractionLifecycle({
 
     return () => {
       cancelled = true;
+      if (selectedOrEditingMissRecoveryKeyRef.current === reloadKey) {
+        selectedOrEditingMissRecoveryKeyRef.current = null;
+      }
     };
   }, [
     editingPivotId,
+    hasLoadedPivotEntries,
     loadPivotEntries,
     pivotEntries,
     selectedPivotId,
@@ -114,6 +136,15 @@ export function usePivotInteractionLifecycle({
       return;
     }
 
+    const isRecoveringMissingPivot = (pivotId: string): boolean =>
+      selectedOrEditingMissRecoveryKeyRef.current === `${sheetId}:${pivotId}`;
+    if (
+      (selectedPivotId != null && isRecoveringMissingPivot(selectedPivotId)) ||
+      (editingPivotId != null && isRecoveringMissingPivot(editingPivotId))
+    ) {
+      return;
+    }
+
     const selectedMissing =
       selectedPivotId != null && !selectedPivotId.startsWith('imported:') && !selectedEntry;
     const editingMissing =
@@ -134,5 +165,6 @@ export function usePivotInteractionLifecycle({
     selectedPivotId,
     startEditingPivot,
     stopEditingPivot,
+    sheetId,
   ]);
 }

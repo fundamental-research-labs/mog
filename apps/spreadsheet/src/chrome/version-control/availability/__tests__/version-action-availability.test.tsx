@@ -56,6 +56,10 @@ describe('version action availability status gates', () => {
         action.availability(surface, { loading: true }),
         'Version status is refreshing.',
       );
+      expectDisabled(
+        action.availability(surface, { actionBusy: true, loading: true }),
+        'Wait for the current version action to finish.',
+      );
     }
 
     for (const action of SPLIT_CAPABILITY_CASES) {
@@ -67,6 +71,10 @@ describe('version action availability status gates', () => {
       expectDisabled(
         getCapabilityAvailability({ surface }, false, true, action.capability),
         'Version status is refreshing.',
+      );
+      expectDisabled(
+        getCapabilityAvailability({ surface }, true, true, action.capability),
+        'Wait for the current version action to finish.',
       );
     }
   });

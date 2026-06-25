@@ -362,6 +362,9 @@ export function createObjectSimulator(options?: ObjectSimulatorOptions): ObjectS
   const mockWorksheet = {
     sheetId,
     charts: {
+      get: jest.fn().mockImplementation(async (id: string) => {
+        return charts.find((chart) => chart.id === id) ?? null;
+      }),
       list: jest.fn().mockResolvedValue(charts),
     },
   };

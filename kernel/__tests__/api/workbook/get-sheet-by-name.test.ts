@@ -58,6 +58,16 @@ function createMockCtx(): DocumentContext {
       onAll: jest.fn().mockReturnValue({ dispose: jest.fn() }),
       off: jest.fn(),
     },
+    mirror: {
+      getSheetIds: jest.fn(() => ['sheet-1', 'sheet-2']),
+      getSheetMeta: jest.fn((id: string) => {
+        const names: Record<string, string> = {
+          'sheet-1': 'MySheet',
+          'sheet-2': 'Revenue Data',
+        };
+        return { name: names[id] ?? id, hidden: false };
+      }),
+    },
     floatingObjectManager: {
       dispose: jest.fn(),
     },
@@ -166,13 +176,17 @@ describe('getSheet — case-insensitive lookup', () => {
   });
 
   it('shows invisible whitespace and trim-equivalent matches when a sheet name is missing', async () => {
+    const names: Record<string, string> = {
+      'sheet-1': 'Working Capital ',
+      'sheet-2': 'Revenue Data',
+    };
     (ctx.computeBridge.getSheetName as jest.Mock).mockImplementation(async (id: string) => {
-      const names: Record<string, string> = {
-        'sheet-1': 'Working Capital ',
-        'sheet-2': 'Revenue Data',
-      };
       return names[id] ?? null;
     });
+    (ctx.mirror.getSheetMeta as jest.Mock).mockImplementation((id: string) => ({
+      name: names[id] ?? id,
+      hidden: false,
+    }));
 
     const wb = new WorkbookImpl(createConfig(ctx));
     await wb._init();

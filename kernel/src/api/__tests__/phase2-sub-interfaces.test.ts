@@ -138,6 +138,14 @@ function createMockWbCtx(computeBridge?: ReturnType<typeof createMockComputeBrid
   return {
     computeBridge: computeBridge ?? createMockComputeBridge(),
     eventBus: createMockEventBus(),
+    mirror: {
+      getSheetIds: jest.fn().mockReturnValue(['sheet1', 'sheet2']),
+      getSheetMeta: jest.fn().mockImplementation((sheetId: SheetId) => {
+        const names: Record<string, string> = { sheet1: 'Sheet1', sheet2: 'Sheet2' };
+        return { name: names[sheetId] ?? String(sheetId), hidden: false };
+      }),
+      getWorkbookSettings: jest.fn().mockReturnValue({}),
+    },
     setPendingUndoDescription: jest.fn(),
     setPendingSelectionCheckpoint: jest.fn(),
     pivot: mockPivot,

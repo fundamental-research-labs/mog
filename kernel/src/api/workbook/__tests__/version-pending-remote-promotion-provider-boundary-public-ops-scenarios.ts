@@ -104,9 +104,13 @@ export function registerPendingRemotePromotionProviderPublicOpsBoundaryScenarios
       error: {
         diagnostics: expect.arrayContaining([
           expect.objectContaining({
-            code: 'VERSION_REVERT_UNAVAILABLE',
+            code: 'VERSION_REVERT_PENDING_PROVIDER_WRITES',
             data: expect.objectContaining({
               mutationGuarantee: 'no-write-attempted',
+              payload: expect.objectContaining({
+                reason: 'pendingProviderWrites',
+                pendingRemoteSegmentCount: 1,
+              }),
             }),
           }),
         ]),

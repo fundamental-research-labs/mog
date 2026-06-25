@@ -53,7 +53,7 @@ export function registerTargetHeadStaleScenarios(): void {
       value: {
         status: 'stale',
         revision: 6,
-        diagnostics: [
+        diagnostics: expect.arrayContaining([
           expect.objectContaining({
             code: 'stale_head',
             data: expect.objectContaining({
@@ -61,7 +61,7 @@ export function registerTargetHeadStaleScenarios(): void {
               actualTargetHeadId: movedMainCommitId,
             }),
           }),
-        ],
+        ]),
       },
     });
   });

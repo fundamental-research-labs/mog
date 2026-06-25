@@ -55,7 +55,10 @@ describe('WorkbookImpl XLSX export materialization', () => {
   });
 
   it('awaits full workbook materialization before exporting XLSX bytes', async () => {
-    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+    const bytes = new Uint8Array([
+      0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
     const exportToXlsxBytes = jest.fn().mockResolvedValue(bytes);
     const awaitMaterialized = jest.fn().mockResolvedValue(undefined);
     const eventBus = createMockEventBus();

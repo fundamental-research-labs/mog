@@ -51,7 +51,18 @@ describe('WorkbookVersion public applyMerge stale ordering', () => {
       headAfter: advanced.commit.id,
       changes: [],
       conflicts: [],
-      diagnostics: [],
+      diagnostics: [
+        expect.objectContaining({
+          issueCode: 'VERSION_REF_CONFLICT',
+          mutationGuarantee: 'ref-not-mutated',
+          payload: expect.objectContaining({
+            reason: 'staleTargetHead',
+            targetRef: TARGET_REF,
+            expectedHead: fixture.oursCommitId,
+            actualHead: advanced.commit.id,
+          }),
+        }),
+      ],
       mutationGuarantee: 'ref-not-mutated',
     });
     expect(mergeCommit).not.toHaveBeenCalled();

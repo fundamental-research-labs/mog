@@ -54,10 +54,7 @@ describe('VersionCapabilityGate public dry-run/CAS contracts', () => {
     expect(VERSION_CAPABILITY_GATE_DRY_RUN_RESULT_STATUSES).toEqual(['not-applied']);
     expect(VERSION_CAPABILITY_GATE_DRY_RUN_RESULT_REASONS).toEqual(['noop', 'unavailable']);
     expect(VERSION_CAPABILITY_GATE_CAS_RESULT_STATUSES).toEqual(['not-applied']);
-    expect(VERSION_CAPABILITY_GATE_CAS_RESULT_REASONS).toEqual([
-      'unavailable',
-      'stale-cas-token',
-    ]);
+    expect(VERSION_CAPABILITY_GATE_CAS_RESULT_REASONS).toEqual(['unavailable', 'stale-cas-token']);
   });
 
   it('models dry-run as a non-mutating preflight bound to gate scope and digest', () => {
@@ -158,9 +155,7 @@ describe('VersionCapabilityGate public dry-run/CAS contracts', () => {
         version: '2',
       },
     });
-    expect(result.casReceipt.readbackCasToken).not.toEqual(
-      contract.request.expectedPriorCasToken,
-    );
+    expect(result.casReceipt.readbackCasToken).not.toEqual(contract.request.expectedPriorCasToken);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
       'VERSION_CAPABILITY_GATE_STALE_CAS_TOKEN',
     ]);

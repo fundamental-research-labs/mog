@@ -63,10 +63,7 @@ export async function readPersistedPendingRemoteProviderWrites(
     const listed = await store.listByState('pending');
     const projectedList = await projectPendingRemoteSegmentListResult(listed, registry);
     if (projectedList.status === 'failed') {
-      return failedPendingProviderWritesRead(
-        projectedList.message,
-        projectedList.data,
-      );
+      return failedPendingProviderWritesRead(projectedList.message, projectedList.data);
     }
 
     if (projectedList.records.length === 0) {
@@ -133,8 +130,7 @@ function malformedRegistryReadResult(
 ): RegistryProjection {
   return {
     status: 'failed',
-    message:
-      'Version provider returned malformed graph registry evidence for checkout preflight.',
+    message: 'Version provider returned malformed graph registry evidence for checkout preflight.',
     data: {
       ...data,
       redacted: true,
@@ -277,9 +273,7 @@ function documentScopeForRegistry(registry: VersionGraphRegistry) {
   return {
     ...(registry.workspaceId === undefined ? {} : { workspaceId: registry.workspaceId }),
     documentId: registry.documentId,
-    ...(registry.principalScope === undefined
-      ? {}
-      : { principalScope: registry.principalScope }),
+    ...(registry.principalScope === undefined ? {} : { principalScope: registry.principalScope }),
   };
 }
 

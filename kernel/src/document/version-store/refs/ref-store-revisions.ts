@@ -110,7 +110,9 @@ export function cloneDiagnostic(item: VersionDiagnostic): VersionDiagnostic {
     refIncarnationId: item.refIncarnationId,
     previousRefIncarnationId: item.previousRefIncarnationId,
     tombstoneRefVersion:
-      item.tombstoneRefVersion === undefined ? undefined : cloneRefVersion(item.tombstoneRefVersion),
+      item.tombstoneRefVersion === undefined
+        ? undefined
+        : cloneRefVersion(item.tombstoneRefVersion),
     details: item.details === undefined ? undefined : Object.freeze({ ...item.details }),
   });
 }

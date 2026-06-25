@@ -14,11 +14,7 @@ export function conflictReserveAppliedSyncUpdateIdentityResult(
     status: 'conflict',
     record,
     diagnostics: [
-      appliedSyncUpdateIdentityDiagnostic(
-        'VERSION_APPLIED_SYNC_UPDATE_CONFLICT',
-        message,
-        'none',
-      ),
+      appliedSyncUpdateIdentityDiagnostic('VERSION_APPLIED_SYNC_UPDATE_CONFLICT', message, 'none'),
     ],
   };
 }
@@ -31,11 +27,7 @@ export function conflictCompleteAppliedSyncUpdateIdentityResult(
     status: 'conflict',
     record,
     diagnostics: [
-      appliedSyncUpdateIdentityDiagnostic(
-        'VERSION_APPLIED_SYNC_UPDATE_CONFLICT',
-        message,
-        'none',
-      ),
+      appliedSyncUpdateIdentityDiagnostic('VERSION_APPLIED_SYNC_UPDATE_CONFLICT', message, 'none'),
     ],
   };
 }

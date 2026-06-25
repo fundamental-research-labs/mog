@@ -58,9 +58,7 @@ export function registerProposalProviderCreationScenarios(): void {
       error: {
         code: 'target_unavailable',
         target: 'workbook.version.startProposalWorkspace',
-        diagnostics: [
-          expect.objectContaining({ code: 'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE' }),
-        ],
+        diagnostics: [expect.objectContaining({ code: 'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE' })],
       },
     });
 

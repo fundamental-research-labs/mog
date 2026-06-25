@@ -18,17 +18,8 @@ import {
 } from '../registry';
 import { idbTransactionDone } from './internal-idb';
 import { cloneJson } from './internal-json';
-import {
-  commitIndexKey,
-  objectKey,
-  parentIndexKey,
-  parentLookupKey,
-} from './internal-keys';
-import type {
-  StoredCommitIndex,
-  StoredObjectRecord,
-  StoredParentIndex,
-} from './internal-records';
+import { commitIndexKey, objectKey, parentIndexKey, parentLookupKey } from './internal-keys';
+import type { StoredCommitIndex, StoredObjectRecord, StoredParentIndex } from './internal-records';
 
 export async function persistObjectRecords(options: {
   readonly db: IDBDatabase;

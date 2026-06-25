@@ -1,10 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type {
-  VersionDependencyRef,
-  VersionObjectType,
-  WorkbookCommitId,
-} from '../object-digest';
+import type { VersionDependencyRef, VersionObjectType, WorkbookCommitId } from '../object-digest';
 import type {
   CommitVersionGraphInput,
   InitializeVersionGraphInput,

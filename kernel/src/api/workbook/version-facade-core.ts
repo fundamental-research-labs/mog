@@ -18,10 +18,7 @@ import type {
 import { VERSION_DIFF_DEFAULT_PAGE_LIMIT } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
-import {
-  checkoutWorkbookVersion,
-  type VersionCheckoutTransactionGuard,
-} from './version-checkout';
+import { checkoutWorkbookVersion, type VersionCheckoutTransactionGuard } from './version-checkout';
 import {
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
@@ -30,13 +27,9 @@ import {
   recordActiveCheckoutBranchCommit,
 } from './version/active-checkout-write-context';
 import { commitWorkbookVersion } from './version/commit/version-commit';
-import {
-  providerErrorDiagnostic as diffProviderErrorDiagnostic,
-} from './version/diff/version-diff-diagnostics';
+import { providerErrorDiagnostic as diffProviderErrorDiagnostic } from './version/diff/version-diff-diagnostics';
 import { diffWorkbookVersion } from './version/diff/version-diff';
-import {
-  providerErrorDiagnostic as listCommitsProviderErrorDiagnostic,
-} from './version/list-commits/version-list-commits-diagnostics';
+import { providerErrorDiagnostic as listCommitsProviderErrorDiagnostic } from './version/list-commits/version-list-commits-diagnostics';
 import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
 import { listWorkbookVersionCommits } from './version/list-commits/version-list-commits';
@@ -58,9 +51,7 @@ import { getAttachedVersionReadService } from './version-service-attachments';
 import { getWorkbookVersionStatus } from './version/status/version-status';
 import { getWorkbookVersionSurfaceStatus } from './version/surface-status/version-surface-status';
 
-export function getWorkbookVersionFacadeStatus(
-  ctx: DocumentContext,
-): WorkbookVersionStatus {
+export function getWorkbookVersionFacadeStatus(ctx: DocumentContext): WorkbookVersionStatus {
   return getWorkbookVersionStatus(ctx);
 }
 
@@ -112,10 +103,7 @@ export async function listWorkbookVersionFacadeCommits(
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listCommits', gateDiagnostics);
   const activeCheckoutOptions = await listCommitsOptionsForActiveCheckout(ctx, options);
   if (!activeCheckoutOptions.ok) {
-    return versionFailureFromStoreDiagnostics(
-      'listCommits',
-      activeCheckoutOptions.diagnostics,
-    );
+    return versionFailureFromStoreDiagnostics('listCommits', activeCheckoutOptions.diagnostics);
   }
   return listWorkbookVersionCommits(ctx, activeCheckoutOptions.options);
 }

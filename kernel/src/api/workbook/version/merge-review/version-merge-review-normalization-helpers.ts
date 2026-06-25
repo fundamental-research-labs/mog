@@ -113,9 +113,7 @@ export function mapPayloadPurpose(value: unknown): VersionMergeResolutionPayload
   return value === 'chooseValue' || value === 'custom' ? value : null;
 }
 
-export function mapResolutionKind(
-  value: unknown,
-): VersionMergeConflictResolutionOptionKind | null {
+export function mapResolutionKind(value: unknown): VersionMergeConflictResolutionOptionKind | null {
   return value === 'acceptOurs' || value === 'acceptTheirs' || value === 'acceptBase'
     ? value
     : null;

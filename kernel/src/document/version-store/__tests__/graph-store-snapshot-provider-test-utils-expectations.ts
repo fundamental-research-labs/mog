@@ -1,12 +1,6 @@
-import type {
-  VersionGraphReadRefResult,
-  VersionGraphWriteResult,
-} from '../graph';
+import type { VersionGraphReadRefResult, VersionGraphWriteResult } from '../graph';
 import { versionGraphNamespaceKey, type VersionGraphNamespace } from '../object-store';
-import type {
-  VersionDocumentScope,
-  VersionGraphInitializeResult,
-} from '../provider';
+import type { VersionDocumentScope, VersionGraphInitializeResult } from '../provider';
 
 export function expectInitializeSuccess(
   result: VersionGraphInitializeResult,

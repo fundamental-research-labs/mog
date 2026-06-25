@@ -1,9 +1,5 @@
 import type { CommitVersionGraphInput, InitializeVersionGraphInput } from '../graph';
-import type {
-  VersionDependencyRef,
-  VersionObjectType,
-  WorkbookCommitId,
-} from '../object-digest';
+import type { VersionDependencyRef, VersionObjectType, WorkbookCommitId } from '../object-digest';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,

@@ -93,7 +93,9 @@ export function publicDiagnostic(
     recoverability: options.recoverability ?? 'none',
     messageTemplateId: `version.applyMerge.${issueCode}`,
     safeMessage,
-    ...(options.payload ? { payload: { operation: 'applyMergeRecovery', ...options.payload } } : {}),
+    ...(options.payload
+      ? { payload: { operation: 'applyMergeRecovery', ...options.payload } }
+      : {}),
     redacted: true,
     mutationGuarantee: 'no-write-attempted',
   };

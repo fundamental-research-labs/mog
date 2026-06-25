@@ -17,10 +17,7 @@ import {
 } from '../availability/version-action-availability';
 import { displayBranchName } from '../version-branch-name';
 import { shortCommitId } from '../version-history-format';
-import type {
-  VersionMergePreviewState,
-  VersionMergeResolutionSelections,
-} from './merge-actions';
+import type { VersionMergePreviewState, VersionMergeResolutionSelections } from './merge-actions';
 
 export type VersionMergeControlsProps = {
   readonly sourceRefs: readonly VersionRef[];

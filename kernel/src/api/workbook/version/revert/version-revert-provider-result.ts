@@ -9,11 +9,7 @@ import type {
   WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
-import {
-  mapCommitId,
-  mapPublicRevision,
-  mapPublicTargetRef,
-} from '../../version-attempt-metadata';
+import { mapCommitId, mapPublicRevision, mapPublicTargetRef } from '../../version-attempt-metadata';
 import {
   invalidProviderPayloadDiagnostic,
   mapProviderDiagnostics,

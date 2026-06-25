@@ -114,7 +114,7 @@ export function VersionStatusSummary({
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
   const branchName = data.surface?.current.detached
     ? undefined
-    : data.surface?.current.branchName ?? data.head?.refName;
+    : (data.surface?.current.branchName ?? data.head?.refName);
   const branchLabel = branchName ? displayBranchName(branchName) : 'Detached or unavailable';
   const storageLabel = data.surface
     ? `${data.surface.storage.backend}${data.surface.storage.ready ? ' ready' : ' unavailable'}`

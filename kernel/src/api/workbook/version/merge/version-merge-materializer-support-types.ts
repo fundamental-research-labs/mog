@@ -1,7 +1,4 @@
-import type {
-  VersionDiffStructuralMetadata,
-  VersionMergeChange,
-} from '@mog-sdk/contracts/api';
+import type { VersionDiffStructuralMetadata, VersionMergeChange } from '@mog-sdk/contracts/api';
 
 export type MergeMaterializationOperation = 'merge' | 'applyMerge' | 'commitGraphWrite';
 

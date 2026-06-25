@@ -84,9 +84,7 @@ export async function pendingRemoteSegmentRecord(): Promise<PendingRemoteSegment
       payloadHash: 'payload-hash-1',
     },
   } as any;
-  const keyMaterial = await pendingRemoteSegmentKeyMaterialForOperationContext(
-    operationContext,
-  );
+  const keyMaterial = await pendingRemoteSegmentKeyMaterialForOperationContext(operationContext);
   return {
     schemaVersion: 1,
     recordKind: 'pendingRemoteSegment',

@@ -115,13 +115,9 @@ export function usePivotInteractionLifecycle({
     }
 
     const selectedMissing =
-      selectedPivotId != null &&
-      !selectedPivotId.startsWith('imported:') &&
-      !selectedEntry;
+      selectedPivotId != null && !selectedPivotId.startsWith('imported:') && !selectedEntry;
     const editingMissing =
-      editingPivotId != null &&
-      !editingPivotId.startsWith('imported:') &&
-      !editingEntry;
+      editingPivotId != null && !editingPivotId.startsWith('imported:') && !editingEntry;
 
     if (selectedMissing) {
       selectPivot(null);

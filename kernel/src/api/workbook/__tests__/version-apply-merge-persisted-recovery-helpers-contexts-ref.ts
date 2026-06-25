@@ -1,9 +1,6 @@
 import type { WorkbookCommitId } from '@mog-sdk/contracts/api';
 
-import {
-  CREATED_AT,
-  TARGET_REF,
-} from './version-apply-merge-persisted-recovery-helpers-values';
+import { CREATED_AT, TARGET_REF } from './version-apply-merge-persisted-recovery-helpers-values';
 
 export function refReadSuccess(commitId: WorkbookCommitId) {
   return {

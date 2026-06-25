@@ -245,10 +245,7 @@ export class InMemoryAppliedSyncUpdateIdentityStore implements AppliedSyncUpdate
   ): Promise<AppliedSyncUpdateIdentityReserveResult> {
     let record: AppliedSyncUpdateIdentityRecord;
     try {
-      record = await appliedSyncUpdateIdentityRecordFromReserveInput(
-        input,
-        this.documentScopeKey,
-      );
+      record = await appliedSyncUpdateIdentityRecordFromReserveInput(input, this.documentScopeKey);
     } catch {
       return failedReserveAppliedSyncUpdateIdentityResult(
         'Applied sync update reservation has invalid identity context.',

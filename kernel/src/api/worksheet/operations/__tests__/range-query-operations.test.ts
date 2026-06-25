@@ -164,9 +164,7 @@ describe('clearWithMode', () => {
 
     const captureOptions = {
       ...options,
-      directEditRanges: [
-        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
-      ],
+      directEditRanges: [{ sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
     };
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
       SHEET_ID,
@@ -210,9 +208,7 @@ describe('clearWithMode', () => {
 
     expect(ctx.computeBridge.clearRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 1, 1, {
       ...options,
-      directEditRanges: [
-        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
-      ],
+      directEditRanges: [{ sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
     });
   });
 });
@@ -246,9 +242,7 @@ describe('replaceAll', () => {
     expect(result).toBe(2);
     const captureOptions = {
       ...options,
-      directEditRanges: [
-        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
-      ],
+      directEditRanges: [{ sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
     };
     expect(ctx.computeBridge.replaceAllInRange).toHaveBeenCalledWith(
       SHEET_ID,

@@ -8,10 +8,7 @@ import type {
   UnitSpec,
 } from '../../grammar/spec';
 import type { ChartConfig, LegendConfig } from '../../types';
-import {
-  DEFAULT_CHART_HEIGHT,
-  DEFAULT_CHART_WIDTH,
-} from './constants';
+import { DEFAULT_CHART_HEIGHT, DEFAULT_CHART_WIDTH } from './constants';
 import { isLegendShown } from './legend';
 import { pointsToCanvasPx } from './units';
 

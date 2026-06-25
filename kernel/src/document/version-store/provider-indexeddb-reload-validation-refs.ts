@@ -28,7 +28,12 @@ import type {
   RowValidationContext,
 } from './provider-indexeddb-reload-validation-types';
 import { REFS_STORE, SYMBOLIC_REFS_STORE } from './provider-indexeddb-schema';
-import { parseRefVersion, refVersionsEqual, type LiveRefRecord, type RefRecord } from './refs/ref-store';
+import {
+  parseRefVersion,
+  refVersionsEqual,
+  type LiveRefRecord,
+  type RefRecord,
+} from './refs/ref-store';
 
 export function validateStoredRefRecord(
   value: unknown,

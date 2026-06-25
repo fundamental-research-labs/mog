@@ -105,10 +105,7 @@ function validateExpectedTargetBinding(
   if (
     expected?.expectedTargetRefRevision !== undefined &&
     proposal.targetRefVersionAtCreation !== undefined &&
-    !recordRevisionsEqual(
-      expected.expectedTargetRefRevision,
-      proposal.targetRefVersionAtCreation,
-    )
+    !recordRevisionsEqual(expected.expectedTargetRefRevision, proposal.targetRefVersionAtCreation)
   ) {
     return {
       ok: false,
@@ -141,7 +138,8 @@ function missingTargetRefRevisionDiagnostic(proposal: AgentProposalRecord): Vers
   return {
     code: 'proposal_target_ref_revision_missing',
     severity: 'error',
-    message: 'Proposal record is missing the target ref revision required for workspace operations.',
+    message:
+      'Proposal record is missing the target ref revision required for workspace operations.',
     owner: 'version-store',
     data: {
       proposalId: proposal.id,

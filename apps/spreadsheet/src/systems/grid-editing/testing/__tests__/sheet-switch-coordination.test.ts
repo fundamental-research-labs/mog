@@ -87,7 +87,9 @@ function createHarness(options?: {
       listeners.push(handler);
       workbookListeners.set(event, listeners);
       return jest.fn(() => {
-        const nextListeners = workbookListeners.get(event)?.filter((listener) => listener !== handler);
+        const nextListeners = workbookListeners
+          .get(event)
+          ?.filter((listener) => listener !== handler);
         if (nextListeners) workbookListeners.set(event, nextListeners);
       });
     }),

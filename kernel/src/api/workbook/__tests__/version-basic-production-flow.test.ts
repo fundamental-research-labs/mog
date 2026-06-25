@@ -250,7 +250,9 @@ describe('WorkbookVersion basic production flow', () => {
         ref: IMPORTED_FIXTURE_BRANCH_REF as any,
       });
       if (!branchCommits.ok) {
-        throw new Error(`expected imported fixture branch listCommits: ${branchCommits.error.code}`);
+        throw new Error(
+          `expected imported fixture branch listCommits: ${branchCommits.error.code}`,
+        );
       }
       expect(branchCommits.value.items.map((commit) => commit.id)).toEqual(
         expect.arrayContaining([branchCommit.id, baseCommit.id, rootHead.id]),

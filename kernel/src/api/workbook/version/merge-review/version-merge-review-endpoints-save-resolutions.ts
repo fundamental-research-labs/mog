@@ -5,9 +5,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
-import {
-  createMergeResolutionSetArtifactRecord,
-} from '../../../../document/version-store/merge-attempt-artifacts';
+import { createMergeResolutionSetArtifactRecord } from '../../../../document/version-store/merge-attempt-artifacts';
 import {
   normalizeMergeReviewConflicts,
   validateResolutionsForConflictSet,
@@ -29,9 +27,7 @@ import {
   mergeEndpointPreflight,
   readMergePreviewArtifact,
 } from './version-merge-review-endpoints-shared';
-import {
-  createResolvedMergeAttemptArtifactRecordForResolutionSet,
-} from './version-merge-review-saved-resolution-artifacts';
+import { createResolvedMergeAttemptArtifactRecordForResolutionSet } from './version-merge-review-saved-resolution-artifacts';
 import { validateResolutionSetBinding } from './version-merge-review-saved-resolution-binding';
 import { validateSealedResolutionPayloadRefs } from './version-merge-sealed-payload';
 

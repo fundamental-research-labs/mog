@@ -2,11 +2,7 @@ import {
   REQUIRED_FIRST_SLICE_DOMAIN_IDS,
   validateDomainSupportManifest,
 } from '../domain-support-manifest-validator';
-import {
-  domainRow,
-  freshManifest,
-  NOW,
-} from './domain-support-manifest-validator-fixtures';
+import { domainRow, freshManifest, NOW } from './domain-support-manifest-validator-fixtures';
 
 export function registerCoreMatrixRowCoverageScenarios(): void {
   it('fails closed when a required first-slice matrix row is absent', () => {

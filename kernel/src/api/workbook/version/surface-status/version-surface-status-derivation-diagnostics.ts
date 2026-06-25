@@ -14,9 +14,7 @@ export function sanitizePublicDiagnosticPayload(
   return sanitized;
 }
 
-function isPublicDiagnosticValue(
-  value: unknown,
-): value is string | number | boolean | null {
+function isPublicDiagnosticValue(value: unknown): value is string | number | boolean | null {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 

@@ -8,9 +8,7 @@ import {
   semanticEnvelope,
   semanticWorkbookState,
 } from './semantic-mutation-capture-formula-test-helpers';
-import {
-  canonicalFormulaIdentityDiff,
-} from './semantic-mutation-capture-formula-identity-helper-diff';
+import { canonicalFormulaIdentityDiff } from './semantic-mutation-capture-formula-identity-helper-diff';
 
 export type FormulaIdentityCapture = ReturnType<typeof createSemanticMutationCapture>;
 

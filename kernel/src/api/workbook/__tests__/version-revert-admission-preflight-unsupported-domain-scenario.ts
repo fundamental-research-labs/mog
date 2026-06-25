@@ -1,8 +1,6 @@
 import { expect, it } from '@jest/globals';
 
-import {
-  VERSION_REVERT_UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODE,
-} from '../version/revert/version-revert';
+import { VERSION_REVERT_UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODE } from '../version/revert/version-revert';
 import {
   expectFailureDiagnosticsRedactedNoWrite,
   singleCommitInput,

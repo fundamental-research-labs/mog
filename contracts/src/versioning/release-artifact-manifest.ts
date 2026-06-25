@@ -7,8 +7,7 @@ import type { ObjectDigest, VersionMetadataDiagnostic } from './index';
 
 export const RELEASE_ARTIFACT_MANIFEST_SCHEMA_VERSION =
   'mog.versioning.releaseArtifactManifest.v1' as const;
-export type ReleaseArtifactManifestSchemaVersion =
-  typeof RELEASE_ARTIFACT_MANIFEST_SCHEMA_VERSION;
+export type ReleaseArtifactManifestSchemaVersion = typeof RELEASE_ARTIFACT_MANIFEST_SCHEMA_VERSION;
 
 export const RELEASE_ARTIFACT_KINDS = Object.freeze([
   'npm-package',
@@ -28,8 +27,7 @@ export const RELEASE_ARTIFACT_DEPLOYMENT_KINDS = Object.freeze([
   'marketplace',
   'registry',
 ] as const);
-export type ReleaseArtifactDeploymentKind =
-  (typeof RELEASE_ARTIFACT_DEPLOYMENT_KINDS)[number];
+export type ReleaseArtifactDeploymentKind = (typeof RELEASE_ARTIFACT_DEPLOYMENT_KINDS)[number];
 
 export const RELEASE_ARTIFACT_ROLLBACK_STRATEGIES = Object.freeze([
   'disable-gate',
@@ -37,8 +35,7 @@ export const RELEASE_ARTIFACT_ROLLBACK_STRATEGIES = Object.freeze([
   'preserve-or-block-newer-objects',
   'manual',
 ] as const);
-export type ReleaseArtifactRollbackStrategy =
-  (typeof RELEASE_ARTIFACT_ROLLBACK_STRATEGIES)[number];
+export type ReleaseArtifactRollbackStrategy = (typeof RELEASE_ARTIFACT_ROLLBACK_STRATEGIES)[number];
 
 export const RELEASE_ARTIFACT_RETENTION_CLASSES = Object.freeze([
   'release',
@@ -46,8 +43,7 @@ export const RELEASE_ARTIFACT_RETENTION_CLASSES = Object.freeze([
   'quarantine',
   'ephemeral',
 ] as const);
-export type ReleaseArtifactRetentionClass =
-  (typeof RELEASE_ARTIFACT_RETENTION_CLASSES)[number];
+export type ReleaseArtifactRetentionClass = (typeof RELEASE_ARTIFACT_RETENTION_CLASSES)[number];
 
 export const RELEASE_ARTIFACT_QUARANTINE_BEHAVIORS = Object.freeze([
   'block-promotion',

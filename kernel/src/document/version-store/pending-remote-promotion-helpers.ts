@@ -1,13 +1,9 @@
-export {
-  completePendingRemotePromotionSegments,
-} from './pending-remote-promotion-helpers-completion';
+export { completePendingRemotePromotionSegments } from './pending-remote-promotion-helpers-completion';
 export {
   groupPendingRemoteSegments,
   promotedPeersForGroup,
 } from './pending-remote-promotion-helpers-grouping';
-export {
-  preparePendingRemotePromotionGroup,
-} from './pending-remote-promotion-helpers-preparation';
+export { preparePendingRemotePromotionGroup } from './pending-remote-promotion-helpers-preparation';
 export {
   listPromotedRecoveryRecords,
   promotionCompletionForCommit,

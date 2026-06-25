@@ -15,7 +15,10 @@ import type {
 
 import { chartSourceBindingFromChart } from './chart-source-binding';
 
-function axisForRole(axis: AxisConfig | undefined, role: ChartAxisRole): SingleAxisConfig | undefined {
+function axisForRole(
+  axis: AxisConfig | undefined,
+  role: ChartAxisRole,
+): SingleAxisConfig | undefined {
   switch (role) {
     case 'category':
       return axis?.categoryAxis ?? axis?.xAxis;

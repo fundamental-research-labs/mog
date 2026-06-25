@@ -94,7 +94,8 @@ export function createWorkbook(
             : {
                 name,
                 commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
-                revision: name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+                revision:
+                  name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
               },
         diagnostics: [],
       },
@@ -213,9 +214,7 @@ export function createWorkbook(
       }),
     ),
     applyMerge: jest.fn(
-      async (
-        input: Parameters<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>[0],
-      ) => {
+      async (input: Parameters<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>[0]) => {
         const mergeInput = directMergeInput(input);
         return {
           ok: true,

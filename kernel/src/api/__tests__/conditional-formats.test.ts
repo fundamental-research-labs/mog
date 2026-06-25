@@ -253,35 +253,32 @@ describe('WorksheetConditionalFormattingImpl — input shape diagnostics', () =>
   });
 
   it('add accepts historical snake_case aliases that normalize at the bridge boundary', async () => {
-    await cf.add(
-      ['A1:A10'],
-      [
-        {
-          type: 'colorScale',
-          color_scale: {
-            minPoint: { type: 'min', color: '#f8696b' },
-            maxPoint: { type: 'max', color: '#63be7b' },
-          },
+    await cf.add(['A1:A10'], [
+      {
+        type: 'colorScale',
+        color_scale: {
+          minPoint: { type: 'min', color: '#f8696b' },
+          maxPoint: { type: 'max', color: '#63be7b' },
         },
-        {
-          type: 'dataBar',
-          data_bar: {
-            minPoint: { type: 'min', color: '#638ec6' },
-            maxPoint: { type: 'max', color: '#638ec6' },
-            positiveColor: '#638ec6',
-          },
+      },
+      {
+        type: 'dataBar',
+        data_bar: {
+          minPoint: { type: 'min', color: '#638ec6' },
+          maxPoint: { type: 'max', color: '#638ec6' },
+          positiveColor: '#638ec6',
         },
-        {
-          type: 'iconSet',
-          icon_set: { icon_set_name: '3Arrows' },
-        },
-        {
-          type: 'timePeriod',
-          time_period: 'today',
-          style: { backgroundColor: '#fff2cc' },
-        },
-      ] as any,
-    );
+      },
+      {
+        type: 'iconSet',
+        icon_set: { icon_set_name: '3Arrows' },
+      },
+      {
+        type: 'timePeriod',
+        time_period: 'today',
+        style: { backgroundColor: '#fff2cc' },
+      },
+    ] as any);
 
     const rules = bridge.addCfRule.mock.calls[0][1].rules;
     expect(rules).toEqual([

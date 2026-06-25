@@ -1,9 +1,6 @@
 import type { VersionMainRefName } from '@mog-sdk/contracts/api';
 
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-} from '../graph';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from '../graph';
 import {
   createMergePreviewArtifactRecord,
   createMergeResolutionSetArtifactRecord,
@@ -118,14 +115,15 @@ export function registerGraphStoreSnapshotProviderPersistenceScenarios(): void {
         revision: mainCommit.main.revision,
       },
     });
-    await expect(readRecord(REFS_STORE, refKey(namespaceKey, 'scenario/provider-deleted'))).resolves
-      .toMatchObject({
-        record: {
-          state: 'tombstone',
-          previousTargetCommitId: initialized.rootCommit.id,
-          deleteReason: 'provider-snapshot-test',
-        },
-      });
+    await expect(
+      readRecord(REFS_STORE, refKey(namespaceKey, 'scenario/provider-deleted')),
+    ).resolves.toMatchObject({
+      record: {
+        state: 'tombstone',
+        previousTargetCommitId: initialized.rootCommit.id,
+        deleteReason: 'provider-snapshot-test',
+      },
+    });
 
     await provider.close('test-teardown');
     const reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
@@ -136,16 +134,17 @@ export function registerGraphStoreSnapshotProviderPersistenceScenarios(): void {
       target: VERSION_GRAPH_MAIN_REF,
       revision: mainCommit.main.revision,
     });
-    await expect(reloaded.getObjectRecord(resolvedMergeAttemptArtifactRef(resolved.digest)))
-      .resolves.toMatchObject({
-        preimage: {
-          objectType: 'workbook.resolvedMergeAttempt.v1',
-          payload: {
-            resultDigest: preview.digest,
-            resolutionSetDigest: resolutionSet.digest,
-          },
+    await expect(
+      reloaded.getObjectRecord(resolvedMergeAttemptArtifactRef(resolved.digest)),
+    ).resolves.toMatchObject({
+      preimage: {
+        objectType: 'workbook.resolvedMergeAttempt.v1',
+        payload: {
+          resultDigest: preview.digest,
+          resolutionSetDigest: resolutionSet.digest,
         },
-      });
+      },
+    });
     await expect(
       reloaded.createBranch({
         name: 'scenario/provider-deleted',

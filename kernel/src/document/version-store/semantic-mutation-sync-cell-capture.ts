@@ -76,7 +76,9 @@ function semanticCellValue(
   return { kind: 'blank' };
 }
 
-function isCellError(value: unknown): value is { readonly value: string; readonly message?: string } {
+function isCellError(
+  value: unknown,
+): value is { readonly value: string; readonly message?: string } {
   return (
     typeof value === 'object' &&
     value !== null &&

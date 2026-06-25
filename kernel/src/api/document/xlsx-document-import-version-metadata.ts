@@ -5,10 +5,7 @@ import {
   type VersionDocumentScope,
   type VersionStoreProvider,
 } from '../../document/version-store/provider';
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-} from '../../document/version-store/graph';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from '../../document/version-store/graph';
 import { selectVersionStoreProvider } from '../../document/version-store/provider-registry';
 import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../document/version-store/provider-indexeddb/backend';
 import type { XlsxVersionImportRootProvenance } from '../../document/version-store/xlsx-import-root';

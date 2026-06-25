@@ -16,13 +16,7 @@ import {
   createProposalRecord,
   createProposalRow,
 } from './records';
-import {
-  invalidClientRequestReuse,
-  invalidState,
-  notFound,
-  ok,
-  staleRevision,
-} from './results';
+import { invalidClientRequestReuse, invalidState, notFound, ok, staleRevision } from './results';
 import type {
   AgentProposalId,
   AgentProposalMetadataStore,

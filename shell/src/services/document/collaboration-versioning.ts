@@ -61,9 +61,6 @@ function createLiveCollaborationStatusReader(
 
 function isCollaborationSidecarStatus(value: unknown): value is CollaborationSidecarStatus {
   return (
-    value === 'connecting' ||
-    value === 'online' ||
-    value === 'reconnecting' ||
-    value === 'offline'
+    value === 'connecting' || value === 'online' || value === 'reconnecting' || value === 'offline'
   );
 }

@@ -86,9 +86,7 @@ function diagnostic(
   return Object.freeze({
     code,
     severity:
-      code === 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_OBJECT_READ_FAILED'
-        ? 'corruption'
-        : 'error',
+      code === 'VERSION_SNAPSHOT_ROOT_MATERIALIZATION_OBJECT_READ_FAILED' ? 'corruption' : 'error',
     message,
     ...options,
   });

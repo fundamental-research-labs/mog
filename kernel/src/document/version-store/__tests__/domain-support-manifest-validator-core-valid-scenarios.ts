@@ -3,11 +3,7 @@ import {
   REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS,
   validateDomainSupportManifest,
 } from '../domain-support-manifest-validator';
-import {
-  freshManifest,
-  NOW,
-  ONE_HOUR_MS,
-} from './domain-support-manifest-validator-fixtures';
+import { freshManifest, NOW, ONE_HOUR_MS } from './domain-support-manifest-validator-fixtures';
 
 export function registerCoreValidScenarios(): void {
   it('accepts a well-formed, fresh, complete manifest', () => {

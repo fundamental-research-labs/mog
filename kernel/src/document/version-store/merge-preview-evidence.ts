@@ -235,9 +235,6 @@ async function sha256Hex(input: string): Promise<string> {
 
 function hasRedactedValue(value: unknown): value is VersionRedactedValue {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'kind' in value &&
-    value.kind === 'redacted'
+    typeof value === 'object' && value !== null && 'kind' in value && value.kind === 'redacted'
   );
 }

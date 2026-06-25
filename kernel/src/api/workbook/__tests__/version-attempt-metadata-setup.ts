@@ -4,13 +4,7 @@ const DIGEST_A = digest('a');
 const DIGEST_B = digest('b');
 const DIGEST_C = digest('c');
 
-export {
-  COMMIT_A,
-  COMMIT_B,
-  DIGEST_A,
-  DIGEST_B,
-  DIGEST_C,
-};
+export { COMMIT_A, COMMIT_B, DIGEST_A, DIGEST_B, DIGEST_C };
 
 export const RESULT_ID_A = `merge-result:${DIGEST_A.digest}`;
 export const RESULT_ID_C = `merge-result:${DIGEST_C.digest}`;

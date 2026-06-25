@@ -14,16 +14,15 @@ import type {
   WorkbookVersionReviewDiffPage,
 } from '@mog-sdk/contracts/api';
 
-import {
-  WorkbookVersionDiffService,
-  type WorkbookVersionDiffMetadataPage,
-} from './diff-service';
+import { WorkbookVersionDiffService, type WorkbookVersionDiffMetadataPage } from './diff-service';
 import type { VersionStoreProvider } from './provider';
 
 const DEFAULT_REVIEW_DIFF_LIMIT = 50;
 
 export interface WorkbookVersionReviewDiffService {
-  getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
+  getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
 }
 
 export function createWorkbookVersionReviewDiffService(options: {
@@ -107,7 +106,9 @@ function projectReviewDiffPage(
       redactedChanges,
       ...(upstream.nextPageToken ? {} : { totalChanges: changes.length + redactedChanges }),
     },
-    ...(upstream.nextPageToken ? { nextCursor: upstream.nextPageToken as unknown as PageCursor } : {}),
+    ...(upstream.nextPageToken
+      ? { nextCursor: upstream.nextPageToken as unknown as PageCursor }
+      : {}),
     limit: input.limit ?? DEFAULT_REVIEW_DIFF_LIMIT,
     diagnostics,
     upstreamDiff: upstreamDiffPage(upstream, input.limit ?? DEFAULT_REVIEW_DIFF_LIMIT),
@@ -120,7 +121,9 @@ function upstreamDiffPage(
 ): VersionSemanticDiffPage {
   return {
     items: upstream.items,
-    ...(upstream.nextPageToken ? { nextCursor: upstream.nextPageToken as unknown as PageCursor } : {}),
+    ...(upstream.nextPageToken
+      ? { nextCursor: upstream.nextPageToken as unknown as PageCursor }
+      : {}),
     limit,
     readRevision: upstream.readRevision,
     order: upstream.order,
@@ -193,7 +196,9 @@ function displayRefFrom(display: VersionDiffDisplay | undefined): string | undef
   return displayValue(display?.entityLabel);
 }
 
-function displayValue(value: VersionDiffDisplay[keyof VersionDiffDisplay] | undefined): string | undefined {
+function displayValue(
+  value: VersionDiffDisplay[keyof VersionDiffDisplay] | undefined,
+): string | undefined {
   return value?.kind === 'value' ? value.value : undefined;
 }
 

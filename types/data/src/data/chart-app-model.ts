@@ -1,9 +1,4 @@
-import type {
-  AxisType,
-  ChartType,
-  LegendPosition,
-  SeriesOrientation,
-} from './charts';
+import type { AxisType, ChartType, LegendPosition, SeriesOrientation } from './charts';
 
 export type ChartAxisRole =
   | 'category'

@@ -1,10 +1,6 @@
 import { jest } from '@jest/globals';
 
-import {
-  createMockCtx,
-  createMockEventBus,
-  createWorkbook,
-} from './version-checkout-test-utils';
+import { createMockCtx, createMockEventBus, createWorkbook } from './version-checkout-test-utils';
 
 describe('WorkbookVersion checkout facade', () => {
   beforeEach(() => {

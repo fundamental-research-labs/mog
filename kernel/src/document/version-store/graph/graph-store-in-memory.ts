@@ -13,10 +13,7 @@ import {
   exportInMemoryVersionGraphStoreSnapshot,
 } from './graph-store-object-helpers';
 import type { GraphCommitParentPlan } from './graph-store-parent-plans';
-import {
-  createGraphStoreRefHelpers,
-  type GraphStoreRefHelpers,
-} from './graph-store-ref-helpers';
+import { createGraphStoreRefHelpers, type GraphStoreRefHelpers } from './graph-store-ref-helpers';
 import {
   listVersionGraphCommits,
   readVersionGraphCommitClosure,
@@ -54,10 +51,7 @@ import {
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
 } from '../object-store';
-import {
-  createInMemoryRefStore,
-  type InMemoryRefStore,
-} from '../refs/ref-store';
+import { createInMemoryRefStore, type InMemoryRefStore } from '../refs/ref-store';
 
 export class InMemoryVersionGraphStore {
   readonly namespace: VersionGraphNamespace;

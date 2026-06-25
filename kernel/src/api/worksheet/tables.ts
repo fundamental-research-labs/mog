@@ -142,10 +142,7 @@ export class WorksheetTablesImpl implements WorksheetTables {
     this.ctx.writeGate.assertWritable(op);
   }
 
-  private _tableMutationOptions(
-    operationIdPrefix: string,
-    groupId?: string,
-  ): TableMutationOptions {
+  private _tableMutationOptions(operationIdPrefix: string, groupId?: string): TableMutationOptions {
     return createTableMutationOptions(this.ctx, operationIdPrefix, this.sheetId, groupId);
   }
 
@@ -2002,7 +1999,6 @@ export class WorksheetTablesImpl implements WorksheetTables {
     });
     return toDisposable(unsub);
   }
-
 }
 
 /**

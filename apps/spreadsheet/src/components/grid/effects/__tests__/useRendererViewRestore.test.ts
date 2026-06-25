@@ -52,17 +52,9 @@ describe('shouldRestoreImportedSelection', () => {
 
 describe('isActiveSheetViewSelectionChange', () => {
   it('matches only the active sheet view-selection event', () => {
-    expect(
-      isActiveSheetViewSelectionChange(
-        { sheetId: 'sheet-2' },
-        sheetId('sheet-2'),
-      ),
-    ).toBe(true);
-    expect(
-      isActiveSheetViewSelectionChange(
-        { sheetId: 'sheet-1' },
-        sheetId('sheet-2'),
-      ),
-    ).toBe(false);
+    expect(isActiveSheetViewSelectionChange({ sheetId: 'sheet-2' }, sheetId('sheet-2'))).toBe(true);
+    expect(isActiveSheetViewSelectionChange({ sheetId: 'sheet-1' }, sheetId('sheet-2'))).toBe(
+      false,
+    );
   });
 });

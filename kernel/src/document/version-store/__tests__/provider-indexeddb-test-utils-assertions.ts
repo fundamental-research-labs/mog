@@ -1,8 +1,5 @@
 import type { VersionGraphReadHeadResult } from '../graph';
-import type {
-  VersionGraphInitializeResult,
-  VersionGraphRegistryReadResult,
-} from '../provider';
+import type { VersionGraphInitializeResult, VersionGraphRegistryReadResult } from '../provider';
 
 export function expectRegistryOk(
   result: VersionGraphRegistryReadResult,

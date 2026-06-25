@@ -167,8 +167,7 @@ export class InMemoryVersionDocumentProviderBackend {
       syncBatchStatuses: this.syncBatchStatusBackend.exportSnapshot(),
       reviewRecords: this.reviewRecordBackend.exportSnapshot(),
       proposalMetadataRecords: this.proposalMetadataBackend.exportSnapshot(),
-      activeCheckoutMaterializations:
-        this.activeCheckoutMaterializationBackend.exportSnapshot(),
+      activeCheckoutMaterializations: this.activeCheckoutMaterializationBackend.exportSnapshot(),
     });
   }
 
@@ -194,10 +193,9 @@ export class InMemoryVersionDocumentProviderBackend {
       proposalMetadataBackend: AgentProposalMetadataMemoryBackend.fromSnapshot(
         snapshot.proposalMetadataRecords ?? { rows: [] },
       ),
-      activeCheckoutMaterializationBackend:
-        ActiveCheckoutMaterializationMemoryBackend.fromSnapshot(
-          snapshot.activeCheckoutMaterializations ?? [],
-        ),
+      activeCheckoutMaterializationBackend: ActiveCheckoutMaterializationMemoryBackend.fromSnapshot(
+        snapshot.activeCheckoutMaterializations ?? [],
+      ),
     });
     for (const [scope, record] of snapshot.registries) {
       backend.registries.set(versionDocumentScopeKey(scope), cloneRegistryRecord(record));

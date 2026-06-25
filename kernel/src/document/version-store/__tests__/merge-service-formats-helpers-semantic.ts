@@ -26,11 +26,6 @@ export function valueChange(
   };
 }
 
-export function formatChange(
-  changeId: string,
-  entityId: string,
-  before: unknown,
-  after: unknown,
-) {
+export function formatChange(changeId: string, entityId: string, before: unknown, after: unknown) {
   return valueChange(changeId, 'cells.formats.direct', entityId, ['format'], before, after);
 }

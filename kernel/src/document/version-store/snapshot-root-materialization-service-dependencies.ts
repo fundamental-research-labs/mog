@@ -7,7 +7,9 @@ type SnapshotRootMaterializationPlan = Extract<
   { ok: true; materialization: 'planned' }
 >['plan'];
 
-export function snapshotRootDependency(plan: SnapshotRootMaterializationPlan): VersionDependencyRef {
+export function snapshotRootDependency(
+  plan: SnapshotRootMaterializationPlan,
+): VersionDependencyRef {
   const dependency = plan.requiredDependencies.find((entry) => entry.role === 'snapshotRoot');
   return Object.freeze({
     kind: 'object',

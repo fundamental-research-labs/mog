@@ -24,7 +24,9 @@ export function deriveSemanticCaptureCapabilityBlocks(
 }
 
 function requiresProviderBackedNormalCommitCapture(services: unknown): boolean {
-  return hasProvider(services) && hasSnapshotRootByteSyncPort(services) && hasSemanticCapture(services);
+  return (
+    hasProvider(services) && hasSnapshotRootByteSyncPort(services) && hasSemanticCapture(services)
+  );
 }
 
 function hasProvider(services: unknown): boolean {

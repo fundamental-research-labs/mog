@@ -36,7 +36,9 @@ export async function graphWithRootAndDetachedChildren(options: {
   readonly theirsSemanticPayload: unknown;
 }) {
   const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-  const initialized = await provider.initializeGraph(await initializeInput('graph-persist', 'root'));
+  const initialized = await provider.initializeGraph(
+    await initializeInput('graph-persist', 'root'),
+  );
   expectInitializeSuccess(initialized);
   const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-persist');
   const rootCommitId = initialized.rootCommit.id;

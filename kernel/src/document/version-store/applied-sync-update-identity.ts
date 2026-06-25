@@ -57,9 +57,7 @@ export function appliedSyncOperationContext(
   return operationContext.collaboration;
 }
 
-export function isAppliedSyncUpdateIdentity(
-  value: unknown,
-): value is AppliedSyncUpdateIdentity {
+export function isAppliedSyncUpdateIdentity(value: unknown): value is AppliedSyncUpdateIdentity {
   return (
     isRecord(value) &&
     value.schemaVersion === 1 &&

@@ -52,13 +52,10 @@ export function describePersistedStaleFastForwardMaterializerScenarios(): void {
         }),
       );
 
-      const stale = await sourceWb.version.applyMerge(
-        previewMetadata,
-        {
-          targetRef: MATERIALIZER_TARGET_REF as any,
-          expectedTargetHead: staleExpectedTargetHead,
-        },
-      );
+      const stale = await sourceWb.version.applyMerge(previewMetadata, {
+        targetRef: MATERIALIZER_TARGET_REF as any,
+        expectedTargetHead: staleExpectedTargetHead,
+      });
       expect(stale).toMatchObject({
         ok: true,
         value: {

@@ -1,7 +1,4 @@
-import type {
-  VersionMergeInput,
-  VersionMergeResult,
-} from '@mog-sdk/contracts/api';
+import type { VersionMergeInput, VersionMergeResult } from '@mog-sdk/contracts/api';
 
 import type { MergeDiagnostic } from './merge-service-diagnostics';
 

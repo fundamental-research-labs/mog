@@ -17,4 +17,3 @@ export function toWorksheetRange(range: RangeBounds): WorksheetRange {
 export function toWorksheetRangeOrNull(range: RangeBounds | null): WorksheetRange | null {
   return range ? toWorksheetRange(range) : null;
 }
-

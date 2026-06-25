@@ -359,7 +359,10 @@ type _WorkbookNamespaceExportsAgentProposalAcceptResult = Assert<
   IsEqual<WorkbookNamespaceAgentProposalAcceptResult, PackageWorkbookAgentProposalAcceptResult>
 >;
 type _WorkbookNamespaceExportsAgentProposalWorkspaceHandle = Assert<
-  IsEqual<WorkbookNamespaceAgentProposalWorkspaceHandle, PackageWorkbookAgentProposalWorkspaceHandle>
+  IsEqual<
+    WorkbookNamespaceAgentProposalWorkspaceHandle,
+    PackageWorkbookAgentProposalWorkspaceHandle
+  >
 >;
 type _WorkbookNamespaceExportsCreateAgentProposalInput = Assert<
   IsEqual<WorkbookNamespaceCreateAgentProposalInput, PackageWorkbookCreateAgentProposalInput>
@@ -398,7 +401,10 @@ type _WorkbookNamespaceExportsMergeConflict = Assert<
   IsEqual<WorkbookNamespaceMergeConflict, PackageWorkbookMergeConflict>
 >;
 type _WorkbookNamespaceExportsMergeConflictResolutionOption = Assert<
-  IsEqual<WorkbookNamespaceMergeConflictResolutionOption, PackageWorkbookMergeConflictResolutionOption>
+  IsEqual<
+    WorkbookNamespaceMergeConflictResolutionOption,
+    PackageWorkbookMergeConflictResolutionOption
+  >
 >;
 type _WorkbookNamespaceExportsMergeResult = Assert<
   IsEqual<WorkbookNamespaceMergeResult, PackageWorkbookMergeResult>
@@ -425,28 +431,46 @@ type _WorkbookNamespaceExportsPromotePendingRemoteResult = Assert<
   IsEqual<WorkbookNamespacePromotePendingRemoteResult, PackageWorkbookPromotePendingRemoteResult>
 >;
 type _WorkbookNamespaceExportsPromotePendingRemoteSkippedSegment = Assert<
-  IsEqual<WorkbookNamespacePromotePendingRemoteSkippedSegment, PackageWorkbookPromotePendingRemoteSkippedSegment>
+  IsEqual<
+    WorkbookNamespacePromotePendingRemoteSkippedSegment,
+    PackageWorkbookPromotePendingRemoteSkippedSegment
+  >
 >;
 type _WorkbookNamespaceExportsPromotePendingRemoteStatus = Assert<
   IsEqual<WorkbookNamespacePromotePendingRemoteStatus, PackageWorkbookPromotePendingRemoteStatus>
 >;
 type _WorkbookNamespaceExportsPromotePendingRemoteSkipReason = Assert<
-  IsEqual<WorkbookNamespacePromotePendingRemoteSkipReason, PackageWorkbookPromotePendingRemoteSkipReason>
+  IsEqual<
+    WorkbookNamespacePromotePendingRemoteSkipReason,
+    PackageWorkbookPromotePendingRemoteSkipReason
+  >
 >;
 type _WorkbookNamespaceExportsPromotePendingRemoteDiagnostic = Assert<
-  IsEqual<WorkbookNamespacePromotePendingRemoteDiagnostic, PackageWorkbookPromotePendingRemoteDiagnostic>
+  IsEqual<
+    WorkbookNamespacePromotePendingRemoteDiagnostic,
+    PackageWorkbookPromotePendingRemoteDiagnostic
+  >
 >;
 type _WorkbookNamespaceExportsPromotePendingRemoteDiagnosticCode = Assert<
-  IsEqual<WorkbookNamespacePromotePendingRemoteDiagnosticCode, PackageWorkbookPromotePendingRemoteDiagnosticCode>
+  IsEqual<
+    WorkbookNamespacePromotePendingRemoteDiagnosticCode,
+    PackageWorkbookPromotePendingRemoteDiagnosticCode
+  >
 >;
 type _WorkbookNamespaceExportsSaveMergeResolutionsRequest = Assert<
   IsEqual<WorkbookNamespaceSaveMergeResolutionsRequest, PackageWorkbookSaveMergeResolutionsRequest>
 >;
 type _WorkbookNamespaceExportsGetMergeConflictDetailRequest = Assert<
-  IsEqual<WorkbookNamespaceGetMergeConflictDetailRequest, PackageWorkbookGetMergeConflictDetailRequest>
+  IsEqual<
+    WorkbookNamespaceGetMergeConflictDetailRequest,
+    PackageWorkbookGetMergeConflictDetailRequest
+  >
 >;
 type _WorkbookNamespaceExportsPutMergeResolutionPayloadResult = Assert<
-  IsEqual<WorkbookNamespacePutMergeResolutionPayloadResult, PackageWorkbookPutMergeResolutionPayloadResult>
+  IsEqual<
+    WorkbookNamespacePutMergeResolutionPayloadResult,
+    PackageWorkbookPutMergeResolutionPayloadResult
+  >
 >;
 type _WorkbookNamespaceExportsSealedResolutionPayloadRef = Assert<
   IsEqual<WorkbookNamespaceSealedResolutionPayloadRef, PackageWorkbookSealedResolutionPayloadRef>
@@ -500,7 +524,10 @@ type _WorkbookNamespaceUpdateExpectedRefRevisionIsCounter = Assert<
   >
 >;
 type _WorkbookNamespaceDeleteExpectedRefRevisionIsRequired = Assert<
-  IsEqual<undefined extends WorkbookNamespaceDeleteRefOptions['expectedRefRevision'] ? true : false, false>
+  IsEqual<
+    undefined extends WorkbookNamespaceDeleteRefOptions['expectedRefRevision'] ? true : false,
+    false
+  >
 >;
 type _WorkbookNamespaceDeleteExpectedRefRevisionRejectsOpaque = Assert<
   IsEqual<
@@ -564,9 +591,7 @@ type _ApiRootExportsVersionApi = Assert<IsEqual<ApiRootWorkbookVersion, PackageA
 type _ApiRootExportsStatus = Assert<
   IsEqual<ApiRootWorkbookVersionStatus, PackageApiWorkbookVersionStatus>
 >;
-type _ApiRootExportsAgentProposal = Assert<
-  IsEqual<ApiRootAgentProposal, PackageApiAgentProposal>
->;
+type _ApiRootExportsAgentProposal = Assert<IsEqual<ApiRootAgentProposal, PackageApiAgentProposal>>;
 type _ApiRootExportsAgentProposalAcceptResult = Assert<
   IsEqual<ApiRootAgentProposalAcceptResult, PackageApiAgentProposalAcceptResult>
 >;
@@ -594,17 +619,13 @@ type _ApiRootExportsApplyMergeOptions = Assert<
 type _ApiRootExportsApplyMergeGuarantee = Assert<
   IsEqual<ApiRootApplyMergeMutationGuarantee, PackageApiApplyMergeMutationGuarantee>
 >;
-type _ApiRootExportsCommitOptions = Assert<
-  IsEqual<ApiRootCommitOptions, PackageApiCommitOptions>
->;
+type _ApiRootExportsCommitOptions = Assert<IsEqual<ApiRootCommitOptions, PackageApiCommitOptions>>;
 type _ApiRootExportsCommitExpectedHead = Assert<
   IsEqual<ApiRootCommitExpectedHead, PackageApiCommitExpectedHead>
 >;
 type _ApiRootExportsCommitMode = Assert<IsEqual<ApiRootCommitMode, PackageApiCommitMode>>;
 type _ApiRootExportsDiffEntry = Assert<IsEqual<ApiRootDiffEntry, PackageApiDiffEntry>>;
-type _ApiRootExportsMergeConflict = Assert<
-  IsEqual<ApiRootMergeConflict, PackageApiMergeConflict>
->;
+type _ApiRootExportsMergeConflict = Assert<IsEqual<ApiRootMergeConflict, PackageApiMergeConflict>>;
 type _ApiRootExportsMergeConflictResolutionOption = Assert<
   IsEqual<ApiRootMergeConflictResolutionOption, PackageApiMergeConflictResolutionOption>
 >;
@@ -718,9 +739,7 @@ type _ApiRootExportsBranchMutation = Assert<
   IsEqual<ApiRootRefMutationResult, PackageApiRefMutationResult>
 >;
 type _ApiRootExportsRevertInput = Assert<IsEqual<ApiRootRevertInput, PackageApiRevertInput>>;
-type _ApiRootExportsRevertOptions = Assert<
-  IsEqual<ApiRootRevertOptions, PackageApiRevertOptions>
->;
+type _ApiRootExportsRevertOptions = Assert<IsEqual<ApiRootRevertOptions, PackageApiRevertOptions>>;
 type _ApiRootExportsRevertResult = Assert<IsEqual<ApiRootRevertResult, PackageApiRevertResult>>;
 type _ApiRootExportsStoreDiagnostic = Assert<
   IsEqual<ApiRootStoreDiagnostic, PackageApiStoreDiagnostic>
@@ -731,9 +750,7 @@ type _ApiRootExportsSurfaceDiagnosticCode = Assert<
 type _ApiRootExportsWorkbookVersionDiagnosticCode = Assert<
   IsEqual<ApiRootWorkbookVersionDiagnosticCode, PackageApiWorkbookVersionDiagnosticCode>
 >;
-type _ApiRootExportsSemanticValue = Assert<
-  IsEqual<ApiRootSemanticValue, PackageApiSemanticValue>
->;
+type _ApiRootExportsSemanticValue = Assert<IsEqual<ApiRootSemanticValue, PackageApiSemanticValue>>;
 type _ApiRootExportsRedactionPolicy = Assert<
   IsEqual<ApiRootRedactionPolicy, PackageApiRedactionPolicy>
 >;

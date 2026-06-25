@@ -10,11 +10,7 @@ import {
   type InMemoryVersionObjectStore,
   type VersionObjectRecord,
 } from '../object-store';
-import type {
-  WorkbookCommit,
-  WorkbookCommitPayload,
-  WorkbookCommitStoreDiagnostic,
-} from './types';
+import type { WorkbookCommit, WorkbookCommitPayload, WorkbookCommitStoreDiagnostic } from './types';
 
 export function validateCommitRecord(
   commitId: WorkbookCommitId,

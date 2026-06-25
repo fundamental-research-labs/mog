@@ -1,9 +1,5 @@
 import { createWorkbookVersionDiffService } from '../diff-service';
-import {
-  addressDisplay,
-  graphWithRootAndChild,
-  semanticRecord,
-} from './diff-service-fixtures';
+import { addressDisplay, graphWithRootAndChild, semanticRecord } from './diff-service-fixtures';
 
 export function registerDiffServiceProjectionRustScenarios(): void {
   it('projects Rust semantic changes when a payload has no review changes', async () => {

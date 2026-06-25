@@ -1,8 +1,4 @@
-import type {
-  VersionMainRefName,
-  VersionRefName,
-  WorkbookCommitRef,
-} from '@mog-sdk/contracts/api';
+import type { VersionMainRefName, VersionRefName, WorkbookCommitRef } from '@mog-sdk/contracts/api';
 
 import {
   mapCommitId,

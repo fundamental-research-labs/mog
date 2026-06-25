@@ -3,10 +3,7 @@ import type {
   VersionStoreDiagnostic,
 } from '@mog-sdk/contracts/api';
 
-export function invalidOptionsDiagnostic(
-  message: string,
-  option?: string,
-): VersionStoreDiagnostic {
+export function invalidOptionsDiagnostic(message: string, option?: string): VersionStoreDiagnostic {
   return publicDiagnostic('VERSION_INVALID_OPTIONS', message, 'error', 'none', {
     operation: 'promotePendingRemote',
     ...(option ? { option } : {}),

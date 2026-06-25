@@ -1,7 +1,5 @@
 import { DocumentFactory } from '../../../api/document/document-factory';
-import type {
-  SnapshotRootFreshLifecycleMaterialization,
-} from '../../../api/document/snapshot-root-lifecycle-hydrator';
+import type { SnapshotRootFreshLifecycleMaterialization } from '../../../api/document/snapshot-root-lifecycle-hydrator';
 import {
   createWorkbookSnapshotRootRecord,
   createYrsFullStateSnapshotRootPayload,

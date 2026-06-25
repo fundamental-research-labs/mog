@@ -1,11 +1,7 @@
 import type { VersionDomainCapabilityStateMap } from '@mog-sdk/contracts/versioning';
 
 import { validateDomainSupportManifest } from '../domain-support-manifest-validator';
-import {
-  capabilityStates,
-  domainRow,
-  NOW,
-} from './domain-support-manifest-validator-fixtures';
+import { capabilityStates, domainRow, NOW } from './domain-support-manifest-validator-fixtures';
 import { manifestWithAdditionalDomain } from './domain-support-manifest-validator-capabilities-test-helpers';
 
 export function registerCapabilityStateMapScenarios(): void {

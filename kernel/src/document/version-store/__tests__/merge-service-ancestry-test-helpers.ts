@@ -5,7 +5,9 @@ import {
   valueChange,
 } from './merge-service-fixtures';
 
-export type MergeServiceAncestryGraph = Awaited<ReturnType<typeof graphWithRootAndDetachedChildren>>;
+export type MergeServiceAncestryGraph = Awaited<
+  ReturnType<typeof graphWithRootAndDetachedChildren>
+>;
 
 export async function graphWithTheirsDescendantFastForward() {
   const graph = await graphWithRootAndDetachedChildren({

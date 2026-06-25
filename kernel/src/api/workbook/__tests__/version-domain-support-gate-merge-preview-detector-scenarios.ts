@@ -2,12 +2,7 @@ import { expect, it, jest } from '@jest/globals';
 
 import { REQUIRED_FIRST_SLICE_DOMAIN_IDS } from '../../../document/version-store/domain-support-manifest-validator';
 import { WorkbookVersionImpl } from '../version';
-import {
-  BASE,
-  OURS,
-  THEIRS,
-  mergeInput,
-} from './version-domain-support-gate-merge-test-utils';
+import { BASE, OURS, THEIRS, mergeInput } from './version-domain-support-gate-merge-test-utils';
 import {
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW as NOW,
   freshVersionDomainSupportManifest as freshManifest,

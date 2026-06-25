@@ -1,7 +1,4 @@
-import type {
-  VersionApplyMergeResult,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionApplyMergeResult, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../../context';
 import {
@@ -16,9 +13,7 @@ import {
   type MergeResolutionSetArtifactRecord,
   type ResolvedMergeAttemptArtifactRecord,
 } from '../../../../../document/version-store/merge-attempt-artifacts';
-import type {
-  ObjectDigest as InternalObjectDigest,
-} from '../../../../../document/version-store/object-digest';
+import type { ObjectDigest as InternalObjectDigest } from '../../../../../document/version-store/object-digest';
 import type { VersionGraphNamespace } from '../../../../../document/version-store/object-store';
 import type { VersionGraphStore } from '../../../../../document/version-store/provider-graph-store';
 import {

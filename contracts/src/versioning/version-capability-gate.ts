@@ -28,9 +28,7 @@ export const VERSION_CAPABILITY_GATE_DRY_RUN_RESULT_REASONS = Object.freeze([
 export type VersionCapabilityGateDryRunResultReason =
   (typeof VERSION_CAPABILITY_GATE_DRY_RUN_RESULT_REASONS)[number];
 
-export const VERSION_CAPABILITY_GATE_CAS_RESULT_STATUSES = Object.freeze([
-  'not-applied',
-] as const);
+export const VERSION_CAPABILITY_GATE_CAS_RESULT_STATUSES = Object.freeze(['not-applied'] as const);
 export type VersionCapabilityGateCompareAndSwapResultStatus =
   (typeof VERSION_CAPABILITY_GATE_CAS_RESULT_STATUSES)[number];
 
@@ -43,8 +41,10 @@ export type VersionCapabilityGateCompareAndSwapResultReason =
 
 export type VersionCapabilityGateDryRunRequest = ControlPlaneDryRunRequest;
 
-export interface VersionCapabilityGateDryRunResult
-  extends Omit<ControlPlaneDryRunResult, 'applied' | 'reason' | 'status'> {
+export interface VersionCapabilityGateDryRunResult extends Omit<
+  ControlPlaneDryRunResult,
+  'applied' | 'reason' | 'status'
+> {
   readonly status: VersionCapabilityGateDryRunResultStatus;
   readonly reason: VersionCapabilityGateDryRunResultReason;
   readonly applied: false;
@@ -52,14 +52,18 @@ export interface VersionCapabilityGateDryRunResult
 
 export type VersionCapabilityGateCompareAndSwapRequest = ControlPlaneCompareAndSwapRequest;
 
-export interface VersionCapabilityGateCompareAndSwapReceipt
-  extends Omit<ControlPlaneCompareAndSwapResult['casReceipt'], 'reason'> {
+export interface VersionCapabilityGateCompareAndSwapReceipt extends Omit<
+  ControlPlaneCompareAndSwapResult['casReceipt'],
+  'reason'
+> {
   readonly reason: VersionCapabilityGateCompareAndSwapResultReason;
   readonly readbackCasToken?: ControlPlaneCasToken;
 }
 
-export interface VersionCapabilityGateCompareAndSwapResult
-  extends Omit<ControlPlaneCompareAndSwapResult, 'applied' | 'casReceipt' | 'reason' | 'status'> {
+export interface VersionCapabilityGateCompareAndSwapResult extends Omit<
+  ControlPlaneCompareAndSwapResult,
+  'applied' | 'casReceipt' | 'reason' | 'status'
+> {
   readonly status: VersionCapabilityGateCompareAndSwapResultStatus;
   readonly reason: VersionCapabilityGateCompareAndSwapResultReason;
   readonly applied: false;

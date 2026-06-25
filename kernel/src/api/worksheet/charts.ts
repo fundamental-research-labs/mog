@@ -218,7 +218,11 @@ export class WorksheetChartsImpl implements WorksheetCharts {
 
   async clear(): Promise<void> {
     const charts = await this.list();
-    await clearWorksheetCharts(this.ctx, this.sheetId, charts.map((chart) => chart.id));
+    await clearWorksheetCharts(
+      this.ctx,
+      this.sheetId,
+      charts.map((chart) => chart.id),
+    );
   }
 
   // ===========================================================================
@@ -749,12 +753,20 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     return setChartAxisTitleAppModelMutation(this.ctx, this.sheetId, chartId, axisType, title);
   }
 
-  async setAxisVisible(chartId: string, axisRole: ChartAxisRole, visible: boolean): Promise<ChartMutationReceipt> {
+  async setAxisVisible(
+    chartId: string,
+    axisRole: ChartAxisRole,
+    visible: boolean,
+  ): Promise<ChartMutationReceipt> {
     return setChartAxisVisibleMutation(this.ctx, this.sheetId, chartId, axisRole, visible);
   }
 
-  async setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> { return setChartLegendVisibleMutation(this.ctx, this.sheetId, chartId, visible); }
-  async setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> { return setChartTitleVisibleMutation(this.ctx, this.sheetId, chartId, visible); }
+  async setLegendVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> {
+    return setChartLegendVisibleMutation(this.ctx, this.sheetId, chartId, visible);
+  }
+  async setChartTitleVisible(chartId: string, visible: boolean): Promise<ChartMutationReceipt> {
+    return setChartTitleVisibleMutation(this.ctx, this.sheetId, chartId, visible);
+  }
   async switchSeriesOrientation(chartId: string): Promise<ChartMutationReceipt> {
     return switchChartSeriesOrientationMutation(this.ctx, this.sheetId, chartId);
   }

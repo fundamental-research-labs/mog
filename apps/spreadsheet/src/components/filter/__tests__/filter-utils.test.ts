@@ -1,7 +1,12 @@
 import type { Worksheet } from '@mog-sdk/contracts/api';
 import { jest } from '@jest/globals';
 
-import { detectColumnType, getUniqueColors, groupDatesByHierarchy, isDateColumn } from '../filter-utils';
+import {
+  detectColumnType,
+  getUniqueColors,
+  groupDatesByHierarchy,
+  isDateColumn,
+} from '../filter-utils';
 
 describe('filter-utils column type detection', () => {
   it('treats plain Excel-serial-like numbers as numeric values', () => {
@@ -27,16 +32,20 @@ describe('filter-utils column type detection', () => {
 
   it('reads unique colors through one range query when available', async () => {
     const formatsGet = jest.fn();
-    const getDisplayedRangeProperties = jest.fn().mockResolvedValue([
-      [{ backgroundColor: '#ff0000', fontColor: '#111111' }],
-      [{ backgroundColor: '#00ff00', fontColor: '#222222' }],
-      [{ backgroundColor: '#ff0000', fontColor: '#333333' }],
-    ]);
-    const getRange = jest.fn().mockResolvedValue([
-      [{ value: 'A', format: { backgroundColor: '#ff0000', fontColor: '#111111' } }],
-      [{ value: 'B', format: { backgroundColor: '#00ff00', fontColor: '#222222' } }],
-      [{ value: 'C', format: { backgroundColor: '#ff0000', fontColor: '#333333' } }],
-    ]);
+    const getDisplayedRangeProperties = jest
+      .fn()
+      .mockResolvedValue([
+        [{ backgroundColor: '#ff0000', fontColor: '#111111' }],
+        [{ backgroundColor: '#00ff00', fontColor: '#222222' }],
+        [{ backgroundColor: '#ff0000', fontColor: '#333333' }],
+      ]);
+    const getRange = jest
+      .fn()
+      .mockResolvedValue([
+        [{ value: 'A', format: { backgroundColor: '#ff0000', fontColor: '#111111' } }],
+        [{ value: 'B', format: { backgroundColor: '#00ff00', fontColor: '#222222' } }],
+        [{ value: 'C', format: { backgroundColor: '#ff0000', fontColor: '#333333' } }],
+      ]);
     const ws = {
       getRange,
       formats: { get: formatsGet, getDisplayedRangeProperties },

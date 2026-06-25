@@ -3,9 +3,7 @@ import type { VersionStoreProvider } from '../../../../document/version-store/pr
 import type { MaybeVersionRuntimeContext } from './provider-writes-types';
 import { isRecord } from './provider-writes-utils';
 
-export function getAttachedVersionStoreProvider(
-  ctx: DocumentContext,
-): VersionStoreProvider | null {
+export function getAttachedVersionStoreProvider(ctx: DocumentContext): VersionStoreProvider | null {
   const runtime = ctx as MaybeVersionRuntimeContext;
   const services = runtime.versioning ?? runtime.versionStore ?? runtime.version ?? null;
   if (!isRecord(services)) return null;

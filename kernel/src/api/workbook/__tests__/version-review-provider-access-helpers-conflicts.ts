@@ -5,7 +5,10 @@ import type {
   VersionMergeConflict,
 } from '@mog-sdk/contracts/api';
 
-import { SECRET_TABLE_ID, SECRET_TABLE_NAME } from './version-review-provider-access-helpers-constants';
+import {
+  SECRET_TABLE_ID,
+  SECRET_TABLE_NAME,
+} from './version-review-provider-access-helpers-constants';
 
 export function tableDefinitionConflict(): VersionMergeConflict {
   const conflictId = 'conflict:w10-09:secret-table';

@@ -1,7 +1,4 @@
-import type {
-  VersionCommitOptions,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionCommitOptions, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import {
   VERSION_COMMIT_MODE_KEYS,

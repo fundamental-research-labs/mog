@@ -289,7 +289,6 @@ export abstract class WorkbookImplOperations extends WorkbookImplFoundation {
   // Calculation Control
   // ===========================================================================
 
-
   get calculationState(): 'done' | 'calculating' | 'pending' {
     return this._calculationState;
   }

@@ -8,8 +8,7 @@ import type {
 
 export const EMERGENCY_DISABLE_POLICY_SCHEMA_VERSION =
   'mog.versioning.emergencyDisablePolicy.v1' as const;
-export type EmergencyDisablePolicySchemaVersion =
-  typeof EMERGENCY_DISABLE_POLICY_SCHEMA_VERSION;
+export type EmergencyDisablePolicySchemaVersion = typeof EMERGENCY_DISABLE_POLICY_SCHEMA_VERSION;
 
 export const EMERGENCY_DISABLE_AUTHORITY_KINDS = Object.freeze([
   'user',
@@ -18,8 +17,7 @@ export const EMERGENCY_DISABLE_AUTHORITY_KINDS = Object.freeze([
   'release-operator',
   'system',
 ] as const);
-export type EmergencyDisableAuthorityKind =
-  (typeof EMERGENCY_DISABLE_AUTHORITY_KINDS)[number];
+export type EmergencyDisableAuthorityKind = (typeof EMERGENCY_DISABLE_AUTHORITY_KINDS)[number];
 
 export const EMERGENCY_DISABLE_INCIDENT_CATEGORIES = Object.freeze([
   'security',
@@ -67,8 +65,7 @@ export const EMERGENCY_DISABLE_DRILL_CHECKS = Object.freeze([
   'offline-version-apis-fail-closed',
   'in-flight-transition-reconciled',
 ] as const);
-export type EmergencyDisableDrillCheck =
-  (typeof EMERGENCY_DISABLE_DRILL_CHECKS)[number];
+export type EmergencyDisableDrillCheck = (typeof EMERGENCY_DISABLE_DRILL_CHECKS)[number];
 
 export const EMERGENCY_DISABLE_AUDIT_RECORD_FIELDS = Object.freeze([
   'recordKind',

@@ -1,23 +1,13 @@
-import {
-  graphWriteSuccess,
-  parseGraphCommitExpectedHead,
-} from './graph-store-commit-helpers';
+import { graphWriteSuccess, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
 import {
   VERSION_GRAPH_MAIN_REF,
   graphRefNameFromRefName,
   missingGraphCommitExpectedRefVersionDiagnostic,
   parseGraphCommitTargetRef,
 } from './graph-store-refs';
-import {
-  objectDigestFromWorkbookCommitId,
-  type WorkbookCommitId,
-} from '../object-digest';
+import { objectDigestFromWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
 import type { RefName } from '../refs/ref-name';
-import type {
-  InMemoryRefStore,
-  LiveRefRecord,
-  VersionDiagnostic,
-} from '../refs/ref-store';
+import type { InMemoryRefStore, LiveRefRecord, VersionDiagnostic } from '../refs/ref-store';
 import { refVersionsEqual } from '../refs/ref-store';
 import type {
   FastForwardVersionGraphInput,
@@ -157,7 +147,9 @@ function readRefRecord(
       diagnostics: [
         diagnostic(
           refName === 'main' ? 'VERSION_GRAPH_UNINITIALIZED' : 'VERSION_INVALID_OPTIONS',
-          refName === 'main' ? 'Graph main ref is not initialized.' : 'Graph branch ref was not found.',
+          refName === 'main'
+            ? 'Graph main ref is not initialized.'
+            : 'Graph branch ref was not found.',
           {
             refName: graphRefNameFromRefName(refName),
             operation,

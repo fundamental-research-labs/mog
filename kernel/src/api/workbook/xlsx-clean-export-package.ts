@@ -210,11 +210,7 @@ function shouldDropCleanExportRelationship(relsPath: string, tag: string): boole
   return targetPath !== null && isCleanExportScrubbedPackagePath(targetPath);
 }
 
-function removeXmlTags(
-  xml: string,
-  tagName: string,
-  predicate: (tag: string) => boolean,
-): string {
+function removeXmlTags(xml: string, tagName: string, predicate: (tag: string) => boolean): string {
   let scrubbed = xml;
   for (const tag of extractXmlTags(xml, tagName)) {
     if (predicate(tag)) {

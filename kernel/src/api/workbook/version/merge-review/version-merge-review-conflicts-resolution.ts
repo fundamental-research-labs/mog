@@ -14,10 +14,8 @@ import {
 } from './version-merge-review-conflicts-lookup';
 import { canonicalJson, projectReviewValue } from './version-merge-review-conflicts-projection';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';
-import {
-  invalidInputDiagnostic,
-  type NormalizedPutMergeResolutionPayloadInput,
-} from './version-merge-review-normalization';
+import { invalidInputDiagnostic } from './version-merge-review-normalization-helpers';
+import type { NormalizedPutMergeResolutionPayloadInput } from './version-merge-review-normalization-phases-resolution-payload';
 
 type ResolutionValidationResult =
   | {

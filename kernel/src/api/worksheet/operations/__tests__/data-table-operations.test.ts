@@ -126,12 +126,20 @@ describe('data table operations', () => {
         options,
       );
 
-      expect(ctx.computeBridge.createDataTable).toHaveBeenCalledWith('sheet-1', 1, 1, 3, 3, {
-        sheetId: 'sheet-1',
-        tableRange: 'B2:D4',
-        rowInputCell: 'A1',
-        colInputCell: 'A2',
-      }, options);
+      expect(ctx.computeBridge.createDataTable).toHaveBeenCalledWith(
+        'sheet-1',
+        1,
+        1,
+        3,
+        3,
+        {
+          sheetId: 'sheet-1',
+          tableRange: 'B2:D4',
+          rowInputCell: 'A1',
+          colInputCell: 'A2',
+        },
+        options,
+      );
       expect(result).toEqual({
         kind: 'dataTable.create',
         status: 'applied',
@@ -224,12 +232,16 @@ describe('data table operations', () => {
         options,
       );
 
-      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith('sheet-1', [
-        { row: 2, col: 2, input: { kind: 'value', value: 10 } },
-        { row: 2, col: 3, input: { kind: 'value', value: 20 } },
-        { row: 3, col: 2, input: { kind: 'value', value: 30 } },
-        { row: 3, col: 3, input: { kind: 'value', value: 40 } },
-      ], options);
+      expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+        'sheet-1',
+        [
+          { row: 2, col: 2, input: { kind: 'value', value: 10 } },
+          { row: 2, col: 3, input: { kind: 'value', value: 20 } },
+          { row: 3, col: 2, input: { kind: 'value', value: 30 } },
+          { row: 3, col: 3, input: { kind: 'value', value: 40 } },
+        ],
+        options,
+      );
       expect(result).toMatchObject({
         kind: 'dataTable.writeStaticValues',
         status: 'applied',

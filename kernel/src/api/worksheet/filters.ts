@@ -895,13 +895,7 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     col: number,
   ): Promise<{ values: CellValue[]; columnType: FilterDropdownColumnType }> {
     const sheetId = this.sheetId as Parameters<typeof this.ctx.computeBridge.queryRange>[0];
-    const rangeData = await this.ctx.computeBridge.queryRange(
-      sheetId,
-      startRow,
-      col,
-      endRow,
-      col,
-    );
+    const rangeData = await this.ctx.computeBridge.queryRange(sheetId, startRow, col, endRow, col);
     const cellsByRow = new Map<number, (typeof rangeData.cells)[number]>();
     for (const cell of rangeData.cells) {
       cellsByRow.set(cell.row, cell);

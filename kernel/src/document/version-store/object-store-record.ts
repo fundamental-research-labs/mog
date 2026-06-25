@@ -1,10 +1,6 @@
 import { parseObjectDigest, type ObjectDigest, type VersionDependencyRef } from './object-digest';
 import { cloneVersionObjectCompatibilityHeader, type VersionObjectPreimage } from './object-header';
-import {
-  clonePayload,
-  isPlainRecord,
-  sha256ObjectDigest,
-} from './object-store-canonical';
+import { clonePayload, isPlainRecord, sha256ObjectDigest } from './object-store-canonical';
 import { throwValidation, type VersionObjectStoreDiagnosticCode } from './object-store-diagnostics';
 import {
   normalizeVersionGraphNamespace,

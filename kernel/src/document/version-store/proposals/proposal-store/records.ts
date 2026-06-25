@@ -1,8 +1,4 @@
-import {
-  agentProposalRowWithIndexes,
-  cloneAgentProposalRecord,
-  cloneJson,
-} from './codec';
+import { agentProposalRowWithIndexes, cloneAgentProposalRecord, cloneJson } from './codec';
 import type {
   AgentProposalId,
   AgentProposalMutationLogEntry,

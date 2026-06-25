@@ -258,15 +258,11 @@ function materializedMergeDiffRole(
   return null;
 }
 
-function materializedMergeProof(
-  value: Readonly<Record<string, unknown>>,
-):
-  | {
-      readonly baseCommitId: WorkbookCommitId;
-      readonly oursCommitId: WorkbookCommitId;
-      readonly theirsCommitId: WorkbookCommitId;
-    }
-  | null {
+function materializedMergeProof(value: Readonly<Record<string, unknown>>): {
+  readonly baseCommitId: WorkbookCommitId;
+  readonly oursCommitId: WorkbookCommitId;
+  readonly theirsCommitId: WorkbookCommitId;
+} | null {
   if (
     typeof value.baseCommitId !== 'string' ||
     typeof value.oursCommitId !== 'string' ||

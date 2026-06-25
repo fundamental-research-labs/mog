@@ -163,7 +163,9 @@ export function mapTimelineEntryStyleInfo(entry: VersionTimelineStyleEntry): Tim
   };
 }
 
-export function timelineStyleForVersionEntry(entry: VersionTimelineVersionEntry): TimelineStyleName {
+export function timelineStyleForVersionEntry(
+  entry: VersionTimelineVersionEntry,
+): TimelineStyleName {
   if (hasDiagnostics(entry)) return 'dark5';
   if (entry.orphan === true) return 'dark6';
   if (entry.parents.length > 1) return 'dark1';

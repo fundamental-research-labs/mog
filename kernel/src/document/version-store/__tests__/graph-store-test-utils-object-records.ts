@@ -1,7 +1,4 @@
-import type {
-  VersionDependencyRef,
-  VersionObjectType,
-} from '../object-digest';
+import type { VersionDependencyRef, VersionObjectType } from '../object-digest';
 import {
   createVersionObjectRecord,
   type VersionGraphNamespace,

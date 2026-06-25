@@ -82,13 +82,7 @@ export type ProviderBackedAgentProposalServiceContext =
 export function createProviderBackedAgentProposalServiceContext(
   options: ProviderBackedAgentProposalServiceOptions,
 ): ProviderBackedAgentProposalServiceContext {
-  const {
-    openStore,
-    branchService,
-    graphProvider,
-    reviewService,
-    workspaceService,
-  } = options;
+  const { openStore, branchService, graphProvider, reviewService, workspaceService } = options;
 
   return {
     openStore,

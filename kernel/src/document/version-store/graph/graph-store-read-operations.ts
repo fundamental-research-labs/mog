@@ -1,11 +1,5 @@
-import {
-  graphCommitSummary,
-  parseGraphCommitExpectedHead,
-} from './graph-store-commit-helpers';
-import {
-  danglingRefDiagnostic,
-  diagnostic,
-} from './graph-store-diagnostics';
+import { graphCommitSummary, parseGraphCommitExpectedHead } from './graph-store-commit-helpers';
+import { danglingRefDiagnostic, diagnostic } from './graph-store-diagnostics';
 import {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
@@ -240,7 +234,4 @@ export async function readVersionGraphCommitClosure(
   return { status: 'success', commits: ordered.commits, diagnostics: [] };
 }
 
-export {
-  VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
-  VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,
-};
+export { VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE, VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE };

@@ -4,14 +4,9 @@ import {
   type VersionGraphNamespace,
   type VersionObjectRecord,
 } from '../object-store';
-import type {
-  VersionGraphInitializeInput,
-  VersionGraphInitializeResult,
-} from '../provider';
+import type { VersionGraphInitializeInput, VersionGraphInitializeResult } from '../provider';
 
-import {
-  expectInitializeSuccess,
-} from './snapshot-root-materialization-service-assertions.test-helpers';
+import { expectInitializeSuccess } from './snapshot-root-materialization-service-assertions.test-helpers';
 import { AUTHOR, CREATED_AT } from './snapshot-root-materialization-service-constants.test-helpers';
 
 export async function objectRecord(

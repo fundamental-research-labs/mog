@@ -1,7 +1,4 @@
-import type {
-  VersionGraphReadRefResult,
-  VersionGraphWriteResult,
-} from '../graph';
+import type { VersionGraphReadRefResult, VersionGraphWriteResult } from '../graph';
 
 export function expectGraphSuccess(
   result: VersionGraphWriteResult,

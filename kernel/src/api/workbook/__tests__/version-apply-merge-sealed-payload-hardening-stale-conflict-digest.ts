@@ -1,6 +1,4 @@
-import {
-  withSealedPayloadHardeningFixture,
-} from './version-apply-merge-sealed-payload-hardening-fixtures';
+import { withSealedPayloadHardeningFixture } from './version-apply-merge-sealed-payload-hardening-fixtures';
 
 export function registerStaleConflictDigestScenario(): void {
   it('rejects stale conflict digests before writes', async () => {

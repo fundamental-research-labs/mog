@@ -64,22 +64,21 @@ export function registerMergeServicePersistenceConflictedScenarios() {
       algorithm: 'sha256',
       digest: previewArtifactDigest.digest,
     });
-    await expect(opened.getObjectRecord(artifactRef))
-      .resolves.toMatchObject({
-        preimage: {
-          payload: {
-            recordKind: 'mergePreview',
-            status: 'conflicted',
-            changes: [],
-            conflicts: [
-              expect.objectContaining({
-                conflictKind: 'same-property',
-                structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
-              }),
-            ],
-          },
+    await expect(opened.getObjectRecord(artifactRef)).resolves.toMatchObject({
+      preimage: {
+        payload: {
+          recordKind: 'mergePreview',
+          status: 'conflicted',
+          changes: [],
+          conflicts: [
+            expect.objectContaining({
+              conflictKind: 'same-property',
+              structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
+            }),
+          ],
         },
-      });
+      },
+    });
 
     await expectNoIntentForReviewResult(graph, result.resultId);
   });

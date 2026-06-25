@@ -1,7 +1,4 @@
-import {
-  diagnostic,
-  type DiffServiceDiagnostic,
-} from './diff-service-diagnostics';
+import { diagnostic, type DiffServiceDiagnostic } from './diff-service-diagnostics';
 import {
   objectStoreFromGraph,
   type VersionObjectRecordReader,
@@ -14,9 +11,7 @@ import {
 } from './provider';
 import { namespaceForRegistry } from './registry';
 
-export async function openVisibleDiffGraph(
-  provider: VersionStoreProvider,
-): Promise<
+export async function openVisibleDiffGraph(provider: VersionStoreProvider): Promise<
   | {
       readonly ok: true;
       readonly graph: VersionGraphStore;

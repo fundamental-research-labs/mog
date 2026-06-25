@@ -42,7 +42,10 @@ function toAxisType(value: string | undefined): AxisType | undefined {
     : undefined;
 }
 
-function axisForRole(axis: AxisConfig | undefined, role: ChartAxisRole): SingleAxisConfig | undefined {
+function axisForRole(
+  axis: AxisConfig | undefined,
+  role: ChartAxisRole,
+): SingleAxisConfig | undefined {
   switch (role) {
     case 'category':
       return axis?.categoryAxis ?? axis?.xAxis;
@@ -84,7 +87,8 @@ export function mergeAxisRoleConfig(
 
 export function legendVisibilityUpdate(chart: Chart, visible: boolean): Partial<ChartConfig> {
   const previous = chart.legend;
-  const previousPosition = previous?.position && previous.position !== 'none' ? previous.position : 'bottom';
+  const previousPosition =
+    previous?.position && previous.position !== 'none' ? previous.position : 'bottom';
   const legend: LegendConfig = {
     show: visible,
     visible,

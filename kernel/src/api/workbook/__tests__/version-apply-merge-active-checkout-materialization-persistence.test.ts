@@ -304,9 +304,7 @@ describe('WorkbookVersion applyMerge active checkout materialization persistence
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        diagnostics: [
-          expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
-        ],
+        diagnostics: [expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' })],
       },
     });
 

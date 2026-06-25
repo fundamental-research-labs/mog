@@ -1,8 +1,4 @@
-import type {
-  Paged,
-  VersionResult,
-  WorkbookVersionReviewRecord,
-} from '@mog-sdk/contracts/api';
+import type { Paged, VersionResult, WorkbookVersionReviewRecord } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
 import { callProposalService } from './version-proposal-service-call';

@@ -41,12 +41,12 @@ describe('SnapshotRootMaterializationService', () => {
       await expect(fixture.materialized.workbook.activeSheet.getCell('A2')).resolves.toMatchObject({
         value: 42,
       });
-      await expect(fixture.materialized.workbook.activeSheet.view.getFrozenPanes()).resolves.toEqual(
-        {
-          rows: 2,
-          cols: 1,
-        },
-      );
+      await expect(
+        fixture.materialized.workbook.activeSheet.view.getFrozenPanes(),
+      ).resolves.toEqual({
+        rows: 2,
+        cols: 1,
+      });
       await expect(fixture.materialized.workbook.names.get('ReplayRevenue')).resolves.toMatchObject(
         {
           name: 'ReplayRevenue',

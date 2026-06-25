@@ -9,10 +9,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import { diagnostic, type DiffServiceDiagnostic } from './diff-service-diagnostics';
-import {
-  mapEntriesWithOrderKeys,
-  type MappedSemanticDiffEntry,
-} from './diff-service-order-key';
+import { mapEntriesWithOrderKeys, type MappedSemanticDiffEntry } from './diff-service-order-key';
 import { projectReviewAccessDiffValue } from './review-access-projection';
 
 const REDACTED_VALUE_REASONS = new Set([

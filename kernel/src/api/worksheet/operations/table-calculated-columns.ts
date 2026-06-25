@@ -350,11 +350,7 @@ export async function applySetCalculatedColumnWithReceipt(
   let autofillReceipt: AutoFillApplyReceipt | undefined;
   let undoGroupStarted = false;
   let stage = 'beginUndoGroup';
-  const nextOptions = createGroupedTableMutationOptions(
-    ctx,
-    'tables.setCalculatedColumn',
-    sheetId,
-  );
+  const nextOptions = createGroupedTableMutationOptions(ctx, 'tables.setCalculatedColumn', sheetId);
 
   try {
     await undoGroupBridge(ctx).beginUndoGroup(nextOptions());

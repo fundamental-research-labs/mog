@@ -1,7 +1,4 @@
-export {
-  CREATED_AT,
-  DOCUMENT_SCOPE,
-} from './version-refs-provider-helpers-constants';
+export { CREATED_AT, DOCUMENT_SCOPE } from './version-refs-provider-helpers-constants';
 export {
   expectInitializeSuccess,
   expectNoDiagnosticLeak,

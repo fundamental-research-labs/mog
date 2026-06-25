@@ -194,7 +194,11 @@ export function registerProjectionSemanticScenarios(): void {
       expect.objectContaining({ domain: 'cell', entityId: 'sheet-alpha!A1' }),
       expect.objectContaining({ domain: 'cell', entityId: 'sheet-beta!B2' }),
       expect.objectContaining({ domain: 'sheet', entityId: 'sheet-beta', propertyPath: ['name'] }),
-      expect.objectContaining({ domain: 'sheet', entityId: 'sheet-beta', propertyPath: ['tabColor'] }),
+      expect.objectContaining({
+        domain: 'sheet',
+        entityId: 'sheet-beta',
+        propertyPath: ['tabColor'],
+      }),
     ]);
   });
 

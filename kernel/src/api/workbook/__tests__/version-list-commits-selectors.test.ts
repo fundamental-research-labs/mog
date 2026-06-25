@@ -12,9 +12,7 @@ import {
   rootCommitSummary,
   successPage,
 } from './version-list-commits-selectors-test-utils';
-import {
-  createWorkbookVersionSurfaceStatusService,
-} from '../version/surface-status/version-surface-status-service';
+import { createWorkbookVersionSurfaceStatusService } from '../version/surface-status/version-surface-status-service';
 
 const ACTIVE_BRANCH_REF = 'refs/heads/scenario/list-active-revert' as const;
 

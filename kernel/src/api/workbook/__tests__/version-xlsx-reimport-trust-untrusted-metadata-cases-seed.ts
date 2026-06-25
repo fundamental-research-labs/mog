@@ -1,11 +1,5 @@
-import {
-  DOCUMENT_ID,
-  WORKSPACE_ID,
-} from './version-xlsx-reimport-trust-constants';
-import {
-  seedTrustedExport,
-  type TrustedExportSeed,
-} from './version-xlsx-reimport-trust-workbook';
+import { DOCUMENT_ID, WORKSPACE_ID } from './version-xlsx-reimport-trust-constants';
+import { seedTrustedExport, type TrustedExportSeed } from './version-xlsx-reimport-trust-workbook';
 
 export function seedOriginalTrustedExport(): Promise<TrustedExportSeed> {
   return seedTrustedExport({

@@ -1,9 +1,6 @@
 import type { VersionMainRefName } from '@mog-sdk/contracts/api';
 
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-} from '../graph';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from '../graph';
 import {
   createMergePreviewArtifactRecord,
   createMergeResolutionSetArtifactRecord,
@@ -67,7 +64,9 @@ export function registerGraphStoreSnapshotProviderReloadFailureScenarios(): void
 
   it('fails closed on stale branch manifest counters during reload', async () => {
     const provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
-    const initialized = await provider.initializeGraph(await initializeInput('graph-stale-manifest'));
+    const initialized = await provider.initializeGraph(
+      await initializeInput('graph-stale-manifest'),
+    );
     expectInitializeSuccess(initialized);
     const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-stale-manifest');
     const graph = await provider.openGraph(namespace);

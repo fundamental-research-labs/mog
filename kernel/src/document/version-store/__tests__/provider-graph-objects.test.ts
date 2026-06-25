@@ -53,10 +53,11 @@ describe('InMemoryVersionStoreProvider graph registry', () => {
     });
     const put = await graph.putObjects([preview]);
     expect(put).toMatchObject({ status: 'success', records: [preview] });
-    await expect(graph.getObjectRecord(mergePreviewArtifactRef(preview.digest))).resolves
-      .toMatchObject({
-        preimage: { payload: { recordKind: 'mergePreview', status: 'clean' } },
-      });
+    await expect(
+      graph.getObjectRecord(mergePreviewArtifactRef(preview.digest)),
+    ).resolves.toMatchObject({
+      preimage: { payload: { recordKind: 'mergePreview', status: 'clean' } },
+    });
 
     const missingDependencyPreview = await createMergePreviewArtifactRecord(namespace, {
       status: 'clean',
@@ -70,8 +71,9 @@ describe('InMemoryVersionStoreProvider graph registry', () => {
       mutationGuarantee: 'no-objects-written',
       diagnostics: [expect.objectContaining({ code: 'VERSION_MISSING_DEPENDENCY' })],
     });
-    await expect(graph.hasObject(mergePreviewArtifactRef(missingDependencyPreview.digest)))
-      .resolves.toBe(false);
+    await expect(
+      graph.hasObject(mergePreviewArtifactRef(missingDependencyPreview.digest)),
+    ).resolves.toBe(false);
 
     const snapshot = await backend.exportSnapshot();
     const reloadedBackend = await InMemoryVersionDocumentProviderBackend.fromSnapshot(snapshot);
@@ -81,10 +83,11 @@ describe('InMemoryVersionStoreProvider graph registry', () => {
       durability: 'snapshot-test-double',
     });
     const reloadedGraph = await reloadedProvider.openGraph(namespace);
-    await expect(reloadedGraph.getObjectRecord(mergePreviewArtifactRef(preview.digest))).resolves
-      .toMatchObject({
-        preimage: { payload: { base: initialized.rootCommit.id, ours: ours.commit.id } },
-      });
+    await expect(
+      reloadedGraph.getObjectRecord(mergePreviewArtifactRef(preview.digest)),
+    ).resolves.toMatchObject({
+      preimage: { payload: { base: initialized.rootCommit.id, ours: ours.commit.id } },
+    });
     await expect(
       reloadedGraph.hasObject(mergePreviewArtifactRef(missingDependencyPreview.digest)),
     ).resolves.toBe(false);

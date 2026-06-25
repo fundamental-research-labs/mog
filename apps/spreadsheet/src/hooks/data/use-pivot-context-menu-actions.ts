@@ -518,13 +518,7 @@ export function usePivotContextMenuActions(
         closeContextMenu();
       }
     },
-    [
-      pivotId,
-      effectiveValueTargetId,
-      canChangeAggregate,
-      setPivotShowValuesAs,
-      closeContextMenu,
-    ],
+    [pivotId, effectiveValueTargetId, canChangeAggregate, setPivotShowValuesAs, closeContextMenu],
   );
 
   // ==========================================================================

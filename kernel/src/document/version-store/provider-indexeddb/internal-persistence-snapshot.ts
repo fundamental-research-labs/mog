@@ -38,9 +38,7 @@ import {
 } from './internal-persistence-refs';
 import type { PersistGraphSnapshotOptions } from './internal-persistence-types';
 
-export async function persistGraphSnapshot(
-  options: PersistGraphSnapshotOptions,
-): Promise<void> {
+export async function persistGraphSnapshot(options: PersistGraphSnapshotOptions): Promise<void> {
   const namespace = normalizeVersionGraphNamespace(options.snapshot.namespace);
   const namespaceKey = versionGraphNamespaceKey(namespace);
   const documentScopeKey = versionDocumentScopeKey(

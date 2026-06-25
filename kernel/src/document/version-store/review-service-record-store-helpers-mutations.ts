@@ -1,13 +1,7 @@
-import type {
-  VersionCreateReviewInput,
-  VersionResult,
-} from '@mog-sdk/contracts/api';
+import type { VersionCreateReviewInput, VersionResult } from '@mog-sdk/contracts/api';
 
 import { canonicalJsonStringify, cloneRecord, cloneRow } from './review-service-codec';
-import {
-  invalidClientRequestReuse,
-  ok,
-} from './review-service-record-store-helpers-results';
+import { invalidClientRequestReuse, ok } from './review-service-record-store-helpers-results';
 import type {
   WorkbookVersionReviewMutationLogEntry,
   WorkbookVersionReviewMutationOperation,

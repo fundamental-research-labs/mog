@@ -56,9 +56,7 @@ function assignSanitizedDiagnosticValue(
   data[key] = shouldRedactDiagnosticDataValue(key, value) ? 'redacted' : value;
 }
 
-function isPublicDiagnosticDataValue(
-  value: unknown,
-): value is string | number | boolean | null {
+function isPublicDiagnosticDataValue(value: unknown): value is string | number | boolean | null {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 

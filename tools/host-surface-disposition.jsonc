@@ -85,6 +85,10 @@
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
       },
+      "DocumentHandleWorkbookConfig": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Authority-bearing DocumentHandle.workbook configuration; trusted runtime/host adapters may supply save callbacks and version-store lifecycle wiring.",
+      },
       "FilterExpression": {
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
@@ -172,6 +176,18 @@
       "Utils": {
         "disposition": "public-host-facade",
         "reason": "Current public kernel facade export; must remain self-contained and covered by API/declaration gates.",
+      },
+      "VersionLiveCollaborationState": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted live-collaboration state enum exposed through public version status DTOs.",
+      },
+      "VersionLiveCollaborationStatus": {
+        "disposition": "public-host-facade",
+        "reason": "Redacted live-collaboration status DTO exposed through public version status surfaces.",
+      },
+      "VersionLiveCollaborationStatusReader": {
+        "disposition": "trusted-adapter-only",
+        "reason": "Host/runtime callback used to project live collaboration status into kernel version surfaces.",
       },
       "ViewportReader": {
         "disposition": "public-host-facade",

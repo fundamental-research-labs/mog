@@ -46,9 +46,7 @@ export function registerWriteServiceCommitDirtyTrackingScenarios(): void {
 
     const commitResult = await wb.version.commit();
 
-    expect(commitResult).toMatchObject(
-      missingChangeSetCommitResult('uncaptured-normal-mutations'),
-    );
+    expect(commitResult).toMatchObject(missingChangeSetCommitResult('uncaptured-normal-mutations'));
     expect(commit).not.toHaveBeenCalled();
     expect(wb.isDirty).toBe(true);
     expect(semanticMutationCapture.readNormalCommitCaptureState()).toMatchObject({

@@ -354,12 +354,13 @@ describe('WorkbookVersion materialized active checkout persisted reopen', () => 
       );
       if (!applied.ok) throw new Error(`expected applyMerge success: ${applied.error.code}`);
       await expectMaterializedMainCheckout(sourceWb, theirsCommit);
-      await expect((await provider.openActiveCheckoutMaterializationStore()).read()).resolves
-        .toMatchObject({
-          checkedOutCommitId: theirsCommit.id,
-          branchName: 'main',
-          refHeadAtMaterialization: theirsCommit.id,
-        });
+      await expect(
+        (await provider.openActiveCheckoutMaterializationStore()).read(),
+      ).resolves.toMatchObject({
+        checkedOutCommitId: theirsCommit.id,
+        branchName: 'main',
+        refHeadAtMaterialization: theirsCommit.id,
+      });
 
       const checkoutPrior = await sourceWb.version.checkout({
         kind: 'commit',
@@ -373,8 +374,9 @@ describe('WorkbookVersion materialized active checkout persisted reopen', () => 
         materialization: 'applied',
         mutationGuarantee: 'workbook-state-materialized',
       });
-      await expect((await provider.openActiveCheckoutMaterializationStore()).read()).resolves
-        .toBeNull();
+      await expect(
+        (await provider.openActiveCheckoutMaterializationStore()).read(),
+      ).resolves.toBeNull();
       await expect(sourceWb.version.getSurfaceStatus()).resolves.toMatchObject({
         current: {
           headCommitId: oursCommit.id,

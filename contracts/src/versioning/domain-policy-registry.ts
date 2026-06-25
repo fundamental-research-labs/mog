@@ -11,7 +11,7 @@ import type {
   VersionRolloutStage,
   VersionWriteAdmissionMode,
 } from './domain-policy';
-import { VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY } from './domain-policy';
+import { VERSION_HISTORY_SUMMARY_ONLY_DIAGNOSTIC_PROJECTION_POLICY } from './access-policy';
 import type { VersionDomainPolicySurfaceRedactionPolicy } from './domain-policy-types';
 
 export const VERSION_DOMAIN_POLICY_REGISTRY_SCHEMA_VERSION = 'version-domain-policy-registry.v1';

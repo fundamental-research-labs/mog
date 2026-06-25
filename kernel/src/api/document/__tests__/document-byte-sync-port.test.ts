@@ -141,7 +141,9 @@ function makeLiveProvenance(
   };
 }
 
-function makeProviderEnvelope(payload = new Uint8Array([0x10, 0x20])): ProviderInboundUpdateEnvelopeV2 {
+function makeProviderEnvelope(
+  payload = new Uint8Array([0x10, 0x20]),
+): ProviderInboundUpdateEnvelopeV2 {
   const baseProvenance = makeLiveProvenance(payload);
   const provenance = makeLiveProvenance(payload, {
     updateIdentity: {
@@ -351,9 +353,7 @@ describe('DocumentHandle.createSyncPort', () => {
     );
     expect((error as Error).message).toContain('subreason=rawUnclassified');
     expect((error as Error).message).toContain('retryable=true');
-    expect((error as Error).message).toContain(
-      'bin=document-byte-sync-port.raw-fallback-rejected',
-    );
+    expect((error as Error).message).toContain('bin=document-byte-sync-port.raw-fallback-rejected');
     expect((error as Error).message).toContain('sourceKind=legacyRawUnknown');
 
     expect(bridge.recordProviderDocApplyUpdateAdmission).not.toHaveBeenCalled();
@@ -516,9 +516,7 @@ describe('DocumentHandle.createSyncPort', () => {
     const { handle, bridge } = createHandleFixture();
     const port = handle.createSyncPort();
     const update = new Uint8Array([8, 8, 8]);
-    const provenance = makeLiveProvenance(
-      update,
-    ) as unknown as ClassifiedRawSyncUpdateProvenance;
+    const provenance = makeLiveProvenance(update) as unknown as ClassifiedRawSyncUpdateProvenance;
 
     await expect(port.applyClassifiedRawUpdate(update, provenance)).rejects.toThrow(
       'DocumentHandle.syncPort.applyClassifiedRawUpdate: classified raw sync updates cannot be commit eligible or live-authored',

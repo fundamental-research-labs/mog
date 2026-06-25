@@ -59,10 +59,7 @@ export async function startProviderBackedProposalWorkspace(
   });
   if (!targetBinding.ok) return sanitizeProposalProviderResult(targetBinding.result);
 
-  const branchReady = await context.ensureProposalBranch(
-    proposal.value,
-    'startProposalWorkspace',
-  );
+  const branchReady = await context.ensureProposalBranch(proposal.value, 'startProposalWorkspace');
   if (!branchReady.ok) return sanitizeProposalProviderResult(branchReady.result);
 
   if (!context.workspaceService) return workspaceUnavailable('startProposalWorkspace');

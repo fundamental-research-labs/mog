@@ -292,7 +292,10 @@ function createMockBridge(participantId: string): MockBridge {
   return bridge;
 }
 
-function createBridgeSyncPort(bridge: MockBridge, roomId: string): {
+function createBridgeSyncPort(
+  bridge: MockBridge,
+  roomId: string,
+): {
   applyClassifiedRawUpdate(
     update: Uint8Array,
     provenance: ClassifiedRawSyncUpdateProvenance,

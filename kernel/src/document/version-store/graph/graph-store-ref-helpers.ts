@@ -36,7 +36,6 @@ export function createGraphStoreRefHelpers(options: {
     collectReachableCommits: (rootCommitId, operation) =>
       collectReachableGraphCommits(options.commitStore, rootCommitId, operation),
     readMainRef: (operation) => readGraphMainRef(options.refStore, operation),
-    readBranchRef: (refName, operation) =>
-      readGraphBranchRef(options.refStore, refName, operation),
+    readBranchRef: (refName, operation) => readGraphBranchRef(options.refStore, refName, operation),
   };
 }

@@ -892,7 +892,11 @@ function canonicalSupportedVersionStoreKindFor(
 }
 
 function canonicalKindLookupId(kind: string): string {
-  return kind.normalize('NFC').trim().replace(/[\s_]+/gu, '-').toLowerCase();
+  return kind
+    .normalize('NFC')
+    .trim()
+    .replace(/[\s_]+/gu, '-')
+    .toLowerCase();
 }
 
 function isUnsupportedVersionStoreKind(kind: string): kind is MogSdkUnsupportedVersionStoreKind {

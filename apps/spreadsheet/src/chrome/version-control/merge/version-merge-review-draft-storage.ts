@@ -31,10 +31,7 @@ const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 const VERSION_MAIN_BRANCH = 'main';
 const VERSION_MAIN_REF = 'refs/heads/main';
 
-export function mergeReviewDraftStorageKey(
-  target: VersionMergeTarget,
-  source: VersionRef,
-): string {
+export function mergeReviewDraftStorageKey(target: VersionMergeTarget, source: VersionRef): string {
   return mergeReviewDraftStorageKeyForRefName(
     target.commitId,
     canonicalMergeReviewRefName(target.refName),

@@ -9,10 +9,7 @@ import { INDEXEDDB_VERSION_STORE_PROVIDER_KIND } from '../../../document/version
 import { deleteVersionStoreIndexedDbForTesting } from '../../../document/version-store/provider-indexeddb-schema';
 import { WorkbookVersionImpl } from '../version';
 import { withVersionManifest } from './version-domain-support-test-utils';
-import {
-  SURFACE_CAPABILITY_KEYS,
-  createMockCtx,
-} from './version-surface-status-test-utils';
+import { SURFACE_CAPABILITY_KEYS, createMockCtx } from './version-surface-status-test-utils';
 
 describe('WorkbookVersion surface status facade', () => {
   beforeEach(async () => {

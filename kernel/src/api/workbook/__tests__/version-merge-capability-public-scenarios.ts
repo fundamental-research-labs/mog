@@ -1,12 +1,7 @@
 import { expect, jest } from '@jest/globals';
 
 import { WorkbookVersionImpl } from '../version';
-import {
-  BASE,
-  HOST_POLICY_SECRET,
-  OURS,
-  THEIRS,
-} from './version-merge-capability-test-utils';
+import { BASE, HOST_POLICY_SECRET, OURS, THEIRS } from './version-merge-capability-test-utils';
 
 export function registerMergeCapabilityPublicScenarios(): void {
   it('maps disabled applyMerge through the public facade without invoking attached services', async () => {

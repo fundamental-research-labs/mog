@@ -247,7 +247,9 @@ async function validateMergeCommitRefCasProof(
   });
   const diagnostics: VersionStoreDiagnostic[] = [];
   if (proof.applyKind !== 'mergeCommit') {
-    diagnostics.push(resolutionMismatchDiagnostic('merge commit ref CAS proof apply kind does not match.'));
+    diagnostics.push(
+      resolutionMismatchDiagnostic('merge commit ref CAS proof apply kind does not match.'),
+    );
   }
   if (!digestsEqual(proof.commitMetadataDigest, expected.commitMetadataDigest)) {
     diagnostics.push(

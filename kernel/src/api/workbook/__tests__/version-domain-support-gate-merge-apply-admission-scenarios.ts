@@ -28,10 +28,10 @@ export function registerMergeGateApplyAdmissionScenarios(): void {
     } as any);
 
     await expect(
-      version.applyMerge(
-        mergeInput(),
-        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
-      ),
+      version.applyMerge(mergeInput(), {
+        targetRef: TARGET_REF as any,
+        expectedTargetHead: EXPECTED_TARGET_HEAD,
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -77,10 +77,10 @@ export function registerMergeGateApplyAdmissionScenarios(): void {
     } as any);
 
     await expect(
-      version.applyMerge(
-        mergeInput(),
-        { targetRef: TARGET_REF as any, expectedTargetHead: EXPECTED_TARGET_HEAD },
-      ),
+      version.applyMerge(mergeInput(), {
+        targetRef: TARGET_REF as any,
+        expectedTargetHead: EXPECTED_TARGET_HEAD,
+      }),
     ).resolves.toMatchObject({
       ok: false,
       error: {

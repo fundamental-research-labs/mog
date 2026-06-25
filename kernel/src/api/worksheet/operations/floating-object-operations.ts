@@ -117,7 +117,8 @@ function createGroupedFloatingObjectMutationOptions(
       groupId,
       options,
     );
-    groupId = mutationOptions.operationContext.groupId ?? mutationOptions.operationContext.operationId;
+    groupId =
+      mutationOptions.operationContext.groupId ?? mutationOptions.operationContext.operationId;
     return {
       ...mutationOptions,
       operationContext: {
@@ -1244,9 +1245,14 @@ export async function copyToSheet(
   }
 
   if (sourceSheetId !== targetSheetId) {
-    await ctx.computeBridge.updateFloatingObject(sourceSheetId, change.objectId, {
-      sheetId: targetSheetId,
-    }, nextMutationOptions());
+    await ctx.computeBridge.updateFloatingObject(
+      sourceSheetId,
+      change.objectId,
+      {
+        sheetId: targetSheetId,
+      },
+      nextMutationOptions(),
+    );
   }
 
   // After a potential sheet move, the object now lives on `targetSheetId`.

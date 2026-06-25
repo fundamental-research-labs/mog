@@ -11,9 +11,7 @@ import {
 } from './provider';
 import { namespaceForRegistry } from './registry';
 
-export async function openVisibleMergeGraph(
-  provider: VersionStoreProvider,
-): Promise<
+export async function openVisibleMergeGraph(provider: VersionStoreProvider): Promise<
   | {
       readonly ok: true;
       readonly namespace: VersionGraphNamespace;

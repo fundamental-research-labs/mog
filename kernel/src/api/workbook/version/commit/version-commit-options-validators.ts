@@ -125,10 +125,7 @@ export function validateRedactionPolicy(
   rejectUnknownNestedKeys(value, REDACTION_POLICY_KEYS, 'redactionPolicy', diagnostics);
   if (!REDACTION_POLICY_MODES.has(String(value.mode))) {
     diagnostics.push(
-      invalidCommitOptionDiagnostic(
-        'redactionPolicy.mode',
-        'redactionPolicy.mode is unsupported.',
-      ),
+      invalidCommitOptionDiagnostic('redactionPolicy.mode', 'redactionPolicy.mode is unsupported.'),
     );
   }
 

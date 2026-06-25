@@ -1,9 +1,5 @@
 import { validateDomainSupportManifest } from '../domain-support-manifest-validator';
-import {
-  freshManifest,
-  NOW,
-  ONE_HOUR_MS,
-} from './domain-support-manifest-validator-fixtures';
+import { freshManifest, NOW, ONE_HOUR_MS } from './domain-support-manifest-validator-fixtures';
 
 export function registerCoreFreshnessScenarios(): void {
   it('fails closed when the manifest is stale by maxAgeMs', () => {

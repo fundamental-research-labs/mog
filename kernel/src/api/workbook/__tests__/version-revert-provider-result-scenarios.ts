@@ -302,8 +302,8 @@ export function registerRevertProviderResultScenarios(): void {
     });
     surfaceStatusService.recordCheckoutMaterialization({
       commitId: COMMIT_B,
-        resolvedTarget: { kind: 'commit', commitId: COMMIT_B },
-      } as never);
+      resolvedTarget: { kind: 'commit', commitId: COMMIT_B },
+    } as never);
     const revert = jest.fn();
     const readRef = jest.fn();
     const version = workbookVersionWithRevertService(revert, {

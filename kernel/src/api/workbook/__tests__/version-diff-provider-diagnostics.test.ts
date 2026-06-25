@@ -2,10 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { WorkbookCommitCompletenessDiagnostic } from '../../../document/version-store/commit-store';
 import { defaultSemanticChanges } from './version-diff-provider-fixtures';
-import {
-  createCommittedDiffWorkbook,
-  diffCommitted,
-} from './version-diff-provider-test-utils';
+import { createCommittedDiffWorkbook, diffCommitted } from './version-diff-provider-test-utils';
 
 describe('WorkbookVersion provider-backed diff completeness diagnostics', () => {
   beforeEach(() => {
@@ -70,10 +67,8 @@ describe('WorkbookVersion provider-backed diff completeness diagnostics', () => 
   ] satisfies readonly (readonly [string, WorkbookCommitCompletenessDiagnostic])[])(
     'reports %s completeness diagnostics through wb.version.diff without claiming a clean diff',
     async (category, completenessDiagnostic) => {
-      const expectedCategory =
-        category === 'omitted-unsupported-domain' ? 'unsupported' : category;
-      const expectedRedactedCategory =
-        category === 'subset-hidden' ? 'redacted' : expectedCategory;
+      const expectedCategory = category === 'omitted-unsupported-domain' ? 'unsupported' : category;
+      const expectedRedactedCategory = category === 'subset-hidden' ? 'redacted' : expectedCategory;
       const context = await createCommittedDiffWorkbook({
         commitLabel: 'child',
         changes: defaultSemanticChanges('child'),

@@ -10,10 +10,8 @@ import { findResolutionOptionForConflictSet } from './version-merge-review-confl
 import type { NormalizedMergeReviewConflictSet } from './version-merge-review-conflicts-set';
 import { projectReviewValue } from './version-merge-review-conflicts-projection';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';
-import {
-  invalidInputDiagnostic,
-  type NormalizedGetMergeConflictDetailInput,
-} from './version-merge-review-normalization';
+import { invalidInputDiagnostic } from './version-merge-review-normalization-helpers';
+import type { NormalizedGetMergeConflictDetailInput } from './version-merge-review-normalization-phases-conflict-detail';
 
 type VersionMergeConflictDetailResolutionOption = {
   readonly optionId: string;

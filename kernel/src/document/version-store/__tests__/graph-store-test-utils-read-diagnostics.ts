@@ -1,17 +1,11 @@
-import {
-  workbookCommitIdFromObjectDigest,
-  type WorkbookCommitId,
-} from '../object-digest';
+import { workbookCommitIdFromObjectDigest, type WorkbookCommitId } from '../object-digest';
 import {
   createVersionObjectRecord,
   type InMemoryVersionObjectStore,
   type VersionObjectMemoryBackend,
   type VersionObjectRecord,
 } from '../object-store';
-import {
-  AUTHOR,
-  NAMESPACE,
-} from './graph-store-test-utils-constants';
+import { AUTHOR, NAMESPACE } from './graph-store-test-utils-constants';
 import { objectRecord } from './graph-store-test-utils-object-records';
 
 export async function persistRootCommitForReadDiagnostics(

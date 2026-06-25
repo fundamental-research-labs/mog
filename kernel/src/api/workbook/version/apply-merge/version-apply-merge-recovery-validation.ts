@@ -84,7 +84,9 @@ export async function readAndValidateRefCasProof(
     diagnostics.push(refCasProofMismatchDiagnostic('ref CAS proof apply kind does not match.'));
   }
   if (!digestsEqual(read.proof.commitMetadataDigest, expected.commitMetadataDigest)) {
-    diagnostics.push(refCasProofMismatchDiagnostic('ref CAS proof commit metadata does not match.'));
+    diagnostics.push(
+      refCasProofMismatchDiagnostic('ref CAS proof commit metadata does not match.'),
+    );
   }
   if (!digestsEqual(read.proof.refUpdateMetadataDigest, expected.refUpdateMetadataDigest)) {
     diagnostics.push(refCasProofMismatchDiagnostic('ref CAS proof ref update does not match.'));
@@ -92,9 +94,7 @@ export async function readAndValidateRefCasProof(
   if (!digestsEqual(read.proof.refLogEventDigest, expected.refLogEventDigest)) {
     diagnostics.push(refCasProofMismatchDiagnostic('ref CAS proof event log does not match.'));
   }
-  return diagnostics.length === 0
-    ? { ok: true, proof: read.proof }
-    : { ok: false, diagnostics };
+  return diagnostics.length === 0 ? { ok: true, proof: read.proof } : { ok: false, diagnostics };
 }
 
 export async function validateMergeCommitIdentity(
@@ -166,7 +166,9 @@ export function recoveryIntentIdentityFromInput(
   const intentId = resolvedAttemptIntentId ?? resultIntentId;
   if (!intentId && diagnostics.length === 0) {
     diagnostics.push(
-      invalidRecoveryInputDiagnostic('Recovery input must identify an existing merge apply intent.'),
+      invalidRecoveryInputDiagnostic(
+        'Recovery input must identify an existing merge apply intent.',
+      ),
     );
   }
   if (diagnostics.length > 0) return { ok: false, diagnostics };

@@ -103,10 +103,12 @@ function makeStubBridge(): StubBridge {
   };
 }
 
-async function makeOrchestrator(options: {
-  readonly appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
-  readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
-} = {}): Promise<{ doc: RustDocument; bridge: StubBridge }> {
+async function makeOrchestrator(
+  options: {
+    readonly appliedSyncUpdateIdentityStore?: AppliedSyncUpdateIdentityStore;
+    readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
+  } = {},
+): Promise<{ doc: RustDocument; bridge: StubBridge }> {
   const bridge = makeStubBridge();
   const doc = new RustDocument({
     docId: 'inbound-test-doc',
@@ -628,11 +630,9 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
       const providerB = makeRecordingProvider('ProviderB');
       await doc.attachProvider(providerA);
       await doc.attachProvider(providerB);
-      const syncApply = jest
-        .spyOn(bridge, 'syncApply')
-        .mockImplementation(async () => {
-          throw new Error('sync apply failed after reservation');
-        });
+      const syncApply = jest.spyOn(bridge, 'syncApply').mockImplementation(async () => {
+        throw new Error('sync apply failed after reservation');
+      });
 
       const envelope = makeV2Envelope({
         payload: new Uint8Array([0x31, 0x32]),
@@ -679,11 +679,9 @@ describe('RustDocument.applyProviderUpdate — inbound update orchestration', ()
       const { doc, bridge } = await makeOrchestrator();
       const providerA = makeRecordingProvider('ProviderA');
       await doc.attachProvider(providerA);
-      const syncApply = jest
-        .spyOn(bridge, 'syncApply')
-        .mockImplementation(async () => {
-          throw new Error('sync apply failed without identity store');
-        });
+      const syncApply = jest.spyOn(bridge, 'syncApply').mockImplementation(async () => {
+        throw new Error('sync apply failed without identity store');
+      });
       const envelope = makeV2Envelope({
         payload: new Uint8Array([0x41, 0x42]),
         updateId: 'applied-identity-no-store-failure-1',

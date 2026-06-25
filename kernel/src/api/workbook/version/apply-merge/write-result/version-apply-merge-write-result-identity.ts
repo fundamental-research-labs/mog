@@ -177,9 +177,7 @@ export function blockedWriteMetadata(
   commit: WorkbookCommitRef,
 ): VersionApplyMergeAttemptMetadata {
   return {
-    ...(metadata.resultId || plan.resultId
-      ? { resultId: plan.resultId ?? metadata.resultId }
-      : {}),
+    ...(metadata.resultId || plan.resultId ? { resultId: plan.resultId ?? metadata.resultId } : {}),
     ...(metadata.previewArtifactDigest || plan.previewArtifactDigest
       ? { previewArtifactDigest: plan.previewArtifactDigest ?? metadata.previewArtifactDigest }
       : {}),

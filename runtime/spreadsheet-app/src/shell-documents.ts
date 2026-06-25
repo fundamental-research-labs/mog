@@ -105,11 +105,7 @@ export async function resolveDocumentVersioningReadiness(
       ...(surface.statusRevision ? { statusRevision: surface.statusRevision } : {}),
     };
   } catch (error) {
-    return createFailedDocumentVersioningReadiness(
-      current,
-      error,
-      'version.getSurfaceStatus',
-    );
+    return createFailedDocumentVersioningReadiness(current, error, 'version.getSurfaceStatus');
   }
 }
 
@@ -126,11 +122,7 @@ export async function materializeSpreadsheetWorkbook(
   } catch (error) {
     throw attachDocumentVersioningDiagnostics(
       toError(error),
-      createFailedDocumentVersioningReadiness(
-        documentVersioning,
-        error,
-        'document.workbook',
-      ),
+      createFailedDocumentVersioningReadiness(documentVersioning, error, 'document.workbook'),
     );
   }
 }
@@ -254,9 +246,7 @@ async function readVersionSurfaceStatus(
 
   return {
     diagnostics: diagnosticsFromVersionSurface(status.diagnostics),
-    ...(typeof status.statusRevision === 'string'
-      ? { statusRevision: status.statusRevision }
-      : {}),
+    ...(typeof status.statusRevision === 'string' ? { statusRevision: status.statusRevision } : {}),
   };
 }
 

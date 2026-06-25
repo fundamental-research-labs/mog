@@ -678,14 +678,17 @@ export class RustDocument {
   }
 
   async installVersionSyncServices(
-    versioning: Pick<
-      ResolvedWorkbookVersioningConfig,
-      | 'provider'
-      | 'providerWriteActivityTracker'
-      | 'pendingRemotePromotionService'
-      | 'semanticMutationCapture'
-      | 'snapshotRootByteSyncPort'
-    > | null | undefined,
+    versioning:
+      | Pick<
+          ResolvedWorkbookVersioningConfig,
+          | 'provider'
+          | 'providerWriteActivityTracker'
+          | 'pendingRemotePromotionService'
+          | 'semanticMutationCapture'
+          | 'snapshotRootByteSyncPort'
+        >
+      | null
+      | undefined,
   ): Promise<void> {
     if (versioning === null || versioning === undefined) return;
     const provider = versioning?.provider;
@@ -980,9 +983,7 @@ export class RustDocument {
         updateId: envelope.updateId,
         provenance,
         ...(applyResult === undefined ? {} : { applyResult }),
-        ...(pendingRemotePromotionResult === undefined
-          ? {}
-          : { pendingRemotePromotionResult }),
+        ...(pendingRemotePromotionResult === undefined ? {} : { pendingRemotePromotionResult }),
       };
     });
   }

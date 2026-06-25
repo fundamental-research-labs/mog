@@ -1,8 +1,4 @@
-import {
-  VersionObjectDigestError,
-  isObjectDigest,
-  parseObjectDigest,
-} from '../object-digest';
+import { VersionObjectDigestError, isObjectDigest, parseObjectDigest } from '../object-digest';
 import { HEX_A, digest } from './object-digest-test-helpers';
 
 export function registerObjectDigestGrammarTests(): void {

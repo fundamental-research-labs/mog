@@ -2,10 +2,7 @@ import '@testing-library/jest-dom';
 
 import { screen } from '@testing-library/react';
 
-import {
-  HEAD_COMMIT_ID,
-  renderVersionHistoryPanel,
-} from './VersionHistoryPanel.test-utils';
+import { HEAD_COMMIT_ID, renderVersionHistoryPanel } from './VersionHistoryPanel.test-utils';
 import {
   LATEST_REMOTE_COMMIT_ID,
   createRemotePromotionSurfaceStatus,

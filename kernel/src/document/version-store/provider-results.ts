@@ -1,8 +1,4 @@
-import {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-  type VersionGraphRef,
-} from './graph';
+import { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF, type VersionGraphRef } from './graph';
 import {
   cloneVersionGraphRegistry,
   type VersionDocumentScope,

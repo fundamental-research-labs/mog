@@ -820,11 +820,8 @@ export class CellsLayer extends BaseLayer implements DirtyCellExpander {
           filterInfo,
           sheetId,
         };
-        collectInteractiveElements(
-          cellInfo,
-          interactiveInfo,
-          this.interactiveElements,
-          (bounds) => toInteractiveViewportBounds(bounds, region),
+        collectInteractiveElements(cellInfo, interactiveInfo, this.interactiveElements, (bounds) =>
+          toInteractiveViewportBounds(bounds, region),
         );
       }
     }

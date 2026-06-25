@@ -3,11 +3,7 @@ import type { AcceptAgentProposalInput, AgentProposalStatus } from './version-pr
 export const WORKBOOK_COMMIT_ID_RE = /^commit:sha256:[0-9a-f]{64}$/;
 export const PROPOSAL_ID_RE = /^proposal:sha256:[0-9a-f]{64}$/;
 export const AUTHOR_KINDS: ReadonlySet<string> = new Set(['user', 'agent', 'system', 'unknown']);
-export const AUTHOR_TRUST_LEVELS: ReadonlySet<string> = new Set([
-  'trusted',
-  'unknown',
-  'redacted',
-]);
+export const AUTHOR_TRUST_LEVELS: ReadonlySet<string> = new Set(['trusted', 'unknown', 'redacted']);
 
 export const PROPOSAL_STATUSES: ReadonlySet<AgentProposalStatus> = new Set([
   'draft',
@@ -23,9 +19,8 @@ export const PROPOSAL_STATUSES: ReadonlySet<AgentProposalStatus> = new Set([
   'applied',
 ]);
 
-export const ACCEPT_RESOLUTION_POLICIES: ReadonlySet<
-  AcceptAgentProposalInput['resolutionPolicy']
-> = new Set(['fastForwardOnly', 'allowCleanMerge', 'allowResolvedMerge']);
+export const ACCEPT_RESOLUTION_POLICIES: ReadonlySet<AcceptAgentProposalInput['resolutionPolicy']> =
+  new Set(['fastForwardOnly', 'allowCleanMerge', 'allowResolvedMerge']);
 
 export const CREATE_PROPOSAL_KEYS: ReadonlySet<string> = new Set([
   'clientRequestId',

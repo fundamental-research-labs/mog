@@ -1,7 +1,4 @@
-import type {
-  VersionCommitExpectedHead,
-  VersionMergeResult,
-} from '@mog-sdk/contracts/api';
+import type { VersionCommitExpectedHead, VersionMergeResult } from '@mog-sdk/contracts/api';
 
 import type { MergeApplyIntentId } from '../../../document/version-store/merge-apply-intent-store';
 import type { VersionGraphNamespace } from '../../../document/version-store/object-store';

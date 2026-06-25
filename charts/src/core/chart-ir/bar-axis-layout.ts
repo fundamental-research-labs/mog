@@ -179,9 +179,8 @@ function importedAutoCategoryTickSkip(input: ResolveBarColumnAxisLayoutInput): n
     const slot = axisLength / categoryCount;
     const sizeDrivenSkip =
       slot > 0 ? Math.ceil(DEFAULT_AXIS_LABEL_FONT_SIZE / slot) : categoryCount;
-    const densityDrivenSkip = categoryCount >= 24 || (maxLabelLength >= 24 && categoryCount >= 16)
-      ? 2
-      : 1;
+    const densityDrivenSkip =
+      categoryCount >= 24 || (maxLabelLength >= 24 && categoryCount >= 16) ? 2 : 1;
     return clamp(
       Math.max(sizeDrivenSkip, densityDrivenSkip),
       1,

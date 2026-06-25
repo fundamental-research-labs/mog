@@ -12,9 +12,9 @@ export async function expectInvalidRefDiagnostic(
   version: VersionUnderTest,
   graphStore: FakeGraphStore,
 ) {
-  await expect(
-    version.listCommits({ ref: 'refs/heads/scenario/missing' }),
-  ).resolves.toMatchObject(expectUnavailable('VERSION_INVALID_OPTIONS', 'ref'));
+  await expect(version.listCommits({ ref: 'refs/heads/scenario/missing' })).resolves.toMatchObject(
+    expectUnavailable('VERSION_INVALID_OPTIONS', 'ref'),
+  );
   expect(graphStore.listCommits).toHaveBeenLastCalledWith({ ref: 'refs/heads/scenario/missing' });
 }
 

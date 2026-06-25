@@ -93,28 +93,70 @@ export type MergeApplyIntentStoreDiagnostic = {
 };
 
 export type MergeApplyIntentReadResult =
-  | { readonly status: 'found'; readonly record: MergeApplyIntentRecord; readonly diagnostics: readonly [] }
-  | { readonly status: 'missing'; readonly record: null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] }
-  | { readonly status: 'failed'; readonly record: null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
+  | {
+      readonly status: 'found';
+      readonly record: MergeApplyIntentRecord;
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'missing';
+      readonly record: null;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    }
+  | {
+      readonly status: 'failed';
+      readonly record: null;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    };
 
 export type MergeApplyIntentBeginResult =
-  | { readonly status: 'created' | 'existing'; readonly record: MergeApplyIntentRecord; readonly diagnostics: readonly [] }
-  | { readonly status: 'conflict'; readonly record: MergeApplyIntentRecord; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] }
-  | { readonly status: 'failed'; readonly record: null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
+  | {
+      readonly status: 'created' | 'existing';
+      readonly record: MergeApplyIntentRecord;
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'conflict';
+      readonly record: MergeApplyIntentRecord;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    }
+  | {
+      readonly status: 'failed';
+      readonly record: null;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    };
 
 export type MergeApplyIntentCompleteResult =
-  | { readonly status: 'completed'; readonly record: MergeApplyIntentRecord; readonly diagnostics: readonly [] }
-  | { readonly status: 'missing' | 'conflict' | 'failed'; readonly record: MergeApplyIntentRecord | null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
+  | {
+      readonly status: 'completed';
+      readonly record: MergeApplyIntentRecord;
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'missing' | 'conflict' | 'failed';
+      readonly record: MergeApplyIntentRecord | null;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    };
 
 export type MergeApplyRefCasProofReadResult =
-  | { readonly status: 'found'; readonly proof: MergeApplyRefCasProof; readonly diagnostics: readonly [] }
-  | { readonly status: 'missing' | 'failed'; readonly proof: null; readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[] };
+  | {
+      readonly status: 'found';
+      readonly proof: MergeApplyRefCasProof;
+      readonly diagnostics: readonly [];
+    }
+  | {
+      readonly status: 'missing' | 'failed';
+      readonly proof: null;
+      readonly diagnostics: readonly MergeApplyIntentStoreDiagnostic[];
+    };
 
 export interface MergeApplyIntentStore {
   readonly namespace: VersionGraphNamespace;
   beginIntent(input: BeginMergeApplyIntentInput): Promise<MergeApplyIntentBeginResult>;
   readByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentReadResult>;
-  readByIdempotencyKey(idempotencyKey: MergeApplyIntentIdempotencyKey): Promise<MergeApplyIntentReadResult>;
+  readByIdempotencyKey(
+    idempotencyKey: MergeApplyIntentIdempotencyKey,
+  ): Promise<MergeApplyIntentReadResult>;
   readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult>;
   completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult>;
 }

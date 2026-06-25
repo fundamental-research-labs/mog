@@ -1,7 +1,4 @@
-import {
-  VERSION_GRAPH_MAIN_REF,
-  createInMemoryVersionGraphStore,
-} from './graph';
+import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from './graph';
 import type { VersionGraphNamespace } from './object-store';
 import { mapGraphDiagnostics, versionStoreDiagnostic } from './provider-diagnostics';
 import { failedStoreResult, initializeSuccess, registryRecordResult } from './provider-results';
@@ -10,10 +7,7 @@ import type {
   VersionGraphInitializeResult,
   VersionGraphRegistryReadResult,
 } from './provider-types';
-import {
-  createVersionGraphRegistry,
-  namespaceForDocumentScope,
-} from './registry';
+import { createVersionGraphRegistry, namespaceForDocumentScope } from './registry';
 import {
   assertInMemoryProviderAvailable,
   inMemoryProviderWriteUnavailableFailure,

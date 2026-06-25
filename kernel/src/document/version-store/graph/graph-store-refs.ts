@@ -1,8 +1,4 @@
-import {
-  REF_NAME_STORAGE_PREFIX,
-  validateRefName,
-  type RefName,
-} from '../refs/ref-name';
+import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from '../refs/ref-name';
 import type { LiveRefRecord } from '../refs/ref-store';
 import type {
   VersionGraphCommitRef,
@@ -161,7 +157,9 @@ export function commitRefFromLiveRef(
 
 function decodeGraphRefSuffix(
   value: string,
-): { readonly ok: true; readonly value: string } | { readonly ok: false; readonly message: string } {
+):
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly message: string } {
   if (value.length === 0) {
     return { ok: false, message: 'refs/heads/* graph ref must include a branch name.' };
   }

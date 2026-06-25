@@ -1,9 +1,6 @@
 import type { VersionNormalCommitCapture } from '../../../document/version-store/commit-service';
 
-import {
-  CREATED_AT,
-  VERSION_AUTHOR,
-} from './version-checkout-lifecycle-test-utils-constants';
+import { CREATED_AT, VERSION_AUTHOR } from './version-checkout-lifecycle-test-utils-constants';
 import { objectRecord } from './version-checkout-lifecycle-test-utils-records';
 
 export function createCellEditNormalCommitCapture(input: {

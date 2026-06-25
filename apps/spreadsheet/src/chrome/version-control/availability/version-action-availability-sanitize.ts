@@ -39,7 +39,7 @@ function redactSensitiveVersionDiagnosticText(message: string): string {
     .replace(/\bsync-batch-status:sha256:[0-9a-f]{12,64}\b/gi, REDACTED_SYNC_BATCH)
     .replace(/\/Users\/[^\s"'`<>),;]+/g, REDACTED_INTERNAL_REFERENCE)
     .replace(
-      /\b(?:mog-internal|dev\/version-control-eval|plans\/active|plans\/)[^\s"'`<>),;]*/g,
+      /\b(?:internal-workstream|workspace-plan|local-plan)[^\s"'`<>),;]*/gi,
       REDACTED_INTERNAL_REFERENCE,
     )
     .replace(/\bhttps?:\/\/[^\s"'`<>),;]+/gi, REDACTED_EXTERNAL_LINK)

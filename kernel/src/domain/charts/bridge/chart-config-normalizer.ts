@@ -11,10 +11,7 @@ import {
   normalizeImportedComboChart,
   normalizeImportedDisplayBlanksAsValue,
 } from '../../../bridges/compute/chart-import-normalization';
-import {
-  resolveStoredChartHeightPoints,
-  resolveStoredChartWidthPoints,
-} from '../chart-size-units';
+import { resolveStoredChartHeightPoints, resolveStoredChartWidthPoints } from '../chart-size-units';
 import { isXYValueAxisChartType } from './axis-role';
 import {
   wireToAxisConfig,

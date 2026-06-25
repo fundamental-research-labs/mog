@@ -10,9 +10,7 @@ import {
 import { installVersionDomainDetectorNoopsOnHandles } from './version-domain-support-test-utils';
 
 export type ProviderLifecycleDocumentFactoryState = {
-  readonly setStaleMaterializationVersioningScope: (
-    scope: VersionDocumentScope | null,
-  ) => void;
+  readonly setStaleMaterializationVersioningScope: (scope: VersionDocumentScope | null) => void;
   readonly internalMaterializationCreateCount: () => number;
 };
 

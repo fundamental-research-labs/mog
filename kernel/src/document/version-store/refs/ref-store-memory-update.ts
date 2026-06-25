@@ -19,10 +19,7 @@ import {
   parseRefNameForResult,
   parseRefVersionForResult,
 } from './ref-store-validation';
-import {
-  currentMemoryRefStoreTime,
-  type InMemoryRefStoreState,
-} from './ref-store-memory-state';
+import { currentMemoryRefStoreTime, type InMemoryRefStoreState } from './ref-store-memory-state';
 
 export function updateMemoryRef(
   state: InMemoryRefStoreState,

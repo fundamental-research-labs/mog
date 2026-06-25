@@ -1,9 +1,7 @@
 import type { ObjectDigest, Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
-import {
-  readAndValidateMogVersionMetadataFromXlsx,
-} from '../version/xlsx-metadata/xlsx-version-metadata';
+import { readAndValidateMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
 import { withVersionManifest } from './version-domain-support-test-utils';
 import {
   createViewStateSourceXlsx,
@@ -58,9 +56,9 @@ export function registerTrustedMetadataRoundTripScenario(): void {
       expect(rootSemanticPayload).toHaveProperty('semanticState.stateDigest');
       expect(rootSemanticPayload).toHaveProperty('semanticState.state');
       expect(rootSemanticPayload).toHaveProperty('source.semanticStateDigest');
-      expect((rootSemanticPayload.source as { semanticStateDigest?: unknown }).semanticStateDigest).toEqual(
-        (rootSemanticPayload.semanticState as { stateDigest?: unknown }).stateDigest,
-      );
+      expect(
+        (rootSemanticPayload.source as { semanticStateDigest?: unknown }).semanticStateDigest,
+      ).toEqual((rootSemanticPayload.semanticState as { stateDigest?: unknown }).stateDigest);
       await expect(wb.version.listCommits()).resolves.toMatchObject({
         ok: true,
         value: {
@@ -98,15 +96,12 @@ export function registerTrustedMetadataRoundTripScenario(): void {
       await importedHandle.dispose();
       importedHandle = undefined;
 
-      const reimported = await DocumentFactory.createFromXlsx(
-        { type: 'bytes', data: exported },
-        {
-          documentId: TRUSTED_ROUNDTRIP_DOCUMENT_ID,
-          environment: 'headless',
-          userTimezone: 'UTC',
-          versioning: withVersionManifest(durableIndexedDbVersioning()),
-        } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown },
-      );
+      const reimported = await DocumentFactory.createFromXlsx({ type: 'bytes', data: exported }, {
+        documentId: TRUSTED_ROUNDTRIP_DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+        versioning: withVersionManifest(durableIndexedDbVersioning()),
+      } as Parameters<typeof DocumentFactory.createFromXlsx>[1] & { versioning: unknown });
       expect(reimported.success).toBe(true);
       if (!reimported.success || !reimported.handle) {
         throw new Error(`expected trusted XLSX reimport success: ${reimported.error?.message}`);

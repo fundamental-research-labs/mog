@@ -608,7 +608,10 @@ export function usePivotTables({ sheetId }: UsePivotTablesOptions): UsePivotTabl
           }
 
           // Clear selection if deleted pivot was selected
-          if (selectedPivotId != null && pivotConfigFromId(selectedPivotId)?.id === deletedPivotId) {
+          if (
+            selectedPivotId != null &&
+            pivotConfigFromId(selectedPivotId)?.id === deletedPivotId
+          ) {
             selectPivotAction(null);
           }
           if (editingPivotId != null && pivotConfigFromId(editingPivotId)?.id === deletedPivotId) {

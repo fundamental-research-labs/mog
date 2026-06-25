@@ -1,7 +1,4 @@
-import type {
-  VersionResult,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionResult, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { VersionReviewPublicOperation } from './version-review-operation';
 import { hardenReviewDiffPage } from './version-review-diagnostics-diff';

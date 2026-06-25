@@ -17,9 +17,7 @@ import {
 
 export const PROMOTED_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
 export const LATEST_REMOTE_COMMIT_ID = `commit:sha256:${'e'.repeat(64)}` as WorkbookCommitId;
-export const PENDING_REMOTE_SEGMENT_ID = `pending-remote-segment:sha256:${'d'.repeat(
-  64,
-)}` as const;
+export const PENDING_REMOTE_SEGMENT_ID = `pending-remote-segment:sha256:${'d'.repeat(64)}` as const;
 export const PENDING_REMOTE_BACKLOG_MESSAGE =
   'Remote sync changes are waiting to be promoted into version history; checkout is unsafe.';
 

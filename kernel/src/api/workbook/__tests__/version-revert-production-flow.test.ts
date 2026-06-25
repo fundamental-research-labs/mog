@@ -172,8 +172,9 @@ describe('WorkbookVersion revert production flow', () => {
   });
 
   it('reverts a top-of-ref range by creating a revert commit at the base snapshot', async () => {
-    const { documentScope, provider, initialized } =
-      await initializeMaterializerGraph('revert-production-range-flow');
+    const { documentScope, provider, initialized } = await initializeMaterializerGraph(
+      'revert-production-range-flow',
+    );
     const mainHandle = await createMaterializerDocumentHandle(documentScope);
     const verifyHandle = await createMaterializerDocumentHandle(documentScope);
     installVersionDomainDetectorNoopsOnHandles(mainHandle, verifyHandle);
@@ -360,8 +361,9 @@ describe('WorkbookVersion revert production flow', () => {
   });
 
   it('requires review for a non-tip commit revert without advancing the target ref', async () => {
-    const { documentScope, provider, initialized } =
-      await initializeMaterializerGraph('revert-production-non-tip-flow');
+    const { documentScope, provider, initialized } = await initializeMaterializerGraph(
+      'revert-production-non-tip-flow',
+    );
     const mainHandle = await createMaterializerDocumentHandle(documentScope);
     installVersionDomainDetectorNoopsOnHandles(mainHandle);
 
@@ -648,15 +650,14 @@ describe('WorkbookVersion revert production flow', () => {
 
       const commitIdsAfterRevert = await listCommitIds(sourceWb);
       await sourceWb.activeSheet.setCell('D1', 'post-revert-local');
-      await expect(sourceWb.version.commit({ message: 'must not rollback reverted merge' }))
-        .resolves.toMatchObject({
-          ok: false,
-          error: {
-            diagnostics: [
-              expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
-            ],
-          },
-        });
+      await expect(
+        sourceWb.version.commit({ message: 'must not rollback reverted merge' }),
+      ).resolves.toMatchObject({
+        ok: false,
+        error: {
+          diagnostics: [expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' })],
+        },
+      });
       await expect(listCommitIds(sourceWb)).resolves.toEqual(commitIdsAfterRevert);
 
       const mergedWb = await fixture.openMergedWorkbook();

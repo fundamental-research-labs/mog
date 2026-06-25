@@ -22,9 +22,7 @@ import type {
 const BRANCH_REF = 'scenario/indexeddb-persisted-incoming' as any;
 const MAIN_REF = 'refs/heads/main' as any;
 
-export async function stagePersistedFastForwardPreviewForProviderSelectionReopen(): Promise<
-  ProviderSelectionReopenFastForwardStage
-> {
+export async function stagePersistedFastForwardPreviewForProviderSelectionReopen(): Promise<ProviderSelectionReopenFastForwardStage> {
   const firstHandle = await DocumentFactory.create({
     documentId: DOCUMENT_ID,
     environment: 'headless',

@@ -1,6 +1,9 @@
 import { expect, it } from '@jest/globals';
 
-import { reviewCellA1ValueChange, reviewSheetOrderChange } from './version-review-provider-fixtures';
+import {
+  reviewCellA1ValueChange,
+  reviewSheetOrderChange,
+} from './version-review-provider-fixtures';
 import {
   DOCUMENT_SCOPE,
   createReviewInput,

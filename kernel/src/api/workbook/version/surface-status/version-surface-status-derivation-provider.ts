@@ -24,7 +24,8 @@ export function deriveProviderCapabilityBlocks(
     !provider.readOnlyHistory &&
     providerCapability(provider, 'writes', 'commitGraphWrite') &&
     providerCapability(provider, 'writes', 'putObjects');
-  const writeRefs = !provider.readOnlyHistory && providerCapability(provider, 'writes', 'updateRefs');
+  const writeRefs =
+    !provider.readOnlyHistory && providerCapability(provider, 'writes', 'updateRefs');
 
   if (availability.diff && (!readGraph || !readCommits || !readObjects)) {
     blocks['version:diff'] = providerBlock(

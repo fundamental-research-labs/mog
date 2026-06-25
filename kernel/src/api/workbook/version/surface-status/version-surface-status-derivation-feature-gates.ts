@@ -23,7 +23,10 @@ export function getVersionSurfaceOperationFeatureGates(
   };
 }
 
-function readOperationFeatureGate(value: unknown, operation: 'checkout' | 'revert'): boolean | undefined {
+function readOperationFeatureGate(
+  value: unknown,
+  operation: 'checkout' | 'revert',
+): boolean | undefined {
   if (!isRecord(value)) return undefined;
   const pascal = operation[0].toUpperCase() + operation.slice(1);
   const keys = [`versionControl${pascal}`, `versionControl.${operation}`];

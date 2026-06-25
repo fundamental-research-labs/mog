@@ -3,43 +3,22 @@ import type {
   ProviderInboundProofField,
   SyncUpdateDiagnosticEvidence,
 } from '@mog-sdk/types-document/storage/inbound-updates';
+import {
+  PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
+  PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
+} from '@mog-sdk/types-document/storage/inbound-updates';
 import type { VersionSyncOperationContext } from './sync-provenance';
 
 export const VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_REQUIRED_FIELDS = Object.freeze([
-  'sourceKind',
-  'originKind',
-  'stableOriginId',
-  'providerRefId',
-  'storageScope',
-  'authorityRef',
-  'authorState',
-  'provenanceRedactionPolicy',
-  'provenancePayloadHash',
-  'payloadHash',
-  'updateId',
-  'epoch',
+  ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
   'providerId',
   'providerKind',
-  'remoteSessionId',
-  'remoteAuthorRef',
-  'correlationId',
-  'causationIds',
+  ...PROVIDER_INBOUND_V2_SINGLE_AUTHOR_PROOF_FIELDS,
 ] as const satisfies readonly ProviderInboundProofField[]);
 
 export const VERSION_SYNC_PROVENANCE_PROVIDER_MIXED_AUTHORITY_PROOF_V2_REQUIRED_FIELDS =
   Object.freeze([
-    'sourceKind',
-    'originKind',
-    'stableOriginId',
-    'providerRefId',
-    'storageScope',
-    'authorityRef',
-    'authorState',
-    'provenanceRedactionPolicy',
-    'provenancePayloadHash',
-    'payloadHash',
-    'updateId',
-    'epoch',
+    ...PROVIDER_INBOUND_V2_BASE_PROOF_FIELDS,
     'providerId',
     'providerKind',
   ] as const satisfies readonly ProviderInboundProofField[]);
@@ -197,14 +176,18 @@ export const VERSION_SYNC_PROVENANCE_PROVIDER_MIXED_INBOUND_EVIDENCE_FIXTURE = O
 export const VERSION_SYNC_PROVENANCE_BLOCKED_BATCH_FAILURE_CONTEXT_FIXTURE = Object.freeze({
   sourceKind: 'providerLiveInbound',
   originKind: 'provider',
-  stableOriginId: 'stable-origin-digest:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-  providerId: 'provider-digest:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  stableOriginId:
+    'stable-origin-digest:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  providerId:
+    'provider-digest:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
   providerKind: 'fixture-provider',
-  authorityRef: 'authority-digest:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  authorityRef:
+    'authority-digest:sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
   epoch: 'provider-epoch-7',
   updateId: 'update-digest:sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
   sequence: '42',
-  payloadHash: 'payload-digest:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+  payloadHash:
+    'payload-digest:sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
   provenancePayloadHash:
     'provenance-digest:sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
   trustStatus: 'verified',

@@ -163,9 +163,7 @@ function extractGeneratedBridgeWriteOperations(): readonly GeneratedBridgeWriteO
     const access = BRIDGE_METHOD_KIND[method] as BridgeMethodKind | undefined;
 
     if (!access && mutationWrapperCalls.length) {
-      throw new Error(
-        `Generated mutation method '${method}' is missing from BRIDGE_METHOD_KIND.`,
-      );
+      throw new Error(`Generated mutation method '${method}' is missing from BRIDGE_METHOD_KIND.`);
     }
     if (!access) continue;
 
@@ -308,9 +306,7 @@ describe('VC-02 operation classification inventory', () => {
       'dev/version-control/registry/operation-classification-registry.json',
     );
 
-    expect(registry.runtimeRegistry).toBe(
-      'kernel/src/bridges/compute/operation-classification.ts',
-    );
+    expect(registry.runtimeRegistry).toBe('kernel/src/bridges/compute/operation-classification.ts');
     expect(registry.coveredInventory).toBe(
       'dev/version-control/inventory/compute-bridge-write-inventory.json',
     );

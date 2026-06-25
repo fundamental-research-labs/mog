@@ -160,9 +160,7 @@ describe('timeline style mapper', () => {
       'light6',
     );
     expect(
-      timelineStyleForDiffEntry(
-        diffEntry({ structural: structural({ propertyPath: ['order'] }) }),
-      ),
+      timelineStyleForDiffEntry(diffEntry({ structural: structural({ propertyPath: ['order'] }) })),
     ).toBe('light5');
     expect(timelineStyleForDiffEntry(diffEntry({ after: REDACTED_VALUE }))).toBe('dark5');
     expect(timelineStyleForDiffEntry(diffEntry({ diagnostics: [{} as never] }))).toBe('dark5');

@@ -173,7 +173,12 @@ export function encodedRangeChange(
     rowIds: ['row-1', 'row-2'],
     colIds: ['col-1', 'col-2'],
   };
-  return { sheetId, rangeId, kind: changeKind, data: new TextEncoder().encode(JSON.stringify(meta)) };
+  return {
+    sheetId,
+    rangeId,
+    kind: changeKind,
+    data: new TextEncoder().encode(JSON.stringify(meta)),
+  };
 }
 
 export function floatingObjectData(id: string, type: string, data: Record<string, unknown>) {

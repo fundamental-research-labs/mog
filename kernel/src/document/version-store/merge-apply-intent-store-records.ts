@@ -7,13 +7,22 @@ import type {
 
 export function cloneIntent(record: MergeApplyIntentRecord): MergeApplyIntentRecord;
 export function cloneIntent(record: undefined): undefined;
-export function cloneIntent(record: MergeApplyIntentRecord | undefined): MergeApplyIntentRecord | undefined;
-export function cloneIntent(record: MergeApplyIntentRecord | undefined): MergeApplyIntentRecord | undefined {
+export function cloneIntent(
+  record: MergeApplyIntentRecord | undefined,
+): MergeApplyIntentRecord | undefined;
+export function cloneIntent(
+  record: MergeApplyIntentRecord | undefined,
+): MergeApplyIntentRecord | undefined {
   return record === undefined ? undefined : cloneJson(record);
 }
 
-export function intentsEquivalent(left: MergeApplyIntentRecord, right: MergeApplyIntentRecord): boolean {
-  return canonicalJsonStringify(intentIdentity(left)) === canonicalJsonStringify(intentIdentity(right));
+export function intentsEquivalent(
+  left: MergeApplyIntentRecord,
+  right: MergeApplyIntentRecord,
+): boolean {
+  return (
+    canonicalJsonStringify(intentIdentity(left)) === canonicalJsonStringify(intentIdentity(right))
+  );
 }
 
 export function objectDigestsEqual(left: ObjectDigest, right: ObjectDigest): boolean {
@@ -29,11 +38,14 @@ export function mergeApplyIntentTerminalsEqual(
     left.headBefore === right.headBefore &&
     left.headAfter === right.headAfter &&
     left.commitId === right.commitId &&
-    canonicalJsonStringify(left.refCasProof ?? null) === canonicalJsonStringify(right.refCasProof ?? null)
+    canonicalJsonStringify(left.refCasProof ?? null) ===
+      canonicalJsonStringify(right.refCasProof ?? null)
   );
 }
 
-export function hasMergeApplyIntentStoreProvider(value: unknown): value is MergeApplyIntentStoreProvider {
+export function hasMergeApplyIntentStoreProvider(
+  value: unknown,
+): value is MergeApplyIntentStoreProvider {
   return isRecord(value) && typeof value.openMergeApplyIntentStore === 'function';
 }
 

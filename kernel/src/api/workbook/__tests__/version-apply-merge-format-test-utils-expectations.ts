@@ -1,8 +1,4 @@
-import type {
-  VersionHead,
-  Workbook,
-  WorkbookCommitSummary,
-} from '@mog-sdk/contracts/api';
+import type { VersionHead, Workbook, WorkbookCommitSummary } from '@mog-sdk/contracts/api';
 
 import type { VersionGraphInitializeResult } from '../../../document/version-store/provider';
 

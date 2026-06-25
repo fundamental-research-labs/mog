@@ -28,29 +28,27 @@ beforeEach(resetVersionStoreIndexedDbForXlsxImportRootTests);
 afterEach(resetVersionStoreIndexedDbForXlsxImportRootTests);
 
 describe('WorkbookVersion XLSX materialized merge real fixture', () => {
-  it(
-    'materializes a clean branch merge from an XLSX import root while preserving imported sheet view state',
-    async () => {
-      const imported = await DocumentFactory.createFromXlsx(
-        { type: 'bytes', data: new Uint8Array(readFileSync(FROZEN_PANES_FIXTURE)) },
-        {
-          documentId: DOCUMENT_ID,
-          environment: 'headless',
-          userTimezone: 'UTC',
-        },
-      );
-      expect(imported.success).toBe(true);
-      if (!imported.success || !imported.handle) {
-        throw new Error(`expected XLSX import success: ${imported.error?.message}`);
-      }
+  it('materializes a clean branch merge from an XLSX import root while preserving imported sheet view state', async () => {
+    const imported = await DocumentFactory.createFromXlsx(
+      { type: 'bytes', data: new Uint8Array(readFileSync(FROZEN_PANES_FIXTURE)) },
+      {
+        documentId: DOCUMENT_ID,
+        environment: 'headless',
+        userTimezone: 'UTC',
+      },
+    );
+    expect(imported.success).toBe(true);
+    if (!imported.success || !imported.handle) {
+      throw new Error(`expected XLSX import success: ${imported.error?.message}`);
+    }
 
-      let wb: Workbook | undefined;
-      let branchWb: Workbook | undefined;
-      let branchHandle: Awaited<ReturnType<typeof DocumentFactory.create>> | undefined;
-      try {
-        wb = await imported.handle.workbook({
-          versioning: withVersionManifest(durableIndexedDbVersioning()),
-        });
+    let wb: Workbook | undefined;
+    let branchWb: Workbook | undefined;
+    let branchHandle: Awaited<ReturnType<typeof DocumentFactory.create>> | undefined;
+    try {
+      wb = await imported.handle.workbook({
+        versioning: withVersionManifest(durableIndexedDbVersioning()),
+      });
 
       const rootHead = await expectHead(wb);
       expect(rootHead).toMatchObject({
@@ -192,13 +190,11 @@ describe('WorkbookVersion XLSX materialized merge real fixture', () => {
 
       const frozenC5 = await wb.getSheet('Frozen C5');
       await expect(frozenC5.view.getFrozenPanes()).resolves.toEqual({ rows: 4, cols: 2 });
-      } finally {
-        await branchWb?.close('skipSave').catch(() => {});
-        await branchHandle?.dispose().catch(() => {});
-        await wb?.close('skipSave').catch(() => {});
-        await imported.handle.dispose().catch(() => {});
-      }
-    },
-    90_000,
-  );
+    } finally {
+      await branchWb?.close('skipSave').catch(() => {});
+      await branchHandle?.dispose().catch(() => {});
+      await wb?.close('skipSave').catch(() => {});
+      await imported.handle.dispose().catch(() => {});
+    }
+  }, 90_000);
 });

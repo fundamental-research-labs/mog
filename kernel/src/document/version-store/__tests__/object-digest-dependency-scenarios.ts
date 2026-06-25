@@ -4,13 +4,7 @@ import {
   versionDependencySortKey,
   type VersionDependencyRef,
 } from '../object-digest';
-import {
-  HEX_A,
-  HEX_B,
-  HEX_C,
-  digest,
-  expectIssue,
-} from './object-digest-test-helpers';
+import { HEX_A, HEX_B, HEX_C, digest, expectIssue } from './object-digest-test-helpers';
 
 export function registerCanonicalizeVersionDependenciesTests(): void {
   const commitA = parseWorkbookCommitId(`commit:sha256:${HEX_A}`);

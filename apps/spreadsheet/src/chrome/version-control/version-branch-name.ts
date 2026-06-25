@@ -8,12 +8,7 @@ import type {
 export const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
-const VERSION_BRANCH_NAMESPACES = Object.freeze([
-  'scenario',
-  'agent',
-  'import',
-  'review',
-] as const);
+const VERSION_BRANCH_NAMESPACES = Object.freeze(['scenario', 'agent', 'import', 'review'] as const);
 const VERSION_BRANCH_NAME_PATTERN =
   /^(?:main|(?:scenario|agent|import|review)\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*)$/;
 const VERSION_BRANCH_MAX_BYTES = 128;
@@ -35,9 +30,7 @@ export function displayBranchName(name: string): string {
     : name;
 }
 
-export function normalizeVersionBranchNameInput(
-  value: string,
-): VersionBranchNameValidationResult {
+export function normalizeVersionBranchNameInput(value: string): VersionBranchNameValidationResult {
   const trimmed = value.trim();
   if (trimmed.length === 0) return invalidBranchName('Enter a branch name.');
 

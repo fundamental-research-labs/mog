@@ -7,9 +7,7 @@ export {
   type ProviderLifecycleDocumentFactoryState,
   versioningRuntimeForHandle,
 } from './version-checkout-provider-lifecycle-helpers-document-factory';
-export {
-  expectPublicDiagnosticsNotToLeak,
-} from './version-checkout-provider-lifecycle-helpers-diagnostics';
+export { expectPublicDiagnosticsNotToLeak } from './version-checkout-provider-lifecycle-helpers-diagnostics';
 export {
   initializeVersionGraph,
   replaceVisibleRegistryGraph,

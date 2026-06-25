@@ -769,9 +769,15 @@ export async function setTextRuns(
   admissionOptions?: MutationAdmissionOptions,
 ): Promise<FloatingObjectMutationReceipt> {
   const content = runs.map((r) => r.text).join('');
-  return updateShape(ctx, sheetId, shapeId, {
-    text: { content, runs } as any,
-  }, admissionOptions);
+  return updateShape(
+    ctx,
+    sheetId,
+    shapeId,
+    {
+      text: { content, runs } as any,
+    },
+    admissionOptions,
+  );
 }
 
 /**

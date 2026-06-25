@@ -4,9 +4,6 @@ import { vc06ViewObjectSemanticChanges } from './version-persistence-semantic-fi
 export function vc06SemanticChangeSetPayload() {
   return {
     schemaVersion: 1,
-    changes: [
-      ...vc06DefinitionSemanticChanges(),
-      ...vc06ViewObjectSemanticChanges(),
-    ],
+    changes: [...vc06DefinitionSemanticChanges(), ...vc06ViewObjectSemanticChanges()],
   };
 }

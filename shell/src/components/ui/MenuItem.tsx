@@ -25,8 +25,10 @@ import { cn, menuItemClasses, menuSeparatorClasses } from './radix/styles';
 // MenuItem
 // =============================================================================
 
-export interface MenuItemProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children' | 'className' | 'disabled'> {
+export interface MenuItemProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'children' | 'className' | 'disabled'
+> {
   /** Item content (text label) */
   children: ReactNode;
   /** Icon displayed on the left side */

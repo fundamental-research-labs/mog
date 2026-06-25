@@ -210,11 +210,7 @@ function assertObjectField(
   );
 }
 
-function fieldValue(
-  rule: Record<string, unknown>,
-  field: string,
-  aliases: string[],
-): unknown {
+function fieldValue(rule: Record<string, unknown>, field: string, aliases: string[]): unknown {
   if (rule[field] !== undefined) return rule[field];
   for (const alias of aliases) {
     if (rule[alias] !== undefined) return rule[alias];

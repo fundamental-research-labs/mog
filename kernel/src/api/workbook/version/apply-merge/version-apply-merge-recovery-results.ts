@@ -28,7 +28,9 @@ export async function resultFromTerminalIntent(
   const commitId = record.terminal?.commitId ?? record.terminal?.headAfter;
   if (!commitId) {
     return blockedApplyMergeResult(record.base, record.ours, record.theirs, [
-      recoveryOperationIdentityMismatchDiagnostic('Recovery terminal commit identity is incomplete.'),
+      recoveryOperationIdentityMismatchDiagnostic(
+        'Recovery terminal commit identity is incomplete.',
+      ),
     ]);
   }
   const current = await readCurrentTargetHead(graph, record.targetRef);
@@ -59,7 +61,9 @@ export function alreadyAppliedResult(
   };
 }
 
-export function staleTargetHeadBlockedResult(record: MergeApplyIntentRecord): VersionApplyMergeResult {
+export function staleTargetHeadBlockedResult(
+  record: MergeApplyIntentRecord,
+): VersionApplyMergeResult {
   return blockedApplyMergeResult(
     record.base,
     record.ours,

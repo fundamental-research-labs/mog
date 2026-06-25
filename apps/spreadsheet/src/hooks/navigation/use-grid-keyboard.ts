@@ -463,8 +463,6 @@ function samePendingTarget(
   cell: { readonly row: number; readonly col: number },
 ): boolean {
   return (
-    pending.sheetId === sheetId &&
-    pending.cell.row === cell.row &&
-    pending.cell.col === cell.col
+    pending.sheetId === sheetId && pending.cell.row === cell.row && pending.cell.col === cell.col
   );
 }

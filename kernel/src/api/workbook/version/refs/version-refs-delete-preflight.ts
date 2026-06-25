@@ -236,12 +236,7 @@ function currentHeadRefName(value: unknown, operation: DeleteRefOperation): Acti
   if (head === null) return { status: 'ok', refName: null };
   if (!isRecord(head)) return activeProjectionBlocked(operation, 'currentHead');
   if (head.mode === 'detached') return { status: 'ok', refName: null };
-  const projected = firstProviderRefName([
-    head.branchName,
-    head.refName,
-    head.target,
-    head.name,
-  ]);
+  const projected = firstProviderRefName([head.branchName, head.refName, head.target, head.name]);
   if (projected.status === 'invalid') return activeProjectionBlocked(operation, 'currentHead');
   if (projected.refName) return { status: 'ok', refName: projected.refName };
   return head.mode === 'attached'
@@ -255,10 +250,7 @@ function currentHeadPayload(value: Readonly<Record<string, unknown>>): unknown {
   return value;
 }
 
-type ActiveProjectionRefName = Extract<
-  ActiveRefProjection,
-  { readonly status: 'ok' }
->['refName'];
+type ActiveProjectionRefName = Extract<ActiveRefProjection, { readonly status: 'ok' }>['refName'];
 
 type ProviderRefNameProjection =
   | { readonly status: 'ok'; readonly refName: ActiveProjectionRefName }

@@ -1,7 +1,4 @@
-import type {
-  VersionRevertInput,
-  VersionRevertOptions,
-} from '@mog-sdk/contracts/api';
+import type { VersionRevertInput, VersionRevertOptions } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
 import { isRecord, type MaybePromise } from './version-revert-provider-shape';

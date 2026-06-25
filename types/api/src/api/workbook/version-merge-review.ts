@@ -1,8 +1,4 @@
-import type {
-  JsonValue,
-  ObjectDigest,
-  PageCursor,
-} from './version-shared';
+import type { JsonValue, ObjectDigest, PageCursor } from './version-shared';
 import type {
   VersionApplyMergeResolution,
   VersionCommitExpectedHead,

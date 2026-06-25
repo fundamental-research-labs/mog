@@ -1,14 +1,8 @@
 import type { WorkbookCommitId } from '../object-digest';
 import type { RefName } from '../refs/ref-name';
 import type { LiveRefRecord, RefVersion } from '../refs/ref-store';
-import {
-  VERSION_GRAPH_HEAD_REF,
-  graphRefFromLiveRef,
-} from './graph-store-refs';
-import type {
-  VersionGraphRef,
-  VersionGraphStoreDiagnostic,
-} from './graph-store-types';
+import { VERSION_GRAPH_HEAD_REF, graphRefFromLiveRef } from './graph-store-refs';
+import type { VersionGraphRef, VersionGraphStoreDiagnostic } from './graph-store-types';
 import type { ParsedListCommitsTarget } from './graph-store-list-options';
 
 type GraphRefReadResult =
@@ -62,9 +56,10 @@ export function resolveListCommitsRoot(
     };
   }
 
-  const current = target.selector.refName === 'main'
-    ? readers.readMainRef()
-    : readers.readBranchRef(target.selector.refName);
+  const current =
+    target.selector.refName === 'main'
+      ? readers.readMainRef()
+      : readers.readBranchRef(target.selector.refName);
   if (!current.ok) return current;
 
   return {

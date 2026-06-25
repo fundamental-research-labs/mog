@@ -81,8 +81,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
   });
 
   it('creates sibling refs without rebinding symbolic HEAD away from the current branch', async () => {
-    const { branchService, version } =
-      createWorkbookVersionWithBranchService('scenario/current');
+    const { branchService, version } = createWorkbookVersionWithBranchService('scenario/current');
 
     await expect(
       version.createBranch({

@@ -213,12 +213,7 @@ async function resultFromPreviewArtifactTargetRefCasFailure(
   failure: TargetRefCasFailure,
 ): Promise<VersionApplyMergeResult> {
   if (failure.kind === 'blocked') {
-    return blockedApplyMergeResult(
-      payload.base,
-      payload.ours,
-      payload.theirs,
-      failure.diagnostics,
-    );
+    return blockedApplyMergeResult(payload.base, payload.ours, payload.theirs, failure.diagnostics);
   }
 
   const current = await readCurrentTargetHead(graph, options.targetRef);

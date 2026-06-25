@@ -561,9 +561,7 @@ export function registerCleanMergeApplyScenario(): void {
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        diagnostics: [
-          expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
-        ],
+        diagnostics: [expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' })],
       },
     });
     expect(merge).not.toHaveBeenCalled();

@@ -296,9 +296,7 @@ function versionStoreProviderFromContext(ctx: DocumentContext): VersionStoreProv
   return undefined;
 }
 
-function workbookContextDocumentScope(
-  ctx: DocumentContext,
-): VersionDocumentScope | null {
+function workbookContextDocumentScope(ctx: DocumentContext): VersionDocumentScope | null {
   const linkScope = ctx.workbookLinkScope();
   if (!isRecord(linkScope) || !isNonEmptyString(linkScope.requestingDocumentId)) {
     return null;

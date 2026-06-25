@@ -10,11 +10,7 @@ import type {
   VersionResult,
   VerificationSummary,
 } from './version-shared';
-import type {
-  VersionSemanticDiffPage,
-  VersionDiffValue,
-  WorkbookCommitId,
-} from './version';
+import type { VersionSemanticDiffPage, VersionDiffValue, WorkbookCommitId } from './version';
 
 export type WorkbookVersionReviewStatus =
   | 'open'
@@ -85,7 +81,10 @@ export interface WorkbookVersionReviewDecision {
   readonly metadata?: JsonValue;
 }
 
-export type WorkbookVersionReviewDecisionDraft = Omit<WorkbookVersionReviewDecision, 'id' | 'createdAt'>;
+export type WorkbookVersionReviewDecisionDraft = Omit<
+  WorkbookVersionReviewDecision,
+  'id' | 'createdAt'
+>;
 
 export interface WorkbookVersionReviewApprovalTarget {
   readonly targetKey: string;
@@ -187,7 +186,12 @@ export interface WorkbookVersionReviewDiffEntity {
   readonly displayRefStale?: boolean;
 }
 
-export type WorkbookVersionReviewDiffChangeKind = 'create' | 'update' | 'delete' | 'move' | 'reorder';
+export type WorkbookVersionReviewDiffChangeKind =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'move'
+  | 'reorder';
 
 export interface WorkbookVersionReviewDiffChange {
   readonly target: WorkbookVersionReviewDecisionTarget;
@@ -227,12 +231,16 @@ export interface WorkbookVersionReviewApi {
     input?: VersionListReviewsInput,
   ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>;
   getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   appendReviewDecision(
     input: VersionAppendReviewDecisionInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
   updateReviewStatus(
     input: VersionUpdateReviewStatusInput,
   ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
-  getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
+  getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
 }

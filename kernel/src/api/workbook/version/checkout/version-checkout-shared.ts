@@ -5,7 +5,10 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import { REF_NAME_STORAGE_PREFIX, validateRefName } from '../../../../document/version-store/refs/ref-name';
+import {
+  REF_NAME_STORAGE_PREFIX,
+  validateRefName,
+} from '../../../../document/version-store/refs/ref-name';
 
 export const VERSION_HEAD_REF = 'HEAD';
 export const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;

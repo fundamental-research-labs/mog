@@ -3,10 +3,7 @@ import 'fake-indexeddb/auto';
 import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { removeMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
-import {
-  DOCUMENT_ID,
-  WORKSPACE_ID,
-} from './version-xlsx-reimport-trust-constants';
+import { DOCUMENT_ID, WORKSPACE_ID } from './version-xlsx-reimport-trust-constants';
 import { expectNoMetadataWarning } from './version-xlsx-reimport-trust-metadata';
 import { installXlsxReimportTrustVersionStoreHooks } from './version-xlsx-reimport-trust-setup';
 import { expectImportBranchCounts } from './version-xlsx-reimport-trust-version-store';

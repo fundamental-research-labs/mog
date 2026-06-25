@@ -4,10 +4,7 @@ import type { MogWorkbookVersionXlsxMetadataTrustReason } from '../version/xlsx-
 import { DOCUMENT_ID, WORKSPACE_ID } from './version-xlsx-reimport-trust-constants';
 import { expectMetadataWarning } from './version-xlsx-reimport-trust-metadata';
 import { expectImportBranchCounts } from './version-xlsx-reimport-trust-version-store';
-import {
-  importXlsxWithVersioning,
-  versioning,
-} from './version-xlsx-reimport-trust-workbook';
+import { importXlsxWithVersioning, versioning } from './version-xlsx-reimport-trust-workbook';
 
 export async function expectUntrustedNewRootReimport(input: {
   readonly xlsxBytes: Uint8Array;

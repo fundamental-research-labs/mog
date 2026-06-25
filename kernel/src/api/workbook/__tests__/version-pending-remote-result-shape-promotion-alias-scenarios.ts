@@ -4,11 +4,7 @@ import {
   hasAttachedPendingRemotePromotionService,
   promotePendingRemoteWorkbookVersion,
 } from '../version/pending/remote';
-import {
-  COMMIT_ID,
-  SEGMENT_ID,
-  authorizedCtx,
-} from './version-pending-remote-test-utils';
+import { COMMIT_ID, SEGMENT_ID, authorizedCtx } from './version-pending-remote-test-utils';
 
 export function registerPendingRemoteResultShapePromotionAliasScenarios(): void {
   it('discovers the top-level promotion alias and maps the public result shape', async () => {

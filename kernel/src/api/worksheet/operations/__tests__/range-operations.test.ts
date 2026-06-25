@@ -84,9 +84,7 @@ describe('clearRange', () => {
 
     const captureOptions = {
       ...options,
-      directEditRanges: [
-        { sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 },
-      ],
+      directEditRanges: [{ sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
     };
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
       SHEET_ID,
@@ -214,24 +212,8 @@ describe('setRange', () => {
       { row: 0, col: 0, input: { kind: 'parse', text: 'start' } },
       { row: 1, col: 1, input: { kind: 'clear' } },
     ]);
-    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
-      1,
-      SHEET_ID,
-      0,
-      1,
-      2026,
-      1,
-      1,
-    );
-    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
-      2,
-      SHEET_ID,
-      1,
-      0,
-      2026,
-      2,
-      1,
-    );
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(1, SHEET_ID, 0, 1, 2026, 1, 1);
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(2, SHEET_ID, 1, 0, 2026, 2, 1);
     expect(ctx.order).toEqual([
       'await:allSheets',
       'setCellsByPosition',

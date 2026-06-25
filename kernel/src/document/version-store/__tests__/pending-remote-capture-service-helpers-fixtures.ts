@@ -49,9 +49,7 @@ export async function createPendingRemoteCaptureFixture(): Promise<PendingRemote
   };
 }
 
-export async function createPendingRemoteCaptureFixtureWithSegmentStore(): Promise<
-  PendingRemoteCaptureFixtureWithSegmentStore
-> {
+export async function createPendingRemoteCaptureFixtureWithSegmentStore(): Promise<PendingRemoteCaptureFixtureWithSegmentStore> {
   const fixture = await createPendingRemoteCaptureFixture();
   const pendingRemoteSegmentStore = await fixture.provider.openPendingRemoteSegmentStore(
     fixture.namespace,

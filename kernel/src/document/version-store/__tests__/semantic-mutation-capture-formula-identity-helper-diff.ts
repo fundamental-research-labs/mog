@@ -2,9 +2,7 @@ import type {
   SemanticWorkbookDiff,
   SemanticWorkbookStateEnvelope,
 } from '../../../bridges/compute/compute-types.gen';
-import {
-  semanticDigest,
-} from './semantic-mutation-capture-formula-test-helpers';
+import { semanticDigest } from './semantic-mutation-capture-formula-test-helpers';
 
 export function canonicalFormulaIdentityDiff(
   beforeEnvelope: SemanticWorkbookStateEnvelope,

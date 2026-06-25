@@ -54,8 +54,7 @@ export function normalizeVersionSurfacePendingProviderWritesStatus(
   const providerDiagnostics = dedupeDiagnostics(
     [...status.unsafeReasons, ...status.diagnostics].filter(isProviderWriteDiagnostic),
   );
-  const pendingProviderWrites =
-    status.pendingProviderWrites || providerDiagnostics.length > 0;
+  const pendingProviderWrites = status.pendingProviderWrites || providerDiagnostics.length > 0;
   if (!pendingProviderWrites) return status;
   const fallback =
     providerDiagnostics.length === 0
@@ -68,7 +67,11 @@ export function normalizeVersionSurfacePendingProviderWritesStatus(
   return {
     ...status,
     pendingProviderWrites: true,
-    unsafeReasons: dedupeDiagnostics([...status.unsafeReasons, ...providerDiagnostics, ...fallback]),
+    unsafeReasons: dedupeDiagnostics([
+      ...status.unsafeReasons,
+      ...providerDiagnostics,
+      ...fallback,
+    ]),
     diagnostics: dedupeDiagnostics([...status.diagnostics, ...providerDiagnostics, ...fallback]),
   };
 }

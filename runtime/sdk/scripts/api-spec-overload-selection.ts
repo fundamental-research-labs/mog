@@ -36,9 +36,7 @@ function pickAgentFriendlyOverload(
   return overloads[0]!;
 }
 
-function pickBroadestOverload(
-  overloads: readonly InterfaceTypeElement[],
-): InterfaceTypeElement {
+function pickBroadestOverload(overloads: readonly InterfaceTypeElement[]): InterfaceTypeElement {
   return overloads.reduce((best, candidate) =>
     overloadGeneralityScore(candidate) > overloadGeneralityScore(best) ? candidate : best,
   );
@@ -46,8 +44,7 @@ function pickBroadestOverload(
 
 function usesBroadPublicRefOverload(interfaceName: string, memberName: string): boolean {
   return (
-    interfaceName === 'WorkbookVersion' &&
-    (memberName === 'readRef' || memberName === 'getRef')
+    interfaceName === 'WorkbookVersion' && (memberName === 'readRef' || memberName === 'getRef')
   );
 }
 

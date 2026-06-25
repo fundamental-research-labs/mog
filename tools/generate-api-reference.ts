@@ -367,8 +367,7 @@ function pickApiReferenceMethod(
 
 function usesBroadPublicRefOverload(interfaceName: string, methodName: string): boolean {
   return (
-    interfaceName === 'WorkbookVersion' &&
-    (methodName === 'readRef' || methodName === 'getRef')
+    interfaceName === 'WorkbookVersion' && (methodName === 'readRef' || methodName === 'getRef')
   );
 }
 

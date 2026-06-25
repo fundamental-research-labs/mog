@@ -55,10 +55,7 @@ import type {
   SpreadsheetWorkbookSession,
   SpreadsheetWorkbookStatus,
 } from './public-types';
-import {
-  loadDocumentForSource,
-  materializeSpreadsheetWorkbook,
-} from './shell-documents';
+import { loadDocumentForSource, materializeSpreadsheetWorkbook } from './shell-documents';
 import type {
   RegisteredSpreadsheetAppBridge,
   SpreadsheetAppDocumentHandle,

@@ -17,4 +17,3 @@ export interface WorksheetRange {
   /** A1 address relative to the worksheet, e.g. "A1:D10". */
   address: string;
 }
-

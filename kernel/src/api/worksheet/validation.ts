@@ -496,8 +496,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
         this.sheetId,
         a,
       );
-      const groupId =
-        schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
+      const groupId = schemas.length > 1 ? this._validationGroupId('validation.remove') : undefined;
       for (const schema of schemas) {
         await this.deleteSchemaAndEmit(schema, 'validation.remove', groupId);
       }

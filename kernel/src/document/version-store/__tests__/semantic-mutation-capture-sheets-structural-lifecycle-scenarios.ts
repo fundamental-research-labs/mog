@@ -7,9 +7,7 @@ import {
   expectedSheetStructuralLifecycleMutationSegments,
   expectedSheetStructuralLifecycleSemanticPayload,
 } from './semantic-mutation-capture-sheets-structural-lifecycle-expectations';
-import {
-  recordSheetStructuralLifecycleMutations,
-} from './semantic-mutation-capture-sheets-structural-lifecycle-mutations';
+import { recordSheetStructuralLifecycleMutations } from './semantic-mutation-capture-sheets-structural-lifecycle-mutations';
 
 export function describeSheetStructuralLifecycleScenarios(): void {
   it('captures sheet create, remove, copy, and move structural changes', async () => {

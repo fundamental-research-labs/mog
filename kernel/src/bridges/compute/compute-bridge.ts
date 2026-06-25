@@ -2010,7 +2010,7 @@ export class ComputeBridge extends GeneratedBridgeBase {
           sheetId,
           ranges,
           format: { numberFormat: 'M/d/yyyy' },
-      }),
+        }),
       ranges.map(([row, col]) => ({ sheetId, row, col })),
       options,
     );

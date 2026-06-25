@@ -105,10 +105,7 @@ export type VersionAuthor = {
 export type VersionDiagnosticSeverity = 'info' | 'warning' | 'error';
 
 export interface VersionDiagnostic {
-  readonly code:
-    | VersionSurfaceDiagnosticCode
-    | WorkbookVersionDiagnosticCode
-    | (string & {});
+  readonly code: VersionSurfaceDiagnosticCode | WorkbookVersionDiagnosticCode | (string & {});
   readonly severity: VersionDiagnosticSeverity;
   readonly message: string;
   readonly owner?: string;
@@ -153,12 +150,25 @@ export type VersionCapabilityError = {
 export type VersionError =
   | VersionCapabilityError
   | { readonly code: 'not_found'; readonly target: string; readonly reason: string }
-  | { readonly code: 'stale_revision'; readonly expectedRevision: number; readonly actualRevision: number }
+  | {
+      readonly code: 'stale_revision';
+      readonly expectedRevision: number;
+      readonly actualRevision: number;
+    }
   | { readonly code: 'stale_head'; readonly expectedHeadId: string; readonly actualHeadId: string }
-  | { readonly code: 'invalid_state'; readonly state: string; readonly allowed: readonly string[]; readonly reason: string }
+  | {
+      readonly code: 'invalid_state';
+      readonly state: string;
+      readonly allowed: readonly string[];
+      readonly reason: string;
+    }
   | { readonly code: 'invalid_branch_name'; readonly branchName: string; readonly reason: string }
   | { readonly code: 'redaction_blocked'; readonly reason: string }
-  | { readonly code: 'target_unavailable'; readonly target: string; readonly diagnostics: readonly VersionDiagnostic[] };
+  | {
+      readonly code: 'target_unavailable';
+      readonly target: string;
+      readonly diagnostics: readonly VersionDiagnostic[];
+    };
 
 export type VersionResult<T> =
   | { readonly ok: true; readonly value: T }

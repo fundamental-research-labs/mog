@@ -690,7 +690,9 @@ export function createConsoleAPI(
     }
   }
 
-  function getWorkbookVersionReadFacade(workbook: unknown): DevToolsWorkbookVersionReadFacade | null {
+  function getWorkbookVersionReadFacade(
+    workbook: unknown,
+  ): DevToolsWorkbookVersionReadFacade | null {
     const version = (workbook as { version?: unknown } | null | undefined)?.version as
       | Partial<DevToolsWorkbookVersionReadFacade>
       | null

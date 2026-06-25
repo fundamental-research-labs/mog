@@ -1,9 +1,6 @@
 import { expect, it, jest } from '@jest/globals';
 
-import {
-  createVersion,
-  ROOT_COMMIT_ID,
-} from './version-diff-selector-test-utils';
+import { createVersion, ROOT_COMMIT_ID } from './version-diff-selector-test-utils';
 
 export function registerSelectorRedactionCompletenessDiagnosticScenarios(): void {
   it.each([

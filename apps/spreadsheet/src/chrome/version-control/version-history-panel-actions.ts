@@ -73,10 +73,7 @@ import {
 } from './version-history-panel-data';
 import { readCurrentMergeExpectedTargetHead } from './version-history-panel-merge-target-head';
 
-export type {
-  VersionMergePreviewState,
-  VersionMergeResolutionSelections,
-} from './merge';
+export type { VersionMergePreviewState, VersionMergeResolutionSelections } from './merge';
 
 type UseVersionHistoryPanelActionsInput = {
   readonly workbook: VersionHistoryWorkbook;
@@ -108,8 +105,9 @@ export function useVersionHistoryPanelActions({
   const activeActionRef = useRef<VersionPanelActionRun | undefined>(undefined);
   const latestDataRef = useRef<VersionHistoryData | undefined>(data);
   const commitDirtyRefreshFenceRef = useRef<CommitDirtyRefreshFence | undefined>(undefined);
-  const [commitDirtyRefreshFence, setCommitDirtyRefreshFence] =
-    useState<CommitDirtyRefreshFence | undefined>(undefined);
+  const [commitDirtyRefreshFence, setCommitDirtyRefreshFence] = useState<
+    CommitDirtyRefreshFence | undefined
+  >(undefined);
   latestDataRef.current = data;
 
   const actionBusy = actionState.status === 'running';
@@ -305,15 +303,10 @@ export function useVersionHistoryPanelActions({
     setActionState((current) => (current.status === 'running' ? { status: 'idle' } : current));
   }, []);
 
-  const mergeContextStillCurrent = useCallback(
-    (target: VersionMergeTarget, source: VersionRef) => {
-      const latest = latestMergeContextRef.current;
-      return (
-        mergeTargetsMatch(latest.target, target) && mergeSourcesMatch(latest.source, source)
-      );
-    },
-    [],
-  );
+  const mergeContextStillCurrent = useCallback((target: VersionMergeTarget, source: VersionRef) => {
+    const latest = latestMergeContextRef.current;
+    return mergeTargetsMatch(latest.target, target) && mergeSourcesMatch(latest.source, source);
+  }, []);
 
   useEffect(() => {
     if (mergeSources.length === 0) {
@@ -331,14 +324,17 @@ export function useVersionHistoryPanelActions({
     }
   }, [cancelActiveMergeReadAction, mergeSourceRefName, mergeSources]);
 
-  const setMergeSourceRefName = useCallback((refName: string) => {
-    if (refName === mergeSourceRefName) return;
-    cancelActiveMergeReadAction();
-    setMergeSourceRefNameState(refName);
-    setMergePreviewState({ kind: 'idle' });
-    setMergeResolutionSelections({});
-    restoredMergeReviewDraftKeyRef.current = undefined;
-  }, [cancelActiveMergeReadAction, mergeSourceRefName]);
+  const setMergeSourceRefName = useCallback(
+    (refName: string) => {
+      if (refName === mergeSourceRefName) return;
+      cancelActiveMergeReadAction();
+      setMergeSourceRefNameState(refName);
+      setMergePreviewState({ kind: 'idle' });
+      setMergeResolutionSelections({});
+      restoredMergeReviewDraftKeyRef.current = undefined;
+    },
+    [cancelActiveMergeReadAction, mergeSourceRefName],
+  );
 
   useEffect(() => {
     if (
@@ -712,10 +708,7 @@ export function useVersionHistoryPanelActions({
     const dirtyRefreshFenceData = data;
     const targetRef = currentMergeTarget.refName;
 
-    const input = applyMergeInputFromPreview(
-      mergePreviewState.result,
-      mergeResolutionSelections,
-    );
+    const input = applyMergeInputFromPreview(mergePreviewState.result, mergeResolutionSelections);
     if (!input) {
       cancelAction(action);
       return;
@@ -827,11 +820,7 @@ export function useVersionHistoryPanelActions({
     (conflictId: string, optionId: string) => {
       setMergeResolutionSelections((current) => {
         const next = { ...current, [conflictId]: optionId };
-        if (
-          mergePreviewState.kind === 'result' &&
-          currentMergeTarget &&
-          selectedMergeSource
-        ) {
+        if (mergePreviewState.kind === 'result' && currentMergeTarget && selectedMergeSource) {
           writeMergeReviewDraft(currentMergeTarget, selectedMergeSource, {
             input: mergePreviewState.input,
             selections: next,

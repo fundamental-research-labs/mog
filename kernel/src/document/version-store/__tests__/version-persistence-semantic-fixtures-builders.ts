@@ -23,6 +23,8 @@ export function metadataChange(input: {
   };
 }
 
-export function semanticObjectValue(fields: readonly { readonly key: string; readonly value: unknown }[]) {
+export function semanticObjectValue(
+  fields: readonly { readonly key: string; readonly value: unknown }[],
+) {
   return { kind: 'object', fields };
 }

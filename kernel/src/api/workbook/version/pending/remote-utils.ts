@@ -1,6 +1,4 @@
-export function isPublicPayloadValue(
-  value: unknown,
-): value is string | number | boolean | null {
+export function isPublicPayloadValue(value: unknown): value is string | number | boolean | null {
   return value === null || ['string', 'number', 'boolean'].includes(typeof value);
 }
 

@@ -2,11 +2,7 @@ import {
   REQUIRED_FIRST_SLICE_DOMAIN_IDS,
   validateDomainSupportManifest,
 } from '../domain-support-manifest-validator';
-import {
-  domainRow,
-  freshManifest,
-  NOW,
-} from './domain-support-manifest-validator-fixtures';
+import { domainRow, freshManifest, NOW } from './domain-support-manifest-validator-fixtures';
 
 export function registerPolicyOperationScenarios(): void {
   it('blocks durable operations when policy write admission is block', () => {

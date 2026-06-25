@@ -144,7 +144,9 @@ export function registerSyncBatchStatusStoreMemoryPersistenceTests(): void {
         durability: 'snapshot-test-double',
       });
       await expect(
-        (await reloadedProvider.openSyncBatchStatusStore()).readByBatchStatusId(input.batchStatusId),
+        (await reloadedProvider.openSyncBatchStatusStore()).readByBatchStatusId(
+          input.batchStatusId,
+        ),
       ).resolves.toMatchObject({
         status: 'found',
         record: { state: 'complete', terminal: { status: 'complete' } },

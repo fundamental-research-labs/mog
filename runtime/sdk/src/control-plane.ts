@@ -111,7 +111,9 @@ export function observeControlPlaneShadow(
 export function createInertControlPlane(): ControlPlaneClient {
   return Object.freeze({
     entrypoints: controlPlaneEntrypoints,
-    async readCapabilityGates(request?: ControlPlaneReadRequest): Promise<ControlPlaneReadSnapshot> {
+    async readCapabilityGates(
+      request?: ControlPlaneReadRequest,
+    ): Promise<ControlPlaneReadSnapshot> {
       return Object.freeze({
         status: 'disabled',
         scope: request?.scope,

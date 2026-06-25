@@ -18,10 +18,7 @@ export function registerPendingSyncBatchAdmissionScenarios(): void {
     const store = await provider.openPendingRemoteSegmentStore(namespace);
     const fixture = await pendingSegmentFixture(namespace);
     await persistAndReservePendingSegment(graph, store, fixture);
-    const batchStatusId = await reserveSyncBatchStatus(
-      provider,
-      fixture.input.operationContext,
-    );
+    const batchStatusId = await reserveSyncBatchStatus(provider, fixture.input.operationContext);
     const wb = createWorkbook({ versioning: { provider } });
 
     await expect(wb.version.checkout({ kind: 'head' })).resolves.toMatchObject({

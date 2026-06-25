@@ -9,10 +9,7 @@ import {
   updateFirstByNamespace,
 } from './provider-indexeddb-recovery-test-utils';
 import { createIndexedDbVersionStoreProvider } from '../provider-indexeddb/backend';
-import {
-  COMMIT_INDEXES_STORE,
-  PARENT_INDEXES_STORE,
-} from '../provider-indexeddb-schema';
+import { COMMIT_INDEXES_STORE, PARENT_INDEXES_STORE } from '../provider-indexeddb-schema';
 import { namespaceForDocumentScope } from '../provider';
 
 describe('IndexedDB provider recovery hardening: derived indexes', () => {

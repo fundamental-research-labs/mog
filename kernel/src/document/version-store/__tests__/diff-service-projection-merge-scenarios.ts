@@ -1,10 +1,7 @@
 import type { VersionDiffEntry } from '@mog-sdk/contracts/api';
 
 import { createWorkbookVersionDiffService } from '../diff-service';
-import {
-  graphWithMergeTarget,
-  sheetAddressDisplay,
-} from './diff-service-fixtures';
+import { graphWithMergeTarget, sheetAddressDisplay } from './diff-service-fixtures';
 
 export function registerDiffServiceProjectionMergeScenarios(): void {
   it('projects materialized merge slices and filters role-local no-op changes', async () => {

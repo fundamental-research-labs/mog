@@ -15,10 +15,7 @@ import {
   readRootSemanticChangeSetPayload,
   readRootSnapshotRootRecord,
 } from './version-xlsx-import-root-test-utils';
-import {
-  decodeUtf8,
-  readZipArchive,
-} from './xlsx-clean-export-package-zip-test-utils';
+import { decodeUtf8, readZipArchive } from './xlsx-clean-export-package-zip-test-utils';
 
 type WorkbookWithMirror = Workbook & { readonly mirror: MirrorReadView };
 

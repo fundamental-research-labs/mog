@@ -1,7 +1,4 @@
-import {
-  VersionObjectDigestError,
-  type ObjectDigest,
-} from '../object-digest';
+import { VersionObjectDigestError, type ObjectDigest } from '../object-digest';
 
 export const HEX_A = 'aa'.repeat(32);
 export const HEX_B = '11'.repeat(32);

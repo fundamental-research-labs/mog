@@ -1,7 +1,4 @@
-import type {
-  WorkbookCommitCompletenessDiagnostic,
-  WorkbookCommitStoreDiagnostic,
-} from './types';
+import type { WorkbookCommitCompletenessDiagnostic, WorkbookCommitStoreDiagnostic } from './types';
 import { invalidPayloadDiagnostic } from './payload-diagnostics';
 import { isPlainRecord } from './payload-guards';
 import { parseOptionalString, parseString } from './payload-scalars';

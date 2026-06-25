@@ -23,16 +23,14 @@ export const VERSION_COMMIT_SAFE_MESSAGES: Readonly<Record<string, string>> = {
   VERSION_STORE_READ_ONLY: 'The attached version store is read-only for this document.',
   VERSION_REF_CONFLICT: 'The version ref changed while the commit was in progress.',
   VERSION_MISSING_CHANGE_SET: 'The version commit has no eligible captured change set.',
-  VERSION_MISSING_SNAPSHOT_ROOT:
-    'The version commit is missing its materializable snapshot root.',
+  VERSION_MISSING_SNAPSHOT_ROOT: 'The version commit is missing its materializable snapshot root.',
   VERSION_MISSING_MUTATION_SEGMENT: 'The version commit is missing a captured mutation segment.',
   VERSION_DIGEST_MISMATCH: 'A version commit object digest does not match its canonical bytes.',
   VERSION_WRONG_OBJECT_KIND: 'A version commit dependency has the wrong object kind.',
   VERSION_UNSUPPORTED_SCHEMA: 'A version commit dependency uses an unsupported schema.',
   VERSION_REDACTION_VIOLATION:
     'The version commit could not prove required redaction before storage.',
-  VERSION_ANNOTATION_WRITE_FAILED:
-    'The version commit annotation could not be written durably.',
+  VERSION_ANNOTATION_WRITE_FAILED: 'The version commit annotation could not be written durably.',
   VERSION_UNMATERIALIZABLE_COMMIT:
     'The version commit is not materializable by the attached service.',
   VERSION_INVALID_COMMIT_PAYLOAD:

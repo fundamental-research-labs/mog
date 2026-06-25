@@ -7,11 +7,7 @@ import type {
   WorkbookCommit,
   WorkbookCommitStoreDiagnostic,
 } from '../commit-store';
-import type {
-  ObjectDigest,
-  VersionDependencyRef,
-  WorkbookCommitId,
-} from '../object-digest';
+import type { ObjectDigest, VersionDependencyRef, WorkbookCommitId } from '../object-digest';
 import type {
   InMemoryVersionObjectStore,
   VersionGraphNamespace,

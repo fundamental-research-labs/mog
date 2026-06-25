@@ -1,9 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import type {
-  createInMemoryVersionStoreProvider,
-  VersionDocumentScope,
-} from '../provider';
+import type { createInMemoryVersionStoreProvider, VersionDocumentScope } from '../provider';
 
 export const DIFF_SERVICE_DOCUMENT_SCOPE: VersionDocumentScope = {
   workspaceId: 'workspace-1',

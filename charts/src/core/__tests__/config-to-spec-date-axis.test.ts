@@ -833,13 +833,27 @@ describe('configToSpec imported Excel date category axes', () => {
 
     const gapSpec = asUnitSpec(
       configToSpec(
-        { type: 'line', anchorRow: 0, anchorCol: 0, width: 480, height: 75, displayBlanksAs: 'gap' },
+        {
+          type: 'line',
+          anchorRow: 0,
+          anchorCol: 0,
+          width: 480,
+          height: 75,
+          displayBlanksAs: 'gap',
+        },
         data,
       ),
     );
     const zeroSpec = asUnitSpec(
       configToSpec(
-        { type: 'line', anchorRow: 0, anchorCol: 0, width: 480, height: 75, displayBlanksAs: 'zero' },
+        {
+          type: 'line',
+          anchorRow: 0,
+          anchorCol: 0,
+          width: 480,
+          height: 75,
+          displayBlanksAs: 'zero',
+        },
         data,
       ),
     );

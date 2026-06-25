@@ -2,11 +2,7 @@ import { expect, it, jest } from '@jest/globals';
 
 import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
 
-import {
-  createVersion,
-  READ_REVISION,
-  ROOT_COMMIT_ID,
-} from './version-diff-selector-test-utils';
+import { createVersion, READ_REVISION, ROOT_COMMIT_ID } from './version-diff-selector-test-utils';
 
 export function registerSelectorRedactionDiffEntryScenarios(): void {
   it('preserves redacted diff entries without exposing hidden domain metadata', async () => {

@@ -1,11 +1,7 @@
 import { parseRefName } from './ref-name';
 import { refAlreadyExists } from './ref-store-conflicts';
 import { diagnostic, failure } from './ref-store-diagnostics';
-import {
-  cloneLiveRefRecord,
-  nextProviderEpoch,
-  nextRefVersion,
-} from './ref-store-revisions';
+import { cloneLiveRefRecord, nextProviderEpoch, nextRefVersion } from './ref-store-revisions';
 import { refTombstoned, validateTombstoneReuseMetadata } from './ref-store-tombstones';
 import type {
   CreateBranchInput,
@@ -13,14 +9,8 @@ import type {
   InitializeMainInput,
   RefMutationResult,
 } from './ref-store-types';
-import {
-  parseCommitForResult,
-  parseRefNameForResult,
-} from './ref-store-validation';
-import {
-  createLiveMemoryRef,
-  type InMemoryRefStoreState,
-} from './ref-store-memory-state';
+import { parseCommitForResult, parseRefNameForResult } from './ref-store-validation';
+import { createLiveMemoryRef, type InMemoryRefStoreState } from './ref-store-memory-state';
 
 export function initializeMemoryMain(
   state: InMemoryRefStoreState,
@@ -76,11 +66,7 @@ export function createMemoryBranch(
 
   if (parsedName.name === 'main') {
     return failure('protectedRef', 'main can only be created by root/import initialization.', [
-      diagnostic(
-        'protectedRef',
-        'main can only be created by root/import initialization.',
-        'main',
-      ),
+      diagnostic('protectedRef', 'main can only be created by root/import initialization.', 'main'),
     ]);
   }
 

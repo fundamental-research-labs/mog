@@ -628,9 +628,7 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     await screen.findByText('Calculated forecast');
     await firstRender.user.click(screen.getByTestId(mergePreviewButtonTestId()));
     await waitFor(() => expect(merge).toHaveBeenCalledTimes(1));
-    await firstRender.user.click(
-      screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }),
-    );
+    await firstRender.user.click(screen.getByRole('radio', { name: SOURCE_RESOLUTION_RADIO_NAME }));
     await waitFor(() => expect(screen.getByTestId(mergeApplyButtonTestId())).toBeEnabled());
 
     firstRender.unmount();

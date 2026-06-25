@@ -67,11 +67,7 @@ export async function getWorkbookVersionFacadeReviewDiff(
   ctx: DocumentContext,
   input: VersionGetReviewDiffInput,
 ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
-  const gateDiagnostics = readWorkbookVersionFacadeGate(
-    ctx,
-    'getReviewDiff',
-    'version:reviewRead',
-  );
+  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'getReviewDiff', 'version:reviewRead');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getReviewDiff', gateDiagnostics);
   return getWorkbookVersionReviewDiff(ctx, input);
 }

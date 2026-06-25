@@ -1,7 +1,4 @@
-import {
-  VERSION_GRAPH_MAIN_REF,
-  createInMemoryVersionGraphStore,
-} from '../graph';
+import { VERSION_GRAPH_MAIN_REF, createInMemoryVersionGraphStore } from '../graph';
 import {
   AUTHOR,
   NAMESPACE,

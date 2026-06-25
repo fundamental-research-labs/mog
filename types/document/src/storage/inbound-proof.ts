@@ -50,10 +50,7 @@ export type ProviderAuthorityProofKind =
   | 'handoff-bound-token'
   | 'signed-provider-message'
   | 'trusted-sidecar-session';
-export type ProviderAuthorityProofAlgorithm =
-  | 'hmac-sha256'
-  | 'ed25519'
-  | 'trusted-session-mac';
+export type ProviderAuthorityProofAlgorithm = 'hmac-sha256' | 'ed25519' | 'trusted-session-mac';
 export type ProviderAuthorityProofAudienceKind =
   | 'provider-inbound-update'
   | 'collaboration-inbound-update'
@@ -129,7 +126,9 @@ export function providerAuthorityProofCanonicalPayloadHashAlgorithm(
 }
 
 export function providerAuthorityProofCanonicalPayloadHash(proof: ProviderAuthorityProof): string {
-  return isProviderAuthorityProofV2(proof) ? proof.canonicalPayload.value : proof.canonicalPayloadHash;
+  return isProviderAuthorityProofV2(proof)
+    ? proof.canonicalPayload.value
+    : proof.canonicalPayloadHash;
 }
 
 export function providerAuthorityProofCoveredFields(

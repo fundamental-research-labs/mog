@@ -383,10 +383,7 @@ export function directEditKey(edit: DirectEditPosition): string {
   return `${edit.sheetId}\u0000${edit.row}\u0000${edit.col}`;
 }
 
-export function isInDirectEditRange(
-  cell: CellChange,
-  ranges: readonly DirectEditRange[],
-): boolean {
+export function isInDirectEditRange(cell: CellChange, ranges: readonly DirectEditRange[]): boolean {
   if (!cell.position) return false;
   return ranges.some(
     (range) =>

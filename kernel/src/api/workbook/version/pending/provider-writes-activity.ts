@@ -10,11 +10,7 @@ import type {
   PublicDiagnosticData,
   VersionPendingProviderWritesStatus,
 } from './provider-writes-types';
-import {
-  isRecord,
-  isSafeCount,
-  SAFE_STATUS_REVISION_RE,
-} from './provider-writes-utils';
+import { isRecord, isSafeCount, SAFE_STATUS_REVISION_RE } from './provider-writes-utils';
 
 export function readAttachedProviderWriteActivity(
   ctx: DocumentContext,
@@ -43,9 +39,7 @@ export function readAttachedProviderWriteActivity(
   return { status: 'absent' };
 }
 
-export function hasProviderWriteActivity(
-  activity: VersionProviderWriteActivitySnapshot,
-): boolean {
+export function hasProviderWriteActivity(activity: VersionProviderWriteActivitySnapshot): boolean {
   return (
     activity.remoteSyncApplyActiveCount > 0 ||
     activity.pendingRemotePromotionActiveCount > 0 ||
@@ -101,9 +95,7 @@ function failedProviderWriteActivityRead(): ProviderWriteActivityProjection {
   };
 }
 
-function projectProviderWriteActivitySnapshot(
-  value: unknown,
-): ProviderWriteActivityProjection {
+function projectProviderWriteActivitySnapshot(value: unknown): ProviderWriteActivityProjection {
   if (!isRecord(value)) {
     return malformedProviderWriteActivitySnapshot('notObject');
   }
@@ -131,9 +123,7 @@ function projectProviderWriteActivitySnapshot(
   };
 }
 
-function malformedProviderWriteActivitySnapshot(
-  reason: string,
-): ProviderWriteActivityProjection {
+function malformedProviderWriteActivitySnapshot(reason: string): ProviderWriteActivityProjection {
   return {
     status: 'failed',
     data: {

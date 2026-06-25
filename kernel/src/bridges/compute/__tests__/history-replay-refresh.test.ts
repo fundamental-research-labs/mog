@@ -31,9 +31,7 @@ describe('refreshViewportsAfterHistoryReplay', () => {
     await refreshViewportsAfterHistoryReplay(
       fetchManager as never,
       makeResult({
-        dimensionChanges: [
-          { sheetId: 'sheet-1', axis: 'col', index: 18, kind: 'Set', size: 64 },
-        ],
+        dimensionChanges: [{ sheetId: 'sheet-1', axis: 'col', index: 18, kind: 'Set', size: 64 }],
         mergeChanges: [
           {
             sheetId: 'sheet-1',
@@ -44,9 +42,7 @@ describe('refreshViewportsAfterHistoryReplay', () => {
             endCol: 18,
           },
         ],
-        visibilityChanges: [
-          { sheetId: 'sheet-2', axis: 'row', index: 5, hidden: true },
-        ],
+        visibilityChanges: [{ sheetId: 'sheet-2', axis: 'row', index: 5, hidden: true }],
       }),
     );
 

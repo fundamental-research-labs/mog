@@ -4,10 +4,7 @@ import {
 } from '@mog-sdk/contracts/versioning';
 
 import { REQUIRED_FIRST_SLICE_MATRIX_ROW_IDS } from './domain-support-manifest-validator-constants';
-import {
-  validateDomainPolicyId,
-  validateRegistryMatch,
-} from './domain-support-policy-registry';
+import { validateDomainPolicyId, validateRegistryMatch } from './domain-support-policy-registry';
 import type {
   DomainSupportManifestDiagnostic,
   DomainSupportManifestValidationOptions,

@@ -1,10 +1,7 @@
 import type { WorkbookCommitId } from '../../../document/version-store/object-digest';
 import type { ProposalWorkspaceLifecycleService } from '../../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import { namespaceForDocumentScope } from '../../../document/version-store/provider';
-import {
-  DOCUMENT_SCOPE,
-  type ProposalProvider,
-} from './version-proposal-provider-fixtures';
+import { DOCUMENT_SCOPE, type ProposalProvider } from './version-proposal-provider-fixtures';
 import { commitInput, commitMain } from './version-proposal-provider-graph-fixtures';
 
 export function graphCommittingWorkspaceService(

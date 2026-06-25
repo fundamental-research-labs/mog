@@ -43,7 +43,7 @@ const DEPRECATED_SCALAR_SUPPORT_FIELDS = Object.freeze([
 
 const PUBLIC_SAFE_SINK_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const UNSAFE_PUBLIC_DIAGNOSTIC_PAYLOAD =
-  /ownerWorkstream|requiredOracles|requiredOracleByCapability|supportEvidenceByCapability|scenarioIds|reportPath|acceptedRisk|evidenceDigest|mog-internal|dev\/version-control-eval|plans\/|\/Users\/|xl\/|\.xml\b|https?:\/\/|password\s*=|token\s*=/i;
+  /ownerWorkstream|requiredOracles|requiredOracleByCapability|supportEvidenceByCapability|scenarioIds|reportPath|acceptedRisk|evidenceDigest|internalWorkstream|privateRepo|localPlan|workbookXmlPath|https?:\/\/|password\s*=|token\s*=/i;
 
 function sortedUnique(values: readonly string[]): readonly string[] {
   return [...new Set(values)].sort();

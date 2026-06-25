@@ -310,11 +310,7 @@ describe('version action availability W11 hardening', () => {
         },
       });
 
-      expectDisabled(
-        item.availability(surface),
-        item.reason,
-        'version-capability-unavailable',
-      );
+      expectDisabled(item.availability(surface), item.reason, 'version-capability-unavailable');
     }
   });
 
@@ -412,7 +408,7 @@ describe('version action availability W11 hardening', () => {
       'version.surfaceStatus.pendingProviderWrites',
     );
     const capabilityReason =
-      'Proposal is disabled by owner note /Users/private/mog-internal/plans/active/version-control.md token=private-token.';
+      'Proposal is disabled by owner note internal-workstream/version-control.md token=fixture-token.';
     const surface = createSurfaceStatus({
       dirty: {
         pendingProviderWrites: true,

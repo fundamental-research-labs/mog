@@ -15,7 +15,9 @@ export function describeCanonicalFormulaIdentityScenarios(): void {
 
     await recordCanonicalFormulaIdentityMutation(harness.capture);
 
-    const captured = expectCaptureSuccess(await harness.capture.captureNormalCommit(captureInput()));
+    const captured = expectCaptureSuccess(
+      await harness.capture.captureNormalCommit(captureInput()),
+    );
     const payload = captured.input.semanticChangeSetRecord.preimage.payload as any;
     expectFormulaIdentityStateReaderCalls(harness);
     expectCanonicalFormulaIdentityPayload(payload, harness);

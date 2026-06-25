@@ -26,8 +26,7 @@ describe('WorkbookVersion surface status lower-gate derivation', () => {
       expect(capabilityState(surface, capability)).toMatchObject({
         enabled: false,
         dependency: 'VC-09',
-        reason:
-          'Promoted version surfaces require current, clean, passing lower-gate evidence.',
+        reason: 'Promoted version surfaces require current, clean, passing lower-gate evidence.',
         retryable: true,
       });
     }

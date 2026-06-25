@@ -12,9 +12,7 @@ import {
   createCellEditNormalCommitCapture,
   initializeVersionGraph,
 } from './version-checkout-lifecycle-test-utils';
-import {
-  expectVc06SnapshotRootDomains,
-} from './version-checkout-lifecycle-vc06-snapshot-root-assertions';
+import { expectVc06SnapshotRootDomains } from './version-checkout-lifecycle-vc06-snapshot-root-assertions';
 
 export function registerVc06SnapshotRootMaterializationScenario(): void {
   it('publishes VC-06 domains from a real snapshot-root checkout into a clean active workbook facade', async () => {

@@ -14,13 +14,7 @@ export function describePersistedAlreadyMergedMaterializerScenarios(): void {
     const fixture = await createPersistedMaterializerSourceFixture('graph-already-merged');
 
     try {
-      const {
-        sourceWb,
-        initialized,
-        baseCommit,
-        oursCommit,
-        expectedTargetHead,
-      } = fixture;
+      const { sourceWb, initialized, baseCommit, oursCommit, expectedTargetHead } = fixture;
 
       const preview = await sourceWb.version.merge(
         {
@@ -56,13 +50,10 @@ export function describePersistedAlreadyMergedMaterializerScenarios(): void {
         'expected already-merged preview to expose a persisted result id and digest',
       );
 
-      const applied = await sourceWb.version.applyMerge(
-        previewMetadata,
-        {
-          targetRef: MATERIALIZER_TARGET_REF as any,
-          expectedTargetHead,
-        },
-      );
+      const applied = await sourceWb.version.applyMerge(previewMetadata, {
+        targetRef: MATERIALIZER_TARGET_REF as any,
+        expectedTargetHead,
+      });
       if (!applied.ok)
         throw new Error(`expected already-merged apply success: ${applied.error.code}`);
       expect(applied.value).toMatchObject({
@@ -99,13 +90,10 @@ export function describePersistedAlreadyMergedMaterializerScenarios(): void {
           },
         }),
       );
-      const staleTerminal = await sourceWb.version.applyMerge(
-        previewMetadata,
-        {
-          targetRef: MATERIALIZER_TARGET_REF as any,
-          expectedTargetHead,
-        },
-      );
+      const staleTerminal = await sourceWb.version.applyMerge(previewMetadata, {
+        targetRef: MATERIALIZER_TARGET_REF as any,
+        expectedTargetHead,
+      });
       if (!staleTerminal.ok) {
         throw new Error(
           `expected stale already-merged terminal result: ${staleTerminal.error.code}`,

@@ -268,10 +268,7 @@ export type ClassifiedRawSyncUpdateProvenance = Exclude<
 
 export interface DocumentByteSyncPortApplyUpdateMetadata extends SyncUpdateAdmissionMetadata {
   readonly source: 'document-sync-port';
-  readonly envelopeVersion:
-    | 'provider-inbound-update-v2'
-    | 'provenance-only'
-    | 'classified-raw';
+  readonly envelopeVersion: 'provider-inbound-update-v2' | 'provenance-only' | 'classified-raw';
 }
 
 /**

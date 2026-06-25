@@ -46,7 +46,9 @@ export function mapApplyMergeWriteResult(
 
   if (TERMINAL_WRITE_STATUSES.has(String(value.status))) {
     const commit = mapWorkbookCommitRef(value.commitRef ?? value.commit);
-    const diagnostics = Array.isArray(value.diagnostics) ? mapWriteDiagnostics(value.diagnostics) : [];
+    const diagnostics = Array.isArray(value.diagnostics)
+      ? mapWriteDiagnostics(value.diagnostics)
+      : [];
     const identityDiagnostics = terminalWriteIdentityDiagnostics(
       value.status,
       metadata,
@@ -111,7 +113,9 @@ export function mapApplyMergeWriteResult(
   }
 
   const commit = mapWorkbookCommitRef(value.commitRef ?? value.commit);
-  const diagnostics = Array.isArray(value.diagnostics) ? mapWriteDiagnostics(value.diagnostics) : [];
+  const diagnostics = Array.isArray(value.diagnostics)
+    ? mapWriteDiagnostics(value.diagnostics)
+    : [];
   const identityDiagnostics = appliedWriteIdentityDiagnostics(
     metadata,
     plan,

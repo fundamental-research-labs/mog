@@ -10,10 +10,7 @@ import {
 } from '../registry';
 import { parseWorkbookCommitId } from '../object-digest';
 import { hasOnlyKeys, isPlainRecord } from './internal-json';
-import type {
-  RegistryRecordRead,
-  StoredRegistryEnvelope,
-} from './internal-records';
+import type { RegistryRecordRead, StoredRegistryEnvelope } from './internal-records';
 
 export async function decodeRegistryEnvelope(
   value: unknown,

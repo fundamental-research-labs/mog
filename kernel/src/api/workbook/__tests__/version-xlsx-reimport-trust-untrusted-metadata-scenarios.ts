@@ -11,9 +11,7 @@ import {
 
 export function registerUntrustedMetadataReimportScenarios(): void {
   it('fails closed for a real copied sidecar from another document', async () => {
-    await expectUntrustedNewRootReimport(
-      await createCopiedSidecarFromAnotherDocumentScenario(),
-    );
+    await expectUntrustedNewRootReimport(await createCopiedSidecarFromAnotherDocumentScenario());
   });
 
   it.each(UNTRUSTED_METADATA_CASES)('fails closed for $name metadata', async ({ reason, xlsx }) => {

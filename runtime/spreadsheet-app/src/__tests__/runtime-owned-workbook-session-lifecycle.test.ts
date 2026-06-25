@@ -268,11 +268,10 @@ test('spreadsheet app shell document loading defers default versioning for impor
     },
   } as never;
 
-  const loaded = await loadDocumentForSource(
-    shell,
-    'runtime-shell-default-versioning-import-doc',
-    { kind: 'xlsx-bytes', bytes: new Uint8Array([1, 2, 3]) },
-  );
+  const loaded = await loadDocumentForSource(shell, 'runtime-shell-default-versioning-import-doc', {
+    kind: 'xlsx-bytes',
+    bytes: new Uint8Array([1, 2, 3]),
+  });
 
   await loaded.handle.workbook();
 

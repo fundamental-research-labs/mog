@@ -728,15 +728,7 @@ export async function setDateValue(
   options?: MutationAdmissionOptions,
 ): Promise<void> {
   await awaitAllSheetsBeforeCellWrite(ctx);
-  await ctx.computeBridge.setDateValue(
-    sheetId,
-    row,
-    col,
-    date.year,
-    date.month,
-    date.day,
-    options,
-  );
+  await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day, options);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 

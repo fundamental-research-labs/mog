@@ -22,8 +22,7 @@ export async function applyPersistedCleanMergeArtifactAfterReopen(
       expectedTargetHead,
     },
   );
-  if (!applied.ok)
-    throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
+  if (!applied.ok) throw new Error(`expected persisted clean apply success: ${applied.error.code}`);
   expect(applied.value).toMatchObject({
     status: 'applied',
     ours: oursCommit.id,

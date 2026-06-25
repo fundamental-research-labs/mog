@@ -278,8 +278,6 @@ async function expectDiffContainsValue(
   const diff = await wb.version.diff(base, target);
   if (!diff.ok) throw new Error(`expected ${label} success: ${diff.error.code}`);
   expect(
-    diff.value.items.some(
-      (entry) => entry.after.kind === 'value' && entry.after.value === value,
-    ),
+    diff.value.items.some((entry) => entry.after.kind === 'value' && entry.after.value === value),
   ).toBe(true);
 }

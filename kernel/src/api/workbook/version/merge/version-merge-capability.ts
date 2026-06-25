@@ -1,6 +1,4 @@
-export {
-  VERSION_CAPABILITY_KEYS,
-} from './version-merge-capability-constants';
+export { VERSION_CAPABILITY_KEYS } from './version-merge-capability-constants';
 export type {
   VersionMergePublicCapability,
   VersionMergePublicOperation,

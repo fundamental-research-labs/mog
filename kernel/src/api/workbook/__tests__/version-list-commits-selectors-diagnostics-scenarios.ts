@@ -1,7 +1,4 @@
-import {
-  createFakeGraphStore,
-  createVersion,
-} from './version-list-commits-selectors-test-utils';
+import { createFakeGraphStore, createVersion } from './version-list-commits-selectors-test-utils';
 import {
   expectInvalidRefDiagnostic,
   expectMalformedNextPageTokenDiagnostic,

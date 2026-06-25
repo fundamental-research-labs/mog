@@ -43,7 +43,9 @@ export function semanticRecord(input: {
   };
 }
 
-export function semanticObject(fields: readonly { readonly key: string; readonly value: unknown }[]) {
+export function semanticObject(
+  fields: readonly { readonly key: string; readonly value: unknown }[],
+) {
   return {
     kind: 'object',
     fields: fields.map((field) => ({ key: field.key, value: field.value })),

@@ -1,11 +1,7 @@
 import { expect, it } from '@jest/globals';
 
 import { WorkbookVersionImpl } from '../version';
-import {
-  BASE_COMMIT_ID,
-  OURS_COMMIT_ID,
-  THEIRS_COMMIT_ID,
-} from './version-merge-core-test-utils';
+import { BASE_COMMIT_ID, OURS_COMMIT_ID, THEIRS_COMMIT_ID } from './version-merge-core-test-utils';
 
 export function registerVersionMergeCoreAvailabilityScenarios(): void {
   it('blocks without fabricating a preview when no merge service is attached', async () => {

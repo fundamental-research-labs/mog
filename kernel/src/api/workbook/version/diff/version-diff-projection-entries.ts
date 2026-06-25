@@ -29,10 +29,7 @@ type MappedDiffEntry = {
   readonly sourceIndex: number;
   readonly orderChangeId?: string;
 };
-type MetadataDiffStructural = Extract<
-  VersionDiffStructuralMetadata,
-  { readonly kind: 'metadata' }
->;
+type MetadataDiffStructural = Extract<VersionDiffStructuralMetadata, { readonly kind: 'metadata' }>;
 
 export function mapDiffEntries(values: readonly unknown[]): {
   readonly items: readonly VersionDiffEntry[];
@@ -196,9 +193,7 @@ function duplicateStructuralValueKey(
 }
 
 function duplicateValueHash(entry: VersionDiffEntry): string {
-  return stringFingerprint(
-    stableStringify([entry.before, entry.after, entry.display ?? null]),
-  );
+  return stringFingerprint(stableStringify([entry.before, entry.after, entry.display ?? null]));
 }
 
 function nextDuplicateOccurrence(occurrences: Map<string, number>, key: string): string {
@@ -234,10 +229,7 @@ function stableStringify(value: unknown): string {
     .join(',')}}`;
 }
 
-function metadataForOrder(
-  source: unknown,
-  entry: VersionDiffEntry,
-): MetadataDiffStructural | null {
+function metadataForOrder(source: unknown, entry: VersionDiffEntry): MetadataDiffStructural | null {
   if (entry.structural.kind === 'metadata') return entry.structural;
   const structural = mapStructuralMetadata(
     isRecord(source) ? (source.structural ?? source) : source,

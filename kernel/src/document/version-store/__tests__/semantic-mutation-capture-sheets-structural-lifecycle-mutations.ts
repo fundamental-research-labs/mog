@@ -1,13 +1,11 @@
-import type {
-  createTestSemanticMutationCapture,
-} from './semantic-mutation-capture-test-helpers';
-import {
-  mutationResult,
-} from './semantic-mutation-capture-test-helpers';
+import type { createTestSemanticMutationCapture } from './semantic-mutation-capture-test-helpers';
+import { mutationResult } from './semantic-mutation-capture-test-helpers';
 
 type TestSemanticMutationCapture = ReturnType<typeof createTestSemanticMutationCapture>;
 
-export function recordSheetStructuralLifecycleMutations(capture: TestSemanticMutationCapture): void {
+export function recordSheetStructuralLifecycleMutations(
+  capture: TestSemanticMutationCapture,
+): void {
   capture.mutationCapture.recordMutationResult({
     operation: 'compute_create_sheet_with_default_col_width',
     result: mutationResult({

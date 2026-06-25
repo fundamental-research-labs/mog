@@ -41,14 +41,23 @@ export class MergeApplyIntentMemoryBackend {
   private readonly recordsByKey = new Map<string, MergeApplyIntentRecord>();
   private readonly refCasProofsByKey = new Map<string, MergeApplyRefCasProof>();
 
-  get(namespace: VersionGraphNamespace, idempotencyKey: MergeApplyIntentIdempotencyKey): MergeApplyIntentRecord | undefined {
-    return cloneIntent(this.recordsByKey.get(mergeApplyIntentStorageKey(namespace, idempotencyKey)));
+  get(
+    namespace: VersionGraphNamespace,
+    idempotencyKey: MergeApplyIntentIdempotencyKey,
+  ): MergeApplyIntentRecord | undefined {
+    return cloneIntent(
+      this.recordsByKey.get(mergeApplyIntentStorageKey(namespace, idempotencyKey)),
+    );
   }
 
-  findByIntentId(namespace: VersionGraphNamespace, intentId: MergeApplyIntentId): MergeApplyIntentRecord | undefined {
+  findByIntentId(
+    namespace: VersionGraphNamespace,
+    intentId: MergeApplyIntentId,
+  ): MergeApplyIntentRecord | undefined {
     const namespaceKey = versionGraphNamespaceKey(namespace);
     for (const record of this.recordsByKey.values()) {
-      if (record.namespaceKey === namespaceKey && record.intentId === intentId) return cloneIntent(record);
+      if (record.namespaceKey === namespaceKey && record.intentId === intentId)
+        return cloneIntent(record);
     }
     return undefined;
   }
@@ -57,11 +66,18 @@ export class MergeApplyIntentMemoryBackend {
     this.recordsByKey.set(mergeApplyIntentRecordStorageKey(record), cloneIntent(record));
   }
 
-  getRefCasProof(namespace: VersionGraphNamespace, input: MergeApplyRefCasProofLookup): MergeApplyRefCasProof | undefined {
+  getRefCasProof(
+    namespace: VersionGraphNamespace,
+    input: MergeApplyRefCasProofLookup,
+  ): MergeApplyRefCasProof | undefined {
     return cloneJson(this.refCasProofsByKey.get(mergeApplyRefCasProofStorageKey(namespace, input)));
   }
 
-  putRefCasProof(namespace: VersionGraphNamespace, input: MergeApplyRefCasProofLookup, proof: MergeApplyRefCasProof): void {
+  putRefCasProof(
+    namespace: VersionGraphNamespace,
+    input: MergeApplyRefCasProofLookup,
+    proof: MergeApplyRefCasProof,
+  ): void {
     this.refCasProofsByKey.set(mergeApplyRefCasProofStorageKey(namespace, input), cloneJson(proof));
   }
 
@@ -75,7 +91,9 @@ export class MergeApplyIntentMemoryBackend {
     };
   }
 
-  static fromSnapshot(snapshot: MergeApplyIntentMemoryBackendSnapshot): MergeApplyIntentMemoryBackend {
+  static fromSnapshot(
+    snapshot: MergeApplyIntentMemoryBackendSnapshot,
+  ): MergeApplyIntentMemoryBackend {
     const backend = new MergeApplyIntentMemoryBackend();
     for (const record of snapshot.records) backend.put(record);
     for (const item of snapshot.refCasProofs ?? []) {
@@ -99,7 +117,9 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
   }) {
     this.namespace = normalizeVersionGraphNamespace(options.namespace);
     this.namespaceKey = versionGraphNamespaceKey(this.namespace);
-    this.documentScopeKey = versionDocumentScopeKey(normalizeVersionDocumentScope(options.documentScope));
+    this.documentScopeKey = versionDocumentScopeKey(
+      normalizeVersionDocumentScope(options.documentScope),
+    );
     this.backend = options.backend;
   }
 
@@ -112,7 +132,13 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
         : {
             status: 'conflict',
             record: existing,
-            diagnostics: [diagnostic('VERSION_INTENT_CONFLICT', 'Merge apply idempotency key is already bound to a different intent.', 'none')],
+            diagnostics: [
+              diagnostic(
+                'VERSION_INTENT_CONFLICT',
+                'Merge apply idempotency key is already bound to a different intent.',
+                'none',
+              ),
+            ],
           };
     }
     this.backend.put(record);
@@ -126,30 +152,48 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
       : missingRead('Merge apply intent was not found by intent id.');
   }
 
-  async readByIdempotencyKey(idempotencyKey: MergeApplyIntentIdempotencyKey): Promise<MergeApplyIntentReadResult> {
+  async readByIdempotencyKey(
+    idempotencyKey: MergeApplyIntentIdempotencyKey,
+  ): Promise<MergeApplyIntentReadResult> {
     const record = this.backend.get(this.namespace, idempotencyKey);
     return record
       ? { status: 'found', record, diagnostics: [] }
       : missingRead('Merge apply intent was not found by idempotency key.');
   }
 
-  async readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult> {
+  async readRefCasProof(
+    input: MergeApplyRefCasProofLookup,
+  ): Promise<MergeApplyRefCasProofReadResult> {
     const proof = this.backend.getRefCasProof(this.namespace, input);
     return proof
       ? { status: 'found', proof, diagnostics: [] }
       : missingProofRead('Merge apply ref CAS proof was not found.');
   }
 
-  async completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult> {
+  async completeIntent(
+    input: CompleteMergeApplyIntentInput,
+  ): Promise<MergeApplyIntentCompleteResult> {
     const existing = this.backend.findByIntentId(this.namespace, input.intentId);
     if (!existing) {
-      return { status: 'missing', record: null, diagnostics: [diagnostic('VERSION_INTENT_NOT_FOUND', 'Merge apply intent was not found.', 'repair')] };
+      return {
+        status: 'missing',
+        record: null,
+        diagnostics: [
+          diagnostic('VERSION_INTENT_NOT_FOUND', 'Merge apply intent was not found.', 'repair'),
+        ],
+      };
     }
     if (!objectDigestsEqual(existing.resolvedAttemptDigest, input.resolvedAttemptDigest)) {
       return {
         status: 'conflict',
         record: existing,
-        diagnostics: [diagnostic('VERSION_INTENT_CONFLICT', 'Merge apply completion did not match the stored resolved attempt digest.', 'none')],
+        diagnostics: [
+          diagnostic(
+            'VERSION_INTENT_CONFLICT',
+            'Merge apply completion did not match the stored resolved attempt digest.',
+            'none',
+          ),
+        ],
       };
     }
     if (existing.terminal) {
@@ -158,7 +202,13 @@ export class InMemoryMergeApplyIntentStore implements MergeApplyIntentStore {
         : {
             status: 'conflict',
             record: existing,
-            diagnostics: [diagnostic('VERSION_INTENT_CONFLICT', 'Merge apply intent is already finalized with a different terminal result.', 'none')],
+            diagnostics: [
+              diagnostic(
+                'VERSION_INTENT_CONFLICT',
+                'Merge apply intent is already finalized with a different terminal result.',
+                'none',
+              ),
+            ],
           };
     }
     const completed: MergeApplyIntentRecord = {

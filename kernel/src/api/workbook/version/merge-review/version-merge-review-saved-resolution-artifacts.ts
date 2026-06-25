@@ -223,9 +223,7 @@ function versionObjectReadCode(error: unknown): string | null {
 
 function resolutionSetPayloadMatchesObjectType(
   payload: MergeResolutionSetArtifactPayload,
-  objectType:
-    | typeof MERGE_RESOLUTION_SET_OBJECT_TYPE
-    | typeof MERGE_RESOLUTION_SET_V2_OBJECT_TYPE,
+  objectType: typeof MERGE_RESOLUTION_SET_OBJECT_TYPE | typeof MERGE_RESOLUTION_SET_V2_OBJECT_TYPE,
 ): boolean {
   return objectType === MERGE_RESOLUTION_SET_V2_OBJECT_TYPE
     ? payload.schemaVersion === 2

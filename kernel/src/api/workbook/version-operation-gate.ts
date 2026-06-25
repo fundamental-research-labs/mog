@@ -41,7 +41,8 @@ export function validateVersionOperationGate(
   if (hostDecision === 'denied' || hostDecision === 'approval-required') {
     return [
       capabilityDisabledDiagnostic(operation, capability, {
-        reason: hostDecision === 'denied' ? 'hostCapabilityDenied' : 'hostCapabilityApprovalRequired',
+        reason:
+          hostDecision === 'denied' ? 'hostCapabilityDenied' : 'hostCapabilityApprovalRequired',
         safeMessage:
           hostDecision === 'denied'
             ? `Host policy denies ${capability}.`

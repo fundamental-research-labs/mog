@@ -6,7 +6,10 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import type { CheckoutMaterializationRequest } from '../../../../document/version-store/checkout-service';
-import { REF_NAME_STORAGE_PREFIX, validateRefName } from '../../../../document/version-store/refs/ref-name';
+import {
+  REF_NAME_STORAGE_PREFIX,
+  validateRefName,
+} from '../../../../document/version-store/refs/ref-name';
 import {
   invalidOptionsDiagnostic,
   invalidTargetDiagnostic,

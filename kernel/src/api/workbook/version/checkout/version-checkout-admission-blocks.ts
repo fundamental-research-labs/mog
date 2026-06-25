@@ -60,10 +60,10 @@ function onlyIgnoredCheckoutInProgress(
 ): boolean {
   return Boolean(
     options.ignoreCheckoutInProgress &&
-      dirty.unsafeReasons.length > 0 &&
-      dirty.unsafeReasons.every(
-        (reason) => reason.code === 'version.surfaceStatus.checkoutInProgress',
-      ),
+    dirty.unsafeReasons.length > 0 &&
+    dirty.unsafeReasons.every(
+      (reason) => reason.code === 'version.surfaceStatus.checkoutInProgress',
+    ),
   );
 }
 

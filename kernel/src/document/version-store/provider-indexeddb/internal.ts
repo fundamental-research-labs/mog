@@ -21,11 +21,7 @@ export type {
   StoredRefRecord,
   StoredRegistryEnvelope,
 } from './internal-records';
-export {
-  failedGraphWrite,
-  failedStoreResult,
-  registryRecordResult,
-} from './internal-results';
+export { failedGraphWrite, failedStoreResult, registryRecordResult } from './internal-results';
 export { decodeRegistryEnvelope, registryEnvelope } from './internal-registry';
 export {
   initializeSuccess,

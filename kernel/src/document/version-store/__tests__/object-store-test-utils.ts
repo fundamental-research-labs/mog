@@ -4,11 +4,7 @@ import {
   type VersionObjectPutBatchResult,
   type VersionObjectRecord,
 } from '../object-store';
-import type {
-  ObjectDigest,
-  VersionDependencyRef,
-  VersionObjectType,
-} from '../object-digest';
+import type { ObjectDigest, VersionDependencyRef, VersionObjectType } from '../object-digest';
 
 export const NAMESPACE: VersionGraphNamespace = {
   workspaceId: 'workspace-1',

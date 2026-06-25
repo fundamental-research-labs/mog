@@ -44,9 +44,9 @@ describe('versioning sync provenance public fixtures', () => {
         (audience) => audience.kind,
       ),
     ).toEqual(['provider-inbound-update', 'versioning-sync-provenance']);
-    expect(
-      VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_FIXTURE.canonicalPayload.value,
-    ).toBe(VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_FIXTURE.canonicalPayloadHash);
+    expect(VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_FIXTURE.canonicalPayload.value).toBe(
+      VERSION_SYNC_PROVENANCE_PROVIDER_AUTHORITY_PROOF_V2_FIXTURE.canonicalPayloadHash,
+    );
   });
 
   it('exports a redaction-safe diagnostic DTO fixture', () => {

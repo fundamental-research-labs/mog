@@ -27,9 +27,7 @@ export function checkoutAccessDeniedDiagnosticDetails(
   return null;
 }
 
-export function hasCheckoutAccessDeniedDiagnostic(
-  diagnostics: readonly unknown[],
-): boolean {
+export function hasCheckoutAccessDeniedDiagnostic(diagnostics: readonly unknown[]): boolean {
   return checkoutAccessDeniedDiagnosticDetails(diagnostics) !== null;
 }
 

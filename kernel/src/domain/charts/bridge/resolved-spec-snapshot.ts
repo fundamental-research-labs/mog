@@ -53,10 +53,7 @@ import {
   snapshotSeries,
   snapshotSeriesProjection,
 } from './resolved-spec-series-snapshot';
-import {
-  resolveStoredChartHeightPoints,
-  resolveStoredChartWidthPoints,
-} from '../chart-size-units';
+import { resolveStoredChartHeightPoints, resolveStoredChartWidthPoints } from '../chart-size-units';
 import {
   groupingFor,
   snapshotAxis,

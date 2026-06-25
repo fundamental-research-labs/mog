@@ -1,7 +1,10 @@
 import { expect, it } from '@jest/globals';
 
 import { expectUnsupportedAuthoredDomainDetailsRedacted } from './version-review-provider-diff-assertions';
-import { hiddenUnsupportedMacroChange, reviewCellA1ValueChange } from './version-review-provider-fixtures';
+import {
+  hiddenUnsupportedMacroChange,
+  reviewCellA1ValueChange,
+} from './version-review-provider-fixtures';
 import {
   AUTHOR,
   createReviewInput,

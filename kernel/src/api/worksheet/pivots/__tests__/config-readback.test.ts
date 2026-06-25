@@ -33,7 +33,12 @@ function makeConfig(): DataPivotTableConfig {
       { id: 'f_amount', name: 'Amount', dataType: 'number' },
     ],
     placements: [
-      { placementId: makePlacementId('row', 'f_region', 0), fieldId: 'f_region', area: 'row', position: 0 },
+      {
+        placementId: makePlacementId('row', 'f_region', 0),
+        fieldId: 'f_region',
+        area: 'row',
+        position: 0,
+      },
       {
         placementId: makePlacementId('value', 'f_amount', 0),
         fieldId: 'f_amount',
@@ -91,7 +96,8 @@ describe('pivot config readback', () => {
         throw new Error('resolvePlacement should not be called by getConfig');
       },
       placementId: (placement) =>
-        placement.placementId ?? makePlacementId(placement.area, placement.fieldId, placement.position),
+        placement.placementId ??
+        makePlacementId(placement.area, placement.fieldId, placement.position),
       getRange: async () => null,
       getCollectionInfo: async () => ({
         name: 'SalesPivot',

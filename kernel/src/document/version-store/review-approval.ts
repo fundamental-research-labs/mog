@@ -141,7 +141,9 @@ export function validateApprovalEvidenceForStatusMutation(
   record: WorkbookVersionReviewRecord,
   input: VersionUpdateReviewStatusInput,
   evidence: WorkbookVersionReviewApprovalEvidence | undefined,
-): { readonly ok: true } | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly result: VersionResult<WorkbookVersionReviewRecord> } {
   if (input.status !== 'approved') return { ok: true };
   if (!evidence) {
     return {
@@ -158,7 +160,9 @@ export function validateApprovalEvidenceForStatusMutation(
     evidence.headCommitId !== record.headCommitId ||
     evidence.reviewRevision !== record.revision + 1 ||
     canonicalJsonStringify(evidence.approvedBy) !== canonicalJsonStringify(input.actor) ||
-    evidence.requiredTargets.some((target) => target.targetKey !== reviewDecisionTargetKey(target.target))
+    evidence.requiredTargets.some(
+      (target) => target.targetKey !== reviewDecisionTargetKey(target.target),
+    )
   ) {
     return {
       ok: false,
@@ -198,7 +202,9 @@ function unresolvedRequestChanges(
   return [...pendingByTarget.values()];
 }
 
-function remapReviewDiffFailure<T>(result: VersionResult<T>): VersionResult<WorkbookVersionReviewApprovalEvidence> {
+function remapReviewDiffFailure<T>(
+  result: VersionResult<T>,
+): VersionResult<WorkbookVersionReviewApprovalEvidence> {
   if (result.ok) throw new Error('expected failed review diff result');
   if (result.error.code === 'target_unavailable') {
     return {

@@ -211,7 +211,7 @@ export function describeCleanMaterializerMergeScenario(): void {
           { entityId: expect.stringMatching(/!A1$/), after: 'shared' },
           { entityId: expect.stringMatching(/!B1$/), after: 'ours-only' },
           { entityId: expect.stringMatching(/!C1$/), after: 'theirs-write' },
-          ]),
+        ]),
       );
 
       const checkoutMerged = await mergedWb.version.checkout({

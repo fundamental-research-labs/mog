@@ -87,16 +87,8 @@ function RemoteCursor({
     let height = rect.height;
     const range = state.selection.ranges?.[0];
     if (range) {
-      const startRect = getCellRect(
-        state.selection.sheetId,
-        range.startRow,
-        range.startCol,
-      );
-      const endRect = getCellRect(
-        state.selection.sheetId,
-        range.endRow,
-        range.endCol,
-      );
+      const startRect = getCellRect(state.selection.sheetId, range.startRow, range.startCol);
+      const endRect = getCellRect(state.selection.sheetId, range.endRow, range.endCol);
       if (startRect && endRect) {
         left = startRect.x;
         top = startRect.y;

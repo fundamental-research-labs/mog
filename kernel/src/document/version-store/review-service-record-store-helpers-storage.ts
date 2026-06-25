@@ -1,7 +1,5 @@
 import { cloneRow, isWorkbookVersionReviewRecordStoreRow } from './review-service-codec';
-import type {
-  WorkbookVersionReviewRecordStoreRow,
-} from './review-service-record-store-helpers-types';
+import type { WorkbookVersionReviewRecordStoreRow } from './review-service-record-store-helpers-types';
 
 export function reviewRecordStorageKey(documentScopeKey: string, reviewId: string): string {
   return `${documentScopeKey}\u0000review\u0000${reviewId}`;

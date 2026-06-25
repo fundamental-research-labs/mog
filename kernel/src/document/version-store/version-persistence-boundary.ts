@@ -74,9 +74,7 @@ export async function persistVersionPersistenceBoundary(
   }
 }
 
-function parseBoundaryRequest(
-  request: VersionPersistenceBoundaryRequest,
-):
+function parseBoundaryRequest(request: VersionPersistenceBoundaryRequest):
   | {
       readonly ok: true;
       readonly boundary: VersionPersistenceBoundaryKind;
@@ -170,8 +168,7 @@ function boundaryDiagnostic(
 ): VersionPersistenceBoundaryDiagnostic {
   return Object.freeze({
     code,
-    severity:
-      code === 'VERSION_PERSISTENCE_BOUNDARY_REF_NOT_ADVANCED' ? 'warning' : 'error',
+    severity: code === 'VERSION_PERSISTENCE_BOUNDARY_REF_NOT_ADVANCED' ? 'warning' : 'error',
     message,
     ...options,
   });

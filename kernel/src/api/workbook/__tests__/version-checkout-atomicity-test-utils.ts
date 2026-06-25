@@ -45,10 +45,7 @@ type ActiveDocumentState = {
 export async function readActiveDocumentState(wb: Workbook): Promise<ActiveDocumentState> {
   const sheetNames = [...wb.sheetNames];
   const sheet1 = await wb.getSheet('Sheet1');
-  const [sheet1A1, sheet1B1] = await Promise.all([
-    sheet1.getCell('A1'),
-    sheet1.getCell('B1'),
-  ]);
+  const [sheet1A1, sheet1B1] = await Promise.all([sheet1.getCell('A1'), sheet1.getCell('B1')]);
   const hasLocalOnly = sheetNames.includes('LocalOnly');
   const localOnlyC1 = hasLocalOnly
     ? (await (await wb.getSheet('LocalOnly')).getCell('C1')).value

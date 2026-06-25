@@ -10,12 +10,7 @@ import {
   VERSION_REVERT_UNAVAILABLE_DIAGNOSTIC_CODE,
   VERSION_REVERT_UNSUPPORTED_DOMAIN_DIAGNOSTIC_CODE,
 } from '../version/revert/version-revert';
-import {
-  COMMIT_B,
-  MAIN_REF,
-  MAIN_REVISION,
-  singleCommitInput,
-} from './version-revert-test-utils';
+import { COMMIT_B, MAIN_REF, MAIN_REVISION, singleCommitInput } from './version-revert-test-utils';
 
 export function registerRevertAdmissionPreflightMatrixScenarios(): void {
   it.each([

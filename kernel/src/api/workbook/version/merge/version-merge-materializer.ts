@@ -2,7 +2,10 @@ import type { VersionMergeChange } from '@mog-sdk/contracts/api';
 
 import type { VersionMergeCommitCapture } from '../../../../document/version-store/commit-service';
 import { createVersionObjectRecord } from '../../../../document/version-store/object-store';
-import { failedStoreResult, versionStoreDiagnostic } from '../../../../document/version-store/provider';
+import {
+  failedStoreResult,
+  versionStoreDiagnostic,
+} from '../../../../document/version-store/provider';
 import { captureWorkbookSnapshotRootRecord } from '../../../../document/version-store/snapshot-root-capture';
 import { createSnapshotRootMaterializationService } from '../../../../document/version-store/snapshot-root-materialization-service';
 import { createDocumentLifecycleSnapshotRootHydrator } from '../../../document/snapshot-root-lifecycle-hydrator';

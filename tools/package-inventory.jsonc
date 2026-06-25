@@ -31,6 +31,7 @@
     ],
     "exports": {
       "./node": { "disposition": "public-experimental" },
+      "./version-store": { "disposition": "public-experimental" },
       "./wasm": { "disposition": "public-experimental" },
       "./workerd": { "disposition": "public-experimental" },
     },
@@ -146,6 +147,7 @@
       "./actors/object-interaction": { "disposition": "public-experimental" },
       "./actors/diagram": { "disposition": "public-experimental" },
       "./api": { "disposition": "public-experimental" },
+      "./api/workbook": { "disposition": "public-experimental" },
       "./api/mutation-receipt": { "disposition": "public-experimental" },
       "./api/operation-receipt": { "disposition": "public-experimental" },
       "./api-errors": { "disposition": "public-experimental" },
@@ -244,6 +246,7 @@
       "./context-menu": { "disposition": "public-experimental" },
       "./data": { "disposition": "public-experimental" },
       "./data/charts": { "disposition": "public-experimental" },
+      "./data/chart-app-model": { "disposition": "public-experimental" },
       "./data/diagnostics": { "disposition": "public-experimental" },
       "./utils": { "disposition": "public-experimental" },
       "./utils/function-registry": { "disposition": "public-experimental" },

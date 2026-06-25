@@ -120,9 +120,7 @@ export class WorksheetCommentsImpl implements WorksheetComments {
   }
 
   private _groupedCommentMutationOptions(operationIdPrefix: string): () => CommentMutationOptions {
-    let nextOptions = ensureCommentMutationGroup(
-      this._commentMutationOptions(operationIdPrefix),
-    );
+    let nextOptions = ensureCommentMutationGroup(this._commentMutationOptions(operationIdPrefix));
     const groupId = nextOptions.operationContext.groupId;
     return () => {
       const options = nextOptions;

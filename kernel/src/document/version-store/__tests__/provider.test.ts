@@ -1,12 +1,5 @@
-import {
-  VersionStoreProviderError,
-  createInMemoryVersionStoreProvider,
-} from '../provider';
-import {
-  DOCUMENT_SCOPE,
-  expectInitializeFailed,
-  initializeInput,
-} from './provider-test-utils';
+import { VersionStoreProviderError, createInMemoryVersionStoreProvider } from '../provider';
+import { DOCUMENT_SCOPE, expectInitializeFailed, initializeInput } from './provider-test-utils';
 
 describe('InMemoryVersionStoreProvider capabilities and provider states', () => {
   it('reports writable in-memory capabilities without claiming durability', () => {

@@ -46,8 +46,7 @@ export async function persistMergeAttemptIfRequested(input: {
       ),
     ]);
   }
-  const requiresApplyIntent =
-    result.status === 'fastForward' || result.status === 'alreadyMerged';
+  const requiresApplyIntent = result.status === 'fastForward' || result.status === 'alreadyMerged';
   const intentProvider = hasMergeApplyIntentStoreProvider(provider) ? provider : null;
   if (requiresApplyIntent && !intentProvider) {
     return blocked(result, [
@@ -101,7 +100,9 @@ export async function persistMergeAttemptIfRequested(input: {
     expectedTargetHead: options.expectedTargetHead,
   });
   if (!intentProvider) return result;
-  const begin = await (await intentProvider.openMergeApplyIntentStore(namespace)).beginIntent({
+  const begin = await (
+    await intentProvider.openMergeApplyIntentStore(namespace)
+  ).beginIntent({
     intentId: intentIdForResolvedAttemptDigest(resolvedAttemptDigest),
     idempotencyKey: idempotencyKeyForResolvedAttempt({
       resolvedAttemptDigest,

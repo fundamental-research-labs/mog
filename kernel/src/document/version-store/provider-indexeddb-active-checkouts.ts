@@ -13,9 +13,7 @@ import {
   type VersionDocumentScope,
 } from './registry';
 
-export class IndexedDbActiveCheckoutMaterializationStore
-  implements ActiveCheckoutMaterializationStore
-{
+export class IndexedDbActiveCheckoutMaterializationStore implements ActiveCheckoutMaterializationStore {
   private readonly documentScopeKey: string;
 
   constructor(
@@ -68,10 +66,9 @@ export class IndexedDbActiveCheckoutMaterializationStore
     const tx = db.transaction(ACTIVE_CHECKOUTS_STORE, 'readwrite');
     const done = idbTransactionDone(tx);
     await idbRequest(
-      tx.objectStore(ACTIVE_CHECKOUTS_STORE).put(
-        storedActiveCheckoutMaterializationRecord(materialization),
-        this.documentScopeKey,
-      ),
+      tx
+        .objectStore(ACTIVE_CHECKOUTS_STORE)
+        .put(storedActiveCheckoutMaterializationRecord(materialization), this.documentScopeKey),
     );
     await done;
   }

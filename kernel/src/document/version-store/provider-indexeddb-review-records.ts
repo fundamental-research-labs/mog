@@ -42,17 +42,21 @@ export class IndexedDbWorkbookVersionReviewRecordStore extends WorkbookVersionRe
           await done;
           return rows;
         },
-        async mutateRow<T>(reviewId: string, mutator: (
-          row: WorkbookVersionReviewRecordStoreRow | undefined,
-        ) => ReviewRecordRowMutation<T>) {
+        async mutateRow<T>(
+          reviewId: string,
+          mutator: (
+            row: WorkbookVersionReviewRecordStoreRow | undefined,
+          ) => ReviewRecordRowMutation<T>,
+        ) {
           const db = await options.getDb();
           const tx = db.transaction(INTENTS_STORE, 'readwrite');
           const store = tx.objectStore(INTENTS_STORE);
           const key = reviewRecordStorageKey(documentScopeKey, reviewId);
-          const existing = decodeStoredWorkbookVersionReviewRecordRow(
-            await idbRequest<unknown | undefined>(store.get(key)),
-            documentScopeKey,
-          ) ?? undefined;
+          const existing =
+            decodeStoredWorkbookVersionReviewRecordRow(
+              await idbRequest<unknown | undefined>(store.get(key)),
+              documentScopeKey,
+            ) ?? undefined;
           const result = mutator(existing);
           if (result.action === 'put') {
             await idbRequest(store.put(storedWorkbookVersionReviewRecordRow(result.row), key));
@@ -60,9 +64,11 @@ export class IndexedDbWorkbookVersionReviewRecordStore extends WorkbookVersionRe
           await idbTransactionDone(tx);
           return result.result;
         },
-        async mutateRows<T>(mutator: (
-          rows: readonly WorkbookVersionReviewRecordStoreRow[],
-        ) => ReviewRecordRowMutation<T>) {
+        async mutateRows<T>(
+          mutator: (
+            rows: readonly WorkbookVersionReviewRecordStoreRow[],
+          ) => ReviewRecordRowMutation<T>,
+        ) {
           const db = await options.getDb();
           const tx = db.transaction(INTENTS_STORE, 'readwrite');
           const store = tx.objectStore(INTENTS_STORE);

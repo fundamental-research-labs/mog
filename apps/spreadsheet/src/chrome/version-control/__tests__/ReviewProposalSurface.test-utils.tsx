@@ -138,7 +138,9 @@ export function createReview(
   };
 }
 
-export function createProposal(overrides: Partial<AgentProposalSummary> = {}): AgentProposalSummary {
+export function createProposal(
+  overrides: Partial<AgentProposalSummary> = {},
+): AgentProposalSummary {
   return {
     id: 'proposal-1' as AgentProposalSummary['id'],
     documentId: 'document-1',

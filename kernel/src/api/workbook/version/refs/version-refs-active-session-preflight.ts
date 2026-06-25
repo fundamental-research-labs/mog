@@ -8,17 +8,11 @@ import type {
 import type { DocumentContext } from '../../../../context';
 import { getActiveCheckoutSessionReader } from './version-refs-active-session-service';
 import type { AttachedVersionRefLifecycleService } from './version-refs-adapter';
-import {
-  publicDiagnostic,
-  type VersionRefOperation,
-} from './version-refs-public-diagnostics';
+import { publicDiagnostic, type VersionRefOperation } from './version-refs-public-diagnostics';
 import { parsePublicBranchName } from './version-refs-validation';
 import { isRecord, toCommitId } from './version-refs-values';
 
-type BranchAdvanceOperation = Extract<
-  VersionRefOperation,
-  'fastForwardBranch' | 'updateBranch'
->;
+type BranchAdvanceOperation = Extract<VersionRefOperation, 'fastForwardBranch' | 'updateBranch'>;
 
 type ActiveCheckoutBranchAdvanceInput = {
   readonly branchName: string;
@@ -70,16 +64,10 @@ export async function preflightActiveCheckoutBranchAdvance(
 
   const current = await readCurrentBranchHead(service, input.branchName, operation);
   if (current.status === 'blocked') return current.diagnostics;
-  if (
-    current.status === 'checked' &&
-    current.commitId !== active.refHeadAtMaterialization
-  ) {
+  if (current.status === 'checked' && current.commitId !== active.refHeadAtMaterialization) {
     return [staleActiveCheckoutBranchAdvanceDiagnostic(operation)];
   }
-  if (
-    current.status === 'unchecked' &&
-    input.expectedHead !== active.refHeadAtMaterialization
-  ) {
+  if (current.status === 'unchecked' && input.expectedHead !== active.refHeadAtMaterialization) {
     return [staleActiveCheckoutBranchAdvanceDiagnostic(operation)];
   }
 
@@ -93,10 +81,7 @@ async function readCurrentBranchHead(
 ): Promise<CurrentBranchHeadProjection> {
   if (!service.readBranch) return { status: 'unchecked' };
   try {
-    return projectCurrentBranchHead(
-      await service.readBranch({ name: branchName }),
-      operation,
-    );
+    return projectCurrentBranchHead(await service.readBranch({ name: branchName }), operation);
   } catch {
     return {
       status: 'blocked',
@@ -135,9 +120,7 @@ function projectCurrentBranchHead(
     ? { status: 'checked', commitId }
     : {
         status: 'blocked',
-        diagnostics: [
-          activeCheckoutPreflightReadFailedDiagnostic(operation, 'currentBranch'),
-        ],
+        diagnostics: [activeCheckoutPreflightReadFailedDiagnostic(operation, 'currentBranch')],
       };
 }
 

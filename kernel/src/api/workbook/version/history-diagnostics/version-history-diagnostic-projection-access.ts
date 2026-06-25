@@ -43,9 +43,7 @@ export function projectVersionHistoryDiagnosticsForAccess(
   access: VersionHistoryDiagnosticProjectionAccess,
 ): readonly VersionDiagnostic[] {
   if (access.kind === 'allowed') return diagnostics;
-  return [
-    versionHistoryDeniedSummaryDiagnostic(projectVersionHistoryAccessDeniedSummary(access)),
-  ];
+  return [versionHistoryDeniedSummaryDiagnostic(projectVersionHistoryAccessDeniedSummary(access))];
 }
 
 export function projectVersionHistoryAccessDeniedSummary(
@@ -121,7 +119,5 @@ function publicVersionCapabilityDependency(
 function publicVersionHistoryDeniedCode(
   kind: VersionHistoryDeniedSummaryKind,
 ): VersionHistoryAccessDeniedSummary['code'] {
-  return kind === 'capability-denied'
-    ? 'version_capability_unavailable'
-    : 'version_access_denied';
+  return kind === 'capability-denied' ? 'version_capability_unavailable' : 'version_access_denied';
 }

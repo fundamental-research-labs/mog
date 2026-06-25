@@ -616,7 +616,7 @@ describe('CellsLayer', () => {
         .find((element) => element.id === `filter-button:${sheetId}:3,10`);
 
       expect(filterButton?.bounds).toEqual({
-        x: 893,
+        x: 884,
         y: 79.5,
         width: 16,
         height: 16,
@@ -662,7 +662,7 @@ describe('CellsLayer', () => {
         .find((element) => element.id === `filter-button:${sheetId}:3,10`);
 
       expect(filterButton?.bounds).toEqual({
-        x: 803.7,
+        x: 795.6,
         y: 71.55,
         width: 14.4,
         height: 14.4,

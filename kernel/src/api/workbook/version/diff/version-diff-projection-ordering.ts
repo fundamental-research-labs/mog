@@ -6,7 +6,9 @@ export type ProjectedDiffEntry = {
   readonly sourceIndex: number;
 };
 
-export function orderDiffEntries(items: readonly ProjectedDiffEntry[]): readonly VersionDiffEntry[] {
+export function orderDiffEntries(
+  items: readonly ProjectedDiffEntry[],
+): readonly VersionDiffEntry[] {
   if (!items.some((item) => item.explicitOrderKey)) return items.map((item) => item.entry);
   return [...items]
     .sort((a, b) => diffOrderKey(a).localeCompare(diffOrderKey(b)))

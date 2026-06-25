@@ -1,9 +1,5 @@
-import type {
-  SemanticWorkbookStateEnvelope,
-} from '../../../bridges/compute/compute-types.gen';
-import type {
-  CanonicalFormulaIdentityCaptureHarness,
-} from './semantic-mutation-capture-formula-identity-helper-capture';
+import type { SemanticWorkbookStateEnvelope } from '../../../bridges/compute/compute-types.gen';
+import type { CanonicalFormulaIdentityCaptureHarness } from './semantic-mutation-capture-formula-identity-helper-capture';
 
 export function expectFormulaIdentityStateReaderCalls(
   harness: CanonicalFormulaIdentityCaptureHarness,

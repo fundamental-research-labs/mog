@@ -1,7 +1,4 @@
-import {
-  parseWorkbookCommitId,
-  type WorkbookCommitId,
-} from '../object-digest';
+import { parseWorkbookCommitId, type WorkbookCommitId } from '../object-digest';
 import type { RefVersion } from '../refs/ref-store';
 
 export function commit(byte: string): WorkbookCommitId {

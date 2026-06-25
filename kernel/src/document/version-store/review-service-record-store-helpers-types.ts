@@ -1,7 +1,4 @@
-import type {
-  VersionResult,
-  WorkbookVersionReviewRecord,
-} from '@mog-sdk/contracts/api';
+import type { VersionResult, WorkbookVersionReviewRecord } from '@mog-sdk/contracts/api';
 
 export type WorkbookVersionReviewMutationOperation =
   | 'createReview'

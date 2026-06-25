@@ -88,12 +88,10 @@ export function normalizeVersionObjectCompatibilityHeader(
   });
 }
 
-export function cloneVersionObjectCompatibilityHeader(
-  value: {
-    readonly minReaderVersion?: unknown;
-    readonly minWriterVersion?: unknown;
-  },
-): VersionObjectCompatibilityHeader {
+export function cloneVersionObjectCompatibilityHeader(value: {
+  readonly minReaderVersion?: unknown;
+  readonly minWriterVersion?: unknown;
+}): VersionObjectCompatibilityHeader {
   return Object.freeze({
     minReaderVersion:
       value.minReaderVersion === undefined

@@ -10,9 +10,7 @@ export {
   createPersistedCleanMergeReplayArtifact,
   type IndexedDbCleanMergeReplayArtifact,
 } from './version-indexeddb-persisted-apply-clean-merge-artifact-reopen-replay-preview-artifact';
-export {
-  registerIndexedDbPersistedApplyCleanMergeArtifactReopenReplayScenario,
-} from './version-indexeddb-persisted-apply-clean-merge-artifact-reopen-replay-roundtrip-scenario';
+export { registerIndexedDbPersistedApplyCleanMergeArtifactReopenReplayScenario } from './version-indexeddb-persisted-apply-clean-merge-artifact-reopen-replay-roundtrip-scenario';
 export {
   replayFinalizedPersistedCleanMergeIntent,
   verifyPersistedCleanMergeCheckout,

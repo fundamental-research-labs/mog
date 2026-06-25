@@ -21,7 +21,4 @@ export {
   tableDefinitionChange,
 } from './version-apply-merge-materializer-support-change-utils';
 
-export {
-  CREATED_AT,
-  DOCUMENT_SCOPE,
-} from './version-apply-merge-materializer-support-fixtures';
+export { CREATED_AT, DOCUMENT_SCOPE } from './version-apply-merge-materializer-support-fixtures';

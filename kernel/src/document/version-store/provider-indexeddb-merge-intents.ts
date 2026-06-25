@@ -19,7 +19,11 @@ import {
   mergeApplyIntentStorageKey,
   objectDigestsEqual,
 } from './merge-apply-intent-store';
-import { normalizeVersionGraphNamespace, versionGraphNamespaceKey, type VersionGraphNamespace } from './object-store';
+import {
+  normalizeVersionGraphNamespace,
+  versionGraphNamespaceKey,
+  type VersionGraphNamespace,
+} from './object-store';
 import {
   normalizeVersionDocumentScope,
   versionDocumentScopeKey,
@@ -60,7 +64,9 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
   }) {
     this.namespace = normalizeVersionGraphNamespace(options.namespace);
     this.namespaceKey = versionGraphNamespaceKey(this.namespace);
-    this.documentScopeKey = versionDocumentScopeKey(normalizeVersionDocumentScope(options.documentScope));
+    this.documentScopeKey = versionDocumentScopeKey(
+      normalizeVersionDocumentScope(options.documentScope),
+    );
     this.getDb = options.getDb;
   }
 
@@ -72,7 +78,11 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
       const tx = db.transaction(INTENTS_STORE, 'readwrite');
       const store = tx.objectStore(INTENTS_STORE);
       const existingRow = await idbRequest<unknown | undefined>(store.get(key));
-      const existing = decodeStoredMergeApplyIntent(existingRow, this.namespaceKey, this.documentScopeKey);
+      const existing = decodeStoredMergeApplyIntent(
+        existingRow,
+        this.namespaceKey,
+        this.documentScopeKey,
+      );
       if (existing) {
         await idbTransactionDone(tx);
         return intentsEquivalent(existing, record)
@@ -119,11 +129,14 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
     }
   }
 
-  async readByIdempotencyKey(idempotencyKey: MergeApplyIntentIdempotencyKey): Promise<MergeApplyIntentReadResult> {
+  async readByIdempotencyKey(
+    idempotencyKey: MergeApplyIntentIdempotencyKey,
+  ): Promise<MergeApplyIntentReadResult> {
     try {
       const db = await this.getDb();
       const row = await idbRequest<unknown | undefined>(
-        db.transaction(INTENTS_STORE, 'readonly')
+        db
+          .transaction(INTENTS_STORE, 'readonly')
           .objectStore(INTENTS_STORE)
           .get(mergeApplyIntentStorageKey(this.namespace, idempotencyKey)),
       );
@@ -136,15 +149,23 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
     }
   }
 
-  async readRefCasProof(input: MergeApplyRefCasProofLookup): Promise<MergeApplyRefCasProofReadResult> {
+  async readRefCasProof(
+    input: MergeApplyRefCasProofLookup,
+  ): Promise<MergeApplyRefCasProofReadResult> {
     try {
       const db = await this.getDb();
       const row = await idbRequest<unknown | undefined>(
-        db.transaction(INTENTS_STORE, 'readonly')
+        db
+          .transaction(INTENTS_STORE, 'readonly')
           .objectStore(INTENTS_STORE)
           .get(mergeApplyRefCasProofStorageKey(this.namespace, input)),
       );
-      const proof = decodeStoredMergeApplyRefCasProof(row, this.namespaceKey, this.documentScopeKey, input);
+      const proof = decodeStoredMergeApplyRefCasProof(
+        row,
+        this.namespaceKey,
+        this.documentScopeKey,
+        input,
+      );
       return proof
         ? { status: 'found', proof, diagnostics: [] }
         : {
@@ -173,7 +194,9 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
     }
   }
 
-  async completeIntent(input: CompleteMergeApplyIntentInput): Promise<MergeApplyIntentCompleteResult> {
+  async completeIntent(
+    input: CompleteMergeApplyIntentInput,
+  ): Promise<MergeApplyIntentCompleteResult> {
     try {
       const db = await this.getDb();
       const tx = db.transaction(INTENTS_STORE, 'readwrite');
@@ -223,7 +246,8 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
               diagnostics: [
                 {
                   code: 'VERSION_INTENT_CONFLICT',
-                  message: 'Merge apply intent is already finalized with a different terminal result.',
+                  message:
+                    'Merge apply intent is already finalized with a different terminal result.',
                   recoverability: 'none',
                 },
               ],
@@ -259,7 +283,9 @@ export class IndexedDbMergeApplyIntentStore implements MergeApplyIntentStore {
     }
   }
 
-  private async findByIntentId(intentId: MergeApplyIntentId): Promise<MergeApplyIntentRecord | null> {
+  private async findByIntentId(
+    intentId: MergeApplyIntentId,
+  ): Promise<MergeApplyIntentRecord | null> {
     const db = await this.getDb();
     const tx = db.transaction(INTENTS_STORE, 'readonly');
     const record = await findByIntentIdInStore(
@@ -300,11 +326,7 @@ function findByIntentIdInStore(
         resolve(null);
         return;
       }
-      const candidate = decodeStoredMergeApplyIntent(
-        cursor.value,
-        namespaceKey,
-        documentScopeKey,
-      );
+      const candidate = decodeStoredMergeApplyIntent(cursor.value, namespaceKey, documentScopeKey);
       if (candidate?.intentId === intentId) {
         resolve(candidate);
         return;
@@ -332,7 +354,8 @@ function decodeStoredMergeApplyIntent(
   if (!isRecord(value) || value.schemaVersion !== 1 || value.operation !== 'merge-apply-intent') {
     return null;
   }
-  if (value.namespaceKey !== namespaceKey || value.documentScopeKey !== documentScopeKey) return null;
+  if (value.namespaceKey !== namespaceKey || value.documentScopeKey !== documentScopeKey)
+    return null;
   return isMergeApplyIntentRecord(value.record) ? cloneJson(value.record) : null;
 }
 

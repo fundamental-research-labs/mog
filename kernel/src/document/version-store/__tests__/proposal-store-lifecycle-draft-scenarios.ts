@@ -1,9 +1,5 @@
 import type { AgentProposalMetadataStore, AgentProposalRecord } from '../proposals/proposal-store';
-import {
-  BASE_COMMIT_ID,
-  DOCUMENT_SCOPE,
-  createProposalInput,
-} from './proposal-store-test-utils';
+import { BASE_COMMIT_ID, DOCUMENT_SCOPE, createProposalInput } from './proposal-store-test-utils';
 
 export async function createProposalDraftWithIdempotencyChecks(
   store: AgentProposalMetadataStore,

@@ -1,7 +1,4 @@
-import type {
-  VersionDiagnostic,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionDiagnostic, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import { projectVersionStoreDiagnosticPayload } from './version-history-diagnostic-projection-store-payload';
 import {
@@ -17,9 +14,7 @@ import { isRecord } from './version-history-diagnostic-projection-store-redactio
 export function projectVersionStoreDiagnosticForPublicResult(
   diagnostic: VersionStoreDiagnostic,
 ): VersionDiagnostic {
-  const source = isRecord(diagnostic)
-    ? (diagnostic as Readonly<Record<string, unknown>>)
-    : {};
+  const source = isRecord(diagnostic) ? (diagnostic as Readonly<Record<string, unknown>>) : {};
   const issueCode = publicDiagnosticIssueCode(source);
   const payload = projectVersionStoreDiagnosticPayload(source);
   return {

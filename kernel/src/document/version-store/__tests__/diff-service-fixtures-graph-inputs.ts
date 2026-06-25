@@ -1,16 +1,7 @@
-import type {
-  CommitVersionGraphInput,
-  VersionGraphNamespace,
-} from '../graph';
+import type { CommitVersionGraphInput, VersionGraphNamespace } from '../graph';
 import type { VersionObjectType, WorkbookCommitId } from '../object-digest';
-import {
-  createVersionObjectRecord,
-  type VersionObjectRecord,
-} from '../object-store';
-import {
-  namespaceForDocumentScope,
-  type VersionGraphInitializeInput,
-} from '../provider';
+import { createVersionObjectRecord, type VersionObjectRecord } from '../object-store';
+import { namespaceForDocumentScope, type VersionGraphInitializeInput } from '../provider';
 import type { RefVersion } from '../refs/ref-store';
 import {
   DIFF_SERVICE_AUTHOR,

@@ -285,14 +285,13 @@ async function createCopyCutDeps(deps: ActionDependencies, sheetId: SheetId, ran
     systemClipboardExportOptions.isRowHidden = (_sid, row) => filterHiddenRows.has(row);
   }
 
-  const filteredCopyStoreReader: ClipboardStoreReader =
-    copyIntersectsActiveFilter
-      ? {
-          ...storeReader,
-          isRowHidden: (_sid, row) => filterHiddenRows.has(row),
-          isColHidden: undefined,
-        }
-      : storeReader;
+  const filteredCopyStoreReader: ClipboardStoreReader = copyIntersectsActiveFilter
+    ? {
+        ...storeReader,
+        isRowHidden: (_sid, row) => filterHiddenRows.has(row),
+        isColHidden: undefined,
+      }
+    : storeReader;
 
   return {
     commands: deps.commands.clipboard,

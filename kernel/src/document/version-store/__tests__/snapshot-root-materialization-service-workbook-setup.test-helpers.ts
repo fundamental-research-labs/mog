@@ -7,23 +7,16 @@ import {
   createDocumentLifecycleSnapshotRootHydrator,
   type SnapshotRootFreshLifecycleMaterialization,
 } from '../../../api/document/snapshot-root-lifecycle-hydrator';
-import {
-  createInMemoryVersionStoreProvider,
-  namespaceForDocumentScope,
-} from '../provider';
+import { createInMemoryVersionStoreProvider, namespaceForDocumentScope } from '../provider';
 import {
   createWorkbookSnapshotRootRecord,
   createYrsFullStateSnapshotRootPayload,
 } from '../snapshot-root-capture';
 import { createSnapshotRootMaterializationService } from '../snapshot-root-materialization-service';
 
-import {
-  expectMaterializationSuccess,
-} from './snapshot-root-materialization-service-assertions.test-helpers';
+import { expectMaterializationSuccess } from './snapshot-root-materialization-service-assertions.test-helpers';
 import { DOCUMENT_SCOPE } from './snapshot-root-materialization-service-constants.test-helpers';
-import {
-  initializeGraphWithSnapshotRoot,
-} from './snapshot-root-materialization-service-graph-builders.test-helpers';
+import { initializeGraphWithSnapshotRoot } from './snapshot-root-materialization-service-graph-builders.test-helpers';
 
 export async function materializeAuthoredWorkbook<TArtifacts>(options: {
   readonly sourceDocumentId: string;

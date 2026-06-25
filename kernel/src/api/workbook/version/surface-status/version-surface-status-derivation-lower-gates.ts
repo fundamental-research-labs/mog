@@ -135,9 +135,8 @@ function appendLowerGateResultIssues(
   for (const result of lowerGateResults) {
     if (!isRecord(result)) continue;
     const status = stringValue(result.status);
-    const currentForTarget = typeof result.currentForTarget === 'boolean'
-      ? result.currentForTarget
-      : true;
+    const currentForTarget =
+      typeof result.currentForTarget === 'boolean' ? result.currentForTarget : true;
     if (status === 'pass' && currentForTarget) continue;
     issues.push(
       lowerGateIssue(
@@ -192,10 +191,7 @@ function appendSourceRepoIssues(
   }
 }
 
-function lowerGateIssue(
-  message: string,
-  data: Readonly<Record<string, unknown>>,
-): LowerGateIssue {
+function lowerGateIssue(message: string, data: Readonly<Record<string, unknown>>): LowerGateIssue {
   return {
     diagnostic: {
       code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
@@ -210,8 +206,7 @@ function lowerGateIssue(
 function lowerGateBlock(issues: readonly LowerGateIssue[]): VersionSurfaceCapabilityBlock {
   return {
     dependency: 'VC-09',
-    reason:
-      'Promoted version surfaces require current, clean, passing lower-gate evidence.',
+    reason: 'Promoted version surfaces require current, clean, passing lower-gate evidence.',
     retryable: true,
     code: 'version.surfaceStatus.lowerGateEvidenceBlocked',
     diagnostics: issues.map((issue) => issue.diagnostic),
@@ -253,13 +248,13 @@ function availabilityForCapability(
 function looksLikeLowerGateEvidence(value: Readonly<Record<string, unknown>>): boolean {
   return Boolean(
     value.lowerGateResults ||
-      value.requiredLowerGates ||
-      value.rolloutGate ||
-      value.capabilityGateCas ||
-      value.promotionStatus ||
-      value.rolloutStage ||
-      value.readbackStage ||
-      value.sourceRepos ||
-      isRecord(value.target),
+    value.requiredLowerGates ||
+    value.rolloutGate ||
+    value.capabilityGateCas ||
+    value.promotionStatus ||
+    value.rolloutStage ||
+    value.readbackStage ||
+    value.sourceRepos ||
+    isRecord(value.target),
   );
 }

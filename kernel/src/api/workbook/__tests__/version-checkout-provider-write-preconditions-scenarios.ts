@@ -42,9 +42,8 @@ export function registerProviderWriteActivityPreconditionScenario(): void {
 
 export function registerProviderWritePendingRemotePromotionPreconditionScenario(): void {
   it('blocks checkout while pending remote promotion activity is in flight', async () => {
-    const provider = await createInitializedProviderWritePreconditionProvider(
-      'graph-active-promotion',
-    );
+    const provider =
+      await createInitializedProviderWritePreconditionProvider('graph-active-promotion');
     const activity = await startHeldPendingRemotePromotionActivity();
     const wb = createProviderWritePreconditionWorkbook(provider, {
       providerWriteActivityTracker: activity.providerWriteActivityTracker,

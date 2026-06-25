@@ -4,10 +4,7 @@ import {
   DOCUMENT_ID,
   WORKSPACE_ID,
 } from './version-xlsx-reimport-trust-constants';
-import {
-  createSourceXlsx,
-  seedTrustedExport,
-} from './version-xlsx-reimport-trust-workbook';
+import { createSourceXlsx, seedTrustedExport } from './version-xlsx-reimport-trust-workbook';
 import type { UntrustedNewRootReimportScenario } from './version-xlsx-reimport-trust-untrusted-metadata-cases-types';
 
 export async function createCopiedSidecarFromAnotherDocumentScenario(): Promise<UntrustedNewRootReimportScenario> {

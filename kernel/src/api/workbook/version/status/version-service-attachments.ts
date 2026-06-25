@@ -56,9 +56,7 @@ export function getAttachedVersionReadService(
   return null;
 }
 
-export function hasCompleteVc09ProvenanceTruth(
-  services: AttachedVersionServices | null,
-): boolean {
+export function hasCompleteVc09ProvenanceTruth(services: AttachedVersionServices | null): boolean {
   if (!services) return false;
   return [
     services.provenanceAdmissionService,

@@ -4,9 +4,7 @@ import type {
 } from '../../../document/version-store/refs/ref-name';
 import { validateRefName } from '../../../document/version-store/refs/ref-name';
 
-export type PublicVersionBranchRefIssue =
-  | RefNameValidationIssue
-  | 'reservedPublicNamespace';
+export type PublicVersionBranchRefIssue = RefNameValidationIssue | 'reservedPublicNamespace';
 
 export type PublicVersionBranchRefValidationResult =
   | { readonly ok: true; readonly name: RefName }

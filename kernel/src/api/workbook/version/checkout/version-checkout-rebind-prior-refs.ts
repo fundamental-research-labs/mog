@@ -1,4 +1,7 @@
-import { REF_NAME_STORAGE_PREFIX, validateRefName } from '../../../../document/version-store/refs/ref-name';
+import {
+  REF_NAME_STORAGE_PREFIX,
+  validateRefName,
+} from '../../../../document/version-store/refs/ref-name';
 import { VersionCheckoutRebindIdentityError } from './version-checkout-rebind-errors';
 import type { RebindIdentityErrorReason } from './version-checkout-rebind-types';
 import {

@@ -4,12 +4,7 @@ import type {
   VersionSemanticValue,
 } from '@mog-sdk/contracts/api';
 
-import {
-  BASE,
-  OURS,
-  THEIRS,
-  metadata as mergeMetadata,
-} from './version-apply-merge-test-utils';
+import { BASE, OURS, THEIRS, metadata as mergeMetadata } from './version-apply-merge-test-utils';
 
 export function cleanResult(changes: readonly VersionMergeChange[]): VersionMergeResult {
   return {

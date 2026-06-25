@@ -183,10 +183,7 @@ export async function deleteWorkbookVersionFacadeRef(
   ctx: DocumentContext,
   options: VersionDeleteRefOptions,
 ): Promise<VersionResult<VersionRef>> {
-  return versionResultFromRefMutation(
-    'deleteRef',
-    await deleteWorkbookVersionRef(ctx, options),
-  );
+  return versionResultFromRefMutation('deleteRef', await deleteWorkbookVersionRef(ctx, options));
 }
 
 async function readActiveCheckoutSymbolicHead(
@@ -241,9 +238,7 @@ async function readActiveCheckoutSymbolicHead(
   };
 }
 
-function symbolicHeadRefFromActiveResult(
-  value: unknown,
-): VersionSymbolicRefReadResult['ref'] {
+function symbolicHeadRefFromActiveResult(value: unknown): VersionSymbolicRefReadResult['ref'] {
   if (!isRecord(value)) return null;
   const revision = value.revision;
   if (!isVersionRecordRevision(revision)) return null;

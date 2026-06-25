@@ -46,8 +46,7 @@ function toDeleteCapableVersionRefLifecycleService(
   const getHead = bindMethod(value, 'getHead');
   const readHead = bindMethod(value, 'readHead');
   const readActiveCheckoutSession =
-    bindMethod(value, 'readActiveCheckoutSession') ??
-    bindMethod(value, 'getActiveCheckoutSession');
+    bindMethod(value, 'readActiveCheckoutSession') ?? bindMethod(value, 'getActiveCheckoutSession');
   return {
     deleteBranch: (input) => deleteBranch(input),
     ...(readBranch ? { readBranch: (input) => readBranch(input) } : {}),

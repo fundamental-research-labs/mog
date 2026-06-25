@@ -1,7 +1,4 @@
-import type {
-  VersionMergeConflict,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionMergeConflict, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { VersionGraphStore } from '../../../../document/version-store/provider-graph-store';
 import { mergeReviewDiagnostic } from './version-merge-review-artifacts';

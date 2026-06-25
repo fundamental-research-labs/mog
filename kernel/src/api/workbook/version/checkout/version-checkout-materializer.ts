@@ -19,7 +19,9 @@ export interface WorkbookCheckoutPublisher {
   currentContext(): DocumentContext;
   revalidateCheckoutPublish?(
     input: CheckoutSnapshotApplyInput,
-  ): Promise<readonly CheckoutMaterializationDiagnostic[]> | readonly CheckoutMaterializationDiagnostic[];
+  ):
+    | Promise<readonly CheckoutMaterializationDiagnostic[]>
+    | readonly CheckoutMaterializationDiagnostic[];
   publishCheckoutMaterialization(
     materialization: SnapshotRootFreshLifecycleMaterialization,
     input: CheckoutSnapshotApplyInput,
@@ -128,7 +130,8 @@ async function settleMaterializedMirrorState(
         {
           code: 'VERSION_CHECKOUT_SNAPSHOT_APPLY_FAILED',
           severity: 'error',
-          message: 'Fresh lifecycle checkout materialization could not settle mirrored sheet state.',
+          message:
+            'Fresh lifecycle checkout materialization could not settle mirrored sheet state.',
           commitId: input.commitId,
           details: {
             ...checkoutPublishErrorDetails(error),
@@ -165,8 +168,6 @@ function errorName(error: unknown): string {
   return error instanceof Error ? error.name : typeof error;
 }
 
-function checkoutPublishErrorDetails(
-  error: unknown,
-): CheckoutMaterializationDiagnostic['details'] {
+function checkoutPublishErrorDetails(error: unknown): CheckoutMaterializationDiagnostic['details'] {
   return checkoutRebindIdentityDiagnosticDetails(error) ?? { cause: errorName(error) };
 }

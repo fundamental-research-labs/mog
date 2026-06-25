@@ -1,7 +1,4 @@
-import type {
-  WorkbookCommitStoreDiagnostic,
-  WorkbookCommitStoreDiagnosticCode,
-} from './types';
+import type { WorkbookCommitStoreDiagnostic, WorkbookCommitStoreDiagnosticCode } from './types';
 
 export function diagnostic(
   code: WorkbookCommitStoreDiagnosticCode,

@@ -14,9 +14,7 @@ export function spyOnBranchWrites(branchService: BranchWriteService) {
   };
 }
 
-export function expectBranchWritesNotCalled(
-  spies: ReturnType<typeof spyOnBranchWrites>,
-): void {
+export function expectBranchWritesNotCalled(spies: ReturnType<typeof spyOnBranchWrites>): void {
   expect(spies.createBranch).not.toHaveBeenCalled();
   expect(spies.fastForwardBranch).not.toHaveBeenCalled();
   expect(spies.deleteBranch).not.toHaveBeenCalled();

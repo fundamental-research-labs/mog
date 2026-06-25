@@ -10,10 +10,7 @@ import {
   type VersionGraphInitializeInput,
 } from '../../../document/version-store/provider';
 import { VERSION_STATUS_CREATED_AT as CREATED_AT } from './version-status-test-utils';
-import {
-  DOCUMENT_SCOPE,
-  VERSION_AUTHOR,
-} from './version-status-workbook-test-utils-constants';
+import { DOCUMENT_SCOPE, VERSION_AUTHOR } from './version-status-workbook-test-utils-constants';
 
 export async function objectRecord(
   namespace: VersionGraphNamespace,

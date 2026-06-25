@@ -23,9 +23,9 @@ describe('checkout frozen pane materialization', () => {
       setFrozenPanes,
     });
 
-    await expect(
-      materializeCheckoutFrozenPanes(checkoutInput(), materialization),
-    ).resolves.toEqual({ status: 'materialized' });
+    await expect(materializeCheckoutFrozenPanes(checkoutInput(), materialization)).resolves.toEqual(
+      { status: 'materialized' },
+    );
 
     expect(setFrozenPanes).toHaveBeenCalledTimes(1);
     expect(setFrozenPanes).toHaveBeenCalledWith(FROZEN_SHEET_ID, 7, 1);
@@ -45,9 +45,9 @@ describe('checkout frozen pane materialization', () => {
       setFrozenPanes,
     });
 
-    await expect(
-      materializeCheckoutFrozenPanes(checkoutInput(), materialization),
-    ).resolves.toEqual({ status: 'materialized' });
+    await expect(materializeCheckoutFrozenPanes(checkoutInput(), materialization)).resolves.toEqual(
+      { status: 'materialized' },
+    );
 
     expect(setFrozenPanes).not.toHaveBeenCalled();
   });

@@ -14,7 +14,10 @@ import {
   type ChartMutationOptionsInput,
 } from './chart-mutation-context';
 import { get, update } from './chart-store';
-import { resolveStoredChartHeightCellSpan, resolveStoredChartWidthCellSpan } from './chart-size-units';
+import {
+  resolveStoredChartHeightCellSpan,
+  resolveStoredChartWidthCellSpan,
+} from './chart-size-units';
 
 /**
  * Update chart position (for drag/resize).

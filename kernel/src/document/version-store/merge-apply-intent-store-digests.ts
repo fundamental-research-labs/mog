@@ -51,7 +51,9 @@ export function mergeResultIdForResolvedAttemptDigest(digest: ObjectDigest): Ver
   return `merge-result:${digest.digest}` as VersionMergeResultId;
 }
 
-export function intentIdForMergeResultId(resultId: VersionMergeResultId): MergeApplyIntentId | null {
+export function intentIdForMergeResultId(
+  resultId: VersionMergeResultId,
+): MergeApplyIntentId | null {
   const digest = resultId.slice('merge-result:'.length);
   return /^[0-9a-f]{64}$/.test(digest) ? `merge-apply-intent:sha256:${digest}` : null;
 }
@@ -70,13 +72,16 @@ export async function computeMergeApplyRefCasProof(
   const commitMetadataDigest = objectDigestFromWorkbookCommitId(
     input.headAfter as StoreWorkbookCommitId,
   );
-  const refUpdateMetadataDigest = await objectDigestFor('mog.version.merge.ref-update-metadata.v1', {
-    schemaVersion: 1,
-    applyKind: input.applyKind,
-    targetRef: input.targetRef,
-    headBefore: input.headBefore,
-    headAfter: input.headAfter,
-  });
+  const refUpdateMetadataDigest = await objectDigestFor(
+    'mog.version.merge.ref-update-metadata.v1',
+    {
+      schemaVersion: 1,
+      applyKind: input.applyKind,
+      targetRef: input.targetRef,
+      headBefore: input.headBefore,
+      headAfter: input.headAfter,
+    },
+  );
   const refLogEventDigest = await objectDigestFor('mog.version.merge.ref-log-event.v1', {
     schemaVersion: 1,
     applyKind: input.applyKind,

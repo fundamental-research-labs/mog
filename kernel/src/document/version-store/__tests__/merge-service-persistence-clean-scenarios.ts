@@ -64,24 +64,23 @@ export function registerMergeServicePersistenceCleanScenarios() {
       algorithm: 'sha256',
       digest: previewArtifactDigest.digest,
     });
-    await expect(opened.getObjectRecord(artifactRef))
-      .resolves.toMatchObject({
-        preimage: {
-          payload: {
-            recordKind: 'mergePreview',
-            status: 'clean',
-            changes: expect.arrayContaining([
-              expect.objectContaining({
-                structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
-              }),
-              expect.objectContaining({
-                structural: expect.objectContaining({ entityId: 'sheet-1!B1' }),
-              }),
-            ]),
-            conflicts: [],
-          },
+    await expect(opened.getObjectRecord(artifactRef)).resolves.toMatchObject({
+      preimage: {
+        payload: {
+          recordKind: 'mergePreview',
+          status: 'clean',
+          changes: expect.arrayContaining([
+            expect.objectContaining({
+              structural: expect.objectContaining({ entityId: 'sheet-1!A1' }),
+            }),
+            expect.objectContaining({
+              structural: expect.objectContaining({ entityId: 'sheet-1!B1' }),
+            }),
+          ]),
+          conflicts: [],
         },
-      });
+      },
+    });
 
     await expectNoIntentForReviewResult(graph, result.resultId);
   });

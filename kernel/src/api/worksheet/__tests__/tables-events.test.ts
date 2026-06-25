@@ -325,7 +325,9 @@ describe('WorksheetTablesImpl table event identity', () => {
     expect(styleOptions.operationContext.groupId).toBe(styleOptions.operationContext.operationId);
     expect(boolOptions.operationContext.groupId).toBe(styleOptions.operationContext.groupId);
     expect(autoExpandOptions.operationContext.groupId).toBe(styleOptions.operationContext.groupId);
-    expect(boolOptions.operationContext.operationId).not.toBe(styleOptions.operationContext.operationId);
+    expect(boolOptions.operationContext.operationId).not.toBe(
+      styleOptions.operationContext.operationId,
+    );
     expect(autoExpandOptions.operationContext.operationId).not.toBe(
       styleOptions.operationContext.operationId,
     );

@@ -126,6 +126,8 @@ fn fully_populated_roundtrip() {
         hidden: Some(false),
         // quote_prefix is not wire-encoded; it round-trips as None.
         quote_prefix: None,
+        // pivot_button is not wire-encoded; it round-trips as None.
+        pivot_button: None,
         // tint / auto-indent fields are not wire-encoded; they round-trip as None.
         font_color_tint: None,
         auto_indent: None,

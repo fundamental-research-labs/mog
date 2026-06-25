@@ -3,10 +3,7 @@ export {
   createInMemoryVersionGraphStore,
   createInMemoryVersionGraphStoreFromSnapshot,
 } from './graph-store-in-memory';
-export {
-  VERSION_GRAPH_HEAD_REF,
-  VERSION_GRAPH_MAIN_REF,
-} from './graph-store-refs';
+export { VERSION_GRAPH_HEAD_REF, VERSION_GRAPH_MAIN_REF } from './graph-store-refs';
 export {
   VERSION_GRAPH_LIST_COMMITS_DEFAULT_PAGE_SIZE,
   VERSION_GRAPH_LIST_COMMITS_MAX_PAGE_SIZE,

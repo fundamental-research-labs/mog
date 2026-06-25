@@ -3,7 +3,10 @@ import {
   namespaceForDocumentScope,
 } from '../../../document/version-store/provider';
 import { AUTHOR, DOCUMENT_SCOPE } from './version-diff-projection-helpers-constants';
-import { appendChild, expectInitializeSuccess } from './version-diff-projection-helpers-graph-operations';
+import {
+  appendChild,
+  expectInitializeSuccess,
+} from './version-diff-projection-helpers-graph-operations';
 import { commitInput, initializeInput } from './version-diff-projection-helpers-graph-inputs';
 import { graphContentInput } from './version-diff-projection-helpers-records';
 import { defaultCellChange, validSemanticPayload } from './version-diff-projection-fixtures';
@@ -103,11 +106,7 @@ export async function graphWithMergeTarget(
   };
 
   const merge = await graph.mergeCommit({
-    ...(await graphContentInput(
-      namespace,
-      'merge',
-      mergePayload,
-    )),
+    ...(await graphContentInput(namespace, 'merge', mergePayload)),
     expectedHeadCommitId: ours.commit.id,
     expectedMainRefVersion: ours.main.revision,
     mergeParentCommitId: theirs.commit.id,

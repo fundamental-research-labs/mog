@@ -1,10 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 
 import { rebindVersioningAfterCheckout } from '../version/checkout/version-checkout-rebind';
-import {
-  createDocumentContext,
-  OPERATION_CONTEXT,
-} from './version-checkout-rebind-test-utils';
+import { createDocumentContext, OPERATION_CONTEXT } from './version-checkout-rebind-test-utils';
 
 export function registerCheckoutRebindCaptureResetScenario(): void {
   it('passes caller-supplied operation context to semantic capture reset', () => {

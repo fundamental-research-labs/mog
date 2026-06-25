@@ -1,7 +1,4 @@
-import type {
-  VersionCapabilityDependency,
-  VersionDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionCapabilityDependency, VersionDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
 import type { SurfaceVersionCapability } from './version-surface-status-service';

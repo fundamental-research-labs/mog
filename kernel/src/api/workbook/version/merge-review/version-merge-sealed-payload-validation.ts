@@ -17,7 +17,8 @@ import {
   toInternalSha256Digest,
 } from './version-merge-review-artifacts';
 import type { VersionMergePublicOperation } from '../merge/version-merge-capability';
-import { findResolutionOption, projectReviewValue } from './version-merge-review-conflicts';
+import { findResolutionOption } from './version-merge-review-conflicts-lookup';
+import { projectReviewValue } from './version-merge-review-conflicts-projection';
 import {
   type MergeResolutionPayloadRecord,
   toMergeResolutionPayloadRecord,

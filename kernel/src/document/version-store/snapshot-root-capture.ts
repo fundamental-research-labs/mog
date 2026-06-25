@@ -133,11 +133,7 @@ export function validateYrsFullStateSnapshotRootPayload(
 
 export function decodeYrsFullStateSnapshotRootPayload(payload: unknown): Uint8Array {
   const validated = validateYrsFullStateSnapshotRootPayload(payload);
-  return decodeCanonicalBase64Bytes(
-    validated.bytes,
-    validated.byteLength,
-    'snapshotRoot.bytes',
-  );
+  return decodeCanonicalBase64Bytes(validated.bytes, validated.byteLength, 'snapshotRoot.bytes');
 }
 
 export async function createWorkbookSnapshotRootRecord(
@@ -179,10 +175,7 @@ export function validateWorkbookSnapshotRootRecord(
       'record.preimage.payloadEncoding',
     );
   }
-  if (
-    !Array.isArray(record.preimage.dependencies) ||
-    record.preimage.dependencies.length !== 0
-  ) {
+  if (!Array.isArray(record.preimage.dependencies) || record.preimage.dependencies.length !== 0) {
     throw invalidRecord(
       'Yrs full-state snapshot root records must not declare dependencies.',
       'record.preimage.dependencies',
@@ -242,11 +235,7 @@ const BASE64_ENCODE_CHUNK_BYTE_LENGTH = 0x3000;
 
 function bytesToBase64(bytes: Uint8Array): string {
   const chunks: string[] = [];
-  for (
-    let offset = 0;
-    offset < bytes.byteLength;
-    offset += BASE64_ENCODE_CHUNK_BYTE_LENGTH
-  ) {
+  for (let offset = 0; offset < bytes.byteLength; offset += BASE64_ENCODE_CHUNK_BYTE_LENGTH) {
     chunks.push(
       encodeBase64Chunk(
         bytes,
@@ -258,11 +247,7 @@ function bytesToBase64(bytes: Uint8Array): string {
   return chunks.join('');
 }
 
-function decodeCanonicalBase64Bytes(
-  value: string,
-  byteLength: number,
-  path: string,
-): Uint8Array {
+function decodeCanonicalBase64Bytes(value: string, byteLength: number, path: string): Uint8Array {
   const bytes = new Uint8Array(byteLength);
   let outputOffset = 0;
 
@@ -301,8 +286,7 @@ function encodeBase64Chunk(bytes: Uint8Array, start: number, end: number): strin
   const remaining = end - index;
   if (remaining === 1) {
     const first = bytes[index];
-    output +=
-      BASE64_ALPHABET[first >> 2] + BASE64_ALPHABET[(first & 0x03) << 4] + '==';
+    output += BASE64_ALPHABET[first >> 2] + BASE64_ALPHABET[(first & 0x03) << 4] + '==';
   } else if (remaining === 2) {
     const combined = (bytes[index] << 8) | bytes[index + 1];
     output +=
@@ -337,10 +321,10 @@ function canonicalBase64DecodedByteLength(value: string, path: string): number {
       throw invalidPayload('Snapshot root payload bytes must be canonical base64.', path);
     }
   }
-  if (padding === 1 && (requiredBase64Value(value.charCodeAt(value.length - 2), path) & 0x03)) {
+  if (padding === 1 && requiredBase64Value(value.charCodeAt(value.length - 2), path) & 0x03) {
     throw invalidPayload('Snapshot root payload bytes must use canonical base64 padding.', path);
   }
-  if (padding === 2 && (requiredBase64Value(value.charCodeAt(value.length - 3), path) & 0x0f)) {
+  if (padding === 2 && requiredBase64Value(value.charCodeAt(value.length - 3), path) & 0x0f) {
     throw invalidPayload('Snapshot root payload bytes must use canonical base64 padding.', path);
   }
 

@@ -96,9 +96,7 @@ export function mapServiceDiagnostics(value: unknown): readonly VersionStoreDiag
   return value.map(mapServiceDiagnostic);
 }
 
-export function mapOptionalServiceDiagnostics(
-  value: unknown,
-): readonly VersionStoreDiagnostic[] {
+export function mapOptionalServiceDiagnostics(value: unknown): readonly VersionStoreDiagnostic[] {
   if (!Array.isArray(value) || value.length === 0) return [];
   return value.map(mapServiceDiagnostic);
 }
@@ -111,10 +109,7 @@ export function mapServiceDiagnostic(value: unknown): VersionStoreDiagnostic {
 
   return publicDiagnostic(issueCode, safeMessageForIssue(issueCode), {
     severity:
-      severity === 'info' ||
-      severity === 'warning' ||
-      severity === 'error' ||
-      severity === 'fatal'
+      severity === 'info' || severity === 'warning' || severity === 'error' || severity === 'fatal'
         ? severity
         : 'error',
     recoverability: recoverabilityForIssue(issueCode),

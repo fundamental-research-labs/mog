@@ -188,9 +188,7 @@ export interface ControlPlaneShadowObservationEvent {
   readonly diagnostics: readonly ControlPlaneDiagnostic[];
 }
 
-export type ControlPlaneShadowObservationHook = (
-  event: ControlPlaneShadowObservationEvent,
-) => void;
+export type ControlPlaneShadowObservationHook = (event: ControlPlaneShadowObservationEvent) => void;
 
 export interface ControlPlaneShadowObservationOptions {
   readonly scope?: ControlPlaneCapabilityGateScope;

@@ -1,7 +1,4 @@
-import type {
-  VersionCommitExpectedHead,
-  VersionMergeResult,
-} from '@mog-sdk/contracts/api';
+import type { VersionCommitExpectedHead, VersionMergeResult } from '@mog-sdk/contracts/api';
 
 export type PersistedFastForwardMergePreview = Extract<
   VersionMergeResult,

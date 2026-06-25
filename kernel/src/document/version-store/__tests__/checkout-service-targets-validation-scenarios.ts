@@ -1,10 +1,6 @@
 import type { CheckoutMaterializationRequest } from '../checkout-service';
 
-import {
-  commit,
-  createStores,
-  expectPlanFailed,
-} from './checkout-service-test-helpers';
+import { commit, createStores, expectPlanFailed } from './checkout-service-test-helpers';
 import {
   createTargetCheckoutService,
   createTrackedCommitReader,

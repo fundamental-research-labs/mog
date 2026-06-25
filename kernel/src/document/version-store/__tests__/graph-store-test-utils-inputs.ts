@@ -1,17 +1,8 @@
-import type {
-  VersionDependencyRef,
-  WorkbookCommitId,
-} from '../object-digest';
-import type {
-  CommitVersionGraphInput,
-  InitializeVersionGraphInput,
-} from '../graph';
+import type { VersionDependencyRef, WorkbookCommitId } from '../object-digest';
+import type { CommitVersionGraphInput, InitializeVersionGraphInput } from '../graph';
 import type { VersionGraphNamespace } from '../object-store';
 import type { RefVersion } from '../refs/ref-store';
-import {
-  AUTHOR,
-  NAMESPACE,
-} from './graph-store-test-utils-constants';
+import { AUTHOR, NAMESPACE } from './graph-store-test-utils-constants';
 import { objectRecord } from './graph-store-test-utils-object-records';
 
 export async function graphInput(

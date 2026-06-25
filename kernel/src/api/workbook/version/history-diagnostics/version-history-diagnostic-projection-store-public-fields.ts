@@ -1,7 +1,4 @@
-import type {
-  VersionDiagnostic,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionDiagnostic, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import {
   diagnosticHistoryCondition,
@@ -51,9 +48,7 @@ export function publicRecoverability(value: unknown): VersionStoreDiagnostic['re
 }
 
 export function publicMessageTemplateId(value: unknown, issueCode: string): string {
-  return typeof value === 'string' && value.length > 0
-    ? value
-    : `version.provider.${issueCode}`;
+  return typeof value === 'string' && value.length > 0 ? value : `version.provider.${issueCode}`;
 }
 
 export function isPublicMutationGuarantee(

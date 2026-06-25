@@ -66,9 +66,7 @@ export class ActiveCheckoutMaterializationMemoryBackend {
 
   exportSnapshot(): ActiveCheckoutMaterializationMemoryBackendSnapshot {
     return Object.freeze(
-      [...this.records.values()].map((record) =>
-        cloneActiveCheckoutMaterializationRecord(record),
-      ),
+      [...this.records.values()].map((record) => cloneActiveCheckoutMaterializationRecord(record)),
     );
   }
 

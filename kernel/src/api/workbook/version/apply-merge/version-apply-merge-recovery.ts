@@ -128,7 +128,13 @@ async function recoverFastForwardPostCas(
       'ref-not-mutated',
     );
   }
-  const completed = await completeRecoveredIntent(store, record, 'fastForwarded', record.theirs, proof.proof);
+  const completed = await completeRecoveredIntent(
+    store,
+    record,
+    'fastForwarded',
+    record.theirs,
+    proof.proof,
+  );
   if (completed.status !== 'completed') {
     return blockedApplyMergeResult(
       record.base,
@@ -177,7 +183,13 @@ async function recoverMergeCommitPostCas(
       'ref-not-mutated',
     );
   }
-  const completed = await completeRecoveredIntent(store, record, 'applied', current.commitId, proof.proof);
+  const completed = await completeRecoveredIntent(
+    store,
+    record,
+    'applied',
+    current.commitId,
+    proof.proof,
+  );
   if (completed.status !== 'completed') {
     return blockedApplyMergeResult(
       record.base,
@@ -268,7 +280,12 @@ function getAttachedMergeApplyIntentStoreProvider(
 ): (VersionStoreProvider & MergeApplyIntentStoreProvider) | null {
   const services = getAttachedVersionServices(ctx);
   if (!services) return null;
-  for (const candidate of [services.provider, services.versionStoreProvider, services.storeProvider, services]) {
+  for (const candidate of [
+    services.provider,
+    services.versionStoreProvider,
+    services.storeProvider,
+    services,
+  ]) {
     if (
       isRecord(candidate) &&
       typeof candidate.readGraphRegistry === 'function' &&

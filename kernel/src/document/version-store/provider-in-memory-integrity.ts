@@ -1,8 +1,5 @@
 import { versionStoreDiagnostic } from './provider-diagnostics';
-import type {
-  VersionDocumentIntegrityScanOptions,
-  VersionIntegrityReport,
-} from './provider-types';
+import type { VersionDocumentIntegrityScanOptions, VersionIntegrityReport } from './provider-types';
 import { assertInMemoryProviderAvailable } from './provider-in-memory-availability';
 import type { InMemoryVersionStoreProviderState } from './provider-in-memory-types';
 

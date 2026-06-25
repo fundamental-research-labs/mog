@@ -144,8 +144,8 @@ export function registerVersionStatusCommitProviderScenarios() {
       checkedOutCommitId: committed.id,
       branchName: 'scenario/direct-active-branch',
       refHeadAtMaterialization: committed.id,
-        detached: false,
-      });
+      detached: false,
+    });
     expect(activeCheckoutStateChanges).toEqual([
       expect.objectContaining({
         activeCheckoutSession: expect.objectContaining({
@@ -289,9 +289,7 @@ export function registerVersionStatusCommitProviderScenarios() {
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        diagnostics: [
-          expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' }),
-        ],
+        diagnostics: [expect.objectContaining({ code: 'VERSION_CHECKOUT_STALE_WORKSPACE_HEAD' })],
       },
     });
     expect(commit).not.toHaveBeenCalled();

@@ -24,7 +24,9 @@ export function isWorkbookVersionReviewRecordStoreRow(
   return Array.isArray(value.mutationLog) && value.mutationLog.every(isMutationLogEntry);
 }
 
-export function cloneRow(row: WorkbookVersionReviewRecordStoreRow): WorkbookVersionReviewRecordStoreRow;
+export function cloneRow(
+  row: WorkbookVersionReviewRecordStoreRow,
+): WorkbookVersionReviewRecordStoreRow;
 export function cloneRow(row: undefined): undefined;
 export function cloneRow(
   row: WorkbookVersionReviewRecordStoreRow | undefined,
@@ -80,7 +82,11 @@ function isWorkbookVersionReviewRecord(value: unknown): value is WorkbookVersion
   if (typeof value.documentId !== 'string') return false;
   if (!isReviewSubject(value.subject)) return false;
   if (!isReviewStatus(value.status)) return false;
-  if (typeof value.revision !== 'number' || !Number.isInteger(value.revision) || value.revision < 1) {
+  if (
+    typeof value.revision !== 'number' ||
+    !Number.isInteger(value.revision) ||
+    value.revision < 1
+  ) {
     return false;
   }
   if (!isRecord(value.createdBy)) return false;

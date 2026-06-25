@@ -1,6 +1,4 @@
-export {
-  withPersistedConflictPreview,
-} from './version-merge-review-endpoints-helpers-fixtures-persisted';
+export { withPersistedConflictPreview } from './version-merge-review-endpoints-helpers-fixtures-persisted';
 export {
   readSyntheticConflictDetail,
   withSyntheticConflictPreview,

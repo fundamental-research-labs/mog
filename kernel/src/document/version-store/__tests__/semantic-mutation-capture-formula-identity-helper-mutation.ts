@@ -1,9 +1,5 @@
-import type {
-  FormulaIdentityCapture,
-} from './semantic-mutation-capture-formula-identity-helper-capture';
-import {
-  mutationResult,
-} from './semantic-mutation-capture-formula-test-helpers';
+import type { FormulaIdentityCapture } from './semantic-mutation-capture-formula-identity-helper-capture';
+import { mutationResult } from './semantic-mutation-capture-formula-test-helpers';
 
 const FORMULA_IDENTITY_OPERATION = 'compute_batch_set_cells_by_position';
 

@@ -290,7 +290,9 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   };
 }
 
-function commitDirtySnapshot(data: VersionHistoryData | undefined): CommitDirtySnapshot | undefined {
+function commitDirtySnapshot(
+  data: VersionHistoryData | undefined,
+): CommitDirtySnapshot | undefined {
   const dirty = data?.surface?.dirty;
   if (!dirty) return undefined;
   if (
@@ -407,8 +409,7 @@ function projectVersionHistoryHead(
 function currentCheckoutCommitId(
   current: VersionSurfaceStatus['current'] | undefined,
 ): WorkbookCommitId | undefined {
-  return (current?.checkedOutCommitId ??
-    current?.headCommitId) as WorkbookCommitId | undefined;
+  return (current?.checkedOutCommitId ?? current?.headCommitId) as WorkbookCommitId | undefined;
 }
 
 function publicSurfaceCurrentBranch(

@@ -20,7 +20,12 @@ describe('InMemoryVersionObjectStore namespace binding', () => {
     const secondStore = createInMemoryVersionObjectStore(OTHER_NAMESPACE, { backend });
     const payload = { changes: [{ id: 'same-digest' }] };
     const firstRecord = await record(payload, [], 'workbook.semanticChangeSet.v1', NAMESPACE);
-    const secondRecord = await record(payload, [], 'workbook.semanticChangeSet.v1', OTHER_NAMESPACE);
+    const secondRecord = await record(
+      payload,
+      [],
+      'workbook.semanticChangeSet.v1',
+      OTHER_NAMESPACE,
+    );
     const ref = objectRef(firstRecord);
 
     expect(firstRecord.digest).toEqual(secondRecord.digest);

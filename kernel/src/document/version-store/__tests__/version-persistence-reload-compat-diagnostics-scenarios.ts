@@ -14,14 +14,10 @@ export function registerVersionPersistenceReloadCompatibilityDiagnosticsScenario
       schemaVersion: 1,
       kind: 'compat-diagnostic-test',
     });
-    const semanticChangeSetRecord = await objectRecord(
-      namespace,
-      'workbook.semanticChangeSet.v1',
-      {
-        schemaVersion: 1,
-        changes: [],
-      },
-    );
+    const semanticChangeSetRecord = await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
+      schemaVersion: 1,
+      changes: [],
+    });
     const provider = createVersionPersistenceTestProvider();
     const initialized = await initializeGraphRoot({
       provider,

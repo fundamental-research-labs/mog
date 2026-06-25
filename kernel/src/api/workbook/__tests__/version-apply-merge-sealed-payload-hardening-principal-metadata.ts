@@ -1,9 +1,5 @@
-import {
-  withSealedPayloadHardeningFixture,
-} from './version-apply-merge-sealed-payload-hardening-fixtures';
-import {
-  putForgedResolutionPayload,
-} from './version-apply-merge-sealed-payload-test-utils';
+import { withSealedPayloadHardeningFixture } from './version-apply-merge-sealed-payload-hardening-fixtures';
+import { putForgedResolutionPayload } from './version-apply-merge-sealed-payload-test-utils';
 
 export function registerPrincipalMetadataScenario(): void {
   it('rejects sealed payload objects with principal metadata before writes', async () => {

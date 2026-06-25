@@ -24,10 +24,9 @@ import {
 
 describe('VersionHistoryPanelContent pending remote promotion', () => {
   it('shows pending remote backlog status and promotes it through workbook.version', async () => {
-    const pendingProviderWrites = pendingProviderWritesDiagnostic(
-      PENDING_REMOTE_BACKLOG_MESSAGE,
-      { pendingRemoteSegmentCount: 1 },
-    );
+    const pendingProviderWrites = pendingProviderWritesDiagnostic(PENDING_REMOTE_BACKLOG_MESSAGE, {
+      pendingRemoteSegmentCount: 1,
+    });
     const workbook = createRemotePromotionWorkbook({
       surface: createRemotePromotionSurfaceStatus({
         dirty: {
@@ -90,10 +89,9 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
   });
 
   it('fails closed while refreshing capability status after remote promotion', async () => {
-    const pendingProviderWrites = pendingProviderWritesDiagnostic(
-      PENDING_REMOTE_BACKLOG_MESSAGE,
-      { pendingRemoteSegmentCount: 1 },
-    );
+    const pendingProviderWrites = pendingProviderWritesDiagnostic(PENDING_REMOTE_BACKLOG_MESSAGE, {
+      pendingRemoteSegmentCount: 1,
+    });
     const refreshedReason = 'Remote promotion is disabled until the provider reconnects.';
     const refreshedSurface = createDeferred<VersionSurfaceStatus>();
     const getSurfaceStatus = jest
@@ -159,13 +157,13 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
   });
 
   it('keeps destructive controls disabled while remote promotion is in flight', async () => {
-    const pendingProviderWrites = pendingProviderWritesDiagnostic(
-      PENDING_REMOTE_BACKLOG_MESSAGE,
-      { pendingRemoteSegmentCount: 1 },
-    );
-    const promotion = createDeferred<
-      Awaited<ReturnType<VersionHistoryWorkbook['version']['promotePendingRemote']>>
-    >();
+    const pendingProviderWrites = pendingProviderWritesDiagnostic(PENDING_REMOTE_BACKLOG_MESSAGE, {
+      pendingRemoteSegmentCount: 1,
+    });
+    const promotion =
+      createDeferred<
+        Awaited<ReturnType<VersionHistoryWorkbook['version']['promotePendingRemote']>>
+      >();
     const workbook = createRemotePromotionWorkbook({
       surface: createRemotePromotionSurfaceStatus({
         dirty: {
@@ -248,6 +246,9 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
     await screen.findByText('Calculated forecast');
     await user.click(screen.getByTestId('version-history-promote-remote-button'));
 
-    await expectActionResult('Pending remote promotion is blocked by a failed sync batch.', 'error');
+    await expectActionResult(
+      'Pending remote promotion is blocked by a failed sync batch.',
+      'error',
+    );
   });
 });

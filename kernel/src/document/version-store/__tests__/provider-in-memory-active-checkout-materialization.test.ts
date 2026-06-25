@@ -7,10 +7,7 @@ import type {
   ActiveCheckoutMaterializationMemoryBackendSnapshot,
   ActiveCheckoutMaterializationRecord,
 } from '../active-checkout-materialization-store';
-import {
-  DOCUMENT_SCOPE,
-  OTHER_DOCUMENT_SCOPE,
-} from './provider-test-utils';
+import { DOCUMENT_SCOPE, OTHER_DOCUMENT_SCOPE } from './provider-test-utils';
 
 const ORIGINAL_COMMIT = `commit:sha256:${'1'.repeat(64)}`;
 const MUTATED_COMMIT = `commit:sha256:${'2'.repeat(64)}`;
@@ -65,11 +62,10 @@ describe('InMemoryVersionStoreProvider active checkout materialization snapshots
     ];
     const snapshotReloadRecord = snapshotForReload[0];
     if (!snapshotReloadRecord) throw new Error('expected reload snapshot materialization record');
-    const reloadedBackend =
-      await InMemoryVersionDocumentProviderBackend.fromSnapshot({
-        ...snapshot,
-        activeCheckoutMaterializations: snapshotForReload,
-      });
+    const reloadedBackend = await InMemoryVersionDocumentProviderBackend.fromSnapshot({
+      ...snapshot,
+      activeCheckoutMaterializations: snapshotForReload,
+    });
     mutateRecordUnchecked(snapshotReloadRecord, {
       checkedOutCommitId: MUTATED_COMMIT,
       branchName: 'mutated-after-reload',

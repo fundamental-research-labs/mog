@@ -5,7 +5,10 @@ import {
   parseWorkbookCommitId,
   type WorkbookCommitId,
 } from '../../../document/version-store/object-digest';
-import { createInMemoryRefStore, type RefVersion } from '../../../document/version-store/refs/ref-store';
+import {
+  createInMemoryRefStore,
+  type RefVersion,
+} from '../../../document/version-store/refs/ref-store';
 import { WorkbookVersionImpl } from '../version';
 
 export const CREATED_AT = '2026-06-20T00:00:00.000Z';

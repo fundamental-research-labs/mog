@@ -11,11 +11,7 @@ import { seriesConfigForDataSeries } from '../series-identity';
 import { resolveAxisConfigForChannel } from './axis';
 import { chartImportSourceDialect } from './bar-geometry';
 import { categoryDisplayLabel, shouldUseDateSerialCategoryAxis } from './category-axis';
-import {
-  DEFAULT_CHART_HEIGHT,
-  DEFAULT_CHART_WIDTH,
-  MARK_TYPE_MAP,
-} from './constants';
+import { DEFAULT_CHART_HEIGHT, DEFAULT_CHART_WIDTH, MARK_TYPE_MAP } from './constants';
 import {
   isQuantitativeXSeries,
   isSupportedChartType,

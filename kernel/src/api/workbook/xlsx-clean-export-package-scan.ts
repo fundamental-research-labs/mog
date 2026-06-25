@@ -7,10 +7,7 @@ import {
   scanContentTypesXml,
   scanRelationshipsXml,
 } from './xlsx-clean-export-package-scan-inventory-xml';
-import {
-  normalizePackagePath,
-  scanPackagePartPath,
-} from './xlsx-clean-export-package-scan-paths';
+import { normalizePackagePath, scanPackagePartPath } from './xlsx-clean-export-package-scan-paths';
 import type {
   XlsxCleanExportPackageDiagnostic,
   XlsxCleanExportPackageInventoryXmlPart,

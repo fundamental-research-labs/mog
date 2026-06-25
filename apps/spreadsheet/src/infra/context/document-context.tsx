@@ -474,6 +474,9 @@ export function DocumentProvider({
   }
 }
 
-function effectiveWorkbookFeatureGates(readOnly: boolean, featureGates: FeatureGates): FeatureGates {
+function effectiveWorkbookFeatureGates(
+  readOnly: boolean,
+  featureGates: FeatureGates,
+): FeatureGates {
   return readOnly ? { ...featureGates, editing: false } : featureGates;
 }

@@ -1,14 +1,8 @@
 import type { RefName } from './ref-name';
-import {
-  createMemoryBranch,
-  initializeMemoryMain,
-} from './ref-store-memory-branch';
+import { createMemoryBranch, initializeMemoryMain } from './ref-store-memory-branch';
 import { deleteMemoryRef } from './ref-store-memory-delete';
 import { getMemoryRef, listMemoryRefs } from './ref-store-memory-read';
-import {
-  createInMemoryRefStoreState,
-  type InMemoryRefStoreState,
-} from './ref-store-memory-state';
+import { createInMemoryRefStoreState, type InMemoryRefStoreState } from './ref-store-memory-state';
 import { exportInMemoryRefStoreSnapshot } from './ref-store-memory-snapshot';
 import { updateMemoryRef } from './ref-store-memory-update';
 import type { InMemoryRefStoreSnapshot } from './ref-store-snapshot';

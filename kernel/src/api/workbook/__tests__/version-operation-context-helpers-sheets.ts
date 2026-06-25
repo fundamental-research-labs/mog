@@ -4,10 +4,7 @@ import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import { WorkbookSheetsImpl, type WorkbookSheetsDeps } from '../sheets';
 import { createBridgeFixture } from './version-operation-context-helpers-bridge';
-import {
-  SECOND_SHEET_ID,
-  SHEET_ID,
-} from './version-operation-context-helpers-constants';
+import { SECOND_SHEET_ID, SHEET_ID } from './version-operation-context-helpers-constants';
 
 export function createSheetsFixture() {
   const bridgeFixture = createBridgeFixture();

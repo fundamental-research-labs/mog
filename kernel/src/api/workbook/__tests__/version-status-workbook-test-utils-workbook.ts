@@ -2,10 +2,7 @@ import { jest } from '@jest/globals';
 
 import type { WorkbookConfig } from '../types';
 import { versioningWithDomainSupportManifest } from './version-domain-support-test-utils';
-import {
-  createMockCtx,
-  createMockEventBus,
-} from './version-status-workbook-test-utils-context';
+import { createMockCtx, createMockEventBus } from './version-status-workbook-test-utils-context';
 import {
   WorkbookImpl,
   createCheckpointManagerMock,

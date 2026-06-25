@@ -55,10 +55,7 @@ export async function assertSnapshotRefTargetsReadable(
   }
 }
 
-export function maxGeneratedRefRecordId(
-  records: readonly RefRecord[],
-  documentId: string,
-): number {
+export function maxGeneratedRefRecordId(records: readonly RefRecord[], documentId: string): number {
   let max = 0;
   for (const record of records) {
     if (record.state === 'live') {

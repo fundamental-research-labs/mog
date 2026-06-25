@@ -54,19 +54,13 @@ export function createVersionProviderWriteActivityTracker(): VersionProviderWrit
       bumpRevision();
 
       const run = promotionTail.then(async () => {
-        pendingRemotePromotionQueuedCount = Math.max(
-          0,
-          pendingRemotePromotionQueuedCount - 1,
-        );
+        pendingRemotePromotionQueuedCount = Math.max(0, pendingRemotePromotionQueuedCount - 1);
         pendingRemotePromotionActiveCount += 1;
         bumpRevision();
         try {
           return await operation();
         } finally {
-          pendingRemotePromotionActiveCount = Math.max(
-            0,
-            pendingRemotePromotionActiveCount - 1,
-          );
+          pendingRemotePromotionActiveCount = Math.max(0, pendingRemotePromotionActiveCount - 1);
           bumpRevision();
         }
       });

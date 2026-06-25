@@ -12,6 +12,4 @@ export {
   initializeGraphWithSnapshotRoot,
   objectRecord,
 } from './snapshot-root-materialization-service-graph-builders.test-helpers';
-export {
-  materializeAuthoredWorkbook,
-} from './snapshot-root-materialization-service-workbook-setup.test-helpers';
+export { materializeAuthoredWorkbook } from './snapshot-root-materialization-service-workbook-setup.test-helpers';

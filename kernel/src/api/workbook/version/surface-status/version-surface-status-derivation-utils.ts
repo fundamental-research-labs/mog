@@ -2,10 +2,7 @@ export function isRecord(value: unknown): value is Readonly<Record<string, unkno
   return typeof value === 'object' && value !== null;
 }
 
-export function nested(
-  value: unknown,
-  key: string,
-): Readonly<Record<string, unknown>> | null {
+export function nested(value: unknown, key: string): Readonly<Record<string, unknown>> | null {
   if (!isRecord(value)) return null;
   const child = value[key];
   return isRecord(child) ? child : null;

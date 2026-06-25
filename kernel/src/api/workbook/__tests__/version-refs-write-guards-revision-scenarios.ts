@@ -95,18 +95,16 @@ export function registerWriteGuardRevisionScenarios(): void {
     };
     const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
 
-    await expect(version.readRef('scenario/inconsistent-revision' as any)).resolves.toMatchObject(
-      {
-        ok: false,
-        error: {
-          diagnostics: [
-            expect.objectContaining({
-              code: 'VERSION_INVALID_COMMIT_PAYLOAD',
-              data: expect.objectContaining({ redacted: true }),
-            }),
-          ],
-        },
+    await expect(version.readRef('scenario/inconsistent-revision' as any)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_INVALID_COMMIT_PAYLOAD',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
       },
-    );
+    });
   });
 }

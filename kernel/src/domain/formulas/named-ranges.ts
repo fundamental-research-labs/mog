@@ -488,18 +488,22 @@ export async function update(
   // transaction. The kernel must not split this into remove+set — that
   // would orphan dependents into #NAME? before the new key exists, and the
   // formula-text rewrite would never run.
-  await ctx.computeBridge.updateNamedRange(id, {
-    name: updates.name ?? null,
-    refersTo: updates.refersToA1 ?? null,
-    comment: updates.comment ?? null,
-    visible: updates.visible ?? null,
-  }, nextNamedRangeMutationOptions(
-    mutationOptions ??
-      createNamedRangeMutationOptions(ctx, {
-        operationIdPrefix: 'namedRanges.update',
-        sheetIds: namedRangeSheetIds(existing.scope, contextSheet),
-      }),
-  ));
+  await ctx.computeBridge.updateNamedRange(
+    id,
+    {
+      name: updates.name ?? null,
+      refersTo: updates.refersToA1 ?? null,
+      comment: updates.comment ?? null,
+      visible: updates.visible ?? null,
+    },
+    nextNamedRangeMutationOptions(
+      mutationOptions ??
+        createNamedRangeMutationOptions(ctx, {
+          operationIdPrefix: 'namedRanges.update',
+          sheetIds: namedRangeSheetIds(existing.scope, contextSheet),
+        }),
+    ),
+  );
 }
 
 /**

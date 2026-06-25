@@ -1,9 +1,5 @@
 import { parseWorkbookCommitId, type WorkbookCommitId } from './object-digest';
-import {
-  REF_NAME_STORAGE_PREFIX,
-  validateRefName,
-  type RefName,
-} from './refs/ref-name';
+import { REF_NAME_STORAGE_PREFIX, validateRefName, type RefName } from './refs/ref-name';
 import {
   branchFromLiveRef,
   diagnostic,
@@ -11,11 +7,7 @@ import {
   refNameDiagnostics,
   unsupportedDetachedHead,
 } from './branch-service-results';
-import type {
-  BranchFailureResult,
-  BranchRecord,
-  BranchRefName,
-} from './branch-service-types';
+import type { BranchFailureResult, BranchRecord, BranchRefName } from './branch-service-types';
 import {
   parseRefVersion,
   type LiveRefRecord,

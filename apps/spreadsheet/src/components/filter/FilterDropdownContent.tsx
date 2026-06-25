@@ -412,8 +412,7 @@ export function FilterDropdownContent({
         const spaceRight = window.innerWidth - rect.right;
         const spaceLeft = rect.left;
         const preferredPlacement =
-          spaceRight >= SUBMENU_PANEL_WIDTH_PX + SUBMENU_PANEL_GAP_PX ||
-          spaceRight >= spaceLeft
+          spaceRight >= SUBMENU_PANEL_WIDTH_PX + SUBMENU_PANEL_GAP_PX || spaceRight >= spaceLeft
             ? 'right'
             : 'left';
         const left =

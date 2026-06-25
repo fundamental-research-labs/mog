@@ -1,7 +1,4 @@
-import type {
-  VersionDiagnostic,
-  VersionStoreDiagnostic,
-} from '@mog-sdk/contracts/api';
+import type { VersionDiagnostic, VersionStoreDiagnostic } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
 import { validateVersionDomainSupportManifestGate } from '../domain-support/version-domain-support-gate';
@@ -25,8 +22,16 @@ export async function deriveDomainSupportCapabilityBlocks(
   }[] = [
     { capability: 'version:commit', operation: 'commit', available: availability.commit },
     { capability: 'version:checkout', operation: 'checkout', available: availability.checkout },
-    { capability: 'version:mergePreview', operation: 'merge', available: availability.mergePreview },
-    { capability: 'version:mergeApply', operation: 'applyMerge', available: availability.mergeApply },
+    {
+      capability: 'version:mergePreview',
+      operation: 'merge',
+      available: availability.mergePreview,
+    },
+    {
+      capability: 'version:mergeApply',
+      operation: 'applyMerge',
+      available: availability.mergeApply,
+    },
     { capability: 'version:revert', operation: 'revert', available: availability.revert },
   ];
   const blocks: VersionSurfaceCapabilityBlocks = {};
@@ -101,9 +106,7 @@ function projectDomainSupportDiagnostic(
       issueCode: diagnostic.issueCode,
       recoverability: diagnostic.recoverability,
       redacted: diagnostic.redacted,
-      ...(diagnostic.mutationGuarantee
-        ? { mutationGuarantee: diagnostic.mutationGuarantee }
-        : {}),
+      ...(diagnostic.mutationGuarantee ? { mutationGuarantee: diagnostic.mutationGuarantee } : {}),
       ...(diagnostic.payload
         ? { payload: sanitizePublicDiagnosticPayload(diagnostic.payload) }
         : {}),

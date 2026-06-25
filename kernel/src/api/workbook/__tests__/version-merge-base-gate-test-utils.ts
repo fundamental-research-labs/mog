@@ -1,7 +1,4 @@
-export {
-  createCommit,
-  graphWithRoot,
-} from './version-merge-base-gate-test-utils-graph';
+export { createCommit, graphWithRoot } from './version-merge-base-gate-test-utils-graph';
 export { commitId } from './version-merge-base-gate-test-utils-ids';
 export {
   expectPublicSafeMergeFailure,

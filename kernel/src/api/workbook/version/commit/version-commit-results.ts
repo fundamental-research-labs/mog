@@ -83,9 +83,7 @@ function mapCommitFailureDiagnostics(
   );
 }
 
-function commitSummaryResult(
-  summary: WorkbookCommitSummary,
-): VersionResult<WorkbookCommitSummary> {
+function commitSummaryResult(summary: WorkbookCommitSummary): VersionResult<WorkbookCommitSummary> {
   if (summary.parents.length > 0) return { ok: true, value: summary };
   return versionFailureFromStoreDiagnostics('commit', [
     publicDiagnostic(
@@ -202,9 +200,7 @@ function mapCommitCompletenessDiagnostic(value: unknown): VersionStoreDiagnostic
       : 'The version commit includes a completeness diagnostic.',
     {
       severity:
-        severity === 'info' || severity === 'warning' || severity === 'error'
-          ? severity
-          : 'error',
+        severity === 'info' || severity === 'warning' || severity === 'error' ? severity : 'error',
       recoverability: recoverabilityForIssue(issueCode),
       payload: sanitizeCompletenessDiagnosticPayload(value),
     },

@@ -84,8 +84,7 @@ export async function mergeWorkbookVersionCommit(
           namespace: opened.namespace,
           refName: target.ref.name,
           commitId: target.ref.commitId,
-          safeMessage:
-            'No production merge materialization service is attached for merge commits.',
+          safeMessage: 'No production merge materialization service is attached for merge commits.',
           mutationGuarantee: 'no-write-attempted',
         }),
       ],

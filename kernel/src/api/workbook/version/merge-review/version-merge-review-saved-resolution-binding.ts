@@ -119,10 +119,7 @@ function hasExpectedPreviewDependency(
   if (!expectedResultDigest || record.preimage.dependencies.length !== 1) return false;
   const expected = mergePreviewArtifactRef(expectedResultDigest);
   if (expected.kind !== 'object') return false;
-  return isExpectedPreviewDependency(
-    record.preimage.dependencies[0],
-    expected,
-  );
+  return isExpectedPreviewDependency(record.preimage.dependencies[0], expected);
 }
 
 function isExpectedPreviewDependency(

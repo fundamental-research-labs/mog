@@ -1,13 +1,7 @@
 import 'fake-indexeddb/auto';
 
-import {
-  openVersionStoreIndexedDb,
-  REGISTRIES_STORE,
-} from '../provider-indexeddb-schema';
-import {
-  versionDocumentScopeKey,
-  type VersionDocumentScope,
-} from '../provider';
+import { openVersionStoreIndexedDb, REGISTRIES_STORE } from '../provider-indexeddb-schema';
+import { versionDocumentScopeKey, type VersionDocumentScope } from '../provider';
 
 export async function putRegistryEnvelope(
   documentScope: VersionDocumentScope,

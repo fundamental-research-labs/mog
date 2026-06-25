@@ -8,10 +8,7 @@ import {
   unsupportedNamedRangeRawFieldChange,
 } from './version-diff-provider-fixtures';
 import { vc06SemanticChanges } from './version-diff-provider-vc06-fixtures';
-import {
-  createCommittedDiffWorkbook,
-  diffCommitted,
-} from './version-diff-provider-test-utils';
+import { createCommittedDiffWorkbook, diffCommitted } from './version-diff-provider-test-utils';
 
 describe('WorkbookVersion provider-backed diff review access', () => {
   beforeEach(() => {

@@ -64,9 +64,7 @@ export function registerSavedResolutionDifferentPrincipalScenarios(): void {
           expectedTargetHead: target,
         });
 
-        expect(openGraphCalls).toEqual([
-          expect.objectContaining({ accessContext: readerAccess }),
-        ]);
+        expect(openGraphCalls).toEqual([expect.objectContaining({ accessContext: readerAccess })]);
         expect(detail).toMatchObject({
           ok: true,
           value: {

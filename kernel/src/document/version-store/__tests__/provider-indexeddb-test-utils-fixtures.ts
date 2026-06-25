@@ -7,10 +7,7 @@ import {
   type VersionObjectRecord,
 } from '../object-store';
 import type { VersionObjectType } from '../object-digest';
-import type {
-  VersionDocumentScope,
-  VersionGraphInitializeInput,
-} from '../provider';
+import type { VersionDocumentScope, VersionGraphInitializeInput } from '../provider';
 import { namespaceForDocumentScope } from '../provider';
 
 export const DOCUMENT_SCOPE: VersionDocumentScope = {

@@ -3,10 +3,7 @@ import type { Workbook } from '@mog-sdk/contracts/api';
 
 import { DocumentFactory } from '../../document/document-factory';
 import type { CheckoutSnapshotMaterializer } from '../../../document/version-store/checkout-apply';
-import {
-  DOCUMENT_SCOPE,
-  initializeVersionGraph,
-} from './version-checkout-atomicity-test-utils';
+import { DOCUMENT_SCOPE, initializeVersionGraph } from './version-checkout-atomicity-test-utils';
 import {
   installVersionDomainDetectorNoopsOnHandles,
   withVersionManifest,

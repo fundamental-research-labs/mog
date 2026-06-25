@@ -1,9 +1,7 @@
 import { expect, it, jest } from '@jest/globals';
 
 import { validateVersionDomainSupportManifestGate } from '../version/domain-support/version-domain-support-gate';
-import {
-  POLICY_CLOSURE_DETECTOR_SHEET_ID,
-} from './version-domain-support-gate-policy-closure-test-utils';
+import { POLICY_CLOSURE_DETECTOR_SHEET_ID } from './version-domain-support-gate-policy-closure-test-utils';
 import {
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_NOW as NOW,
   VERSION_DOMAIN_SUPPORT_MANIFEST_TEST_TEN_MINUTES_MS as TEN_MINUTES_MS,

@@ -1,7 +1,4 @@
-import type {
-  VersionCapability,
-  VersionResult,
-} from '@mog-sdk/contracts/api';
+import type { VersionCapability, VersionResult } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../../../context';
 import { proposalCapabilityFailure } from './version-proposal-capabilities';

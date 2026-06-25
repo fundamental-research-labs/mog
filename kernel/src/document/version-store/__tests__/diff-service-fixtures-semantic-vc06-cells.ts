@@ -1,7 +1,4 @@
-import {
-  semanticRecord,
-  sheetAddressDisplay,
-} from './diff-service-fixtures-semantic-builders';
+import { semanticRecord, sheetAddressDisplay } from './diff-service-fixtures-semantic-builders';
 
 export function vc06CellSemanticChanges() {
   return [

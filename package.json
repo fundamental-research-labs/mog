@@ -25,7 +25,7 @@
     "check:publish-readiness:sdk": "pnpm check:private-leaks && pnpm check:release-version-metadata && pnpm check:declaration-rollups && pnpm check:api-snapshots && node tools/verify-sdk-publish.mjs && pnpm check:external-fixtures -- --skip-build",
     "check:python-sdk": "bash compute/pyo3/scripts/check_python_sdk.sh",
     "inventory:contracts": "node tools/contracts-shim-inventory.mjs",
-    "check-cycles": "madge --circular --extensions ts --exclude '(dist|\\.claude/worktrees)' .",
+    "check-cycles": "node tools/check-cycles.mjs",
     "generate:api-ref": "tsx tools/generate-api-reference.ts",
     "generate:bridge": "cargo test -p bridge-ts --test generate_handler_registry -- generate --nocapture && cargo test -p bridge-ts --test generate_compute_bridge -- --nocapture",
     "verify:xlsx-spec": "tsx ooxml/spec/tools/verify-contracts.ts",

@@ -1,8 +1,6 @@
 import type { VersionAuthor } from '@mog-sdk/contracts/versioning';
 
-import {
-  type VersionGraphRef,
-} from './graph';
+import { type VersionGraphRef } from './graph';
 import { graphRefNameFromRefName } from './graph/graph-store-refs';
 import { type VersionGraphNamespace } from './object-store';
 import type { VersionGraphStore, VersionStoreDiagnostic, VersionStoreProvider } from './provider';
@@ -122,9 +120,7 @@ export function createProviderBackedCheckoutMaterializationService(
 function createGraphCheckoutService(
   graph: VersionGraphStore,
   snapshotMaterializer?: CheckoutSnapshotMaterializer,
-  checkoutHeadReaderFactory?: (
-    fallbackHeadReader: CheckoutHeadReader,
-  ) => CheckoutHeadReader,
+  checkoutHeadReaderFactory?: (fallbackHeadReader: CheckoutHeadReader) => CheckoutHeadReader,
 ) {
   const fallbackHeadReader: CheckoutHeadReader = {
     readHead: () => readGraphHead(graph),
@@ -363,9 +359,7 @@ function isMissingGraphRef(
   }[],
 ): boolean {
   return diagnostics.some(
-    (item) =>
-      item.code === 'VERSION_INVALID_OPTIONS' &&
-      item.details?.refMissing === true,
+    (item) => item.code === 'VERSION_INVALID_OPTIONS' && item.details?.refMissing === true,
   );
 }
 

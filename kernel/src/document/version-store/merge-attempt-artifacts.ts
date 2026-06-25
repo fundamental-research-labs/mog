@@ -23,8 +23,7 @@ import {
   type VersionObjectRecord,
 } from './object-store';
 
-export const MERGE_PREVIEW_OBJECT_TYPE =
-  'workbook.mergePreview.v1' satisfies VersionObjectType;
+export const MERGE_PREVIEW_OBJECT_TYPE = 'workbook.mergePreview.v1' satisfies VersionObjectType;
 export const MERGE_RESOLUTION_SET_V1_OBJECT_TYPE =
   'workbook.mergeResolutionSet.v1' satisfies VersionObjectType;
 export const MERGE_RESOLUTION_SET_OBJECT_TYPE = MERGE_RESOLUTION_SET_V1_OBJECT_TYPE;
@@ -33,11 +32,7 @@ export const MERGE_RESOLUTION_SET_V2_OBJECT_TYPE =
 export const RESOLVED_MERGE_ATTEMPT_OBJECT_TYPE =
   'workbook.resolvedMergeAttempt.v1' satisfies VersionObjectType;
 
-export type MergePreviewArtifactStatus =
-  | 'clean'
-  | 'conflicted'
-  | 'fastForward'
-  | 'alreadyMerged';
+export type MergePreviewArtifactStatus = 'clean' | 'conflicted' | 'fastForward' | 'alreadyMerged';
 
 export type MergePreviewArtifactPayload = {
   readonly schemaVersion: 1;
@@ -78,8 +73,7 @@ export type ResolvedMergeAttemptArtifactPayload = {
   readonly expectedTargetHead: VersionCommitExpectedHead;
 };
 
-export type MergePreviewArtifactRecord =
-  VersionObjectRecord<MergePreviewArtifactPayload>;
+export type MergePreviewArtifactRecord = VersionObjectRecord<MergePreviewArtifactPayload>;
 export type MergeResolutionSetArtifactRecordV1 =
   VersionObjectRecord<MergeResolutionSetArtifactPayloadV1>;
 export type MergeResolutionSetArtifactRecordV2 =
@@ -244,9 +238,7 @@ export function resolvedMergeAttemptArtifactRef(digest: ObjectDigest): VersionDe
   };
 }
 
-export function mergeResultIdForPreviewDigest(
-  digest: ObjectDigest,
-): VersionMergeResultId {
+export function mergeResultIdForPreviewDigest(digest: ObjectDigest): VersionMergeResultId {
   return `merge-result:${digest.digest}` as VersionMergeResultId;
 }
 
@@ -259,9 +251,7 @@ function commitDependency(commitId: PublicWorkbookCommitId): VersionDependencyRe
   };
 }
 
-function sortedMergeChanges(
-  changes: readonly VersionMergeChange[],
-): readonly VersionMergeChange[] {
+function sortedMergeChanges(changes: readonly VersionMergeChange[]): readonly VersionMergeChange[] {
   return [...changes].sort(compareMergeChanges).map(cloneJson);
 }
 

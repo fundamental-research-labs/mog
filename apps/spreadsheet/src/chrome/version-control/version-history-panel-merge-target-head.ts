@@ -1,14 +1,8 @@
-import type {
-  VersionCommitExpectedHead,
-  WorkbookCommitId,
-} from '@mog-sdk/contracts/api';
+import type { VersionCommitExpectedHead, WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import type { VersionMergeTarget } from './merge';
-import {
-  readVersionResult,
-  type VersionHistoryWorkbook,
-} from './version-history-panel-data';
+import { readVersionResult, type VersionHistoryWorkbook } from './version-history-panel-data';
 
 const VERSION_MAIN_REF = 'refs/heads/main';
 const VERSION_HEAD_REF = 'HEAD';

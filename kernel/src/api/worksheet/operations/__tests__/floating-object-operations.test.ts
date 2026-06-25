@@ -2,11 +2,7 @@ import { jest } from '@jest/globals';
 
 import { sheetId } from '@mog-sdk/contracts/core';
 
-import {
-  copyToSheet,
-  updateFloatingObject,
-  updatePicture,
-} from '../floating-object-operations';
+import { copyToSheet, updateFloatingObject, updatePicture } from '../floating-object-operations';
 
 const SHEET_ID = sheetId('sheet-1');
 const TARGET_SHEET_ID = sheetId('sheet-2');
@@ -44,9 +40,11 @@ function createMockCtx() {
       duplicateFloatingObjectTyped: jest.fn().mockResolvedValue({
         floatingObjectChanges: [{ objectId: 'picture-copy-1', kind: { type: 'created' } }],
       }),
-      computeAllObjectBounds: jest.fn().mockResolvedValue([
-        ['picture-copy-1', { x: 0, y: 0, width: 100, height: 50, rotation: 0 }],
-      ]),
+      computeAllObjectBounds: jest
+        .fn()
+        .mockResolvedValue([
+          ['picture-copy-1', { x: 0, y: 0, width: 100, height: 50, rotation: 0 }],
+        ]),
     },
     workbookLinkScope: jest.fn(() => ({
       actor: 'user-1',

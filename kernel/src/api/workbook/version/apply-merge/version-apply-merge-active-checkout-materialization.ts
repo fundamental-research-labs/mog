@@ -169,11 +169,7 @@ export async function materializeAppliedMergeTargetRef(
       },
     );
     if (isAppliedCheckoutSuccess(result)) {
-      const diagnostics = materializedCheckoutProofDiagnostics(
-        result,
-        targetRef,
-        expectedCommitId,
-      );
+      const diagnostics = materializedCheckoutProofDiagnostics(result, targetRef, expectedCommitId);
       if (diagnostics.length > 0) return { ok: false, diagnostics };
       return { ok: true, diagnostics: result.diagnostics };
     }

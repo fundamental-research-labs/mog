@@ -127,7 +127,7 @@ describe('ObjectCellAccessor', () => {
 });
 
 describe('extractChartData', () => {
-  it('extracts data with columns orientation', () => {
+  it('extracts data with rows orientation', () => {
     const accessor = ObjectCellAccessor.fromArray([
       ['Category', 'Jan', 'Feb', 'Mar'],
       ['Sales', 100, 150, 200],
@@ -142,21 +142,22 @@ describe('extractChartData', () => {
       width: 8,
       height: 15,
       dataRange: 'A1:D3',
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
 
-    expect(data.categories).toEqual(['Category', 'Jan', 'Feb', 'Mar']);
+    expect(data.categories).toEqual(['Jan', 'Feb', 'Mar']);
     expect(data.series).toHaveLength(2);
-    expect(data.series[0].name).toBe('Series 1');
-    expect(data.series[0].data.map((d) => d.y)).toEqual([0, 100, 150, 200]);
-    expect(data.series[1].data.map((d) => d.y)).toEqual([0, 80, 90, 110]);
+    expect(data.series[0].name).toBe('Sales');
+    expect(data.series[0].data.map((d) => d.y)).toEqual([100, 150, 200]);
+    expect(data.series[1].name).toBe('Expenses');
+    expect(data.series[1].data.map((d) => d.y)).toEqual([80, 90, 110]);
   });
 
-  it('extracts data with rows orientation', () => {
-    // In rows orientation, the first column contains category labels
-    // and each subsequent column is a data series
+  it('extracts data with columns orientation', () => {
+    // In columns orientation, the first column contains category labels
+    // and each subsequent column is a data series.
     const accessor = ObjectCellAccessor.fromArray([
       ['Month', 'Sales', 'Expenses'],
       ['Jan', 100, 80],
@@ -172,17 +173,15 @@ describe('extractChartData', () => {
       width: 8,
       height: 15,
       dataRange: 'A1:C4',
-      seriesOrientation: 'rows',
+      seriesOrientation: 'columns',
     };
 
     const data = extractChartData(accessor, config);
 
-    // With rows orientation, categories come from first column
-    expect(data.categories).toEqual(['Month', 'Jan', 'Feb', 'Mar']);
-    // Each column after the first becomes a series (Sales, Expenses)
+    expect(data.categories).toEqual(['Jan', 'Feb', 'Mar']);
     expect(data.series).toHaveLength(2);
-    expect(data.series[0].name).toBe('Series 1');
-    expect(data.series[1].name).toBe('Series 2');
+    expect(data.series[0].name).toBe('Sales');
+    expect(data.series[1].name).toBe('Expenses');
   });
 
   it('handles numeric data correctly', () => {
@@ -199,7 +198,7 @@ describe('extractChartData', () => {
       width: 8,
       height: 15,
       dataRange: 'A1:D2',
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
@@ -222,7 +221,7 @@ describe('extractChartData', () => {
       width: 8,
       height: 15,
       dataRange: 'A1:C3',
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
@@ -283,7 +282,7 @@ describe('extractChartData', () => {
       dataRange: 'A1:C3',
       categoryRange: 'Dashboard!#REF!',
       seriesRange: "'Deleted Sheet'!#REF!",
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
@@ -310,7 +309,7 @@ describe('extractChartData', () => {
       height: 15,
       dataRange: 'A2:C3',
       categoryRange: 'A1:C1',
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
@@ -481,7 +480,7 @@ describe('extractChartData - single-dimension ranges', () => {
       width: 8,
       height: 15,
       dataRange: 'A1:B2',
-      seriesOrientation: 'columns',
+      seriesOrientation: 'rows',
     };
 
     const data = extractChartData(accessor, config);
@@ -554,6 +553,7 @@ describe('extractChartDataFromRange - single-dimension ranges', () => {
       {
         categoryRange: { ...parseRange('A1:A2'), sheetId: 'labels' },
         seriesRange: { ...parseRange('A1'), sheetId: 'meta' },
+        seriesOrientation: 'columns',
       },
     );
 
@@ -574,8 +574,7 @@ describe('extractChartDataFromRange - single-dimension ranges', () => {
     expect(data.categories).toEqual([1]);
   });
 
-  it('falls back to normal behavior with explicit categoryRange for single-column', () => {
-    // When categoryRange is provided, use traditional extraction even for single-dimension
+  it('uses explicit categories for single-column data', () => {
     const accessor = new ObjectCellAccessor({
       A1: 'Jan',
       A2: 'Feb',
@@ -589,13 +588,9 @@ describe('extractChartDataFromRange - single-dimension ranges', () => {
 
     const data = extractChartDataFromRange(accessor, dataRange, { categoryRange });
 
-    // With explicit category range, first col/row header skipping doesn't apply
-    // But since it's single column with categoryRange, normal rows orientation applies
     expect(data.categories).toEqual(['Jan', 'Feb', 'Mar']);
-    // With categoryRange provided, normal extraction happens - we have 1 col, so we get 0 series after skipping header
-    // Actually, with rows orientation and explicit categoryRange, startCol = dataRange.startCol (no skip)
-    // But there's only 1 column, so after startCol += 1 (if no categoryRange), loop doesn't execute
-    // But WITH categoryRange, startCol = dataRange.startCol = 1, and endCol = 1, so loop does execute once
+    expect(data.series).toHaveLength(1);
+    expect(data.series[0].data.map((d) => d.y)).toEqual([100, 200, 300]);
   });
 
   it('auto-detects Excel-style header row and category column tables', () => {

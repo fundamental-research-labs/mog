@@ -161,28 +161,35 @@ export function extractChartDataFromRange(
   const isSingleRow = dataRange.endRow === dataRange.startRow;
   const isSingleDimension = isSingleColumn || isSingleRow;
 
-  // For single-dimension ranges without explicit category range,
-  // treat all values as a single series with numeric indices as categories
-  if (isSingleDimension && !options?.categoryRange) {
+  // Single-dimension ranges represent one data series. Category labels may be
+  // supplied separately; otherwise use 1-based point indices.
+  if (isSingleDimension) {
     const series: ChartDataSeries[] = [];
     const data: ChartDataPoint[] = [];
     const categories: (string | number)[] = [];
+    const explicitCategories = options?.categoryRange
+      ? extractLabels(accessor, options.categoryRange)
+      : [];
 
     if (isSingleColumn) {
       // Single column: iterate rows, each row is a data point
       for (let row = dataRange.startRow; row <= dataRange.endRow; row++) {
-        const index = row - dataRange.startRow + 1; // 1-based index
+        const pointIndex = row - dataRange.startRow;
+        const index = pointIndex + 1; // 1-based index
+        const category = explicitCategories[pointIndex] ?? index;
         const rawValue = getRangeValue(accessor, dataRange, row, dataRange.startCol);
-        categories.push(index);
-        data.push(createDataPoint(index, rawValue, String(index)));
+        categories.push(category);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
     } else {
       // Single row: iterate columns, each column is a data point
       for (let col = dataRange.startCol; col <= dataRange.endCol; col++) {
-        const index = col - dataRange.startCol + 1; // 1-based index
+        const pointIndex = col - dataRange.startCol;
+        const index = pointIndex + 1; // 1-based index
+        const category = explicitCategories[pointIndex] ?? index;
         const rawValue = getRangeValue(accessor, dataRange, dataRange.startRow, col);
-        categories.push(index);
-        data.push(createDataPoint(index, rawValue, String(index)));
+        categories.push(category);
+        data.push(createDataPoint(category, rawValue, String(category)));
       }
     }
 

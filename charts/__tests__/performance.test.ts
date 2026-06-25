@@ -86,16 +86,16 @@ describe('Chart Performance', () => {
         width: 8,
         height: 12,
         dataRange: `A1:J${rows}`,
-        // rows orientation: first column = categories, other columns = series
-        seriesOrientation: 'rows',
+        // columns orientation: first column = categories, other columns = series
+        seriesOrientation: 'columns',
       };
 
       const { duration, result: data } = measureBest(() => extractChartData(accessor, config));
 
       expect(duration).toBeLessThan(50);
-      // With rows orientation: cols - 1 series (exclude category col), rows categories
+      // With columns orientation: cols - 1 series (exclude category col), header row excluded.
       expect(data.series.length).toBe(cols - 1);
-      expect(data.categories.length).toBe(rows);
+      expect(data.categories.length).toBe(rows - 1);
     });
 
     it('should extract 10K cells (1000 rows x 10 cols) in < 200ms', () => {
@@ -110,14 +110,14 @@ describe('Chart Performance', () => {
         width: 8,
         height: 12,
         dataRange: `A1:J${rows}`,
-        seriesOrientation: 'rows',
+        seriesOrientation: 'columns',
       };
 
       const { duration, result: data } = measureBest(() => extractChartData(accessor, config));
 
       expect(duration).toBeLessThan(200);
       expect(data.series.length).toBe(cols - 1);
-      expect(data.categories.length).toBe(rows);
+      expect(data.categories.length).toBe(rows - 1);
     });
 
     it('should extract 10K cells (100 rows x 100 cols) in < 200ms', () => {
@@ -141,8 +141,8 @@ describe('Chart Performance', () => {
         width: 8,
         height: 12,
         dataRange: `A1:${colRef(cols - 1)}${rows}`,
-        // rows orientation: first column = categories
-        seriesOrientation: 'rows',
+        // columns orientation: first column = categories
+        seriesOrientation: 'columns',
       };
 
       const { duration, result: data } = measureBest(() => extractChartData(accessor, config));
@@ -163,14 +163,14 @@ describe('Chart Performance', () => {
         width: 8,
         height: 12,
         dataRange: `A1:J${rows}`,
-        seriesOrientation: 'rows',
+        seriesOrientation: 'columns',
       };
 
       const { duration, result: data } = measureBest(() => extractChartData(accessor, config));
 
       expect(duration).toBeLessThan(1000);
       expect(data.series.length).toBe(cols - 1);
-      expect(data.categories.length).toBe(rows);
+      expect(data.categories.length).toBe(rows - 1);
     });
   });
 

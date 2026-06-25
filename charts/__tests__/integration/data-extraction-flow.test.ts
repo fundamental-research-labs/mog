@@ -74,7 +74,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D3',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -92,7 +92,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -108,7 +108,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -124,7 +124,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:B2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -139,14 +139,12 @@ describe('Data Extraction Flow Integration', () => {
       const config = createTestConfig({
         dataRange: 'A2:A3',
         categoryRange: 'A1:A1',
-        seriesOrientation: 'rows',
+        seriesOrientation: 'columns',
       });
 
       const data = extractChartData(accessor, config);
 
-      // With rows orientation, each column after categoryRange is a series
-      // Since we only have 1 column of data, we need to adjust our expectation
-      expect(data.categories).toEqual(['Precision']);
+      expect(data.categories).toEqual(['Precision', 2]);
       expect(data.series[0].data[0].y).toBeCloseTo(0.000001, 10);
     });
   });
@@ -160,7 +158,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -177,7 +175,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:B3',
-        seriesOrientation: 'rows',
+        seriesOrientation: 'columns',
       });
 
       const data = extractChartData(accessor, config);
@@ -193,7 +191,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -209,7 +207,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -225,7 +223,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -250,7 +248,7 @@ describe('Data Extraction Flow Integration', () => {
         dataRange: 'B2:D3', // Only the numeric data
         categoryRange: 'B1:D1', // Category headers
         seriesRange: 'A2:A3', // Series names
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -271,7 +269,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -291,7 +289,7 @@ describe('Data Extraction Flow Integration', () => {
       const config = createTestConfig({
         dataRange: 'B2:B4', // Only the boolean data
         categoryRange: 'A2:A4', // Feature names as categories
-        seriesOrientation: 'rows',
+        seriesOrientation: 'columns',
       });
 
       const data = extractChartData(accessor, config);
@@ -310,7 +308,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -326,7 +324,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -342,7 +340,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -358,7 +356,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:E2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -376,7 +374,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C4',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -393,7 +391,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -409,7 +407,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -474,9 +472,8 @@ describe('Data Extraction Flow Integration', () => {
 
       const data = extractChartData(accessor, config);
 
-      // Should detect rows orientation (6 cols > 2 rows)
-      // Categories from first column, series from rows
-      expect(data.categories).toEqual(['Jan', '100']);
+      expect(data.categories).toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']);
+      expect(data.series).toHaveLength(1);
     });
   });
 
@@ -497,7 +494,8 @@ describe('Data Extraction Flow Integration', () => {
       const data = extractChartData(accessor, config);
       const elapsed = performance.now() - start;
 
-      expect(data.series).toHaveLength(1000);
+      expect(data.series).toHaveLength(1);
+      expect(data.series[0].data).toHaveLength(1000);
       expect(elapsed).toBeLessThan(100); // Should complete in <100ms
     });
 
@@ -512,7 +510,7 @@ describe('Data Extraction Flow Integration', () => {
       const accessor = MockStoreCellAccessor.fromGrid([headers, values]);
       const config = createTestConfig({
         dataRange: 'A1:CV2', // CV is column 100
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const start = performance.now();
@@ -536,7 +534,7 @@ describe('Data Extraction Flow Integration', () => {
       const accessor = MockStoreCellAccessor.fromGrid(grid);
       const config = createTestConfig({
         dataRange: 'A1:CV100',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const start = performance.now();
@@ -560,13 +558,14 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:B2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
 
-      expect(data.categories).toEqual(['Header', 'Data']);
-      expect(data.series[0].data.map((d) => d.y)).toEqual([0, 100]);
+      expect(data.categories).toEqual(['Data']);
+      expect(data.series[0].name).toBe('Row1');
+      expect(data.series[0].data.map((d) => d.y)).toEqual([100]);
     });
 
     it('works with ObjectCellAccessor.fromArray', () => {
@@ -577,7 +576,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:C2',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(accessor, config);
@@ -596,7 +595,7 @@ describe('Data Extraction Flow Integration', () => {
 
       const config = createTestConfig({
         dataRange: 'A1:D5',
-        seriesOrientation: 'columns',
+        seriesOrientation: 'rows',
       });
 
       const data = extractChartData(customAccessor, config);

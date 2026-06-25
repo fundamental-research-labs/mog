@@ -6,7 +6,7 @@ import type { ObjectCorruptionFixture } from './version-object-corruption-helper
 export function conflictDetailInput(
   fixture: ObjectCorruptionFixture,
   options: {
-    readonly valueRole: 'base' | 'ours' | 'theirs';
+    readonly valueRole: 'base' | 'ours' | 'theirs' | 'resolved';
     readonly resolutionSetDigest?: ObjectDigest;
     readonly resolvedAttemptDigest?: ObjectDigest;
   },

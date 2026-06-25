@@ -1,5 +1,5 @@
 import {
-  mergeResolutionSetArtifactRef,
+  mergeResolutionSetV2ArtifactRef,
   resolvedMergeAttemptArtifactRef,
 } from '../../../document/version-store/merge-attempt-artifacts';
 import {
@@ -59,13 +59,13 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
     await withPersistedConflictPreview('review-corrupt-resolution-set', async (fixture) => {
       const saved = await saveResolution(fixture);
       const resolutionRecord = await fixture.graph.getObjectRecord(
-        mergeResolutionSetArtifactRef(saved.resolutionSetDigest),
+        mergeResolutionSetV2ArtifactRef(saved.resolutionSetDigest),
       );
       corruptStoredRecord(fixture.graph, resolutionRecord);
 
       const result = await fixture.version.getMergeConflictDetail(
         conflictDetailInput(fixture, {
-          valueRole: 'theirs',
+          valueRole: 'resolved',
           resolutionSetDigest: saved.resolutionSetDigest,
         }),
       );
@@ -89,7 +89,7 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
 
       const result = await fixture.version.getMergeConflictDetail(
         conflictDetailInput(fixture, {
-          valueRole: 'theirs',
+          valueRole: 'resolved',
           resolvedAttemptDigest: saved.resolvedAttemptDigest,
         }),
       );

@@ -8,6 +8,12 @@ import { REF_NAME_STORAGE_PREFIX, validateRefName } from './refs/ref-name';
 
 const STORED_ACTIVE_CHECKOUT_MATERIALIZATION_SCHEMA_VERSION = 1;
 const STORED_ACTIVE_CHECKOUT_MATERIALIZATION_RECORD_KIND = 'activeCheckoutMaterialization';
+const ACTIVE_CHECKOUT_MATERIALIZATION_BRANCH_NAMESPACES = new Set([
+  'agent',
+  'import',
+  'review',
+  'scenario',
+]);
 
 export type ActiveCheckoutMaterializationRecord = {
   readonly documentScopeKey: string;
@@ -195,7 +201,13 @@ function normalizeMaterializedBranchName(value: unknown): string | null {
     : value;
   if (branchName === null) return null;
   const parsed = validateRefName(branchName, 'branchName');
-  return parsed.ok ? parsed.name : null;
+  if (!parsed.ok) return null;
+  if (parsed.name === 'main') return parsed.name;
+  const topLevelNamespace = parsed.name.split('/')[0];
+  return topLevelNamespace &&
+    ACTIVE_CHECKOUT_MATERIALIZATION_BRANCH_NAMESPACES.has(topLevelNamespace)
+    ? parsed.name
+    : null;
 }
 
 function decodeBranchRefSuffix(value: string): string | null {

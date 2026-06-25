@@ -51,6 +51,12 @@ export async function initializeSelectedProviderWhenAbsent(input: {
         ...input.xlsxImportRootExistingGraph,
         graph,
       });
+      if (
+        imported.status === 'failed' &&
+        isRejectedExistingGraphImportRootGap(imported.diagnostics)
+      ) {
+        return [];
+      }
       return imported.diagnostics;
     } catch {
       return [
@@ -97,6 +103,17 @@ export async function initializeSelectedProviderWhenAbsent(input: {
 
   assertRegistryMatchesDocumentScope(input.documentScope, initialized.registry);
   return [];
+}
+
+function isRejectedExistingGraphImportRootGap(
+  diagnostics: readonly VersionStoreDiagnostic[],
+): boolean {
+  return diagnostics.some(
+    (diagnostic) =>
+      diagnostic.code === 'VERSION_HISTORY_ROOT_POLICY_BLOCKED' &&
+      diagnostic.details?.rootKind === 'existing-no-history' &&
+      diagnostic.details?.reason === 'history-gap-rejected',
+  );
 }
 
 function evaluateLifecycleRootPolicy(

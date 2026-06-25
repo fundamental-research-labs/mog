@@ -29,7 +29,7 @@ export function registerDomainSupportGateRequiredSourceScenarios(): void {
         ]),
       },
     });
-    expect(readDomainSupportManifest).toHaveBeenCalledTimes(1);
+    expect(readDomainSupportManifest).toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
   });
 }

@@ -4,7 +4,10 @@ import type { SheetId } from '@mog-sdk/contracts/core';
 import { sheetId } from '@mog-sdk/contracts/core';
 import { MogSdkError } from '../../../errors';
 import type { WorkbookConfig } from '../types';
-import { versionDomainSupportManifestRuntime } from './version-domain-support-test-utils';
+import {
+  installVersionDomainDetectorNoopsOnBridgeMock,
+  versionDomainSupportManifestRuntime,
+} from './version-domain-support-test-utils';
 
 const worksheetImplMock = jest.fn().mockImplementation((id: SheetId) => ({
   _sheetId: id,
@@ -79,11 +82,14 @@ function createMockEventBus() {
 }
 
 function createMockCtx(overrides: Record<string, unknown> = {}) {
+  const computeBridge = {
+    exportToXlsxBytes: jest.fn().mockResolvedValue(fakeBuffer),
+    isSheetHidden: jest.fn().mockResolvedValue(false),
+  };
+  installVersionDomainDetectorNoopsOnBridgeMock(computeBridge);
+
   return {
-    computeBridge: {
-      exportToXlsxBytes: jest.fn().mockResolvedValue(fakeBuffer),
-      isSheetHidden: jest.fn().mockResolvedValue(false),
-    },
+    computeBridge,
     eventBus: createMockEventBus(),
     writeGate: {
       assertWritable: jest.fn(),

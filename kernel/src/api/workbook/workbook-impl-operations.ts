@@ -54,7 +54,11 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { CultureInfo } from '@mog-sdk/contracts/culture';
 import type { IChartBridge, IInkRecognitionBridge, IPivotBridge } from '@mog-sdk/contracts/bridges';
-import { type CellValuePrimitive, type SheetId, sheetId } from '@mog-sdk/contracts/core';
+import {
+  type CellValuePrimitive,
+  sheetId as toSheetId,
+  type SheetId,
+} from '@mog-sdk/contracts/core';
 import { toRowId as toSpreadsheetRowId } from '@mog-sdk/contracts/cell-identity';
 import {
   type CallableDisposable,
@@ -683,7 +687,7 @@ export abstract class WorkbookImplOperations extends WorkbookImplFoundation {
       // Reuse the shared formatting function (includes context fetching via IPC)
       const description = await formatDescribeRange(
         this.ctx as DocumentContext,
-        sheetId(batchResult.sheetId),
+        toSheetId(batchResult.sheetId),
         batchResult.result,
         bounds,
         includeStyle,

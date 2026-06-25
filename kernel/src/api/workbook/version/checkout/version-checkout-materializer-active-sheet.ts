@@ -1,5 +1,4 @@
-import type { SheetId } from '@mog-sdk/contracts/core';
-import { sheetId } from '@mog-sdk/contracts/core';
+import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 
 import type { DocumentContext } from '../../../../context';
 import { getOrder } from '../../../../domain/sheets/sheet-meta';
@@ -21,7 +20,7 @@ export async function reconcileCheckoutActiveSheet(input: {
   if (order.length === 0) return;
 
   const active = input.stateProvider.getActiveSheetId();
-  const activeId = active ? sheetId(active) : null;
+  const activeId = active ? toSheetId(active) : null;
   const hiddenBySheetId = await readHiddenBySheetId(input.ctx, order);
   const visibleOrder = order.filter((id) => !hiddenBySheetId.get(id));
   const nextActive =

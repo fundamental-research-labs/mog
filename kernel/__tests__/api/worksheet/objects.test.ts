@@ -50,6 +50,31 @@ function makeObject(id: string, overrides?: Partial<FloatingObjectBase>): Floati
 
 const SHEET_ID = 'sheet-1';
 
+function expectFloatingObjectMutationOptions(
+  operationIdPrefix: string,
+  options: { grouped?: boolean } = {},
+) {
+  const operationContext: Record<string, unknown> = {
+    operationId: expect.stringMatching(new RegExp(`^${escapeRegExp(operationIdPrefix)}:`)),
+    kind: 'mutation',
+    author: expect.objectContaining({ actorKind: 'user' }),
+    domainIds: ['floating-objects.anchors'],
+    sheetIds: [SHEET_ID],
+    capturePolicy: 'commitEligible',
+    writeAdmissionMode: 'capture',
+  };
+  if (options.grouped) {
+    operationContext.groupId = expect.stringMatching(new RegExp(`^${escapeRegExp(operationIdPrefix)}:`));
+  }
+  return expect.objectContaining({
+    operationContext: expect.objectContaining(operationContext),
+  });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // ---------------------------------------------------------------------------
 // Mock bridge + context factory
 // ---------------------------------------------------------------------------
@@ -155,6 +180,7 @@ describe('Floating object operations', () => {
         SHEET_ID,
         'obj-1',
         updates,
+        expectFloatingObjectMutationOptions('floatingObjects.update'),
       );
     });
 
@@ -328,17 +354,27 @@ describe('Floating object operations', () => {
         border: { style: 'solid', color: '#ff0000', width: 3 },
       });
 
-      expect(ctx.computeBridge.updateFloatingObject).toHaveBeenCalledWith(SHEET_ID, 'pic-1', {
-        locked: true,
-        printable: false,
-        crop: { top: 5, right: 6, bottom: 7, left: 8 },
-        adjustments: { brightness: 15, contrast: -10, transparency: 40 },
-        border: { style: 'solid', color: '#ff0000', width: 3 },
-      });
-      expect(ctx.computeBridge.resizeFloatingObjectTyped).toHaveBeenCalledWith(SHEET_ID, 'pic-1', {
-        width: 320,
-        height: 50,
-      });
+      expect(ctx.computeBridge.updateFloatingObject).toHaveBeenCalledWith(
+        SHEET_ID,
+        'pic-1',
+        {
+          locked: true,
+          printable: false,
+          crop: { top: 5, right: 6, bottom: 7, left: 8 },
+          adjustments: { brightness: 15, contrast: -10, transparency: 40 },
+          border: { style: 'solid', color: '#ff0000', width: 3 },
+        },
+        expectFloatingObjectMutationOptions('floatingObjects.update', { grouped: true }),
+      );
+      expect(ctx.computeBridge.resizeFloatingObjectTyped).toHaveBeenCalledWith(
+        SHEET_ID,
+        'pic-1',
+        {
+          width: 320,
+          height: 50,
+        },
+        expectFloatingObjectMutationOptions('floatingObjects.update', { grouped: true }),
+      );
     });
 
     it('moves picture using top-level offsets while preserving the current anchor', async () => {
@@ -350,13 +386,18 @@ describe('Floating object operations', () => {
 
       await updatePicture(ctx, SHEET_ID, 'pic-1', { x: 30, y: 40 });
 
-      expect(ctx.computeBridge.moveFloatingObjectTyped).toHaveBeenCalledWith(SHEET_ID, 'pic-1', {
-        type: 'absolute',
-        anchorRow: 0,
-        anchorCol: 0,
-        xOffset: 30,
-        yOffset: 40,
-      });
+      expect(ctx.computeBridge.moveFloatingObjectTyped).toHaveBeenCalledWith(
+        SHEET_ID,
+        'pic-1',
+        {
+          type: 'absolute',
+          anchorRow: 0,
+          anchorCol: 0,
+          xOffset: 30,
+          yOffset: 40,
+        },
+        expectFloatingObjectMutationOptions('floatingObjects.update', { grouped: true }),
+      );
     });
   });
 

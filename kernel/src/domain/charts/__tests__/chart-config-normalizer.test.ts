@@ -31,7 +31,7 @@ describe('chart config normalizer', () => {
         heightCells: 3,
         height: 300,
         axis: {
-          categoryAxis: { axisType: 'dateAxis', visible: false },
+          categoryAxis: { axisType: 'dateAxis', visible: false, visibleExplicit: true },
           valueAxis: { axisType: 'value', visible: true },
           secondaryCategoryAxis: { axisType: 'dateAxis', visible: true, position: 't' },
         },

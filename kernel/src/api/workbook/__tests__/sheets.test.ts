@@ -205,7 +205,7 @@ describe('WorkbookSheetsImpl.add()', () => {
       's2',
       0,
       expectVersionOperationOptions({
-        operationIdPrefix: 'workbook.sheets.add.move',
+        operationIdPrefix: 'workbook.sheets.add',
         sheetIds: ['s2'],
         groupId,
       }),
@@ -330,7 +330,7 @@ describe('WorkbookSheetsImpl.copy()', () => {
       's2',
       0,
       expectVersionOperationOptions({
-        operationIdPrefix: 'workbook.sheets.copy.move',
+        operationIdPrefix: 'workbook.sheets.copy',
         sheetIds: ['s2'],
         groupId,
       }),

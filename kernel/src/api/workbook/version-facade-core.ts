@@ -97,10 +97,13 @@ export async function getWorkbookVersionFacadeHead(
 
 export async function listWorkbookVersionFacadeCommits(
   ctx: DocumentContext,
-  options: VersionListCommitsOptions = {},
+  options: VersionListCommitsOptions | null = {},
 ): Promise<VersionResult<Paged<WorkbookCommitSummary>>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'listCommits', 'version:read');
   if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listCommits', gateDiagnostics);
+  if (options === null) {
+    return listWorkbookVersionCommits(ctx, options as unknown as VersionListCommitsOptions);
+  }
   const activeCheckoutOptions = await listCommitsOptionsForActiveCheckout(ctx, options);
   if (!activeCheckoutOptions.ok) {
     return versionFailureFromStoreDiagnostics('listCommits', activeCheckoutOptions.diagnostics);

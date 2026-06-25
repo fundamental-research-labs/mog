@@ -64,6 +64,19 @@ const applyScenarioFullMock = jest.fn();
 const restoreScenarioValuesMock = jest.fn();
 const restoreScenarioBaselineMock = jest.fn();
 
+function expectSheetMutationOptions() {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      kind: 'mutation',
+      writeAdmissionMode: 'capture',
+    }),
+  });
+}
+
+function expectSheetMutationCall(mock: unknown, ...args: unknown[]) {
+  expect(mock).toHaveBeenCalledWith(...args, expectSheetMutationOptions());
+}
+
 // Mock WorksheetImpl to avoid deep import chains (WASM, xml-bridge, etc.)
 jest.unstable_mockModule('../worksheet/worksheet-impl', () => ({
   WorksheetImpl: worksheetImplMock,
@@ -281,6 +294,11 @@ function createMockCtx(computeBridge?: ReturnType<typeof createMockComputeBridge
       authorizeExport: jest.fn().mockResolvedValue(undefined),
     },
     mirror: {
+      getSheetIds: jest.fn().mockReturnValue(['sheet1', 'sheet2']),
+      getSheetMeta: jest.fn().mockImplementation((sheetId: SheetId) => {
+        const names: Record<string, string> = { sheet1: 'Sheet1', sheet2: 'Sheet2' };
+        return { name: names[sheetId] ?? String(sheetId), hidden: false };
+      }),
       getWorkbookSettings: jest.fn().mockReturnValue({}),
     },
     services: {
@@ -510,7 +528,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     const sheet = await wb.sheets.add('NewSheet');
-    expect(SheetMutations.createSheet).toHaveBeenCalledWith(expect.anything(), 'NewSheet');
+    expectSheetMutationCall(SheetMutations.createSheet, expect.anything(), 'NewSheet');
     expect(sheet).toBeDefined();
   });
 
@@ -520,7 +538,7 @@ describe('WorkbookImpl - Sheet Management', () => {
 
     await wb.sheets.add();
     // Empty string signals Rust to auto-generate a unique "SheetN" name
-    expect(SheetMutations.createSheet).toHaveBeenCalledWith(expect.anything(), '');
+    expectSheetMutationCall(SheetMutations.createSheet, expect.anything(), '');
   });
 
   it('addSheet() with index calls SheetMutations.moveSheet after create', async () => {
@@ -532,7 +550,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     await wb.sheets.add('TestSheet', 0);
 
     expect(SheetMutations.createSheet).toHaveBeenCalled();
-    expect(SheetMutations.moveSheet).toHaveBeenCalledWith(expect.anything(), 'newSheet', 0);
+    expectSheetMutationCall(SheetMutations.moveSheet, expect.anything(), 'newSheet', 0);
   });
 
   it('removeSheet() delegates to SheetMutations.removeSheet', async () => {
@@ -540,7 +558,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     await wb.sheets.remove('Sheet1');
-    expect(SheetMutations.removeSheet).toHaveBeenCalledWith(expect.anything(), 'sheet1');
+    expectSheetMutationCall(SheetMutations.removeSheet, expect.anything(), 'sheet1');
   });
 
   it('removeSheet() throws KernelError when deleting the last sheet', async () => {
@@ -560,7 +578,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     await wb.sheets.rename('Sheet1', 'Renamed');
-    expect(SheetMutations.renameSheet).toHaveBeenCalledWith(expect.anything(), 'sheet1', 'Renamed');
+    expectSheetMutationCall(SheetMutations.renameSheet, expect.anything(), 'sheet1', 'Renamed');
   });
 
   it('renameSheet() throws when new name collides with another sheet (exact case)', async () => {
@@ -588,7 +606,7 @@ describe('WorkbookImpl - Sheet Management', () => {
 
     // Renaming "Sheet1" → "SHEET1" should succeed (same sheet, just case change)
     await wb.sheets.rename('Sheet1', 'SHEET1');
-    expect(SheetMutations.renameSheet).toHaveBeenCalledWith(expect.anything(), 'sheet1', 'SHEET1');
+    expectSheetMutationCall(SheetMutations.renameSheet, expect.anything(), 'sheet1', 'SHEET1');
   });
 
   it('moveSheet() delegates to SheetMutations.moveSheet', async () => {
@@ -596,7 +614,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     await wb.sheets.move('Sheet1', 1);
-    expect(SheetMutations.moveSheet).toHaveBeenCalledWith(expect.anything(), 'sheet1', 1);
+    expectSheetMutationCall(SheetMutations.moveSheet, expect.anything(), 'sheet1', 1);
   });
 
   it('moveSheet() throws KernelError on failure', async () => {
@@ -611,11 +629,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     const sheet = await wb.sheets.copy('Sheet1', 'Sheet1 Copy');
-    expect(SheetMutations.copySheet).toHaveBeenCalledWith(
-      expect.anything(),
-      'sheet1',
-      'Sheet1 Copy',
-    );
+    expectSheetMutationCall(SheetMutations.copySheet, expect.anything(), 'sheet1', 'Sheet1 Copy');
     expect(sheet).toBeDefined();
   });
 
@@ -624,11 +638,7 @@ describe('WorkbookImpl - Sheet Management', () => {
     const { wb } = await createWorkbook();
 
     await wb.sheets.copy('Sheet1');
-    expect(SheetMutations.copySheet).toHaveBeenCalledWith(
-      expect.anything(),
-      'sheet1',
-      'Sheet1 (Copy)',
-    );
+    expectSheetMutationCall(SheetMutations.copySheet, expect.anything(), 'sheet1', 'Sheet1 (Copy)');
   });
 
   it('copySheet() throws KernelError when copy fails', async () => {
@@ -725,11 +735,7 @@ describe('WorkbookImpl - Sheet Management', () => {
 
       // Pass sheetId 'id-001', NOT name 'Alpha'
       await wb.sheets.rename('id-001', 'Renamed');
-      expect(SheetMutations.renameSheet).toHaveBeenCalledWith(
-        expect.anything(),
-        'id-001',
-        'Renamed',
-      );
+      expectSheetMutationCall(SheetMutations.renameSheet, expect.anything(), 'id-001', 'Renamed');
     });
 
     it('removeSheet() works when passed a sheetId', async () => {
@@ -737,7 +743,7 @@ describe('WorkbookImpl - Sheet Management', () => {
       const { wb } = await createWorkbookWithNonCollidingIds();
 
       await wb.sheets.remove('id-001');
-      expect(SheetMutations.removeSheet).toHaveBeenCalledWith(expect.anything(), 'id-001');
+      expectSheetMutationCall(SheetMutations.removeSheet, expect.anything(), 'id-001');
     });
 
     it('copySheet() works when passed a sheetId', async () => {
@@ -745,11 +751,7 @@ describe('WorkbookImpl - Sheet Management', () => {
       const { wb } = await createWorkbookWithNonCollidingIds();
 
       await wb.sheets.copy('id-001', 'Alpha Copy');
-      expect(SheetMutations.copySheet).toHaveBeenCalledWith(
-        expect.anything(),
-        'id-001',
-        'Alpha Copy',
-      );
+      expectSheetMutationCall(SheetMutations.copySheet, expect.anything(), 'id-001', 'Alpha Copy');
     });
 
     it('hideSheet() works when passed a sheetId', async () => {
@@ -785,11 +787,7 @@ describe('WorkbookImpl - Sheet Management', () => {
 
       // Pass the display name 'Alpha' — should resolve to id-001 via name lookup, not fallback
       await wb.sheets.rename('Alpha', 'Renamed');
-      expect(SheetMutations.renameSheet).toHaveBeenCalledWith(
-        expect.anything(),
-        'id-001',
-        'Renamed',
-      );
+      expectSheetMutationCall(SheetMutations.renameSheet, expect.anything(), 'id-001', 'Renamed');
     });
   });
 });
@@ -2404,7 +2402,10 @@ describe('createWorkbook() - Bootstrap Path', () => {
       const ctx = createMockCtx(bridge);
       setupSheetMetaMocks();
 
-      const fakeBuffer = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+      const fakeBuffer = new Uint8Array([
+        0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      ]);
       (bridge as any).exportToXlsxBytes = jest.fn().mockResolvedValue(fakeBuffer);
 
       const wb = new WorkbookImpl({

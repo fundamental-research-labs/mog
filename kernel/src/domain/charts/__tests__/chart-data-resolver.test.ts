@@ -51,6 +51,7 @@ function ctx(overrides: Record<string, unknown> = {}): DocumentContext {
   return {
     computeBridge: {
       getChart: jest.fn(async () => null),
+      getSheetName: jest.fn(async () => 'Sheet1'),
       getCellIdAt: jest.fn(async () => null),
       getActiveCell: jest.fn(async () => null),
       getProjectionSource: jest.fn(async () => null),

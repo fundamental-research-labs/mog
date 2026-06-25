@@ -54,7 +54,11 @@ import type {
 } from '@mog-sdk/contracts/api';
 import type { CultureInfo } from '@mog-sdk/contracts/culture';
 import type { IChartBridge, IInkRecognitionBridge, IPivotBridge } from '@mog-sdk/contracts/bridges';
-import { type CellValuePrimitive, type SheetId, sheetId } from '@mog-sdk/contracts/core';
+import {
+  type CellValuePrimitive,
+  sheetId as toSheetId,
+  type SheetId,
+} from '@mog-sdk/contracts/core';
 import { toRowId as toSpreadsheetRowId } from '@mog-sdk/contracts/cell-identity';
 import {
   type CallableDisposable,
@@ -753,7 +757,7 @@ export abstract class WorkbookImplFoundation {
 
   get activeSheet(): WorksheetWithInternals {
     this._ensureNotDisposed();
-    const activeId = sheetId(this.stateProvider.getActiveSheetId());
+    const activeId = toSheetId(this.stateProvider.getActiveSheetId());
     slog('workbook.getActiveSheet', { resolvedSheetId: String(activeId) });
     return this._getOrCreateWorksheet(activeId);
   }
@@ -860,7 +864,7 @@ export abstract class WorkbookImplFoundation {
 
   /** Get the current active sheet ID. Infrastructure-only (WorkbookInternal). */
   getActiveSheetId(): SheetId {
-    return sheetId(this.stateProvider.getActiveSheetId());
+    return toSheetId(this.stateProvider.getActiveSheetId());
   }
 
   /** Set the active sheet ID. Infrastructure-only (WorkbookInternal). */
@@ -929,7 +933,7 @@ export abstract class WorkbookImplFoundation {
 
   private getProviderActiveSheetId(): SheetId | null {
     const active = this.stateProvider.getActiveSheetId();
-    return active ? sheetId(active) : null;
+    return active ? toSheetId(active) : null;
   }
 
   private getVisibleSheetIds(): SheetId[] {
@@ -954,7 +958,7 @@ export abstract class WorkbookImplFoundation {
     result: MutationResultWithSheetLifecycleRuntimeHint,
   ): SheetId | null {
     const activeSheet = result.sheetLifecycleRuntimeHint?.activeSheet;
-    return activeSheet ? sheetId(String(activeSheet)) : null;
+    return activeSheet ? toSheetId(String(activeSheet)) : null;
   }
 
   private reconcileProviderRuntimeState(nextActive: SheetId, visibleIds: readonly SheetId[]): void {

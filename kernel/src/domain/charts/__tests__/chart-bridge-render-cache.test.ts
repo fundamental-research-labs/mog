@@ -1722,6 +1722,7 @@ describe('chart invalidation event fanout', () => {
     const { ctx, eventBus } = createTestCtx();
     const computeBridge = {
       getSheetOrder: jest.fn(async () => [SHEET_A]),
+      getSheetName: jest.fn(async () => 'Sheet1'),
       getAllCharts: jest.fn(async () => [
         { ...fakeChart, sheetId: SHEET_A as unknown as string, dataRange: 'B5:F11' },
       ]),

@@ -36,6 +36,11 @@ import { DateFiltersMenu } from './DateFiltersMenu';
 import { DateValueFilterList } from './DateValueFilterList';
 import { detectColumnType, getUniqueColors } from './filter-utils';
 import { NumberFiltersMenu } from './NumberFiltersMenu';
+import {
+  calculateSubmenuPanelPosition,
+  fixedContainingBlockRect,
+  type SubmenuPanelPosition,
+} from './submenu-position';
 import { SortByColorMenu } from './SortByColorMenu';
 import { TextFiltersMenu } from './TextFiltersMenu';
 import { ValueFilterList, type ValueFilterSelection } from './ValueFilterList';
@@ -62,18 +67,12 @@ type FilterOperationReceipt = {
   readonly effects: readonly unknown[];
   readonly diagnostics: readonly { severity?: string; message?: string }[];
 };
-type SubmenuPanelPosition = {
-  readonly left: number;
-  readonly top: number;
-};
 
 type PendingFilterActionGlobal = typeof globalThis & {
   __MOG_PENDING_FILTER_ACTION__?: Promise<void>;
 };
 
 const FILTER_ACTION_APPLY_DELAY_MS = 100;
-const SUBMENU_PANEL_WIDTH_PX = 180;
-const SUBMENU_PANEL_GAP_PX = 4;
 
 function submenuPanelClassName(): string {
   return cn(
@@ -409,20 +408,13 @@ export function FilterDropdownContent({
         );
       const rect = triggerElement?.getBoundingClientRect();
       if (rect && typeof window !== 'undefined') {
-        const spaceRight = window.innerWidth - rect.right;
-        const spaceLeft = rect.left;
-        const preferredPlacement =
-          spaceRight >= SUBMENU_PANEL_WIDTH_PX + SUBMENU_PANEL_GAP_PX || spaceRight >= spaceLeft
-            ? 'right'
-            : 'left';
-        const left =
-          preferredPlacement === 'right'
-            ? rect.right + SUBMENU_PANEL_GAP_PX
-            : rect.left - SUBMENU_PANEL_WIDTH_PX - SUBMENU_PANEL_GAP_PX;
-        setSubmenuPosition({
-          left: Math.max(8, Math.min(left, window.innerWidth - SUBMENU_PANEL_WIDTH_PX - 8)),
-          top: Math.max(8, Math.min(rect.top, window.innerHeight - 16)),
-        });
+        setSubmenuPosition(
+          calculateSubmenuPanelPosition(
+            rect,
+            { width: window.innerWidth, height: window.innerHeight },
+            fixedContainingBlockRect(triggerElement ?? null),
+          ),
+        );
       } else {
         setSubmenuPosition(null);
       }

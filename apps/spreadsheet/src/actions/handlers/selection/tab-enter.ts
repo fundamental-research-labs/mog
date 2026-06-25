@@ -21,7 +21,10 @@
 
 import type { AsyncActionHandler } from '@mog-sdk/contracts/actions';
 import { unifiedPaste } from '../../../domain/clipboard';
-import { waitForPendingClipboardPaste } from '../../../systems/grid-editing/coordination/pending-clipboard-paste';
+import {
+  trackActiveClipboardPaste,
+  waitForPendingClipboardPaste,
+} from '../../../systems/grid-editing/coordination/pending-clipboard-paste';
 import { handled, type ActionHandler } from './helpers';
 
 // =============================================================================
@@ -54,13 +57,17 @@ export const TAB_BACKWARD: ActionHandler = (deps) => {
 export const ENTER_NAVIGATE: AsyncActionHandler = async (deps) => {
   if (deps.accessors.clipboard.hasCopy()) {
     const activeCell = deps.accessors.selection.getActiveCell();
-    await unifiedPaste(activeCell, {
-      getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
-      commands: deps.commands.clipboard,
-      waitForPasteCommit: waitForPendingClipboardPaste,
-    });
-    // Clear marching ants after the one-time Enter-paste (Excel behavior)
-    deps.commands.clipboard.clear();
+    const paste = (async () => {
+      await unifiedPaste(activeCell, {
+        getClipboardSnapshot: () => deps.accessors.clipboard.getSnapshot(),
+        commands: deps.commands.clipboard,
+        waitForPasteCommit: waitForPendingClipboardPaste,
+      });
+      // Clear marching ants after the one-time Enter-paste (Excel behavior)
+      deps.commands.clipboard.clear();
+    })();
+    trackActiveClipboardPaste(paste);
+    await paste;
     return handled();
   }
 

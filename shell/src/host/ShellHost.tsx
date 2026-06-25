@@ -29,7 +29,7 @@ import React, { useState } from 'react';
 
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
 import type { FeatureGates } from '@mog-sdk/contracts/feature-gates';
-import { Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import type { AppAppearanceMode } from '../apps/types';
 import { AppLogoSwitcher } from '../apps/AppLogoSwitcher';
 import { FileExplorer, type ProjectFileEntry } from '../components/files';
@@ -212,7 +212,7 @@ export function ShellHost({
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar with FileExplorer and/or AppSwitcher */}
           {(showFileExplorer || showAppSwitcher) && (
-            <div className="relative flex">
+            <div className="flex flex-shrink-0">
               <aside
                 className={`flex flex-shrink-0 flex-col overflow-visible border-r border-ss-border bg-ss-surface-secondary transition-[width] duration-200 ease-in-out ${sidebarCollapsed ? 'w-0 overflow-hidden border-r-0' : 'w-[220px]'}`}
               >
@@ -243,14 +243,24 @@ export function ShellHost({
                   )}
                 </div>
               </aside>
-              <button
-                className={`absolute top-1/2 z-10 flex h-10 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-r border border-l-0 border-ss-border bg-ss-surface-secondary text-xs text-ss-text-secondary transition-[left] duration-200 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-[220px]'}`}
-                onClick={toggleSidebar}
-                aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              <div
+                className="flex w-5 flex-shrink-0 items-center"
+                data-testid="shell-sidebar-collapse-rail"
               >
-                {sidebarCollapsed ? '>' : '<'}
-              </button>
+                <button
+                  type="button"
+                  className="flex h-10 w-5 cursor-pointer items-center justify-center rounded-r border border-l-0 border-ss-border bg-ss-surface-secondary text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text active:bg-ss-surface-active"
+                  onClick={toggleSidebar}
+                  aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                  title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                  {sidebarCollapsed ? (
+                    <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                  ) : (
+                    <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+                  )}
+                </button>
+              </div>
             </div>
           )}
 

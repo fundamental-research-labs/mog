@@ -5,18 +5,18 @@
  * 1. The .node binary loads in Node.js
  * 2. ComputeEngine class exists and can be constructed
  * 3. Static free functions work (computeSetCurrentTime)
- * 4. Instance methods work (set cell, get viewport)
+ * 4. Instance methods work (set cell, query range)
  * 5. Formula evaluation works (=A1+A2)
  * 6. Serde JSON round-trip works
  * 7. Multiple instances can coexist
  * 8. Quick serde overhead measurement (1K set + 1K get)
  *
  * Calling convention notes:
- * - SheetId and CellId params are [serde]-tagged → pass JSON.stringify(uuid)
+ * - SheetId params are [serde]-tagged → pass JSON.stringify(uuid)
  * - u32 params are [prim]-tagged → pass JS number
  * - &str params are [str]-tagged → pass JS string
- * - set_cell(sheet_id, cell_id, row, col, input) — input is plain text like "10" or "=A1+A2"
- * - Snapshot CellValue uses adjacently-tagged serde: {"type":"Number","value":10}
+ * - set_cell_value_parsed(sheet_id, row, col, input) accepts user text like "10" or "=A1+A2"
+ * - Snapshot/query CellValue JSON uses primitive scalar values for numbers/strings/bools
  *
  * Usage: node smoke-test.mjs
  */
@@ -57,8 +57,6 @@ const sid = (id) => JSON.stringify(id);
 // ---- Constants ----
 const SHEET_ID = '00000000-0000-0000-0000-000000000001';
 const CELL_A1 = '00000000-0000-0000-0000-000000000101';
-const CELL_A2 = '00000000-0000-0000-0000-000000000102';
-const CELL_A3 = '00000000-0000-0000-0000-000000000103';
 
 function minimalSnapshot(cells = []) {
   return JSON.stringify({
@@ -72,6 +70,12 @@ function minimalSnapshot(cells = []) {
       },
     ],
   });
+}
+
+function unpackMutationResult(value) {
+  const buf = Buffer.isBuffer(value) ? value : Buffer.from(value);
+  const binaryLen = buf.readUInt32LE(0);
+  return JSON.parse(buf.subarray(4 + binaryLen).toString('utf-8'));
 }
 
 // =========================================================================
@@ -119,19 +123,15 @@ try {
 }
 
 // =========================================================================
-// Test 4: take_init_result (initial RecalcResult)
+// Test 4: Initial range query
 // =========================================================================
-console.log('\n--- Test 4: Initial RecalcResult ---');
+console.log('\n--- Test 4: Initial range query ---');
 try {
-  const initResult = engine.compute_take_init_result();
-  assert(initResult != null, 'take_init_result returns non-null on first call');
-  const parsed = JSON.parse(initResult);
-  assert(typeof parsed === 'object', 'init result is valid JSON object');
-
-  const secondCall = engine.compute_take_init_result();
-  assertEq(secondCall, null, 'take_init_result returns null on second call');
+  const initialRange = JSON.parse(engine.compute_query_range(sid(SHEET_ID), 0, 0, 1, 1));
+  assert(Array.isArray(initialRange.cells), 'initial range query has cells array');
+  assertEq(initialRange.cells.length, 0, 'empty snapshot has no materialized cells');
 } catch (e) {
-  assert(false, `take_init_result threw: ${e.message}`);
+  assert(false, `Initial range query threw: ${e.message}`);
 }
 
 // =========================================================================
@@ -142,25 +142,23 @@ try {
   // Set time before recalc operations
   addon.computeSetCurrentTime(45292.0);
 
-  // set_cell params: (sheet_id[serde], cell_id[serde], row[prim], col[prim], input[str])
-  engine.compute_set_cell(sid(SHEET_ID), sid(CELL_A1), 0, 0, '10');
+  engine.compute_set_cell_value_parsed(sid(SHEET_ID), 0, 0, '10');
   assert(true, 'set A1 = 10');
 
-  engine.compute_set_cell(sid(SHEET_ID), sid(CELL_A2), 1, 0, '20');
+  engine.compute_set_cell_value_parsed(sid(SHEET_ID), 1, 0, '20');
   assert(true, 'set A2 = 20');
 
   // Set formula — input starts with "=" so it's parsed as a formula
-  // compute_set_cell returns a packed bytes-tuple Buffer: [4-byte LE len][binary][JSON]
-  const r3 = engine.compute_set_cell(sid(SHEET_ID), sid(CELL_A3), 2, 0, '=A1+A2');
-  const r3Buf = Buffer.isBuffer(r3) ? r3 : Buffer.from(r3);
-  const binaryLen = r3Buf.readUInt32LE(0);
-  const metaJson = r3Buf.subarray(4 + binaryLen).toString('utf-8');
-  const result = JSON.parse(metaJson);
+  // Native write methods return a packed bytes-tuple Buffer: [4-byte LE len][binary][JSON]
+  const result = unpackMutationResult(
+    engine.compute_set_cell_value_parsed(sid(SHEET_ID), 2, 0, '=A1+A2'),
+  );
 
-  // The MutationResult has recalc.changedCells (camelCase via serde rename_all)
-  const a3Changed = result.recalc?.changedCells?.find((c) => c.row === 2 && c.col === 0);
+  const a3Changed = result.recalc?.changedCells?.find(
+    (c) => c.position?.row === 2 && c.position?.col === 0,
+  );
   assert(a3Changed != null, 'A3 appears in recalc.changedCells');
-  assertEq(a3Changed?.value?.value, 30, '=A1+A2 evaluates to 30');
+  assertEq(a3Changed?.value, 30, '=A1+A2 evaluates to 30');
 } catch (e) {
   assert(false, `Formula evaluation threw: ${e.message}`);
   console.error(e);
@@ -177,7 +175,7 @@ try {
   assert(rq.cells.length >= 2, `range query has ${rq.cells.length} cells (A1, A2 at minimum)`);
 
   const a1Cell = rq.cells.find((c) => c.row === 0 && c.col === 0);
-  assertEq(a1Cell?.value?.value, 10, 'range query A1 = 10');
+  assertEq(a1Cell?.value, 10, 'range query A1 = 10');
 } catch (e) {
   assert(false, `Range query read threw: ${e.message}`);
 }
@@ -188,21 +186,19 @@ try {
 console.log('\n--- Test 7: Multiple instances ---');
 try {
   // Create engine2 with A1 = 999 in snapshot
-  // CellData uses camelCase (#[serde(rename_all = "camelCase")]), CellValue is adjacently tagged
   const engine2 = new addon.ComputeEngine(
-    minimalSnapshot([{ cellId: CELL_A1, row: 0, col: 0, value: { type: 'Number', value: 999 } }]),
+    minimalSnapshot([{ cellId: CELL_A1, row: 0, col: 0, value: 999 }]),
   );
-  engine2.compute_take_init_result();
 
   // engine2 A1 should be 999
   const rq2 = JSON.parse(engine2.compute_query_range(sid(SHEET_ID), 0, 0, 1, 1));
   const e2a1 = rq2.cells?.find((c) => c.row === 0 && c.col === 0);
-  assertEq(e2a1?.value?.value, 999, 'engine2 A1 = 999 (independent instance)');
+  assertEq(e2a1?.value, 999, 'engine2 A1 = 999 (independent instance)');
 
   // engine1 A1 should still be 10
   const rq1 = JSON.parse(engine.compute_query_range(sid(SHEET_ID), 0, 0, 1, 1));
   const e1a1 = rq1.cells?.find((c) => c.row === 0 && c.col === 0);
-  assertEq(e1a1?.value?.value, 10, 'engine1 A1 = 10 (unchanged by engine2)');
+  assertEq(e1a1?.value, 10, 'engine1 A1 = 10 (unchanged by engine2)');
 } catch (e) {
   assert(false, `Multiple instances threw: ${e.message}`);
   console.error(e);
@@ -214,22 +210,17 @@ try {
 console.log('\n--- Test 8: Serde performance (1K round-trips) ---');
 try {
   const perfEngine = new addon.ComputeEngine(minimalSnapshot());
-  perfEngine.compute_take_init_result();
   const N = 1000;
-  const cellIds = Array.from(
-    { length: N },
-    (_, i) => `00000000-0000-0000-0000-${String(i + 1000).padStart(12, '0')}`,
-  );
 
   // Warm up
   for (let i = 0; i < 10; i++) {
-    perfEngine.compute_set_cell(sid(SHEET_ID), sid(cellIds[i]), i, 0, String(i));
+    perfEngine.compute_set_cell_value_parsed(sid(SHEET_ID), i, 0, String(i));
   }
 
-  // Time 1K set_cell calls
+  // Time 1K parsed cell writes
   const t0 = performance.now();
   for (let i = 0; i < N; i++) {
-    perfEngine.compute_set_cell(sid(SHEET_ID), sid(cellIds[i]), i, 0, String(i * 2));
+    perfEngine.compute_set_cell_value_parsed(sid(SHEET_ID), i, 0, String(i * 2));
   }
   const setTime = performance.now() - t0;
 

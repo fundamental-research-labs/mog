@@ -175,9 +175,13 @@ fn append_standard_chart_export_diagnostics(
     chart_path: &str,
     diagnostics: &mut Vec<ExportDiagnostic>,
 ) {
+    let export_plan = super::chart_replay::standard_chart_export_plan(chart);
     if (chart.standard_chart_provenance.is_some()
         || chart.standard_chart_export_authority.is_some())
-        && super::chart_replay::should_reconstruct_chart_space(chart)
+        && matches!(
+            export_plan,
+            super::chart_replay::StandardChartExportPlan::ReconstructFromModel
+        )
     {
         let reason = chart
             .standard_chart_export_authority
@@ -237,7 +241,10 @@ fn append_standard_chart_source_cache_diagnostics(
     chart_path: &str,
     diagnostics: &mut Vec<ExportDiagnostic>,
 ) {
-    if !super::chart_replay::should_reconstruct_chart_space(chart) {
+    if !matches!(
+        super::chart_replay::standard_chart_export_plan(chart),
+        super::chart_replay::StandardChartExportPlan::ReconstructFromModel
+    ) {
         return;
     }
 
@@ -289,7 +296,7 @@ fn append_standard_chart_source_cache_diagnostics(
         Some(chart_path),
         ExportSemanticImpact::None,
         format!(
-            "Modeled chart export omitted imported source caches without a current live-data snapshot: {}.",
+            "Modeled chart export did not preserve imported source caches for reconstructed live references: {}.",
             omitted_dimensions.join(", ")
         ),
     );

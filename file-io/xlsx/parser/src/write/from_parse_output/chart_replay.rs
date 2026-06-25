@@ -2,25 +2,41 @@ use super::chart_auxiliary;
 use crate::domain::charts::chart_ex::chart_ex_title_text;
 use crate::write::write_error::WriteError;
 
-pub(super) fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
-    !can_serialize_current_imported_chart_space(chart_spec)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum StandardChartExportPlan {
+    ReplayImportedChartSpace,
+    ReconstructFromModel,
 }
 
-// TODO(chart-export): replace these paired predicates with an explicit
-// ChartExportPlan, e.g. ReplayImportedChartSpace vs ReconstructFromModel.
-// ChartSpec still mixes public chart semantics, imported OOXML replay authority,
-// and XLSX source/cache readiness; keeping the export mode as a single planned
-// value would make roundtrip-preservation changes unable to accidentally change
-// SDK-generated chart export behavior.
+pub(super) fn standard_chart_export_plan(
+    chart_spec: &domain_types::ChartSpec,
+) -> StandardChartExportPlan {
+    if can_replay_current_imported_chart_space(chart_spec) {
+        StandardChartExportPlan::ReplayImportedChartSpace
+    } else {
+        StandardChartExportPlan::ReconstructFromModel
+    }
+}
+
+pub(super) fn should_reconstruct_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
+    matches!(
+        standard_chart_export_plan(chart_spec),
+        StandardChartExportPlan::ReconstructFromModel
+    )
+}
+
 pub(super) fn should_complete_sources_for_xlsx_export(
     chart_spec: &domain_types::ChartSpec,
 ) -> bool {
     !chart_spec.is_chart_ex
         && has_live_chart_source_refs(chart_spec)
-        && !can_serialize_current_imported_chart_space(chart_spec)
+        && matches!(
+            standard_chart_export_plan(chart_spec),
+            StandardChartExportPlan::ReconstructFromModel
+        )
 }
 
-fn can_serialize_current_imported_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
+fn can_replay_current_imported_chart_space(chart_spec: &domain_types::ChartSpec) -> bool {
     if !matches!(
         chart_spec.definition,
         Some(domain_types::ChartDefinition::Chart(_))
@@ -51,42 +67,9 @@ fn can_serialize_current_imported_chart_space(chart_spec: &domain_types::ChartSp
     if provenance.original_path.as_deref() != authority.package_owner.as_deref() {
         return false;
     }
-    if !imported_chart_space_has_export_ready_sources(chart_spec) {
-        return false;
-    }
     let current_fingerprint = standard_chart_projection_fingerprint(chart_spec);
     provenance.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
         && authority.projection_fingerprint.as_deref() == Some(current_fingerprint.as_str())
-}
-
-fn imported_chart_space_has_export_ready_sources(chart_spec: &domain_types::ChartSpec) -> bool {
-    if !has_live_chart_source_refs(chart_spec) {
-        return true;
-    }
-    if !chart_spec
-        .series
-        .iter()
-        .all(series_has_export_ready_sources)
-    {
-        return false;
-    }
-    let Some(domain_types::ChartDefinition::Chart(chart_space)) = chart_spec.definition.as_ref()
-    else {
-        return false;
-    };
-    let chart_xml = crate::domain::charts::write_canonical::serialize_chart_space(chart_space);
-    let chart_xml = String::from_utf8_lossy(&chart_xml);
-    let formulas = chart_formula_refs(&chart_xml);
-    if formulas.is_empty() {
-        return false;
-    }
-    if formulas
-        .iter()
-        .any(|formula| !formula_contains_sheet_qualifier(formula))
-    {
-        return false;
-    }
-    true
 }
 
 fn has_live_chart_source_refs(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -106,60 +89,6 @@ fn series_has_live_source_refs(series: &domain_types::chart::ChartSeriesData) ->
         )
 }
 
-fn series_has_export_ready_sources(series: &domain_types::chart::ChartSeriesData) -> bool {
-    live_point_source_ready(
-        series.values.as_deref(),
-        series.value_source_kind,
-        series.value_cache.as_ref(),
-    ) && live_category_source_ready(series)
-        && live_point_source_ready(
-            series.bubble_size.as_deref(),
-            series.bubble_size_source_kind,
-            series.bubble_size_cache.as_ref(),
-        )
-}
-
-fn live_point_source_ready(
-    formula: Option<&str>,
-    source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
-    cache: Option<&domain_types::chart::ChartSeriesPointCacheData>,
-) -> bool {
-    if !live_source_ref(formula, source_kind) {
-        return true;
-    }
-    formula.is_some_and(formula_contains_sheet_qualifier) && point_cache_has_payload(cache)
-}
-
-fn live_category_source_ready(series: &domain_types::chart::ChartSeriesData) -> bool {
-    if !live_source_ref(series.categories.as_deref(), series.category_source_kind) {
-        return true;
-    }
-    series
-        .categories
-        .as_deref()
-        .is_some_and(formula_contains_sheet_qualifier)
-        && (point_cache_has_payload(series.category_cache.as_ref())
-            || category_levels_have_payload(series.category_levels.as_ref()))
-}
-
-fn point_cache_has_payload(cache: Option<&domain_types::chart::ChartSeriesPointCacheData>) -> bool {
-    cache.is_some_and(|cache| {
-        cache.point_count.is_some() || cache.format_code.is_some() || !cache.points.is_empty()
-    })
-}
-
-fn category_levels_have_payload(
-    cache: Option<&domain_types::chart::ChartSeriesCategoryLevelsCacheData>,
-) -> bool {
-    cache.is_some_and(|cache| {
-        cache.point_count.is_some()
-            || cache
-                .levels
-                .iter()
-                .any(|level| level.point_count.is_some() || !level.points.is_empty())
-    })
-}
-
 fn live_source_ref(
     formula: Option<&str>,
     source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
@@ -169,24 +98,6 @@ fn live_source_ref(
             source_kind,
             None | Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
         )
-}
-
-fn chart_formula_refs(chart_xml: &str) -> Vec<&str> {
-    let mut refs = Vec::new();
-    let mut rest = chart_xml;
-    while let Some(start) = rest.find("<c:f>") {
-        let value_start = start + "<c:f>".len();
-        let Some(end) = rest[value_start..].find("</c:f>") else {
-            break;
-        };
-        refs.push(&rest[value_start..value_start + end]);
-        rest = &rest[value_start + end + "</c:f>".len()..];
-    }
-    refs
-}
-
-fn formula_contains_sheet_qualifier(formula: &str) -> bool {
-    formula.chars().any(|ch| ch == '!')
 }
 
 fn has_modeled_chart_space_state(chart_spec: &domain_types::ChartSpec) -> bool {
@@ -376,7 +287,10 @@ pub(super) fn chart_allows_current_auxiliary_replay(
         && if chart_spec.is_chart_ex {
             chart_ex_allows_opaque_replay(chart_spec, chart_path)
         } else {
-            can_serialize_current_imported_chart_space(chart_spec)
+            matches!(
+                standard_chart_export_plan(chart_spec),
+                StandardChartExportPlan::ReplayImportedChartSpace
+            )
         }
 }
 

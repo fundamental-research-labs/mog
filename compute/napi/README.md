@@ -22,7 +22,9 @@ pnpm build:release
 pnpm build:debug
 ```
 
-Produces `compute-core-napi.node` in this directory.
+Produces `compute-core-napi.node` in this directory and syncs it into the
+current host platform package under `npm/<platform>/`, which is what the Node
+SDK loads at runtime.
 
 ## Smoke Test
 

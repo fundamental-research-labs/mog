@@ -339,19 +339,20 @@ pub(super) fn build_sheet_parts(
             if chart_spec.is_chart_ex {
                 continue; // handled by ChartEx pipeline below
             }
-            // Reconstruct from typed fields when present so modeled chart edits
-            // are not overridden by stale preserved ChartSpace XML.
-            let chart_xml = if chart_replay::should_reconstruct_chart_space(chart_spec) {
-                let chart_space =
-                    crate::domain::charts::reconstruct::reconstruct_chart_space_for_sheet(
-                        chart_spec,
-                        &sheet_data.name,
-                    );
-                serialize_chart_space(&chart_space)
-            } else {
-                match &chart_spec.definition {
-                    Some(domain_types::ChartDefinition::Chart(cs)) => serialize_chart_space(cs),
-                    _ => continue, // not a standard chart
+            let chart_xml = match chart_replay::standard_chart_export_plan(chart_spec) {
+                chart_replay::StandardChartExportPlan::ReplayImportedChartSpace => {
+                    match &chart_spec.definition {
+                        Some(domain_types::ChartDefinition::Chart(cs)) => serialize_chart_space(cs),
+                        _ => continue, // not a standard chart
+                    }
+                }
+                chart_replay::StandardChartExportPlan::ReconstructFromModel => {
+                    let chart_space =
+                        crate::domain::charts::reconstruct::reconstruct_chart_space_for_sheet(
+                            chart_spec,
+                            &sheet_data.name,
+                        );
+                    serialize_chart_space(&chart_space)
                 }
             };
             // Preserve original chart number from the imported chart object when available.

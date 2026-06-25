@@ -691,7 +691,7 @@ fn stale_standard_chart_authority_suppresses_auxiliary_numbering_and_relationshi
 }
 
 #[test]
-fn modeled_chart_export_omits_stale_ref_caches_and_reports_diagnostic() {
+fn modeled_chart_export_refreshes_stale_ref_caches_and_reports_diagnostic() {
     let mut imported_chart = make_chart(ChartType::Column, "Data!A1:B3");
     imported_chart.data_range = None;
     imported_chart.title = Some("Modeled Revenue".to_string());
@@ -742,14 +742,18 @@ fn modeled_chart_export_omits_stale_ref_caches_and_reports_diagnostic() {
 
     assert!(chart_xml.contains("<c:f>Data!B2:B3</c:f>"), "{chart_xml}");
     assert!(chart_xml.contains("<c:f>Data!A2:A3</c:f>"), "{chart_xml}");
-    assert!(!chart_xml.contains("<c:numCache>"), "{chart_xml}");
-    assert!(!chart_xml.contains("<c:strCache>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:numCache>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:strCache>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:v>100</c:v>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:v>200</c:v>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:v>Q1</c:v>"), "{chart_xml}");
+    assert!(chart_xml.contains("<c:v>Q2</c:v>"), "{chart_xml}");
     assert!(!chart_xml.contains("999"), "{chart_xml}");
     assert!(!chart_xml.contains("Stale category"), "{chart_xml}");
     assert_export_report_contains(
         &report,
         ExportDiagnosticCode::ChartSourceCacheOmitted,
-        "omitted imported source caches",
+        "did not preserve imported source caches",
     );
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }

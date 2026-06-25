@@ -26,6 +26,7 @@ mod chart_ex_frame_defaults;
 mod chart_ex_modeled_state;
 mod chart_ex_replay;
 mod chart_export_defaults;
+mod chart_export_plan;
 mod chart_plot_vis_only_replay;
 mod chart_user_shapes;
 mod charts;

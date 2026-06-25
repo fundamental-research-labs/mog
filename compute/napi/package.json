@@ -9,9 +9,9 @@
   "private": true,
   "main": "compute-core-napi.node",
   "scripts": {
-    "build": "napi build --profile fast --manifest-path ../../Cargo.toml -p compute-core-napi",
-    "build:release": "napi build --release --manifest-path ../../Cargo.toml -p compute-core-napi",
-    "build:debug": "napi build --manifest-path ../../Cargo.toml -p compute-core-napi",
+    "build": "napi build --profile fast --manifest-path ../../Cargo.toml -p compute-core-napi && node scripts/sync-host-native-artifact.mjs",
+    "build:release": "napi build --release --manifest-path ../../Cargo.toml -p compute-core-napi && node scripts/sync-host-native-artifact.mjs",
+    "build:debug": "napi build --manifest-path ../../Cargo.toml -p compute-core-napi && node scripts/sync-host-native-artifact.mjs",
     "smoke-test": "node smoke-test.mjs"
   },
   "napi": {

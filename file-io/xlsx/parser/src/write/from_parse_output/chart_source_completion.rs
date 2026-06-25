@@ -18,6 +18,8 @@ use formula_types::{CellRef, RangeType};
 
 use super::chart_replay;
 
+type WorkbookCellText = HashMap<String, HashMap<(u32, u32), String>>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ParsedLocalRange {
     start_row: u32,
@@ -26,17 +28,23 @@ struct ParsedLocalRange {
     end_col: u32,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedWorkbookRange {
+    sheet_name: String,
+    range: ParsedLocalRange,
+}
+
 pub(super) fn complete_chart_sources_for_xlsx_export(output: &mut ParseOutput) {
+    let cell_text = workbook_cell_text(output);
     for sheet_data in &mut output.sheets {
-        complete_chart_sources_for_sheet(sheet_data);
+        complete_chart_sources_for_sheet(sheet_data, &cell_text);
     }
 }
 
-fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData) {
+fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData, cell_text: &WorkbookCellText) {
     if sheet_data.charts.is_empty() {
         return;
     }
-    let cell_text = sheet_cell_text(sheet_data);
     let sheet_name = sheet_data.name.clone();
     for chart in &mut sheet_data.charts {
         if chart.is_chart_ex {
@@ -59,68 +67,93 @@ fn complete_chart_sources_for_sheet(sheet_data: &mut SheetData) {
                 chart.series_range.as_deref(),
             );
         }
-        complete_series_live_ref_caches(&mut chart.series, &sheet_name, |row, col| {
-            cell_text.get(&(row, col)).cloned()
+        complete_series_live_ref_caches(&mut chart.series, &sheet_name, |sheet_name, row, col| {
+            cell_text
+                .get(sheet_name)
+                .and_then(|sheet| sheet.get(&(row, col)))
+                .cloned()
         });
         complete_series_name_refs_from_data_range(
             chart.data_range.as_deref(),
             &mut chart.series,
             &sheet_name,
-            |row, col| cell_text.get(&(row, col)).cloned(),
+            |sheet_name, row, col| {
+                cell_text
+                    .get(sheet_name)
+                    .and_then(|sheet| sheet.get(&(row, col)))
+                    .cloned()
+            },
         );
     }
 }
 
-fn sheet_cell_text(sheet_data: &SheetData) -> HashMap<(u32, u32), String> {
-    sheet_data
-        .cells
+fn workbook_cell_text(output: &ParseOutput) -> WorkbookCellText {
+    output
+        .sheets
         .iter()
-        .map(|cell| ((cell.row, cell.col), cell.value.to_string()))
+        .map(|sheet_data| {
+            (
+                sheet_data.name.clone(),
+                sheet_data
+                    .cells
+                    .iter()
+                    .map(|cell| ((cell.row, cell.col), cell.value.to_string()))
+                    .collect(),
+            )
+        })
         .collect()
 }
 
 fn complete_series_live_ref_caches(
     series: &mut [ChartSeriesData],
     sheet_name: &str,
-    mut cell_text: impl FnMut(u32, u32) -> Option<String>,
+    mut cell_text: impl FnMut(&str, u32, u32) -> Option<String>,
 ) {
     for series in series {
-        if should_materialize_live_ref_cache(series.value_source_kind)
-            && let Some(range) = series
-                .values
-                .as_deref()
-                .and_then(|range| parse_local_a1_range(range, sheet_name))
-            && let Some(cache) =
-                point_cache_from_live_range(&range, Some("General"), &mut cell_text)
-        {
-            series.value_cache = Some(cache);
-            series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        if should_materialize_live_ref_cache(series.value_source_kind) {
+            if let Some(reference) = non_empty_ref(series.values.as_deref()) {
+                series.value_cache = None;
+                if let Some(range) = parse_workbook_a1_range(reference, sheet_name)
+                    && let Some(cache) =
+                        point_cache_from_live_range(&range, Some("General"), &mut cell_text)
+                {
+                    series.value_cache = Some(cache);
+                    series.value_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                }
+            }
         }
 
         if should_materialize_live_ref_cache(series.category_source_kind)
             && series.category_levels.is_none()
-            && let Some(range) = series
-                .categories
-                .as_deref()
-                .and_then(|range| parse_local_a1_range(range, sheet_name))
-            && let Some(cache) = point_cache_from_live_range(&range, None, &mut cell_text)
         {
-            series.category_cache = Some(cache);
-            series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+            if let Some(reference) = non_empty_ref(series.categories.as_deref()) {
+                series.category_cache = None;
+                if let Some(range) = parse_workbook_a1_range(reference, sheet_name)
+                    && let Some(cache) = point_cache_from_live_range(&range, None, &mut cell_text)
+                {
+                    series.category_cache = Some(cache);
+                    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                }
+            }
         }
 
-        if should_materialize_live_ref_cache(series.bubble_size_source_kind)
-            && let Some(range) = series
-                .bubble_size
-                .as_deref()
-                .and_then(|range| parse_local_a1_range(range, sheet_name))
-            && let Some(cache) =
-                point_cache_from_live_range(&range, Some("General"), &mut cell_text)
-        {
-            series.bubble_size_cache = Some(cache);
-            series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        if should_materialize_live_ref_cache(series.bubble_size_source_kind) {
+            if let Some(reference) = non_empty_ref(series.bubble_size.as_deref()) {
+                series.bubble_size_cache = None;
+                if let Some(range) = parse_workbook_a1_range(reference, sheet_name)
+                    && let Some(cache) =
+                        point_cache_from_live_range(&range, Some("General"), &mut cell_text)
+                {
+                    series.bubble_size_cache = Some(cache);
+                    series.bubble_size_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                }
+            }
         }
     }
+}
+
+fn non_empty_ref(reference: Option<&str>) -> Option<&str> {
+    reference.map(str::trim).filter(|value| !value.is_empty())
 }
 
 fn should_materialize_live_ref_cache(
@@ -133,16 +166,16 @@ fn should_materialize_live_ref_cache(
 }
 
 fn point_cache_from_live_range(
-    range: &ParsedLocalRange,
+    range: &ParsedWorkbookRange,
     format_code: Option<&str>,
-    mut cell_text: impl FnMut(u32, u32) -> Option<String>,
+    mut cell_text: impl FnMut(&str, u32, u32) -> Option<String>,
 ) -> Option<ChartSeriesPointCacheData> {
-    let point_count = point_count(range)?;
-    let points = point_positions(range)
+    let point_count = point_count(&range.range)?;
+    let points = point_positions(&range.range)
         .into_iter()
         .enumerate()
         .filter_map(|(idx, (row, col))| {
-            cell_text(row, col).and_then(|value| {
+            cell_text(&range.sheet_name, row, col).and_then(|value| {
                 (!value.trim().is_empty()).then_some(ChartSeriesPointCachePointData {
                     idx: idx as u32,
                     value,
@@ -191,9 +224,9 @@ fn complete_series_name_refs_from_data_range(
     data_range: Option<&str>,
     series: &mut [ChartSeriesData],
     sheet_name: &str,
-    mut cell_text: impl FnMut(u32, u32) -> Option<String>,
+    mut cell_text: impl FnMut(&str, u32, u32) -> Option<String>,
 ) {
-    let Some(data_range) = data_range.and_then(|range| parse_local_a1_range(range, sheet_name))
+    let Some(data_range) = data_range.and_then(|range| parse_workbook_a1_range(range, sheet_name))
     else {
         return;
     };
@@ -218,7 +251,7 @@ fn complete_series_name_refs_from_data_range(
         let Some(values) = series
             .values
             .as_deref()
-            .and_then(|range| parse_local_a1_range(range, sheet_name))
+            .and_then(|range| parse_workbook_a1_range(range, sheet_name))
         else {
             continue;
         };
@@ -229,55 +262,64 @@ fn complete_series_name_refs_from_data_range(
         if let Some(categories) = series
             .categories
             .as_deref()
-            .and_then(|range| parse_local_a1_range(range, sheet_name))
+            .and_then(|range| parse_workbook_a1_range(range, sheet_name))
             && !categories_match_data_body_category_column(&data_range, &categories)
         {
             continue;
         }
 
-        let Some(header_text) = cell_text(data_range.start_row, values.start_col) else {
+        let Some(header_text) = cell_text(
+            &data_range.sheet_name,
+            data_range.range.start_row,
+            values.range.start_col,
+        ) else {
             continue;
         };
         if header_text.trim() == series_name {
-            series.name_ref = Some(crate::infra::a1::to_a1(
-                data_range.start_row,
-                values.start_col,
+            series.name_ref = Some(qualified_cell_ref(
+                &data_range.sheet_name,
+                sheet_name,
+                data_range.range.start_row,
+                values.range.start_col,
             ));
         }
     }
 }
 
 fn series_values_match_data_body_column(
-    data_range: &ParsedLocalRange,
-    values: &ParsedLocalRange,
+    data_range: &ParsedWorkbookRange,
+    values: &ParsedWorkbookRange,
 ) -> bool {
-    data_range.start_row < data_range.end_row
-        && data_range.start_col < data_range.end_col
-        && values.start_col == values.end_col
-        && values.start_col > data_range.start_col
-        && values.start_col <= data_range.end_col
-        && values.start_row == data_range.start_row + 1
-        && values.end_row == data_range.end_row
+    data_range.sheet_name == values.sheet_name
+        && data_range.range.start_row < data_range.range.end_row
+        && data_range.range.start_col < data_range.range.end_col
+        && values.range.start_col == values.range.end_col
+        && values.range.start_col > data_range.range.start_col
+        && values.range.start_col <= data_range.range.end_col
+        && values.range.start_row == data_range.range.start_row + 1
+        && values.range.end_row == data_range.range.end_row
 }
 
 fn categories_match_data_body_category_column(
-    data_range: &ParsedLocalRange,
-    categories: &ParsedLocalRange,
+    data_range: &ParsedWorkbookRange,
+    categories: &ParsedWorkbookRange,
 ) -> bool {
-    categories.start_col == data_range.start_col
-        && categories.end_col == data_range.start_col
-        && categories.start_row == data_range.start_row + 1
-        && categories.end_row == data_range.end_row
+    data_range.sheet_name == categories.sheet_name
+        && categories.range.start_col == data_range.range.start_col
+        && categories.range.end_col == data_range.range.start_col
+        && categories.range.start_row == data_range.range.start_row + 1
+        && categories.range.end_row == data_range.range.end_row
 }
 
-fn parse_local_a1_range(reference: &str, sheet_name: &str) -> Option<ParsedLocalRange> {
+fn parse_workbook_a1_range(
+    reference: &str,
+    default_sheet_name: &str,
+) -> Option<ParsedWorkbookRange> {
     let trimmed = reference.trim();
     let (sheet_prefix, body) = compute_parser::split_sheet_prefix(trimmed);
-    if let Some(prefix) = sheet_prefix
-        && unescape_sheet_name(prefix) != sheet_name
-    {
-        return None;
-    }
+    let sheet_name = sheet_prefix
+        .map(unescape_sheet_name)
+        .unwrap_or_else(|| default_sheet_name.to_string());
 
     let range = compute_parser::parse_a1_range(body.trim())?;
     if range.range_type != RangeType::CellRange {
@@ -286,11 +328,14 @@ fn parse_local_a1_range(reference: &str, sheet_name: &str) -> Option<ParsedLocal
 
     let (start_row, start_col) = positional_cell(range.start)?;
     let (end_row, end_col) = positional_cell(range.end)?;
-    Some(ParsedLocalRange {
-        start_row: start_row.min(end_row),
-        start_col: start_col.min(end_col),
-        end_row: start_row.max(end_row),
-        end_col: start_col.max(end_col),
+    Some(ParsedWorkbookRange {
+        sheet_name,
+        range: ParsedLocalRange {
+            start_row: start_row.min(end_row),
+            start_col: start_col.min(end_col),
+            end_row: start_row.max(end_row),
+            end_col: start_col.max(end_col),
+        },
     })
 }
 
@@ -305,10 +350,31 @@ fn unescape_sheet_name(sheet_name: &str) -> String {
     sheet_name.replace("''", "'")
 }
 
+fn qualified_cell_ref(sheet_name: &str, default_sheet_name: &str, row: u32, col: u32) -> String {
+    let cell_ref = crate::infra::a1::to_a1(row, col);
+    if sheet_name == default_sheet_name {
+        cell_ref
+    } else {
+        format!("{}!{cell_ref}", quote_sheet_name(sheet_name))
+    }
+}
+
+fn quote_sheet_name(sheet_name: &str) -> String {
+    if !sheet_name.is_empty()
+        && sheet_name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    {
+        sheet_name.to_string()
+    } else {
+        format!("'{}'", sheet_name.replace('\'', "''"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use domain_types::{CellData, SheetData};
+    use domain_types::{CellData, ParseOutput, SheetData};
     use value_types::{CellValue, FiniteF64};
 
     fn chart_text_cell(row: u32, col: u32, text: &str) -> CellData {
@@ -335,7 +401,7 @@ mod tests {
 
     #[test]
     fn materializes_caches_from_sheet_cells_for_reconstructed_export() {
-        let mut sheet = SheetData {
+        let sheet = SheetData {
             name: "Sheet1".to_string(),
             cells: vec![
                 chart_text_cell(0, 0, "Quarter"),
@@ -373,9 +439,13 @@ mod tests {
             ..Default::default()
         };
 
-        complete_chart_sources_for_sheet(&mut sheet);
+        let mut output = ParseOutput {
+            sheets: vec![sheet],
+            ..Default::default()
+        };
+        complete_chart_sources_for_xlsx_export(&mut output);
 
-        let series = &sheet.charts[0].series[0];
+        let series = &output.sheets[0].charts[0].series[0];
         assert_eq!(series.name_ref.as_deref(), Some("B1"));
         assert_eq!(
             series
@@ -421,7 +491,7 @@ mod tests {
         series[0].category_source_kind = Some(ChartSeriesDimensionSourceKindData::CacheFallback);
         series[0].category_cache = Some(imported.clone());
 
-        complete_series_live_ref_caches(&mut series, "Sheet1", |_, _| Some("live".to_string()));
+        complete_series_live_ref_caches(&mut series, "Sheet1", |_, _, _| Some("live".to_string()));
 
         assert_eq!(series[0].value_cache, Some(imported.clone()));
         assert_eq!(series[0].category_cache, Some(imported));

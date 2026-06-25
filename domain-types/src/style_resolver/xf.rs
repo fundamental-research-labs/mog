@@ -89,7 +89,7 @@ fn should_apply_font(xf: &CellXfInput) -> bool {
     xf.apply_font.unwrap_or(xf.font_id.unwrap_or(0) != 0)
 }
 fn should_apply_fill(xf: &CellXfInput) -> bool {
-    xf.apply_fill.unwrap_or(xf.fill_id.is_some())
+    xf.apply_fill.unwrap_or(xf.fill_id.unwrap_or(0) != 0)
 }
 fn should_apply_border(xf: &CellXfInput) -> bool {
     xf.apply_border.unwrap_or(xf.border_id.unwrap_or(0) != 0)

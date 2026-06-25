@@ -287,7 +287,7 @@ fn present_number_format_zero_preserves_general_override_without_apply_flag() {
 }
 
 #[test]
-fn present_fill_zero_preserves_no_fill_override_without_apply_flag() {
+fn present_fill_zero_without_apply_flag_inherits_base_fill() {
     let input = StyleInput {
         cell_style_xfs: vec![CellXfInput {
             fill_id: Some(1),
@@ -321,9 +321,31 @@ fn present_fill_zero_preserves_no_fill_override_without_apply_flag() {
     };
 
     let fmt = &resolve_styles(&input)[1];
-    let fill = fmt.fill.as_ref().expect("explicit no-fill override");
-    assert_eq!(fill.pattern_type.as_deref(), Some("none"));
-    assert!(fill.background_color.is_none());
+    let fill = fmt.fill.as_ref().expect("base fill");
+    assert_eq!(fill.pattern_type.as_deref(), Some("solid"));
+    assert_eq!(fill.background_color.as_deref(), Some("#FF0000"));
+}
+
+#[test]
+fn present_fill_zero_without_apply_flag_does_not_materialize_no_fill() {
+    let input = StyleInput {
+        cell_xfs: vec![
+            CellXfInput::default(),
+            CellXfInput {
+                fill_id: Some(0),
+                ..Default::default()
+            },
+        ],
+        fills: vec![FillInput {
+            fill_type: "pattern".to_string(),
+            pattern_type: "none".to_string(),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let fmt = &resolve_styles(&input)[1];
+    assert!(fmt.fill.is_none());
 }
 
 #[test]

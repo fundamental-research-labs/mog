@@ -15,6 +15,7 @@ import {
 } from './version-list-commits-diagnostics';
 import { toPageToken } from './version-list-commits-options';
 import { isRecord, toCommitId, toRevision } from './version-list-commits-utils';
+import { mapWorkbookCommitAnnotationSummary } from '../version-commit-summary-projection';
 
 export function mapCommitPageResult(
   value: unknown,
@@ -317,20 +318,39 @@ function mapCommitSummaries(values: readonly unknown[]): {
 
 function mapCommitSummary(value: unknown): WorkbookCommitSummary | null {
   if (!isRecord(value)) return null;
+  const payload = isRecord(value.payload) ? value.payload : null;
 
   const id = toCommitId(value.id);
-  if (!id || typeof value.createdAt !== 'string') return null;
+  const createdAt =
+    typeof value.createdAt === 'string'
+      ? value.createdAt
+      : typeof payload?.createdAt === 'string'
+        ? payload.createdAt
+        : null;
+  if (!id || !createdAt) return null;
 
-  const parents = Array.isArray(value.parents)
-    ? value.parents.map(toCommitId).filter((parent): parent is WorkbookCommitId => Boolean(parent))
-    : null;
-  if (!parents || parents.length !== (value.parents as readonly unknown[]).length) return null;
+  const parentsValue = Array.isArray(value.parents)
+    ? value.parents
+    : Array.isArray(value.parentCommitIds)
+      ? value.parentCommitIds
+      : Array.isArray(payload?.parentCommitIds)
+        ? payload.parentCommitIds
+        : null;
+  if (!parentsValue) return null;
+
+  const parents = parentsValue
+    .map(toCommitId)
+    .filter((parent): parent is WorkbookCommitId => Boolean(parent));
+  if (parents.length !== parentsValue.length) return null;
+
+  const annotation = mapWorkbookCommitAnnotationSummary(value.annotation ?? payload?.annotation);
 
   return {
     id,
     parents,
-    createdAt: value.createdAt,
-    author: redactAuthor(value.author),
+    createdAt,
+    author: redactAuthor(value.author ?? payload?.author),
+    ...(annotation ? { annotation } : {}),
   };
 }
 

@@ -69,6 +69,11 @@ describe('WorkbookVersion listCommits selector forwarding', () => {
               displayName: 'Public Reader',
               redacted: true,
             },
+            annotation: {
+              title: { kind: 'text', value: 'protected salary details' },
+              message: { kind: 'text', value: 'deleted acquisition plan' },
+              tags: [{ kind: 'text', value: 'opaque finance blob' }],
+            },
           },
           {
             id: ROOT_COMMIT_ID,
@@ -77,6 +82,9 @@ describe('WorkbookVersion listCommits selector forwarding', () => {
             author: {
               actorKind: 'system',
               redacted: true,
+            },
+            annotation: {
+              title: { kind: 'redacted', reason: 'permission-denied' },
             },
           },
         ],

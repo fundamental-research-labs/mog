@@ -49,6 +49,9 @@ describe('IndexedDB version provider document/workbook lifecycle durable reload'
       value: {
         id: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
         parents: [initialHead.id],
+        annotation: {
+          message: { kind: 'text', value: 'normal lifecycle commit' },
+        },
       },
     });
     if (!committedResult.ok) throw new Error(`expected commit: ${committedResult.error.code}`);

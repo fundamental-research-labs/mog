@@ -2,20 +2,16 @@
  * Styles Group
  *
  * Self-sufficient toolbar group for styling operations.
- * Excel layout: Conditional Formatting, Format as Table, then a 2x2 grid of
- * quick-pick style chips (Normal, Good, Bad, Neutral) with Cell Styles dropdown.
+ * Excel layout: compact three-row command stack for Conditional Formatting,
+ * Format as Table, and Cell Styles.
  *
- * Text formatting dispatch: clearFormat (the "Normal" quick-pick chip)
- * routes through `useDispatch()`/`dispatch('CLEAR_FORMATS')`. The
- * applyStyle / formatAsTable code paths still call non-dispatch helpers
- * (`useToolbarActions().handleApplyStyle` and `ws.tables.add` directly) —
- * those need APPLY_CELL_STYLE / FORMAT_AS_TABLE handlers which are out of
- * scope for text formatting. It does not add new ActionTypes here.
+ * Text formatting dispatch: Format as Table routes through INSERT_TABLE.
+ * Cell Styles still delegates named styles to the existing toolbar action
+ * helper until a typed APPLY_CELL_STYLE handler exists.
  *
  * Features:
  * - Conditional Formatting dropdown (Excel-like menu with quick rules, presets, and manager)
  * - Format as Table dropdown (creates table with selected style)
- * - Quick-pick style chips for one-click style application
  * - Cell Styles dropdown (applies built-in cell styles)
  *
  * COLLAPSE SUPPORT (
@@ -34,19 +30,20 @@
 import React, { useCallback, useEffect } from 'react';
 import { useFeatureGate, useUIStore } from '../../../internal-api';
 
-import { Tooltip } from '@mog/shell';
 import type { TableStylePreset } from '@mog-sdk/contracts/tables';
 import { STYLES_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { StyleGallery } from '../../../components/pickers/StyleGallery';
 import { TableStyleGallery } from '../../../components/pickers/TableStyleGallery';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useToolbarActions } from '../../../hooks/toolbar/use-toolbar-actions';
-import { ConditionalFormattingMenu } from '../galleries/ConditionalFormattingMenu';
+import {
+  ConditionalFormattingMenu,
+  ConditionalFormattingStackIcon,
+} from '../galleries/ConditionalFormattingMenu';
 import { keyTipRegistry } from '../keytips';
-import { RibbonButton } from '../primitives/RibbonButton';
 import { RibbonDropdownPanel } from '../primitives/RibbonDropdown';
+import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
-import { ConditionalFormatIcon, DropdownArrowIcon } from '../primitives/ToolbarIcons';
 import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
@@ -58,7 +55,13 @@ import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
  */
 function FormatAsTableIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
       {/* Table icon with header */}
       <rect x="2" y="2" width="16" height="4" fill="#4472c4" rx="1" />
       <rect x="2" y="7" width="16" height="3" fill="#d6dce5" stroke="#8faadc" strokeWidth="0.3" />
@@ -68,79 +71,27 @@ function FormatAsTableIcon() {
   );
 }
 
-// =============================================================================
-// Quick-Pick Style Chips
-// =============================================================================
-
-/**
- * Quick-pick style definitions.
- * These match Excel's 2x2 grid of Normal, Good, Bad, Neutral.
- * "Normal" clears formatting (represented as null styleId).
- */
-const QUICK_PICK_STYLES = [
-  { id: null, name: 'Normal', bgColor: '#ffffff', textColor: '#000000', borderColor: '#d4d4d4' },
-  { id: 'bad', name: 'Bad', bgColor: '#ffc7ce', textColor: '#9c0006', borderColor: '#9c0006' },
-  { id: 'good', name: 'Good', bgColor: '#c6efce', textColor: '#006100', borderColor: '#006100' },
-  {
-    id: 'neutral',
-    name: 'Neutral',
-    bgColor: '#ffeb9c',
-    textColor: '#9c5700',
-    borderColor: '#9c5700',
-  },
-] as const;
-
-interface StylePreviewChipProps {
-  /** Style ID or null for "Normal" (clear formatting) */
-  styleId: string | null;
-  /** Display name */
-  name: string;
-  /** Background color */
-  bgColor: string;
-  /** Text/border color for the chip */
-  textColor: string;
-  /** Border color */
-  borderColor: string;
-  /** Click handler */
-  onClick: () => void;
-}
-
-/**
- * Small colored preview chip for quick style application.
- * Shows a preview of the style with the style name.
- */
-function StylePreviewChip({
-  name,
-  bgColor,
-  textColor,
-  borderColor,
-  onClick,
-}: StylePreviewChipProps) {
+function CellStylesIcon() {
   return (
-    <Tooltip title={name} description={`Apply ${name} style`}>
-      <button
-        type="button"
-        onClick={onClick}
-        className="
- flex items-center justify-center
- min-w-[36px] h-[20px] px-1.5
- text-ribbon-chip leading-none font-medium
- whitespace-nowrap
- rounded-ss-sm cursor-pointer
- border transition-all duration-ss-fast
- hover:ring-1 hover:ring-ss-primary hover:ring-offset-1
- focus:outline-none focus-visible:ring-2 focus-visible:ring-ss-primary
- "
-        style={{
-          backgroundColor: bgColor,
-          color: textColor,
-          borderColor: borderColor,
-        }}
-        aria-label={`Apply ${name} style`}
-      >
-        {name}
-      </button>
-    </Tooltip>
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect x="1.5" y="2" width="11" height="12" rx="1" fill="#ffffff" stroke="#6b7280" />
+      <path d="M5.2 2v12M8.9 2v12M1.5 6h11M1.5 10h11" stroke="#9ca3af" strokeWidth="0.7" />
+      <rect x="2.3" y="2.8" width="2.2" height="2.5" fill="#d8eadc" />
+      <rect x="6" y="6.8" width="2.2" height="2.5" fill="#dbeafe" />
+      <rect x="9.7" y="10.8" width="2" height="2.3" fill="#f8d7da" />
+      <path
+        d="M9.8 13.8 14 9.6l1.1 1.1-4.2 4.2-1.4.3.3-1.4z"
+        fill="#2f7d59"
+        stroke="#ffffff"
+        strokeWidth="0.45"
+      />
+    </svg>
   );
 }
 
@@ -151,10 +102,10 @@ function StylePreviewChip({
 /**
  * Styles toolbar group - self-sufficient, no props required.
  *
- * Layout matches Excel:
- * - Conditional Formatting (large button with dropdown)
- * - Format as Table (large button with gallery dropdown)
- * - Quick-pick style chips (2x2 grid: Normal, Bad, Good, Neutral) with Cell Styles dropdown
+ * Compact three-row command stack:
+ * - Conditional Formatting
+ * - Format as Table
+ * - Cell Styles
  *
  * Memoized to prevent re-renders when parent re-renders.
  */
@@ -239,18 +190,6 @@ export const StylesGroup = React.memo(function StylesGroup() {
   // Handlers
   // ===========================================================================
 
-  /**
-   * Handle quick-pick style chip click.
-   * null id means "Normal" (CLEAR_FORMATS), otherwise apply the named style.
-   */
-  const handleQuickStyleClick = (styleId: string | null) => {
-    if (styleId === null) {
-      dispatch('CLEAR_FORMATS');
-    } else {
-      applyStyle(styleId);
-    }
-  };
-
   // ===========================================================================
   // Render
   // ===========================================================================
@@ -261,88 +200,51 @@ export const StylesGroup = React.memo(function StylesGroup() {
     <ToolbarGroup
       label="Styles"
       collapseConfig={STYLES_COLLAPSE_CONFIG}
-      dropdownIcon={<ConditionalFormatIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
-      dialogLaunchTitle="Cell Styles Settings"
+      dropdownIcon={<ConditionalFormattingStackIcon />}
     >
-      <div className="flex items-start gap-1">
-        {/* Conditional Formatting - Dropdown Menu (Excel-like) */}
-        <ConditionalFormattingMenu />
+      <div className="flex flex-col justify-center gap-0.5">
+        <ConditionalFormattingMenu variant="stacked" />
 
-        {/* Format as Table - Large Button with Gallery */}
-        <div className="relative inline-flex">
-          <Tooltip title="Format as Table" description="Convert data to a table with formatting">
-            <RibbonButton
-              layout="vertical"
-              height="full"
-              data-testid="ribbon-dropdown-format-as-table"
+        <RibbonVisibilityItem item="formatAsTable">
+          <div className="relative inline-flex">
+            <StackedRibbonMenuButton
+              id="format-as-table"
+              testId="ribbon-dropdown-format-as-table"
               icon={<FormatAsTableIcon />}
-              label="Table"
-              hasDropdown
-              dropdownPosition="inline"
+              label="Format as Table"
+              visibilityKey="formatAsTable"
               isOpen={tableStyleGalleryOpen}
               onClick={() => setTableStyleGalleryOpen(!tableStyleGalleryOpen)}
-              aria-label="Format as Table"
             />
-          </Tooltip>
-          <RibbonDropdownPanel
-            open={tableStyleGalleryOpen}
-            onClose={() => setTableStyleGalleryOpen(false)}
-            position="bottom-right"
-          >
-            <div data-testid="ribbon-dropdown-menu-format-as-table">
-              <TableStyleGallery
-                onSelectStyle={(styleId) => {
-                  formatAsTable(styleId);
-                  setTableStyleGalleryOpen(false);
-                }}
-                onClose={() => setTableStyleGalleryOpen(false)}
-              />
-            </div>
-          </RibbonDropdownPanel>
-        </div>
-
-        {/* Quick-Pick Style Chips + Cell Styles Dropdown */}
-        <RibbonVisibilityItem item="cellStyles">
-          <div className="relative inline-flex flex-col items-start h-[var(--ribbon-content-height)] justify-between py-1">
-            {/* 2x2 Grid of style preview chips */}
-            <div className="flex flex-wrap content-start gap-0.5 w-[92px]">
-              {QUICK_PICK_STYLES.map((style) => (
-                <StylePreviewChip
-                  key={style.name}
-                  styleId={style.id}
-                  name={style.name}
-                  bgColor={style.bgColor}
-                  textColor={style.textColor}
-                  borderColor={style.borderColor}
-                  onClick={() => handleQuickStyleClick(style.id)}
+            <RibbonDropdownPanel
+              open={tableStyleGalleryOpen}
+              onClose={() => setTableStyleGalleryOpen(false)}
+              position="bottom-right"
+            >
+              <div data-testid="ribbon-dropdown-menu-format-as-table">
+                <TableStyleGallery
+                  onSelectStyle={(styleId) => {
+                    formatAsTable(styleId);
+                    setTableStyleGalleryOpen(false);
+                  }}
+                  onClose={() => setTableStyleGalleryOpen(false)}
                 />
-              ))}
-            </div>
+              </div>
+            </RibbonDropdownPanel>
+          </div>
+        </RibbonVisibilityItem>
 
-            {/* Cell Styles dropdown button */}
-            <Tooltip title="Cell Styles" description="Apply predefined cell styles">
-              <button
-                type="button"
-                data-testid="ribbon-dropdown-cell-styles"
-                onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
-                className="
- flex items-center gap-0.5 px-1 py-0.5
- text-ribbon text-ss-text-secondary
- rounded cursor-pointer
- hover:bg-ss-surface-hover
- transition-all duration-ss-fast
- "
-                aria-label="Cell Styles"
-                aria-expanded={styleGalleryOpen}
-                aria-haspopup="menu"
-              >
-                <span>Cell Styles</span>
-                <DropdownArrowIcon className={styleGalleryOpen ? 'rotate-180' : ''} />
-              </button>
-            </Tooltip>
-
-            {/* Cell Styles Gallery Dropdown */}
+        <RibbonVisibilityItem item="cellStyles">
+          <div className="relative inline-flex">
+            <StackedRibbonMenuButton
+              id="cell-styles"
+              testId="ribbon-dropdown-cell-styles"
+              icon={<CellStylesIcon />}
+              label="Cell Styles"
+              visibilityKey="cellStyles"
+              isOpen={styleGalleryOpen}
+              onClick={() => setStyleGalleryOpen(!styleGalleryOpen)}
+            />
             <RibbonDropdownPanel
               open={styleGalleryOpen}
               onClose={() => setStyleGalleryOpen(false)}

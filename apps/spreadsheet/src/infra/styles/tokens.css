@@ -25,12 +25,13 @@
   --tabbar-section-margin: 8px; /* margin between major sections */
 
   /* Tab styling - Excel-like appearance */
-  --tab-active-bg: var(--color-ss-surface);
+  --tab-active-bg: transparent;
   --tab-inactive-bg: transparent;
   --tab-hover-bg: rgba(0, 0, 0, 0.04);
   --tab-active-text: var(--color-ss-primary);
   --tab-inactive-text: var(--color-ss-text-secondary);
   --tab-border-radius: 3px;
+  --tab-active-underline: 2px;
   /* Contextual tab accent (Table Design = green) */
   --tab-contextual-accent: #217346;
 
@@ -45,14 +46,13 @@
   --qat-gap: 2px;
   --qat-padding-x: 4px;
 
-  /* Ribbon structure - explicit heights for predictable layout */
-  /* Tightened to match Excel's vertical density (was 80px/66px) */
-  /* Note: 77px = 60px content + 14px label + 2px padding-y + 1px border-t */
-  --ribbon-height: 77px; /* total ribbon height (includes 1px border) */
-  --ribbon-content-height: 60px; /* height of button/content area */
-  --ribbon-label-height: 14px; /* height of group label area */
+  /* Ribbon structure - explicit border-box heights for predictable layout */
+  /* 68px = 56px content + 0px footer label + 12px vertical padding */
+  --ribbon-height: 68px; /* total ribbon height */
+  --ribbon-content-height: 56px; /* height of button/content area */
+  --ribbon-label-height: 0px; /* group footer labels are hidden */
   --ribbon-padding-x: 6px;
-  --ribbon-padding-y: 1px;
+  --ribbon-padding-y: 6px;
 
   /* Ribbon groups */
   --ribbon-section-gap: 4px; /* gap between ribbon groups */
@@ -60,22 +60,23 @@
   --ribbon-group-items-gap: 3px; /* gap between items horizontally within a group */
 
   /* Ribbon buttons */
+  --ribbon-icon-size: 14px;
   --ribbon-button-gap: 2px; /* gap between button rows vertically */
   --ribbon-button-icon-gap: 2px; /* gap between icon and label within a button */
   --ribbon-button-inline-gap: 1px; /* tight gap between adjacent icon buttons (B/I/U row) */
 
   /* Ribbon button heights - CONSTRAINT-BASED SYSTEM
  * ================================================
- * All heights derive from --ribbon-content-height (60px).
+ * All heights derive from --ribbon-content-height (56px).
  * Formula: (content-height - (N-1) * gap) / N
  *
  * This guarantees N stacked buttons ALWAYS fit their container.
  * Overflow is impossible by construction.
  *
- * Calculated values (60px content, 2px gap):
- * full = 60px
- * half = (60 - 2) / 2 = 29px
- * third = (60 - 4) / 3 = 18.67px
+ * Calculated values (56px content, 2px gap):
+ * full = 56px
+ * half = (56 - 2) / 2 = 27px
+ * third = (56 - 4) / 3 = 17.33px
  */
   --ribbon-button-height-full: var(--ribbon-content-height);
   --ribbon-button-height-half: calc((var(--ribbon-content-height) - var(--ribbon-button-gap)) / 2);
@@ -83,9 +84,8 @@
     (var(--ribbon-content-height) - 2 * var(--ribbon-button-gap)) / 3
   );
 
-  /* Ribbon group separators & labels */
+  /* Ribbon group separators */
   --ribbon-group-separator-width: 1px;
-  --ribbon-group-label-letter-spacing: 0.03em;
 
   /* Tooltip timing */
   --tooltip-delay: 500ms;

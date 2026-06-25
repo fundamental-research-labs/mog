@@ -468,11 +468,15 @@ function IconOnlyButton({
     >
       {hasDropdown ? (
         <span className="flex items-center justify-center gap-[var(--ribbon-button-icon-gap)]">
-          <span className="flex items-center justify-center w-4 h-4 overflow-visible">{icon}</span>
+          <span className="flex h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)] items-center justify-center overflow-visible">
+            {icon}
+          </span>
           <DropdownArrowIcon className={isOpen ? 'rotate-180' : ''} />
         </span>
       ) : (
-        <span className="flex items-center justify-center w-4 h-4 overflow-visible">{icon}</span>
+        <span className="flex h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)] items-center justify-center overflow-visible">
+          {icon}
+        </span>
       )}
     </button>
   );
@@ -526,7 +530,9 @@ function VerticalButton({
   const isBottomDropdown = hasDropdown && dropdownPosition === 'bottom' && isFullHeight;
 
   // Icon size: 20x20 for full height, 16x16 for half/third
-  const iconSize = isFullHeight ? 'w-5 h-5' : 'w-4 h-4';
+  const iconSize = isFullHeight
+    ? 'h-5 w-5'
+    : 'h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)]';
 
   // Text size: normal for full height, compact for half/third
   const textClass = isFullHeight ? 'text-ribbon' : 'text-ribbon-compact';
@@ -659,7 +665,9 @@ function HorizontalButton({
       {...buttonProps}
     >
       {/* Icon container - 16x16 */}
-      <span className="flex items-center justify-center w-4 h-4">{icon}</span>
+      <span className="flex h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)] items-center justify-center">
+        {icon}
+      </span>
 
       {/* Label */}
       <span className={`${textClass} leading-tight ${labelWhitespaceClass} text-center`}>

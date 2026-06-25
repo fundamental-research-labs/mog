@@ -469,8 +469,8 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
               ref={ribbonContentRef}
               data-testid="panel-ribbon"
               className={`
- flex items-stretch px-[var(--ribbon-padding-x)] py-[var(--ribbon-padding-y)]
- bg-ss-surface gap-[var(--ribbon-section-gap)] h-[var(--ribbon-height)]
+ flex items-center px-[var(--ribbon-padding-x)] py-[var(--ribbon-padding-y)]
+ bg-ss-surface-secondary gap-[var(--ribbon-section-gap)] h-[var(--ribbon-height)]
  border-t border-ss-border-light overflow-hidden min-w-0
  ${temporaryShow ? 'shadow-ss-lg' : ''}
  `}

@@ -175,7 +175,7 @@ export function ZoomSlider({ className = '' }: ZoomSliderProps) {
         max={MAX_ZOOM * 100}
         value={currentZoom * 100}
         onChange={handleSliderChange}
-        className="w-20 h-1 bg-ss-surface-hover rounded-ss-lg appearance-none cursor-pointer accent-ss-primary"
+        className="mog-zoom-slider w-20 h-1 bg-ss-surface-hover rounded-ss-lg appearance-none cursor-pointer"
         title={`Zoom: ${formatZoomPercent(currentZoom)}`}
         aria-label="Zoom level"
       />

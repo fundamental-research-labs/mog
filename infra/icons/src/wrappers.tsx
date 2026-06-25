@@ -15,7 +15,7 @@ import type { ComponentType, CSSProperties, SVGProps } from 'react';
 
 // Standard icon sizes used across the application
 export const ICON_SIZES = {
-  toolbar: 16,
+  toolbar: 14,
   toolbarLarge: 20,
   menu: 20,
   dialog: 24,

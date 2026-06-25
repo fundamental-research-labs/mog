@@ -123,17 +123,17 @@ describe('CoordinateSystem.getClickPositionInCell', () => {
     });
 
     it('returns correct position for cell (0, 0) at center of cell', () => {
-      // Cell (0,0) starts at (50, 24), size (100, 21)
-      // Center is at (100, 34.5)
-      const clickPos = coords.getClickPositionInCell(TEST_SHEET_ID, viewportPoint(100, 34), {
+      const clickX = ROW_HEADER_WIDTH + DEFAULT_COL_WIDTH / 2;
+      const clickY = COL_HEADER_HEIGHT + 10;
+      const clickPos = coords.getClickPositionInCell(TEST_SHEET_ID, viewportPoint(clickX, clickY), {
         row: 0,
         col: 0,
       });
 
       expect(clickPos).not.toBeNull();
       if (clickPos) {
-        expect(clickPos.x).toBe(50); // 100 - 50 (header offset)
-        expect(clickPos.y).toBe(10); // 34 - 24 (header offset)
+        expect(clickPos.x).toBe(DEFAULT_COL_WIDTH / 2);
+        expect(clickPos.y).toBe(10);
         expect(clickPos.width).toBe(DEFAULT_COL_WIDTH);
         expect(clickPos.height).toBe(DEFAULT_ROW_HEIGHT);
       }

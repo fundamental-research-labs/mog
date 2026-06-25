@@ -33,6 +33,7 @@ import { useRibbonButtonVisible } from '../visibility/RibbonVisibilityContext';
 import { DropdownArrowIcon } from './ToolbarIcons';
 
 type SplitButtonVariant = 'small' | 'large';
+type SplitButtonWidth = 'normal' | 'narrow';
 
 interface SplitButtonProps {
   /** Optional ID for keytip positioning */
@@ -43,6 +44,8 @@ interface SplitButtonProps {
   label?: string;
   /** Size variant */
   variant?: SplitButtonVariant;
+  /** Width variant for large ribbon buttons. */
+  width?: SplitButtonWidth;
   /** Whether the dropdown is currently open */
   isOpen?: boolean;
   /** Whether the entire button is disabled */
@@ -118,6 +121,7 @@ export const SplitButton = React.memo(function SplitButton({
   icon,
   label,
   variant = 'small',
+  width = 'normal',
   isOpen = false,
   disabled = false,
   title,
@@ -155,19 +159,33 @@ export const SplitButton = React.memo(function SplitButton({
  disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed disabled:pointer-events-none disabled:shadow-none
  `;
 
-  const hoverStyles = 'hover:bg-ss-surface-hover hover:shadow-ss-button-hover';
+  const quietSplitStyles = `
+ bg-transparent text-ss-text-secondary border-transparent
+ group-hover/split-button:bg-ss-surface-hover
+ group-hover/split-button:border-ss-border-button-hover
+ group-hover/split-button:shadow-ss-button-hover
+ `;
+  const openSplitStyles = 'bg-ss-primary-light text-ss-primary border-ss-primary-light';
   const activeStyles = 'active:bg-ss-surface-active active:shadow-ss-button-active';
 
   if (variant === 'large') {
     // Adjust sizing based on collapse mode
     // In icons mode, use more compact sizing
     const isCompact = groupMode === 'icons' || groupMode === 'compact';
+    const isNarrow = width === 'narrow';
     const mainButtonClasses = isCompact
       ? 'px-2 py-1 min-w-[32px]' // Compact sizing
-      : 'px-3 py-1 min-w-[44px]'; // Full sizing
+      : isNarrow
+        ? 'px-2 py-1 min-w-[38px]'
+        : 'px-3 py-1 min-w-[44px]'; // Full sizing
+    const iconSizeClasses = isNarrow
+      ? 'h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)]'
+      : 'h-5 w-5';
+    const dropdownButtonClasses = isNarrow ? 'px-0.5 min-w-[14px]' : 'px-1 min-w-[16px]';
+    const labelTextClasses = isNarrow ? 'text-ribbon-compact' : 'text-ribbon';
 
     return (
-      <div id={id} className={`flex flex-row items-stretch ${className}`}>
+      <div id={id} className={`group/split-button flex flex-row items-stretch ${className}`}>
         {/* Main Button - Large */}
         <button
           type="button"
@@ -182,15 +200,15 @@ export const SplitButton = React.memo(function SplitButton({
  ${mainButtonClasses}
  h-[var(--ribbon-content-height)]
  text-ss-text-secondary
- border border-ss-border rounded-l
+ border border-r-0 rounded-l
  cursor-pointer select-none
- ${hoverStyles}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
         >
-          <span className="flex items-center justify-center w-5 h-5">{icon}</span>
+          <span className={`flex items-center justify-center ${iconSizeClasses}`}>{icon}</span>
           {showLabel && (
-            <span className="text-ribbon leading-tight whitespace-nowrap">{label}</span>
+            <span className={`${labelTextClasses} leading-tight whitespace-nowrap`}>{label}</span>
           )}
         </button>
 
@@ -206,11 +224,11 @@ export const SplitButton = React.memo(function SplitButton({
           data-testid={dropdownTestId}
           className={`
  ${buttonBase}
- px-1 min-w-[16px]
+ ${dropdownButtonClasses}
  h-[var(--ribbon-content-height)]
- border border-l-0 border-ss-border rounded-r
+ border border-l rounded-r
  cursor-pointer select-none
- ${isOpen ? 'bg-ss-primary-light text-ss-primary' : `text-ss-text-secondary ${hoverStyles}`}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
         >
@@ -222,7 +240,7 @@ export const SplitButton = React.memo(function SplitButton({
 
   // Small variant (default)
   return (
-    <div id={id} className={`flex flex-row items-stretch ${className}`}>
+    <div id={id} className={`group/split-button flex flex-row items-stretch ${className}`}>
       {/* Main Button - Small */}
       <button
         type="button"
@@ -235,13 +253,15 @@ export const SplitButton = React.memo(function SplitButton({
  ${buttonBase}
  w-6 h-7
  text-ss-text-secondary
- border border-ss-border rounded-l
+ border border-r-0 rounded-l
  cursor-pointer select-none
- ${hoverStyles}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
       >
-        {icon}
+        <span className="flex h-[var(--ribbon-icon-size)] w-[var(--ribbon-icon-size)] items-center justify-center">
+          {icon}
+        </span>
       </button>
 
       {/* Dropdown Trigger - Small */}
@@ -257,9 +277,9 @@ export const SplitButton = React.memo(function SplitButton({
         className={`
  ${buttonBase}
  px-0.5 min-w-[14px] h-7
- border border-l-0 border-ss-border rounded-r
+ border border-l rounded-r
  cursor-pointer select-none
- ${isOpen ? 'bg-ss-primary-light text-ss-primary' : `text-ss-text-secondary ${hoverStyles}`}
+ ${isOpen ? openSplitStyles : quietSplitStyles}
  ${activeStyles}
  `}
       >

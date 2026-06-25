@@ -275,8 +275,6 @@ export const NumberGroup = React.memo(function NumberGroup() {
       label="Number"
       collapseConfig={NUMBER_COLLAPSE_CONFIG}
       dropdownIcon={<NumberFormatIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG')}
-      dialogLaunchTitle="Number Format Settings"
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Number format dropdown */}

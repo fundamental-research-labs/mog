@@ -141,6 +141,10 @@ const DEFAULT_BORDER: { borders: CellBorders; preset: BorderPresetMode } = {
   preset: null,
 };
 
+const FONT_SIZE_STEP_ICON_STYLE = {
+  '--ribbon-icon-size': '15px',
+} as React.CSSProperties;
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -480,16 +484,10 @@ export const FontGroup = React.memo(function FontGroup() {
   if (!isEnabled) return null;
 
   return (
-    <ToolbarGroup
-      label="Font"
-      collapseConfig={FONT_COLLAPSE_CONFIG}
-      dropdownIcon={<FontIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'font' })}
-      dialogLaunchTitle="Font Settings"
-    >
+    <ToolbarGroup label="Font" collapseConfig={FONT_COLLAPSE_CONFIG} dropdownIcon={<FontIcon />}>
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Font family & size */}
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
           {/* Font Family Picker */}
           <RibbonVisibilityItem item="fontFamily">
             <div id="font-family-picker" className="relative inline-flex">
@@ -585,7 +583,11 @@ export const FontGroup = React.memo(function FontGroup() {
           <Tooltip title="Increase Font Size">
             <RibbonButton
               layout="icon-only"
-              icon={<FontSizeIncreaseIcon />}
+              icon={
+                <span className="translate-y-px" style={FONT_SIZE_STEP_ICON_STYLE}>
+                  <FontSizeIncreaseIcon />
+                </span>
+              }
               onClick={() => dispatch('INCREASE_FONT_SIZE')}
               disabled={!canFormatCells}
               id="increase-font-size"
@@ -597,7 +599,11 @@ export const FontGroup = React.memo(function FontGroup() {
           <Tooltip title="Decrease Font Size">
             <RibbonButton
               layout="icon-only"
-              icon={<FontSizeDecreaseIcon />}
+              icon={
+                <span className="translate-y-px" style={FONT_SIZE_STEP_ICON_STYLE}>
+                  <FontSizeDecreaseIcon />
+                </span>
+              }
               onClick={() => dispatch('DECREASE_FONT_SIZE')}
               disabled={!canFormatCells}
               id="decrease-font-size"

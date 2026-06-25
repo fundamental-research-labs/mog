@@ -272,7 +272,7 @@ export function FormulaBar({
     <div
       data-formula-bar
       data-testid="formula-bar"
-      className={`relative flex px-2 bg-ss-surface text-ss-text gap-2 ${
+      className={`relative flex px-2 bg-ss-surface-secondary text-ss-text gap-2 ${
         usesTallLayout ? 'items-start py-1' : 'items-center'
       }`}
       style={{ height: formulaBarHeightPx }}
@@ -395,9 +395,7 @@ export function FormulaBar({
             onCompositionEnd={(e) => onCompositionEnd?.(e.data)}
             resize="none"
             rows={usesTallLayout ? 3 : 1}
-            className={`h-full min-h-0 ${
-              isEditing ? 'border-ss-primary ring-2 ring-ss-primary/20' : ''
-            }`}
+            className="h-full min-h-0 focus:!border-ss-border focus:!ring-0 focus-visible:!ring-0 focus-visible:!ring-offset-0"
             style={{
               // D.2: Enable word wrapping for long formulas
               wordWrap: 'break-word',
@@ -432,9 +430,7 @@ export function FormulaBar({
             onCompositionStart={() => onCompositionStart?.()}
             onCompositionUpdate={(e) => onCompositionUpdate?.(e.data)}
             onCompositionEnd={(e) => onCompositionEnd?.(e.data)}
-            className={`h-full ${
-              isEditing ? 'border-ss-primary ring-2 ring-ss-primary/20' : ''
-            } ${isFormula ? 'text-transparent' : ''}`}
+            className={`h-full focus:!border-ss-border focus:!ring-0 focus-visible:!ring-0 focus-visible:!ring-offset-0 ${isFormula ? 'text-transparent' : ''}`}
             // Keep caret visible when text is transparent for syntax highlighting overlay
             style={isFormula ? { caretColor: 'var(--color-ss-text)' } : undefined}
             spellCheck={false}

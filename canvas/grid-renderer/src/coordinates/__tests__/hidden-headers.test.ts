@@ -616,9 +616,9 @@ describe('CoordinateSystem with hidden headers', () => {
       const vpRect = coords.documentToViewport(TEST_SHEET_ID, docRect);
 
       expect(vpRect).not.toBeNull();
-      // x: 100 * 2 + ROW_HEADER_WIDTH = 200 + 50 = 250
+      // x: 100 * 2 + ROW_HEADER_WIDTH
       // y: 50 * 2 = 100 (no column header offset)
-      expect(vpRect!.x).toBe(250);
+      expect(vpRect!.x).toBe(100 * 2 + ROW_HEADER_WIDTH);
       expect(vpRect!.y).toBe(100);
     });
 
@@ -665,9 +665,9 @@ describe('CoordinateSystem with hidden headers', () => {
       const vpRect = coords.documentToViewport(TEST_SHEET_ID, docRect);
 
       expect(vpRect).not.toBeNull();
-      // x: (300 - 200 scroll) + ROW_HEADER_WIDTH = 100 + 50 = 150
+      // x: (300 - 200 scroll) + ROW_HEADER_WIDTH
       // y: (150 - 100 scroll) = 50 (no column header offset)
-      expect(vpRect!.x).toBe(150);
+      expect(vpRect!.x).toBe(300 - 200 + ROW_HEADER_WIDTH);
       expect(vpRect!.y).toBe(50);
     });
 

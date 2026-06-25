@@ -6,8 +6,7 @@
  * text orientation, and indent controls.
  *
  * Text formatting dispatch: every onClick routes through `useDispatch`
- * — the same hook form ArrangeGroup uses. The horizontal-alignment
- * three-button cluster is now a single `<SegmentedControl>` instance.
+ * — the same hook form ArrangeGroup uses.
  *
  * COLLAPSE SUPPORT (
  * - Passes ALIGNMENT_COLLAPSE_CONFIG to ToolbarGroup
@@ -33,7 +32,7 @@
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useActiveSheetId, useFeatureGate, useUIStore, useWorkbook } from '../../../internal-api';
 
-import { SegmentedControl, Tooltip } from '@mog/shell';
+import { Tooltip } from '@mog/shell';
 import { ALIGNMENT_COLLAPSE_CONFIG } from '@mog-sdk/contracts/ribbon';
 import { useDispatch } from '../../../hooks/toolbar/use-action-dependencies';
 import { useSheetProtectionPermissions } from '../../../hooks/structure/use-sheet-protection';
@@ -72,7 +71,6 @@ import {
 // Types
 // =============================================================================
 
-type HorizontalAlign = 'left' | 'center' | 'right' | 'justify';
 type VerticalAlign = 'top' | 'middle' | 'bottom';
 
 // =============================================================================
@@ -99,12 +97,9 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   const dispatch = useDispatch();
 
   // ===========================================================================
-  // Derived alignment state — granular Zustand selectors. Horizontal alignment
-  // binds the SegmentedControl to the *raw* engine value: when raw is
-  // 'general'/'fill'/'centerContinuous'/'justify'/'distributed' (none of which
-  // map to a Row-1 segment), no segment is highlighted — matching Excel's
-  // unset-state visual. Vertical alignment still uses the mapped form because
-  // its three icon-only buttons are not yet a SegmentedControl.
+  // Derived alignment state. Horizontal alignment binds to the raw engine
+  // value so non-rendered values such as general/fill/centerContinuous leave
+  // the three icon buttons unhighlighted, matching Excel's unset state.
   // ===========================================================================
 
   const rawHAlign = useUIStore((s) => s.activeCellFormat?.horizontalAlign ?? 'general');
@@ -266,33 +261,6 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
   const showAlignCenter = useRibbonVisibilityPathVisible(['home', 'alignment', 'center']);
   const showAlignRight = useRibbonVisibilityPathVisible(['home', 'alignment', 'alignRight']);
 
-  const horizontalAlignmentOptions = [
-    {
-      value: 'left',
-      id: 'align-left',
-      ariaLabel: 'Align left',
-      tooltip: 'Align Left',
-      label: <AlignLeftIcon />,
-      visible: showAlignLeft,
-    },
-    {
-      value: 'center',
-      id: 'align-center',
-      ariaLabel: 'Align center',
-      tooltip: 'Align Center',
-      label: <AlignCenterIcon />,
-      visible: showAlignCenter,
-    },
-    {
-      value: 'right',
-      id: 'align-right',
-      ariaLabel: 'Align right',
-      tooltip: 'Align Right',
-      label: <AlignRightIcon />,
-      visible: showAlignRight,
-    },
-  ].filter((option) => option.visible);
-
   if (!isEnabled) return null;
 
   return (
@@ -300,405 +268,429 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       label="Alignment"
       collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
       dropdownIcon={<AlignCenterIcon />}
-      onDialogLaunch={() => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' })}
-      dialogLaunchTitle="Alignment Settings"
     >
-      <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
-        {/* Row 1: Horizontal alignment + Vertical alignment */}
-        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
-          {/* Bind to the *raw* alignment, not the mapped textAlign: Radix
- RadioGroup suppresses onValueChange when clicking the already-
- selected segment (radios don't uncheck on re-click), so mapping
- 'general' → 'left' would silence the keytip-driven synthetic
- click on `align-left`. Excel shows the unset state as no segment
- highlighted, which matches this binding by construction. */}
-          <SegmentedControl
-            id="horizontal-align"
-            ariaLabel="Horizontal alignment"
-            value={rawHAlign}
-            onChange={(v) => dispatch('SET_HORIZONTAL_ALIGN', { align: v as HorizontalAlign })}
-            disabled={!canFormatCells}
-            options={horizontalAlignmentOptions}
-          />
-
-          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
-
-          <Tooltip title="Align Top">
-            <RibbonButton
-              id="align-top"
-              layout="icon-only"
-              icon={<AlignTopIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
-              isOpen={verticalAlign === 'top'}
-              disabled={!canFormatCells}
-              aria-label="Align top"
-              aria-pressed={verticalAlign === 'top'}
-            />
-          </Tooltip>
-          <Tooltip title="Align Middle">
-            <RibbonButton
-              id="align-middle"
-              layout="icon-only"
-              icon={<AlignMiddleIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
-              isOpen={verticalAlign === 'middle'}
-              disabled={!canFormatCells}
-              aria-label="Align middle"
-              aria-pressed={verticalAlign === 'middle'}
-            />
-          </Tooltip>
-          <Tooltip title="Align Bottom">
-            <RibbonButton
-              id="align-bottom"
-              layout="icon-only"
-              icon={<AlignBottomIcon />}
-              onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
-              isOpen={verticalAlign === 'bottom'}
-              disabled={!canFormatCells}
-              aria-label="Align bottom"
-              aria-pressed={verticalAlign === 'bottom'}
-            />
-          </Tooltip>
-        </div>
-
-        {/* Row 2: Wrap + Merge + Orientation + Indent */}
-        <div className="flex items-center gap-[var(--ribbon-button-inline-gap)]">
-          <Tooltip title="Word Wrap">
-            <RibbonButton
-              id="word-wrap"
-              layout="icon-only"
-              icon={<WordWrapIcon />}
-              onClick={() => dispatch('TOGGLE_WRAP_TEXT')}
-              isOpen={wordWrap}
-              disabled={!canFormatCells}
-              aria-label="Word wrap"
-              aria-pressed={wordWrap}
-            />
-          </Tooltip>
-
-          {/* Merge Cells Split Button: direct-action + dropdown.
- Main button toggles merge & center vs unmerge (matches MERGE_AND_CENTER
- handler's internal toggle behavior). */}
-          <div className="relative inline-flex">
-            <Tooltip title="Merge & Center" shortcut="Ctrl+Shift+M">
-              <SplitButton
-                id="merge-center"
-                icon={<MergeCellsIcon />}
-                variant="small"
-                isOpen={isMerged || mergeDropdownOpen}
-                disabled={!canFormatCells || (!canMerge && !canUnmerge)}
-                visibilityKey="mergeCenter"
-                aria-label="Merge & Center"
-                onMainClick={() => {
-                  if (isMerged || canUnmerge) {
-                    dispatch('UNMERGE_CELLS');
-                  } else if (canMerge) {
-                    dispatch('MERGE_AND_CENTER');
-                  }
-                }}
-                onDropdownClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
-                dropdownTestId="merge-dropdown-trigger"
+      <div className="flex h-full items-start gap-2">
+        <div className="flex h-[calc(var(--ribbon-content-height)-4px)] flex-col justify-between">
+          <div className="flex h-7 items-center gap-[var(--ribbon-button-inline-gap)]">
+            {showAlignLeft && (
+              <Tooltip title="Align Left">
+                <RibbonButton
+                  id="align-left"
+                  layout="icon-only"
+                  icon={<AlignLeftIcon />}
+                  onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'left' })}
+                  isOpen={rawHAlign === 'left'}
+                  disabled={!canFormatCells}
+                  aria-label="Align left"
+                  aria-pressed={rawHAlign === 'left'}
+                />
+              </Tooltip>
+            )}
+            {showAlignCenter && (
+              <Tooltip title="Align Center">
+                <RibbonButton
+                  id="align-center"
+                  layout="icon-only"
+                  icon={<AlignCenterIcon />}
+                  onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'center' })}
+                  isOpen={rawHAlign === 'center'}
+                  disabled={!canFormatCells}
+                  aria-label="Align center"
+                  aria-pressed={rawHAlign === 'center'}
+                />
+              </Tooltip>
+            )}
+            {showAlignRight && (
+              <Tooltip title="Align Right">
+                <RibbonButton
+                  id="align-right"
+                  layout="icon-only"
+                  icon={<AlignRightIcon />}
+                  onClick={() => dispatch('SET_HORIZONTAL_ALIGN', { align: 'right' })}
+                  isOpen={rawHAlign === 'right'}
+                  disabled={!canFormatCells}
+                  aria-label="Align right"
+                  aria-pressed={rawHAlign === 'right'}
+                />
+              </Tooltip>
+            )}
+          </div>
+          <div className="flex h-[var(--ribbon-button-height-third)] items-center gap-[var(--ribbon-button-inline-gap)]">
+            <Tooltip title="Align Top">
+              <RibbonButton
+                id="align-top"
+                layout="icon-only"
+                icon={<AlignTopIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'top' })}
+                isOpen={verticalAlign === 'top'}
+                disabled={!canFormatCells}
+                aria-label="Align top"
+                aria-pressed={verticalAlign === 'top'}
               />
             </Tooltip>
-            <RibbonDropdownPanel
-              open={mergeDropdownOpen}
-              onClose={() => setMergeDropdownOpen(false)}
-            >
-              <div data-testid="ribbon-dropdown-menu-merge" className="py-1 min-w-[180px]">
-                {/* Merge & Center */}
-                <button
-                  type="button"
-                  data-value="merge-and-center"
-                  className={`
+            <Tooltip title="Align Middle">
+              <RibbonButton
+                id="align-middle"
+                layout="icon-only"
+                icon={<AlignMiddleIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'middle' })}
+                isOpen={verticalAlign === 'middle'}
+                disabled={!canFormatCells}
+                aria-label="Align middle"
+                aria-pressed={verticalAlign === 'middle'}
+              />
+            </Tooltip>
+            <Tooltip title="Align Bottom">
+              <RibbonButton
+                id="align-bottom"
+                layout="icon-only"
+                icon={<AlignBottomIcon />}
+                onClick={() => dispatch('SET_VERTICAL_ALIGN', { align: 'bottom' })}
+                isOpen={verticalAlign === 'bottom'}
+                disabled={!canFormatCells}
+                aria-label="Align bottom"
+                aria-pressed={verticalAlign === 'bottom'}
+              />
+            </Tooltip>
+          </div>
+        </div>
+
+        <div className="w-px h-11 self-center bg-ss-surface-tertiary" />
+
+        <div className="flex h-[calc(var(--ribbon-content-height)-4px)] flex-col justify-between">
+          <div className="flex h-7 items-center gap-1.5">
+            <Tooltip title="Word Wrap">
+              <RibbonButton
+                id="word-wrap"
+                layout="icon-only"
+                icon={<WordWrapIcon />}
+                onClick={() => dispatch('TOGGLE_WRAP_TEXT')}
+                isOpen={wordWrap}
+                disabled={!canFormatCells}
+                aria-label="Word wrap"
+                aria-pressed={wordWrap}
+              />
+            </Tooltip>
+
+            {/* Merge Cells split button: direct action plus menu options. */}
+            <div className="relative inline-flex">
+              <Tooltip title="Merge & Center" shortcut="Ctrl+Shift+M">
+                <SplitButton
+                  id="merge-center"
+                  icon={<MergeCellsIcon />}
+                  variant="small"
+                  isOpen={isMerged || mergeDropdownOpen}
+                  disabled={!canFormatCells || (!canMerge && !canUnmerge)}
+                  visibilityKey="mergeCenter"
+                  aria-label="Merge & Center"
+                  onMainClick={() => {
+                    setMergeDropdownOpen(false);
+                    dispatch('MERGE_AND_CENTER');
+                  }}
+                  onDropdownClick={() => setMergeDropdownOpen(!mergeDropdownOpen)}
+                  dropdownTestId="merge-dropdown-trigger"
+                />
+              </Tooltip>
+              <RibbonDropdownPanel
+                open={mergeDropdownOpen}
+                onClose={() => setMergeDropdownOpen(false)}
+              >
+                <div data-testid="ribbon-dropdown-menu-merge" className="py-1 min-w-[180px]">
+                  {/* Merge & Center */}
+                  <button
+                    type="button"
+                    data-value="merge-and-center"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
                   ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
-                  onClick={() => {
-                    if (canFormatCells && canMerge) {
-                      dispatch('MERGE_AND_CENTER');
-                      setMergeDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!canFormatCells || !canMerge}
-                >
-                  <MergeAndCenterIcon />
-                  <span>Merge & Center</span>
-                </button>
-                {/* Merge Across */}
-                <button
-                  type="button"
-                  data-value="merge-across"
-                  className={`
+                    onClick={() => {
+                      if (canFormatCells && canMerge) {
+                        dispatch('MERGE_AND_CENTER');
+                        setMergeDropdownOpen(false);
+                      }
+                    }}
+                    disabled={!canFormatCells || !canMerge}
+                  >
+                    <MergeAndCenterIcon />
+                    <span>Merge & Center</span>
+                  </button>
+                  {/* Merge Across */}
+                  <button
+                    type="button"
+                    data-value="merge-across"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
                   ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
-                  onClick={() => {
-                    if (canFormatCells && canMerge) {
-                      dispatch('MERGE_ACROSS');
-                      setMergeDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!canFormatCells || !canMerge}
-                >
-                  <MergeAcrossIcon />
-                  <span>Merge Across</span>
-                </button>
-                {/* Merge Cells (plain — no center alignment) */}
-                <button
-                  type="button"
-                  data-value="merge-cells"
-                  className={`
+                    onClick={() => {
+                      if (canFormatCells && canMerge) {
+                        dispatch('MERGE_ACROSS');
+                        setMergeDropdownOpen(false);
+                      }
+                    }}
+                    disabled={!canFormatCells || !canMerge}
+                  >
+                    <MergeAcrossIcon />
+                    <span>Merge Across</span>
+                  </button>
+                  {/* Merge Cells (plain — no center alignment) */}
+                  <button
+                    type="button"
+                    data-value="merge-cells"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
                   ${canFormatCells && canMerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
-                  onClick={() => {
-                    if (canFormatCells && canMerge) {
-                      dispatch('MERGE_CELLS');
-                      setMergeDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!canFormatCells || !canMerge}
-                >
-                  <MergeCellsIcon />
-                  <span>Merge Cells</span>
-                </button>
-                {/* Divider */}
-                <div className="h-px bg-ss-surface-tertiary my-1" />
-                {/* Unmerge Cells */}
-                <button
-                  type="button"
-                  data-value="unmerge"
-                  className={`
+                    onClick={() => {
+                      if (canFormatCells && canMerge) {
+                        dispatch('MERGE_CELLS');
+                        setMergeDropdownOpen(false);
+                      }
+                    }}
+                    disabled={!canFormatCells || !canMerge}
+                  >
+                    <MergeCellsIcon />
+                    <span>Merge Cells</span>
+                  </button>
+                  {/* Divider */}
+                  <div className="h-px bg-ss-surface-tertiary my-1" />
+                  {/* Unmerge Cells */}
+                  <button
+                    type="button"
+                    data-value="unmerge"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
                   ${canFormatCells && canUnmerge ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
-                  onClick={() => {
-                    if (canFormatCells && canUnmerge) {
-                      dispatch('UNMERGE_CELLS');
-                      setMergeDropdownOpen(false);
+                    onClick={() => {
+                      if (canFormatCells && canUnmerge) {
+                        dispatch('UNMERGE_CELLS');
+                        setMergeDropdownOpen(false);
+                      }
+                    }}
+                    disabled={!canFormatCells || !canUnmerge}
+                  >
+                    <UnmergeCellsIcon />
+                    <span>Unmerge Cells</span>
+                  </button>
+                  {/* Center Across Selection */}
+                  <button
+                    type="button"
+                    data-value="center-across-selection"
+                    data-testid="merge-menu-center-across-selection"
+                    aria-describedby={
+                      !centerAcrossAvailability.enabled
+                        ? 'merge-center-across-disabled-reason'
+                        : undefined
                     }
-                  }}
-                  disabled={!canFormatCells || !canUnmerge}
-                >
-                  <UnmergeCellsIcon />
-                  <span>Unmerge Cells</span>
-                </button>
-                {/* Center Across Selection */}
-                <button
-                  type="button"
-                  data-value="center-across-selection"
-                  data-testid="merge-menu-center-across-selection"
-                  aria-describedby={
-                    !centerAcrossAvailability.enabled
-                      ? 'merge-center-across-disabled-reason'
-                      : undefined
-                  }
-                  data-disabled-reason={centerAcrossAvailability.reason}
-                  className={`
+                    data-disabled-reason={centerAcrossAvailability.reason}
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${centerAcrossAvailability.enabled ? 'hover:bg-ss-surface-hover text-text-ss-primary' : 'text-ss-text-disabled cursor-not-allowed'}
  `}
-                  onClick={() => {
-                    if (centerAcrossAvailability.enabled) {
-                      dispatch('SET_HORIZONTAL_ALIGN', { align: 'centerContinuous' });
-                      setMergeDropdownOpen(false);
-                    }
-                  }}
-                  disabled={!centerAcrossAvailability.enabled}
-                >
-                  <AlignCenterIcon />
-                  <span>Center Across Selection</span>
-                </button>
-                {!centerAcrossAvailability.enabled && (
-                  <span id="merge-center-across-disabled-reason" className="sr-only">
-                    {centerAcrossAvailability.reason}
-                  </span>
-                )}
-              </div>
-            </RibbonDropdownPanel>
+                    onClick={() => {
+                      if (centerAcrossAvailability.enabled) {
+                        dispatch('SET_HORIZONTAL_ALIGN', { align: 'centerContinuous' });
+                        setMergeDropdownOpen(false);
+                      }
+                    }}
+                    disabled={!centerAcrossAvailability.enabled}
+                  >
+                    <AlignCenterIcon />
+                    <span>Center Across Selection</span>
+                  </button>
+                  {!centerAcrossAvailability.enabled && (
+                    <span id="merge-center-across-disabled-reason" className="sr-only">
+                      {centerAcrossAvailability.reason}
+                    </span>
+                  )}
+                </div>
+              </RibbonDropdownPanel>
+            </div>
           </div>
 
-          {/* Text Orientation Dropdown */}
-          <div className="relative inline-flex">
-            <Tooltip title="Orientation">
-              <RibbonButton
-                id="orientation"
-                layout="icon-only"
-                data-testid="ribbon-dropdown-orientation"
-                icon={<TextOrientationIcon />}
-                onClick={() => setOrientationDropdownOpen(!orientationDropdownOpen)}
-                isOpen={orientationDropdownOpen}
-                hasDropdown
-                disabled={!canFormatCells}
-                aria-label="Text orientation"
-                aria-expanded={orientationDropdownOpen}
-              />
-            </Tooltip>
-            <RibbonDropdownPanel
-              open={orientationDropdownOpen}
-              onClose={() => setOrientationDropdownOpen(false)}
-            >
-              <div data-testid="ribbon-dropdown-menu-orientation" className="py-1 min-w-[180px]">
-                <button
-                  type="button"
-                  data-value="angle-counterclockwise"
-                  className={`
+          <div className="flex h-[var(--ribbon-button-height-third)] items-center gap-[var(--ribbon-button-inline-gap)]">
+            {/* Text Orientation Dropdown */}
+            <div className="relative inline-flex">
+              <Tooltip title="Orientation">
+                <RibbonButton
+                  id="orientation"
+                  layout="icon-only"
+                  data-testid="ribbon-dropdown-orientation"
+                  icon={<TextOrientationIcon />}
+                  onClick={() => setOrientationDropdownOpen(!orientationDropdownOpen)}
+                  isOpen={orientationDropdownOpen}
+                  hasDropdown
+                  disabled={!canFormatCells}
+                  aria-label="Text orientation"
+                  aria-expanded={orientationDropdownOpen}
+                />
+              </Tooltip>
+              <RibbonDropdownPanel
+                open={orientationDropdownOpen}
+                onClose={() => setOrientationDropdownOpen(false)}
+              >
+                <div data-testid="ribbon-dropdown-menu-orientation" className="py-1 min-w-[180px]">
+                  <button
+                    type="button"
+                    data-value="angle-counterclockwise"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 45 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: 45 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <AngleCounterclockwiseIcon />
-                  <span>Angle Counterclockwise</span>
-                </button>
-                <button
-                  type="button"
-                  data-value="angle-clockwise"
-                  className={`
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: 45 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <AngleCounterclockwiseIcon />
+                    <span>Angle Counterclockwise</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-value="angle-clockwise"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === -45 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: -45 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <AngleClockwiseIcon />
-                  <span>Angle Clockwise</span>
-                </button>
-                <button
-                  type="button"
-                  data-value="vertical-text"
-                  className={`
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: -45 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <AngleClockwiseIcon />
+                    <span>Angle Clockwise</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-value="vertical-text"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 255 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: 255 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <VerticalTextIcon />
-                  <span>Vertical Text</span>
-                </button>
-                <button
-                  type="button"
-                  data-value="rotate-text-up"
-                  className={`
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: 255 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <VerticalTextIcon />
+                    <span>Vertical Text</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-value="rotate-text-up"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 90 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: 90 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <RotateTextUpIcon />
-                  <span>Rotate Text Up</span>
-                </button>
-                <button
-                  type="button"
-                  data-value="rotate-text-down"
-                  className={`
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: 90 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <RotateTextUpIcon />
+                    <span>Rotate Text Up</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-value="rotate-text-down"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === -90 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: -90 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <RotateTextDownIcon />
-                  <span>Rotate Text Down</span>
-                </button>
-                <div className="h-px bg-ss-surface-tertiary my-1" />
-                <button
-                  type="button"
-                  data-value="no-rotation"
-                  className={`
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: -90 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <RotateTextDownIcon />
+                    <span>Rotate Text Down</span>
+                  </button>
+                  <div className="h-px bg-ss-surface-tertiary my-1" />
+                  <button
+                    type="button"
+                    data-value="no-rotation"
+                    className={`
  w-full px-3 py-2 text-left text-dropdown
  flex items-center gap-2
  transition-colors
  ${canFormatCells ? 'hover:bg-ss-surface-hover' : 'text-ss-text-disabled cursor-not-allowed'}
  ${textRotation === 0 ? 'bg-ss-surface-selected' : ''}
  `}
-                  onClick={() => {
-                    if (!canFormatCells) return;
-                    dispatch('SET_TEXT_ROTATION', { rotation: 0 });
-                    setOrientationDropdownOpen(false);
-                  }}
-                  disabled={!canFormatCells}
-                >
-                  <span className="w-4" />
-                  <span>No Rotation</span>
-                </button>
-              </div>
-            </RibbonDropdownPanel>
+                    onClick={() => {
+                      if (!canFormatCells) return;
+                      dispatch('SET_TEXT_ROTATION', { rotation: 0 });
+                      setOrientationDropdownOpen(false);
+                    }}
+                    disabled={!canFormatCells}
+                  >
+                    <span className="w-4" />
+                    <span>No Rotation</span>
+                  </button>
+                </div>
+              </RibbonDropdownPanel>
+            </div>
+
+            {/* Decrease Indent */}
+            <Tooltip title="Decrease Indent">
+              <RibbonButton
+                id="decrease-indent"
+                layout="icon-only"
+                icon={<DecreaseIndentIcon />}
+                onClick={() => dispatch('DECREASE_INDENT')}
+                disabled={!canFormatCells || indent === 0}
+                aria-label="Decrease indent"
+              />
+            </Tooltip>
+
+            {/* Increase Indent */}
+            <Tooltip title="Increase Indent">
+              <RibbonButton
+                id="increase-indent"
+                layout="icon-only"
+                icon={<IncreaseIndentIcon />}
+                onClick={() => dispatch('INCREASE_INDENT')}
+                disabled={!canFormatCells}
+                aria-label="Increase indent"
+              />
+            </Tooltip>
           </div>
-
-          <div className="w-px h-5 bg-ss-surface-tertiary mx-0.5" />
-
-          {/* Decrease Indent */}
-          <Tooltip title="Decrease Indent">
-            <RibbonButton
-              id="decrease-indent"
-              layout="icon-only"
-              icon={<DecreaseIndentIcon />}
-              onClick={() => dispatch('DECREASE_INDENT')}
-              disabled={!canFormatCells || indent === 0}
-              aria-label="Decrease indent"
-            />
-          </Tooltip>
-
-          {/* Increase Indent */}
-          <Tooltip title="Increase Indent">
-            <RibbonButton
-              id="increase-indent"
-              layout="icon-only"
-              icon={<IncreaseIndentIcon />}
-              onClick={() => dispatch('INCREASE_INDENT')}
-              disabled={!canFormatCells}
-              aria-label="Increase indent"
-            />
-          </Tooltip>
         </div>
       </div>
     </ToolbarGroup>

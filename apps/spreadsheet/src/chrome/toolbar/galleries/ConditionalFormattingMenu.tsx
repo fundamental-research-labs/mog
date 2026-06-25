@@ -42,7 +42,9 @@ import {
   RibbonDropdownItem,
   RibbonDropdownSubmenu,
 } from '../primitives/RibbonDropdown';
+import { StackedRibbonMenuButton } from '../primitives/StackedRibbonMenuButton';
 import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
+import { RibbonVisibilityItem } from '../visibility/RibbonVisibilityContext';
 
 // =============================================================================
 // Types
@@ -51,6 +53,8 @@ import { ConditionalFormatIcon } from '../primitives/ToolbarIcons';
 interface ConditionalFormattingMenuProps {
   /** Callback when CF dialog should open (existing flow) */
   onOpenCFDialog?: () => void;
+  /** Compact three-row style used inside the Home ribbon Styles group. */
+  variant?: 'button' | 'stacked';
 }
 
 // =============================================================================
@@ -96,6 +100,29 @@ const TOP_BOTTOM_RULES: Array<{ label: string; type: QuickRuleDialogType; descri
 ];
 
 // =============================================================================
+// Trigger Icon
+// =============================================================================
+
+export function ConditionalFormattingStackIcon() {
+  return (
+    <svg
+      width="var(--ribbon-icon-size)"
+      height="var(--ribbon-icon-size)"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect x="1.5" y="2" width="13" height="12" rx="1" fill="#ffffff" stroke="#6b7280" />
+      <path d="M5.8 2v12M10.2 2v12M1.5 6.1h13M1.5 10.4h13" stroke="#9ca3af" strokeWidth="0.7" />
+      <rect x="2.4" y="2.9" width="2.6" height="2.4" fill="#f7c7c7" />
+      <rect x="6.7" y="2.9" width="2.6" height="2.4" fill="#b7d7f0" />
+      <rect x="11" y="6.9" width="2.6" height="2.7" fill="#f7c7c7" />
+      <rect x="6.7" y="11.2" width="2.6" height="1.9" fill="#f7c7c7" />
+    </svg>
+  );
+}
+
+// =============================================================================
 // Component
 // =============================================================================
 
@@ -107,6 +134,7 @@ const TOP_BOTTOM_RULES: Array<{ label: string; type: QuickRuleDialogType; descri
  */
 export const ConditionalFormattingMenu = React.memo(function ConditionalFormattingMenu({
   onOpenCFDialog,
+  variant = 'button',
 }: ConditionalFormattingMenuProps) {
   // lifted into the ribbonDropdowns slice so the keytip chord
   // (Alt+H,J) can open the menu via OPEN_RIBBON_DROPDOWN.
@@ -202,24 +230,35 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
   // Get table at selection for conditional rendering
   const tableAtSelection = cf.getTableAtSelection();
 
-  // Trigger button - uses RibbonButton with vertical layout and full height
-  const trigger = (
-    <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
-      <RibbonButton
-        layout="vertical"
-        height="full"
-        data-testid="ribbon-dropdown-conditional-formatting"
-        icon={<ConditionalFormatIcon />}
-        label={'Conditional\nFormatting'}
-        hasDropdown
-        dropdownPosition="inline"
+  // Trigger button: vertical RibbonButton by default, compact stack row in Styles.
+  const trigger =
+    variant === 'stacked' ? (
+      <StackedRibbonMenuButton
+        id="conditional-formatting"
+        testId="ribbon-dropdown-conditional-formatting"
+        icon={<ConditionalFormattingStackIcon />}
+        label="Conditional Formatting"
+        visibilityKey="conditionalFormatting"
         isOpen={isOpen}
-        aria-label="Conditional Formatting"
+        onClick={() => setIsOpen(!isOpen)}
       />
-    </Tooltip>
-  );
+    ) : (
+      <Tooltip title="Conditional Formatting" description="Highlight cells based on rules">
+        <RibbonButton
+          layout="vertical"
+          height="full"
+          data-testid="ribbon-dropdown-conditional-formatting"
+          icon={<ConditionalFormatIcon />}
+          label={'Conditional\nFormatting'}
+          hasDropdown
+          dropdownPosition="inline"
+          isOpen={isOpen}
+          aria-label="Conditional Formatting"
+        />
+      </Tooltip>
+    );
 
-  return (
+  const menu = (
     <div className="relative inline-flex">
       <RibbonDropdown open={isOpen} onOpenChange={setIsOpen} trigger={trigger} width={220}>
         {/* Wrapper carries the chrome-symmetry menu testid; the popover
@@ -407,6 +446,12 @@ export const ConditionalFormattingMenu = React.memo(function ConditionalFormatti
         </div>
       </RibbonDropdown>
     </div>
+  );
+
+  return variant === 'stacked' ? (
+    <RibbonVisibilityItem item="conditionalFormatting">{menu}</RibbonVisibilityItem>
+  ) : (
+    menu
   );
 });
 

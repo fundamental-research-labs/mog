@@ -147,9 +147,6 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
         </PopoverContent>
       </Popover>
 
-      {/* Label area - matches non-collapsed groups for vertical alignment */}
-      <div className="h-[var(--ribbon-label-height)]" />
-
       {/* Separator - matches ToolbarGroup */}
       {!isLast && (
         <div

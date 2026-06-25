@@ -55,7 +55,7 @@ export const MIN_ROW_HEIGHT = 16;
 // =============================================================================
 
 /** Width of row header column (shows row numbers) */
-export const ROW_HEADER_WIDTH = 50;
+export const ROW_HEADER_WIDTH = 28;
 
 /** Height of column header row (shows column letters) */
 export const COL_HEADER_HEIGHT = 24;

@@ -216,6 +216,7 @@ export const PasteDropdown = React.memo(function PasteDropdown({
       icon={<PasteIcon />}
       label="Paste"
       variant="large"
+      width="narrow"
       isOpen={isOpen}
       title="Paste (Ctrl+V)"
       aria-label="Paste"

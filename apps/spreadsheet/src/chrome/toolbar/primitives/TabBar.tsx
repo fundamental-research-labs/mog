@@ -390,7 +390,7 @@ function TabBarImpl<T extends string>({
         )}
       </div>
 
-      {/* Tabs - Excel-like appearance where active tab connects to ribbon */}
+      {/* Tabs */}
       {/*
  Expose the ribbon tab strip via WAI-ARIA tablist semantics so `readActiveRibbonTab`
  resolves the *ribbon* active tab. Without `role="tab"` on the
@@ -416,13 +416,12 @@ function TabBarImpl<T extends string>({
           type="button"
           onClick={onFileClick}
           className={`
- px-[var(--tabbar-tab-padding-x)] py-[var(--tabbar-tab-padding-y)]
+ relative px-[var(--tabbar-tab-padding-x)] py-[var(--tabbar-tab-padding-y)]
  flex-shrink-0 whitespace-nowrap
  cursor-pointer text-tab font-normal
  transition-all duration-ss-fast
- border-t border-l border-r border-transparent
+ border border-transparent
  bg-[var(--tab-inactive-bg)] text-[var(--tab-inactive-text)]
- rounded-t-[var(--tab-border-radius)]
  hover:bg-[var(--tab-hover-bg)] hover:text-text
  `}
         >
@@ -449,22 +448,15 @@ function TabBarImpl<T extends string>({
               aria-selected={isActive}
               onClick={(event) => handleTabClick(tab.id, event)}
               className={`
- px-[var(--tabbar-tab-padding-x)] py-[var(--tabbar-tab-padding-y)]
+ relative px-[var(--tabbar-tab-padding-x)] py-[var(--tabbar-tab-padding-y)]
  flex-shrink-0 whitespace-nowrap
  cursor-pointer text-tab font-normal
  transition-all duration-ss-fast
- border-t border-l border-r border-transparent
+ border border-transparent
  ${
    isActive
-     ? // Active tab: "lifts" and connects to ribbon content
-       `bg-[var(--tab-active-bg)] text-[var(--tab-active-text)] font-medium
- rounded-t-[var(--tab-border-radius)]
- border-t-border-light border-l-border-light border-r-border-light
- relative -mb-px z-ss-sticky`
-     : // Inactive tab: subtle hover, stays "recessed"
-       `bg-[var(--tab-inactive-bg)] text-[var(--tab-inactive-text)]
- rounded-t-[var(--tab-border-radius)]
- hover:bg-[var(--tab-hover-bg)] hover:text-text`
+     ? `bg-[var(--tab-active-bg)] text-[var(--tab-active-text)] font-medium`
+     : `bg-[var(--tab-inactive-bg)] text-[var(--tab-inactive-text)] hover:bg-[var(--tab-hover-bg)] hover:text-text`
  }
  ${
    // Contextual tab accent (e.g., Table Design)
@@ -474,6 +466,13 @@ function TabBarImpl<T extends string>({
  `}
             >
               {tab.label}
+              {isActive && (
+                <span
+                  className="absolute left-[var(--tabbar-tab-padding-x)] right-[var(--tabbar-tab-padding-x)] bottom-0 bg-[var(--tab-active-text)]"
+                  style={{ height: 'var(--tab-active-underline)' }}
+                  aria-hidden="true"
+                />
+              )}
             </button>
           );
         })}

@@ -244,9 +244,12 @@ export class WorksheetTablesImpl implements WorksheetTables {
 
   private tableInfoWithMethods(table: TableInfo): TableInfo {
     return attachTableInfoMethods(table, {
-      setTotalsRow: (tableName, visible) => this.setShowTotals(tableName, visible),
-      setTotalsFunction: (tableName, columnName, func) =>
-        this.setColumnTotalsFunction(tableName, columnName, func as TotalsFunction),
+      setTotalsRow: async (tableName, visible) => {
+        await this.setShowTotals(tableName, visible);
+      },
+      setTotalsFunction: async (tableName, columnName, func) => {
+        await this.setColumnTotalsFunction(tableName, columnName, func as TotalsFunction);
+      },
     });
   }
 

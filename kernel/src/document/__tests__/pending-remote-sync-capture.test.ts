@@ -13,6 +13,10 @@ import {
 
 import type {
   MutationResult,
+  ObjectDigest,
+  SemanticWorkbookDiff,
+  SemanticWorkbookState,
+  SemanticWorkbookStateEnvelope,
   SyncApplyMutationMetadataWire,
 } from '../../bridges/compute/compute-types.gen';
 import {
@@ -41,6 +45,7 @@ import {
 } from '../version-store/provider';
 import type { VersionPendingRemoteCaptureResult } from '../version-store/pending-remote-capture-service';
 import { createSemanticMutationCapture } from '../version-store/semantic-mutation-capture';
+import type { VersionSemanticStateReaderPort } from '../version-store/semantic-state-reader';
 
 type StubBridge = {
   subscribeUpdateV1(cb: (u: Uint8Array) => void): { unsubscribe: () => void };
@@ -168,9 +173,11 @@ describe('RustDocument pending remote sync capture', () => {
     );
     const { graph, registry, pendingRemoteSegmentStore } =
       await openPendingRemoteCaptureDependencies(versionProvider, namespace);
+    const semanticStateReader = sheetRenameSemanticStateReader();
     const semanticMutationCapture = createSemanticMutationCapture({
       author: VERSION_AUTHOR,
       now: () => new Date('2026-06-21T00:00:00.000Z'),
+      semanticStateReader,
     });
     const matchingContext = pendingRemoteOperationContext({
       operationId: 'remote-operation-a',
@@ -192,6 +199,9 @@ describe('RustDocument pending remote sync capture', () => {
       operation: 'compute_apply_sync_update',
       operationContext: unrelatedContext,
       result: syncAuthoredCellMutationResult({ cellId: 'remote-cell-b', value: 'Remote B' }),
+    });
+    await semanticMutationCapture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_rename_compute_sheet',
     });
     semanticMutationCapture.mutationCapture.recordMutationResult({
       operation: 'compute_rename_compute_sheet',
@@ -280,12 +290,25 @@ describe('RustDocument pending remote sync capture', () => {
     const normalCommitCapture = await semanticMutationCapture.captureNormalCommit({
       namespace,
     } as Parameters<typeof semanticMutationCapture.captureNormalCommit>[0]);
-    expect(normalCommitCapture.status).toBe('success');
     if (normalCommitCapture.status !== 'success') {
-      throw new Error('expected normal commit capture success');
+      throw new Error(
+        `expected normal commit capture success: ${JSON.stringify(normalCommitCapture)}`,
+      );
     }
+    expect(semanticStateReader.readCurrentSemanticState).toHaveBeenCalledTimes(2);
+    expect(semanticStateReader.diffSemanticStates).toHaveBeenCalledTimes(1);
     expect(normalCommitCapture.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      source: { kind: 'rustSemanticDiff' },
       changes: [
+        expect.objectContaining({
+          domainId: 'sheets',
+          objectId: 'sheet-local',
+          objectKind: 'sheet',
+          kind: 'updated',
+        }),
+      ],
+      reviewChanges: [
         expect.objectContaining({
           after: { kind: 'value', value: 'Local Sheet' },
         }),
@@ -646,6 +669,76 @@ function sheetRenameMutationResult(sheetId: string, oldName: string, name: strin
       },
     ],
   } as MutationResult;
+}
+
+function sheetRenameSemanticStateReader(): VersionSemanticStateReaderPort {
+  const before = semanticStateEnvelope('Sheet1', 'a');
+  const after = semanticStateEnvelope('Local Sheet', 'b');
+  const semanticDiff: SemanticWorkbookDiff = {
+    beforeDigest: digest('a'),
+    afterDigest: digest('b'),
+    changes: [
+      {
+        changeId: 'rust-diff:sheet-local:name',
+        kind: 'updated',
+        domainId: 'sheets',
+        objectId: 'sheet-local',
+        objectKind: 'sheet',
+        beforeDigest: digest('c'),
+        afterDigest: digest('d'),
+      },
+    ],
+  };
+
+  return {
+    readCurrentSemanticState: jest
+      .fn<VersionSemanticStateReaderPort['readCurrentSemanticState']>()
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce(after),
+    diffSemanticStates: jest
+      .fn<VersionSemanticStateReaderPort['diffSemanticStates']>()
+      .mockResolvedValue(semanticDiff),
+  };
+}
+
+function semanticStateEnvelope(sheetName: string, seed: string): SemanticWorkbookStateEnvelope {
+  return {
+    state: semanticWorkbookState(sheetName),
+    stateDigest: digest(seed),
+  };
+}
+
+function semanticWorkbookState(sheetName: string): SemanticWorkbookState {
+  return {
+    schemaVersion: 'semantic-workbook-state.v1',
+    workbookId: 'workbook-pending-remote-sync-capture',
+    domains: {
+      sheets: {
+        domainId: 'sheets',
+        domainClass: 'authored',
+        capabilityState: 'supported',
+      },
+    },
+    sheets: {
+      'sheet-local': {
+        sheetId: 'sheet-local',
+        name: sheetName,
+        rowCount: 1,
+        columnCount: 1,
+        rows: {},
+        columns: {},
+        cells: {},
+      },
+    },
+  };
+}
+
+function digest(seed: string): ObjectDigest {
+  return {
+    algorithm: 'sha256',
+    value: seed.repeat(64).slice(0, 64),
+    byteLength: 32,
+  };
 }
 
 async function initializeVersionGraph(

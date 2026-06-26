@@ -19,7 +19,6 @@ import type { PanelTogglesSlice } from './slices/core/panel-toggles';
 import type { SettingsSlice } from './slices/core/settings';
 import type { DisplayModeSlice } from './slices/core/display-mode';
 import type { DataToolsSlice } from './slices/data-tools/data-tools';
-import type { FilterDropdownSlice } from './slices/data-tools/filter-dropdown';
 import type { QuickAnalysisSlice } from './slices/data-tools/quick-analysis';
 import type { SchemaBrowserSlice } from './slices/data-tools/schema-browser';
 import type { WorkbookLinksPanelSlice } from './slices/data-tools/workbook-links-panel';
@@ -27,7 +26,6 @@ import type { AdvancedFilterDialogSlice } from './slices/dialogs/advanced-filter
 import type { CFDialogSlice } from './slices/dialogs/cf-dialog';
 import type { ConsolidateDialogSlice } from './slices/dialogs/consolidate-dialog';
 import type { CreateNamesDialogSlice } from './slices/dialogs/create-names-dialog';
-import type { CustomAutoFilterDialogSlice } from './slices/dialogs/custom-autofilter-dialog';
 import type { CustomListsDialogSlice } from './slices/dialogs/custom-lists-dialog';
 import type { DataTableDialogSlice } from './slices/dialogs/data-table-dialog';
 import type { DeleteSheetConfirmDialogSlice } from './slices/dialogs/delete-sheet-confirm-dialog';
@@ -133,7 +131,6 @@ export type UIState = ActiveSheetSlice &
   DVDialogSlice &
   PivotDialogSlice &
   SheetOperationsSlice &
-  FilterDropdownSlice &
   FillSeriesDialogSlice &
   FillContextMenuSlice &
   FormatCellsDialogSlice &
@@ -184,7 +181,6 @@ export type UIState = ActiveSheetSlice &
   ChartClipboardSlice &
   ChartUISlice &
   ShapeClipboardSlice &
-  CustomAutoFilterDialogSlice &
   MoreColorsDialogSlice &
   ValidationTooltipSlice &
   ValidationErrorDialogSlice &
@@ -273,7 +269,6 @@ export type {
   EquationDialogSlice,
   FillContextMenuSlice,
   FillSeriesDialogSlice,
-  FilterDropdownSlice,
   FlashFillSlice,
   FloatingObjectsSlice,
   FormatCellsDialogSlice,
@@ -357,7 +352,6 @@ export type {
   AccessibilityCheckerState,
   AccessibilityCheckStatus,
 } from './slices/core/accessibility-checker';
-export type { FilterDropdownState } from './slices/data-tools/filter-dropdown';
 export type {
   ColumnSchema,
   SchemaBrowserState,
@@ -366,12 +360,6 @@ export type {
 } from './slices/data-tools/schema-browser';
 export type { WorkbookLinksPanelState } from './slices/data-tools/workbook-links-panel';
 export type { CFDialogState, QuickRuleDialogType } from './slices/dialogs/cf-dialog';
-export type {
-  CustomAutoFilterDialogSlice,
-  CustomAutoFilterDialogState,
-  CustomFilterCondition,
-  CustomFilterOperator,
-} from './slices/dialogs/custom-autofilter-dialog';
 export type {
   DataTableDialogState,
   DataTableResultInfo,

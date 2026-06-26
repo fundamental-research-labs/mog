@@ -8,9 +8,6 @@
  *
  */
 
-export { FilterDropdown } from './FilterDropdown';
-export type { FilterDropdownProps } from './FilterDropdown';
-
 export { FilterDropdownContent } from './FilterDropdownContent';
 export type { FilterDropdownContentProps } from './FilterDropdownContent';
 
@@ -32,7 +29,7 @@ export type { TextFiltersMenuProps } from './TextFiltersMenu';
 export { ColorFiltersMenu } from './ColorFiltersMenu';
 export type { ColorFiltersMenuProps } from './ColorFiltersMenu';
 
-export { Top10FilterDialog, Top10FilterDialogWrapper } from './Top10FilterDialog';
-export type { Top10FilterDialogProps } from './Top10FilterDialog';
+export { Top10FilterDialog } from './Top10FilterDialog';
+export type { Top10FilterConfig, Top10FilterDialogProps } from './Top10FilterDialog';
 
 export * from './filter-utils';

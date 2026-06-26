@@ -3,7 +3,7 @@
  *
  * Renders an invisible button positioned over a canvas-rendered filter button.
  * Uses Radix Popover with a REAL DOM trigger, eliminating the need for
- * timing hacks and virtual anchors that plague the current FilterDropdown.
+ * timing hacks and virtual anchors from the retired dropdown implementation.
  *
  * This is part of the Canvas Interactive Element Layer architecture:
  * 1. Canvas renders filter buttons visually (fast, efficient)

@@ -13,7 +13,7 @@
  * - Supports select all/none at each level
  * - Checkbox states: checked, unchecked, indeterminate
  *
- * Used within FilterDropdown when column type is detected as date.
+ * Used within filter dropdown content when column type is detected as date.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';

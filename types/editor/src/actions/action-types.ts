@@ -896,33 +896,16 @@ export type FormatPainterActionType =
   | 'TOGGLE_FORMAT_PAINTER_LOCKED';
 
 /**
- * Filter actions - filter dropdown operations.
- * Target: Filters domain + UIStore
+ * Filter actions.
+ * Target: Filters domain + UIStore where a global dialog is still required
  *
- * Excel Parity Quickwin B4: Filter Dropdown Panel
  * Track 4: Added context menu filter actions
- *
- * Uses Draft + Apply pattern:
- * 1. Store pending config in UIStore (setPendingFilterConfig, etc.)
- * 2. Dispatch action to apply (reads from UIStore)
  */
 export type FilterActionType =
-  | 'APPLY_NUMBER_FILTER'
-  | 'APPLY_TEXT_FILTER'
-  | 'APPLY_COLOR_FILTER'
-  | 'APPLY_TOP10_FILTER'
-  | 'OPEN_TOP10_DIALOG'
-  | 'CLOSE_TOP10_DIALOG'
-  | 'CLEAR_COLUMN_FILTER'
-  // Track 4: Context menu filter actions
   | 'FILTER_BY_SELECTED_VALUE'
   | 'FILTER_BY_COLOR'
   | 'FILTER_BY_FONT_COLOR' // Filter by font color
   | 'CLEAR_FILTER'
-  // Track 14.3: Custom AutoFilter Dialog
-  | 'OPEN_CUSTOM_AUTOFILTER_DIALOG'
-  | 'CLOSE_CUSTOM_AUTOFILTER_DIALOG'
-  | 'APPLY_CUSTOM_AUTOFILTER'
   // Advanced Filter dialog
   | 'OPEN_ADVANCED_FILTER_DIALOG'
   | 'CLOSE_ADVANCED_FILTER_DIALOG'

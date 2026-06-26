@@ -1,6 +1,5 @@
 export * from './AdvancedFilterDialog';
 export * from './ConsolidateDialog';
-export * from './CustomAutoFilterDialog';
 export * from './CustomListsDialog';
 export * from './DataTableDialog';
 export * from './DataValidationDialog';

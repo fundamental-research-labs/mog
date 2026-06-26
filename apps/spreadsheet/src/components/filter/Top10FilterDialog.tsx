@@ -9,98 +9,50 @@
  * - Count (default 10)
  * - Items or Percent
  *
- * ARCHITECTURE:
- * - Uses Draft + Apply pattern: stores pending config in UIStore, then dispatches
- * - Dispatches APPLY_TOP10_FILTER to apply the filter
- * - Dispatches CLOSE_TOP10_DIALOG to close without applying
- * - Top10FilterDialogWrapper subscribes to its own state to prevent re-renders in parent components
+ * Receives the target filter context from FilterDropdownContent and reports the
+ * selected Top/Bottom settings back to that owner.
  */
 
-import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import React, { useState } from 'react';
-import { dispatch } from '../../actions';
-import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
-import { useUIStore } from '../../infra/context';
+
+export interface Top10FilterConfig {
+  type: 'top' | 'bottom';
+  count: number;
+  by: 'items' | 'percent';
+}
 
 export interface Top10FilterDialogProps {
   /** Dialog open state */
   isOpen: boolean;
-  /** Filter ID from the filter dropdown context */
-  filterId: string;
-  /** Header cell ID from the filter dropdown context */
-  headerCellId: CellId;
-}
-
-/**
- * Wrapper component that subscribes to its own state from UIStore.
- * This prevents SpreadsheetContent from re-rendering when filter dropdown state changes.
- * Follows render isolation pattern - see ARCHITECTURE-CHECKLIST.md Section 14.
- */
-export function Top10FilterDialogWrapper(): React.ReactElement | null {
-  const isTop10DialogOpen = useUIStore((s) => s.filterDropdown.isTop10DialogOpen);
-  const filterId = useUIStore((s) => s.filterDropdown.filterId);
-  const headerCellId = useUIStore((s) => s.filterDropdown.headerCellId);
-
-  if (!isTop10DialogOpen || !filterId || !headerCellId) {
-    return null;
-  }
-
-  return (
-    <Top10FilterDialog isOpen={isTop10DialogOpen} filterId={filterId} headerCellId={headerCellId} />
-  );
+  /** Called when user applies the Top/Bottom N configuration */
+  onApply: (config: Top10FilterConfig) => void;
+  /** Called to close without applying */
+  onCancel: () => void;
 }
 
 /**
  * Top 10 filter dialog
- *
- * Uses Draft + Apply pattern:
- * 1. Store pending config in UIStore via setPendingTop10Config
- * 2. Dispatch APPLY_TOP10_FILTER to apply
  */
 export function Top10FilterDialog({
   isOpen,
-  filterId,
-  headerCellId,
+  onApply,
+  onCancel,
 }: Top10FilterDialogProps): React.ReactElement | null {
-  const deps = useActionDependencies();
-  const setPendingTop10Config = useUIStore((s) => s.setPendingTop10Config);
-
   const [type, setType] = useState<'top' | 'bottom'>('top');
   const [count, setCount] = useState<number>(10);
   const [by, setBy] = useState<'items' | 'percent'>('items');
 
   if (!isOpen) return null;
 
-  /**
-   * Handle apply button click.
-   * Uses Draft + Apply pattern: store config, then dispatch.
-   */
   const handleApply = () => {
-    // Store pending config in UIStore (Draft step)
-    setPendingTop10Config({
-      filterId,
-      headerCellId,
-      type,
-      count,
-      by,
-    });
-
-    // Dispatch to apply filter (Apply step)
-    dispatch('APPLY_TOP10_FILTER', deps);
+    onApply({ type, count, by });
   };
 
-  /**
-   * Handle cancel button click.
-   * Dispatches CLOSE_TOP10_DIALOG to close without applying.
-   */
   const handleCancel = () => {
-    // Reset to defaults
     setType('top');
     setCount(10);
     setBy('items');
-
-    // Dispatch to close dialog
-    dispatch('CLOSE_TOP10_DIALOG', deps);
+    onCancel();
   };
 
   return (

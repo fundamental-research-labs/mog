@@ -848,25 +848,11 @@ export const HANDLER_MAP: Record<ActionType, AnyActionHandler> = {
   TOGGLE_FORMAT_PAINTER: FormatPainterHandlers.TOGGLE_FORMAT_PAINTER,
   TOGGLE_FORMAT_PAINTER_LOCKED: FormatPainterHandlers.TOGGLE_FORMAT_PAINTER_LOCKED,
 
-  // ===========================================================================
-  // Filter Actions (Excel Parity Quickwin B4) ✅
-  // ===========================================================================
-  APPLY_NUMBER_FILTER: FilterHandlers.APPLY_NUMBER_FILTER,
-  APPLY_TEXT_FILTER: FilterHandlers.APPLY_TEXT_FILTER,
-  APPLY_COLOR_FILTER: FilterHandlers.APPLY_COLOR_FILTER,
-  APPLY_TOP10_FILTER: FilterHandlers.APPLY_TOP10_FILTER,
-  OPEN_TOP10_DIALOG: FilterHandlers.OPEN_TOP10_DIALOG,
-  CLOSE_TOP10_DIALOG: FilterHandlers.CLOSE_TOP10_DIALOG,
-  CLEAR_COLUMN_FILTER: FilterHandlers.CLEAR_COLUMN_FILTER,
   // Context Menu Filter Actions
   FILTER_BY_SELECTED_VALUE: FilterHandlers.FILTER_BY_SELECTED_VALUE,
   FILTER_BY_COLOR: FilterHandlers.FILTER_BY_COLOR,
   FILTER_BY_FONT_COLOR: FilterHandlers.FILTER_BY_FONT_COLOR,
   CLEAR_FILTER: FilterHandlers.CLEAR_FILTER,
-  // Custom AutoFilter Dialog
-  OPEN_CUSTOM_AUTOFILTER_DIALOG: FilterHandlers.OPEN_CUSTOM_AUTOFILTER_DIALOG,
-  CLOSE_CUSTOM_AUTOFILTER_DIALOG: FilterHandlers.CLOSE_CUSTOM_AUTOFILTER_DIALOG,
-  APPLY_CUSTOM_AUTOFILTER: FilterHandlers.APPLY_CUSTOM_AUTOFILTER,
   // Advanced Filter Dialog
   OPEN_ADVANCED_FILTER_DIALOG: FilterHandlers.OPEN_ADVANCED_FILTER_DIALOG,
   CLOSE_ADVANCED_FILTER_DIALOG: FilterHandlers.CLOSE_ADVANCED_FILTER_DIALOG,

@@ -79,9 +79,6 @@ export { MergeWarningDialog } from './confirmations/MergeWarningDialog';
 // Paste Size Mismatch Dialog
 export { PasteSizeMismatchDialog } from './paste/PasteSizeMismatchDialog';
 
-// Custom AutoFilter Dialog
-export { CustomAutoFilterDialog } from './data/CustomAutoFilterDialog';
-
 // Advanced Filter Dialog
 export { AdvancedFilterDialog } from './data/AdvancedFilterDialog';
 

@@ -66,7 +66,6 @@ import {
   createCornerRotationSlice,
   createCreateNamesDialogSlice,
   createCtrlAStateSlice,
-  createCustomAutoFilterDialogSlice,
   createCustomListsDialogSlice,
   createDVDialogSlice,
   createDataTableDialogSlice,
@@ -83,7 +82,6 @@ import {
   createFillContextMenuSlice,
   createFillMergeConflictDialogSlice,
   createFillSeriesDialogSlice,
-  createFilterDropdownSlice,
   createFlashFillSlice,
   createFloatingObjectsSlice,
   createFontColorPickerSlice,
@@ -223,7 +221,6 @@ export function createUIStore(
       ...createDVDialogSlice(...args),
       ...createPivotDialogSlice(...args),
       ...createSheetOperationsSlice(...args),
-      ...createFilterDropdownSlice(...args),
       ...createFillSeriesDialogSlice(...args),
       ...createFillContextMenuSlice(...args),
       ...createFlashFillSlice(...args),
@@ -274,7 +271,6 @@ export function createUIStore(
       ...createChartClipboardSlice(...args),
       ...createChartUISlice(...args),
       ...createShapeClipboardSlice(...args),
-      ...createCustomAutoFilterDialogSlice(...args),
       ...createMoreColorsDialogSlice(...args),
       ...createDragDropOverwriteDialogSlice(...args),
       ...createValidationTooltipSlice(...args),
@@ -493,10 +489,6 @@ export function createUIStoreHooks(store: StoreApi<UIState>) {
     useIsSubtotalDialogOpen: () => useStore(store, (s) => s.subtotalDialog.isOpen),
     // Format Cells Dialog hooks (Context Menu Parity)
     useIsFormatCellsDialogOpen: () => useStore(store, (s) => s.formatCellsDialogOpen),
-    // Filter Dropdown hooks (Filter UI)
-    useFilterDropdown: () => useStore(store, (s) => s.filterDropdown),
-    useIsFilterDropdownOpen: () => useStore(store, (s) => s.filterDropdown.isOpen),
-    useFilterDropdownHeaderCellId: () => useStore(store, (s) => s.filterDropdown.headerCellId),
     // Trace Arrows hooks (Formula Auditing)
     useTraceArrows: () => useStore(store, (s) => s.traceArrows),
     useTracedCellId: () => useStore(store, (s) => s.tracedCellId),

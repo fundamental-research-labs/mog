@@ -3,7 +3,7 @@
  *
  *
  * Checkbox list of unique values with select all/none and search functionality.
- * Used within the FilterDropdown component for value-based filtering.
+ * Used within the filter dropdown content for value-based filtering.
  *
  * ARCHITECTURE (Cell Identity Model):
  * This component receives dropdown metadata from the worksheet filter engine.
@@ -114,6 +114,11 @@ export interface ValueFilterListProps {
   hasBlank: boolean;
   blankCount: number;
   blankSelected: boolean;
+  /**
+   * When true, search-scoped Select All/Clear preserve checked values hidden by
+   * the search. This is needed when editing an existing partial value filter.
+   */
+  preserveHiddenSearchSelections?: boolean;
   /** Called when user applies the filter */
   onApply: (selection: ValueFilterSelection) => void;
   /** Called to cancel without applying */
@@ -158,6 +163,7 @@ export function ValueFilterList({
   hasBlank,
   blankCount: _blankCount,
   blankSelected,
+  preserveHiddenSearchSelections = false,
   onApply,
   onCancel,
 }: ValueFilterListProps): React.ReactElement {
@@ -191,6 +197,8 @@ export function ValueFilterList({
     return matchesSearch('(Blank)', searchTerm);
   }, [hasBlank, searchTerm]);
 
+  const searchScopedToVisibleValues = searchTerm.trim() !== '' && !preserveHiddenSearchSelections;
+
   // Computed states
   const allSelected = useMemo(() => {
     return (
@@ -199,10 +207,22 @@ export function ValueFilterList({
     );
   }, [filteredItems, checkedKeys, blankVisible, isBlankChecked]);
 
-  const hasAnySelected = useMemo(
-    () => checkedKeys.size > 0 || (hasBlank && isBlankChecked),
-    [checkedKeys.size, hasBlank, isBlankChecked],
-  );
+  const hasAnySelected = useMemo(() => {
+    if (!searchScopedToVisibleValues) {
+      return checkedKeys.size > 0 || (hasBlank && isBlankChecked);
+    }
+    return (
+      filteredItems.some((item) => checkedKeys.has(valueToKey(item.value))) ||
+      (blankVisible && isBlankChecked)
+    );
+  }, [
+    searchScopedToVisibleValues,
+    checkedKeys,
+    hasBlank,
+    isBlankChecked,
+    filteredItems,
+    blankVisible,
+  ]);
 
   // Handlers
   const handleToggle = useCallback((value: CellValue) => {
@@ -220,36 +240,60 @@ export function ValueFilterList({
 
   const handleSelectAll = useCallback(() => {
     setCheckedKeys((prev) => {
-      const next = new Set(prev);
+      const next = searchScopedToVisibleValues ? new Set<string>() : new Set(prev);
       for (const item of filteredItems) {
         next.add(valueToKey(item.value));
       }
       return next;
     });
-    if (blankVisible) setIsBlankChecked(true);
-  }, [filteredItems, blankVisible]);
+    if (searchScopedToVisibleValues) {
+      setIsBlankChecked(blankVisible);
+    } else if (blankVisible) {
+      setIsBlankChecked(true);
+    }
+  }, [filteredItems, blankVisible, searchScopedToVisibleValues]);
 
   const handleSelectNone = useCallback(() => {
     setCheckedKeys((prev) => {
-      const next = new Set(prev);
+      const next = searchScopedToVisibleValues ? new Set<string>() : new Set(prev);
       for (const item of filteredItems) {
         next.delete(valueToKey(item.value));
       }
       return next;
     });
-    if (blankVisible) setIsBlankChecked(false);
-  }, [filteredItems, blankVisible]);
+    if (searchScopedToVisibleValues || blankVisible) setIsBlankChecked(false);
+  }, [filteredItems, blankVisible, searchScopedToVisibleValues]);
 
   const handleApply = useCallback(() => {
     // Convert checked keys back to values
-    const selectedVals = items
+    const candidateItems = searchScopedToVisibleValues ? filteredItems : items;
+    const selectedVals = candidateItems
       .filter((item) => checkedKeys.has(valueToKey(item.value)))
       .map((item) => item.value);
-    onApply({ values: selectedVals, includeBlanks: hasBlank && isBlankChecked });
-  }, [items, checkedKeys, hasBlank, isBlankChecked, onApply]);
+    onApply({
+      values: selectedVals,
+      includeBlanks: searchScopedToVisibleValues
+        ? blankVisible && isBlankChecked
+        : hasBlank && isBlankChecked,
+    });
+  }, [
+    searchScopedToVisibleValues,
+    filteredItems,
+    items,
+    checkedKeys,
+    blankVisible,
+    isBlankChecked,
+    hasBlank,
+    onApply,
+  ]);
 
-  const selectedCount = checkedKeys.size + (hasBlank && isBlankChecked ? 1 : 0);
-  const totalSelectable = items.length + (hasBlank ? 1 : 0);
+  const selectedCount = searchScopedToVisibleValues
+    ? filteredItems.filter((item) => checkedKeys.has(valueToKey(item.value))).length +
+      (blankVisible && isBlankChecked ? 1 : 0)
+    : checkedKeys.size + (hasBlank && isBlankChecked ? 1 : 0);
+  const totalSelectable = searchScopedToVisibleValues
+    ? filteredItems.length + (blankVisible ? 1 : 0)
+    : items.length + (hasBlank ? 1 : 0);
 
   return (
     <div

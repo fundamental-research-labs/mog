@@ -1,8 +1,7 @@
 /**
  * FilterDropdownContent Component
  *
- * The content portion of the filter dropdown, extracted from FilterDropdown.tsx
- * for use with real DOM triggers (FilterButtonOverlay) instead of virtual anchors.
+ * Filter dropdown content used with real DOM triggers from FilterButtonOverlay.
  *
  * This component contains all the filter UI:
  * - Sort A-Z / Z-A buttons
@@ -17,7 +16,6 @@
  * follows columns on insert/delete. Layer 0's domain functions handle
  * all position resolution internally.
  *
- * @see FilterDropdown.tsx - Original component (still used for legacy virtual anchor path)
  * @see FilterButtonOverlay.tsx - Uses this content with real DOM triggers
  */
 
@@ -39,6 +37,7 @@ import { FilterSubmenu } from './FilterSubmenu';
 import { NumberFiltersMenu } from './NumberFiltersMenu';
 import { SortByColorMenu } from './SortByColorMenu';
 import { TextFiltersMenu } from './TextFiltersMenu';
+import { Top10FilterDialog, type Top10FilterConfig } from './Top10FilterDialog';
 import { ValueFilterList, type ValueFilterSelection } from './ValueFilterList';
 
 export interface FilterDropdownContentProps {
@@ -177,8 +176,7 @@ async function sortFilterRange(
 /**
  * Filter dropdown content for AutoFilter header cells.
  *
- * This is the extracted content from FilterDropdown that can be used
- * with any Popover (virtual anchor or real DOM trigger).
+ * Filter dropdown content for AutoFilter header cells.
  */
 export function FilterDropdownContent({
   filterId,
@@ -200,6 +198,8 @@ export function FilterDropdownContent({
 
   // Pending operator for condition panel (when switching from submenu)
   const [pendingOperator, setPendingOperator] = useState<FilterOperator | null>(null);
+
+  const [top10DialogOpen, setTop10DialogOpen] = useState(false);
 
   // Get filter state via Worksheet API (async)
   // Only store the fields we actually use (id + columnFilters)
@@ -348,6 +348,32 @@ export function FilterDropdownContent({
       'Column filter did not clear.',
     );
   }, [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied]);
+
+  const handleApplyTop10Filter = useCallback(
+    (config: Top10FilterConfig) => {
+      if (!filterId || !headerCellId || col === undefined) return;
+
+      const ws = wb.getSheetById(activeSheetId) as unknown as Worksheet;
+      void runFilterMutation(
+        () =>
+          ws.filters.setColumnFilter(
+            col,
+            {
+              type: 'top10',
+              topBottom: config,
+            },
+            filterId,
+          ),
+        () => {
+          setTop10DialogOpen(false);
+          onClose();
+          onFilterApplied?.();
+        },
+        'Top 10 filter did not apply.',
+      );
+    },
+    [wb, activeSheetId, filterId, headerCellId, col, onClose, onFilterApplied],
+  );
 
   // Sort handlers - integrated with sort system
   const handleSortAsc = useCallback(() => {
@@ -542,10 +568,9 @@ export function FilterDropdownContent({
             }
           >
             <NumberFiltersMenu
-              filterId={filterId}
-              headerCellId={brandedHeaderCellId}
               onClose={() => setActiveSubmenu(null)}
               onSwitchToConditions={handleSwitchToConditions}
+              onOpenTop10={() => setTop10DialogOpen(true)}
             />
           </FilterSubmenu>
         )}
@@ -573,7 +598,6 @@ export function FilterDropdownContent({
           >
             <DateFiltersMenu
               filterId={filterId}
-              headerCellId={brandedHeaderCellId}
               col={col}
               onClose={() => setActiveSubmenu(null)}
               onSwitchToConditions={handleSwitchToConditions}
@@ -604,8 +628,6 @@ export function FilterDropdownContent({
             }
           >
             <TextFiltersMenu
-              filterId={filterId}
-              headerCellId={brandedHeaderCellId}
               onClose={() => setActiveSubmenu(null)}
               onSwitchToConditions={handleSwitchToConditions}
             />
@@ -636,7 +658,6 @@ export function FilterDropdownContent({
             <ColorFiltersMenu
               sheetId={activeSheetId}
               filterId={filterId}
-              headerCellId={brandedHeaderCellId}
               col={col}
               onClose={() => {
                 setActiveSubmenu(null);
@@ -697,6 +718,7 @@ export function FilterDropdownContent({
                 hasBlank={dropdownData.hasBlank}
                 blankCount={dropdownData.blankCount}
                 blankSelected={dropdownData.blankSelected}
+                preserveHiddenSearchSelections={currentCriteria?.type === 'value'}
                 onApply={handleApplyValueFilter}
                 onCancel={onClose}
               />
@@ -725,6 +747,11 @@ export function FilterDropdownContent({
           </button>
         </div>
       )}
+      <Top10FilterDialog
+        isOpen={top10DialogOpen}
+        onApply={handleApplyTop10Filter}
+        onCancel={() => setTop10DialogOpen(false)}
+      />
     </div>
   );
 }

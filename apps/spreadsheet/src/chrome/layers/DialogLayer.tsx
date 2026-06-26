@@ -77,9 +77,7 @@ import { SortDialog } from '../../dialogs/data/SortDialog';
 // =============================================================================
 // Filter Dialogs
 // =============================================================================
-import { Top10FilterDialogWrapper } from '../../components/filter';
 import { AdvancedFilterDialog } from '../../dialogs/data/AdvancedFilterDialog';
-import { CustomAutoFilterDialog } from '../../dialogs/data/CustomAutoFilterDialog';
 
 // =============================================================================
 // Chart Dialogs
@@ -252,13 +250,8 @@ export function DialogLayer() {
       {/* ===================================================================== */}
       {/* Filter Dialogs */}
       {/* ===================================================================== */}
-      {/* Custom AutoFilter Dialog */}
-      <CustomAutoFilterDialog />
       {/* Advanced Filter Dialog */}
       <AdvancedFilterDialog />
-      {/* Top 10 Filter Dialog */}
-      <Top10FilterDialogWrapper />
-
       {/* ===================================================================== */}
       {/* Chart Dialogs */}
       {/* ===================================================================== */}

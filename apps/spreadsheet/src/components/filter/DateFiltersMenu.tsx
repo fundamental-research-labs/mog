@@ -14,24 +14,20 @@
  * - All Dates in Period (submenu)
  *
  * ARCHITECTURE:
- * - Uses Draft + Apply pattern: stores pending config in UIStore, then dispatches
  * - Quick filters apply immediately using date range calculation
  * - Operator-based filters switch to condition panel for value input
  */
 
-import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import type { ColumnFilterCriteria, FilterOperator } from '@mog-sdk/contracts/filter';
 import { serialToDate } from '@mog/spreadsheet-utils/datetime';
 import React, { useCallback, useState } from 'react';
-import { useActiveSheetId, useUIStore, useWorkbook } from '../../infra/context';
+import { useActiveSheetId, useWorkbook } from '../../infra/context';
 import { MenuItem, MenuSeparator } from '@mog/shell/components/ui';
 import { FilterSubmenu } from './FilterSubmenu';
 
 export interface DateFiltersMenuProps {
   /** Filter ID from the filter dropdown context */
   filterId: string;
-  /** Header cell ID from the filter dropdown context */
-  headerCellId: CellId;
   /** 0-based column index (from FilterButtonMetadata.col) */
   col: number;
   /** Called to close the submenu */
@@ -92,14 +88,11 @@ function filterReceiptError(receipt: unknown, fallback: string): string | null {
 /**
  * Date filters submenu with operator shortcuts and quick filters
  *
- * Uses Draft + Apply pattern:
- * 1. Store pending config in UIStore via setPendingFilterConfig
- * 2. For condition panel: call onSwitchToConditions to let user enter value
- * 3. For quick filters: directly apply date range filter
+ * Operator items switch to the condition panel; quick filters directly apply a
+ * date-range criterion.
  */
 export function DateFiltersMenu({
   filterId,
-  headerCellId,
   col,
   onClose,
   onSwitchToConditions,
@@ -107,7 +100,6 @@ export function DateFiltersMenu({
 }: DateFiltersMenuProps): React.ReactElement {
   const wb = useWorkbook();
   const activeSheetId = useActiveSheetId();
-  const setPendingFilterConfig = useUIStore((s) => s.setPendingFilterConfig);
   const [showPeriodSubmenu, setShowPeriodSubmenu] = useState(false);
 
   const applyDateCriteria = useCallback(
@@ -138,21 +130,10 @@ export function DateFiltersMenu({
    */
   const handleSelect = useCallback(
     (operator: FilterOperator) => {
-      // Store pending config in UIStore (Draft step)
-      setPendingFilterConfig({
-        filterId,
-        headerCellId,
-        type: 'date',
-        operator,
-      });
-
-      if (onSwitchToConditions) {
-        // Let parent component switch to condition panel for value input
-        onSwitchToConditions(operator);
-      }
+      onSwitchToConditions?.(operator);
       onClose();
     },
-    [filterId, headerCellId, setPendingFilterConfig, onSwitchToConditions, onClose],
+    [onSwitchToConditions, onClose],
   );
 
   /**
@@ -322,19 +303,9 @@ export function DateFiltersMenu({
    * Handle Custom Filter selection - switch to condition panel
    */
   const handleCustomFilter = useCallback(() => {
-    // Set up for custom filter - use 'equals' as default operator
-    setPendingFilterConfig({
-      filterId,
-      headerCellId,
-      type: 'date',
-      operator: 'equals',
-    });
-
-    if (onSwitchToConditions) {
-      onSwitchToConditions('equals');
-    }
+    onSwitchToConditions?.('equals');
     onClose();
-  }, [filterId, headerCellId, setPendingFilterConfig, onSwitchToConditions, onClose]);
+  }, [onSwitchToConditions, onClose]);
 
   const handlePeriodTriggerKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLButtonElement>) => {

@@ -1,5 +1,4 @@
 export * from './data-tools';
-export * from './filter-dropdown';
 export * from './quick-analysis';
 export * from './record-detail';
 export * from './schema-browser';

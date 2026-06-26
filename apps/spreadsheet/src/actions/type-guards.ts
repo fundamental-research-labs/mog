@@ -568,20 +568,10 @@ export function isCommentAction(action: string): action is CommentActionType {
 
 export function isFilterAction(action: string): action is FilterActionType {
   const filterActions: Set<string> = new Set([
-    'APPLY_NUMBER_FILTER',
-    'APPLY_TEXT_FILTER',
-    'APPLY_COLOR_FILTER',
-    'APPLY_TOP10_FILTER',
-    'OPEN_TOP10_DIALOG',
-    'CLOSE_TOP10_DIALOG',
-    'CLEAR_COLUMN_FILTER',
     'FILTER_BY_SELECTED_VALUE',
     'FILTER_BY_COLOR',
     'FILTER_BY_FONT_COLOR',
     'CLEAR_FILTER',
-    'OPEN_CUSTOM_AUTOFILTER_DIALOG',
-    'CLOSE_CUSTOM_AUTOFILTER_DIALOG',
-    'APPLY_CUSTOM_AUTOFILTER',
     'OPEN_ADVANCED_FILTER_DIALOG',
     'CLOSE_ADVANCED_FILTER_DIALOG',
     'APPLY_ADVANCED_FILTER',

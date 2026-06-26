@@ -40,7 +40,7 @@ export type DragDropActionType = 'SHOW_DRAG_DROP_OVERWRITE_DIALOG' | 'CONFIRM_DR
 export type EditorActionType = 'EDIT_CELL' | 'COMMIT_AND_MOVE_DOWN' | 'COMMIT_AND_MOVE_UP' | 'COMMIT_AND_MOVE_LEFT' | 'COMMIT_AND_MOVE_RIGHT' | 'COMMIT_TAB' | 'COMMIT_SHIFT_TAB' | 'COMMIT_ENTER' | 'CO ...
 export type EquationActionType = 'INSERT_EQUATION' | 'EDIT_EQUATION' | 'UPDATE_EQUATION' | 'DELETE_EQUATION' | 'OPEN_EQUATION_DIALOG' | 'CLOSE_EQUATION_DIALOG'
 export type FillContextMenuActionType = 'SHOW_FILL_CONTEXT_MENU' | 'HIDE_FILL_CONTEXT_MENU' | 'EXECUTE_FILL_COPY_CELLS' | 'EXECUTE_FILL_SERIES_CONTEXT_MENU' | 'EXECUTE_FILL_FORMATTING_ONLY' | 'EXECUTE ...
-export type FilterActionType = 'APPLY_NUMBER_FILTER' | 'APPLY_TEXT_FILTER' | 'APPLY_COLOR_FILTER' | 'APPLY_TOP10_FILTER' | 'OPEN_TOP10_DIALOG' | 'CLOSE_TOP10_DIALOG' | 'CLEAR_COLUMN_FILTER' | 'FILTER_ ...
+export type FilterActionType = 'FILTER_BY_SELECTED_VALUE' | 'FILTER_BY_COLOR' | 'FILTER_BY_FONT_COLOR' | 'CLEAR_FILTER' | 'OPEN_ADVANCED_FILTER_DIALOG' | 'CLOSE_ADVANCED_FILTER_DIALOG' | 'APPLY_ADVANC ...
 export type FlashFillActionType = 'FLASH_FILL' | 'SHOW_FLASH_FILL_PREVIEW' | 'ACCEPT_FLASH_FILL' | 'REJECT_FLASH_FILL'
 export type FormattingActionType = 'TOGGLE_BOLD' | 'TOGGLE_ITALIC' | 'TOGGLE_UNDERLINE' | 'TOGGLE_STRIKETHROUGH' | 'APPLY_FONT_FORMAT' | 'SET_FONT_SIZE' | 'SET_FONT_FAMILY' | 'SET_FONT_COLOR' | 'SET_F ...
 export type HostCommandOwner = 'host' | 'mog' | 'disabled'
@@ -3968,6 +3968,8 @@ export interface ViewportResizedEvent extends BaseEvent { type: 'viewport:resize
 export interface WorkbookPolicyPreservedEvent extends BaseEvent { type: 'workbook:policy-preserved'; outcomes: PolicyPreservedParseOutcome[]; summary: PolicyPreservedParseSummary; source: StructureCha ...
 export interface WorkbookSettingsChangedEvent extends BaseEvent { type: 'workbook:settings-changed'; settings: WorkbookSettings; changedKey: keyof WorkbookSettings; source: StructureChangeSource; }
 export interface WorkbookThemeChangedEvent extends BaseEvent { type: 'workbook:theme-changed'; oldThemeId: string | undefined; newThemeId: string; customTheme?: ThemeDefinition; source: StructureChang ...
+export interface WorkbookVersionActiveCheckoutSessionSnapshot { readonly checkedOutCommitId: string; readonly branchName?: string; readonly refHeadAtMaterialization?: string; readonly detached: boolea ...
+export interface WorkbookVersionActiveCheckoutStateChangedEvent extends BaseEvent { readonly type: 'workbook:version-active-checkout-state-changed'; readonly activeCheckoutSession: WorkbookVersionActi ...
 export interface WorkbookVersionCheckoutMaterializedEvent extends BaseEvent { readonly type: 'workbook:version-checkout-materialized'; readonly commitId: string; readonly targetKind: 'commit' | 'ref'  ...
 export interface WorkbookVersionDirtyStatusChangedEvent extends BaseEvent { readonly type: 'workbook:version-dirty-status-changed'; readonly hasUncommittedLocalChanges: boolean; readonly previousHasUn ...
 export type AllEventsHandler<TEvent extends { type: string; } = SpreadsheetEvent> = (event: TEvent) => void
@@ -4018,8 +4020,9 @@ export type TableEvent = TableCreatedEvent | TableUpdatedEvent | TableDeletedEve
 export type TextEffectEvent = TextEffectCreatedEvent | TextEffectUpdatedEvent | TextEffectRemovedEvent | TextEffectConvertedEvent
 export type TextEffectEventType = TextEffectEvent['type']
 export type ValidationEvent = ValidationFailedEvent | ValidationPassedEvent | SchemaChangedEvent | SchemasInferredEvent | RangeSchemaCreatedEvent | RangeSchemaUpdatedEvent | RangeSchemaDeletedEvent |  ...
-export type VersionEvent = WorkbookVersionCheckoutMaterializedEvent | WorkbookVersionDirtyStatusChangedEvent
+export type VersionEvent = WorkbookVersionCheckoutMaterializedEvent | WorkbookVersionDirtyStatusChangedEvent | WorkbookVersionActiveCheckoutStateChangedEvent
 export type ViewEvent = FreezeChangedEvent | ViewOptionsChangedEvent | ViewSelectionChangedEvent | SplitCreatedEvent | SplitRemovedEvent | SplitPositionChangedEvent | ScrollChangedEvent | ViewportResi ...
+export type WorkbookVersionActiveCheckoutStateChangeReason = 'checkout-materialized' | 'branch-head-advanced' | 'branch-ref-moved'
 
 ## dist/extensions/index.d.ts
 export interface ExtensionAuthor { name: string; email?: string; url?: string; }
@@ -4651,7 +4654,7 @@ export const MOUSE_HIT_AREA_SIZE = 5
 export const OUTLINE_BUTTON_SIZE = 10
 export const OUTLINE_LEVEL_HEIGHT = 14
 export const OUTLINE_LEVEL_WIDTH = 14
-export const ROW_HEADER_WIDTH = 50
+export const ROW_HEADER_WIDTH = 28
 export const SCROLL_BAR_WIDTH = 14
 export const TOUCH_HIT_AREA_SIZE = 22
 export const ZOOM_PRESETS: readonly [0.5, 0.75, 1, 1.25, 1.5, 2, 4]
@@ -4696,7 +4699,7 @@ export const MOUSE_HIT_AREA_SIZE = 5
 export const OUTLINE_BUTTON_SIZE = 10
 export const OUTLINE_LEVEL_HEIGHT = 14
 export const OUTLINE_LEVEL_WIDTH = 14
-export const ROW_HEADER_WIDTH = 50
+export const ROW_HEADER_WIDTH = 28
 export const SCROLL_BAR_WIDTH = 14
 export const TOUCH_HIT_AREA_SIZE = 22
 export const ZOOM_PRESETS: readonly [0.5, 0.75, 1, 1.25, 1.5, 2, 4]
@@ -5218,6 +5221,7 @@ export type FunctionArgumentType = 'number' | 'text' | 'logical' | 'reference' |
 
 ## dist/versioning/index.d.ts
 export const CAPTURE_POLICIES: readonly ["commitEligible", "excluded", "derivedOnly", "rootCreation", "historyGap", "shadowOnly"]
+export const DEFAULT_VERSION_SEMANTIC_MERGE_MATERIALIZER_KIND = "semantic-cell-merge-commit-materializer.v1"
 export const EMERGENCY_DISABLE_AUDIT_RECORD_FIELDS: readonly ["recordKind", "incidentId", "policyId", "scopeDigest", "category", "createdAt", "expiresAt", "signerKeyIds", "signalDigest", "decisionDige ...
 export const EMERGENCY_DISABLE_AUTHORITY_KINDS: readonly ["user", "service", "security", "release-operator", "system"]
 export const EMERGENCY_DISABLE_DISTRIBUTION_CHANNEL_KINDS: readonly ["config", "release-channel", "control-plane", "offline-signed-material", "other"]
@@ -5285,6 +5289,14 @@ export const VERSION_REDACTION_KEY_SUBJECTS: readonly ["author", "session", "pro
 export const VERSION_REDACTION_POLICIES: readonly ["none", "metadata-only", "content-redacted", "opaque-digest-only", "drop"]
 export const VERSION_ROLLOUT_STAGES: readonly ["disabled", "shadow-only", "headless-local", "ui-beta", "collab-interop-beta", "default-on"]
 export const VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES: readonly ["runtimeContextId", "operationContext", "entrypointIds", "command", "runtimeKind", "redactionPolicy", "actor", "diagnostics"]
+export const VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS: readonly ["cell", "cells.values", "cells.formulas", "sheet", "cells.formats.direct", "rows-columns"]
+export const VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS: readonly ["cell", "cells.values", "cells.formulas", "cells.formats", "cells.formats.direct", "rows-columns", "sheet", "sheets"]
+export const VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID: Readonly<{ readonly cell: readonly ["cell", "cells.values", "cells.formulas"]; readonly 'cells.values': readonly ["cell" ...
+export const VERSION_SEMANTIC_MERGE_MATERIALIZER_KINDS: readonly ["semantic-cell-merge-commit-materializer.v1"]
+export const VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST: Readonly<{ schemaVersion: "version-semantic-merge-support.v1"; defaultMaterializerKind: "semantic-cell-merge-commit-materializer.v1"; rawPublicDif ...
+export const VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST_SCHEMA_VERSION = "version-semantic-merge-support.v1"
+export const VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_DOMAIN_IDS: readonly ["chart", "charts", "charts.source-range", "column", "columns", "filter", "filters", "filters.auto-filter", "floating-ob ...
+export const VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS: readonly ["tables", "filters.auto-filter", "charts.source-range", "floating-objects.anchors"]
 export const VERSION_SHADOW_OBSERVATION_CAPTURE_MODES: readonly ["shadow", "headless-replay", "corpus-replay", "app-eval", "provider-shadow"]
 export const VERSION_SHADOW_SAMPLE_STATUSES: readonly ["observed", "skipped", "blocked", "divergent", "pass"]
 export const VERSION_SYNC_PROVENANCE_BLOCKED_BATCH_FAILURE_CONTEXT_FIXTURE: Readonly<{ readonly sourceKind: "providerLiveInbound"; readonly originKind: "provider"; readonly stableOriginId: "stable-ori ...
@@ -5373,6 +5385,7 @@ export interface VersionRevertRecord { readonly revertId: string; readonly targe
 export interface VersionReviewRecord { readonly reviewId: string; readonly subjectCommitId: string; readonly status: VersionReviewRecordStatus; readonly reviewer?: VersionAuthor; readonly notes?: stri ...
 export interface VersionRuntimeOperationActorSummary { readonly actorKind?: VersionActorKind | 'unknown'; readonly redactedAuthorClass: string; }
 export interface VersionRuntimeOperationContext { readonly runtimeContextId: string; readonly operationContext: VersionOperationContext; readonly entrypointIds: readonly string[]; readonly command?: s ...
+export interface VersionSemanticMergeSupportManifest { readonly schemaVersion: typeof VERSION_SEMANTIC_MERGE_SUPPORT_MANIFEST_SCHEMA_VERSION; readonly defaultMaterializerKind: VersionSemanticMergeMate ...
 export interface VersionShadowMutationObservationRecord { readonly schemaVersion: 1; readonly recordKind: 'version-shadow-observation'; readonly observationId: string; readonly observedAt: string; rea ...
 export interface VersionShadowObservationArtifactRef { readonly artifactId: string; readonly kind: 'operation-context' | 'admission-classification' | 'mutation-result' | 'diagnostics'; readonly digest ...
 export interface VersionShadowObservationOptions { readonly rolloutStage?: VersionRolloutStage; readonly captureMode?: VersionShadowObservationCaptureMode; readonly environmentId?: string; readonly re ...
@@ -5461,6 +5474,15 @@ export type VersionRevertRecordStatus = 'planned' | 'applied' | 'rejected' | 're
 export type VersionReviewRecordStatus = 'pending' | 'approved' | 'rejected' | 'changes-requested'
 export type VersionRolloutStage = (typeof VERSION_ROLLOUT_STAGES)[number]
 export type VersionRuntimeOperationContextFieldName = (typeof VERSION_RUNTIME_OPERATION_CONTEXT_FIELD_NAMES)[number]
+export type VersionSemanticDiffRawPublicDomainId = (typeof VERSION_SEMANTIC_DIFF_RAW_PUBLIC_DOMAIN_IDS)[number]
+export type VersionSemanticMergeMaterializableDomainId = (typeof VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS)[number]
+export type VersionSemanticMergeMaterializableMatrixRowId = keyof typeof VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID
+export type VersionSemanticMergeMaterializerKind = (typeof VERSION_SEMANTIC_MERGE_MATERIALIZER_KINDS)[number]
+export type VersionSemanticMergeMatrixRowDomainMap = typeof VERSION_SEMANTIC_MERGE_MATERIALIZABLE_DOMAIN_IDS_BY_MATRIX_ROW_ID
+export type VersionSemanticMergeUnsupportedDomainIds = readonly VersionSemanticMergeUnsupportedStructuralDomainId[]
+export type VersionSemanticMergeUnsupportedMatrixRowIds = readonly VersionSemanticMergeUnsupportedStructuralMatrixRowId[]
+export type VersionSemanticMergeUnsupportedStructuralDomainId = (typeof VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_DOMAIN_IDS)[number]
+export type VersionSemanticMergeUnsupportedStructuralMatrixRowId = (typeof VERSION_SEMANTIC_MERGE_UNSUPPORTED_STRUCTURAL_MATRIX_ROW_IDS)[number]
 export type VersionShadowObservationCaptureMode = (typeof VERSION_SHADOW_OBSERVATION_CAPTURE_MODES)[number]
 export type VersionShadowObservationRecord = VersionShadowMutationObservationRecord
 export type VersionShadowSampleStatus = (typeof VERSION_SHADOW_SAMPLE_STATUSES)[number]

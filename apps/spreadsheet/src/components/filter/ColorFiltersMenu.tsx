@@ -7,24 +7,45 @@
  * Shows unique colors in the column with color swatches.
  *
  * ARCHITECTURE:
- * - Uses Draft + Apply pattern: stores pending config in UIStore, then dispatches
  * - Extracts unique colors from column cells
- * - Dispatches APPLY_COLOR_FILTER to apply the filter
+ * - Applies the selected color criterion through the Worksheet API
  */
 
-import type { CellId } from '@mog-sdk/contracts/cell-identity';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import React, { useEffect, useState } from 'react';
-import { dispatch } from '../../actions';
-import { useActionDependencies } from '../../hooks/toolbar/use-action-dependencies';
-import { useUIStore, useWorkbook } from '../../infra/context';
+import { useWorkbook } from '../../infra/context';
 import { MenuItem, MenuSeparator } from '@mog/shell/components/ui';
 import { getUniqueColors } from './filter-utils';
+
+type FilterOperationReceipt = {
+  readonly status: string;
+  readonly effects: readonly unknown[];
+  readonly diagnostics: readonly { severity?: string; message?: string }[];
+};
+
+function filterReceiptError(receipt: unknown, fallback: string): string | null {
+  if (typeof receipt !== 'object' || receipt === null) return null;
+  const maybe = receipt as Partial<FilterOperationReceipt>;
+  if (
+    typeof maybe.status !== 'string' ||
+    !Array.isArray(maybe.effects) ||
+    !Array.isArray(maybe.diagnostics)
+  ) {
+    return null;
+  }
+  if (maybe.status !== 'failed' && maybe.status !== 'unsupported' && maybe.status !== 'noOp') {
+    return null;
+  }
+  return (
+    maybe.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
+    maybe.diagnostics[0]?.message ??
+    fallback
+  );
+}
 
 export interface ColorFiltersMenuProps {
   sheetId: SheetId;
   filterId: string;
-  headerCellId: CellId;
   /** 0-based column index (from FilterButtonMetadata.col) */
   col?: number;
   /** Called to close the submenu */
@@ -34,20 +55,15 @@ export interface ColorFiltersMenuProps {
 /**
  * Color filters submenu with background/font color options
  *
- * Uses Draft + Apply pattern:
- * 1. Store pending config in UIStore via setPendingColorFilter
- * 2. Dispatch APPLY_COLOR_FILTER to apply
+ * Applies the selected color criterion directly through the Worksheet API.
  */
 export function ColorFiltersMenu({
   sheetId,
   filterId,
-  headerCellId,
   col,
   onClose,
 }: ColorFiltersMenuProps): React.ReactElement {
   const wb = useWorkbook();
-  const deps = useActionDependencies();
-  const setPendingColorFilter = useUIStore((s) => s.setPendingColorFilter);
 
   // Get filter and resolve range (async)
   const [backgroundColors, setBackgroundColors] = useState<string[]>([]);
@@ -89,28 +105,26 @@ export function ColorFiltersMenu({
     return () => {
       stale = true;
     };
-  }, [wb, sheetId, filterId, headerCellId, col]);
+  }, [wb, sheetId, filterId, col]);
 
-  /**
-   * Handle color selection.
-   * Uses Draft + Apply pattern: store config, then dispatch.
-   */
   const handleColorSelect = async (color: string, type: 'fill' | 'font') => {
-    // Store pending config in UIStore (Draft step)
-    setPendingColorFilter({
-      filterId,
-      headerCellId,
-      col,
-      colorType: type,
-      color,
-    });
-
-    // Dispatch to apply filter (Apply step)
+    if (col === undefined) return;
     try {
-      const result = await dispatch('APPLY_COLOR_FILTER', deps);
-      if (result.handled) {
-        onClose();
+      const ws = wb.getSheetById(sheetId);
+      const receipt = await ws.filters.setColumnFilter(
+        col,
+        {
+          type: 'color',
+          colorFilter: { type, color },
+        },
+        filterId,
+      );
+      const error = filterReceiptError(receipt, 'Color filter did not apply.');
+      if (error) {
+        console.error(error, receipt);
+        return;
       }
+      onClose();
     } catch (error) {
       console.error('[ColorFiltersMenu] Failed to apply color filter:', error);
     }

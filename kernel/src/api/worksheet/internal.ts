@@ -19,7 +19,6 @@ import type {
   RangeSchema as BridgeRangeSchema,
 } from '../../bridges/compute/compute-bridge';
 import type { Table as CanonicalTable } from '../../bridges/compute/compute-types.gen';
-import type { PivotTableConfig as DataPivotTableConfig } from '@mog-sdk/contracts/pivot';
 import type { TableConfig } from '@mog-sdk/contracts/tables';
 
 import {
@@ -31,7 +30,6 @@ import { getOrCreateCellId as getOrCreateCellIdDomain } from '../../domain/cells
 import { getData as getCellStoreDataDomain } from '../../domain/cells/cell-values';
 import { orderChartsForList } from '../../domain/charts/chart-list-ordering';
 import { serializedChartToChart } from '../../domain/charts/chart-public-api-converters';
-import { getPivotRangeForId } from '../../domain/pivots/ranges';
 import * as CellOps from './operations/cell-operations';
 import {
   getWorksheetValidationCache,
@@ -140,33 +138,6 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     );
   }
 
-  private async getPivotDefinitionsForRange(
-    sourceRange: CellRange,
-  ): Promise<Array<{ config: DataPivotTableConfig; range: CellRange }>> {
-    let pivots: DataPivotTableConfig[];
-    try {
-      pivots = await this.ctx.pivot.getAllPivots(this.sheetId);
-    } catch {
-      return [];
-    }
-
-    const matches: Array<{ config: DataPivotTableConfig; range: CellRange }> = [];
-    for (const config of pivots) {
-      const range = await getPivotRangeForId({
-        ctx: this.ctx,
-        sheetId: this.sheetId,
-        pivotId: config.id,
-      }).catch(() => null);
-      if (
-        range &&
-        (this.isSameRange(range, sourceRange) || this.rangeContainsRange(sourceRange, range))
-      ) {
-        matches.push({ config, range });
-      }
-    }
-    return matches;
-  }
-
   private async copyTableDefinitionsToTarget(
     tables: CanonicalTable[],
     sourceRange: CellRange,
@@ -232,103 +203,6 @@ export class WorksheetInternalImpl implements WorksheetInternal {
         table.autoCalculatedColumns,
       );
     }
-  }
-
-  private async moveTableDefinitionsForRange(
-    sourceRange: CellRange,
-    targetRow: number,
-    targetCol: number,
-    tablesInSourceRange?: CanonicalTable[],
-  ): Promise<void> {
-    const tables = tablesInSourceRange ?? (await this.getTableDefinitionsForRange(sourceRange));
-    const tableMoves = tables
-      .filter(
-        (table) =>
-          this.isSameRange(table.range, sourceRange) ||
-          this.rangeContainsRange(sourceRange, table.range),
-      )
-      .map((table) => {
-        const rowOffset = table.range.startRow - sourceRange.startRow;
-        const colOffset = table.range.startCol - sourceRange.startCol;
-        const targetStartRow = targetRow + rowOffset;
-        const targetStartCol = targetCol + colOffset;
-        return {
-          id: table.id,
-          name: table.name,
-          sourceRange: table.range,
-          targetRange: {
-            startRow: targetStartRow,
-            startCol: targetStartCol,
-            endRow: targetStartRow + (table.range.endRow - table.range.startRow),
-            endCol: targetStartCol + (table.range.endCol - table.range.startCol),
-          },
-        };
-      });
-    if (tableMoves.length === 0) return;
-
-    const postRelocateTables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
-    const moveByName = new Map(tableMoves.map((move) => [move.name, move]));
-
-    await Promise.all(
-      postRelocateTables
-        .filter((table) => {
-          const move = moveByName.get(table.name);
-          return Boolean(move && this.isSameRange(table.range, move.sourceRange));
-        })
-        .map((table) => {
-          const move = moveByName.get(table.name)!;
-          return this.ctx.computeBridge.resizeTable(
-            table.name,
-            move.targetRange.startRow,
-            move.targetRange.startCol,
-            move.targetRange.endRow,
-            move.targetRange.endCol,
-          );
-        }),
-    );
-
-    for (const move of tableMoves) {
-      this.ctx.eventBus.emit({
-        type: 'table:updated',
-        timestamp: Date.now(),
-        sheetId: this.sheetId,
-        tableId: move.id,
-        changes: { range: move.targetRange },
-        source: 'api',
-      });
-    }
-  }
-
-  private async movePivotDefinitionsForRange(
-    sourceRange: CellRange,
-    targetRow: number,
-    targetCol: number,
-    pivotsInSourceRange?: Array<{ config: DataPivotTableConfig; range: CellRange }>,
-  ): Promise<void> {
-    const pivots = pivotsInSourceRange ?? (await this.getPivotDefinitionsForRange(sourceRange));
-    const pivotMoves = pivots.map(({ config, range }) => {
-      const rowOffset = range.startRow - sourceRange.startRow;
-      const colOffset = range.startCol - sourceRange.startCol;
-      return {
-        id: config.id,
-        outputLocation: {
-          row: targetRow + rowOffset,
-          col: targetCol + colOffset,
-        },
-      };
-    });
-    if (pivotMoves.length === 0) return;
-
-    await Promise.all(
-      pivotMoves.map((move) =>
-        this.ctx.pivot.updatePivot(
-          this.sheetId,
-          move.id,
-          { outputLocation: move.outputLocation },
-          { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
-        ),
-      ),
-    );
   }
 
   async getCellIdAt(row: number, col: number): Promise<string | null> {
@@ -450,22 +324,10 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       sourceRange.endRow - sourceRange.startRow + 1,
       sourceRange.endCol - sourceRange.startCol + 1,
     );
-    const tablesInSourceRange = await this.getTableDefinitionsForRange(sourceRange);
-    const pivotsInSourceRange = await this.getPivotDefinitionsForRange(sourceRange);
     await CellOps.relocateCells(this.ctx, this.sheetId, sourceRange, {
       row: targetRow,
       col: targetCol,
     });
-    await this.moveTableDefinitionsForRange(sourceRange, targetRow, targetCol, tablesInSourceRange);
-    await this.movePivotDefinitionsForRange(sourceRange, targetRow, targetCol, pivotsInSourceRange);
-  }
-
-  async movePivotsForCutPaste(
-    sourceRange: CellRange,
-    targetRow: number,
-    targetCol: number,
-  ): Promise<void> {
-    await this.movePivotDefinitionsForRange(sourceRange, targetRow, targetCol);
   }
 
   async relocateCellsToSheet(

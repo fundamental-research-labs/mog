@@ -515,20 +515,6 @@ export function setupClipboardPasteIntegration(
         );
 
         if (result.success) {
-          await store.moveTablesForCutPaste?.(
-            toSheetId(data.sourceSheetId),
-            sourceRange,
-            sheetId,
-            pastePreviewTarget.row,
-            pastePreviewTarget.col,
-          );
-          await store.movePivotsForCutPaste?.(
-            toSheetId(data.sourceSheetId),
-            sourceRange,
-            sheetId,
-            pastePreviewTarget.row,
-            pastePreviewTarget.col,
-          );
           await clearSystemClipboardText();
           clipboardActor.send({ type: 'PASTE_COMPLETE' });
 
@@ -583,23 +569,6 @@ export function setupClipboardPasteIntegration(
 
         if (result.success) {
           if (isCut && sourceRanges && sourceRanges.length > 0 && data.sourceSheetId) {
-            for (const sourceRange of sourceRanges) {
-              await store.moveTablesForCutPaste?.(
-                toSheetId(data.sourceSheetId),
-                sourceRange,
-                sheetId,
-                pastePreviewTarget.row,
-                pastePreviewTarget.col,
-              );
-              await store.movePivotsForCutPaste?.(
-                toSheetId(data.sourceSheetId),
-                sourceRange,
-                sheetId,
-                pastePreviewTarget.row,
-                pastePreviewTarget.col,
-              );
-            }
-
             // Unmerge merges in source ranges
             if (store.getMergesInRange && store.unmergeRange) {
               for (const sourceRange of sourceRanges) {

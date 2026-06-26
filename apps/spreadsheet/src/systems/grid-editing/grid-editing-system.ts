@@ -20,7 +20,6 @@
 import { assign, createActor, fromPromise, type InspectionEvent } from 'xstate';
 
 import { clipboardSelectors, editorSelectors, selectionSelectors } from '../../selectors';
-import type { PivotRefreshReceipt } from '@mog-sdk/contracts/api';
 import type {
   ClipboardSnapshot,
   Direction,
@@ -31,7 +30,6 @@ import type { CellCoord } from '@mog-sdk/contracts/rendering';
 import type { MutationResult } from '@mog-sdk/contracts/protection';
 import type { RichTextSegment } from '@mog-sdk/contracts/rich-text';
 import type { SlicerCache } from '@mog-sdk/contracts/slicers';
-import type { PivotTableConfig } from '@mog-sdk/contracts/pivot';
 import {
   sheetId as toSheetId,
   type CellFormat,
@@ -132,39 +130,6 @@ function getOppositeDirection(dir: Direction | 'none'): Direction | 'none' {
     case 'none':
       return 'none';
   }
-}
-
-function rangesEqual(a: CellRange, b: CellRange): boolean {
-  return (
-    a.startRow === b.startRow &&
-    a.startCol === b.startCol &&
-    a.endRow === b.endRow &&
-    a.endCol === b.endCol
-  );
-}
-
-function rangeContainsRange(container: CellRange, candidate: CellRange): boolean {
-  return (
-    candidate.startRow >= container.startRow &&
-    candidate.endRow <= container.endRow &&
-    candidate.startCol >= container.startCol &&
-    candidate.endCol <= container.endCol
-  );
-}
-
-function warnPivotRefreshReceipt(receipt: PivotRefreshReceipt | null | undefined): void {
-  if (!receipt || receipt.status === 'applied') return;
-  console.warn(
-    receipt.diagnostics.find((diagnostic) => diagnostic.severity === 'error')?.message ??
-      receipt.diagnostics[0]?.message ??
-      `Pivot refresh did not apply: ${receipt.status}.`,
-    receipt,
-  );
-}
-
-function warnPivotRelocationError(pivotId: string, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`Pivot relocation for "${pivotId}" failed: ${message}`, error);
 }
 
 // =============================================================================
@@ -1590,166 +1555,6 @@ export class GridEditingSystem implements IGridEditingSystem {
           const error = err instanceof Error ? err.message : 'relocateCells failed';
           return { success: false, movedCount: 0, error };
         }
-      },
-      moveTablesForCutPaste: async (
-        sourceSheetId,
-        sourceRange,
-        targetSheetId,
-        targetRow,
-        targetCol,
-      ) => {
-        if (sourceSheetId !== targetSheetId) return;
-
-        const sheet = workbook.getSheetById(sourceSheetId);
-        const bridge = (
-          sheet as unknown as {
-            ctx?: {
-              computeBridge?: {
-                getAllTablesInSheet(
-                  sheetId: SheetId,
-                ): Promise<Array<{ name: string; range: CellRange }>>;
-                resizeTable(
-                  tableName: string,
-                  newStartRow: number,
-                  newStartCol: number,
-                  newEndRow: number,
-                  newEndCol: number,
-                ): Promise<unknown>;
-              };
-            };
-          }
-        ).ctx?.computeBridge;
-        if (!bridge) return;
-
-        const tables = await bridge.getAllTablesInSheet(sourceSheetId);
-        const tableMoves = tables
-          .filter(
-            (table) =>
-              rangesEqual(table.range, sourceRange) || rangeContainsRange(sourceRange, table.range),
-          )
-          .map((table) => {
-            const rowOffset = table.range.startRow - sourceRange.startRow;
-            const colOffset = table.range.startCol - sourceRange.startCol;
-            const targetStartRow = targetRow + rowOffset;
-            const targetStartCol = targetCol + colOffset;
-            return {
-              name: table.name,
-              sourceRange: table.range,
-              targetRange: {
-                startRow: targetStartRow,
-                startCol: targetStartCol,
-                endRow: targetStartRow + (table.range.endRow - table.range.startRow),
-                endCol: targetStartCol + (table.range.endCol - table.range.startCol),
-              },
-            };
-          });
-        await Promise.all(
-          tableMoves.map((move) =>
-            bridge.resizeTable(
-              move.name,
-              move.targetRange.startRow,
-              move.targetRange.startCol,
-              move.targetRange.endRow,
-              move.targetRange.endCol,
-            ),
-          ),
-        );
-      },
-      movePivotsForCutPaste: async (
-        sourceSheetId,
-        sourceRange,
-        targetSheetId,
-        targetRow,
-        targetCol,
-      ) => {
-        if (sourceSheetId !== targetSheetId) return;
-
-        const internal = workbook.getSheetById(sourceSheetId)._internal as {
-          movePivotsForCutPaste?: (
-            sourceRange: CellRange,
-            targetRow: number,
-            targetCol: number,
-          ) => Promise<void>;
-        };
-        await internal.movePivotsForCutPaste?.(sourceRange, targetRow, targetCol);
-
-        const sheet = workbook.getSheetById(sourceSheetId);
-        const pivotBridge = (
-          sheet as unknown as {
-            ctx?: {
-              pivot?: {
-                getAllPivots(sheetId: SheetId): Promise<
-                  Array<{
-                    id: string;
-                    outputLocation: { row: number; col: number };
-                  }>
-                >;
-                compute(
-                  sheetId: SheetId,
-                  pivotId: string,
-                ): Promise<{
-                  renderedBounds?: { totalRows: number; totalCols: number };
-                } | null>;
-                updatePivot(
-                  sheetId: SheetId,
-                  pivotId: string,
-                  updates: { outputLocation: { row: number; col: number } },
-                  options: { reason: 'uiConfigChanged'; refreshPolicy: 'refreshAndMaterialize' },
-                ): Promise<PivotTableConfig | null>;
-              };
-            };
-          }
-        ).ctx?.pivot;
-        if (!pivotBridge) return;
-
-        const pivots = await pivotBridge.getAllPivots(sourceSheetId);
-        await Promise.all(
-          pivots.map(async (pivot) => {
-            const result = await pivotBridge.compute(sourceSheetId, pivot.id).catch(() => null);
-            const totalRows = result?.renderedBounds?.totalRows ?? 1;
-            const totalCols = result?.renderedBounds?.totalCols ?? 1;
-            const range: CellRange = {
-              startRow: pivot.outputLocation.row,
-              startCol: pivot.outputLocation.col,
-              endRow: pivot.outputLocation.row + Math.max(1, totalRows) - 1,
-              endCol: pivot.outputLocation.col + Math.max(1, totalCols) - 1,
-            };
-            if (!rangesEqual(range, sourceRange) && !rangeContainsRange(sourceRange, range)) {
-              return;
-            }
-
-            const movedPivot = await pivotBridge.updatePivot(
-              sourceSheetId,
-              pivot.id,
-              {
-                outputLocation: {
-                  row: targetRow + (range.startRow - sourceRange.startRow),
-                  col: targetCol + (range.startCol - sourceRange.startCol),
-                },
-              },
-              { reason: 'uiConfigChanged', refreshPolicy: 'refreshAndMaterialize' },
-            );
-            if (!movedPivot) {
-              console.warn(`Pivot relocation for "${pivot.id}" did not apply: pivot not found.`);
-              return;
-            }
-            const handle = await sheet.pivots.get(movedPivot).catch((error) => {
-              warnPivotRelocationError(pivot.id, error);
-              return null;
-            });
-            if (!handle) {
-              console.warn(
-                `Pivot relocation for "${pivot.id}" updated config without a materialization receipt.`,
-              );
-              return;
-            }
-            const receipt = await handle.refresh().catch((error) => {
-              warnPivotRelocationError(pivot.id, error);
-              return null;
-            });
-            warnPivotRefreshReceipt(receipt);
-          }),
-        );
       },
       copyRange: async (
         sourceSheetId,

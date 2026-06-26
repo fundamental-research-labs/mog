@@ -151,6 +151,49 @@ fn standard_chart_relationship_closure_reports_unsupported_relationships() {
 }
 
 #[test]
+fn standard_chart_source_replay_rejects_unqualified_local_refs() {
+    let readiness = chart_xml_source_replay_readiness(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:cat><c:strRef><c:f>A4:A10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>B4:B10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+    );
+
+    assert!(!readiness.current);
+    assert!(
+        readiness
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("unqualified local source references")),
+        "{readiness:?}"
+    );
+}
+
+#[test]
+fn standard_chart_source_replay_allows_sheet_qualified_refs_without_caches() {
+    let readiness = chart_xml_source_replay_readiness(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:cat><c:strRef><c:f>Data!A4:A10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>Data!B4:B10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+    );
+
+    assert!(readiness.current, "{readiness:?}");
+}
+
+#[test]
+fn standard_chart_source_replay_allows_export_ready_xml_without_modeled_cache_projection() {
+    let readiness = chart_xml_source_replay_readiness(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:cat><c:strRef><c:f>Data!A4:A10</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Q1</c:v></c:pt></c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>Data!B4:B10</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="1"/><c:pt idx="0"><c:v>100</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+    );
+
+    assert!(readiness.current, "{readiness:?}");
+}
+
+#[test]
+fn standard_chart_source_replay_does_not_treat_named_ranges_as_local_a1_refs() {
+    let readiness = chart_xml_source_replay_readiness(
+        r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:cat><c:strRef><c:f>QuarterLabels</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Q1</c:v></c:pt></c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>RevenueValues</c:f><c:numCache><c:ptCount val="1"/><c:pt idx="0"><c:v>100</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,
+    );
+
+    assert!(readiness.current, "{readiness:?}");
+}
+
+#[test]
 fn standard_chart_pivot_fmts_emit_import_diagnostic_for_style_semantics() {
     let chart_space = ooxml_types::charts::ChartSpace {
         chart: ooxml_types::charts::Chart {

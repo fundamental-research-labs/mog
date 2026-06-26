@@ -106,6 +106,10 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                 ),
             );
             let relationship_closure_current = relationship_closure.current;
+            let source_replay_readiness =
+                standard_chart_source_replay_readiness(chart_space, &spec);
+            let chart_export_authority_current =
+                relationship_closure_current && source_replay_readiness.current;
             spec.standard_chart_provenance = Some(domain_types::chart::StandardChartProvenance {
                 original_path: chart.original_path.clone(),
                 rels_path: chart
@@ -124,7 +128,7 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
             spec.standard_chart_export_authority =
                 Some(domain_types::chart::StandardChartExportAuthority {
                     schema_version: STANDARD_CHART_PROJECTION_SCHEMA_VERSION,
-                    validity: if relationship_closure_current {
+                    validity: if chart_export_authority_current {
                         domain_types::chart::StandardChartAuthorityValidity::Current
                     } else {
                         domain_types::chart::StandardChartAuthorityValidity::Unsafe
@@ -134,12 +138,20 @@ pub(crate) fn convert_parsed_charts_to_chart_specs(sheet: &FullParsedSheet) -> V
                     relationship_closure_current,
                     projection_fingerprint: Some(projection_fingerprint),
                     invalidated_owner_ids: Vec::new(),
-                    stale_reason: (!relationship_closure_current).then(|| {
-                        relationship_closure
-                            .diagnostics
-                            .first()
-                            .and_then(|diagnostic| diagnostic.message.clone())
-                            .unwrap_or_else(|| "chart relationship graph is not closed".to_string())
+                    stale_reason: (!chart_export_authority_current).then(|| {
+                        if !relationship_closure_current {
+                            relationship_closure
+                                .diagnostics
+                                .first()
+                                .and_then(|diagnostic| diagnostic.message.clone())
+                                .unwrap_or_else(|| {
+                                    "chart relationship graph is not closed".to_string()
+                                })
+                        } else {
+                            source_replay_readiness.reason.unwrap_or_else(|| {
+                                "chart source references are not safe to replay".to_string()
+                            })
+                        }
                     }),
                 });
 
@@ -158,6 +170,110 @@ const REL_CHART_USER_SHAPES: &str =
 struct ChartRelationshipClosure {
     current: bool,
     diagnostics: Vec<domain_types::ImportDiagnosticRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ChartSourceReplayReadiness {
+    current: bool,
+    reason: Option<String>,
+}
+
+fn standard_chart_source_replay_readiness(
+    chart_space: &ooxml_types::charts::ChartSpace,
+    spec: &ChartSpec,
+) -> ChartSourceReplayReadiness {
+    if !standard_chart_has_live_source_refs(spec) {
+        return ChartSourceReplayReadiness {
+            current: true,
+            reason: None,
+        };
+    }
+
+    let chart_xml = crate::domain::charts::write_canonical::serialize_chart_space(chart_space);
+    let chart_xml = String::from_utf8_lossy(&chart_xml);
+    chart_xml_source_replay_readiness(&chart_xml)
+}
+
+fn chart_xml_source_replay_readiness(chart_xml: &str) -> ChartSourceReplayReadiness {
+    let formulas = chart_formula_refs(chart_xml);
+    if formulas.is_empty() {
+        return ChartSourceReplayReadiness {
+            current: false,
+            reason: Some(
+                "chart XML has live source references but no chart source formulas".to_string(),
+            ),
+        };
+    }
+
+    let unqualified_local_refs = formulas
+        .iter()
+        .filter(|formula| is_unqualified_local_a1_reference(formula))
+        .map(|formula| formula.trim().to_string())
+        .collect::<Vec<_>>();
+    if !unqualified_local_refs.is_empty() {
+        return ChartSourceReplayReadiness {
+            current: false,
+            reason: Some(format!(
+                "chart XML has unqualified local source references: {}",
+                unqualified_local_refs.join(", ")
+            )),
+        };
+    }
+
+    ChartSourceReplayReadiness {
+        current: true,
+        reason: None,
+    }
+}
+
+fn standard_chart_has_live_source_refs(spec: &ChartSpec) -> bool {
+    spec.data_range
+        .as_deref()
+        .is_some_and(|range| !range.trim().is_empty())
+        || spec.series.iter().any(series_has_live_source_refs)
+}
+
+fn series_has_live_source_refs(series: &domain_types::chart::ChartSeriesData) -> bool {
+    live_source_ref(series.values.as_deref(), series.value_source_kind)
+        || live_source_ref(series.categories.as_deref(), series.category_source_kind)
+        || live_source_ref(
+            series.bubble_size.as_deref(),
+            series.bubble_size_source_kind,
+        )
+}
+
+fn live_source_ref(
+    formula: Option<&str>,
+    source_kind: Option<domain_types::chart::ChartSeriesDimensionSourceKindData>,
+) -> bool {
+    formula.is_some_and(|formula| !formula.trim().is_empty())
+        && matches!(
+            source_kind,
+            None | Some(domain_types::chart::ChartSeriesDimensionSourceKindData::Ref)
+        )
+}
+
+fn chart_formula_refs(chart_xml: &str) -> Vec<&str> {
+    let mut refs = Vec::new();
+    let mut rest = chart_xml;
+    while let Some(start) = rest.find("<c:f>") {
+        let value_start = start + "<c:f>".len();
+        let Some(end) = rest[value_start..].find("</c:f>") else {
+            break;
+        };
+        refs.push(&rest[value_start..value_start + end]);
+        rest = &rest[value_start + end + "</c:f>".len()..];
+    }
+    refs
+}
+
+fn is_unqualified_local_a1_reference(formula: &str) -> bool {
+    let trimmed = formula.trim().trim_start_matches('=').trim();
+    if trimmed.is_empty() || compute_parser::split_sheet_prefix(trimmed).0.is_some() {
+        return false;
+    }
+    compute_parser::parse_a1_range(trimmed)
+        .is_some_and(|range| range.range_type == formula_types::RangeType::CellRange)
 }
 
 fn standard_chart_relationship_closure(

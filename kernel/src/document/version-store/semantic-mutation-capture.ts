@@ -42,6 +42,8 @@ export interface VersionMutationCaptureRecordInput {
 
 export interface VersionMutationCapturePreMutationInput {
   readonly operation: string;
+  readonly directEdits?: readonly DirectEditPosition[];
+  readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
 }
 
@@ -83,6 +85,15 @@ const DEFAULT_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
   displayName: 'Mog Version Capture',
 });
 
+const UNCAPTURED_ROW_COL_FORMAT_OPERATIONS = new Set([
+  'compute_clear_col_format',
+  'compute_set_col_format',
+  'compute_set_col_format_range',
+  'compute_set_col_formats',
+  'compute_set_row_format',
+  'compute_set_row_formats',
+]);
+
 export function createSemanticMutationCapture(
   options: SemanticMutationCaptureOptions = {},
 ): SemanticMutationCaptureServices {
@@ -121,7 +132,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (
       (this.requireOperationContext && !input.operationContext) ||
       !this.semanticStateReader ||
-      classifySemanticMutationCaptureLane(input.operationContext) !== 'normalLocal' ||
+      !shouldCapturePreMutationSemanticState(input) ||
       this.beforeNormalSemanticState ||
       this.pendingNormal.length > 0 ||
       this.pendingUncapturedNormal.length > 0
@@ -355,5 +366,33 @@ function shouldDeferEmptySemanticChangeSetToRustDiff(
 ): boolean {
   if (lane !== 'normalLocal') return false;
   if (!isDirectCellValueOperation(input.operation)) return false;
+  return hasDirectEditEvidence(input);
+}
+
+function shouldCapturePreMutationSemanticState(
+  input: VersionMutationCapturePreMutationInput,
+): boolean {
+  if (classifySemanticMutationCaptureLane(input.operationContext) !== 'normalLocal') return false;
+
+  // Row/column format mutations currently update sparse metadata and viewport
+  // patches, but row/column formats are not represented in the semantic
+  // workbook state. The receipt is therefore recorded as uncaptured; reading a
+  // full semantic preimage cannot make the mutation committable.
+  if (UNCAPTURED_ROW_COL_FORMAT_OPERATIONS.has(input.operation)) return false;
+
+  // Empty direct cell write receipts can fall back to a Rust semantic diff only
+  // when the caller supplies the edited cells/ranges. Without that evidence the
+  // post-mutation recorder marks the write uncaptured, so skip the preimage too.
+  if (isDirectCellValueOperation(input.operation)) {
+    return hasDirectEditEvidence(input);
+  }
+
+  return true;
+}
+
+function hasDirectEditEvidence(input: {
+  readonly directEdits?: readonly DirectEditPosition[];
+  readonly directEditRanges?: readonly DirectEditRange[];
+}): boolean {
   return (input.directEdits?.length ?? 0) > 0 || (input.directEditRanges?.length ?? 0) > 0;
 }

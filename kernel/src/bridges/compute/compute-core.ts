@@ -1043,10 +1043,7 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
   ): Promise<MutationResult> {
     await this.admitPublicMutation(operation, options);
-    await prepareVersionMutationCapture(this.ctx, {
-      operation,
-      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
-    });
+    await prepareVersionMutationCapture(this.ctx, operation, directEdits, options);
     return this.mutate(call(), directEdits, operation, options, true);
   }
 
@@ -1070,10 +1067,7 @@ export class ComputeCore {
     });
     this.ensureInitialized();
     this._writeGate?.assertWritable(operation);
-    await prepareVersionMutationCapture(this.ctx, {
-      operation,
-      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
-    });
+    await prepareVersionMutationCapture(this.ctx, operation, directEdits, options);
     return this.mutate(call(), directEdits, operation, options, true);
   }
 
@@ -1089,10 +1083,7 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
   ): Promise<{ raw: T; mutation: MutationResult }> {
     await this.admitPublicMutation(operation, options);
-    await prepareVersionMutationCapture(this.ctx, {
-      operation,
-      ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
-    });
+    await prepareVersionMutationCapture(this.ctx, operation, directEdits, options);
     const raw = await call();
     const mutation = await this.mutate(
       Promise.resolve(toMutationTuple(raw)),

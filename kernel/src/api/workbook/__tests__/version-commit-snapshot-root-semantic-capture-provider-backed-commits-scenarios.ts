@@ -76,6 +76,7 @@ export function registerProviderBackedSemanticMutationCaptureScenario(): void {
         sheetIds: ['sheet-1'],
         domainIds: ['cells.values'],
       }),
+      directEdits: [{ sheetId: 'sheet-1', row: 0, col: 0 }],
     });
     ctx.versioning.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',

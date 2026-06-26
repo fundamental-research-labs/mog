@@ -82,6 +82,8 @@ export function createRustBackedTestSemanticMutationCapture(
     pendingBeforeCapture ??= Promise.resolve(
       recordPreMutation?.({
         operation: input.operation,
+        ...(input.directEdits ? { directEdits: input.directEdits } : {}),
+        ...(input.directEditRanges ? { directEditRanges: input.directEditRanges } : {}),
         operationContext: input.operationContext,
       }),
     );

@@ -62,6 +62,8 @@ export interface VersionMutationCaptureRecordInput {
 
 export interface VersionMutationCapturePreMutationInput {
   readonly operation: string;
+  readonly directEdits?: readonly DirectEditPosition[];
+  readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
 }
 
@@ -157,8 +159,14 @@ function shouldSkipContextlessSemanticCapture(input: VersionMutationCaptureRecor
 
 export async function prepareVersionMutationCapture(
   ctx: IKernelContext,
-  input: VersionMutationCapturePreMutationInput,
+  inputOrOperation: VersionMutationCapturePreMutationInput | string,
+  directEdits?: readonly DirectEditPosition[],
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
+  const input =
+    typeof inputOrOperation === 'string'
+      ? versionMutationCapturePreMutationInput(inputOrOperation, directEdits, options)
+      : inputOrOperation;
   const capture = (ctx as IKernelContext & VersionMutationCaptureContext).versioning
     ?.mutationCapture;
   if (!capture?.recordPreMutation) return;
@@ -169,6 +177,19 @@ export async function prepareVersionMutationCapture(
       ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
     )?.('versioning:mutation-capture-error', { operation: input.operation, phase: 'pre-mutation' });
   }
+}
+
+function versionMutationCapturePreMutationInput(
+  operation: string,
+  directEdits?: readonly DirectEditPosition[],
+  options?: MutationAdmissionOptions,
+): VersionMutationCapturePreMutationInput {
+  return {
+    operation,
+    ...(directEdits ? { directEdits } : {}),
+    ...(options?.directEditRanges ? { directEditRanges: options.directEditRanges } : {}),
+    ...(options?.operationContext ? { operationContext: options.operationContext } : {}),
+  };
 }
 
 export function observeMutationAdmission(

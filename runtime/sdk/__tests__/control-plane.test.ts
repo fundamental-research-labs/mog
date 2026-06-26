@@ -36,7 +36,7 @@ describe('inert control plane', () => {
     const artifactRuntimeRange = {
       runtimeKind: 'headless-sdk' as const,
       packageName: '@mog-sdk/sdk',
-      minClientVersion: '0.9.6',
+      minClientVersion: '0.10.0',
     };
 
     const before = await controlPlane.readCapabilityGates({ scope: priorScope });

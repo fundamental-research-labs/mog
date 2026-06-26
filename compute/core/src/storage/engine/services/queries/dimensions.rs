@@ -115,27 +115,7 @@ pub(in crate::storage::engine) fn get_data_bounds(
         max_col = max_col.max(dense_max_col);
     }
 
-    // 3. Expand bounds with format-only cells from CRDT properties.
-    //    These cells have formatting but no value/formula, so they exist in
-    //    the CRDT properties map but not in the cell mirror.
-    use crate::storage::properties;
-
-    let doc = stores.storage.doc();
-    let sheets_map = stores.storage.sheets();
-    let grid = stores.grid_indexes.get(sheet_id);
-
-    for cell_id_hex in properties::iter_formatted_property_cell_ids(doc, sheets_map, sheet_id) {
-        // Resolve position directly from the authoritative GridIndex.
-        if let Some((row, col)) = resolve_pos_from_grid(grid, cell_id_hex.as_str()) {
-            found = true;
-            min_row = min_row.min(row);
-            max_row = max_row.max(row);
-            min_col = min_col.min(col);
-            max_col = max_col.max(col);
-        }
-    }
-
-    // 4. Expand bounds with merge-region footprints.
+    // 3. Expand bounds with merge-region footprints.
     //    A merged region is sheet structure (not just a view hint), so its
     //    bounding box must be part of the used range — matches Excel's
     //    `UsedRange` semantics. Walking merges here makes `get_data_bounds`
@@ -149,6 +129,9 @@ pub(in crate::storage::engine) fn get_data_bounds(
     //    local `GridIndex` may not yet have the merge-origin cell IDs
     //    registered (hydration gap fixed in a separate round), but the
     //    Yrs merges map carries the rectangle directly.
+    let doc = stores.storage.doc();
+    let sheets_map = stores.storage.sheets();
+
     for (sr, sc, er, ec) in merges::iter_merge_bounds(doc, sheets_map, *sheet_id) {
         found = true;
         min_row = min_row.min(sr);

@@ -188,6 +188,27 @@ describe('WorksheetTablesImpl table event identity', () => {
     expect(table.containsCell?.(4, 2)).toBe(false);
   });
 
+  it('lists tables without waiting for app clipboard paste globals', async () => {
+    const global = globalThis as typeof globalThis & {
+      __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
+      __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
+    };
+    const never = new Promise<never>(() => undefined);
+    global.__MOG_PENDING_CLIPBOARD_PASTE__ = never;
+    global.__MOG_ACTIVE_CLIPBOARD_PASTE__ = never;
+
+    try {
+      const listPromise = tables.list();
+      await flushPromises();
+
+      expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledWith(SHEET_ID);
+      await expect(listPromise).resolves.toHaveLength(1);
+    } finally {
+      delete global.__MOG_PENDING_CLIPBOARD_PASTE__;
+      delete global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
+    }
+  });
+
   it('emits table:updated with the stable table id while preserving name-based update input', async () => {
     const receipt = await tables.update('Sales', { style: 'TableStyleMedium4' });
 

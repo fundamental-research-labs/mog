@@ -101,33 +101,6 @@ import {
   tableStyleIdForCompute,
 } from '../../domain/tables/style-normalization';
 
-type PendingClipboardPasteGlobal = typeof globalThis & {
-  __MOG_PENDING_CLIPBOARD_PASTE__?: Promise<unknown>;
-  __MOG_ACTIVE_CLIPBOARD_PASTE__?: Promise<unknown>;
-};
-
-async function waitForPendingClipboardPaste(): Promise<void> {
-  const deadline = Date.now() + 2000;
-
-  while (Date.now() < deadline) {
-    const global = globalThis as PendingClipboardPasteGlobal;
-    const pending = global.__MOG_PENDING_CLIPBOARD_PASTE__;
-    const active = global.__MOG_ACTIVE_CLIPBOARD_PASTE__;
-    if (
-      (!pending || typeof pending.then !== 'function') &&
-      (!active || typeof active.then !== 'function')
-    ) {
-      return;
-    }
-
-    await Promise.race([
-      Promise.all([pending?.catch(() => undefined), active?.catch(() => undefined)]),
-      new Promise<void>((resolve) => setTimeout(resolve, 16)),
-    ]);
-  }
-}
-
-// FIX-001-tables-hotcheck-v1
 export class WorksheetTablesImpl implements WorksheetTables {
   // TODO(4.8): Persist sort specs to document model via bridge (OOXML
   // TableSortState infrastructure exists but canonical Table type lacks it).
@@ -410,7 +383,6 @@ export class WorksheetTablesImpl implements WorksheetTables {
   }
 
   async list(): Promise<TableInfo[]> {
-    await waitForPendingClipboardPaste();
     const tables = await this.ctx.computeBridge.getAllTablesInSheet(this.sheetId);
     return tables.map((t) => this.tableInfoWithMethods(bridgeTableToTableInfo(t)));
   }

@@ -94,6 +94,8 @@ export interface FeatureGates {
     print?: boolean;
     export?: boolean;
     formulaBar?: boolean;
+    /** Show first-party formula AI surfaces, such as natural-language formula explanation. */
+    formulaAI?: boolean;
     sheetTabs?: boolean;
     contextMenu?: boolean;
     freezePanes?: boolean;

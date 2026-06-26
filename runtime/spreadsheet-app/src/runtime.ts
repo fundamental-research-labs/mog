@@ -541,6 +541,7 @@ class SpreadsheetRuntimeController
       shell: this.shell,
       appKernel: record.appKernel,
       capabilityRegistry: this.capabilityRegistry,
+      formulaAI: this.options.services?.formulaAI,
       hostCommands: {
         getOwner: (command) =>
           resolveCommandOwner(

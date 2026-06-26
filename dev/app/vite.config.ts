@@ -4,6 +4,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import svgr from 'vite-plugin-svgr';
 
 import { mogWasmPlugin } from '@mog/vite-wasm-plugin';
+import { formulaAIProxy } from './formula-ai-proxy';
 
 /**
  * Dev-only fingerprint injection.
@@ -35,6 +36,7 @@ function injectFingerprint(): Plugin {
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {
   const env = loadEnv(mode, process.cwd(), ['VITE_', 'MOG_']);
+  const serverEnv = { ...process.env, ...loadEnv(mode, process.cwd(), '') };
   const enableHmr = env.MOG_DEV_HMR === '1' || env.MOG_DEV_HMR === 'true';
   const publicRoot = path.resolve(__dirname, '..', '..');
 
@@ -58,6 +60,7 @@ export default defineConfig(({ mode, command }) => {
     plugins: [
       ...mogWasmPlugin(),
       injectFingerprint(),
+      formulaAIProxy(serverEnv),
       react(),
       svgr({
         // Transform SVGs to React components when imported with ?react
@@ -85,6 +88,10 @@ export default defineConfig(({ mode, command }) => {
         '@mog-sdk/kernel/host-lifecycle-internal': path.resolve(
           publicRoot,
           'kernel/src/host-lifecycle-internal.ts',
+        ),
+        '@mog/app-spreadsheet/embed-runtime': path.resolve(
+          publicRoot,
+          'apps/spreadsheet/src/infra/context/embed-runtime-context.tsx',
         ),
         '@mog/app-spreadsheet/globals.css': path.resolve(
           publicRoot,

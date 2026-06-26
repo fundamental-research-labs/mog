@@ -59,6 +59,7 @@ import {
   useHideRibbon,
   useReadOnly,
   useSpreadsheetEmbedRuntimeOptional,
+  useSpreadsheetFormulaAIOptional,
   useSpreadsheetEmbedSlot,
   useUIStore,
   useUIStoreApi,
@@ -743,6 +744,8 @@ function SpreadsheetContent(): React.JSX.Element {
   const activeSheetId = useActiveSheetId();
   const showRibbon = useFeatureMode('ribbon');
   const formulaBarGated = useFeatureGate('capabilities', 'formulaBar');
+  const formulaAIGated = useFeatureGate('capabilities', 'formulaAI');
+  const formulaAI = useSpreadsheetFormulaAIOptional();
   const showSheetTabs = useFeatureGate('capabilities', 'sheetTabs');
   // Chrome-symmetry: feature gate AND user-toggle must agree before we
   // mount these chrome panels. Hidden state is observable as the panel
@@ -750,13 +753,25 @@ function SpreadsheetContent(): React.JSX.Element {
   const formulaBarUserVisible = useUIStore((s) => s.formulaBarVisible);
   const nlBarVisible = useUIStore((s) => s.nlBarVisible);
   const statusBarUserVisible = useUIStore((s) => s.statusBarVisible);
+  const [nlBarMounted, setNLBarMounted] = useState(nlBarVisible);
   const aboveGridSlot = useSpreadsheetEmbedSlot('above-grid');
   const showFormulaBar = formulaBarGated && formulaBarUserVisible;
+  const showNLFormulaBar = showFormulaBar && formulaAIGated && formulaAI !== undefined;
   const showStatusBar = statusBarUserVisible;
   const { mode: displayMode, effectiveScheme } = useSpreadsheetDisplayMode();
 
   const workbook = useWorkbook();
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (nlBarVisible) {
+      setNLBarMounted(true);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => setNLBarMounted(false), 200);
+    return () => window.clearTimeout(timeout);
+  }, [nlBarVisible]);
 
   const handleExport = useCallback(async () => {
     if (isExporting) return;
@@ -833,10 +848,21 @@ function SpreadsheetContent(): React.JSX.Element {
           )}
 
           {/* NL Formula Bar — natural-language formula input, gated by
- formula bar visibility and the NL bar toggle (nlBarVisible). */}
-          {showFormulaBar && nlBarVisible && (
-            <div data-testid="panel-nl-formula-bar" className="shrink-0 border-b border-ss-border">
-              <NLFormulaBarContainer />
+	 formula bar visibility and the NL bar toggle (nlBarVisible). */}
+          {showNLFormulaBar && (
+            <div
+              className={`shrink-0 overflow-hidden transition-[max-height,opacity,transform] duration-[220ms] ease-out ${
+                nlBarVisible
+                  ? 'max-h-[36px] opacity-100 translate-y-0'
+                  : 'max-h-0 opacity-0 -translate-y-1 pointer-events-none'
+              }`}
+              aria-hidden={!nlBarVisible}
+            >
+              {(nlBarVisible || nlBarMounted) && (
+                <div data-testid="panel-nl-formula-bar">
+                  <NLFormulaBarContainer enabled={nlBarVisible} />
+                </div>
+              )}
             </div>
           )}
 

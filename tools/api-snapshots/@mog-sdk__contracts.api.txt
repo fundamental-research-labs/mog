@@ -5027,6 +5027,12 @@ export interface Sheet { /** Array of floating objects on the sheet (deserialize
 
 ## dist/services/index.d.ts
 export interface ClipboardPayload { /** * Cell values as 2D array. ALWAYS present. */ cells: { values: unknown[][]; formulas?: (string | null)[][]; formats?: (Record<string, unknown> | null)[][]; rowC ...
+export interface FormulaAIContextCell { readonly address: string; readonly value: FormulaAIContextCellValue; }
+export interface FormulaAIExplainContext { readonly documentId?: string; readonly workbookId?: string; readonly sheetId?: string; readonly sheetName?: string; readonly cellAddress?: string; readonly s ...
+export interface FormulaAIExplainRequest { readonly formula: string; readonly source: FormulaAIExplainSource; readonly context: FormulaAIExplainContext; }
+export interface FormulaAIExplainResult { /** * One plain-language sentence explaining what the formula does. */ readonly explanation: string; }
+export interface FormulaAIRequestOptions { readonly signal?: AbortSignal; }
+export interface FormulaAIService { explainFormula(request: FormulaAIExplainRequest, options?: FormulaAIRequestOptions): Promise<FormulaAIExplainResult> | FormulaAIExplainResult; }
 export interface IClipboardService { /** Get current clipboard snapshot */ getSnapshot(): KernelClipboardSnapshot; /** Get clipboard payload data */ getPayload(): ClipboardPayload | null; /** Copy dat ...
 export interface IKernelServices { /** Cross-app clipboard service */ readonly clipboard: IClipboardService; /** Cross-app undo/redo service */ readonly undo: IUndoService; /** Cross-app notifications ...
 export interface INotificationsService { getAll(): Notification[]; getCount(): number; notify(message: string, options?: NotificationOptions): NotificationId; info(message: string, options?: Omit<Noti ...
@@ -5041,6 +5047,8 @@ export interface UndoStackItem { /** Description of the operation */ description
 export interface UndoStateChangeEvent { /** Current state */ state: UndoServiceState; /** What triggered this change */ trigger: 'undo' | 'redo' | 'push' | 'clear' | 'external'; }
 export type ClipboardOperation = 'copy' | 'cut' | null
 export type ClipboardState = 'empty' | 'hasCopy' | 'hasCut' | 'pasting'
+export type FormulaAIContextCellValue = string | number | boolean | null
+export type FormulaAIExplainSource = 'typed' | 'active-cell'
 export type NotificationId = string & { readonly __brand: 'NotificationId'; }
 export type NotificationType = 'info' | 'success' | 'warning' | 'error'
 export type UndoError = { type: 'nothing-to-undo'; } | { type: 'nothing-to-redo'; } | { type: 'rust-failed'; reason: string; }

@@ -1,4 +1,5 @@
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
+import type { FormulaAIService } from '@mog-sdk/contracts/services';
 import type { ShellBootstrapResult } from '@mog/shell/bootstrap';
 
 import type {
@@ -81,6 +82,7 @@ export interface SpreadsheetRuntimeAttachmentEnvironment {
   readonly shell: ShellBootstrapResult;
   readonly appKernel: IAppKernelAPI;
   readonly capabilityRegistry: SpreadsheetAppCapabilityRegistry;
+  readonly formulaAI?: FormulaAIService;
   readonly hostCommands?: SpreadsheetAttachmentHostCommands;
   getStatus?(): SpreadsheetAppStatus;
   registerAppBridge(bridge: RegisteredSpreadsheetAppBridge): () => void;

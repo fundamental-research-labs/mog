@@ -785,6 +785,49 @@ test('runtime attachment detach returns workbook session to headless without dis
   }
 });
 
+test('runtime attachment environment exposes configured formula AI service', async () => {
+  let runtime: SpreadsheetRuntime | undefined;
+  const formulaAI = {
+    explainFormula() {
+      return { explanation: 'This formula adds values.' };
+    },
+  };
+  try {
+    runtime = await createSpreadsheetRuntime({
+      ...runtimeOptions('runtime-formula-ai-service-contract'),
+      services: { formulaAI },
+    });
+    await runtime.ready;
+
+    const workbook = await runtime.openWorkbook({
+      workbookId: 'runtime-formula-ai-service-workbook',
+      source: { kind: 'blank' },
+    });
+    await workbook.ready;
+
+    const controller = (runtime as any)[SPREADSHEET_RUNTIME_ATTACHMENT_CONTROLLER];
+    const attachment = await controller.attach({
+      attachmentId: 'attachment-formula-ai',
+      workbook,
+      props: {},
+    });
+
+    assert.equal(attachment.formulaAI, formulaAI);
+    assert.deepEqual(
+      await attachment.formulaAI?.explainFormula({
+        formula: '=SUM(A1:A3)',
+        source: 'active-cell',
+        context: { sheetName: 'Sheet1', cellAddress: 'A4' },
+      }),
+      { explanation: 'This formula adds values.' },
+    );
+
+    await attachment.detach();
+  } finally {
+    await disposeRuntime(runtime);
+  }
+});
+
 test('runtime rejects concurrent full-app attachments for the same workbook session', async () => {
   let runtime: SpreadsheetRuntime | undefined;
   try {

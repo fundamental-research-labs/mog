@@ -83,6 +83,7 @@ export {
 
 export {
   SpreadsheetEmbedRuntimeProvider,
+  useSpreadsheetFormulaAIOptional,
   useSpreadsheetEmbedRuntimeOptional,
   useSpreadsheetEmbedSlot,
   useSpreadsheetHostCommandsOptional,

@@ -66,6 +66,10 @@ export {
 
 // --- Feature gates ---
 export { useFeatureGate, useFeatureGates } from './infra/context/feature-gates-context';
+export {
+  useSpreadsheetEmbedRuntimeOptional,
+  useSpreadsheetFormulaAIOptional,
+} from './infra/context/embed-runtime-context';
 
 // --- Selection hooks ---
 export { useActiveCell } from './hooks/selection/use-active-cell';

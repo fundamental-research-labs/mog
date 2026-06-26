@@ -27,6 +27,7 @@ type SpreadsheetEditModelPolicy = {
 };
 
 type SpreadsheetRuntimeFeatureAvailability = {
+  readonly formulaAI?: boolean;
   readonly versionControl?: boolean;
 };
 
@@ -93,6 +94,9 @@ export function mergeFeatureGates(
     next.capabilities!.versionControl = false;
     next.capabilities!.versionControlMerge = false;
     next.capabilities!['versionControl.merge'] = false;
+  }
+  if (runtimeAvailability.formulaAI !== true) {
+    next.capabilities!.formulaAI = false;
   }
 
   if (editModel?.user === 'none' || editModel?.user === 'read') {

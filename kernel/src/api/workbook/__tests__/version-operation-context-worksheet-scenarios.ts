@@ -12,16 +12,22 @@ export function registerVersionOperationContextWorksheetScenarios(): void {
         name: 'setCell',
         operationIdPrefix: 'worksheet.setCell',
         run: (worksheet: WorksheetImpl) => worksheet.setCell('A1', 'value'),
+        directEdits: [{ sheetId: SHEET_ID, row: 0, col: 0 }],
       },
       {
         name: 'setCells',
         operationIdPrefix: 'worksheet.setCells',
         run: (worksheet: WorksheetImpl) => worksheet.setCells([{ address: 'B1', value: 42 }]),
+        directEdits: [{ sheetId: SHEET_ID, row: 0, col: 1 }],
       },
       {
         name: 'setRange',
         operationIdPrefix: 'worksheet.setRange',
         run: (worksheet: WorksheetImpl) => worksheet.setRange('C1:D1', [[1, 2]]),
+        directEdits: [
+          { sheetId: SHEET_ID, row: 0, col: 2 },
+          { sheetId: SHEET_ID, row: 0, col: 3 },
+        ],
       },
       {
         name: 'whatIf.createDataTable',
@@ -44,10 +50,16 @@ export function registerVersionOperationContextWorksheetScenarios(): void {
             colValues: [],
             targetRange: 'B1:B1',
           }),
+        directEdits: [{ sheetId: SHEET_ID, row: 0, col: 1 }],
       },
     ])(
       '$name carries context into version capture',
-      async ({ operation = 'compute_batch_set_cells_by_position', operationIdPrefix, run }) => {
+      async ({
+        operation = 'compute_batch_set_cells_by_position',
+        operationIdPrefix,
+        run,
+        directEdits,
+      }) => {
         const { capture, worksheet } = createWorksheetFixture();
 
         await run(worksheet);
@@ -57,6 +69,7 @@ export function registerVersionOperationContextWorksheetScenarios(): void {
           operationIdPrefix,
           sheetIds: [SHEET_ID],
           domainIds: ['cells'],
+          directEdits,
         });
       },
     );

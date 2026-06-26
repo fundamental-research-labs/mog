@@ -2,16 +2,18 @@ import type { FormulaIdentityCapture } from './semantic-mutation-capture-formula
 import { mutationResult } from './semantic-mutation-capture-formula-test-helpers';
 
 const FORMULA_IDENTITY_OPERATION = 'compute_batch_set_cells_by_position';
+const FORMULA_IDENTITY_DIRECT_EDITS = [{ sheetId: 'sheet-1', row: 1, col: 0 }];
 
 export async function recordCanonicalFormulaIdentityMutation(
   capture: FormulaIdentityCapture,
 ): Promise<void> {
   await capture.mutationCapture.recordPreMutation?.({
     operation: FORMULA_IDENTITY_OPERATION,
+    directEdits: FORMULA_IDENTITY_DIRECT_EDITS,
   });
   capture.mutationCapture.recordMutationResult({
     operation: FORMULA_IDENTITY_OPERATION,
-    directEdits: [{ sheetId: 'sheet-1', row: 1, col: 0 }],
+    directEdits: FORMULA_IDENTITY_DIRECT_EDITS,
     result: mutationResult({
       recalc: {
         changedCells: [

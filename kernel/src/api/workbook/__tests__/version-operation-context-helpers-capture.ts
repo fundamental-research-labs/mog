@@ -4,6 +4,12 @@ import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import { CREATED_AT_MS, DOCUMENT_ID } from './version-operation-context-helpers-constants';
 
+type DirectEditExpectation = {
+  readonly sheetId: string;
+  readonly row: number;
+  readonly col: number;
+};
+
 type MutationCapture = {
   recordPreMutation: jest.Mock;
   recordMutationResult: jest.Mock;
@@ -21,6 +27,7 @@ export function expectCapturedContext(
     operationIdPrefix: string;
     domainIds: readonly string[];
     sheetIds?: readonly string[];
+    directEdits?: readonly DirectEditExpectation[];
   },
 ): void {
   const operationContext = expect.objectContaining({
@@ -38,14 +45,17 @@ export function expectCapturedContext(
     capturePolicy: 'commitEligible',
     writeAdmissionMode: 'capture',
   });
-  expect(capture.recordPreMutation).toHaveBeenCalledWith({
+  const captureInput = expect.objectContaining({
     operation: expected.operation,
     operationContext,
+    ...(expected.directEdits ? { directEdits: [...expected.directEdits] } : {}),
   });
+  expect(capture.recordPreMutation).toHaveBeenCalledWith(captureInput);
   expect(capture.recordMutationResult).toHaveBeenCalledWith(
     expect.objectContaining({
       operation: expected.operation,
       operationContext,
+      ...(expected.directEdits ? { directEdits: [...expected.directEdits] } : {}),
     }),
   );
 }

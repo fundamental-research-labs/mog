@@ -41,6 +41,9 @@ const PUBLIC_DECLARATIONS = new Set([
   'agent-guidance/types.d.ts',
   'boot.d.ts',
   'collaborative-engine.d.ts',
+  'control-plane.d.ts',
+  'document-byte-sync-port.d.ts',
+  'document-sync-port-types.d.ts',
   'public-kernel-facade.d.ts',
 ]);
 

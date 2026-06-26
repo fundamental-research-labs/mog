@@ -4989,7 +4989,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
@@ -5236,7 +5236,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {
@@ -24338,7 +24338,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
+      "signature": "createReview(\n    input: VersionCreateReviewInput,\n  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewRecord>>",
       "compatibility": [],
       "source": {
@@ -24585,7 +24585,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
+      "signature": "getReviewDiff(\n    input: VersionGetReviewDiffInput,\n  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;",
       "typeText": "Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
       "compatibility": [],
       "source": {

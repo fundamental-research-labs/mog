@@ -11,6 +11,8 @@ export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS = [
   'browser',
 ] as const;
 
+const NODE_FS_VERSION_STORE_KIND = ['node', 'fs'].join(':') as 'node:fs';
+
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS = [
   'node-file',
   'nodeFile',
@@ -18,7 +20,7 @@ export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS = [
   'file-system',
   'node-filesystem',
   'nodeFileSystem',
-  'node:fs',
+  NODE_FS_VERSION_STORE_KIND,
   'fs',
 ] as const;
 

@@ -5,6 +5,7 @@
 export class CollaborativeEngine { private readonly _inner; private readonly _coordinator; private readonly _participantId; private readonly _syncMode; private readonly _batchSize; private _pendingMut ...
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
 export const MogDocumentFactory: IMogDocumentFactory
@@ -22,6 +23,7 @@ export const colToLetter: (col: number) => string
 export const column: (index: number) => string
 export const columnIndex: (name: string) => number
 export const columnName: (index: number) => string
+export const controlPlaneEntrypoints: ControlPlaneEntrypointInventory
 export const offset: (ref: string, dr: number, dc: number) => string
 export const parse: (ref: string) => ParsedCellAddress | null
 export const parseAddress: (ref: string) => ParsedCellAddress | null
@@ -34,10 +36,12 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
+export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
 export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
 export function preflightMogCode(code: string): ApiGuidancePreflightResult
 export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
 export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
@@ -68,6 +72,25 @@ export interface ChartRasterRequest { readonly version: 1; readonly marks: reado
 export interface ChartRasterResult { readonly bytes: Uint8Array; readonly format: ChartRasterImageExportFormat; readonly width: number; readonly height: number; }
 export interface ChartRenderingOptions { /** * Explicit raster backend. When present, PNG/JPEG chart export uses this * backend instead of the native Node raster function. */ readonly rasterBackend?:  ...
 export interface CollaborativeEngineOptions { /** Pre-loaded napi addon module. */ computeAddon: NapiAddonModule; /** Coordinator handle (from coordinator_create). If not provided, one is created. */  ...
+export interface ControlPlaneArtifactRuntimeRange { readonly runtimeKind?: ControlPlaneRuntimeKind; readonly artifactId?: string; readonly packageName?: string; readonly packageVersion?: string; reado ...
+export interface ControlPlaneCapabilityGateScope { readonly workbookId?: string; readonly sheetId?: string; readonly featureId?: string; readonly domainIds?: readonly string[]; readonly surfaceIds?: r ...
+export interface ControlPlaneCapabilityGateScopeDelta { readonly added?: ControlPlaneCapabilityGateScope; readonly removed?: ControlPlaneCapabilityGateScope; readonly changedFields?: readonly string[] ...
+export interface ControlPlaneCapabilityGateSnapshot { readonly gateId: string; readonly stage: ControlPlaneCapabilityGateRolloutStage; readonly scope?: ControlPlaneCapabilityGateScope; readonly status ...
+export interface ControlPlaneCasToken { readonly token: string; readonly version: string; }
+export interface ControlPlaneClient { readonly entrypoints: ControlPlaneEntrypointInventory; readCapabilityGates(request?: ControlPlaneReadRequest): Promise<ControlPlaneReadSnapshot>; dryRunCapability ...
+export interface ControlPlaneCompareAndSwapRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRollo ...
+export interface ControlPlaneCompareAndSwapResult { readonly status: ControlPlaneCompareAndSwapResultStatus; readonly reason: ControlPlaneCompareAndSwapResultReason; readonly applied: false; readonly  ...
+export interface ControlPlaneDiagnostic { readonly severity: ControlPlaneDiagnosticSeverity; readonly code: string; readonly message?: string; readonly entrypointId?: ControlPlaneEntrypointId; }
+export interface ControlPlaneDisposable { dispose(): void; }
+export interface ControlPlaneDryRunRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRolloutStage; ...
+export interface ControlPlaneDryRunResult { readonly status: ControlPlaneDryRunResultStatus; readonly reason: ControlPlaneDryRunResultReason; readonly applied: false; readonly casKey: string; readonly ...
+export interface ControlPlaneEntrypointDescriptor { readonly id: ControlPlaneEntrypointId; readonly status: ControlPlaneEntrypointStatus; readonly description?: string; }
+export interface ControlPlaneEntrypointInventory { readonly entrypoints: readonly ControlPlaneEntrypointDescriptor[]; }
+export interface ControlPlanePreflightDigest { readonly algorithm: ControlPlanePreflightDigestAlgorithm; readonly value: string; }
+export interface ControlPlaneReadRequest { readonly scope?: ControlPlaneCapabilityGateScope; }
+export interface ControlPlaneReadSnapshot { readonly status: ControlPlaneReadSnapshotStatus; readonly scope?: ControlPlaneCapabilityGateScope; readonly gates: readonly ControlPlaneCapabilityGateSnapsh ...
+export interface ControlPlaneShadowObservationEvent { readonly entrypointId: Extract<ControlPlaneEntrypointId, 'control-plane.shadow.observe'>; readonly scope?: ControlPlaneCapabilityGateScope; readon ...
+export interface ControlPlaneShadowObservationOptions { readonly scope?: ControlPlaneCapabilityGateScope; }
 export interface CreateWorkbookOptions { documentId?: string; /** XLSX data shorthand — equivalent to `source: { type: 'bytes', data: xlsx }`. */ xlsx?: Uint8Array; /** Full source descriptor (for Tau ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface DocumentSecurityConfig { /** * Callback to resolve the current principal. Called once per document * session; the returned principal is forwarded to Rust and governs * every bridge ca ...
@@ -142,7 +165,6 @@ export interface TypesNode { readonly [typeName: string]: TypeResult; }
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
 export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
-export type * from './control-plane.js'
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
 export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
@@ -158,9 +180,23 @@ export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type CellWriteData = Pick<StoreCellData, 'raw' | 'formula' | 'identityFormula' | 'computed'>
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions
+export type ControlPlaneCapabilityGateRolloutStage = 'disabled' | 'shadow-only' | 'headless-local' | 'ui-beta' | 'collab-interop-beta' | 'default-on'
+export type ControlPlaneCapabilityGateStage = ControlPlaneCapabilityGateRolloutStage
+export type ControlPlaneCompareAndSwapResultReason = 'unavailable'
+export type ControlPlaneCompareAndSwapResultStatus = 'not-applied'
+export type ControlPlaneDiagnosticSeverity = 'info' | 'warning' | 'error'
+export type ControlPlaneDryRunResultReason = 'noop' | 'unavailable'
+export type ControlPlaneDryRunResultStatus = 'not-applied'
+export type ControlPlaneEntrypointId = (typeof CONTROL_PLANE_ENTRYPOINT_IDS)[number]
+export type ControlPlaneEntrypointStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlanePreflightDigestAlgorithm = 'sha256' | 'opaque'
+export type ControlPlaneReadSnapshotStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlaneRuntimeKind = 'headless-sdk' | 'browser' | 'workerd' | 'tauri' | 'node' | 'unknown'
+export type ControlPlaneShadowObservationHook = (event: ControlPlaneShadowObservationEvent) => void
 export type DescribeResult = OverviewResult | InterfaceResult | MethodResult | TypeResult | null
 export type DocumentSource = { readonly type: 'path'; readonly path: string; } | { readonly type: 'bytes'; readonly data: Uint8Array; }
 export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
+export type GateEvidencePreflightDigest = ControlPlanePreflightDigest
 export type HeadlessCodeExecutorFactory = (engine: HeadlessEngine) => { execute(code: string, options?: CodeExecutionOptions): Promise<CodeExecutionResult>; cancelExecution?(executionId: string): void ...
 export type MogCloseBehavior = 'save' | 'skipSave'
 export type MogDocumentDurabilityMode = 'ephemeral' | 'durableLocal' | 'localFirst' | 'remoteBacked' | 'readOnly'
@@ -186,12 +222,12 @@ export type SyncMode = 'immediate' | 'batch' | 'manual'
 export type TagMatcher = string
 export type TypedMogSdkEvent<K extends MogSdkEventType> = K extends keyof MogSdkEventPayloads ? MogSdkEvent<MogSdkEventPayloads[K]> : MogSdkEvent<unknown>
 export type { SheetId }
-export { CONTROL_PLANE_ENTRYPOINT_IDS, controlPlaneEntrypoints, createInertControlPlane, observeControlPlaneShadow, } from './control-plane.js'
 
 ## dist/index.d.ts
 export class CollaborativeEngine { private readonly _inner; private readonly _coordinator; private readonly _participantId; private readonly _syncMode; private readonly _batchSize; private _pendingMut ...
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
 export const MogDocumentFactory: IMogDocumentFactory
@@ -209,6 +245,7 @@ export const colToLetter: (col: number) => string
 export const column: (index: number) => string
 export const columnIndex: (name: string) => number
 export const columnName: (index: number) => string
+export const controlPlaneEntrypoints: ControlPlaneEntrypointInventory
 export const offset: (ref: string, dr: number, dc: number) => string
 export const parse: (ref: string) => ParsedCellAddress | null
 export const parseAddress: (ref: string) => ParsedCellAddress | null
@@ -221,10 +258,12 @@ export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
+export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
 export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
 export function preflightMogCode(code: string): ApiGuidancePreflightResult
 export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
 export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
@@ -255,6 +294,25 @@ export interface ChartRasterRequest { readonly version: 1; readonly marks: reado
 export interface ChartRasterResult { readonly bytes: Uint8Array; readonly format: ChartRasterImageExportFormat; readonly width: number; readonly height: number; }
 export interface ChartRenderingOptions { /** * Explicit raster backend. When present, PNG/JPEG chart export uses this * backend instead of the native Node raster function. */ readonly rasterBackend?:  ...
 export interface CollaborativeEngineOptions { /** Pre-loaded napi addon module. */ computeAddon: NapiAddonModule; /** Coordinator handle (from coordinator_create). If not provided, one is created. */  ...
+export interface ControlPlaneArtifactRuntimeRange { readonly runtimeKind?: ControlPlaneRuntimeKind; readonly artifactId?: string; readonly packageName?: string; readonly packageVersion?: string; reado ...
+export interface ControlPlaneCapabilityGateScope { readonly workbookId?: string; readonly sheetId?: string; readonly featureId?: string; readonly domainIds?: readonly string[]; readonly surfaceIds?: r ...
+export interface ControlPlaneCapabilityGateScopeDelta { readonly added?: ControlPlaneCapabilityGateScope; readonly removed?: ControlPlaneCapabilityGateScope; readonly changedFields?: readonly string[] ...
+export interface ControlPlaneCapabilityGateSnapshot { readonly gateId: string; readonly stage: ControlPlaneCapabilityGateRolloutStage; readonly scope?: ControlPlaneCapabilityGateScope; readonly status ...
+export interface ControlPlaneCasToken { readonly token: string; readonly version: string; }
+export interface ControlPlaneClient { readonly entrypoints: ControlPlaneEntrypointInventory; readCapabilityGates(request?: ControlPlaneReadRequest): Promise<ControlPlaneReadSnapshot>; dryRunCapability ...
+export interface ControlPlaneCompareAndSwapRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRollo ...
+export interface ControlPlaneCompareAndSwapResult { readonly status: ControlPlaneCompareAndSwapResultStatus; readonly reason: ControlPlaneCompareAndSwapResultReason; readonly applied: false; readonly  ...
+export interface ControlPlaneDiagnostic { readonly severity: ControlPlaneDiagnosticSeverity; readonly code: string; readonly message?: string; readonly entrypointId?: ControlPlaneEntrypointId; }
+export interface ControlPlaneDisposable { dispose(): void; }
+export interface ControlPlaneDryRunRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRolloutStage; ...
+export interface ControlPlaneDryRunResult { readonly status: ControlPlaneDryRunResultStatus; readonly reason: ControlPlaneDryRunResultReason; readonly applied: false; readonly casKey: string; readonly ...
+export interface ControlPlaneEntrypointDescriptor { readonly id: ControlPlaneEntrypointId; readonly status: ControlPlaneEntrypointStatus; readonly description?: string; }
+export interface ControlPlaneEntrypointInventory { readonly entrypoints: readonly ControlPlaneEntrypointDescriptor[]; }
+export interface ControlPlanePreflightDigest { readonly algorithm: ControlPlanePreflightDigestAlgorithm; readonly value: string; }
+export interface ControlPlaneReadRequest { readonly scope?: ControlPlaneCapabilityGateScope; }
+export interface ControlPlaneReadSnapshot { readonly status: ControlPlaneReadSnapshotStatus; readonly scope?: ControlPlaneCapabilityGateScope; readonly gates: readonly ControlPlaneCapabilityGateSnapsh ...
+export interface ControlPlaneShadowObservationEvent { readonly entrypointId: Extract<ControlPlaneEntrypointId, 'control-plane.shadow.observe'>; readonly scope?: ControlPlaneCapabilityGateScope; readon ...
+export interface ControlPlaneShadowObservationOptions { readonly scope?: ControlPlaneCapabilityGateScope; }
 export interface CreateWorkbookOptions { documentId?: string; /** XLSX data shorthand — equivalent to `source: { type: 'bytes', data: xlsx }`. */ xlsx?: Uint8Array; /** Full source descriptor (for Tau ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface DocumentSecurityConfig { /** * Callback to resolve the current principal. Called once per document * session; the returned principal is forwarded to Rust and governs * every bridge ca ...
@@ -329,7 +387,6 @@ export interface TypesNode { readonly [typeName: string]: TypeResult; }
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
 export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
-export type * from './control-plane.js'
 export type AccessLevel = 'none' | 'structure' | 'read' | 'write' | 'admin'
 export type AccessTarget = { readonly kind: 'workbook'; } | { readonly kind: 'sheet'; readonly sheetId: SheetId; } | { readonly kind: 'column'; readonly colId: ColId; readonly sheetId: SheetId; }
 export type ApiCompatibilityStatus = 'canonical' | 'contract_extension' | 'supported_alias' | 'input_alias' | 'deprecated_alias' | 'semantic_compatibility' | 'structured_diagnostic' | 'rejected'
@@ -345,9 +402,23 @@ export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type CellWriteData = Pick<StoreCellData, 'raw' | 'formula' | 'identityFormula' | 'computed'>
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions
+export type ControlPlaneCapabilityGateRolloutStage = 'disabled' | 'shadow-only' | 'headless-local' | 'ui-beta' | 'collab-interop-beta' | 'default-on'
+export type ControlPlaneCapabilityGateStage = ControlPlaneCapabilityGateRolloutStage
+export type ControlPlaneCompareAndSwapResultReason = 'unavailable'
+export type ControlPlaneCompareAndSwapResultStatus = 'not-applied'
+export type ControlPlaneDiagnosticSeverity = 'info' | 'warning' | 'error'
+export type ControlPlaneDryRunResultReason = 'noop' | 'unavailable'
+export type ControlPlaneDryRunResultStatus = 'not-applied'
+export type ControlPlaneEntrypointId = (typeof CONTROL_PLANE_ENTRYPOINT_IDS)[number]
+export type ControlPlaneEntrypointStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlanePreflightDigestAlgorithm = 'sha256' | 'opaque'
+export type ControlPlaneReadSnapshotStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlaneRuntimeKind = 'headless-sdk' | 'browser' | 'workerd' | 'tauri' | 'node' | 'unknown'
+export type ControlPlaneShadowObservationHook = (event: ControlPlaneShadowObservationEvent) => void
 export type DescribeResult = OverviewResult | InterfaceResult | MethodResult | TypeResult | null
 export type DocumentSource = { readonly type: 'path'; readonly path: string; } | { readonly type: 'bytes'; readonly data: Uint8Array; }
 export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
+export type GateEvidencePreflightDigest = ControlPlanePreflightDigest
 export type HeadlessCodeExecutorFactory = (engine: HeadlessEngine) => { execute(code: string, options?: CodeExecutionOptions): Promise<CodeExecutionResult>; cancelExecution?(executionId: string): void ...
 export type MogCloseBehavior = 'save' | 'skipSave'
 export type MogDocumentDurabilityMode = 'ephemeral' | 'durableLocal' | 'localFirst' | 'remoteBacked' | 'readOnly'
@@ -373,7 +444,6 @@ export type SyncMode = 'immediate' | 'batch' | 'manual'
 export type TagMatcher = string
 export type TypedMogSdkEvent<K extends MogSdkEventType> = K extends keyof MogSdkEventPayloads ? MogSdkEvent<MogSdkEventPayloads[K]> : MogSdkEvent<unknown>
 export type { SheetId }
-export { CONTROL_PLANE_ENTRYPOINT_IDS, controlPlaneEntrypoints, createInertControlPlane, observeControlPlaneShadow, } from './control-plane.js'
 
 ## dist/version-store.d.ts
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
@@ -400,6 +470,7 @@ export type MogSdkVersionStoreRuntime = 'node' | 'wasm'
 
 ## dist/wasm.d.ts
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
 export const Utils: PublicUtils
@@ -409,6 +480,7 @@ export const colToLetter: (col: number) => string
 export const column: (index: number) => string
 export const columnIndex: (name: string) => number
 export const columnName: (index: number) => string
+export const controlPlaneEntrypoints: ControlPlaneEntrypointInventory
 export const offset: (ref: string, dr: number, dc: number) => string
 export const parse: (ref: string) => ParsedCellAddress | null
 export const parseAddress: (ref: string) => ParsedCellAddress | null
@@ -417,17 +489,38 @@ export const parseCellRange: (ref: string) => ParsedCellRange | null
 export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
+export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
 export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array, importOptions?: DocumentImportOptions): Promise<Workbook>
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
 export interface ChartRasterBackend { readonly id: string; readonly runtime: ChartRasterBackendRuntime; readonly supportedFormats: readonly ChartRasterImageExportFormat[]; render(request: ChartRasterR ...
 export interface ChartRasterRequest { readonly version: 1; readonly marks: readonly Record<string, unknown>[]; readonly options: { readonly format: ChartRasterImageExportFormat; readonly width: number ...
 export interface ChartRasterResult { readonly bytes: Uint8Array; readonly format: ChartRasterImageExportFormat; readonly width: number; readonly height: number; }
 export interface ChartRenderingOptions { /** * Explicit raster backend. When present, PNG/JPEG chart export uses this * backend instead of the native Node raster function. */ readonly rasterBackend?:  ...
+export interface ControlPlaneArtifactRuntimeRange { readonly runtimeKind?: ControlPlaneRuntimeKind; readonly artifactId?: string; readonly packageName?: string; readonly packageVersion?: string; reado ...
+export interface ControlPlaneCapabilityGateScope { readonly workbookId?: string; readonly sheetId?: string; readonly featureId?: string; readonly domainIds?: readonly string[]; readonly surfaceIds?: r ...
+export interface ControlPlaneCapabilityGateScopeDelta { readonly added?: ControlPlaneCapabilityGateScope; readonly removed?: ControlPlaneCapabilityGateScope; readonly changedFields?: readonly string[] ...
+export interface ControlPlaneCapabilityGateSnapshot { readonly gateId: string; readonly stage: ControlPlaneCapabilityGateRolloutStage; readonly scope?: ControlPlaneCapabilityGateScope; readonly status ...
+export interface ControlPlaneCasToken { readonly token: string; readonly version: string; }
+export interface ControlPlaneClient { readonly entrypoints: ControlPlaneEntrypointInventory; readCapabilityGates(request?: ControlPlaneReadRequest): Promise<ControlPlaneReadSnapshot>; dryRunCapability ...
+export interface ControlPlaneCompareAndSwapRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRollo ...
+export interface ControlPlaneCompareAndSwapResult { readonly status: ControlPlaneCompareAndSwapResultStatus; readonly reason: ControlPlaneCompareAndSwapResultReason; readonly applied: false; readonly  ...
+export interface ControlPlaneDiagnostic { readonly severity: ControlPlaneDiagnosticSeverity; readonly code: string; readonly message?: string; readonly entrypointId?: ControlPlaneEntrypointId; }
+export interface ControlPlaneDisposable { dispose(): void; }
+export interface ControlPlaneDryRunRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRolloutStage; ...
+export interface ControlPlaneDryRunResult { readonly status: ControlPlaneDryRunResultStatus; readonly reason: ControlPlaneDryRunResultReason; readonly applied: false; readonly casKey: string; readonly ...
+export interface ControlPlaneEntrypointDescriptor { readonly id: ControlPlaneEntrypointId; readonly status: ControlPlaneEntrypointStatus; readonly description?: string; }
+export interface ControlPlaneEntrypointInventory { readonly entrypoints: readonly ControlPlaneEntrypointDescriptor[]; }
+export interface ControlPlanePreflightDigest { readonly algorithm: ControlPlanePreflightDigestAlgorithm; readonly value: string; }
+export interface ControlPlaneReadRequest { readonly scope?: ControlPlaneCapabilityGateScope; }
+export interface ControlPlaneReadSnapshot { readonly status: ControlPlaneReadSnapshotStatus; readonly scope?: ControlPlaneCapabilityGateScope; readonly gates: readonly ControlPlaneCapabilityGateSnapsh ...
+export interface ControlPlaneShadowObservationEvent { readonly entrypointId: Extract<ControlPlaneEntrypointId, 'control-plane.shadow.observe'>; readonly scope?: ControlPlaneCapabilityGateScope; readon ...
+export interface ControlPlaneShadowObservationOptions { readonly scope?: ControlPlaneCapabilityGateScope; }
 export interface CreateWorkbookOptions { documentId?: string; wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>; xlsx?: Uint8Array; source?: Extract<NativeCreateWorkbookOptions['source'],  ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface MogSdkBrowserVersionStoreConfig extends MogSdkVersionStoreScopeOptions { readonly kind: 'browser'; /** Browser-backed SDK version history currently maps to IndexedDB. */ readonly prov ...
@@ -448,12 +541,25 @@ export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = R
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
 export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
-export type * from './control-plane.js'
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions
+export type ControlPlaneCapabilityGateRolloutStage = 'disabled' | 'shadow-only' | 'headless-local' | 'ui-beta' | 'collab-interop-beta' | 'default-on'
+export type ControlPlaneCapabilityGateStage = ControlPlaneCapabilityGateRolloutStage
+export type ControlPlaneCompareAndSwapResultReason = 'unavailable'
+export type ControlPlaneCompareAndSwapResultStatus = 'not-applied'
+export type ControlPlaneDiagnosticSeverity = 'info' | 'warning' | 'error'
+export type ControlPlaneDryRunResultReason = 'noop' | 'unavailable'
+export type ControlPlaneDryRunResultStatus = 'not-applied'
+export type ControlPlaneEntrypointId = (typeof CONTROL_PLANE_ENTRYPOINT_IDS)[number]
+export type ControlPlaneEntrypointStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlanePreflightDigestAlgorithm = 'sha256' | 'opaque'
+export type ControlPlaneReadSnapshotStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlaneRuntimeKind = 'headless-sdk' | 'browser' | 'workerd' | 'tauri' | 'node' | 'unknown'
+export type ControlPlaneShadowObservationHook = (event: ControlPlaneShadowObservationEvent) => void
 export type DocumentSource = { readonly type: 'path'; readonly path: string; } | { readonly type: 'bytes'; readonly data: Uint8Array; }
 export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
+export type GateEvidencePreflightDigest = ControlPlanePreflightDigest
 export type MogSdkSupportedVersionStoreKind = (typeof MOG_SDK_SUPPORTED_VERSION_STORE_KINDS)[number]
 export type MogSdkUnsupportedVersionStoreKind = (typeof MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS)[number]
 export type MogSdkVersionStoreConfig = MogSdkSupportedVersionStoreKind | MogSdkVersionStoreConfigObject
@@ -461,10 +567,10 @@ export type MogSdkVersionStoreConfigObject = MogSdkMemoryVersionStoreConfig | Mo
 export type MogSdkVersionStoreDiagnosticCode = 'MOG_SDK_VERSION_STORE_INVALID_CONFIG' | 'MOG_SDK_VERSION_STORE_UNSUPPORTED'
 export type MogSdkVersionStoreRuntime = 'node' | 'wasm'
 export type { SheetId }
-export { CONTROL_PLANE_ENTRYPOINT_IDS, controlPlaneEntrypoints, createInertControlPlane, observeControlPlaneShadow, } from './control-plane.js'
 
 ## dist/workerd.d.ts
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
 export const Utils: PublicUtils
@@ -474,6 +580,7 @@ export const colToLetter: (col: number) => string
 export const column: (index: number) => string
 export const columnIndex: (name: string) => number
 export const columnName: (index: number) => string
+export const controlPlaneEntrypoints: ControlPlaneEntrypointInventory
 export const createWorkbook: CreateWasmWorkbook
 export const offset: (ref: string, dr: number, dc: number) => string
 export const parse: (ref: string) => ParsedCellAddress | null
@@ -483,17 +590,38 @@ export const parseCellRange: (ref: string) => ParsedCellRange | null
 export const rangeAddress: (row1: number, col1: number, row2: number, col2: number) => string
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
+export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
 export function createWorkbook(options: CreateWorkbookOptions): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array): Promise<Workbook>
 export function createWorkbook(xlsx: Uint8Array, importOptions?: DocumentImportOptions): Promise<Workbook>
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
 export interface ChartRasterBackend { readonly id: string; readonly runtime: ChartRasterBackendRuntime; readonly supportedFormats: readonly ChartRasterImageExportFormat[]; render(request: ChartRasterR ...
 export interface ChartRasterRequest { readonly version: 1; readonly marks: readonly Record<string, unknown>[]; readonly options: { readonly format: ChartRasterImageExportFormat; readonly width: number ...
 export interface ChartRasterResult { readonly bytes: Uint8Array; readonly format: ChartRasterImageExportFormat; readonly width: number; readonly height: number; }
 export interface ChartRenderingOptions { /** * Explicit raster backend. When present, PNG/JPEG chart export uses this * backend instead of the native Node raster function. */ readonly rasterBackend?:  ...
+export interface ControlPlaneArtifactRuntimeRange { readonly runtimeKind?: ControlPlaneRuntimeKind; readonly artifactId?: string; readonly packageName?: string; readonly packageVersion?: string; reado ...
+export interface ControlPlaneCapabilityGateScope { readonly workbookId?: string; readonly sheetId?: string; readonly featureId?: string; readonly domainIds?: readonly string[]; readonly surfaceIds?: r ...
+export interface ControlPlaneCapabilityGateScopeDelta { readonly added?: ControlPlaneCapabilityGateScope; readonly removed?: ControlPlaneCapabilityGateScope; readonly changedFields?: readonly string[] ...
+export interface ControlPlaneCapabilityGateSnapshot { readonly gateId: string; readonly stage: ControlPlaneCapabilityGateRolloutStage; readonly scope?: ControlPlaneCapabilityGateScope; readonly status ...
+export interface ControlPlaneCasToken { readonly token: string; readonly version: string; }
+export interface ControlPlaneClient { readonly entrypoints: ControlPlaneEntrypointInventory; readCapabilityGates(request?: ControlPlaneReadRequest): Promise<ControlPlaneReadSnapshot>; dryRunCapability ...
+export interface ControlPlaneCompareAndSwapRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRollo ...
+export interface ControlPlaneCompareAndSwapResult { readonly status: ControlPlaneCompareAndSwapResultStatus; readonly reason: ControlPlaneCompareAndSwapResultReason; readonly applied: false; readonly  ...
+export interface ControlPlaneDiagnostic { readonly severity: ControlPlaneDiagnosticSeverity; readonly code: string; readonly message?: string; readonly entrypointId?: ControlPlaneEntrypointId; }
+export interface ControlPlaneDisposable { dispose(): void; }
+export interface ControlPlaneDryRunRequest { readonly casKey: string; readonly expectedPriorStage: ControlPlaneCapabilityGateRolloutStage; readonly targetStage: ControlPlaneCapabilityGateRolloutStage; ...
+export interface ControlPlaneDryRunResult { readonly status: ControlPlaneDryRunResultStatus; readonly reason: ControlPlaneDryRunResultReason; readonly applied: false; readonly casKey: string; readonly ...
+export interface ControlPlaneEntrypointDescriptor { readonly id: ControlPlaneEntrypointId; readonly status: ControlPlaneEntrypointStatus; readonly description?: string; }
+export interface ControlPlaneEntrypointInventory { readonly entrypoints: readonly ControlPlaneEntrypointDescriptor[]; }
+export interface ControlPlanePreflightDigest { readonly algorithm: ControlPlanePreflightDigestAlgorithm; readonly value: string; }
+export interface ControlPlaneReadRequest { readonly scope?: ControlPlaneCapabilityGateScope; }
+export interface ControlPlaneReadSnapshot { readonly status: ControlPlaneReadSnapshotStatus; readonly scope?: ControlPlaneCapabilityGateScope; readonly gates: readonly ControlPlaneCapabilityGateSnapsh ...
+export interface ControlPlaneShadowObservationEvent { readonly entrypointId: Extract<ControlPlaneEntrypointId, 'control-plane.shadow.observe'>; readonly scope?: ControlPlaneCapabilityGateScope; readon ...
+export interface ControlPlaneShadowObservationOptions { readonly scope?: ControlPlaneCapabilityGateScope; }
 export interface CreateWorkbookOptions { documentId?: string; wasmModule?: WebAssembly.Module | Promise<WebAssembly.Module>; xlsx?: Uint8Array; source?: Extract<NativeCreateWorkbookOptions['source'],  ...
 export interface DocumentImportOptions extends CreateDocumentOptions { /** * Maximum number of cells to import. * Default: 1,000,000 * Files exceeding this limit will fail the pre-flight check. */ max ...
 export interface MogSdkBrowserVersionStoreConfig extends MogSdkVersionStoreScopeOptions { readonly kind: 'browser'; /** Browser-backed SDK version history currently maps to IndexedDB. */ readonly prov ...
@@ -514,12 +642,25 @@ export interface ScreenshotOptions { /** Device pixel ratio (1 = standard, 2 = R
 export interface Workbook { /** Whether the workbook is in auto-save mode. Always false until auto-save is implemented. */ readonly autoSave: boolean; /** Whether the workbook uses system (culture-der ...
 export interface WorkbookSecurity { /** * Add a new access policy. Rust enforces capability attenuation: the * caller's effective workbook level must be >= the granted level. * * @returns The assigned ...
 export interface Worksheet extends WorksheetFill { /** The internal sheet ID (immutable). */ readonly sheetId: SheetId; /** Sheet name. SYNC — cached, updated on sheet mutations. */ readonly name: str ...
-export type * from './control-plane.js'
 export type CellRawValue = CellValuePrimitive | RichText
 export type CellValue = CellValuePrimitive | CellError
 export type ChartRenderingConfig = 'auto' | ChartRenderingOptions
+export type ControlPlaneCapabilityGateRolloutStage = 'disabled' | 'shadow-only' | 'headless-local' | 'ui-beta' | 'collab-interop-beta' | 'default-on'
+export type ControlPlaneCapabilityGateStage = ControlPlaneCapabilityGateRolloutStage
+export type ControlPlaneCompareAndSwapResultReason = 'unavailable'
+export type ControlPlaneCompareAndSwapResultStatus = 'not-applied'
+export type ControlPlaneDiagnosticSeverity = 'info' | 'warning' | 'error'
+export type ControlPlaneDryRunResultReason = 'noop' | 'unavailable'
+export type ControlPlaneDryRunResultStatus = 'not-applied'
+export type ControlPlaneEntrypointId = (typeof CONTROL_PLANE_ENTRYPOINT_IDS)[number]
+export type ControlPlaneEntrypointStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlanePreflightDigestAlgorithm = 'sha256' | 'opaque'
+export type ControlPlaneReadSnapshotStatus = 'available' | 'disabled' | 'unavailable'
+export type ControlPlaneRuntimeKind = 'headless-sdk' | 'browser' | 'workerd' | 'tauri' | 'node' | 'unknown'
+export type ControlPlaneShadowObservationHook = (event: ControlPlaneShadowObservationEvent) => void
 export type DocumentSource = { readonly type: 'path'; readonly path: string; } | { readonly type: 'bytes'; readonly data: Uint8Array; }
 export type FormulaA1 = string & { readonly [formulaA1Brand]: true; }
+export type GateEvidencePreflightDigest = ControlPlanePreflightDigest
 export type MogSdkSupportedVersionStoreKind = (typeof MOG_SDK_SUPPORTED_VERSION_STORE_KINDS)[number]
 export type MogSdkUnsupportedVersionStoreKind = (typeof MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS)[number]
 export type MogSdkVersionStoreConfig = MogSdkSupportedVersionStoreKind | MogSdkVersionStoreConfigObject
@@ -527,4 +668,3 @@ export type MogSdkVersionStoreConfigObject = MogSdkMemoryVersionStoreConfig | Mo
 export type MogSdkVersionStoreDiagnosticCode = 'MOG_SDK_VERSION_STORE_INVALID_CONFIG' | 'MOG_SDK_VERSION_STORE_UNSUPPORTED'
 export type MogSdkVersionStoreRuntime = 'node' | 'wasm'
 export type { SheetId }
-export { CONTROL_PLANE_ENTRYPOINT_IDS, controlPlaneEntrypoints, createInertControlPlane, observeControlPlaneShadow, } from './control-plane.js'

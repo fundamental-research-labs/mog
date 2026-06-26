@@ -134,9 +134,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
           <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
             {children}
           </div>
-          {dialogLauncher && (
-            <DialogLauncherButton launcher={dialogLauncher} placement="group" />
-          )}
+          {dialogLauncher && <DialogLauncherButton launcher={dialogLauncher} placement="group" />}
           {/* E2: Gradient fade separator - softer than solid border */}
           {/* Extended fade region (10%-90%) for more visible separator while keeping soft edges */}
           {!isLast && (
@@ -162,9 +160,7 @@ function DialogLauncherButton({
   placement: 'group' | 'dropdown';
 }) {
   const placementClass =
-    placement === 'group'
-      ? 'absolute bottom-0.5 right-1 h-3.5 w-3.5'
-      : 'h-5 w-5';
+    placement === 'group' ? 'absolute bottom-0.5 right-1 h-3.5 w-3.5' : 'h-5 w-5';
   const className = [
     'flex items-center justify-center rounded-sm text-ss-text-tertiary',
     'transition-colors duration-ss-fast',

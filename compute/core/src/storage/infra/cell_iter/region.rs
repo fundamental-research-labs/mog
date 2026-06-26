@@ -76,69 +76,32 @@ pub fn get_current_region_with_extra_data(
         }
     }
 
-    // Expand outward until no more data found in any direction
-    let mut expanded = true;
-    while expanded {
-        expanded = false;
+    let row_has_data_in_cols =
+        |row: u32, left: u32, right: u32| -> bool { (left..=right).any(|col| has_data(row, col)) };
+    let col_has_data_in_rows =
+        |col: u32, top: u32, bottom: u32| -> bool { (top..=bottom).any(|row| has_data(row, col)) };
 
-        // Try expanding up
-        if top > 0 {
-            let mut found = false;
-            for col in left..=right {
-                if has_data(top - 1, col) {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                top -= 1;
-                expanded = true;
-            }
+    // Expand outward until no more data is found in any direction. Consume each
+    // contiguous run before checking the orthogonal boundary; otherwise a tall
+    // dense region repeatedly rescans the same blank side column once per row.
+    loop {
+        let previous = (top, bottom, left, right);
+
+        while top > 0 && row_has_data_in_cols(top - 1, left, right) {
+            top -= 1;
+        }
+        while bottom < max_row && row_has_data_in_cols(bottom + 1, left, right) {
+            bottom += 1;
+        }
+        while left > 0 && col_has_data_in_rows(left - 1, top, bottom) {
+            left -= 1;
+        }
+        while right < max_col && col_has_data_in_rows(right + 1, top, bottom) {
+            right += 1;
         }
 
-        // Try expanding down
-        if bottom < max_row {
-            let mut found = false;
-            for col in left..=right {
-                if has_data(bottom + 1, col) {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                bottom += 1;
-                expanded = true;
-            }
-        }
-
-        // Try expanding left
-        if left > 0 {
-            let mut found = false;
-            for row in top..=bottom {
-                if has_data(row, left - 1) {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                left -= 1;
-                expanded = true;
-            }
-        }
-
-        // Try expanding right
-        if right < max_col {
-            let mut found = false;
-            for row in top..=bottom {
-                if has_data(row, right + 1) {
-                    found = true;
-                    break;
-                }
-            }
-            if found {
-                right += 1;
-                expanded = true;
-            }
+        if (top, bottom, left, right) == previous {
+            break;
         }
     }
 

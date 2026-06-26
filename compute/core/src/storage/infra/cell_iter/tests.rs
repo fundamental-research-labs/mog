@@ -12,6 +12,7 @@ use value_types::{CellValue, FiniteF64};
 use yrs::{Any, Array, ArrayPrelim, Map, MapPrelim, Out, Transact};
 
 mod navigation_outline;
+mod region;
 
 // -------------------------------------------------------------------
 // Helpers

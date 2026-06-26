@@ -751,12 +751,21 @@ const MogSpreadsheetAppImpl = forwardRef<
   }, [props.runtime, props.workbook]);
 
   const environment = state.environment;
+  const formulaAI = environment?.formulaAI;
   const effectiveFeatureGates = useMemo(
     () =>
       mergeFeatureGates(props.featurePolicy, props.chrome, props.commands, props.editModel, {
+        formulaAI: formulaAI !== undefined,
         versionControl: state.defaultVersioning?.status === 'attached',
       }),
-    [props.featurePolicy, props.chrome, props.commands, props.editModel, state.defaultVersioning],
+    [
+      props.featurePolicy,
+      props.chrome,
+      props.commands,
+      props.editModel,
+      formulaAI,
+      state.defaultVersioning,
+    ],
   );
 
   const hostCommands = useMemo(
@@ -777,11 +786,12 @@ const MogSpreadsheetAppImpl = forwardRef<
   const embedRuntimeValue = useMemo(
     () => ({
       documentId: environment?.documentId,
+      formulaAI,
       hostCommands,
       slots,
       registerAppBridge,
     }),
-    [environment?.documentId, hostCommands, registerAppBridge, slots],
+    [environment?.documentId, formulaAI, hostCommands, registerAppBridge, slots],
   );
 
   const handleOpenSettings = useCallback(() => {

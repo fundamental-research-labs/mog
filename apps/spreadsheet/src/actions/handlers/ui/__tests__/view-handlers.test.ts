@@ -15,6 +15,7 @@ import { createMockPlatform, createMockShellService } from '../../__tests__/test
 function createMockDeps(): ActionDependencies {
   const setZoomLevel = jest.fn();
   const setSheetSetting = jest.fn(() => Promise.resolve());
+  const toggleNLBar = jest.fn();
   return {
     platform: createMockPlatform(),
     shellService: createMockShellService(),
@@ -22,6 +23,7 @@ function createMockDeps(): ActionDependencies {
       getState: () => ({
         zoomLevels: {},
         setZoomLevel,
+        toggleNLBar,
       }),
     },
     workbook: {
@@ -37,11 +39,12 @@ function createMockDeps(): ActionDependencies {
     getActiveSheetId: () => 'sheet1' as any,
     accessors: {} as any,
     commands: {} as any,
-    __test: { setZoomLevel, setSheetSetting },
+    __test: { setZoomLevel, setSheetSetting, toggleNLBar },
   } as unknown as ActionDependencies & {
     __test: {
       setZoomLevel: jest.Mock;
       setSheetSetting: jest.Mock<Promise<void>, [string, number]>;
+      toggleNLBar: jest.Mock;
     };
   };
 }
@@ -104,6 +107,27 @@ describe('view handler migrations', () => {
       expect(result.handled).toBe(true);
       expect(deps.__test.setZoomLevel).toHaveBeenCalledWith('sheet1', 1.25);
       expect(deps.__test.setSheetSetting).toHaveBeenCalledWith('zoomScale', 125);
+    });
+  });
+
+  describe('TOGGLE_NL_BAR', () => {
+    it('toggles the NL formula bar when formula AI is available', () => {
+      const deps = createMockDeps();
+
+      const result = ViewHandlers.TOGGLE_NL_BAR(deps);
+
+      expect(result.handled).toBe(true);
+      expect((deps as any).__test.toggleNLBar).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not toggle when formula AI is disabled', () => {
+      const deps = createMockDeps();
+      (deps as any).featureGates = { capabilities: { formulaAI: false } };
+
+      const result = ViewHandlers.TOGGLE_NL_BAR(deps);
+
+      expect(result.handled).toBe(false);
+      expect((deps as any).__test.toggleNLBar).not.toHaveBeenCalled();
     });
   });
 });

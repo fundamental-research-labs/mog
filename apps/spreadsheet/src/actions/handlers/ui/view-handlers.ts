@@ -344,6 +344,9 @@ export const TOGGLE_SCROLL_LOCK: ActionHandler = (deps): ActionResult => {
  * Ctrl+Shift+I toggles the AI natural-language formula bar.
  */
 export const TOGGLE_NL_BAR: ActionHandler = (deps): ActionResult => {
+  if (deps.featureGates?.capabilities?.formulaAI === false) {
+    return notHandled('disabled');
+  }
   getUIStore(deps).getState().toggleNLBar();
   return handled();
 };

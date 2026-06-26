@@ -1,25 +1,21 @@
 /**
  * NL Formula Bar Slice
  *
- * Manages state for the natural-language formula bar: visibility,
- * prompt text, request/response lifecycle, retry, accept, and dismiss.
+ * Keeps only document-local visibility and explanation lifecycle state. Formula
+ * text and workbook context stay in component scope so the global UI store does
+ * not retain AI payloads.
  */
 
 import type { StateCreator } from 'zustand';
 
-export interface SpreadsheetContext {
-  cellAddress: string;
-  sheetName: string;
-  headers: string[];
-  dataTypes: Record<string, string>;
-  namedRanges?: string[];
-  selectionRange?: string;
-  currentFormula?: string;
-}
+export type NLFormulaExplainSource = 'typed' | 'active-cell';
 
-export interface NLFormulaResult {
-  formula: string;
-  explanation: string;
+export interface NLFormulaExplainRequest {
+  requestId: number;
+  source: NLFormulaExplainSource;
+  cellAddress?: string;
+  sheetName?: string;
+  selectionRange?: string;
 }
 
 export interface NLFormulaBarSlice {
@@ -27,44 +23,17 @@ export interface NLFormulaBarSlice {
   toggleNLBar: () => void;
   setNLBarVisible: (visible: boolean) => void;
 
-  nlPrompt: string;
-  setNLPrompt: (prompt: string) => void;
-
-  nlRequest: { prompt: string; context: SpreadsheetContext } | null;
-  nlLastRequest: { prompt: string; context: SpreadsheetContext } | null;
-  nlResult: NLFormulaResult | null;
-  nlLoading: boolean;
-  nlError: string | null;
-
-  nlSubmitPrompt: (context: SpreadsheetContext) => void;
-  nlAcceptFormula: () => void;
-  nlRetry: () => void;
-  nlDismiss: () => void;
-
-  nlResponseLoading: () => void;
-  nlResponseSuccess: (result: NLFormulaResult) => void;
-  nlResponseError: (error: string) => void;
-
-  // Explain feature
-  nlExplainRequest: { formula: string; context: SpreadsheetContext } | null;
+  nlExplainRequest: NLFormulaExplainRequest | null;
   nlExplainResult: string | null;
   nlExplainLoading: boolean;
   nlExplainError: string | null;
-  nlSubmitExplain: (formula: string, context: SpreadsheetContext) => void;
+  nlSubmitExplain: (request: NLFormulaExplainRequest) => void;
+  nlDismiss: () => void;
   nlExplainDismiss: () => void;
   nlExplainResponseLoading: () => void;
   nlExplainResponseSuccess: (explanation: string) => void;
   nlExplainResponseError: (error: string) => void;
 }
-
-const INITIAL_NL_STATE = {
-  nlPrompt: '',
-  nlRequest: null,
-  nlLastRequest: null,
-  nlResult: null,
-  nlLoading: false,
-  nlError: null,
-} as const;
 
 const INITIAL_EXPLAIN_STATE = {
   nlExplainRequest: null,
@@ -78,7 +47,6 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
   get,
 ) => ({
   nlBarVisible: false,
-  ...INITIAL_NL_STATE,
   ...INITIAL_EXPLAIN_STATE,
 
   toggleNLBar: () => {
@@ -89,72 +57,20 @@ export const createNLFormulaBarSlice: StateCreator<NLFormulaBarSlice, [], [], NL
     set({ nlBarVisible: visible });
   },
 
-  setNLPrompt: (prompt) => {
-    set({ nlPrompt: prompt });
-  },
-
-  nlSubmitPrompt: (context) => {
-    if (get().nlLoading) return;
+  nlSubmitExplain: (request) => {
+    if (get().nlExplainLoading) return;
     set({
-      nlRequest: { prompt: get().nlPrompt, context },
-      nlLastRequest: { prompt: get().nlPrompt, context },
-      nlResult: null,
-      nlError: null,
-      nlLoading: true,
-      // Clear explain state when starting a generate
-      ...INITIAL_EXPLAIN_STATE,
+      nlExplainRequest: request,
+      nlExplainResult: null,
+      nlExplainError: null,
+      nlExplainLoading: true,
     });
-  },
-
-  nlResponseLoading: () => {
-    set({ nlResult: null, nlError: null, nlLoading: true });
-  },
-
-  nlResponseSuccess: (result) => {
-    set({ nlResult: result, nlError: null, nlLoading: false });
-  },
-
-  nlResponseError: (error) => {
-    set({ nlResult: null, nlError: error, nlLoading: false });
-  },
-
-  nlRetry: () => {
-    const lastRequest = get().nlLastRequest;
-    if (!lastRequest) {
-      set({ nlResult: null, nlError: null, nlRequest: null, nlLoading: false });
-      return;
-    }
-    set({
-      nlResult: null,
-      nlError: null,
-      nlRequest: { ...lastRequest },
-      nlLoading: true,
-    });
-  },
-
-  nlAcceptFormula: () => {
-    set({ ...INITIAL_NL_STATE, nlLastRequest: null });
   },
 
   nlDismiss: () => {
     set({
-      ...INITIAL_NL_STATE,
-      nlLastRequest: null,
       ...INITIAL_EXPLAIN_STATE,
       nlBarVisible: false,
-    });
-  },
-
-  // Explain feature
-  nlSubmitExplain: (formula, context) => {
-    if (get().nlExplainLoading) return;
-    set({
-      nlExplainRequest: { formula, context },
-      nlExplainResult: null,
-      nlExplainError: null,
-      nlExplainLoading: true,
-      // Clear generate state when starting an explain
-      ...INITIAL_NL_STATE,
     });
   },
 

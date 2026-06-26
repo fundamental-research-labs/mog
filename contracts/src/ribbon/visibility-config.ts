@@ -534,6 +534,7 @@ export const RIBBON_VISIBILITY_SCHEMA = {
       dismiss: true,
     },
     explain: {
+      explain: true,
       retry: true,
       dismiss: true,
     },

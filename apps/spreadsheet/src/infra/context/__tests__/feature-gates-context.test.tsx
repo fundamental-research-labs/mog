@@ -173,7 +173,13 @@ describe('FeatureGatesContext', () => {
 
   describe('capability gating', () => {
     const gates: FeatureGates = {
-      capabilities: { undo: false, redo: false, formulaBar: false, fileMenu: false },
+      capabilities: {
+        undo: false,
+        redo: false,
+        formulaBar: false,
+        formulaAI: false,
+        fileMenu: false,
+      },
     };
 
     it('hidden capabilities return false', () => {
@@ -187,12 +193,16 @@ describe('FeatureGatesContext', () => {
         () => useFeatureGate('capabilities', 'formulaBar'),
         { wrapper: wrapper(gates) },
       );
+      const { result: formulaAI } = renderHook(() => useFeatureGate('capabilities', 'formulaAI'), {
+        wrapper: wrapper(gates),
+      });
       const { result: fileMenu } = renderHook(() => useFeatureGate('capabilities', 'fileMenu'), {
         wrapper: wrapper(gates),
       });
       expect(undo.current).toBe(false);
       expect(redo.current).toBe(false);
       expect(formulaBar.current).toBe(false);
+      expect(formulaAI.current).toBe(false);
       expect(fileMenu.current).toBe(false);
     });
 

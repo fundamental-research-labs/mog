@@ -42,3 +42,50 @@ test('version-control feature gates fail closed without weakening host capabilit
   assert.equal(available.capabilities?.versionControlMerge, false);
   assert.equal(available.capabilities?.['versionControl.merge'], false);
 });
+
+test('formula AI feature gate fails closed unless a runtime service is available', () => {
+  const unavailable = mergeFeatureGates(
+    {
+      capabilities: {
+        formulaAI: true,
+        customHostCapability: true,
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    { formulaAI: false, versionControl: true },
+  );
+
+  assert.equal(unavailable.capabilities?.formulaAI, false);
+  assert.equal(unavailable.capabilities?.customHostCapability, true);
+
+  const available = mergeFeatureGates(
+    {
+      capabilities: {
+        formulaAI: false,
+      },
+    },
+    undefined,
+    undefined,
+    undefined,
+    { formulaAI: true, versionControl: true },
+  );
+
+  assert.equal(available.capabilities?.formulaAI, false);
+
+  const hostDefault = mergeFeatureGates(undefined, undefined, undefined, undefined, {
+    formulaAI: true,
+    versionControl: true,
+  });
+  assert.equal(hostDefault.capabilities?.formulaAI, undefined);
+
+  const hostEnabled = mergeFeatureGates(
+    { capabilities: { formulaAI: true } },
+    undefined,
+    undefined,
+    undefined,
+    { formulaAI: true, versionControl: true },
+  );
+  assert.equal(hostEnabled.capabilities?.formulaAI, true);
+});

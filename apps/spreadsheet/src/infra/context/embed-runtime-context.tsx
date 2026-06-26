@@ -7,6 +7,7 @@ import type {
 } from '@mog-sdk/contracts/actions';
 import type { CellRange, SheetId } from '@mog-sdk/contracts/core';
 import type { CellCoord } from '@mog-sdk/contracts/rendering';
+import type { FormulaAIService } from '@mog-sdk/contracts/services';
 
 export interface SpreadsheetEmbedSelectionSnapshot {
   readonly activeSheetId: SheetId;
@@ -49,6 +50,7 @@ export interface SpreadsheetEmbedAppBridge {
 
 export interface SpreadsheetEmbedRuntimeContextValue {
   readonly documentId?: string;
+  readonly formulaAI?: FormulaAIService;
   readonly hostCommands?: HostSpreadsheetCommandBridge;
   readonly slots?: Readonly<Record<string, React.ReactNode>>;
   registerAppBridge?(bridge: SpreadsheetEmbedAppBridge): () => void;
@@ -80,6 +82,10 @@ export function useSpreadsheetHostCommandsOptional(): HostSpreadsheetCommandBrid
   return useContext(SpreadsheetEmbedRuntimeContext)?.hostCommands;
 }
 
+export function useSpreadsheetFormulaAIOptional(): FormulaAIService | undefined {
+  return useContext(SpreadsheetEmbedRuntimeContext)?.formulaAI;
+}
+
 export function useSpreadsheetEmbedSlot(name: string): React.ReactNode {
   return useContext(SpreadsheetEmbedRuntimeContext)?.slots?.[name] ?? null;
 }
@@ -90,4 +96,5 @@ export type {
   HostSpreadsheetCommandBridge,
   HostSpreadsheetCommandRequest,
   HostSpreadsheetCommandResult,
+  FormulaAIService,
 };

@@ -19,6 +19,7 @@
  */
 
 import { ShellProvider } from '@mog/app-spreadsheet';
+import { SpreadsheetEmbedRuntimeProvider } from '@mog/app-spreadsheet/embed-runtime';
 import { registerSpreadsheetTestingPanel } from '@mog/app-spreadsheet/dev/testing-panel';
 import { DocumentFactory, type DocumentHandle } from '@mog-sdk/kernel';
 import type { IAppKernelAPI } from '@mog-sdk/contracts/apps';
@@ -37,6 +38,7 @@ import {
 } from '@mog/shell';
 import { useCollabStore } from '@mog/app-spreadsheet/chrome/collab';
 import React, { Component, ReactNode, useCallback, useEffect, useState } from 'react';
+import { devFormulaAI } from './dev-formula-ai';
 import { nextSearchForActiveDoc } from './routing/active-doc-route';
 
 const disposeSpreadsheetTestingPanel = registerSpreadsheetTestingPanel();
@@ -286,18 +288,25 @@ function ShellHostWithFileExplorer({
   // during shell bootstrap, BEFORE React mounted.
 
   return (
-    <ShellHost
-      kernel={kernel}
-      onOpenSettings={onOpenSettings}
-      showFileExplorer={true}
-      fileExplorer={fileExplorerConfig}
-      // Dev shell exposes all features so the app-eval corpus tests them.
-      // C's surgical pageLayout exception is subsumed by this open-everything
-      // approach (which landed on dev between when C branched and merge time).
-      featureGates={featureGates}
-      appearanceMode={appearanceMode}
-      onAppearanceModeChange={onAppearanceModeChange}
-    />
+    <SpreadsheetEmbedRuntimeProvider
+      value={{
+        documentId: 'dev-local-formula-ai',
+        formulaAI: devFormulaAI,
+      }}
+    >
+      <ShellHost
+        kernel={kernel}
+        onOpenSettings={onOpenSettings}
+        showFileExplorer={true}
+        fileExplorer={fileExplorerConfig}
+        // Dev shell exposes all features so the app-eval corpus tests them.
+        // C's surgical pageLayout exception is subsumed by this open-everything
+        // approach (which landed on dev between when C branched and merge time).
+        featureGates={featureGates}
+        appearanceMode={appearanceMode}
+        onAppearanceModeChange={onAppearanceModeChange}
+      />
+    </SpreadsheetEmbedRuntimeProvider>
   );
 }
 

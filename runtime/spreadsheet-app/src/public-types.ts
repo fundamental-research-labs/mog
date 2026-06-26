@@ -1,6 +1,25 @@
 import type { Workbook } from '@mog-sdk/contracts/api';
 import type { RibbonVisibilityConfig } from '@mog-sdk/contracts/ribbon';
+import type {
+  FormulaAIContextCell as ContractFormulaAIContextCell,
+  FormulaAIContextCellValue as ContractFormulaAIContextCellValue,
+  FormulaAIExplainContext as ContractFormulaAIExplainContext,
+  FormulaAIExplainRequest as ContractFormulaAIExplainRequest,
+  FormulaAIExplainResult as ContractFormulaAIExplainResult,
+  FormulaAIExplainSource as ContractFormulaAIExplainSource,
+  FormulaAIRequestOptions as ContractFormulaAIRequestOptions,
+  FormulaAIService as ContractFormulaAIService,
+} from '@mog-sdk/contracts/services';
 import type { CSSProperties, ReactNode } from 'react';
+
+export type FormulaAIExplainSource = ContractFormulaAIExplainSource;
+export type FormulaAIContextCellValue = ContractFormulaAIContextCellValue;
+export type FormulaAIContextCell = ContractFormulaAIContextCell;
+export type FormulaAIExplainContext = ContractFormulaAIExplainContext;
+export type FormulaAIExplainRequest = ContractFormulaAIExplainRequest;
+export type FormulaAIExplainResult = ContractFormulaAIExplainResult;
+export type FormulaAIRequestOptions = ContractFormulaAIRequestOptions;
+export type FormulaAIService = ContractFormulaAIService;
 
 export type CommandBarTabId =
   | 'home'
@@ -38,6 +57,7 @@ export type SpreadsheetBuiltInFeatureGateCapability =
   | 'print'
   | 'export'
   | 'formulaBar'
+  | 'formulaAI'
   | 'sheetTabs'
   | 'contextMenu'
   | 'freezePanes'
@@ -57,6 +77,7 @@ export interface SpreadsheetFeatureGateCapabilities {
   readonly print?: boolean;
   readonly export?: boolean;
   readonly formulaBar?: boolean;
+  readonly formulaAI?: boolean;
   readonly sheetTabs?: boolean;
   readonly contextMenu?: boolean;
   readonly freezePanes?: boolean;
@@ -462,10 +483,15 @@ export interface SpreadsheetRuntimeHostPolicy {
   readonly beforeUnloadPrompt?: boolean;
 }
 
+export interface SpreadsheetRuntimeServices {
+  readonly formulaAI?: FormulaAIService;
+}
+
 export interface SpreadsheetRuntimeOptions {
   readonly runtimeId?: string;
   readonly assets?: SpreadsheetRuntimeAssetPolicy;
   readonly host?: SpreadsheetRuntimeHostPolicy;
+  readonly services?: SpreadsheetRuntimeServices;
   readonly onSaveRequest?: (
     request: SpreadsheetSaveRequest,
   ) => Promise<SpreadsheetSaveResult> | SpreadsheetSaveResult;

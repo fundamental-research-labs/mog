@@ -456,7 +456,7 @@ export function FormulaBar({
         </RibbonVisibilityPathItem>
       )}
 
-      {/* AI Formula Bar Toggle (Ctrl+Shift+I) */}
+      {/* Formula explanation toggle (Ctrl+Shift+I) */}
       {onToggleNLBar && (
         <RibbonVisibilityPathItem path={['formulaBar', 'controls', 'toggleAiFormulaBar']}>
           <button
@@ -464,11 +464,16 @@ export function FormulaBar({
             onClick={onToggleNLBar}
             className={`w-[22px] h-[22px] flex items-center justify-center shrink-0 rounded cursor-pointer transition-colors ${
               nlBarVisible
-                ? 'text-ss-accent bg-ss-accent/10'
+                ? 'text-[#21a366] bg-ss-primary-light hover:bg-ss-primary-light'
                 : 'text-ss-text-secondary hover:bg-ss-surface-hover'
             }`}
-            title="Toggle AI Formula Bar (Ctrl+Shift+I)"
-            aria-label="Toggle AI formula bar"
+            title={
+              nlBarVisible
+                ? 'Hide formula explanation (Ctrl+Shift+I)'
+                : 'Show formula explanation (Ctrl+Shift+I)'
+            }
+            aria-label={nlBarVisible ? 'Hide formula explanation' : 'Show formula explanation'}
+            aria-pressed={nlBarVisible}
             data-testid="toggle-nl-formula-bar"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">

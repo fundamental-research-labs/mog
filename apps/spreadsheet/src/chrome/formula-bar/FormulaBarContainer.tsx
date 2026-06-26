@@ -27,7 +27,9 @@ import {
   useEditorActions,
   useEditorState,
   useFocus,
+  useFeatureGate,
   useReadOnly,
+  useSpreadsheetFormulaAIOptional,
   useUIStore,
   useWorkbook,
 } from '../../internal-api';
@@ -113,6 +115,8 @@ function FormulaBarContainerImpl() {
   const setFormulaBarHeightPx = useUIStore((s) => s.setFormulaBarHeightPx);
 
   // NL Formula Bar toggle
+  const formulaAI = useSpreadsheetFormulaAIOptional();
+  const formulaAIEnabled = useFeatureGate('capabilities', 'formulaAI') && formulaAI !== undefined;
   const nlBarVisible = useUIStore((s) => s.nlBarVisible);
   const toggleNLBar = useUIStore((s) => s.toggleNLBar);
 
@@ -670,8 +674,8 @@ function FormulaBarContainerImpl() {
         // Excel parity: Formula range colors synced with grid
         referenceColors={referenceColors}
         onClosePanel={handleClosePanel}
-        nlBarVisible={nlBarVisible}
-        onToggleNLBar={toggleNLBar}
+        nlBarVisible={formulaAIEnabled && nlBarVisible}
+        onToggleNLBar={formulaAIEnabled ? toggleNLBar : undefined}
       />
 
       {/* Formula Bar Context Menu (Excel parity quickwin B5) */}

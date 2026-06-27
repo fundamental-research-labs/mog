@@ -174,7 +174,7 @@ export function CurrentBranchMenu({
                   type="text"
                   value={branchName}
                   onChange={(event) => onBranchNameChange(event.currentTarget.value)}
-                  placeholder="review/version-panel"
+                  placeholder="budget-forecast"
                   className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">

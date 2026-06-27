@@ -122,7 +122,7 @@ export function createWorkbook(
             revision: REF_REVISION,
           },
           {
-            name: 'refs/heads/scenario/budget',
+            name: 'refs/heads/budget',
             commitId: PARENT_COMMIT_ID,
             revision: { kind: 'counter', value: '2' },
           },
@@ -183,7 +183,7 @@ export function createWorkbook(
           strategy: 'fullSnapshot',
           target: {
             kind: 'ref',
-            refName: 'refs/heads/scenario/budget',
+            refName: 'refs/heads/budget',
             commitId: PARENT_COMMIT_ID,
             refRevision: { kind: 'counter', value: '2' },
           },

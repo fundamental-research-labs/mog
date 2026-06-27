@@ -95,7 +95,7 @@ describe('VersionCurrentStaleStatus', () => {
       <VersionCurrentStaleStatus
         surface={createSurfaceStatus({
           current: {
-            branchName: 'refs/heads/scenario/budget',
+            branchName: 'refs/heads/budget',
             stale: true,
             staleReason: 'refMoved',
           },
@@ -105,9 +105,9 @@ describe('VersionCurrentStaleStatus', () => {
 
     const staleStatus = screen.getByTestId('version-history-current-stale-status');
     expect(staleStatus).toHaveTextContent(
-      'Checkout from scenario/budget is stale because the branch head moved.',
+      'Checkout from budget is stale because the branch head moved.',
     );
-    expect(staleStatus).not.toHaveTextContent('refs/heads/scenario/budget');
+    expect(staleStatus).not.toHaveTextContent('refs/heads/budget');
   });
 
   it('keeps detached checkout copy detached even if a stale surface carries branch metadata', () => {

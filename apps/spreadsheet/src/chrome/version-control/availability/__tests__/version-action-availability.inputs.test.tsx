@@ -20,7 +20,7 @@ describe('version action availability input validation', () => {
       'Enter a commit message.',
     );
     expectDisabled(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', undefined),
+      getBranchAvailability({ surface }, false, false, 'review', undefined),
       'Select a commit target first.',
     );
     expectDisabled(
@@ -41,7 +41,7 @@ describe('version action availability input validation', () => {
     const surface = createSurfaceStatus();
     const refs = [
       ref('refs/heads/main'),
-      ref('refs/heads/scenario/budget'),
+      ref('refs/heads/budget'),
       ref('refs/heads/review/model-a'),
     ];
 
@@ -51,29 +51,27 @@ describe('version action availability input validation', () => {
     );
     expectDisabled(
       getBranchAvailability({ surface, refs }, false, false, 'refs/heads/main', TARGET_COMMIT_ID),
-      'main is protected and cannot be created from the version panel.',
+      'Enter a branch name without ref prefixes.',
     );
     expectDisabled(
       getBranchAvailability({ surface, refs }, false, false, 'HEAD', TARGET_COMMIT_ID),
       'HEAD is symbolic and cannot be created as a branch.',
     );
     expectDisabled(
+      getBranchAvailability({ surface, refs }, false, false, 'refs', TARGET_COMMIT_ID),
+      'Enter a branch name without ref prefixes.',
+    );
+    expectDisabled(
       getBranchAvailability({ surface, refs }, false, false, 'refs/tags/review', TARGET_COMMIT_ID),
-      'Branch refs must use refs/heads/<branch>.',
+      'Enter a branch name without ref prefixes.',
     );
     expectDisabled(
-      getBranchAvailability(
-        { surface, refs },
-        false,
-        false,
-        'refs/heads/scenario/budget',
-        TARGET_COMMIT_ID,
-      ),
-      'Branch scenario/budget already exists.',
+      getBranchAvailability({ surface, refs }, false, false, 'budget', TARGET_COMMIT_ID),
+      'Branch budget already exists.',
     );
     expectDisabled(
-      getBranchAvailability({ surface, refs }, false, false, 'review', TARGET_COMMIT_ID),
-      'Branch names must start with scenario/, agent/, import/, or review/.',
+      getBranchAvailability({ surface, refs }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+      'Branch names must not contain /.',
     );
 
     expect(
@@ -81,7 +79,7 @@ describe('version action availability input validation', () => {
         { surface, refs },
         false,
         false,
-        'refs/heads/scenario/forecast-q1',
+        'forecast-q1',
         TARGET_COMMIT_ID,
       ),
     ).toEqual({ enabled: true });

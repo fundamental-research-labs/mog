@@ -55,7 +55,7 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-current-commit')).toHaveTextContent(
       shortCommitId(HEAD_COMMIT_ID),
     );
-    expect(screen.getByText('scenario/budget')).toBeInTheDocument();
+    expect(screen.getByText('budget')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getHead).toHaveBeenCalledTimes(1);
@@ -202,9 +202,9 @@ describe('VersionHistoryPanelContent', () => {
       `Use ${shortCommitId(HEAD_COMMIT_ID)} as branch target`,
     );
     expect(screen.getAllByText('Target')[0]).toBeVisible();
-    expect(
-      screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')),
-    ).toHaveAccessibleName('Checkout scenario/budget');
+    expect(screen.getByTestId(checkoutBranchTestId('refs/heads/budget'))).toHaveAccessibleName(
+      'Checkout budget',
+    );
 
     const parentDiffButton = screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID));
     expect(parentDiffButton).toHaveAccessibleName(
@@ -244,11 +244,11 @@ describe('VersionHistoryPanelContent', () => {
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await openCurrentBranchMenu(user);
-    await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
+    await user.type(screen.getByLabelText('Branch name'), 'version-panel');
 
     const commitButton = screen.getByRole('button', { name: /^Commit$/ });
     const branchButton = screen.getByRole('button', { name: 'Create branch' });
-    const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout budget' });
     const diffButton = screen.getByRole('button', {
       name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
     });
@@ -281,14 +281,11 @@ describe('VersionHistoryPanelContent', () => {
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await openCurrentBranchMenu(user);
-    await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
+    await user.type(screen.getByLabelText('Branch name'), 'version-panel');
 
     expectDisabledButtonReason(screen.getByRole('button', { name: /^Commit$/ }), reason);
     expectDisabledButtonReason(screen.getByRole('button', { name: 'Create branch' }), reason);
-    expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
-      reason,
-    );
+    expectDisabledButtonReason(screen.getByRole('button', { name: 'Checkout budget' }), reason);
     expectDisabledButtonReason(
       screen.getByRole('button', {
         name: `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
@@ -322,7 +319,7 @@ describe('VersionHistoryPanelContent', () => {
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await openCurrentBranchMenu(user);
-    await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
+    await user.type(screen.getByLabelText('Branch name'), 'version-panel');
 
     expectDisabledButtonReason(
       screen.getByRole('button', { name: /^Commit$/ }),
@@ -333,7 +330,7 @@ describe('VersionHistoryPanelContent', () => {
       'Host policy denies version:branch.',
     );
     expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
+      screen.getByRole('button', { name: 'Checkout budget' }),
       'Host policy denies version:checkout.',
     );
     expectDisabledButtonReason(
@@ -376,7 +373,7 @@ describe('VersionHistoryPanelContent', () => {
       'Wait for provider writes to settle before committing.',
     );
     expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
+      screen.getByRole('button', { name: 'Checkout budget' }),
       providerWriteReason.message,
     );
   });
@@ -413,7 +410,7 @@ describe('VersionHistoryPanelContent', () => {
       'Changes in charts, pivotTables cannot be committed yet.',
     );
     expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
+      screen.getByRole('button', { name: 'Checkout budget' }),
       'Commit or discard changes in charts, pivotTables before checking out.',
     );
   });
@@ -445,7 +442,7 @@ describe('VersionHistoryPanelContent', () => {
     await openCurrentBranchMenu(user);
 
     const commitButton = screen.getByRole('button', { name: /^Commit$/ });
-    const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout budget' });
     const rootDiffButton = screen.getByRole('button', {
       name: `Diff ${shortCommitId(PARENT_COMMIT_ID)} against parent`,
     });
@@ -513,6 +510,7 @@ describe('VersionHistoryPanelContent', () => {
       HEAD_COMMIT_ID,
     );
     expect(screen.queryByTestId('version-history-rollback-target-summary')).not.toBeInTheDocument();
+
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await openCurrentBranchMenu(user);
 
@@ -521,7 +519,7 @@ describe('VersionHistoryPanelContent', () => {
       'main is stale because the branch head moved. Refresh before committing.',
     );
     expectDisabledButtonReason(
-      screen.getByRole('button', { name: 'Checkout scenario/budget' }),
+      screen.getByRole('button', { name: 'Checkout budget' }),
       'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
     );
   });

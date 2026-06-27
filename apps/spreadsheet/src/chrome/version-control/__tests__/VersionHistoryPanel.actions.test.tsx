@@ -100,28 +100,31 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     await user.clear(branchInput);
     await user.type(branchInput, 'refs/tags/review');
-    expectDisabledButtonReason(createBranchButton, 'Branch refs must use refs/heads/<branch>.');
+    expectDisabledButtonReason(
+      createBranchButton,
+      'Enter a branch name without ref prefixes.',
+    );
     await user.click(createBranchButton);
     expect(workbook.version.createBranch).not.toHaveBeenCalled();
 
     await user.clear(branchInput);
-    await user.type(branchInput, 'scenario/budget');
-    expectDisabledButtonReason(createBranchButton, 'Branch scenario/budget already exists.');
+    await user.type(branchInput, 'budget');
+    expectDisabledButtonReason(createBranchButton, 'Branch budget already exists.');
     await user.click(createBranchButton);
     expect(workbook.version.createBranch).not.toHaveBeenCalled();
 
     await user.clear(branchInput);
-    await user.type(branchInput, 'refs/heads/review/version-panel');
+    await user.type(branchInput, 'version-panel');
     expect(createBranchButton).toBeEnabled();
     await user.click(createBranchButton);
     await waitFor(() =>
       expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
+        name: 'refs/heads/version-panel',
         targetCommitId: HEAD_COMMIT_ID,
         expectedAbsent: true,
       }),
     );
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
   });
 
   it('announces running and successful action states through a status live region', async () => {
@@ -213,7 +216,7 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     await screen.findByText('Calculated forecast');
     await openCurrentBranchMenu(user);
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
 
     await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
     await waitFor(() =>
@@ -222,22 +225,22 @@ describe('VersionHistoryPanelContent action flows', () => {
       ),
     );
     expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
-      'Checked out scenario/budget',
+      'Checked out budget',
     );
 
     refreshedSurface.resolve(
       createSurfaceStatus({
         current: {
           headCommitId: PARENT_COMMIT_ID,
-          branchName: 'refs/heads/scenario/budget',
+          branchName: 'refs/heads/budget',
         },
       }),
     );
-    await expectActionResult('Checked out scenario/budget', 'success');
+    await expectActionResult('Checked out budget', 'success');
   });
 
   it('does not announce branch creation until refreshed refs include the new checkout action', async () => {
-    const branchName = 'refs/heads/review/version-panel';
+    const branchName = 'refs/heads/version-panel';
     const branchResult =
       createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
     const refreshedRefs =
@@ -254,7 +257,7 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     await screen.findByText('Calculated forecast');
     await openCurrentBranchMenu(user);
-    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'version-panel');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
     branchResult.resolve({
@@ -291,12 +294,12 @@ describe('VersionHistoryPanelContent action flows', () => {
         limit: 2,
       },
     });
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
     expect(await screen.findByTestId(checkoutBranchTestId(branchName))).toBeEnabled();
   });
 
   it('keeps checkout controls disabled while branch creation is in flight', async () => {
-    const branchName = 'refs/heads/review/action-busy';
+    const branchName = 'refs/heads/action-busy';
     const branchResult =
       createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
     const workbook = createWorkbook({
@@ -306,7 +309,7 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     await screen.findByText('Calculated forecast');
     await openCurrentBranchMenu(user);
-    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'action-busy');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
     await waitFor(() => expect(workbook.version.createBranch).toHaveBeenCalledTimes(1));
@@ -316,9 +319,10 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     const runningReason = 'Wait for the current version action to finish.';
     expectDisabledButtonReason(
-      screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')),
+      screen.getByTestId(checkoutBranchTestId('refs/heads/budget')),
       runningReason,
     );
+
     branchResult.resolve({
       ok: true,
       value: {
@@ -327,7 +331,7 @@ describe('VersionHistoryPanelContent action flows', () => {
         revision: { kind: 'counter', value: '3' },
       },
     });
-    await expectActionResult('Created review/action-busy', 'success');
+    await expectActionResult('Created action-busy', 'success');
   });
 
   it('refreshes commit availability when workbook edits dirty an open panel', async () => {
@@ -433,9 +437,9 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(commitButton).toBeEnabled();
 
     await openCurrentBranchMenu(user);
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
 
-    await expectActionResult('Checked out scenario/budget', 'success');
+    await expectActionResult('Checked out budget', 'success');
     expectDisabledButtonReason(commitButton, 'Version status is refreshing.');
     await user.click(commitButton);
     expect(workbook.version.commit).not.toHaveBeenCalled();
@@ -470,33 +474,30 @@ describe('VersionHistoryPanelContent action flows', () => {
       'data-version-commit-id',
       PARENT_COMMIT_ID,
     );
-    await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/version-panel',
-    );
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'version-panel');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
     await waitFor(() =>
       expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
+        name: 'refs/heads/version-panel',
         targetCommitId: PARENT_COMMIT_ID,
         expectedAbsent: true,
       }),
     );
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
 
     await openCurrentBranchMenu(user);
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
     await waitFor(() =>
       expect(workbook.version.checkout).toHaveBeenCalledWith(
         {
           kind: 'ref',
-          name: 'refs/heads/scenario/budget',
+          name: 'refs/heads/budget',
         },
         { includeDiagnostics: true },
       ),
     );
-    await expectActionResult('Checked out scenario/budget', 'success');
+    await expectActionResult('Checked out budget', 'success');
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(4));
 
     await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
@@ -548,7 +549,7 @@ describe('VersionHistoryPanelContent action flows', () => {
       commit: jest.fn(async () => failedInvalidState('Commit rejected by version provider.')),
       createBranch: jest.fn(async () =>
         failedInvalidBranchName(
-          'refs/heads/review/provider-rejected',
+          'refs/heads/provider-rejected',
           'Branch rejected by version provider.',
         ),
       ),
@@ -564,15 +565,12 @@ describe('VersionHistoryPanelContent action flows', () => {
     await expectActionResult('Commit rejected by version provider.', 'error');
 
     await openCurrentBranchMenu(user);
-    await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/provider-rejected',
-    );
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'provider-rejected');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
     await expectActionResult('Branch rejected by version provider.', 'error');
 
     await openCurrentBranchMenu(user);
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
     await expectActionResult('Checkout rejected by version provider.', 'error');
 
     await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));

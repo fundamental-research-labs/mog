@@ -191,7 +191,7 @@ describe('version action availability capability contract', () => {
 
     expectDisabled(getCommitAvailability({ surface }, false, false, 'Checkpoint'), reason);
     expect(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+      getBranchAvailability({ surface }, false, false, 'review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
   });
 
@@ -229,7 +229,7 @@ describe('version action availability capability contract', () => {
       'version-history-incomplete',
     );
     expect(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
+      getBranchAvailability({ surface }, false, false, 'review', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
     expectDisabled(

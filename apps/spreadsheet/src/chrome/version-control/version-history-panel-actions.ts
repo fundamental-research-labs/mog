@@ -20,7 +20,7 @@ import {
   type VersionPanelActionKind,
   type VersionPanelActionRun,
 } from './version-history-panel-action-run';
-import { displayBranchName, normalizeVersionBranchNameInput } from './version-branch-name';
+import { displayBranchName, validateVersionBranchCreationName } from './version-branch-name';
 import {
   commitDirtyRefreshFenceRequiresRefresh,
   commitDirtyRefreshFenceSnapshot,
@@ -242,7 +242,7 @@ export function useVersionHistoryPanelActions({
     const action = beginAction('branch');
     if (!action) return;
 
-    const normalizedBranch = normalizeVersionBranchNameInput(branchName);
+    const normalizedBranch = validateVersionBranchCreationName(branchName, data.refs);
     if (!normalizedBranch.ok) {
       cancelAction(action);
       return;

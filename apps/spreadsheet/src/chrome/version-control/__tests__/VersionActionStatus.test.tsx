@@ -159,6 +159,11 @@ describe('VersionActionStatus', () => {
     expect(screen.getByRole('button', { name: 'Promote remote' })).toHaveAccessibleDescription(
       /Remote promotion blocked/,
     );
+    expect(screen.getByTestId('version-history-rollback-reason-input')).toBeInTheDocument();
+    expect(screen.getByTestId('version-history-remote-promote-status')).toBeInTheDocument();
+    expect(screen.queryByText('More actions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-more-actions')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-more-actions-trigger')).not.toBeInTheDocument();
   });
 });
 

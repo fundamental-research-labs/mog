@@ -9,6 +9,7 @@ import {
   createRollbackWorkbook,
   disabledCapabilityState,
   expectDisabledButtonReason,
+  openCurrentBranchMenu,
   renderRollbackPanel,
 } from './VersionHistoryPanel.rollback.test-utils';
 
@@ -29,8 +30,9 @@ describe('VersionHistoryPanelContent rollback availability', () => {
     expect(screen.getByTestId('version-history-stage-rollback-button')).toHaveAccessibleDescription(
       'Authored revert is reserved until an upstream revert contract exists.',
     );
-    expect(screen.getByTestId('version-history-capability-version-revert')).toHaveAccessibleName(
-      'Revert unavailable: Authored revert is reserved until an upstream revert contract exists.',
+    expect(screen.getByTestId('version-history-capability-version-revert')).toHaveAttribute(
+      'aria-label',
+      'Rollback unavailable: Authored revert is reserved until an upstream revert contract exists.',
     );
   });
 
@@ -118,9 +120,10 @@ describe('VersionHistoryPanelContent rollback availability', () => {
       const { user } = renderRollbackPanel({ workbook });
 
       await screen.findByText('Calculated forecast');
+      await openCurrentBranchMenu(user);
       await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
 
-      const checkoutButton = screen.getByRole('button', { name: 'Checkout main' });
+      const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
       const rollbackButton = screen.getByRole('button', { name: 'Stage rollback' });
       expectDisabledButtonReason(checkoutButton, checkoutReason);
       expectDisabledButtonReason(rollbackButton, rollbackReason);
@@ -148,9 +151,10 @@ describe('VersionHistoryPanelContent rollback availability', () => {
     const { user } = renderRollbackPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
 
-    const checkoutButton = screen.getByRole('button', { name: 'Checkout main' });
+    const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
     const rollbackButton = screen.getByRole('button', { name: 'Stage rollback' });
     expectDisabledButtonReason(
       checkoutButton,

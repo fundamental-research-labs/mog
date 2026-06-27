@@ -30,6 +30,7 @@ import {
   mergeApplyButtonTestId,
   mergePreviewButtonTestId,
   mergeSourceRefSelectTestId,
+  openCurrentBranchMenu,
   renderVersionHistoryPanel,
   sameCellMergeConflict,
   shortCommitId,
@@ -276,14 +277,15 @@ describe('VersionHistoryPanelContent direct merge controls', () => {
     );
 
     const statusSummary = screen.getByRole('region', { name: 'Version status' });
-    expect(statusSummary).toHaveTextContent('main');
     expect(statusSummary).not.toHaveTextContent(CURRENT_REF);
     expect(statusSummary).toHaveTextContent(shortCommitId(MERGE_COMMIT_ID));
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
     expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
       shortCommitId(MERGE_COMMIT_ID),
     );
     expect(screen.getByText('Merge budget scenario')).toBeVisible();
     expect(screen.getByTestId(branchTargetTestId(MERGE_COMMIT_ID))).toBeChecked();
+    await openCurrentBranchMenu(user);
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
       'data-version-commit-id',
       MERGE_COMMIT_ID,

@@ -12,8 +12,8 @@ import { useVersionHistoryData, type VersionHistoryWorkbook } from './version-hi
 import {
   CapabilitySummary,
   CommitList,
+  CurrentBranchMenu,
   DiagnosticsBlock,
-  RefList,
   VersionHistoryPanelHeader,
   VersionStatusSummary,
 } from './VersionHistoryPanelSections';
@@ -85,30 +85,37 @@ export function VersionHistoryPanelContent({
         {data ? (
           <div className="flex flex-col gap-4 p-4">
             <VersionStatusSummary data={data} />
-            <CapabilitySummary surface={data.surface} />
+            <CurrentBranchMenu
+              data={data}
+              branchName={actions.branchName}
+              targetCommitId={actions.selectedOrHeadCommitId}
+              branchEnabled={actions.canCreateBranch}
+              checkoutEnabled={actions.canCheckout}
+              branchDisabledReason={actions.branchDisabledReason}
+              checkoutDisabledReason={actions.checkoutDisabledReason}
+              onBranchNameChange={actions.setBranchName}
+              onCreateBranch={actions.handleCreateBranch}
+              onCheckoutRef={actions.handleCheckoutRef}
+            />
             <VersionActions
               commitMessage={actions.commitMessage}
-              branchName={actions.branchName}
               rollbackReason={actions.rollbackReason}
               targetCommitId={actions.selectedOrHeadCommitId}
               actionState={actions.actionState}
               commitEnabled={actions.canCommit}
-              branchEnabled={actions.canCreateBranch}
               rollbackEnabled={actions.canStageRollback}
               remotePromoteEnabled={actions.canPromoteRemote}
               commitDisabledReason={actions.commitDisabledReason}
-              branchDisabledReason={actions.branchDisabledReason}
               rollbackDisabledReason={actions.rollbackDisabledReason}
               remotePromoteDisabledReason={actions.remotePromoteDisabledReason}
               remotePromotionStatus={actions.remotePromotionStatus}
               onCommitMessageChange={actions.setCommitMessage}
-              onBranchNameChange={actions.setBranchName}
               onRollbackReasonChange={actions.setRollbackReason}
               onCommit={actions.handleCommit}
-              onCreateBranch={actions.handleCreateBranch}
               onStageRollback={actions.handleStageRollback}
               onPromotePendingRemote={actions.handlePromotePendingRemote}
             />
+            <CapabilitySummary surface={data.surface} />
             <VersionMergeControls
               sourceRefs={actions.mergeSources}
               selectedSourceRefName={actions.mergeSourceRefName}
@@ -124,12 +131,6 @@ export function VersionHistoryPanelContent({
               onPreviewMerge={actions.handlePreviewMerge}
               onApplyMerge={actions.handleApplyMerge}
               onResolutionChange={actions.handleMergeResolutionChange}
-            />
-            <RefList
-              refs={data.refs}
-              checkoutEnabled={actions.canCheckout}
-              checkoutDisabledReason={actions.checkoutDisabledReason}
-              onCheckoutRef={actions.handleCheckoutRef}
             />
             <ReviewProposalSurface
               surface={data.surface}

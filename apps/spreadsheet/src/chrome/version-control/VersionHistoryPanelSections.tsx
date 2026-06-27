@@ -1,5 +1,15 @@
-import type { RefObject } from 'react';
-import { GitBranch, GitCommit, GitCompare, History, RefreshCw, X } from 'lucide-react';
+import { useState, type RefObject } from 'react';
+import {
+  Check,
+  ChevronRight,
+  GitBranch,
+  GitCommit,
+  GitCompare,
+  History,
+  Plus,
+  RefreshCw,
+  X,
+} from 'lucide-react';
 import type {
   VersionAnnotationText,
   VersionCapability,
@@ -31,7 +41,7 @@ const CAPABILITY_LABELS: Record<VersionCapability, string> = {
   'version:proposal': 'Proposal',
   'version:mergePreview': 'Merge preview',
   'version:mergeApply': 'Merge apply',
-  'version:revert': 'Revert',
+  'version:revert': 'Rollback',
   'version:provenance': 'Provenance',
   'version:remotePromote': 'Remote promote',
 };
@@ -112,10 +122,6 @@ export function VersionStatusSummary({
   readonly data: VersionHistoryData;
 }): React.JSX.Element {
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
-  const branchName = data.surface?.current.detached
-    ? undefined
-    : (data.surface?.current.branchName ?? data.head?.refName);
-  const branchLabel = branchName ? displayBranchName(branchName) : 'Detached or unavailable';
   const storageLabel = data.surface
     ? `${data.surface.storage.backend}${data.surface.storage.ready ? ' ready' : ' unavailable'}`
     : 'Unknown';
@@ -132,8 +138,6 @@ export function VersionStatusSummary({
         </span>
         <span className="text-ss-text-secondary">Storage</span>
         <span className="text-ss-text">{storageLabel}</span>
-        <span className="text-ss-text-secondary">Branch</span>
-        <span className="text-ss-text truncate">{branchLabel}</span>
         <span className="text-ss-text-secondary">Head</span>
         <span className="font-mono text-xs text-ss-text truncate">
           {headId ? shortCommitId(headId) : 'Unavailable'}
@@ -151,105 +155,306 @@ export function CapabilitySummary({
 }: {
   readonly surface?: VersionSurfaceStatus;
 }): React.JSX.Element {
-  const rows = capabilityRows(surface).map((capability) => ({
-    capability,
-    state: surface?.capabilities[capability],
-  }));
+  const [expanded, setExpanded] = useState(false);
+  const rows = capabilityRows(surface).map((capability) => {
+    const state = surface?.capabilities[capability];
+    return {
+      capability,
+      enabled: state?.enabled === true,
+      reason:
+        sanitizeVersionStatusText(
+          state?.enabled === false ? state.reason : 'Unavailable',
+          'Unavailable',
+        ) ?? 'Unavailable',
+    };
+  });
+  const unavailableCount = rows.filter((row) => !row.enabled).length;
+  const enabledCount = rows.length - unavailableCount;
+  const statusText = surface
+    ? unavailableCount === 0
+      ? 'All version actions available'
+      : `${unavailableCount} ${unavailableCount === 1 ? 'action' : 'actions'} unavailable`
+    : 'Version availability unavailable';
+  const countText = surface ? `${enabledCount}/${rows.length} enabled` : 'No status';
 
   return (
-    <section className="flex flex-wrap gap-1.5" aria-label="Version capabilities">
-      {rows.map(({ capability, state }) => {
-        const enabled = state?.enabled === true;
-        const reason =
-          sanitizeVersionStatusText(
-            state?.enabled === false ? state.reason : 'Unavailable',
-            'Unavailable',
-          ) ?? 'Unavailable';
-        const description = enabled
-          ? `${CAPABILITY_LABELS[capability]} enabled`
-          : `${CAPABILITY_LABELS[capability]} unavailable: ${reason}`;
-        return (
-          <span
-            key={capability}
-            data-testid={`version-history-capability-${safeDomId(capability)}`}
-            data-state={enabled ? 'enabled' : 'unavailable'}
-            aria-label={description}
-            className={`px-2 py-1 rounded-sm text-[11px] leading-none border ${
-              enabled
-                ? 'border-ss-success/40 text-ss-success bg-ss-success/10'
-                : 'border-ss-border text-ss-text-secondary bg-ss-surface-secondary'
-            }`}
-            title={description}
-          >
-            {CAPABILITY_LABELS[capability]}
-            <span className="sr-only">{enabled ? ' enabled' : ` unavailable: ${reason}`}</span>
+    <section aria-label="Version availability">
+      <details
+        className="group rounded-sm border border-ss-border bg-ss-surface-secondary"
+        data-testid="version-history-availability-details"
+        onToggle={(event) => setExpanded(event.currentTarget.open)}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-body-sm [&::-webkit-details-marker]:hidden">
+          <span className="flex min-w-0 items-center gap-2">
+            <ChevronRight
+              size={14}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              className="shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
+            />
+            <span className="min-w-0">
+              <span className="block font-medium text-ss-text">Availability</span>
+              <span className="block truncate text-[11px] leading-snug text-ss-text-secondary">
+                {statusText}
+              </span>
+            </span>
           </span>
-        );
-      })}
-    </section>
-  );
-}
-
-export function RefList({
-  refs,
-  checkoutEnabled,
-  checkoutDisabledReason,
-  onCheckoutRef,
-}: {
-  readonly refs: readonly VersionRef[];
-  readonly checkoutEnabled: boolean;
-  readonly checkoutDisabledReason?: string;
-  readonly onCheckoutRef: (ref: VersionRef) => void;
-}): React.JSX.Element {
-  const checkoutReasonId = 'version-checkout-disabled-reason';
-  const checkoutStatus = checkoutDisabledReason?.trim() || 'Checkout is unavailable.';
-
-  return (
-    <section className="flex flex-col gap-2" aria-label="Branches">
-      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
-        <GitBranch size={15} strokeWidth={1.75} aria-hidden="true" />
-        <span>Branches</span>
-      </div>
-      <DisabledReason
-        id={checkoutReasonId}
-        reason={!checkoutEnabled ? checkoutStatus : undefined}
-      />
-      {refs.length === 0 ? (
-        <div className="text-body-sm text-ss-text-secondary py-2">No branches available</div>
-      ) : (
-        <ol className="flex flex-col gap-2 m-0 p-0 list-none">
-          {refs.map((ref) => {
-            const branchLabel = displayBranchName(ref.name);
+          <span className="shrink-0 text-[11px] font-medium text-ss-text-secondary">
+            {countText}
+          </span>
+        </summary>
+        <ol className="m-0 flex flex-col gap-0 border-t border-ss-border p-0 list-none">
+          {rows.map(({ capability, enabled, reason }) => {
+            const description = enabled
+              ? `${CAPABILITY_LABELS[capability]} enabled`
+              : `${CAPABILITY_LABELS[capability]} unavailable: ${reason}`;
             return (
-              <li key={ref.name} className="border border-ss-border rounded-sm p-2 bg-ss-surface">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-body-sm font-medium text-ss-text truncate">
-                      {branchLabel}
-                    </div>
-                    <div className="font-mono text-[11px] text-ss-text-secondary truncate">
-                      {shortCommitId(ref.commitId)}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
-                    onClick={() => onCheckoutRef(ref)}
-                    disabled={!checkoutEnabled}
-                    aria-label={`Checkout ${branchLabel}`}
-                    aria-describedby={!checkoutEnabled ? checkoutReasonId : undefined}
-                    title={!checkoutEnabled ? checkoutStatus : undefined}
-                    className="inline-flex h-7 shrink-0 items-center justify-center rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-                  >
-                    Checkout
-                  </button>
-                </div>
+              <li
+                key={capability}
+                data-testid={`version-history-capability-${safeDomId(capability)}`}
+                data-state={enabled ? 'enabled' : 'unavailable'}
+                aria-label={description}
+                title={description}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 border-b border-ss-border px-3 py-2 last:border-b-0"
+              >
+                <span className="truncate text-[11px] font-medium text-ss-text">
+                  {CAPABILITY_LABELS[capability]}
+                </span>
+                <span
+                  className={`text-[10px] font-medium uppercase ${
+                    enabled ? 'text-ss-success' : 'text-ss-text-tertiary'
+                  }`}
+                >
+                  {enabled ? 'Available' : 'Unavailable'}
+                </span>
+                {!enabled && expanded ? (
+                  <span className="col-span-2 text-[11px] leading-snug text-ss-text-secondary">
+                    {reason}
+                  </span>
+                ) : null}
               </li>
             );
           })}
         </ol>
-      )}
+      </details>
     </section>
+  );
+}
+
+export function CurrentBranchMenu({
+  data,
+  branchName,
+  targetCommitId,
+  branchEnabled,
+  checkoutEnabled,
+  branchDisabledReason,
+  checkoutDisabledReason,
+  onBranchNameChange,
+  onCreateBranch,
+  onCheckoutRef,
+}: {
+  readonly data: VersionHistoryData;
+  readonly branchName: string;
+  readonly targetCommitId?: WorkbookCommitId;
+  readonly branchEnabled: boolean;
+  readonly checkoutEnabled: boolean;
+  readonly branchDisabledReason?: string;
+  readonly checkoutDisabledReason?: string;
+  readonly onBranchNameChange: (value: string) => void;
+  readonly onCreateBranch: () => void;
+  readonly onCheckoutRef: (ref: VersionRef) => void;
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const checkoutReasonId = 'version-checkout-disabled-reason';
+  const branchReasonId = 'version-branch-disabled-reason';
+  const checkoutStatus =
+    sanitizeVersionStatusText(checkoutDisabledReason, 'Checkout is unavailable.') ??
+    'Checkout is unavailable.';
+  const branchStatus =
+    sanitizeVersionStatusText(branchDisabledReason, 'Create branch is unavailable.') ??
+    'Create branch is unavailable.';
+  const currentBranchName = currentBranchRefName(data);
+  const currentBranchLabel = currentBranchName
+    ? displayBranchName(currentBranchName)
+    : 'Detached or unavailable';
+
+  return (
+    <section aria-label="Current Branch">
+      <details
+        open={open}
+        className="group rounded-sm border border-ss-border bg-ss-surface"
+        data-testid="version-history-current-branch-menu"
+        onToggle={(event) => setOpen(event.currentTarget.open)}
+      >
+        <summary
+          className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-body-sm [&::-webkit-details-marker]:hidden"
+          data-testid="version-history-current-branch-trigger"
+          tabIndex={0}
+        >
+          <span className="flex min-w-0 items-center gap-2">
+            <GitBranch
+              size={15}
+              strokeWidth={1.75}
+              aria-hidden="true"
+              className="shrink-0 text-ss-text-secondary"
+            />
+            <span className="min-w-0">
+              <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
+                Current Branch
+              </span>
+              <span className="block truncate text-body-sm font-medium text-ss-text">
+                {currentBranchLabel}
+              </span>
+            </span>
+          </span>
+          <ChevronRight
+            size={15}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
+          />
+        </summary>
+
+        {open ? (
+          <div className="border-t border-ss-border">
+            <div className="px-3 pb-2 pt-3">
+              <div className="mb-2 text-[11px] font-medium uppercase text-ss-text-tertiary">
+                Branches
+              </div>
+              <DisabledReason
+                id={checkoutReasonId}
+                reason={!checkoutEnabled ? checkoutStatus : undefined}
+              />
+              {data.refs.length === 0 ? (
+                <div className="py-2 text-body-sm text-ss-text-secondary">
+                  No branches available
+                </div>
+              ) : (
+                <ol className="m-0 flex flex-col gap-1 p-0 list-none">
+                  {data.refs.map((ref) => {
+                    const branchLabel = displayBranchName(ref.name);
+                    const current = isCurrentBranchRef(currentBranchName, ref);
+                    const buttonLabel = current
+                      ? `Current branch ${branchLabel}`
+                      : `Checkout ${branchLabel}`;
+                    return (
+                      <li key={ref.name}>
+                        <button
+                          type="button"
+                          data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
+                          onClick={() => {
+                            if (!current) onCheckoutRef(ref);
+                          }}
+                          disabled={current || !checkoutEnabled}
+                          aria-label={buttonLabel}
+                          aria-describedby={
+                            !current && !checkoutEnabled ? checkoutReasonId : undefined
+                          }
+                          title={
+                            current
+                              ? 'Current branch'
+                              : !checkoutEnabled
+                                ? checkoutStatus
+                                : undefined
+                          }
+                          className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{branchLabel}</span>
+                            <span className="block truncate font-mono text-[11px] text-ss-text-secondary">
+                              {shortCommitId(ref.commitId)}
+                            </span>
+                          </span>
+                          {current ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ss-primary">
+                              <Check size={13} strokeWidth={1.75} aria-hidden="true" />
+                              Current
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium text-ss-text-secondary">
+                              Checkout
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+
+            <div className="border-t border-ss-border px-3 py-3">
+              <div className="mb-2 flex items-center gap-2 text-body-sm font-medium text-ss-text">
+                <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>New branch</span>
+              </div>
+              <label htmlFor="version-branch-name" className="sr-only">
+                Branch name
+              </label>
+              <input
+                id="version-branch-name"
+                data-testid="version-history-branch-name-input"
+                type="text"
+                value={branchName}
+                onChange={(event) => onBranchNameChange(event.currentTarget.value)}
+                placeholder="review/version-panel"
+                className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
+              />
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <TargetSummary
+                  testId="version-history-branch-target-summary"
+                  commitId={targetCommitId}
+                />
+                <button
+                  type="button"
+                  data-testid="version-history-create-branch-button"
+                  onClick={onCreateBranch}
+                  disabled={!branchEnabled}
+                  aria-describedby={!branchEnabled && branchStatus ? branchReasonId : undefined}
+                  title={!branchEnabled ? branchStatus : undefined}
+                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+                >
+                  <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Create branch</span>
+                </button>
+              </div>
+              <DisabledReason
+                id={branchReasonId}
+                reason={!branchEnabled ? branchStatus : undefined}
+              />
+            </div>
+          </div>
+        ) : null}
+      </details>
+    </section>
+  );
+}
+
+function currentBranchRefName(data: VersionHistoryData): string | undefined {
+  if (data.surface?.current.detached) return undefined;
+  return data.surface?.current.branchName ?? data.head?.refName;
+}
+
+function isCurrentBranchRef(currentBranchName: string | undefined, ref: VersionRef): boolean {
+  if (!currentBranchName) return false;
+  return displayBranchName(currentBranchName) === displayBranchName(ref.name);
+}
+
+function TargetSummary({
+  testId,
+  commitId,
+}: {
+  readonly testId: string;
+  readonly commitId: WorkbookCommitId | undefined;
+}): React.JSX.Element {
+  return (
+    <span
+      className="min-w-0 truncate font-mono text-[11px] text-ss-text-secondary"
+      data-testid={testId}
+      data-version-commit-id={commitId}
+    >
+      Target {commitId ? shortCommitId(commitId) : 'unavailable'}
+    </span>
   );
 }
 

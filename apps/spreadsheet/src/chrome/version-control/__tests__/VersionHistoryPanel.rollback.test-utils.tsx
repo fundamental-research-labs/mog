@@ -26,6 +26,7 @@ export {
   createDeferred,
   expectActionResult,
   expectDisabledButtonReason,
+  openCurrentBranchMenu,
   shortCommitId,
 } from './VersionHistoryPanel.test-utils';
 export type { VersionHistoryWorkbook } from './VersionHistoryPanel.test-utils';

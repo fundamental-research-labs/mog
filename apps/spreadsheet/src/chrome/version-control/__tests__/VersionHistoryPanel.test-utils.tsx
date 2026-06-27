@@ -23,6 +23,8 @@ import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../Vers
 export type { VersionHistoryWorkbook } from '../VersionHistoryPanel';
 export { shortCommitId } from '../version-history-format';
 
+type VersionHistoryPanelUser = ReturnType<typeof userEvent.setup>;
+
 export const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 export const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 export const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
@@ -513,6 +515,15 @@ export function branchTargetTestId(commitId: string): string {
 
 export function checkoutBranchTestId(refName: string): string {
   return `version-history-checkout-branch-${safeDomId(refName)}`;
+}
+
+export async function openCurrentBranchMenu(user: VersionHistoryPanelUser): Promise<HTMLElement> {
+  const menu = screen.getByTestId('version-history-current-branch-menu');
+  if (!menu.hasAttribute('open')) {
+    await user.click(screen.getByTestId('version-history-current-branch-trigger'));
+    await waitFor(() => expect(menu).toHaveAttribute('open'));
+  }
+  return menu;
 }
 
 export function parentDiffButtonTestId(commitId: string): string {

@@ -127,11 +127,9 @@ describe('VersionActionStatus', () => {
     render(
       <VersionActions
         commitMessage=""
-        branchName=""
         rollbackReason=""
         actionState={{ status: 'idle' }}
         commitEnabled={false}
-        branchEnabled
         rollbackEnabled
         remotePromoteEnabled={false}
         commitDisabledReason={`Commit blocked for ${RAW_REF} ${RAW_PRINCIPAL}.`}
@@ -142,10 +140,8 @@ describe('VersionActionStatus', () => {
           detail: `Backlog is pending for ${RAW_REF} ${RAW_PRINCIPAL}.`,
         }}
         onCommitMessageChange={noop}
-        onBranchNameChange={noop}
         onRollbackReasonChange={noop}
         onCommit={noop}
-        onCreateBranch={noop}
         onStageRollback={noop}
         onPromotePendingRemote={noop}
       />,

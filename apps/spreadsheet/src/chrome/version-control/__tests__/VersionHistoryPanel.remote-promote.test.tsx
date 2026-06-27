@@ -8,6 +8,7 @@ import {
   createDeferred,
   expectActionResult,
   expectDisabledButtonReason,
+  openCurrentBranchMenu,
   renderVersionHistoryPanel,
   type VersionHistoryWorkbook,
 } from './VersionHistoryPanel.test-utils';
@@ -40,6 +41,7 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
 
     const remoteStatus = screen.getByTestId('version-history-remote-promote-status');
     expect(remoteStatus).toHaveAttribute('data-state', 'pending');
@@ -80,9 +82,10 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
       'data-state',
       'unavailable',
     );
-    expect(
-      screen.getByTestId('version-history-capability-version-remotePromote'),
-    ).toHaveAccessibleName(`Remote promote unavailable: ${reason}`);
+    expect(screen.getByTestId('version-history-capability-version-remotePromote')).toHaveAttribute(
+      'aria-label',
+      `Remote promote unavailable: ${reason}`,
+    );
 
     await user.click(promoteButton);
     expect(workbook.version.promotePendingRemote).not.toHaveBeenCalled();
@@ -152,9 +155,10 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
       screen.getByRole('button', { name: 'Promote remote' }),
       refreshedReason,
     );
-    expect(
-      screen.getByTestId('version-history-capability-version-remotePromote'),
-    ).toHaveAccessibleName(`Remote promote unavailable: ${refreshedReason}`);
+    expect(screen.getByTestId('version-history-capability-version-remotePromote')).toHaveAttribute(
+      'aria-label',
+      `Remote promote unavailable: ${refreshedReason}`,
+    );
   });
 
   it('keeps destructive controls disabled while remote promotion is in flight', async () => {
@@ -180,6 +184,7 @@ describe('VersionHistoryPanelContent pending remote promotion', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByLabelText('Branch name'), 'scenario/frozen');
     await user.type(screen.getByLabelText('Rollback reason'), 'Undo imported change');
     await user.click(screen.getByTestId('version-history-promote-remote-button'));

@@ -20,6 +20,7 @@ import {
   expectDisabledButtonReason,
   expectReasonById,
   hostDeniedCapabilityState,
+  openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
   safeDomId,
@@ -40,6 +41,8 @@ describe('VersionHistoryPanelContent', () => {
 
     expect(await screen.findByText('Initial import')).toBeInTheDocument();
     expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
+    await openCurrentBranchMenu(user);
     expect(screen.getByText('scenario/budget')).toBeInTheDocument();
     expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
@@ -148,13 +151,19 @@ describe('VersionHistoryPanelContent', () => {
 
     await user.tab();
 
-    expect(screen.getByTestId('version-history-commit-message-input')).toHaveFocus();
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveFocus();
   });
 
   it('exposes stable G4 selectors for real-input controls and visible disabled reasons', async () => {
-    renderVersionHistoryPanel();
+    const { user } = renderVersionHistoryPanel();
 
     await screen.findByText('Calculated forecast');
+    expect(screen.getByTestId('version-history-current-branch-menu')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
+      'Current Branch',
+    );
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
+    await openCurrentBranchMenu(user);
 
     expect(screen.getByTestId('version-history-commit-message-input')).toHaveAccessibleName(
       'Commit message',
@@ -189,12 +198,18 @@ describe('VersionHistoryPanelContent', () => {
       `version-diff-disabled-${safeDomId(PARENT_COMMIT_ID)}`,
       'Root commits do not have a parent diff.',
     );
-    expect(screen.getByTestId('version-history-capability-version-read')).toHaveAccessibleName(
+    const availability = screen.getByRole('region', { name: 'Version availability' });
+    expect(availability).toHaveTextContent('1 action unavailable');
+    expect(availability).toHaveTextContent('12/13 enabled');
+    expect(screen.getByTestId('version-history-availability-details')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('version-history-capability-version-read')).toHaveAttribute(
+      'aria-label',
       'Read enabled',
     );
-    expect(
-      screen.getByTestId('version-history-capability-version-remotePromote'),
-    ).toHaveAccessibleName('Remote promote enabled');
+    expect(screen.getByTestId('version-history-capability-version-remotePromote')).toHaveAttribute(
+      'aria-label',
+      'Remote promote enabled',
+    );
     expect(screen.getByTestId('version-history-remote-promote-status')).toHaveAttribute(
       'data-state',
       'ready',
@@ -202,7 +217,7 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-promote-remote-button')).toBeEnabled();
   });
 
-  it('renders one summary row for every capability in the surface contract', async () => {
+  it('renders one availability diagnostic row for every capability in the surface contract', async () => {
     const surface = createSurfaceStatus();
     const workbook = createWorkbook({
       getSurfaceStatus: jest.fn(async () => surface),
@@ -212,7 +227,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
 
-    const summary = screen.getByRole('region', { name: 'Version capabilities' });
+    const summary = screen.getByRole('region', { name: 'Version availability' });
     const renderedIds = Array.from(
       summary.querySelectorAll<HTMLElement>('[data-testid^="version-history-capability-"]'),
       (row) => {
@@ -246,6 +261,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
 
     const commitButton = screen.getByRole('button', { name: /^Commit$/ });
@@ -269,7 +285,8 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-diff-unavailable-reason')).toHaveTextContent(
       'version:diff is not available.',
     );
-    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAccessibleName(
+    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAttribute(
+      'aria-label',
       'Diff unavailable: version:diff is not available.',
     );
     expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAttribute(
@@ -288,6 +305,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
 
     expectDisabledButtonReason(screen.getByRole('button', { name: /^Commit$/ }), reason);
@@ -328,6 +346,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByLabelText('Branch name'), 'review/version-panel');
 
     expectDisabledButtonReason(
@@ -375,6 +394,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
 
     expectDisabledButtonReason(
       screen.getByRole('button', { name: /^Commit$/ }),
@@ -411,6 +431,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
 
     expectDisabledButtonReason(
       screen.getByRole('button', { name: /^Commit$/ }),
@@ -446,6 +467,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await screen.findByText('Calculated forecast');
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
 
     const commitButton = screen.getByRole('button', { name: /^Commit$/ });
     const checkoutButton = screen.getByRole('button', { name: 'Checkout scenario/budget' });
@@ -510,6 +532,7 @@ describe('VersionHistoryPanelContent', () => {
     );
     expect(staleStatus).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
     expect(staleStatus).not.toHaveTextContent(shortCommitId(LATEST_COMMIT_ID));
+    await openCurrentBranchMenu(user);
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
       'data-version-commit-id',
       HEAD_COMMIT_ID,
@@ -523,6 +546,7 @@ describe('VersionHistoryPanelContent', () => {
     );
 
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
+    await openCurrentBranchMenu(user);
 
     expectDisabledButtonReason(
       screen.getByRole('button', { name: /^Commit$/ }),
@@ -557,13 +581,16 @@ describe('VersionHistoryPanelContent', () => {
       })),
     });
 
-    renderVersionHistoryPanel({ workbook });
+    const { user } = renderVersionHistoryPanel({ workbook });
 
     const statusSummary = await screen.findByRole('region', { name: 'Version status' });
-    expect(statusSummary).toHaveTextContent('Detached or unavailable');
     expect(statusSummary).toHaveTextContent(shortCommitId(PARENT_COMMIT_ID));
     expect(statusSummary).not.toHaveTextContent('refs/heads/main');
     expect(statusSummary).not.toHaveTextContent('main');
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
+      'Detached or unavailable',
+    );
+    await openCurrentBranchMenu(user);
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
       'data-version-commit-id',
       PARENT_COMMIT_ID,

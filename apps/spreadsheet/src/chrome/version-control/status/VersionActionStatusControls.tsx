@@ -1,4 +1,4 @@
-import { CloudUpload, GitBranch, GitCommit, Undo2 } from 'lucide-react';
+import { CloudUpload, GitCommit, Undo2 } from 'lucide-react';
 import type { WorkbookCommitId } from '@mog-sdk/contracts/api';
 
 import {
@@ -49,24 +49,19 @@ export function ActionStatus({
 
 type VersionActionsProps = {
   readonly commitMessage: string;
-  readonly branchName: string;
   readonly rollbackReason: string;
   readonly targetCommitId?: WorkbookCommitId;
   readonly actionState: VersionActionState;
   readonly commitEnabled: boolean;
-  readonly branchEnabled: boolean;
   readonly rollbackEnabled: boolean;
   readonly remotePromoteEnabled: boolean;
   readonly commitDisabledReason?: string;
-  readonly branchDisabledReason?: string;
   readonly rollbackDisabledReason?: string;
   readonly remotePromoteDisabledReason?: string;
   readonly remotePromotionStatus: VersionRemotePromotionStatus;
   readonly onCommitMessageChange: (value: string) => void;
-  readonly onBranchNameChange: (value: string) => void;
   readonly onRollbackReasonChange: (value: string) => void;
   readonly onCommit: () => void;
-  readonly onCreateBranch: () => void;
   readonly onStageRollback: () => void;
   readonly onPromotePendingRemote: () => void;
 };
@@ -79,7 +74,6 @@ type DisabledControlStatus = {
 
 type VersionActionControls = {
   readonly commit: DisabledControlStatus;
-  readonly branch: DisabledControlStatus;
   readonly rollback: DisabledControlStatus;
   readonly remotePromote: DisabledControlStatus;
   readonly remotePromotionDetail: string | undefined;
@@ -95,14 +89,6 @@ export function VersionActions(props: VersionActionsProps): React.JSX.Element {
         control={controls.commit}
         onMessageChange={props.onCommitMessageChange}
         onCommit={props.onCommit}
-      />
-
-      <BranchAction
-        branchName={props.branchName}
-        targetCommitId={props.targetCommitId}
-        control={controls.branch}
-        onBranchNameChange={props.onBranchNameChange}
-        onCreateBranch={props.onCreateBranch}
       />
 
       <RollbackAction
@@ -131,17 +117,14 @@ export function VersionActions(props: VersionActionsProps): React.JSX.Element {
 
 function getVersionActionControls({
   commitEnabled,
-  branchEnabled,
   rollbackEnabled,
   remotePromoteEnabled,
   commitDisabledReason,
-  branchDisabledReason,
   rollbackDisabledReason,
   remotePromoteDisabledReason,
   remotePromotionStatus,
 }: VersionActionsProps): VersionActionControls {
   const commitReason = sanitizeVersionStatusText(commitDisabledReason, VERSION_ACTION_UNAVAILABLE);
-  const branchReason = sanitizeVersionStatusText(branchDisabledReason, VERSION_ACTION_UNAVAILABLE);
   const rollbackReason = sanitizeVersionStatusText(
     rollbackDisabledReason,
     VERSION_ACTION_UNAVAILABLE,
@@ -156,11 +139,6 @@ function getVersionActionControls({
       enabled: commitEnabled,
       reasonId: 'version-commit-disabled-reason',
       reason: commitReason,
-    },
-    branch: {
-      enabled: branchEnabled,
-      reasonId: 'version-branch-disabled-reason',
-      reason: branchReason,
     },
     rollback: {
       enabled: rollbackEnabled,
@@ -215,55 +193,6 @@ function CommitAction({
         <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>Commit</span>
       </button>
-      <DisabledReason
-        id={control.reasonId}
-        reason={!control.enabled ? control.reason : undefined}
-      />
-    </div>
-  );
-}
-
-function BranchAction({
-  branchName,
-  targetCommitId,
-  control,
-  onBranchNameChange,
-  onCreateBranch,
-}: {
-  readonly branchName: string;
-  readonly targetCommitId: WorkbookCommitId | undefined;
-  readonly control: DisabledControlStatus;
-  readonly onBranchNameChange: (value: string) => void;
-  readonly onCreateBranch: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor="version-branch-name" className="text-body-sm font-medium text-ss-text">
-        Branch name
-      </label>
-      <input
-        id="version-branch-name"
-        data-testid="version-history-branch-name-input"
-        type="text"
-        value={branchName}
-        onChange={(event) => onBranchNameChange(event.currentTarget.value)}
-        className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
-      />
-      <div className="flex items-center justify-between gap-2">
-        <TargetSummary testId="version-history-branch-target-summary" commitId={targetCommitId} />
-        <button
-          type="button"
-          data-testid="version-history-create-branch-button"
-          onClick={onCreateBranch}
-          disabled={!control.enabled}
-          aria-describedby={!control.enabled && control.reason ? control.reasonId : undefined}
-          title={!control.enabled ? control.reason : undefined}
-          className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-        >
-          <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span>Create branch</span>
-        </button>
-      </div>
       <DisabledReason
         id={control.reasonId}
         reason={!control.enabled ? control.reason : undefined}

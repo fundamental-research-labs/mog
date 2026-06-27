@@ -21,6 +21,7 @@ import {
   failedInvalidState,
   failedNotFound,
   mergePreviewButtonTestId,
+  openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
   semanticDiffPage,
@@ -85,6 +86,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
 
     const branchInput = screen.getByTestId('version-history-branch-name-input');
     const createBranchButton = screen.getByTestId('version-history-create-branch-button');
@@ -211,6 +213,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
     await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
 
     await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
@@ -251,6 +254,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
@@ -302,6 +306,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
     await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
@@ -433,6 +438,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
     expect(commitButton).toBeEnabled();
 
+    await openCurrentBranchMenu(user);
     await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
 
     await expectActionResult('Checked out scenario/budget', 'success');
@@ -465,6 +471,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
 
     await user.click(screen.getByTestId(branchTargetTestId(PARENT_COMMIT_ID)));
+    await openCurrentBranchMenu(user);
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
       'data-version-commit-id',
       PARENT_COMMIT_ID,
@@ -484,6 +491,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await expectActionResult('Created review/version-panel', 'success');
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
 
+    await openCurrentBranchMenu(user);
     await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
     await waitFor(() =>
       expect(workbook.version.checkout).toHaveBeenCalledWith(
@@ -557,6 +565,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.click(screen.getByTestId('version-history-commit-button'));
     await expectActionResult('Commit rejected by version provider.', 'error');
 
+    await openCurrentBranchMenu(user);
     await user.type(
       screen.getByTestId('version-history-branch-name-input'),
       'review/provider-rejected',
@@ -564,6 +573,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.click(screen.getByTestId('version-history-create-branch-button'));
     await expectActionResult('Branch rejected by version provider.', 'error');
 
+    await openCurrentBranchMenu(user);
     await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
     await expectActionResult('Checkout rejected by version provider.', 'error');
 

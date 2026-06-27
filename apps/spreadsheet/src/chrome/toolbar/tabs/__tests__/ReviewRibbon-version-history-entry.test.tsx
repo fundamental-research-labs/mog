@@ -145,13 +145,24 @@ jest.unstable_mockModule('../../../version-control/VersionHistoryPanel', () => (
 const { ReviewRibbon } = await import('../ReviewRibbon');
 const { SidePanel } = await import('../../../side-panel/SidePanel');
 
-describe('Version History entry gate', () => {
+describe('Review ribbon entry gates', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     versionControlEnabled = true;
     uiState.showAllComments = false;
     uiState.activeSheetId = 'sheet-1';
     uiState.sidePanelContent = 'index';
+  });
+
+  it('does not expose legacy utility groups in the default Review ribbon', () => {
+    render(<ReviewRibbon />);
+
+    expect(screen.queryByRole('region', { name: 'Proofing' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Accessibility' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Spelling' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thesaurus' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Workbook Statistics' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check Accessibility' })).not.toBeInTheDocument();
   });
 
   it('exposes the Review ribbon entrypoint when version control is enabled', async () => {

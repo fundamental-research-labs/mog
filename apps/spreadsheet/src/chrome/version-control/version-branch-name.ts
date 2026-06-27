@@ -30,6 +30,11 @@ export function displayBranchName(name: string): string {
     : name;
 }
 
+export function publicBranchLabel(name: string): string | undefined {
+  const normalized = normalizeVersionBranchNameInput(name);
+  return normalized.ok ? normalized.branch.displayName : undefined;
+}
+
 export function normalizeVersionBranchNameInput(value: string): VersionBranchNameValidationResult {
   const trimmed = value.trim();
   if (trimmed.length === 0) return invalidBranchName('Enter a branch name.');

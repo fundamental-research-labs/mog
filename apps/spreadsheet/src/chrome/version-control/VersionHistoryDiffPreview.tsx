@@ -1,5 +1,12 @@
 import { GitCompare } from 'lucide-react';
-import type { VersionSemanticDiffPage, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import type {
+  VersionDiffEntry,
+  VersionDiffDisplayValue,
+  VersionDiffValue,
+  VersionSemanticDiffPage,
+  VersionSemanticValue,
+  WorkbookCommitId,
+} from '@mog-sdk/contracts/api';
 
 import {
   shortCommitId,
@@ -15,73 +22,211 @@ export type VersionDiffPreview = {
 
 export function VersionHistoryDiffPreview({
   diffPreview,
+  diffEnabled = true,
+  diffDisabledReason,
 }: {
   readonly diffPreview?: VersionDiffPreview;
-}): React.JSX.Element | null {
-  if (!diffPreview) return null;
+  readonly diffEnabled?: boolean;
+  readonly diffDisabledReason?: string;
+}): React.JSX.Element {
+  if (!diffPreview) {
+    return (
+      <section
+        className="flex min-h-[172px] flex-col gap-3 rounded-sm border border-ss-border bg-ss-surface-secondary p-3"
+        aria-label="Diff viewer"
+        data-testid="version-history-diff-viewer"
+        data-state={diffEnabled ? 'idle' : 'unavailable'}
+      >
+        <DiffViewerHeader stateLabel={diffEnabled ? 'No diff' : 'Unavailable'} />
+        <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-ss-border bg-ss-surface px-3 py-6 text-body-sm text-ss-text-secondary">
+          {diffEnabled ? 'No diff loaded' : 'Diff unavailable'}
+        </div>
+        {!diffEnabled && diffDisabledReason ? (
+          <div
+            id="version-diff-unavailable-reason"
+            className="text-[11px] leading-snug text-ss-text-secondary"
+            data-testid="version-diff-unavailable-reason"
+          >
+            {diffDisabledReason}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   const count = diffPreview.page.items.length;
   const state = versionDiffPreviewState(diffPreview.page);
   const summaryId = 'version-history-parent-diff-summary';
-  const summary = `Parent Diff Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
+  const summary = `Diff Viewer Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
     diffPreview.target,
   )} State ${state.label}. Change count ${count}`;
 
   return (
     <section
-      className="flex flex-col gap-2 border border-ss-border rounded-sm p-2 bg-ss-surface-secondary"
-      aria-label="Parent diff"
+      className="flex min-h-[220px] flex-col gap-3 rounded-sm border border-ss-border bg-ss-surface-secondary p-3"
+      aria-label="Diff viewer"
       aria-describedby={summaryId}
-      data-testid="version-history-parent-diff"
+      data-testid="version-history-diff-viewer"
+      data-loaded="true"
       data-state={state.kind}
     >
-      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
-        <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
-        <span>Parent Diff</span>
-      </div>
-      <p
-        id={summaryId}
-        className="sr-only"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        data-testid="version-history-parent-diff-status"
-      >
-        {summary}
-      </p>
-      <div className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1 text-[11px]">
-        <span className="text-ss-text-secondary">Base</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.base)}</span>
-        <span className="text-ss-text-secondary">Target</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.target)}</span>
-        <span className="text-ss-text-secondary">Changes</span>
-        <span className="text-ss-text">{count}</span>
-      </div>
-      {state.kind === 'changes' ? (
-        <ol className="flex flex-col gap-1 m-0 p-0 list-none">
-          {diffPreview.page.items.map((entry, index) => (
-            <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-              {versionDiffEntryLabel(entry)}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <div
-          className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2 py-1.5 text-body-sm"
-          data-testid="version-history-parent-diff-state"
-        >
-          <div className="font-medium text-ss-text">{state.title}</div>
-          <div className="text-ss-text-secondary">{state.message}</div>
-          {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
-            <ol className="mt-1 flex flex-col gap-1 m-0 p-0 list-none">
-              {diffPreview.page.items.map((entry, index) => (
-                <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-                  {versionDiffEntryLabel(entry)}
-                </li>
-              ))}
-            </ol>
-          ) : null}
+      <div data-testid="version-history-parent-diff" data-state={state.kind} className="contents">
+        <div className="flex items-start justify-between gap-3">
+          <DiffViewerHeader stateLabel={state.label} />
+          <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[11px] font-medium text-ss-text-secondary">
+            {count} {count === 1 ? 'change' : 'changes'}
+          </span>
         </div>
-      )}
+        <p
+          id={summaryId}
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="version-history-parent-diff-status"
+        >
+          {summary}
+        </p>
+        <div className="grid grid-cols-2 gap-2 text-[11px]">
+          <CommitPill label="Base" commitId={diffPreview.base} />
+          <CommitPill label="Target" commitId={diffPreview.target} />
+        </div>
+        {state.kind === 'changes' ? (
+          <ol
+            className="m-0 flex max-h-[360px] flex-col gap-2 overflow-y-auto p-0 list-none"
+            data-testid="version-history-diff-change-list"
+          >
+            {diffPreview.page.items.map((entry, index) => (
+              <DiffChangeRow key={index} entry={entry} />
+            ))}
+          </ol>
+        ) : (
+          <div
+            className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2.5 py-2 text-body-sm"
+            data-testid="version-history-parent-diff-state"
+          >
+            <div className="font-medium text-ss-text">{state.title}</div>
+            <div className="text-ss-text-secondary">{state.message}</div>
+            {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
+              <ol className="m-0 mt-2 flex flex-col gap-1 p-0 list-none">
+                {diffPreview.page.items.map((entry, index) => (
+                  <li key={index} className="text-[11px] text-ss-text-secondary truncate">
+                    {versionDiffEntryLabel(entry)}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        )}
+      </div>
     </section>
   );
+}
+
+function DiffViewerHeader({ stateLabel }: { readonly stateLabel: string }): React.JSX.Element {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-body-sm font-semibold text-ss-text">
+      <GitCompare size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">Diff Viewer</span>
+      <span className="shrink-0 text-[11px] font-medium uppercase text-ss-text-tertiary">
+        {stateLabel}
+      </span>
+    </div>
+  );
+}
+
+function CommitPill({
+  label,
+  commitId,
+}: {
+  readonly label: string;
+  readonly commitId: WorkbookCommitId;
+}): React.JSX.Element {
+  return (
+    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5">
+      <div className="text-[10px] font-medium uppercase text-ss-text-tertiary">{label}</div>
+      <div className="truncate font-mono text-[11px] text-ss-text">{shortCommitId(commitId)}</div>
+    </div>
+  );
+}
+
+function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.JSX.Element {
+  return (
+    <li className="rounded-sm border border-ss-border bg-ss-surface px-2.5 py-2">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-body-sm font-medium text-ss-text">
+            {diffEntryTitle(entry)}
+          </div>
+          <div className="mt-0.5 truncate font-mono text-[11px] text-ss-text-secondary">
+            {versionDiffEntryLabel(entry)}
+          </div>
+        </div>
+        {entry.diagnostics?.length ? (
+          <span className="shrink-0 rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-ss-text-secondary">
+            Diagnostic
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <DiffValueCell label="Before" value={entry.before} />
+        <DiffValueCell label="After" value={entry.after} />
+      </div>
+    </li>
+  );
+}
+
+function DiffValueCell({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: VersionDiffValue;
+}): React.JSX.Element {
+  return (
+    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 py-1.5">
+      <div className="text-[10px] font-medium uppercase text-ss-text-tertiary">{label}</div>
+      <div className="break-words font-mono text-[11px] leading-snug text-ss-text">
+        {formatDiffValue(value)}
+      </div>
+    </div>
+  );
+}
+
+function diffEntryTitle(entry: VersionDiffEntry): string {
+  const address = formatDisplayValue(entry.display?.address);
+  const entityLabel = formatDisplayValue(entry.display?.entityLabel);
+  if (address && entityLabel) return `${entityLabel} ${address}`;
+  if (address) return address;
+  if (entityLabel) return entityLabel;
+  if (entry.structural.kind === 'metadata') return entry.structural.entityId;
+  return 'Restricted change';
+}
+
+function formatDisplayValue(value: VersionDiffDisplayValue | undefined): string | undefined {
+  if (!value || value.kind === 'redacted') return undefined;
+  return value.value.trim().length > 0 ? value.value : undefined;
+}
+
+function formatDiffValue(value: VersionDiffValue): string {
+  if (value.kind === 'redacted') return 'Redacted';
+  return truncateValue(formatSemanticValue(value.value), 96);
+}
+
+function formatSemanticValue(value: VersionSemanticValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value.length === 0 ? 'Empty text' : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value.kind === 'blank') return 'Blank';
+  if (value.kind === 'dateTime') return value.iso;
+  if (value.kind === 'duration') return value.iso;
+  if (value.kind === 'error') return value.message ? `${value.code}: ${value.message}` : value.code;
+  if (value.kind === 'formula') return value.formula;
+  if (value.kind === 'richText') return value.runs.map((run) => run.text).join('');
+  if (value.kind === 'array') return `Array (${value.values.length})`;
+  return `Object (${value.fields.length})`;
+}
+
+function truncateValue(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
 }

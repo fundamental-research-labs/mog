@@ -513,13 +513,17 @@ describe('VersionHistoryPanelContent action flows', () => {
       }),
     );
     await expectActionResult('Loaded parent diff', 'success');
-    const parentDiff = await screen.findByTestId('version-history-parent-diff');
-    expect(parentDiff).toHaveTextContent('cells value');
-    const diffStatus = within(parentDiff).getByRole('status');
+    const diffViewer = await screen.findByTestId('version-history-diff-viewer');
+    expect(diffViewer).toHaveTextContent('Diff Viewer');
+    expect(diffViewer).toHaveTextContent('sheet-1!A1');
+    expect(diffViewer).toHaveTextContent('cells value');
+    expect(diffViewer).toHaveTextContent('Blank');
+    expect(diffViewer).toHaveTextContent('42');
+    const diffStatus = within(diffViewer).getByRole('status');
     expect(diffStatus).toHaveAttribute('aria-live', 'polite');
     expect(diffStatus).toHaveAttribute('aria-atomic', 'true');
     expect(diffStatus).toHaveTextContent(
-      `Parent Diff Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
+      `Diff Viewer Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
         HEAD_COMMIT_ID,
       )} State Changes. Change count 1`,
     );
@@ -534,14 +538,14 @@ describe('VersionHistoryPanelContent action flows', () => {
 
       await screen.findByText('Calculated forecast');
       await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-      const parentDiff = await screen.findByTestId('version-history-parent-diff');
-      expect(parentDiff).toHaveAttribute('data-state', state);
-      expect(parentDiff).toHaveTextContent(title);
-      expect(within(parentDiff).getByRole('status')).toHaveTextContent(`State ${label}`);
+      const diffViewer = await screen.findByTestId('version-history-diff-viewer');
+      expect(diffViewer).toHaveAttribute('data-state', state);
+      expect(diffViewer).toHaveTextContent(title);
+      expect(within(diffViewer).getByRole('status')).toHaveTextContent(`State ${label}`);
       if (state === 'redacted') {
-        expect(parentDiff).toHaveTextContent('Redacted change');
+        expect(diffViewer).toHaveTextContent('Redacted change');
       }
-      expect(parentDiff).not.toHaveTextContent('No semantic changes');
+      expect(diffViewer).not.toHaveTextContent('No semantic changes');
     },
   );
 

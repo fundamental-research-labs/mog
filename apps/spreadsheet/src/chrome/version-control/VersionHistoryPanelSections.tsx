@@ -12,9 +12,7 @@ import {
 } from 'lucide-react';
 import type {
   VersionAnnotationText,
-  VersionCapability,
   VersionRef,
-  VersionSurfaceStatus,
   WorkbookCommitId,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
@@ -26,40 +24,9 @@ import {
 } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
-import { displayBranchName } from './version-branch-name';
+import { displayBranchName, publicBranchLabel } from './version-branch-name';
 import { shortCommitId } from './version-history-format';
 import type { VersionHistoryData } from './version-history-panel-data';
-
-const CAPABILITY_LABELS: Record<VersionCapability, string> = {
-  'version:read': 'Read',
-  'version:diff': 'Diff',
-  'version:commit': 'Commit',
-  'version:branch': 'Branch',
-  'version:checkout': 'Checkout',
-  'version:reviewRead': 'Review read',
-  'version:reviewWrite': 'Review write',
-  'version:proposal': 'Proposal',
-  'version:mergePreview': 'Merge preview',
-  'version:mergeApply': 'Merge apply',
-  'version:revert': 'Rollback',
-  'version:provenance': 'Provenance',
-  'version:remotePromote': 'Remote promote',
-};
-
-const CAPABILITY_ROWS = Object.keys(CAPABILITY_LABELS) as readonly VersionCapability[];
-const CAPABILITY_ROW_INDEX = new Map(
-  CAPABILITY_ROWS.map((capability, index) => [capability, index] as const),
-);
-
-function capabilityRows(surface?: VersionSurfaceStatus): readonly VersionCapability[] {
-  if (!surface) return CAPABILITY_ROWS;
-
-  return (Object.keys(surface.capabilities) as VersionCapability[]).sort(
-    (left, right) =>
-      (CAPABILITY_ROW_INDEX.get(left) ?? Number.MAX_SAFE_INTEGER) -
-      (CAPABILITY_ROW_INDEX.get(right) ?? Number.MAX_SAFE_INTEGER),
-  );
-}
 
 export function VersionHistoryPanelHeader({
   closeButtonRef,
@@ -116,131 +83,6 @@ export function VersionHistoryPanelHeader({
   );
 }
 
-export function VersionStatusSummary({
-  data,
-}: {
-  readonly data: VersionHistoryData;
-}): React.JSX.Element {
-  const headId = data.head?.id ?? data.surface?.current.headCommitId;
-  const storageLabel = data.surface
-    ? `${data.surface.storage.backend}${data.surface.storage.ready ? ' ready' : ' unavailable'}`
-    : 'Unknown';
-  const dirtyLabel = data.surface?.dirty.hasUncommittedLocalChanges
-    ? 'Uncommitted changes'
-    : 'Clean';
-
-  return (
-    <section className="flex flex-col gap-2" aria-label="Version status">
-      <div className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-1 text-body-sm">
-        <span className="text-ss-text-secondary">Stage</span>
-        <span className="text-ss-text font-medium">
-          {data.surface?.stage ?? data.rollout?.rolloutStage ?? 'Unknown'}
-        </span>
-        <span className="text-ss-text-secondary">Storage</span>
-        <span className="text-ss-text">{storageLabel}</span>
-        <span className="text-ss-text-secondary">Head</span>
-        <span className="font-mono text-xs text-ss-text truncate">
-          {headId ? shortCommitId(headId) : 'Unavailable'}
-        </span>
-        <span className="text-ss-text-secondary">Workspace</span>
-        <span className="text-ss-text">{dirtyLabel}</span>
-      </div>
-      <VersionCurrentStaleStatus surface={data.surface} />
-    </section>
-  );
-}
-
-export function CapabilitySummary({
-  surface,
-}: {
-  readonly surface?: VersionSurfaceStatus;
-}): React.JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const rows = capabilityRows(surface).map((capability) => {
-    const state = surface?.capabilities[capability];
-    return {
-      capability,
-      enabled: state?.enabled === true,
-      reason:
-        sanitizeVersionStatusText(
-          state?.enabled === false ? state.reason : 'Unavailable',
-          'Unavailable',
-        ) ?? 'Unavailable',
-    };
-  });
-  const unavailableCount = rows.filter((row) => !row.enabled).length;
-  const enabledCount = rows.length - unavailableCount;
-  const statusText = surface
-    ? unavailableCount === 0
-      ? 'All version actions available'
-      : `${unavailableCount} ${unavailableCount === 1 ? 'action' : 'actions'} unavailable`
-    : 'Version availability unavailable';
-  const countText = surface ? `${enabledCount}/${rows.length} enabled` : 'No status';
-
-  return (
-    <section aria-label="Version availability">
-      <details
-        className="group rounded-sm border border-ss-border bg-ss-surface-secondary"
-        data-testid="version-history-availability-details"
-        onToggle={(event) => setExpanded(event.currentTarget.open)}
-      >
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-body-sm [&::-webkit-details-marker]:hidden">
-          <span className="flex min-w-0 items-center gap-2">
-            <ChevronRight
-              size={14}
-              strokeWidth={1.75}
-              aria-hidden="true"
-              className="shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
-            />
-            <span className="min-w-0">
-              <span className="block font-medium text-ss-text">Availability</span>
-              <span className="block truncate text-[11px] leading-snug text-ss-text-secondary">
-                {statusText}
-              </span>
-            </span>
-          </span>
-          <span className="shrink-0 text-[11px] font-medium text-ss-text-secondary">
-            {countText}
-          </span>
-        </summary>
-        <ol className="m-0 flex flex-col gap-0 border-t border-ss-border p-0 list-none">
-          {rows.map(({ capability, enabled, reason }) => {
-            const description = enabled
-              ? `${CAPABILITY_LABELS[capability]} enabled`
-              : `${CAPABILITY_LABELS[capability]} unavailable: ${reason}`;
-            return (
-              <li
-                key={capability}
-                data-testid={`version-history-capability-${safeDomId(capability)}`}
-                data-state={enabled ? 'enabled' : 'unavailable'}
-                aria-label={description}
-                title={description}
-                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 border-b border-ss-border px-3 py-2 last:border-b-0"
-              >
-                <span className="truncate text-[11px] font-medium text-ss-text">
-                  {CAPABILITY_LABELS[capability]}
-                </span>
-                <span
-                  className={`text-[10px] font-medium uppercase ${
-                    enabled ? 'text-ss-success' : 'text-ss-text-tertiary'
-                  }`}
-                >
-                  {enabled ? 'Available' : 'Unavailable'}
-                </span>
-                {!enabled && expanded ? (
-                  <span className="col-span-2 text-[11px] leading-snug text-ss-text-secondary">
-                    {reason}
-                  </span>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      </details>
-    </section>
-  );
-}
-
 export function CurrentBranchMenu({
   data,
   branchName,
@@ -277,162 +119,186 @@ export function CurrentBranchMenu({
   const currentBranchLabel = currentBranchName
     ? displayBranchName(currentBranchName)
     : 'Detached or unavailable';
+  const headId = data.head?.id ?? data.surface?.current.headCommitId;
+  const hasUncommittedChanges = data.surface?.dirty.hasUncommittedLocalChanges === true;
 
   return (
-    <section aria-label="Current Branch">
-      <details
-        open={open}
-        className="group rounded-sm border border-ss-border bg-ss-surface"
-        data-testid="version-history-current-branch-menu"
-        onToggle={(event) => setOpen(event.currentTarget.open)}
+    <>
+      <section
+        aria-label="Version status"
+        className="rounded-sm border border-ss-border bg-ss-surface-secondary"
       >
-        <summary
-          className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-body-sm [&::-webkit-details-marker]:hidden"
-          data-testid="version-history-current-branch-trigger"
-          tabIndex={0}
+        <details
+          open={open}
+          className="group"
+          data-testid="version-history-current-branch-menu"
+          onToggle={(event) => setOpen(event.currentTarget.open)}
         >
-          <span className="flex min-w-0 items-center gap-2">
-            <GitBranch
-              size={15}
-              strokeWidth={1.75}
-              aria-hidden="true"
-              className="shrink-0 text-ss-text-secondary"
-            />
-            <span className="min-w-0">
-              <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
-                Current Branch
-              </span>
-              <span className="block truncate text-body-sm font-medium text-ss-text">
-                {currentBranchLabel}
+          <summary
+            className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2.5 text-body-sm [&::-webkit-details-marker]:hidden"
+            data-testid="version-history-current-branch-trigger"
+            tabIndex={0}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <GitBranch
+                size={15}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                className="shrink-0 text-ss-text-secondary"
+              />
+              <span className="min-w-0">
+                <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
+                  Current branch
+                </span>
+                <span className="block truncate text-body-sm font-medium text-ss-text">
+                  {currentBranchLabel}
+                </span>
               </span>
             </span>
-          </span>
-          <ChevronRight
-            size={15}
-            strokeWidth={1.75}
-            aria-hidden="true"
-            className="shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
-          />
-        </summary>
-
-        {open ? (
-          <div className="border-t border-ss-border">
-            <div className="px-3 pb-2 pt-3">
-              <div className="mb-2 text-[11px] font-medium uppercase text-ss-text-tertiary">
-                Branches
-              </div>
-              <DisabledReason
-                id={checkoutReasonId}
-                reason={!checkoutEnabled ? checkoutStatus : undefined}
+            <span className="flex shrink-0 items-start gap-3 text-right">
+              <span>
+                <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
+                  Latest commit
+                </span>
+                <span className="block font-mono text-xs text-ss-text">
+                  {headId ? shortCommitId(headId) : 'Unavailable'}
+                </span>
+              </span>
+              <ChevronRight
+                size={15}
+                strokeWidth={1.75}
+                aria-hidden="true"
+                className="mt-0.5 shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
               />
-              {data.refs.length === 0 ? (
-                <div className="py-2 text-body-sm text-ss-text-secondary">
-                  No branches available
-                </div>
-              ) : (
-                <ol className="m-0 flex flex-col gap-1 p-0 list-none">
-                  {data.refs.map((ref) => {
-                    const branchLabel = displayBranchName(ref.name);
-                    const current = isCurrentBranchRef(currentBranchName, ref);
-                    const buttonLabel = current
-                      ? `Current branch ${branchLabel}`
-                      : `Checkout ${branchLabel}`;
-                    return (
-                      <li key={ref.name}>
-                        <button
-                          type="button"
-                          data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
-                          onClick={() => {
-                            if (!current) onCheckoutRef(ref);
-                          }}
-                          disabled={current || !checkoutEnabled}
-                          aria-label={buttonLabel}
-                          aria-describedby={
-                            !current && !checkoutEnabled ? checkoutReasonId : undefined
-                          }
-                          title={
-                            current
-                              ? 'Current branch'
-                              : !checkoutEnabled
-                                ? checkoutStatus
-                                : undefined
-                          }
-                          className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
-                        >
-                          <span className="min-w-0">
-                            <span className="block truncate font-medium">{branchLabel}</span>
-                            <span className="block truncate font-mono text-[11px] text-ss-text-secondary">
-                              {shortCommitId(ref.commitId)}
-                            </span>
-                          </span>
-                          {current ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ss-primary">
-                              <Check size={13} strokeWidth={1.75} aria-hidden="true" />
-                              Current
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-medium text-ss-text-secondary">
-                              Checkout
-                            </span>
-                          )}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ol>
-              )}
-            </div>
+            </span>
+          </summary>
 
-            <div className="border-t border-ss-border px-3 py-3">
-              <div className="mb-2 flex items-center gap-2 text-body-sm font-medium text-ss-text">
-                <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
-                <span>New branch</span>
-              </div>
-              <label htmlFor="version-branch-name" className="sr-only">
-                Branch name
-              </label>
-              <input
-                id="version-branch-name"
-                data-testid="version-history-branch-name-input"
-                type="text"
-                value={branchName}
-                onChange={(event) => onBranchNameChange(event.currentTarget.value)}
-                placeholder="review/version-panel"
-                className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
-              />
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <TargetSummary
-                  testId="version-history-branch-target-summary"
-                  commitId={targetCommitId}
-                />
-                <button
-                  type="button"
-                  data-testid="version-history-create-branch-button"
-                  onClick={onCreateBranch}
-                  disabled={!branchEnabled}
-                  aria-describedby={!branchEnabled && branchStatus ? branchReasonId : undefined}
-                  title={!branchEnabled ? branchStatus : undefined}
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-                >
+          {open ? (
+            <div className="border-t border-ss-border">
+              <div className="px-3 py-3">
+                <div className="mb-2 flex items-center gap-2 text-body-sm font-medium text-ss-text">
                   <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
-                  <span>Create branch</span>
-                </button>
+                  <span>New branch</span>
+                </div>
+                <label htmlFor="version-branch-name" className="sr-only">
+                  Branch name
+                </label>
+                <input
+                  id="version-branch-name"
+                  data-testid="version-history-branch-name-input"
+                  type="text"
+                  value={branchName}
+                  onChange={(event) => onBranchNameChange(event.currentTarget.value)}
+                  placeholder="review/version-panel"
+                  className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
+                />
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <TargetSummary
+                    testId="version-history-branch-target-summary"
+                    commitId={targetCommitId}
+                  />
+                  <button
+                    type="button"
+                    data-testid="version-history-create-branch-button"
+                    onClick={onCreateBranch}
+                    disabled={!branchEnabled}
+                    aria-describedby={!branchEnabled && branchStatus ? branchReasonId : undefined}
+                    title={!branchEnabled ? branchStatus : undefined}
+                    className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2.5 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+                  >
+                    <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Create branch</span>
+                  </button>
+                </div>
+                <DisabledReason
+                  id={branchReasonId}
+                  reason={!branchEnabled ? branchStatus : undefined}
+                />
               </div>
-              <DisabledReason
-                id={branchReasonId}
-                reason={!branchEnabled ? branchStatus : undefined}
-              />
+
+              <div className="border-t border-ss-border px-3 pb-2 pt-3">
+                <div className="mb-2 text-[11px] font-medium uppercase text-ss-text-tertiary">
+                  Branches
+                </div>
+                <DisabledReason
+                  id={checkoutReasonId}
+                  reason={!checkoutEnabled ? checkoutStatus : undefined}
+                />
+                {data.refs.length === 0 ? (
+                  <div className="py-2 text-body-sm text-ss-text-secondary">
+                    No branches available
+                  </div>
+                ) : (
+                  <ol className="m-0 flex flex-col gap-1 p-0 list-none">
+                    {data.refs.map((ref) => {
+                      const branchLabel = displayBranchName(ref.name);
+                      const current = isCurrentBranchRef(currentBranchName, ref);
+                      const buttonLabel = current
+                        ? `Current branch ${branchLabel}`
+                        : `Checkout ${branchLabel}`;
+                      return (
+                        <li key={ref.name}>
+                          <button
+                            type="button"
+                            data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
+                            onClick={() => {
+                              if (!current) onCheckoutRef(ref);
+                            }}
+                            disabled={current || !checkoutEnabled}
+                            aria-label={buttonLabel}
+                            aria-describedby={
+                              !current && !checkoutEnabled ? checkoutReasonId : undefined
+                            }
+                            title={
+                              current
+                                ? 'Current branch'
+                                : !checkoutEnabled
+                                  ? checkoutStatus
+                                  : undefined
+                            }
+                            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
+                          >
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium">{branchLabel}</span>
+                              <span className="block truncate font-mono text-[11px] text-ss-text-secondary">
+                                {shortCommitId(ref.commitId)}
+                              </span>
+                            </span>
+                            {current ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ss-primary">
+                                <Check size={13} strokeWidth={1.75} aria-hidden="true" />
+                                Current
+                              </span>
+                            ) : (
+                              <span className="text-[11px] font-medium text-ss-text-secondary">
+                                Checkout
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
             </div>
-          </div>
-        ) : null}
-      </details>
-    </section>
+          ) : null}
+        </details>
+      </section>
+      {hasUncommittedChanges ? (
+        <div className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2 py-1.5 text-body-sm text-ss-text">
+          Uncommitted changes
+        </div>
+      ) : null}
+      <VersionCurrentStaleStatus surface={data.surface} />
+    </>
   );
 }
 
 function currentBranchRefName(data: VersionHistoryData): string | undefined {
   if (data.surface?.current.detached) return undefined;
-  return data.surface?.current.branchName ?? data.head?.refName;
+  const branchName = data.surface?.current.branchName ?? data.head?.refName;
+  return branchName && publicBranchLabel(branchName) ? branchName : undefined;
 }
 
 function isCurrentBranchRef(currentBranchName: string | undefined, ref: VersionRef): boolean {

@@ -4,7 +4,7 @@ import type {
   VersionSurfaceStatus,
 } from '@mog-sdk/contracts/api';
 
-import { displayBranchName } from '../version-branch-name';
+import { publicBranchLabel } from '../version-branch-name';
 import {
   hostCapabilityDiagnosticDisabledReason,
   publicStatusDiagnosticDisabledReason,
@@ -111,7 +111,7 @@ export function currentStaleDisabledReason(
   if (!staleReason) return undefined;
 
   const branchLabel = current.branchName
-    ? displayBranchName(current.branchName)
+    ? (publicBranchLabel(current.branchName) ?? 'Current checkout')
     : 'Current checkout';
   const reason =
     staleReason === 'refMoved'

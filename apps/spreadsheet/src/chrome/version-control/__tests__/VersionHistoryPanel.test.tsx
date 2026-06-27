@@ -41,10 +41,18 @@ describe('VersionHistoryPanelContent', () => {
 
     expect(await screen.findByText('Initial import')).toBeInTheDocument();
     expect(screen.getByText('Calculated forecast')).toBeInTheDocument();
+    const statusSummary = screen.getByRole('region', { name: 'Version status' });
+    expect(statusSummary).toHaveTextContent('Current branch');
+    expect(statusSummary).toHaveTextContent('main');
+    expect(statusSummary).toHaveTextContent('Latest commit');
+    expect(statusSummary).toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
+    expect(statusSummary).not.toHaveTextContent('authoring');
+    expect(statusSummary).not.toHaveTextContent('memory ready');
+    expect(statusSummary).not.toHaveTextContent('Workspace');
+    expect(screen.getAllByTestId('version-history-current-branch-menu')).toHaveLength(1);
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
     await openCurrentBranchMenu(user);
     expect(screen.getByText('scenario/budget')).toBeInTheDocument();
-    expect(screen.getByText('authoring')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getHead).toHaveBeenCalledTimes(1);
@@ -160,10 +168,13 @@ describe('VersionHistoryPanelContent', () => {
     await screen.findByText('Calculated forecast');
     expect(screen.getByTestId('version-history-current-branch-menu')).not.toHaveAttribute('open');
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
-      'Current Branch',
+      'Current branch',
     );
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
     await openCurrentBranchMenu(user);
+    const branchMenuText =
+      screen.getByTestId('version-history-current-branch-menu').textContent ?? '';
+    expect(branchMenuText.indexOf('New branch')).toBeLessThan(branchMenuText.indexOf('Branches'));
 
     expect(screen.getByTestId('version-history-commit-message-input')).toHaveAccessibleName(
       'Commit message',
@@ -198,49 +209,12 @@ describe('VersionHistoryPanelContent', () => {
       `version-diff-disabled-${safeDomId(PARENT_COMMIT_ID)}`,
       'Root commits do not have a parent diff.',
     );
-    const availability = screen.getByRole('region', { name: 'Version availability' });
-    expect(availability).toHaveTextContent('1 action unavailable');
-    expect(availability).toHaveTextContent('12/13 enabled');
-    expect(screen.getByTestId('version-history-availability-details')).not.toHaveAttribute('open');
-    expect(screen.getByTestId('version-history-capability-version-read')).toHaveAttribute(
-      'aria-label',
-      'Read enabled',
-    );
-    expect(screen.getByTestId('version-history-capability-version-remotePromote')).toHaveAttribute(
-      'aria-label',
-      'Remote promote enabled',
-    );
-    expect(screen.getByTestId('version-history-remote-promote-status')).toHaveAttribute(
-      'data-state',
-      'ready',
-    );
-    expect(screen.getByTestId('version-history-promote-remote-button')).toBeEnabled();
-  });
-
-  it('renders one availability diagnostic row for every capability in the surface contract', async () => {
-    const surface = createSurfaceStatus();
-    const workbook = createWorkbook({
-      getSurfaceStatus: jest.fn(async () => surface),
-    });
-
-    renderVersionHistoryPanel({ workbook });
-
-    await screen.findByText('Calculated forecast');
-
-    const summary = screen.getByRole('region', { name: 'Version availability' });
-    const renderedIds = Array.from(
-      summary.querySelectorAll<HTMLElement>('[data-testid^="version-history-capability-"]'),
-      (row) => {
-        const id = row.getAttribute('data-testid');
-        if (!id) throw new Error('Capability summary row is missing data-testid.');
-        return id;
-      },
-    );
-    const expectedIds = Object.keys(surface.capabilities).map(
-      (capability) => `version-history-capability-${safeDomId(capability)}`,
-    );
-
-    expect(renderedIds).toEqual(expectedIds);
+    expect(screen.queryByRole('region', { name: 'Version availability' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-availability-details')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-rollback-reason-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-stage-rollback-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-remote-promote-status')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-promote-remote-button')).not.toBeInTheDocument();
   });
 
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {
@@ -285,14 +259,7 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-diff-unavailable-reason')).toHaveTextContent(
       'version:diff is not available.',
     );
-    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAttribute(
-      'aria-label',
-      'Diff unavailable: version:diff is not available.',
-    );
-    expect(screen.getByTestId('version-history-capability-version-diff')).toHaveAttribute(
-      'data-state',
-      'unavailable',
-    );
+    expect(screen.queryByTestId('version-history-capability-version-diff')).not.toBeInTheDocument();
   });
 
   it('shows the disabled-versioning reason across commit, branch, checkout, and diff controls', async () => {
@@ -537,10 +504,7 @@ describe('VersionHistoryPanelContent', () => {
       'data-version-commit-id',
       HEAD_COMMIT_ID,
     );
-    expect(screen.getByTestId('version-history-rollback-target-summary')).toHaveAttribute(
-      'data-version-commit-id',
-      HEAD_COMMIT_ID,
-    );
+    expect(screen.queryByTestId('version-history-rollback-target-summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
       shortCommitId(HEAD_COMMIT_ID),
     );

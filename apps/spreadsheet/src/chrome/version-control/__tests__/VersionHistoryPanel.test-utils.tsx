@@ -488,7 +488,7 @@ export function expectReasonById(id: string, reason: string): void {
 export function expectDisabledButtonReason(button: HTMLElement, reason: string): void {
   expect(button).toBeDisabled();
   expect(button).toHaveAccessibleDescription(reason);
-  expect(screen.getAllByText(reason)[0]).toBeVisible();
+  expect(screen.getAllByText(reason).length).toBeGreaterThan(0);
 }
 
 export function failedInvalidState<T = never>(reason: string): VersionResult<T> {

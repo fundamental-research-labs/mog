@@ -51,7 +51,6 @@ export function useReviewProposalSurfaceState({
     Boolean(accessDiagnostics?.reviews && Object.keys(accessDiagnostics.reviews).length > 0) ||
     Boolean(accessDiagnostics?.proposals && Object.keys(accessDiagnostics.proposals).length > 0);
   const hasContent =
-    Boolean(surface) ||
     reviews.length > 0 ||
     proposals.length > 0 ||
     Boolean(reviewDiagnostic) ||

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   VersionMergeInput,
   VersionRef,
-  VersionRevertInput,
   WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
@@ -14,15 +13,8 @@ import {
   getCapabilityAvailability,
   getCommitAvailability,
   getDiffAvailability,
-  getRemotePromoteAvailability,
-  getRollbackAvailability,
 } from './availability/version-action-availability';
-import {
-  diagnosticFromRemotePromotionResult,
-  getRemotePromotionStatus,
-  remotePromotionActionMessage,
-  type VersionActionState,
-} from './VersionActionStatus';
+import { type VersionActionState } from './VersionActionStatus';
 import type { VersionDiffPreview } from './VersionHistoryDiffPreview';
 import type { ReviewProposalDiffTarget } from './ReviewProposalSurface';
 import {
@@ -63,10 +55,8 @@ import {
 import {
   commitDirtyRefreshFenceRequiresRefresh,
   commitDirtyRefreshFenceSnapshot,
-  diagnosticFromRevertResult,
   readVersionResult,
   resolveSelectedOrHeadCommitId,
-  rollbackActionMessage,
   type CommitDirtyRefreshFence,
   type VersionHistoryData,
   type VersionHistoryWorkbook,
@@ -90,7 +80,6 @@ export function useVersionHistoryPanelActions({
 }: UseVersionHistoryPanelActionsInput) {
   const [commitMessage, setCommitMessage] = useState('');
   const [branchName, setBranchName] = useState('');
-  const [rollbackReason, setRollbackReason] = useState('');
   const [selectedCommitId, setSelectedCommitId] = useState<WorkbookCommitId | undefined>();
   const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
   const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
@@ -170,14 +159,6 @@ export function useVersionHistoryPanelActions({
   );
   const checkoutAvailability = getCheckoutAvailability(data, actionBusy, loading);
   const diffAvailability = getDiffAvailability(data, actionBusy, loading);
-  const rollbackAvailability = getRollbackAvailability(
-    data,
-    actionBusy,
-    loading,
-    rollbackReason,
-    selectedOrHeadCommitId,
-  );
-  const remotePromoteAvailability = getRemotePromoteAvailability(data, actionBusy, loading);
   const mergePreviewAvailability = getCapabilityAvailability(
     data,
     actionBusy,
@@ -190,13 +171,10 @@ export function useVersionHistoryPanelActions({
     getCapabilityAvailability(data, actionBusy, loading, 'version:branch'),
     getCapabilityAvailability(data, actionBusy, loading, 'version:checkout'),
   );
-  const remotePromotionStatus = getRemotePromotionStatus(data?.surface);
   const canCommit = commitAvailability.enabled;
   const canCreateBranch = branchAvailability.enabled;
   const canCheckout = checkoutAvailability.enabled;
   const canDiff = diffAvailability.enabled;
-  const canStageRollback = rollbackAvailability.enabled;
-  const canPromoteRemote = remotePromoteAvailability.enabled;
   const mergePreviewDisabledReason = mergePreviewActionDisabledReason(
     mergePreviewAvailability.disabledReason,
     currentMergeTarget,
@@ -508,105 +486,6 @@ export function useVersionHistoryPanelActions({
     isActionCurrent,
     refreshThenCompleteAction,
     selectedOrHeadCommitId,
-    setRunningAction,
-    workbook,
-  ]);
-
-  const handleStageRollback = useCallback(async () => {
-    if (!data || !canStageRollback || !selectedOrHeadCommitId) return;
-    const action = beginAction('rollback');
-    if (!action) return;
-
-    const targetRef = data.surface?.current.branchName as
-      | VersionRevertInput['targetRef']
-      | undefined;
-    const expectedTargetHead =
-      data.head?.id && data.head.refRevision
-        ? {
-            commitId: data.head.id,
-            revision: data.head.refRevision,
-          }
-        : undefined;
-    const input: VersionRevertInput = {
-      target: { kind: 'commit', commitId: selectedOrHeadCommitId },
-      ...(targetRef ? { targetRef } : {}),
-      ...(expectedTargetHead ? { expectedTargetHead } : {}),
-      reason: rollbackReason.trim(),
-    };
-
-    if (!setRunningAction(action, 'Staging rollback')) return;
-    const result = await readVersionResult('VERSION_UI_REVERT_FAILED', () =>
-      workbook.version.revert(input, { dryRun: true, includeDiagnostics: true }),
-    );
-    if (!isActionCurrent(action)) return;
-    if (!result.ok) {
-      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
-      return;
-    }
-
-    if (result.value.status === 'rejected') {
-      completeAction(action, {
-        status: 'error',
-        diagnostic: diagnosticFromRevertResult('VERSION_UI_REVERT_REJECTED', result.value),
-      });
-      return;
-    }
-
-    setRollbackReason('');
-    await refreshThenCompleteAction(action, {
-      status: 'success',
-      message: rollbackActionMessage(result.value, selectedOrHeadCommitId),
-    });
-  }, [
-    beginAction,
-    canStageRollback,
-    completeAction,
-    data,
-    isActionCurrent,
-    refreshThenCompleteAction,
-    rollbackReason,
-    selectedOrHeadCommitId,
-    setRunningAction,
-    workbook,
-  ]);
-
-  const handlePromotePendingRemote = useCallback(async () => {
-    if (!data || !canPromoteRemote) return;
-    const action = beginAction('remote-promote');
-    if (!action) return;
-
-    if (!setRunningAction(action, 'Promoting pending remote changes')) return;
-    const result = await readVersionResult('VERSION_UI_REMOTE_PROMOTE_FAILED', () =>
-      workbook.version.promotePendingRemote({ includeDiagnostics: true }),
-    );
-    if (!isActionCurrent(action)) return;
-    if (!result.ok) {
-      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
-      return;
-    }
-
-    if (result.value.status === 'failed') {
-      completeAction(action, {
-        status: 'error',
-        diagnostic: diagnosticFromRemotePromotionResult(
-          'VERSION_UI_REMOTE_PROMOTE_REJECTED',
-          result.value,
-        ),
-      });
-      return;
-    }
-
-    await refreshThenCompleteAction(action, {
-      status: 'success',
-      message: remotePromotionActionMessage(result.value),
-    });
-  }, [
-    beginAction,
-    canPromoteRemote,
-    completeAction,
-    data,
-    isActionCurrent,
-    refreshThenCompleteAction,
     setRunningAction,
     workbook,
   ]);
@@ -935,8 +814,6 @@ export function useVersionHistoryPanelActions({
     canDiff,
     canApplyMerge,
     canPreviewMerge,
-    canPromoteRemote,
-    canStageRollback,
     checkoutDisabledReason: checkoutAvailability.disabledReason,
     commitDisabledReason: commitAvailability.disabledReason,
     commitMessage,
@@ -949,26 +826,19 @@ export function useVersionHistoryPanelActions({
     handleCreateBranch,
     handleDiffCommit,
     handleMergeResolutionChange,
-    handlePromotePendingRemote,
     handlePreviewMerge,
     handleReviewProposalDiff,
-    handleStageRollback,
     mergeApplyDisabledReason,
     mergePreviewDisabledReason,
     mergePreviewState,
     mergeResolutionSelections,
     mergeSourceRefName,
     mergeSources,
-    remotePromoteDisabledReason: remotePromoteAvailability.disabledReason,
-    remotePromotionStatus,
-    rollbackDisabledReason: rollbackAvailability.disabledReason,
-    rollbackReason,
     selectedCommitId,
     selectedOrHeadCommitId,
     setBranchName,
     setCommitMessage,
     setMergeSourceRefName,
-    setRollbackReason,
     setSelectedCommitId,
   };
 }

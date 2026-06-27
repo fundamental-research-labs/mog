@@ -1,6 +1,6 @@
 import type { VersionDiagnostic, VersionSurfaceStatus } from '@mog-sdk/contracts/api';
 
-import { normalizeVersionBranchNameInput } from './version-branch-name';
+import { publicBranchLabel } from './version-branch-name';
 
 type CurrentStaleStatusCode =
   | 'version.surfaceStatus.currentStale.refMoved'
@@ -177,9 +177,4 @@ function currentCheckoutLabel(current: VersionSurfaceStatus['current']): string 
 
   const branchLabel = publicBranchLabel(current.branchName);
   return branchLabel ? `Checkout from ${branchLabel}` : 'Current checkout';
-}
-
-function publicBranchLabel(branchName: string): string | undefined {
-  const normalized = normalizeVersionBranchNameInput(branchName);
-  return normalized.ok ? normalized.branch.displayName : undefined;
 }

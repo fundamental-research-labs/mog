@@ -1,11 +1,10 @@
-import { useState, type RefObject } from 'react';
+import { useState, type ReactNode, type RefObject } from 'react';
 import {
   Check,
   ChevronRight,
   GitBranch,
   GitCommit,
   GitCompare,
-  History,
   Plus,
   RefreshCw,
   X,
@@ -29,12 +28,14 @@ import { shortCommitId } from './version-history-format';
 import type { VersionHistoryData } from './version-history-panel-data';
 
 export function VersionHistoryPanelHeader({
+  branchControl,
   closeButtonRef,
   onClose,
   onRefresh,
   refreshDisabled,
   refreshInProgress,
 }: {
+  readonly branchControl?: ReactNode;
   readonly closeButtonRef: RefObject<HTMLButtonElement | null>;
   readonly onClose: () => void;
   readonly onRefresh: () => Promise<void>;
@@ -42,43 +43,33 @@ export function VersionHistoryPanelHeader({
   readonly refreshInProgress: boolean;
 }): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-ss-border bg-ss-surface-secondary shrink-0">
-      <div className="flex items-center gap-2 min-w-0">
-        <History
-          size={18}
-          strokeWidth={1.75}
-          aria-hidden="true"
-          className="text-ss-primary shrink-0"
-        />
-        <h2 className="text-subtitle font-semibold text-ss-text m-0 truncate">Version History</h2>
-      </div>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => {
-            void onRefresh();
-          }}
-          data-testid="panel-version-history-refresh"
-          className="w-7 h-7 flex items-center justify-center rounded-full text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors disabled:opacity-50"
-          aria-label="Refresh version history"
-          aria-busy={refreshInProgress}
-          title="Refresh"
-          disabled={refreshDisabled}
-        >
-          <RefreshCw size={15} strokeWidth={1.75} aria-hidden="true" />
-        </button>
-        <button
-          ref={closeButtonRef}
-          type="button"
-          onClick={onClose}
-          data-testid="panel-version-history-close"
-          className="w-7 h-7 flex items-center justify-center rounded-full text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors"
-          aria-label="Close version history"
-          title="Close"
-        >
-          <X size={16} strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      </div>
+    <div className="flex items-center gap-2 px-2 py-1 border-b border-ss-border bg-ss-surface shrink-0">
+      <div className="min-w-0 flex-1">{branchControl}</div>
+      <button
+        type="button"
+        onClick={() => {
+          void onRefresh();
+        }}
+        data-testid="panel-version-history-refresh"
+        className="w-7 h-7 flex shrink-0 items-center justify-center rounded-full text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors disabled:opacity-50"
+        aria-label="Refresh version history"
+        aria-busy={refreshInProgress}
+        title="Refresh"
+        disabled={refreshDisabled}
+      >
+        <RefreshCw size={15} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <button
+        ref={closeButtonRef}
+        type="button"
+        onClick={onClose}
+        data-testid="panel-version-history-close"
+        className="w-7 h-7 flex shrink-0 items-center justify-center rounded-full text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors"
+        aria-label="Close version history"
+        title="Close"
+      >
+        <X size={16} strokeWidth={1.75} aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -120,61 +111,55 @@ export function CurrentBranchMenu({
     ? displayBranchName(currentBranchName)
     : 'Detached or unavailable';
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
-  const hasUncommittedChanges = data.surface?.dirty.hasUncommittedLocalChanges === true;
 
   return (
-    <>
-      <section
-        aria-label="Version status"
-        className="rounded-sm border border-ss-border bg-ss-surface-secondary"
+    <section aria-label="Version status" className="relative min-w-0">
+      <details
+        open={open}
+        className="group relative"
+        data-testid="version-history-current-branch-menu"
+        onToggle={(event) => setOpen(event.currentTarget.open)}
       >
-        <details
-          open={open}
-          className="group"
-          data-testid="version-history-current-branch-menu"
-          onToggle={(event) => setOpen(event.currentTarget.open)}
+        <summary
+          className="flex h-7 min-w-0 cursor-pointer list-none items-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-body-sm [&::-webkit-details-marker]:hidden"
+          data-testid="version-history-current-branch-trigger"
+          tabIndex={0}
+          aria-label={`Current branch ${currentBranchLabel}`}
         >
-          <summary
-            className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-3 px-3 py-2.5 text-body-sm [&::-webkit-details-marker]:hidden"
-            data-testid="version-history-current-branch-trigger"
-            tabIndex={0}
-          >
-            <span className="flex min-w-0 items-center gap-2">
-              <GitBranch
-                size={15}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="shrink-0 text-ss-text-secondary"
-              />
-              <span className="min-w-0">
-                <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
-                  Current branch
-                </span>
-                <span className="block truncate text-body-sm font-medium text-ss-text">
-                  {currentBranchLabel}
-                </span>
-              </span>
-            </span>
-            <span className="flex shrink-0 items-start gap-3 text-right">
-              <span>
-                <span className="block text-[11px] font-medium uppercase text-ss-text-tertiary">
-                  Latest commit
-                </span>
-                <span className="block font-mono text-xs text-ss-text">
-                  {headId ? shortCommitId(headId) : 'Unavailable'}
-                </span>
-              </span>
-              <ChevronRight
-                size={15}
-                strokeWidth={1.75}
-                aria-hidden="true"
-                className="mt-0.5 shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
-              />
-            </span>
-          </summary>
+          <GitBranch
+            size={15}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="shrink-0 text-ss-text-secondary"
+          />
+          <span className="shrink-0 text-[11px] font-medium uppercase text-ss-text-tertiary">
+            Current branch
+          </span>
+          <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-ss-text">
+            {currentBranchLabel}
+          </span>
+          <ChevronRight
+            size={15}
+            strokeWidth={1.75}
+            aria-hidden="true"
+            className="shrink-0 text-ss-text-tertiary transition-transform group-open:rotate-90"
+          />
+        </summary>
 
-          {open ? (
-            <div className="border-t border-ss-border">
+        {open ? (
+          <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 overflow-hidden rounded-sm border border-ss-border bg-ss-surface shadow-ss-md">
+            <div className="border-b border-ss-border px-3 py-2">
+              <div className="text-[11px] font-medium uppercase text-ss-text-tertiary">
+                Latest commit
+              </div>
+              <div
+                data-testid="version-history-current-commit"
+                className="mt-0.5 font-mono text-xs text-ss-text"
+              >
+                {headId ? shortCommitId(headId) : 'Unavailable'}
+              </div>
+            </div>
+            <div>
               <div className="px-3 py-3">
                 <div className="mb-2 flex items-center gap-2 text-body-sm font-medium text-ss-text">
                   <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -282,9 +267,22 @@ export function CurrentBranchMenu({
                 )}
               </div>
             </div>
-          ) : null}
-        </details>
-      </section>
+          </div>
+        ) : null}
+      </details>
+    </section>
+  );
+}
+
+export function VersionStatusAlerts({
+  data,
+}: {
+  readonly data: VersionHistoryData;
+}): React.JSX.Element {
+  const hasUncommittedChanges = data.surface?.dirty.hasUncommittedLocalChanges === true;
+
+  return (
+    <>
       {hasUncommittedChanges ? (
         <div className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2 py-1.5 text-body-sm text-ss-text">
           Uncommitted changes

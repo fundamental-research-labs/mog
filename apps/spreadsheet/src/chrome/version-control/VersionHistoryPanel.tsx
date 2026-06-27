@@ -13,6 +13,7 @@ import {
   CurrentBranchMenu,
   DiagnosticsBlock,
   VersionHistoryPanelHeader,
+  VersionStatusAlerts,
 } from './VersionHistoryPanelSections';
 
 export interface VersionHistoryPanelProps {
@@ -61,6 +62,22 @@ export function VersionHistoryPanelContent({
       className="flex flex-col w-[440px] max-w-[calc(100vw-24px)] h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
     >
       <VersionHistoryPanelHeader
+        branchControl={
+          data ? (
+            <CurrentBranchMenu
+              data={data}
+              branchName={actions.branchName}
+              targetCommitId={actions.selectedOrHeadCommitId}
+              branchEnabled={actions.canCreateBranch}
+              checkoutEnabled={actions.canCheckout}
+              branchDisabledReason={actions.branchDisabledReason}
+              checkoutDisabledReason={actions.checkoutDisabledReason}
+              onBranchNameChange={actions.setBranchName}
+              onCreateBranch={actions.handleCreateBranch}
+              onCheckoutRef={actions.handleCheckoutRef}
+            />
+          ) : undefined
+        }
         closeButtonRef={closeButtonRef}
         onClose={onClose}
         onRefresh={load}
@@ -87,18 +104,7 @@ export function VersionHistoryPanelContent({
 
         {data ? (
           <div className="flex flex-col gap-3 p-3">
-            <CurrentBranchMenu
-              data={data}
-              branchName={actions.branchName}
-              targetCommitId={actions.selectedOrHeadCommitId}
-              branchEnabled={actions.canCreateBranch}
-              checkoutEnabled={actions.canCheckout}
-              branchDisabledReason={actions.branchDisabledReason}
-              checkoutDisabledReason={actions.checkoutDisabledReason}
-              onBranchNameChange={actions.setBranchName}
-              onCreateBranch={actions.handleCreateBranch}
-              onCheckoutRef={actions.handleCheckoutRef}
-            />
+            <VersionStatusAlerts data={data} />
             <VersionActions
               commitMessage={actions.commitMessage}
               actionState={actions.actionState}

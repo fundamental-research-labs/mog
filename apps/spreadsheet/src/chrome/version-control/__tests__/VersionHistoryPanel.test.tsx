@@ -44,14 +44,17 @@ describe('VersionHistoryPanelContent', () => {
     const statusSummary = screen.getByRole('region', { name: 'Version status' });
     expect(statusSummary).toHaveTextContent('Current branch');
     expect(statusSummary).toHaveTextContent('main');
-    expect(statusSummary).toHaveTextContent('Latest commit');
-    expect(statusSummary).toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
+    expect(statusSummary).not.toHaveTextContent('Latest commit');
+    expect(statusSummary).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
     expect(statusSummary).not.toHaveTextContent('authoring');
     expect(statusSummary).not.toHaveTextContent('memory ready');
     expect(statusSummary).not.toHaveTextContent('Workspace');
     expect(screen.getAllByTestId('version-history-current-branch-menu')).toHaveLength(1);
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
     await openCurrentBranchMenu(user);
+    expect(screen.getByTestId('version-history-current-commit')).toHaveTextContent(
+      shortCommitId(HEAD_COMMIT_ID),
+    );
     expect(screen.getByText('scenario/budget')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getStatus).toHaveBeenCalledTimes(1);
@@ -159,7 +162,7 @@ describe('VersionHistoryPanelContent', () => {
 
     await user.tab();
 
-    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveFocus();
+    expect(screen.getByTestId('version-history-commit-message-input')).toHaveFocus();
   });
 
   it('exposes stable G4 selectors for real-input controls and visible disabled reasons', async () => {
@@ -171,6 +174,9 @@ describe('VersionHistoryPanelContent', () => {
       'Current branch',
     );
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
+    expect(screen.getByTestId('version-history-current-branch-trigger')).not.toHaveTextContent(
+      shortCommitId(HEAD_COMMIT_ID),
+    );
     await openCurrentBranchMenu(user);
     const branchMenuText =
       screen.getByTestId('version-history-current-branch-menu').textContent ?? '';
@@ -546,13 +552,16 @@ describe('VersionHistoryPanelContent', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     const statusSummary = await screen.findByRole('region', { name: 'Version status' });
-    expect(statusSummary).toHaveTextContent(shortCommitId(PARENT_COMMIT_ID));
+    expect(statusSummary).not.toHaveTextContent(shortCommitId(PARENT_COMMIT_ID));
     expect(statusSummary).not.toHaveTextContent('refs/heads/main');
     expect(statusSummary).not.toHaveTextContent('main');
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
       'Detached or unavailable',
     );
     await openCurrentBranchMenu(user);
+    expect(screen.getByTestId('version-history-current-commit')).toHaveTextContent(
+      shortCommitId(PARENT_COMMIT_ID),
+    );
     expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
       'data-version-commit-id',
       PARENT_COMMIT_ID,

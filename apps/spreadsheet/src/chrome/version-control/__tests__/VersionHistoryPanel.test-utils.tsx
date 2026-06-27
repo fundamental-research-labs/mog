@@ -4,18 +4,11 @@ import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
   VersionCapabilityState,
-  VersionApplyMergeResolution,
-  VersionApplyMergeResult,
-  VersionMergeChange,
-  VersionMergeConflict,
-  VersionMergeInput,
-  VersionMergeResult,
   VersionRecordRevision,
   VersionResult,
   VersionSemanticDiffPage,
   VersionSurfaceStatus,
   WorkbookCommitId,
-  WorkbookVersion,
 } from '@mog-sdk/contracts/api';
 
 import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../VersionHistoryPanel';
@@ -28,7 +21,6 @@ type VersionHistoryPanelUser = ReturnType<typeof userEvent.setup>;
 export const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 export const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 export const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
-export const MERGE_COMMIT_ID = `commit:sha256:${'d'.repeat(64)}` as WorkbookCommitId;
 export const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
 
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
@@ -47,10 +39,6 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:remotePromote',
 ];
 
-export type DirectMergeVersionHistoryWorkbook = VersionHistoryWorkbook & {
-  readonly version: VersionHistoryWorkbook['version'] &
-    Pick<WorkbookVersion, 'merge' | 'applyMerge'>;
-};
 
 type RenderVersionHistoryPanelOptions = {
   readonly workbook?: VersionHistoryWorkbook;
@@ -69,8 +57,8 @@ export function renderVersionHistoryPanel({
 }
 
 export function createWorkbook(
-  overrides: Partial<DirectMergeVersionHistoryWorkbook['version']> = {},
-): DirectMergeVersionHistoryWorkbook {
+  overrides: Partial<VersionHistoryWorkbook['version']> = {},
+): VersionHistoryWorkbook {
   const version = {
     getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
     getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
@@ -209,25 +197,10 @@ export function createWorkbook(
       },
     })),
     diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
-    merge: jest.fn(
-      async (input: Parameters<DirectMergeVersionHistoryWorkbook['version']['merge']>[0]) => ({
-        ok: true,
-        value: cleanMergeResult(input.base, input.ours, input.theirs),
-      }),
-    ),
-    applyMerge: jest.fn(
-      async (input: Parameters<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>[0]) => {
-        const mergeInput = directMergeInput(input);
-        return {
-          ok: true,
-          value: appliedMergeResult(mergeInput.base, mergeInput.ours, mergeInput.theirs),
-        };
-      },
-    ),
     ...overrides,
   };
 
-  return { version } as unknown as DirectMergeVersionHistoryWorkbook;
+  return { version } as unknown as VersionHistoryWorkbook;
 }
 
 export function semanticDiffPage(items: VersionSemanticDiffPage['items']): VersionSemanticDiffPage {
@@ -268,105 +241,6 @@ export function diffDiagnostic(issueCode: string, recoverability: 'retry' | 'uns
     messageTemplateId: `version.diff.${issueCode}`,
     safeMessage: issueCode,
     redacted: true,
-  };
-}
-
-export function cleanMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  changes: readonly VersionMergeChange[] = [mergeChange()],
-): VersionMergeResult {
-  return {
-    status: 'clean',
-    base,
-    ours,
-    theirs,
-    changes,
-    conflicts: [],
-    diagnostics: [],
-    mutationGuarantee: 'preview-only',
-  };
-}
-
-export function conflictedMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  conflict: VersionMergeConflict = sameCellMergeConflict(),
-): VersionMergeResult {
-  return {
-    status: 'conflicted',
-    base,
-    ours,
-    theirs,
-    changes: [],
-    conflicts: [conflict],
-    diagnostics: [],
-    mutationGuarantee: 'preview-only',
-  };
-}
-
-export function appliedMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  changes: readonly VersionMergeChange[] = [mergeChange()],
-): VersionApplyMergeResult {
-  return {
-    status: 'applied',
-    base,
-    ours,
-    theirs,
-    commitRef: {
-      id: MERGE_COMMIT_ID,
-      refName: 'refs/heads/main',
-      refRevision: { kind: 'counter', value: '5' },
-    },
-    changes,
-    conflicts: [],
-    diagnostics: [],
-    resolutionCount: 0,
-    mutationGuarantee: 'merge-commit-created',
-  };
-}
-
-export function sameCellMergeConflict(): VersionMergeConflict {
-  const conflictId = 'conflict:sha256:same-cell-a1';
-  return {
-    conflictId,
-    conflictDigest: 'sha256:same-cell-a1',
-    conflictKind: 'same-property',
-    structural: {
-      kind: 'metadata',
-      changeId: 'merge-conflict-a1',
-      domain: 'cells.values',
-      entityId: 'sheet-1!A1',
-      propertyPath: ['value'],
-    },
-    base: { kind: 'value', value: 'base' },
-    ours: { kind: 'value', value: 'ours' },
-    theirs: { kind: 'value', value: 'theirs' },
-    resolutionOptions: [
-      mergeResolutionOption(conflictId, 'acceptOurs', 'ours'),
-      mergeResolutionOption(conflictId, 'acceptTheirs', 'theirs'),
-      mergeResolutionOption(conflictId, 'acceptBase', 'base'),
-    ],
-  };
-}
-
-export function mergeResolutionFor(
-  conflict: VersionMergeConflict,
-  kind: VersionApplyMergeResolution['kind'],
-): VersionApplyMergeResolution {
-  const option = conflict.resolutionOptions.find((candidate) => candidate.kind === kind);
-  if (!option) throw new Error(`Missing merge resolution option ${kind}`);
-
-  return {
-    conflictId: conflict.conflictId,
-    expectedConflictDigest: conflict.conflictDigest,
-    optionId: option.optionId,
-    kind,
   };
 }
 
@@ -530,59 +404,6 @@ export function parentDiffButtonTestId(commitId: string): string {
   return `version-history-parent-diff-button-${safeDomId(commitId)}`;
 }
 
-export function mergeSourceRefSelectTestId(): string {
-  return 'version-merge-source-ref-select';
-}
-
-export function mergePreviewButtonTestId(): string {
-  return 'version-merge-preview-button';
-}
-
-export function mergeApplyButtonTestId(): string {
-  return 'version-merge-apply-button';
-}
-
 export function safeDomId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
-}
-
-function mergeChange(): VersionMergeChange {
-  return {
-    structural: {
-      kind: 'metadata',
-      changeId: 'merge-change-a1',
-      domain: 'cells.values',
-      entityId: 'sheet-1!A1',
-      propertyPath: ['value'],
-    },
-    base: { kind: 'value', value: 'base' },
-    ours: { kind: 'value', value: 'ours' },
-    theirs: { kind: 'value', value: 'theirs' },
-    merged: { kind: 'value', value: 'theirs' },
-    display: { address: { kind: 'value', value: 'A1' } },
-  };
-}
-
-function mergeResolutionOption(
-  conflictId: string,
-  kind: VersionApplyMergeResolution['kind'],
-  value: string,
-) {
-  return {
-    optionId: `option:${kind}`,
-    conflictId,
-    kind,
-    value: { kind: 'value' as const, value },
-    recalcRequired: true,
-  };
-}
-
-function directMergeInput(input: VersionMergeInput | Parameters<WorkbookVersion['applyMerge']>[0]) {
-  if ('base' in input) return input;
-
-  return {
-    base: PARENT_COMMIT_ID,
-    ours: HEAD_COMMIT_ID,
-    theirs: LATEST_COMMIT_ID,
-  };
 }

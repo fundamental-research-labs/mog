@@ -215,6 +215,8 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.queryByTestId('version-history-stage-rollback-button')).not.toBeInTheDocument();
     expect(screen.queryByTestId('version-history-remote-promote-status')).not.toBeInTheDocument();
     expect(screen.queryByTestId('version-history-promote-remote-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-merge-controls')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Merge' })).not.toBeInTheDocument();
   });
 
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {
@@ -505,10 +507,6 @@ describe('VersionHistoryPanelContent', () => {
       HEAD_COMMIT_ID,
     );
     expect(screen.queryByTestId('version-history-rollback-target-summary')).not.toBeInTheDocument();
-    expect(screen.getByTestId('version-merge-target-head')).toHaveTextContent(
-      shortCommitId(HEAD_COMMIT_ID),
-    );
-
     await user.type(screen.getByLabelText('Commit message'), 'Checkpoint');
     await openCurrentBranchMenu(user);
 

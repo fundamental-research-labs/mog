@@ -3,7 +3,6 @@ import { useEffect, useRef } from 'react';
 import { useWorkbook } from '../../internal-api';
 import { VersionActions } from './VersionActionStatus';
 import { VersionHistoryDiffPreview } from './VersionHistoryDiffPreview';
-import { VersionMergeControls } from './merge';
 import { ReviewProposalSurface } from './ReviewProposalSurface';
 import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
@@ -120,22 +119,6 @@ export function VersionHistoryPanelContent({
               diffDisabledReason={actions.diffDisabledReason}
               onSelectCommit={actions.setSelectedCommitId}
               onDiffCommit={actions.handleDiffCommit}
-            />
-            <VersionMergeControls
-              sourceRefs={actions.mergeSources}
-              selectedSourceRefName={actions.mergeSourceRefName}
-              currentHeadId={actions.currentMergeTarget?.commitId}
-              currentRefName={actions.currentMergeTarget?.refName}
-              previewState={actions.mergePreviewState}
-              resolutionSelections={actions.mergeResolutionSelections}
-              previewEnabled={actions.canPreviewMerge}
-              applyEnabled={actions.canApplyMerge}
-              previewDisabledReason={actions.mergePreviewDisabledReason}
-              applyDisabledReason={actions.mergeApplyDisabledReason}
-              onSourceRefNameChange={actions.setMergeSourceRefName}
-              onPreviewMerge={actions.handlePreviewMerge}
-              onApplyMerge={actions.handleApplyMerge}
-              onResolutionChange={actions.handleMergeResolutionChange}
             />
             {showReviewProposalSurface ? (
               <ReviewProposalSurface

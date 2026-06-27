@@ -20,7 +20,6 @@ import {
   failedInvalidBranchName,
   failedInvalidState,
   failedNotFound,
-  mergePreviewButtonTestId,
   openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
@@ -296,7 +295,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(await screen.findByTestId(checkoutBranchTestId(branchName))).toBeEnabled();
   });
 
-  it('keeps checkout and merge controls disabled while branch creation is in flight', async () => {
+  it('keeps checkout controls disabled while branch creation is in flight', async () => {
     const branchName = 'refs/heads/review/action-busy';
     const branchResult =
       createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
@@ -320,11 +319,6 @@ describe('VersionHistoryPanelContent action flows', () => {
       screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')),
       runningReason,
     );
-    expectDisabledButtonReason(screen.getByTestId(mergePreviewButtonTestId()), runningReason);
-
-    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
-    expect(workbook.version.merge).not.toHaveBeenCalled();
-
     branchResult.resolve({
       ok: true,
       value: {

@@ -542,7 +542,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffViewer).toHaveAttribute('data-state', 'changes');
     expect(diffViewer).toHaveTextContent('Changes');
     expect(diffViewer).toHaveTextContent('sheet-1!A1');
-    expect(diffViewer).toHaveTextContent('cells value');
+    expect(diffViewer).not.toHaveTextContent('cells value');
     expect(diffViewer).toHaveTextContent('Blank');
     expect(diffViewer).toHaveTextContent('42');
     const diffStatus = within(diffViewer).getByRole('status');

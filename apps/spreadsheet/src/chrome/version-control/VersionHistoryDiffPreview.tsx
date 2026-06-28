@@ -9,9 +9,13 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import {
+  formatVersionRowColumnDiffValue,
+  semanticObjectFields,
   shortCommitId,
   versionDiffEntryLabel,
   versionDiffPreviewState,
+  versionRowColumnDiffSummary,
+  versionRowColumnDiffTitle,
 } from './version-history-format';
 
 export type VersionDiffPreview = {
@@ -152,13 +156,8 @@ function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.J
   return (
     <li className="overflow-hidden rounded-sm border border-ss-border bg-ss-surface">
       <div className="flex min-w-0 items-center justify-between gap-2 border-b border-ss-border-light bg-ss-surface-secondary px-2 py-1">
-        <div className="flex min-w-0 items-baseline gap-2">
-          <div className="min-w-0 shrink-0 truncate text-[11px] font-medium text-ss-text">
-            {diffEntryTitle(entry)}
-          </div>
-          <div className="min-w-0 truncate font-mono text-[10px] text-ss-text-secondary">
-            {versionDiffEntryLabel(entry)}
-          </div>
+        <div className="min-w-0 truncate text-[11px] font-medium text-ss-text">
+          {diffEntryTitle(entry)}
         </div>
         {entry.diagnostics?.length ? (
           <span className="shrink-0 rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-ss-text-secondary">
@@ -167,8 +166,8 @@ function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.J
         ) : null}
       </div>
       <div className="font-mono text-[10px] leading-4">
-        <DiffLine label="Before" marker="-" tone="removed" value={entry.before} />
-        <DiffLine label="After" marker="+" tone="added" value={entry.after} />
+        <DiffLine label="Before" marker="-" tone="removed" side="before" entry={entry} />
+        <DiffLine label="After" marker="+" tone="added" side="after" entry={entry} />
       </div>
     </li>
   );
@@ -178,14 +177,16 @@ function DiffLine({
   label,
   marker,
   tone,
-  value,
+  side,
+  entry,
 }: {
   readonly label: string;
   readonly marker: '-' | '+';
   readonly tone: 'removed' | 'added';
-  readonly value: VersionDiffValue;
+  readonly side: 'before' | 'after';
+  readonly entry: VersionDiffEntry;
 }): React.JSX.Element {
-  const formattedValue = formatDiffValue(value);
+  const formattedValue = formatDiffValue(entry, side);
   const toneClass =
     tone === 'removed'
       ? 'border-l-ss-error bg-ss-error-bg text-ss-error-text'
@@ -211,6 +212,9 @@ function DiffLine({
 }
 
 function diffEntryTitle(entry: VersionDiffEntry): string {
+  const rowColumnSummary = versionRowColumnDiffSummary(entry);
+  if (rowColumnSummary) return versionRowColumnDiffTitle(rowColumnSummary);
+
   const address = formatDisplayValue(entry.display?.address);
   const entityLabel = formatDisplayValue(entry.display?.entityLabel);
   if (address && entityLabel) return `${entityLabel} ${address}`;
@@ -225,12 +229,18 @@ function formatDisplayValue(value: VersionDiffDisplayValue | undefined): string 
   return value.value.trim().length > 0 ? value.value : undefined;
 }
 
-function formatDiffValue(value: VersionDiffValue): string {
+function formatDiffValue(entry: VersionDiffEntry, side: 'before' | 'after'): string {
+  const value = side === 'before' ? entry.before : entry.after;
   if (value.kind === 'redacted') return 'Redacted';
+  const rowColumnSummary = versionRowColumnDiffSummary(entry);
+  if (rowColumnSummary) {
+    const rowColumnValue = formatVersionRowColumnDiffValue(rowColumnSummary, value, side);
+    if (rowColumnValue) return rowColumnValue;
+  }
   return truncateValue(formatSemanticValue(value.value), 96);
 }
 
-function formatSemanticValue(value: VersionSemanticValue): string {
+function formatSemanticValue(value: VersionSemanticValue, depth = 0): string {
   if (value === null) return 'null';
   if (typeof value === 'string') return value.length === 0 ? 'Empty text' : value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -241,7 +251,17 @@ function formatSemanticValue(value: VersionSemanticValue): string {
   if (value.kind === 'formula') return value.formula;
   if (value.kind === 'richText') return value.runs.map((run) => run.text).join('');
   if (value.kind === 'array') return `Array (${value.values.length})`;
-  return `Object (${value.fields.length})`;
+  return formatSemanticObjectValue(value, depth);
+}
+
+function formatSemanticObjectValue(value: VersionSemanticValue, depth: number): string {
+  const fields = semanticObjectFields(value);
+  if (!fields) return 'Object';
+  if (fields.length === 0) return 'Object';
+  if (depth >= 2) return `Object (${fields.length})`;
+  return fields
+    .map((field) => `${field.key}: ${formatSemanticValue(field.value, depth + 1)}`)
+    .join(', ');
 }
 
 function truncateValue(value: string, maxLength: number): string {

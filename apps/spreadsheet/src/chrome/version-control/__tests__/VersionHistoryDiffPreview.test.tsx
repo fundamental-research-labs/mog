@@ -28,35 +28,113 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).not.toHaveTextContent('Diff Viewer');
     expect(viewer).toHaveTextContent('aaaaaaaaaaaa...bbbbbbbbbbbb');
     expect(viewer).toHaveTextContent('Cell A1');
-    expect(viewer).toHaveTextContent('cells value');
+    expect(viewer).not.toHaveTextContent('cells value');
 
     const changeList = within(viewer).getByTestId('version-history-diff-change-list');
     expect(within(changeList).getByLabelText('Before: Blank')).toBeInTheDocument();
     expect(within(changeList).getByLabelText('After: 42')).toBeInTheDocument();
   });
+
+  it('renders row and column insertions as spreadsheet structure changes', () => {
+    render(
+      <VersionHistoryDiffPreview
+        diffPreview={{
+          base: BASE_COMMIT_ID,
+          target: TARGET_COMMIT_ID,
+          page: semanticDiffPage([
+            rowColumnInsertion({
+              changeId: 'mutation-1:row:0',
+              axis: 'row',
+              index: 1,
+              displayRef: '2:2',
+            }),
+            rowColumnInsertion({
+              changeId: 'mutation-1:column:1',
+              axis: 'column',
+              index: 2,
+              displayRef: 'C:C',
+            }),
+          ]),
+        }}
+      />,
+    );
+
+    const viewer = screen.getByTestId('version-history-diff-viewer');
+    expect(viewer).toHaveTextContent('Inserted row 2');
+    expect(viewer).toHaveTextContent('Inserted column C');
+    expect(viewer).not.toHaveTextContent('Row structure');
+    expect(viewer).not.toHaveTextContent('Column structure');
+    expect(viewer).not.toHaveTextContent('rows-columns order');
+    expect(viewer).not.toHaveTextContent('Object (4)');
+
+    const changeList = within(viewer).getByTestId('version-history-diff-change-list');
+    expect(within(changeList).getAllByLabelText('Before: Not present')).toHaveLength(2);
+    expect(within(changeList).getByLabelText('After: Inserted row 2')).toBeInTheDocument();
+    expect(within(changeList).getByLabelText('After: Inserted column C')).toBeInTheDocument();
+  });
 });
 
-function semanticDiffPage(): VersionSemanticDiffPage {
-  return {
-    items: [
-      {
-        structural: {
-          kind: 'metadata',
-          changeId: 'change-1',
-          domain: 'cells',
-          entityId: 'sheet-1!A1',
-          propertyPath: ['value'],
-        },
-        before: { kind: 'value', value: { kind: 'blank' } },
-        after: { kind: 'value', value: '42' },
-        display: {
-          address: { kind: 'value', value: 'A1' },
-          entityLabel: { kind: 'value', value: 'Cell' },
-        },
+function semanticDiffPage(
+  items: VersionSemanticDiffPage['items'] = [
+    {
+      structural: {
+        kind: 'metadata',
+        changeId: 'change-1',
+        domain: 'cells',
+        entityId: 'sheet-1!A1',
+        propertyPath: ['value'],
       },
-    ],
+      before: { kind: 'value', value: { kind: 'blank' } },
+      after: { kind: 'value', value: '42' },
+      display: {
+        address: { kind: 'value', value: 'A1' },
+        entityLabel: { kind: 'value', value: 'Cell' },
+      },
+    },
+  ],
+): VersionSemanticDiffPage {
+  return {
+    items,
     limit: 50,
     readRevision: { kind: 'counter', value: '4' },
     order: 'semantic-change-order',
+  };
+}
+
+function rowColumnInsertion({
+  changeId,
+  axis,
+  index,
+  displayRef,
+}: {
+  readonly changeId: string;
+  readonly axis: 'row' | 'column';
+  readonly index: number;
+  readonly displayRef: string;
+}): VersionSemanticDiffPage['items'][number] {
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId,
+      domain: 'rows-columns',
+      entityId: `sheet-1!${axis}:${index}`,
+      propertyPath: ['order'],
+    },
+    before: { kind: 'value', value: null },
+    after: {
+      kind: 'value',
+      value: {
+        kind: 'object',
+        fields: [
+          { key: 'axis', value: axis },
+          { key: 'sheetId', value: 'sheet-1' },
+          { key: 'index', value: index },
+          { key: 'displayRef', value: displayRef },
+        ],
+      },
+    },
+    display: {
+      address: { kind: 'value', value: displayRef },
+    },
   };
 }

@@ -436,6 +436,7 @@ function BranchSourceSummary({
 }
 
 export function CommitList({
+  activeParentDiffCommitId,
   branchName,
   commits,
   checkoutEnabled,
@@ -448,6 +449,7 @@ export function CommitList({
   onCreateBranchFromCommit,
   onDiffCommit,
 }: {
+  readonly activeParentDiffCommitId?: WorkbookCommitId;
   readonly branchName: string;
   readonly commits: readonly WorkbookCommitSummary[];
   readonly checkoutEnabled: boolean;
@@ -504,16 +506,19 @@ export function CommitList({
           {commits.map((commit) => {
             const rootDiffReason =
               commit.parents.length === 0 ? 'Root commits do not have a parent diff.' : undefined;
-            const commitDiffEnabled = diffEnabled && !rootDiffReason;
-            const commitDiffReasonId = `version-diff-disabled-${safeDomId(commit.id)}`;
-            const describedBy = !diffEnabled
-              ? diffReasonId
-              : rootDiffReason
-                ? commitDiffReasonId
-                : undefined;
-            const buttonTitle = !diffEnabled ? diffDisabledReason : rootDiffReason;
+            const parentDiffActive = activeParentDiffCommitId === commit.id;
+            const commitDiffEnabled = (diffEnabled || parentDiffActive) && !rootDiffReason;
+            const describedBy =
+              !commitDiffEnabled && !diffEnabled && !parentDiffActive ? diffReasonId : undefined;
+            const buttonTitle =
+              !commitDiffEnabled && !diffEnabled && !parentDiffActive
+                ? diffDisabledReason
+                : parentDiffActive
+                  ? 'Hide diff'
+                  : undefined;
             const commitTestId = safeDomId(commit.id);
             const menuOpen = contextMenu?.commit.id === commit.id;
+            const diffButtonLabel = parentDiffActive ? 'Hide' : 'Diff';
 
             return (
               <li
@@ -560,13 +565,18 @@ export function CommitList({
                       data-testid={`version-history-parent-diff-button-${commitTestId}`}
                       onClick={() => onDiffCommit(commit)}
                       disabled={!commitDiffEnabled}
-                      aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
+                      aria-label={
+                        parentDiffActive
+                          ? `Hide diff ${shortCommitId(commit.id)} against parent`
+                          : `Diff ${shortCommitId(commit.id)} against parent`
+                      }
+                      aria-pressed={parentDiffActive}
                       aria-describedby={describedBy}
                       title={buttonTitle}
                       className="inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
                     >
                       <GitCompare size={12} strokeWidth={1.75} aria-hidden="true" />
-                      <span>Diff</span>
+                      <span>{diffButtonLabel}</span>
                     </button>
                     <button
                       type="button"
@@ -588,9 +598,6 @@ export function CommitList({
                     </button>
                   </div>
                 </div>
-                {diffEnabled ? (
-                  <DisabledReason id={commitDiffReasonId} reason={rootDiffReason} />
-                ) : null}
               </li>
             );
           })}
@@ -604,6 +611,7 @@ export function CommitList({
           checkoutEnabled={checkoutEnabled}
           checkoutReasonId={checkoutReasonId}
           checkoutStatus={checkoutStatus}
+          activeParentDiffCommitId={activeParentDiffCommitId}
           diffEnabled={diffEnabled}
           diffDisabledReason={diffDisabledReason}
           onBranchNameChange={onBranchNameChange}
@@ -642,6 +650,7 @@ type CommitContextMenuState = {
 
 function CommitContextMenu({
   state,
+  activeParentDiffCommitId,
   branchName,
   branchAvailability,
   checkoutEnabled,
@@ -658,6 +667,7 @@ function CommitContextMenu({
   onDiffCommit,
 }: {
   readonly state: CommitContextMenuState;
+  readonly activeParentDiffCommitId?: WorkbookCommitId;
   readonly branchName: string;
   readonly branchAvailability: VersionActionAvailability;
   readonly checkoutEnabled: boolean;
@@ -680,12 +690,16 @@ function CommitContextMenu({
   const commitTestId = safeDomId(commitId);
   const rootDiffReason =
     state.commit.parents.length === 0 ? 'Root commits do not have a parent diff.' : undefined;
-  const commitDiffEnabled = diffEnabled && !rootDiffReason;
+  const parentDiffActive = activeParentDiffCommitId === state.commit.id;
+  const commitDiffEnabled = (diffEnabled || parentDiffActive) && !rootDiffReason;
+  const contextDiffReasonId = `version-context-diff-disabled-${commitTestId}`;
   const diffStatus =
-    sanitizeVersionStatusText(
-      !diffEnabled ? diffDisabledReason : rootDiffReason,
-      'Diff is unavailable.',
-    ) ?? 'Diff is unavailable.';
+    parentDiffActive
+      ? 'Hide diff'
+      : (sanitizeVersionStatusText(
+          !diffEnabled ? diffDisabledReason : rootDiffReason,
+          'Diff is unavailable.',
+        ) ?? 'Diff is unavailable.');
   const branchReasonId = `version-commit-branch-disabled-${commitTestId}`;
 
   const handleOpenChange = (open: boolean) => {
@@ -814,18 +828,21 @@ function CommitContextMenu({
           data-testid={`version-history-context-diff-${commitTestId}`}
           onClick={onDiffCommit}
           disabled={!commitDiffEnabled}
-          title={!commitDiffEnabled ? diffStatus : undefined}
+          aria-describedby={!commitDiffEnabled ? contextDiffReasonId : undefined}
+          title={!commitDiffEnabled || parentDiffActive ? diffStatus : undefined}
           className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-transparent"
         >
           <GitCompare size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate">Diff against parent</span>
+          <span className="min-w-0 flex-1 truncate">
+            {parentDiffActive ? 'Hide parent diff' : 'Diff against parent'}
+          </span>
         </button>
         <DisabledReason
           id={checkoutReasonId}
           reason={!checkoutEnabled ? checkoutStatus : undefined}
         />
         <DisabledReason
-          id={`version-context-diff-disabled-${commitTestId}`}
+          id={contextDiffReasonId}
           reason={!commitDiffEnabled ? diffStatus : undefined}
         />
       </PopoverContent>

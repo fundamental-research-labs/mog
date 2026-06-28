@@ -147,6 +147,7 @@ export function useVersionHistoryPanelActions({
   const canDiff = diffAvailability.enabled;
   const canPreviewMerge = mergePreviewAvailability.enabled;
   const canApplyMerge = mergeApplyAvailability.enabled;
+  const activeParentDiffCommitId = resolveActiveParentDiffCommitId(data?.commits, diffPreview);
 
   useEffect(
     () => () => {
@@ -443,7 +444,16 @@ export function useVersionHistoryPanelActions({
   const handleDiffCommit = useCallback(
     async (commit: WorkbookCommitSummary) => {
       const parentId = commit.parents[0];
-      if (!canDiff || !parentId) return;
+      if (!parentId) return;
+
+      if (diffPreview?.base === parentId && diffPreview.target === commit.id) {
+        beginDiffLoad();
+        setDiffPreview(undefined);
+        setActionState({ status: 'idle' });
+        return;
+      }
+
+      if (!canDiff) return;
 
       const generation = beginDiffLoad();
       setActionState({ status: 'running', label: 'Loading parent diff' });
@@ -471,7 +481,7 @@ export function useVersionHistoryPanelActions({
       }
       setActionState({ status: 'idle' });
     },
-    [beginDiffLoad, canDiff, isDiffGenerationCurrent, loadInlineDiffDetail, workbook],
+    [beginDiffLoad, canDiff, diffPreview, isDiffGenerationCurrent, loadInlineDiffDetail, workbook],
   );
 
   const getBranchAvailabilityForCommit = useCallback(
@@ -781,6 +791,7 @@ export function useVersionHistoryPanelActions({
 
   return {
     actionState,
+    activeParentDiffCommitId,
     branchDisabledReason: branchAvailability.disabledReason,
     branchName,
     canCheckout,
@@ -815,6 +826,16 @@ export function useVersionHistoryPanelActions({
     setBranchName,
     setCommitMessage,
   };
+}
+
+function resolveActiveParentDiffCommitId(
+  commits: readonly WorkbookCommitSummary[] | undefined,
+  diffPreview: VersionDiffPreview | undefined,
+): WorkbookCommitId | undefined {
+  if (!commits || !diffPreview) return undefined;
+  return commits.find(
+    (commit) => commit.id === diffPreview.target && commit.parents[0] === diffPreview.base,
+  )?.id;
 }
 
 function mergeReviewStatusMessage(review: VersionMergeReview): string {

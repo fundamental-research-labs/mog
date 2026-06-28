@@ -138,6 +138,7 @@ export function VersionHistoryPanelContent({
               />
             ) : null}
             <CommitList
+              activeParentDiffCommitId={actions.activeParentDiffCommitId}
               branchName={actions.branchName}
               commits={data.commits}
               checkoutEnabled={actions.canCheckout}

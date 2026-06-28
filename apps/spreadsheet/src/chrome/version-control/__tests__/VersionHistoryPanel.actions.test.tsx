@@ -558,6 +558,36 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffViewer).toHaveTextContent('42');
   });
 
+  it('toggles the active parent diff closed from the same commit Diff button', async () => {
+    const workbook = createWorkbook();
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+
+    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    expect(await screen.findByTestId('version-history-parent-diff')).toBeInTheDocument();
+    await waitFor(() => expect(workbook.version.diffGroupDetail).toHaveBeenCalledTimes(1));
+
+    const activeDiffButton = screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID));
+    await waitFor(() => expect(activeDiffButton).toBeEnabled());
+    expect(activeDiffButton).toHaveAccessibleName(
+      `Hide diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
+    );
+    expect(activeDiffButton).toHaveTextContent('Hide');
+
+    await user.click(activeDiffButton);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-parent-diff')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('version-history-diff-viewer')).toHaveAttribute('data-state', 'idle');
+    expect(screen.getByTestId('version-history-diff-viewer')).toHaveTextContent('No diff loaded');
+    expect(workbook.version.diffOverview).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID))).toHaveAccessibleName(
+      `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
+    );
+  });
+
   it('applies sheet, domain, and operation filters through the public diff overview APIs', async () => {
     const workbook = createWorkbook();
     const { user } = renderVersionHistoryPanel({ workbook });

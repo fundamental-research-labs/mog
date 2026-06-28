@@ -73,6 +73,7 @@ import type {
   WorkbookCommitSummary,
   WorkbookCommitIdInput,
   WorkbookVersion,
+  WorkbookVersionRefsNamespace,
   WorkbookVersionReviewApi,
   WorkbookVersionReviewDiffPage,
   WorkbookVersionReviewNamespace,
@@ -170,12 +171,6 @@ class WorkbookVersionCoreImpl extends WorkbookVersionNamespaceBase {
     return commitWorkbookVersionFacade(this.ctx, options);
   }
 
-  async promotePendingRemote(
-    options: VersionPromotePendingRemoteOptions = {},
-  ): Promise<VersionResult<VersionPromotePendingRemoteResult>> {
-    return promotePendingRemoteWorkbookVersionFacade(this.ctx, options);
-  }
-
   async checkout(
     target: VersionCheckoutTarget,
     options: VersionCheckoutOptions = {},
@@ -242,6 +237,17 @@ class WorkbookVersionCoreImpl extends WorkbookVersionNamespaceBase {
     options: VersionWorkingTreeDiffOptions = {},
   ): Promise<VersionResult<VersionWorkingTreeDiffPage>> {
     return diffWorkingTreeWorkbookVersionFacade(this.ctx, options);
+  }
+}
+
+class WorkbookVersionRefsNamespaceImpl
+  extends WorkbookVersionNamespaceBase
+  implements WorkbookVersionRefsNamespace
+{
+  async promotePendingRemote(
+    options: VersionPromotePendingRemoteOptions = {},
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>> {
+    return promotePendingRemoteWorkbookVersionFacade(this.ctx, options);
   }
 
   async readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
@@ -407,6 +413,10 @@ export class WorkbookVersionImpl extends WorkbookVersionCoreImpl implements Work
 
   get proposals(): VersionProposalPorcelainApi {
     return createWorkbookVersionProposalPorcelainFacade(this.ctx);
+  }
+
+  get refs(): WorkbookVersionRefsNamespace {
+    return new WorkbookVersionRefsNamespaceImpl(() => this.ctx, this.options);
   }
 
   async getStatus(): Promise<WorkbookVersionStatus> {

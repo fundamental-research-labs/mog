@@ -41,7 +41,7 @@ export function registerTargetHeadStaleScenarios(): void {
         actualTargetHeadId: movedMainCommitId,
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -108,7 +108,7 @@ export function registerTargetHeadStaleScenarios(): void {
         ]),
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

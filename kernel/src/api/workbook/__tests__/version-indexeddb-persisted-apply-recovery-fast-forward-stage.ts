@@ -73,7 +73,7 @@ export async function stageFastForwardIntentAfterTargetRefMove(
     );
     const oursHead = await expectHead(firstWb);
 
-    const branch = await firstWb.version.createBranch({
+    const branch = await firstWb.version.refs.createBranch({
       name: BRANCH_REF,
       targetCommitId: oursCommit.id,
       expectedAbsent: true,

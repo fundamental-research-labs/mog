@@ -52,7 +52,7 @@ export function registerProposalProviderWorkspaceBranchHeadGuardScenarios(): voi
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });
-    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+    await expect(version.refs.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

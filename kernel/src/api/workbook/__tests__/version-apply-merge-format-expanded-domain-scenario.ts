@@ -64,7 +64,7 @@ export function registerExpandedDomainFormatScenario() {
       );
       const baseHead = await expectHead(sourceWb);
 
-      const branch = await sourceWb.version.createBranch({
+      const branch = await sourceWb.version.refs.createBranch({
         name: 'scenario/expanded-domain-incoming' as any,
         targetCommitId: baseCommit.id,
         expectedAbsent: true,

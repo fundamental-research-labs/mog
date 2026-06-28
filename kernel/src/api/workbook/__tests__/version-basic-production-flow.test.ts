@@ -103,7 +103,7 @@ describe('WorkbookVersion basic production flow', () => {
       expect(baseCommit.parents).toEqual([rootHead.id]);
       const baseHead = await expectHead(mainWb);
 
-      const branch = await mainWb.version.createBranch({
+      const branch = await mainWb.version.refs.createBranch({
         name: IMPORTED_FIXTURE_BRANCH_NAME as any,
         targetCommitId: baseCommit.id,
         expectedAbsent: true,
@@ -199,7 +199,7 @@ describe('WorkbookVersion basic production flow', () => {
       }
       const mergeCommitId = applied.value.commitRef.id;
 
-      await expect(mainWb.version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(mainWb.version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -209,7 +209,7 @@ describe('WorkbookVersion basic production flow', () => {
           },
         },
       });
-      await expect(mainWb.version.readRef('refs/heads/main')).resolves.toMatchObject({
+      await expect(mainWb.version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -220,7 +220,7 @@ describe('WorkbookVersion basic production flow', () => {
         },
       });
       await expect(
-        mainWb.version.readRef(IMPORTED_FIXTURE_BRANCH_REF as any),
+        mainWb.version.refs.readRef(IMPORTED_FIXTURE_BRANCH_REF as any),
       ).resolves.toMatchObject({
         ok: true,
         value: {
@@ -258,7 +258,7 @@ describe('WorkbookVersion basic production flow', () => {
         expect.arrayContaining([branchCommit.id, baseCommit.id, rootHead.id]),
       );
 
-      const refs = await mainWb.version.listRefs();
+      const refs = await mainWb.version.refs.listRefs();
       if (!refs.ok) throw new Error(`expected imported fixture listRefs: ${refs.error.code}`);
       expect(refs.value.items).toEqual(
         expect.arrayContaining([
@@ -394,7 +394,7 @@ describe('WorkbookVersion basic production flow', () => {
       expect(baseCommit.parents).toEqual([initialized.rootCommit.id]);
       const baseHead = await expectHead(mainWb);
 
-      const branch = await mainWb.version.createBranch({
+      const branch = await mainWb.version.refs.createBranch({
         name: BASIC_FLOW_BRANCH_NAME as any,
         targetCommitId: baseCommit.id,
         expectedAbsent: true,
@@ -545,7 +545,7 @@ describe('WorkbookVersion basic production flow', () => {
         expect.arrayContaining([branchCommit.id, baseCommit.id, initialized.rootCommit.id]),
       );
 
-      const refs = await mainWb.version.listRefs();
+      const refs = await mainWb.version.refs.listRefs();
       if (!refs.ok) throw new Error(`expected listRefs success: ${refs.error.code}`);
       expect(refs.value.items).toEqual(
         expect.arrayContaining([

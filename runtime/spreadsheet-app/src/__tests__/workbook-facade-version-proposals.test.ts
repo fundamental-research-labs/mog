@@ -158,13 +158,18 @@ test('workbook version proposal sub-api matrix is pinned to porcelain and advanc
   const advancedMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.VersionProposalApi;
   assert.deepEqual(advancedMatrix.acceptProposal.capabilities, [
     'version:proposal',
-    'version:branch',
+    'version:mergePreview',
+    'version:mergeApply',
   ]);
   assert.equal(advancedMatrix.acceptProposal.returnsVersionResult, true);
 });
 
 test('workbook version proposal namespace access is capability-free but methods are guarded', async () => {
-  const deniedCapabilities = new Set<SpreadsheetCapability>(['version:proposal', 'version:branch']);
+  const deniedCapabilities = new Set<SpreadsheetCapability>([
+    'version:proposal',
+    'version:mergePreview',
+    'version:mergeApply',
+  ]);
 
   await withVersionFacade(
     'runtime-version-proposal-namespace-denied-methods',
@@ -212,7 +217,7 @@ test('workbook version proposal namespace access is capability-free but methods 
         acceptResult,
         'acceptProposal',
         'version:proposal',
-        ['version:proposal', 'version:branch'],
+        ['version:proposal', 'version:mergePreview', 'version:mergeApply'],
         'VersionProposalApi.acceptProposal',
       );
     },
@@ -270,7 +275,8 @@ test('workbook facade wraps proposal handles returned from nested porcelain meth
       epoch: record.epoch,
       decisions: [
         { capability: 'version:proposal', decision: 'allowed' },
-        { capability: 'version:branch', decision: 'denied' },
+        { capability: 'version:mergePreview', decision: 'denied' },
+        { capability: 'version:mergeApply', decision: 'denied' },
       ],
     },
   } as unknown as FacadeBinding;
@@ -286,8 +292,8 @@ test('workbook facade wraps proposal handles returned from nested porcelain meth
   assertVersionDeniedResult(
     acceptResult,
     'accept',
-    'version:branch',
-    ['version:branch'],
+    'version:mergePreview',
+    ['version:mergePreview', 'version:mergeApply'],
     'VersionProposalHandle.accept',
   );
 });

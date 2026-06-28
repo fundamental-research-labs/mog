@@ -39,11 +39,7 @@ export type VersionHistoryWorkbook = {
     | 'getSurfaceStatus'
     | 'getStatus'
     | 'getHead'
-    | 'readRef'
     | 'listCommits'
-    | 'listRefs'
-    | 'createBranch'
-    | 'promotePendingRemote'
     | 'revert'
     | 'diff'
     | 'diffOverview'
@@ -55,6 +51,10 @@ export type VersionHistoryWorkbook = {
     | 'checkoutBranch'
     | 'checkoutCommit'
   > & {
+    readonly refs: Pick<
+      WorkbookVersion['refs'],
+      'readRef' | 'listRefs' | 'createBranch' | 'promotePendingRemote'
+    >;
     readonly reviews: {
       readonly advanced: Pick<WorkbookVersion['reviews']['advanced'], 'listReviews'>;
     };
@@ -175,7 +175,7 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
         }),
       ),
       readVersionResult('VERSION_UI_REFS_FAILED', () =>
-        workbook.version.listRefs({ includeDiagnostics: true }),
+        workbook.version.refs.listRefs({ includeDiagnostics: true }),
       ),
       readReviews
         ? readVersionResult('VERSION_UI_REVIEWS_FAILED', () =>

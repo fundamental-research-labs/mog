@@ -100,7 +100,7 @@ export function registerVersionStatusCommitProviderScenarios() {
       provider,
       captureNormalCommit,
     });
-    const branchResult = await version.createBranch({
+    const branchResult = await version.refs.createBranch({
       name: 'scenario/direct-active-branch' as any,
       targetCommitId: initialized.rootCommit.id,
       expectedAbsent: true,
@@ -169,7 +169,7 @@ export function registerVersionStatusCommitProviderScenarios() {
         reason: 'branch-head-advanced',
       }),
     ]);
-    await expect(version.readRef(branch.name)).resolves.toMatchObject({
+    await expect(version.refs.readRef(branch.name)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -179,7 +179,7 @@ export function registerVersionStatusCommitProviderScenarios() {
         },
       },
     });
-    await expect(version.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
+    await expect(version.refs.readRef(VERSION_GRAPH_MAIN_REF)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

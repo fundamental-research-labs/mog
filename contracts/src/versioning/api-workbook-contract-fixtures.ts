@@ -86,6 +86,7 @@ import type {
   WorkbookCommitSummary,
   WorkbookVersion,
   WorkbookVersionDiagnostic,
+  WorkbookVersionRefsNamespace,
   WorkbookVersionReviewApi,
   WorkbookVersionReviewDiffPage,
   WorkbookVersionReviewNamespace,
@@ -108,43 +109,9 @@ type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 type MethodReturn<T> = T extends (...args: any[]) => infer R ? R : never;
 type UnwrapVersionResult<T> = T extends VersionResult<infer Value> ? Value : never;
 
-type ExpectedWorkbookVersionMethodName =
-  | 'getStatus'
-  | 'getSurfaceStatus'
-  | 'getCurrent'
-  | 'getHead'
-  | 'listCommits'
-  | 'commit'
-  | 'promotePendingRemote'
-  | 'checkout'
-  | 'merge'
-  | 'applyMerge'
-  | 'revert'
-  | 'diff'
-  | 'diffOverview'
-  | 'diffGroupDetail'
-  | 'diffWorkingTree'
-  | 'readRef'
-  | 'getRef'
-  | 'listRefs'
-  | 'createBranch'
-  | 'fastForwardBranch'
-  | 'updateBranch'
-  | 'deleteBranch'
-  | 'deleteRef'
-  | 'commitCurrent'
-  | 'checkoutBranch'
-  | 'checkoutCommit'
-  | 'createBranchFromCurrent'
-  | 'listBranches'
-  | 'diffCurrent'
-  | 'diffCurrentOverview'
-  | 'diffBranch'
-  | 'diffBranchOverview'
-  | 'previewMerge'
-  | 'getMergeReview';
 type ExpectedWorkbookVersionMemberName =
-  | ExpectedWorkbookVersionMethodName
+  | keyof ExpectedWorkbookVersionCoreMethods
+  | 'refs'
   | 'reviews'
   | 'artifacts'
   | 'proposals';
@@ -171,7 +138,6 @@ interface ExpectedWorkbookVersionDirectMethods {
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
-  promotePendingRemote(options?: VersionPromotePendingRemoteOptions): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   checkout(target: VersionCheckoutTarget, options?: VersionCheckoutOptions): Promise<VersionResult<CheckoutVersionResult>>;
   merge(input: VersionMergeInput, options?: VersionMergeOptions): Promise<VersionResult<VersionMergeResult>>;
   applyMerge(input: VersionApplyMergeInput, options?: VersionApplyMergeOptions): Promise<VersionResult<VersionApplyMergeResult>>;
@@ -180,6 +146,10 @@ interface ExpectedWorkbookVersionDirectMethods {
   diffOverview(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
   diffGroupDetail(base: VersionCommitish, target: VersionCommitish, options: VersionDiffGroupDetailOptions): Promise<VersionResult<VersionSemanticDiffPage>>;
   diffWorkingTree(options?: VersionWorkingTreeDiffOptions): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
+}
+
+interface ExpectedWorkbookVersionRefsMethods {
+  promotePendingRemote(options?: VersionPromotePendingRemoteOptions): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
   readRef(name: VersionMainRefName | VersionRefName | VersionBranchName): Promise<VersionResult<VersionBranchRefReadResult>>;
   readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>;
@@ -195,43 +165,26 @@ interface ExpectedWorkbookVersionDirectMethods {
 }
 
 type ExpectedWorkbookVersionResultByMethod = {
-  readonly getCurrent: VersionResult<VersionCurrentCheckout>;
-  readonly getHead: VersionResult<VersionHead>;
-  readonly listCommits: VersionResult<Paged<WorkbookCommitSummary>>;
-  readonly commit: VersionResult<WorkbookCommitSummary>;
-  readonly promotePendingRemote: VersionResult<VersionPromotePendingRemoteResult>;
-  readonly checkout: VersionResult<CheckoutVersionResult>;
-  readonly merge: VersionResult<VersionMergeResult>;
-  readonly applyMerge: VersionResult<VersionApplyMergeResult>;
-  readonly revert: VersionResult<VersionRevertResult>;
-  readonly diff: VersionResult<VersionSemanticDiffPage>;
-  readonly diffOverview: VersionResult<VersionDiffOverview>;
-  readonly diffGroupDetail: VersionResult<VersionSemanticDiffPage>;
-  readonly diffWorkingTree: VersionResult<VersionWorkingTreeDiffPage>;
-  readonly readRef: VersionResult<VersionRefReadResult>;
-  readonly getRef: VersionResult<VersionRefReadResult>;
-  readonly listRefs: VersionResult<Paged<VersionRef>>;
-  readonly createBranch: VersionResult<VersionRef>;
-  readonly fastForwardBranch: VersionResult<VersionRef>;
-  readonly updateBranch: VersionResult<VersionRef>;
-  readonly deleteBranch: VersionResult<VersionRef>;
-  readonly deleteRef: VersionResult<VersionRef>;
-  readonly commitCurrent: VersionResult<WorkbookCommitSummary>;
-  readonly checkoutBranch: VersionResult<CheckoutVersionResult>;
-  readonly checkoutCommit: VersionResult<CheckoutVersionResult>;
-  readonly previewMerge: VersionResult<VersionMergeReview>;
-  readonly getMergeReview: VersionResult<VersionMergeReview>;
-  readonly diffCurrent: VersionResult<VersionSemanticDiffPage>;
-  readonly diffCurrentOverview: VersionResult<VersionDiffOverview>;
-  readonly diffBranch: VersionResult<VersionSemanticDiffPage>;
-  readonly diffBranchOverview: VersionResult<VersionDiffOverview>;
-  readonly listBranches: VersionResult<Paged<VersionBranchSummary>>;
-  readonly createBranchFromCurrent: VersionResult<VersionRef>;
+  readonly [Method in keyof ExpectedWorkbookVersionCoreMethods]: Awaited<
+    MethodReturn<ExpectedWorkbookVersionCoreMethods[Method]>
+  >;
+};
+
+type ExpectedWorkbookVersionRefsResultByMethod = {
+  readonly [Method in keyof ExpectedWorkbookVersionRefsMethods]: Awaited<
+    MethodReturn<ExpectedWorkbookVersionRefsMethods[Method]>
+  >;
 };
 
 type WorkbookVersionReturnByMethod = {
-  readonly [Method in ExpectedWorkbookVersionMethodName]: Awaited<
+  readonly [Method in keyof ExpectedWorkbookVersionCoreMethods]: Awaited<
     MethodReturn<WorkbookVersion[Method]>
+  >;
+};
+
+type WorkbookVersionRefsReturnByMethod = {
+  readonly [Method in keyof ExpectedWorkbookVersionRefsMethods]: Awaited<
+    MethodReturn<WorkbookVersionRefsNamespace[Method]>
   >;
 };
 
@@ -904,6 +857,15 @@ type _ContractsWorkbookVersionCoreMethodsKeepPublicContracts = Assert<
 type _ContractsWorkbookVersionExposesReviewNamespace = Assert<
   IsEqual<WorkbookVersion['reviews'], WorkbookVersionReviewNamespace>
 >;
+type _ContractsWorkbookVersionExposesRefsNamespace = Assert<
+  IsEqual<WorkbookVersion['refs'], WorkbookVersionRefsNamespace>
+>;
+type _ContractsWorkbookVersionRefsNamespaceKeepsPublicContracts = Assert<
+  IsMutuallyAssignable<
+    Pick<WorkbookVersionRefsNamespace, keyof ExpectedWorkbookVersionRefsMethods>,
+    ExpectedWorkbookVersionRefsMethods
+  >
+>;
 type _ContractsWorkbookVersionReviewNamespaceEmbedsAdvancedContract = Assert<
   IsMutuallyAssignable<
     Pick<WorkbookVersionReviewNamespace['advanced'], keyof WorkbookVersionReviewApi>,
@@ -924,6 +886,9 @@ type _ContractsWorkbookVersionEmbedsProposalPorcelainContract = Assert<
 >;
 type _ContractsWorkbookVersionMethodReturnEnvelopesArePublic = Assert<
   IsMutuallyAssignable<WorkbookVersionReturnByMethod, ExpectedWorkbookVersionReturnByMethod>
+>;
+type _ContractsWorkbookVersionRefsMethodReturnEnvelopesArePublic = Assert<
+  IsMutuallyAssignable<WorkbookVersionRefsReturnByMethod, ExpectedWorkbookVersionRefsResultByMethod>
 >;
 type _ContractsVersionTargetUnavailableUsesPublicDiagnostics = Assert<
   IsEqual<VersionTargetUnavailableError['diagnostics'], readonly VersionDiagnostic[]>
@@ -994,7 +959,8 @@ type _ContractsWorkbookVersionResultValuesHaveNoTopLevelPrivateFields = Assert<
     Extract<
       KeysOfUnion<
         UnwrapVersionResult<
-          ExpectedWorkbookVersionResultByMethod[keyof ExpectedWorkbookVersionResultByMethod]
+          | ExpectedWorkbookVersionResultByMethod[keyof ExpectedWorkbookVersionResultByMethod]
+          | ExpectedWorkbookVersionRefsResultByMethod[keyof ExpectedWorkbookVersionRefsResultByMethod]
         >
       >,
       PublicVersionPrivateDiagnosticFieldName

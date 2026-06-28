@@ -50,30 +50,37 @@ const VERSION_METHOD_REQUIREMENTS = {
   getCurrent: ['version:read'],
   getHead: ['version:read'],
   listCommits: ['version:read'],
-  readRef: ['version:read'],
-  getRef: ['version:read'],
-  listRefs: ['version:read'],
-  promotePendingRemote: ['version:remotePromote', 'version:provenance'],
   diff: ['version:diff'],
+  diffOverview: ['version:diff'],
+  diffGroupDetail: ['version:diff'],
+  diffWorkingTree: ['version:diff'],
   commit: ['version:commit'],
   checkout: ['version:checkout'],
   merge: ['version:mergePreview'],
   applyMerge: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
   revert: ['version:revert'],
-  createBranch: ['version:branch'],
-  fastForwardBranch: ['version:branch'],
-  updateBranch: ['version:branch'],
-  deleteBranch: ['version:branch'],
-  deleteRef: ['version:branch'],
   listBranches: ['version:read'],
   diffCurrent: ['version:diff'],
+  diffCurrentOverview: ['version:diff'],
   diffBranch: ['version:diff'],
+  diffBranchOverview: ['version:diff'],
   commitCurrent: ['version:commit'],
   checkoutBranch: ['version:checkout'],
   checkoutCommit: ['version:checkout'],
   createBranchFromCurrent: ['version:read', 'version:branch'],
   previewMerge: ['version:mergePreview'],
   getMergeReview: ['version:mergePreview'],
+};
+const VERSION_REFS_METHOD_REQUIREMENTS = {
+  readRef: ['version:read'],
+  getRef: ['version:read'],
+  listRefs: ['version:read'],
+  promotePendingRemote: ['version:remotePromote', 'version:provenance'],
+  createBranch: ['version:branch'],
+  fastForwardBranch: ['version:branch'],
+  updateBranch: ['version:branch'],
+  deleteBranch: ['version:branch'],
+  deleteRef: ['version:branch'],
 };
 const VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS = {
   listReviews: ['version:reviewRead'],
@@ -127,7 +134,7 @@ const VERSION_PROPOSAL_ADVANCED_METHOD_REQUIREMENTS = {
   listProposals: ['version:proposal'],
   markProposalVerified: ['version:proposal'],
   openProposalReview: ['version:proposal'],
-  acceptProposal: ['version:proposal', 'version:branch'],
+  acceptProposal: ['version:proposal', 'version:mergePreview', 'version:mergeApply'],
   rejectProposal: ['version:proposal'],
   supersedeProposal: ['version:proposal'],
 };
@@ -152,7 +159,7 @@ const VERSION_PROPOSAL_HANDLE_METHOD_REQUIREMENTS = {
     returnsVersionResult: true,
   },
   accept: {
-    capabilities: ['version:proposal', 'version:branch'],
+    capabilities: ['version:proposal', 'version:mergePreview', 'version:mergeApply'],
     returnsVersionResult: true,
   },
   reject: {
@@ -246,6 +253,7 @@ function capabilityEntry(requirements) {
 
 function versionInterfaceRequirements(interfaceName) {
   if (interfaceName === 'WorkbookVersion') return VERSION_METHOD_REQUIREMENTS;
+  if (interfaceName === 'WorkbookVersionRefsNamespace') return VERSION_REFS_METHOD_REQUIREMENTS;
   if (interfaceName === 'WorkbookVersionReviewApi') {
     return VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS;
   }
@@ -725,6 +733,13 @@ function assertVersionSubApiInterfaces(subApiInterfaces) {
     );
   }
 
+  const versionRefs = subApiInterfaces.WorkbookVersion?.refs;
+  if (versionRefs?.targetInterface !== 'WorkbookVersionRefsNamespace') {
+    throw new Error(
+      'workbook facade sub-api interfaces must expose WorkbookVersion.refs',
+    );
+  }
+
   const versionProposals = subApiInterfaces.WorkbookVersion?.proposals;
   if (versionProposals?.targetInterface !== 'VersionProposalPorcelainApi') {
     throw new Error(
@@ -775,6 +790,10 @@ function assertVersionInterfaceRequirements(interfaceName, requirements) {
   }
 }
 
+assertVersionInterfaceRequirements(
+  'WorkbookVersionRefsNamespace',
+  VERSION_REFS_METHOD_REQUIREMENTS,
+);
 assertVersionInterfaceRequirements(
   'WorkbookVersionReviewApi',
   VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS,

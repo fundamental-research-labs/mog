@@ -91,7 +91,7 @@ describe('WorkbookVersion materialized active checkout persisted reopen', () => 
       };
       sourceWb.markClean();
 
-      const branch = await sourceWb.version.createBranch({
+      const branch = await sourceWb.version.refs.createBranch({
         name: BRANCH_REF,
         targetCommitId: oursCommit.id,
         expectedAbsent: true,
@@ -289,7 +289,7 @@ describe('WorkbookVersion materialized active checkout persisted reopen', () => 
       };
       sourceWb.markClean();
 
-      const branch = await sourceWb.version.createBranch({
+      const branch = await sourceWb.version.refs.createBranch({
         name: BRANCH_REF,
         targetCommitId: oursCommit.id,
         expectedAbsent: true,

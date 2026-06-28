@@ -60,7 +60,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
         proposalCommitId: expect.stringMatching(/^commit:sha256:[0-9a-f]{64}$/),
       },
     });
-    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+    await expect(version.refs.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -138,7 +138,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
       },
     });
 
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

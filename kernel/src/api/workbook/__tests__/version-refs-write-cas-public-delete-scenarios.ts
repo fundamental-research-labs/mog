@@ -9,9 +9,9 @@ import { expectRedactedExpectedHeadConflict } from './version-refs-write-cas-hel
 export function registerWriteCasPublicDeleteScenarios(): void {
   it('deletes public branch refs through the attached service', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
-    await version.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
 
-    const staleDelete = await version.deleteRef({
+    const staleDelete = await version.refs.deleteRef({
       name: 'scenario/delete-me' as any,
       expectedHead: COMMIT_B,
       expectedRefRevision: refVersion('0'),
@@ -21,7 +21,7 @@ export function registerWriteCasPublicDeleteScenarios(): void {
     expectRedactedExpectedHeadConflict(staleDelete.error.diagnostics);
 
     await expect(
-      version.deleteBranch({
+      version.refs.deleteBranch({
         name: 'scenario/delete-me' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),
@@ -43,10 +43,10 @@ export function registerWriteCasPublicDeleteScenarios(): void {
       },
     });
 
-    await version.createBranch({ name: 'scenario/delete-ref' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({ name: 'scenario/delete-ref' as any, targetCommitId: COMMIT_A });
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'refs/heads/scenario/delete-ref' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),
@@ -64,16 +64,16 @@ export function registerWriteCasPublicDeleteScenarios(): void {
   it('deletes non-current refs without rebinding HEAD or changing the current branch', async () => {
     const { branchService, version } =
       createWorkbookVersionWithBranchService('scenario/current-delete');
-    await version.createBranch({
+    await version.refs.createBranch({
       name: 'scenario/current-delete' as any,
       targetCommitId: COMMIT_A,
     });
-    await version.createBranch({
+    await version.refs.createBranch({
       name: 'scenario/delete-non-current' as any,
       targetCommitId: COMMIT_A,
     });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -87,7 +87,7 @@ export function registerWriteCasPublicDeleteScenarios(): void {
     });
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'refs/heads/scenario/delete-non-current' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),
@@ -101,7 +101,7 @@ export function registerWriteCasPublicDeleteScenarios(): void {
       },
     });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -113,7 +113,7 @@ export function registerWriteCasPublicDeleteScenarios(): void {
         diagnostics: [],
       },
     });
-    await expect(version.getRef('scenario/current-delete' as any)).resolves.toMatchObject({
+    await expect(version.refs.getRef('scenario/current-delete' as any)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -125,7 +125,7 @@ export function registerWriteCasPublicDeleteScenarios(): void {
       },
     });
 
-    const scenarioRefs = await version.listRefs({ prefix: 'refs/heads/scenario' as any });
+    const scenarioRefs = await version.refs.listRefs({ prefix: 'refs/heads/scenario' as any });
     expect(scenarioRefs).toMatchObject({
       ok: true,
       value: {

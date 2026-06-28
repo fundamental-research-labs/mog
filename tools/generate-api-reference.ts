@@ -122,6 +122,7 @@ const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookTheme: 'theme',
   WorkbookSlicers: 'slicers',
   WorkbookVersion: 'version',
+  WorkbookVersionRefsNamespace: 'version.refs',
   WorkbookVersionReviewApi: 'version.reviews.advanced',
   VersionMergeReviewArtifactApi: 'version.artifacts.advanced',
   VersionProposalPorcelainApi: 'version.proposals',
@@ -327,7 +328,7 @@ function extractUsedTypesFromMethods(
 // ============================================================================
 
 const SIGNATURE_TYPE_TEXT_OVERRIDES: Record<string, Record<string, Record<string, string>>> = {
-  WorkbookVersion: {
+  WorkbookVersionRefsNamespace: {
     updateBranch: {
       VersionFastForwardBranchOptions: 'VersionUpdateBranchOptions',
     },
@@ -403,7 +404,8 @@ function pickApiReferenceMethod(
 
 function usesBroadPublicRefOverload(interfaceName: string, methodName: string): boolean {
   return (
-    interfaceName === 'WorkbookVersion' && (methodName === 'readRef' || methodName === 'getRef')
+    interfaceName === 'WorkbookVersionRefsNamespace' &&
+    (methodName === 'readRef' || methodName === 'getRef')
   );
 }
 

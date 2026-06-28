@@ -21,7 +21,7 @@ export function registerProviderW8RedactionProviderDiagnosticScenarios(): void {
     };
     const version = createVersionWithBranchService(branchService);
 
-    const createFailed = await version.createBranch({
+    const createFailed = await version.refs.createBranch({
       name: SECRET_REF_NAME as any,
       targetCommitId: AUX_COMMIT_ID as any,
     });
@@ -41,7 +41,7 @@ export function registerProviderW8RedactionProviderDiagnosticScenarios(): void {
       SECRET_MESSAGE,
     );
 
-    const deleteFailed = await version.deleteRef({
+    const deleteFailed = await version.refs.deleteRef({
       name: SECRET_REF_NAME as any,
       expectedHead: AUX_COMMIT_ID as any,
       expectedRefRevision: { kind: 'counter', value: '0' },

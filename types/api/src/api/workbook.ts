@@ -126,7 +126,7 @@ export type {
   VersionSurfaceLiveCollaborationStatus, VersionSurfaceStage, VersionSurfaceStatus, VersionSurfaceStorageBackend,
   VersionSymbolicRef, VersionSymbolicRefReadResult, VersionUpdateBranchOptions,
   WorkbookCommitAnnotationSummary, WorkbookCommitId, WorkbookCommitIdInput, WorkbookCommitRef, WorkbookCommitSummary,
-  WorkbookDiffPage, WorkbookVersion, WorkbookVersionReviewNamespace,
+  WorkbookDiffPage, WorkbookVersion, WorkbookVersionRefsNamespace, WorkbookVersionReviewNamespace,
   WorkbookVersionCapabilityStage, WorkbookVersionCapabilityStatus, WorkbookVersionDependency,
   WorkbookVersionDiagnostic, WorkbookVersionDiagnosticCode, WorkbookVersionDiagnosticSeverity,
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,

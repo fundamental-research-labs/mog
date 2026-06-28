@@ -232,6 +232,7 @@ export type {
   WorkbookCommitSummary,
   WorkbookDiffPage,
   WorkbookVersion,
+  WorkbookVersionRefsNamespace,
   WorkbookVersionCapabilityStage,
   WorkbookVersionCapabilityStatus,
   WorkbookVersionDependency,

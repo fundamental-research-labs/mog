@@ -37,7 +37,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         refUpdateReceiptId: expect.stringContaining('proposal-accept:'),
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -81,7 +81,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
           appliedCommitId: ready.proposalCommitId,
         },
       });
-      await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -136,7 +136,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
     });
     expect(accepted.value.newHeadId).not.toBe(movedMainCommitId);
     expect(accepted.value.newHeadId).not.toBe(ready.proposalCommitId);
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -186,7 +186,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         conflictIds: expect.arrayContaining([expect.any(String)]),
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

@@ -36,7 +36,7 @@ export function registerProposalProviderCreationScenarios(): void {
       ok: true,
       value: { items: [{ id: created.value.id }], totalEstimate: 1 },
     });
-    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+    await expect(version.refs.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -91,7 +91,7 @@ export function registerProposalProviderCreationScenarios(): void {
       ok: true,
       value: { items: [], totalEstimate: 0 },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

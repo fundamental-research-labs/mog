@@ -56,8 +56,8 @@ describe('WorkbookVersion public ref active-session guards', () => {
       };
       const blocked =
         method === 'fastForwardBranch'
-          ? await version.fastForwardBranch(options)
-          : await version.updateBranch(options);
+          ? await version.refs.fastForwardBranch(options)
+          : await version.refs.updateBranch(options);
 
       expectStaleActiveCheckoutFailure(blocked, method);
       expect(branchService.readBranch(branchName)).toMatchObject({
@@ -102,8 +102,8 @@ describe('WorkbookVersion public ref active-session guards', () => {
       };
       const blocked =
         method === 'fastForwardBranch'
-          ? await version.fastForwardBranch(options)
-          : await version.updateBranch(options);
+          ? await version.refs.fastForwardBranch(options)
+          : await version.refs.updateBranch(options);
 
       expectStaleActiveCheckoutFailure(blocked, method);
       expect(branchService.readBranch(branchName)).toMatchObject({
@@ -140,12 +140,12 @@ describe('WorkbookVersion public ref active-session guards', () => {
 
       const blocked =
         method === 'deleteBranch'
-          ? await version.deleteBranch({
+          ? await version.refs.deleteBranch({
               name: branchName as any,
               expectedHead: COMMIT_A,
               expectedRefRevision: refVersion('0'),
             })
-          : await version.deleteRef({
+          : await version.refs.deleteRef({
               name: `refs/heads/${branchName}` as any,
               expectedHead: COMMIT_A,
               expectedRefRevision: refVersion('0'),

@@ -64,8 +64,9 @@ export function renderVersionHistoryPanel({
 type VersionHistoryVersion = VersionHistoryWorkbook['version'];
 
 type VersionHistoryWorkbookVersionOverrides = Partial<
-  Omit<VersionHistoryVersion, 'reviews' | 'proposals'>
+  Omit<VersionHistoryVersion, 'refs' | 'reviews' | 'proposals'>
 > & {
+  readonly refs?: Partial<VersionHistoryVersion['refs']>;
   readonly reviews?: {
     readonly advanced?: Partial<VersionHistoryVersion['reviews']['advanced']>;
   };
@@ -76,6 +77,7 @@ export function createWorkbook(
   overrides: VersionHistoryWorkbookVersionOverrides = {},
 ): VersionHistoryWorkbook {
   const {
+    refs: refsOverrides,
     reviews: reviewsOverrides,
     proposals: proposalsOverrides,
     ...topLevelOverrides
@@ -89,28 +91,6 @@ export function createWorkbook(
         refRevision: REF_REVISION,
       },
     })),
-    readRef: jest.fn(
-      async (name: Parameters<VersionHistoryVersion['readRef']>[0]) => ({
-        ok: true,
-        value: {
-          status: 'success',
-          ref:
-            name === 'HEAD'
-              ? {
-                  name: 'HEAD',
-                  target: 'refs/heads/main',
-                  revision: REF_REVISION,
-                }
-              : {
-                  name,
-                  commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
-                  revision:
-                    name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
-                },
-          diagnostics: [],
-        },
-      }),
-    ),
     listCommits: jest.fn(async () => ({
       ok: true,
       value: {
@@ -131,44 +111,6 @@ export function createWorkbook(
           },
         ],
         limit: 20,
-      },
-    })),
-    listRefs: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [
-          {
-            name: 'refs/heads/main',
-            commitId: HEAD_COMMIT_ID,
-            revision: REF_REVISION,
-          },
-          {
-            name: 'refs/heads/budget',
-            commitId: PARENT_COMMIT_ID,
-            revision: { kind: 'counter', value: '2' },
-          },
-        ],
-        limit: 2,
-      },
-    })),
-    createBranch: jest.fn(
-      async (options: Parameters<VersionHistoryVersion['createBranch']>[0]) => ({
-        ok: true,
-        value: {
-          name: options.name,
-          commitId: options.targetCommitId,
-          revision: { kind: 'counter', value: '3' },
-        },
-      }),
-    ),
-    promotePendingRemote: jest.fn(async () => ({
-      ok: true,
-      value: {
-        status: 'success',
-        promotedSegmentIds: [],
-        commitIds: [],
-        skipped: [],
-        diagnostics: [],
       },
     })),
     revert: jest.fn(async () => ({
@@ -209,6 +151,69 @@ export function createWorkbook(
       ok: true,
       value: createCleanMergeReview(),
     })),
+  };
+  const refs = {
+    readRef: jest.fn(
+      async (name: Parameters<VersionHistoryVersion['refs']['readRef']>[0]) => ({
+        ok: true,
+        value: {
+          status: 'success',
+          ref:
+            name === 'HEAD'
+              ? {
+                  name: 'HEAD',
+                  target: 'refs/heads/main',
+                  revision: REF_REVISION,
+                }
+              : {
+                  name,
+                  commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
+                  revision:
+                    name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+                },
+          diagnostics: [],
+        },
+      }),
+    ),
+    listRefs: jest.fn(async () => ({
+      ok: true,
+      value: {
+        items: [
+          {
+            name: 'refs/heads/main',
+            commitId: HEAD_COMMIT_ID,
+            revision: REF_REVISION,
+          },
+          {
+            name: 'refs/heads/budget',
+            commitId: PARENT_COMMIT_ID,
+            revision: { kind: 'counter', value: '2' },
+          },
+        ],
+        limit: 2,
+      },
+    })),
+    createBranch: jest.fn(
+      async (options: Parameters<VersionHistoryVersion['refs']['createBranch']>[0]) => ({
+        ok: true,
+        value: {
+          name: options.name,
+          commitId: options.targetCommitId,
+          revision: { kind: 'counter', value: '3' },
+        },
+      }),
+    ),
+    promotePendingRemote: jest.fn(async () => ({
+      ok: true,
+      value: {
+        status: 'success',
+        promotedSegmentIds: [],
+        commitIds: [],
+        skipped: [],
+        diagnostics: [],
+      },
+    })),
+    ...refsOverrides,
   };
   const reviews = {
     advanced: {
@@ -296,6 +301,7 @@ export function createWorkbook(
         mutationGuarantee: 'no-workbook-mutation',
       },
     })),
+    refs,
     reviews,
     proposals,
     ...topLevelOverrides,

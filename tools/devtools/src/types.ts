@@ -128,7 +128,7 @@ export interface DevToolsWorkbookVersionReadFacade {
   listCommits(
     options?: DevToolsVersionListCommitsOptions,
   ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  listRefs(options?: DevToolsVersionListRefsOptions): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  refs?: { listRefs(options?: DevToolsVersionListRefsOptions): DevToolsMaybePromise<DevToolsVersionFacadePayload> };
 }
 
 export interface DevToolsVersionControlReadbacks {
@@ -140,7 +140,7 @@ export interface DevToolsVersionControlReadbacks {
   listCommits(
     options?: DevToolsVersionListCommitsOptions,
   ): Promise<DevToolsVersionFacadePayload | null>;
-  /** Public facade read: `workbook.version.listRefs(options)`. */
+  /** Public facade read: `workbook.version.refs.listRefs(options)`. */
   listRefs(options?: DevToolsVersionListRefsOptions): Promise<DevToolsVersionFacadePayload | null>;
 }
 

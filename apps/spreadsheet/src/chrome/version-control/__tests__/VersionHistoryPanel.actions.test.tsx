@@ -247,14 +247,14 @@ describe('VersionHistoryPanelContent action flows', () => {
         Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranchFromCurrent']>>
       >();
     const refreshedRefs =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['listRefs']>>>();
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['refs']['listRefs']>>>();
     const listRefs = jest
-      .fn<VersionHistoryWorkbook['version']['listRefs']>()
-      .mockImplementationOnce(() => createWorkbook().version.listRefs())
+      .fn<VersionHistoryWorkbook['version']['refs']['listRefs']>()
+      .mockImplementationOnce(() => createWorkbook().version.refs.listRefs())
       .mockImplementationOnce(async () => refreshedRefs.promise);
     const workbook = createWorkbook({
       createBranchFromCurrent: jest.fn(async () => branchResult.promise),
-      listRefs,
+      refs: { listRefs },
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -482,7 +482,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     );
     await user.click(screen.getByTestId(createBranchFromCommitSubmitTestId(PARENT_COMMIT_ID)));
     await waitFor(() =>
-      expect(workbook.version.createBranch).toHaveBeenCalledWith({
+      expect(workbook.version.refs.createBranch).toHaveBeenCalledWith({
         name: 'refs/heads/version-panel',
         targetCommitId: PARENT_COMMIT_ID,
         expectedAbsent: true,

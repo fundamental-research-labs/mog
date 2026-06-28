@@ -3847,6 +3847,53 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
       },
       targetInterface: 'VersionProposalPorcelainApi',
     },
+    refs: {
+      signature: 'readonly refs: WorkbookVersionRefsNamespace;',
+      docstring: '',
+      usedTypes: ['WorkbookVersionRefsNamespace'],
+      stableId: 'WorkbookVersion.refs',
+      canonicalPath: 'wb.version.refs',
+      root: 'subApi',
+      parentRoot: 'workbook',
+      interface: 'WorkbookVersion',
+      method: 'refs',
+      kind: 'property',
+      visibility: 'public',
+      asyncModel: 'sync',
+      parameters: [],
+      returns: {
+        type: {
+          kind: 'objectRef',
+          name: 'WorkbookVersionRefsNamespace',
+        },
+        typeText: 'WorkbookVersionRefsNamespace',
+      },
+      typeScript: {
+        signature: 'readonly refs: WorkbookVersionRefsNamespace;',
+        parameters: [],
+        returnTypeText: 'WorkbookVersionRefsNamespace',
+      },
+      ownership: {
+        package: '@mog/types-api',
+      },
+      ownerPackage: '@mog/types-api',
+      alias: {
+        aliasOf: null,
+        aliases: [],
+        replacement: null,
+      },
+      deprecation: {
+        deprecated: false,
+        message: null,
+        replacement: null,
+        since: null,
+      },
+      compatibility: [],
+      source: {
+        file: 'types/api/src/api/workbook/version-workbook.ts',
+      },
+      targetInterface: 'WorkbookVersionRefsNamespace',
+    },
     reviews: {
       signature: 'readonly reviews: WorkbookVersionReviewNamespace;',
       docstring: '',
@@ -5762,7 +5809,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
   VersionProposalApi: {
     acceptProposal: {
       decision: 'allow',
-      capabilities: ['version:proposal', 'version:branch'],
+      capabilities: ['version:proposal', 'version:mergePreview', 'version:mergeApply'],
       returnsVersionResult: true,
     },
     commitProposalWorkspace: {
@@ -6875,24 +6922,9 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:commit'],
       returnsVersionResult: true,
     },
-    createBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
     createBranchFromCurrent: {
       decision: 'allow',
       capabilities: ['version:read', 'version:branch'],
-      returnsVersionResult: true,
-    },
-    deleteBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-    deleteRef: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
       returnsVersionResult: true,
     },
     diff: {
@@ -6905,14 +6937,34 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:diff'],
       returnsVersionResult: true,
     },
+    diffBranchOverview: {
+      decision: 'allow',
+      capabilities: ['version:diff'],
+      returnsVersionResult: true,
+    },
     diffCurrent: {
       decision: 'allow',
       capabilities: ['version:diff'],
       returnsVersionResult: true,
     },
-    fastForwardBranch: {
+    diffCurrentOverview: {
       decision: 'allow',
-      capabilities: ['version:branch'],
+      capabilities: ['version:diff'],
+      returnsVersionResult: true,
+    },
+    diffGroupDetail: {
+      decision: 'allow',
+      capabilities: ['version:diff'],
+      returnsVersionResult: true,
+    },
+    diffOverview: {
+      decision: 'allow',
+      capabilities: ['version:diff'],
+      returnsVersionResult: true,
+    },
+    diffWorkingTree: {
+      decision: 'allow',
+      capabilities: ['version:diff'],
       returnsVersionResult: true,
     },
     getCurrent: {
@@ -6929,11 +6981,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
       returns: ['VersionMergeReview'],
-      returnsVersionResult: true,
-    },
-    getRef: {
-      decision: 'allow',
-      capabilities: ['version:read'],
       returnsVersionResult: true,
     },
     getStatus: {
@@ -6954,11 +7001,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:read'],
       returnsVersionResult: true,
     },
-    listRefs: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
     merge: {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
@@ -6970,6 +7012,43 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       returns: ['VersionMergeReview'],
       returnsVersionResult: true,
     },
+    revert: {
+      decision: 'allow',
+      capabilities: ['version:revert'],
+      returnsVersionResult: true,
+    },
+  },
+  WorkbookVersionRefsNamespace: {
+    createBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    deleteBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    deleteRef: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    fastForwardBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    getRef: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
+    listRefs: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
     promotePendingRemote: {
       decision: 'allow',
       capabilities: ['version:remotePromote', 'version:provenance'],
@@ -6978,11 +7057,6 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     readRef: {
       decision: 'allow',
       capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    revert: {
-      decision: 'allow',
-      capabilities: ['version:revert'],
       returnsVersionResult: true,
     },
     updateBranch: {
@@ -9848,7 +9922,7 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
     accept: {
       decision: 'allow',
-      capabilities: ['version:proposal', 'version:branch'],
+      capabilities: ['version:proposal', 'version:mergePreview', 'version:mergeApply'],
       returnsVersionResult: true,
     },
     reject: {

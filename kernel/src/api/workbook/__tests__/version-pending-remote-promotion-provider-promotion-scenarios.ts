@@ -16,7 +16,7 @@ import {
 } from './version-pending-remote-promotion-provider-test-utils';
 
 export function registerPendingRemotePromotionProviderPromotionScenarios(): void {
-  it('promotes a seeded pending remote segment through wb.version.promotePendingRemote', async () => {
+  it('promotes a seeded pending remote segment through wb.version.refs.promotePendingRemote', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const namespace = await initializeProvider(provider);
     const graph = await provider.openGraph(namespace);
@@ -25,7 +25,7 @@ export function registerPendingRemotePromotionProviderPromotionScenarios(): void
     await persistAndReservePendingSegment(graph, store, fixture);
     const wb = createPromotionAuthorizedWorkbook({ provider });
 
-    const result = await wb.version.promotePendingRemote();
+    const result = await wb.version.refs.promotePendingRemote();
 
     expect(result).toMatchObject({
       ok: true,
@@ -62,7 +62,7 @@ export function registerPendingRemotePromotionProviderPromotionScenarios(): void
     const headAfterPromotion = await expectReadHeadSuccess(graph);
     expect(headAfterPromotion.commitId).toBe(commitId);
 
-    await expect(wb.version.promotePendingRemote({ includeDiagnostics: true })).resolves.toEqual({
+    await expect(wb.version.refs.promotePendingRemote({ includeDiagnostics: true })).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -94,11 +94,11 @@ export function registerPendingRemotePromotionProviderPromotionScenarios(): void
       versioning: { provenanceTruthService: PROVENANCE_TRUTH_SERVICE },
     });
 
-    await expect(wb.version.promotePendingRemote()).resolves.toMatchObject({
+    await expect(wb.version.refs.promotePendingRemote()).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.promotePendingRemote',
+        target: 'workbook.version.refs.promotePendingRemote',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_PENDING_REMOTE_PROMOTION_SERVICE_UNAVAILABLE',

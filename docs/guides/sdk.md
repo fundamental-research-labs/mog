@@ -288,9 +288,10 @@ The basic public flow is:
    `getMergeReview`.
 3. Apply a merge review with `review.apply(...)` after choosing conflict
    resolutions on the review object.
-4. Use direct lower-level methods such as `getHead`, `readRef`, `commit`,
-   `createBranch`, `checkout`, `merge`, `applyMerge`, and `revert` only when
-   you need explicit CAS, target refs, or custom mutation contracts.
+4. Use direct lower-level history methods such as `getHead`, `commit`,
+   `checkout`, `merge`, `applyMerge`, and `revert` only when you need explicit
+   CAS, target refs, or custom mutation contracts. Raw ref plumbing such as
+   `readRef` and `createBranch` lives under `wb.version.refs`.
 
 Supported public `versionStore.kind` values are `memory`, `in-memory`,
 `memory-durable-snapshot`, `indexeddb`, and `browser`. Scope durable public

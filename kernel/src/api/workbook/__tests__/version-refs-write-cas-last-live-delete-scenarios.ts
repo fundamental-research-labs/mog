@@ -21,7 +21,7 @@ export function registerWriteCasLastLiveDeleteScenarios(): void {
     const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'scenario/last' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),

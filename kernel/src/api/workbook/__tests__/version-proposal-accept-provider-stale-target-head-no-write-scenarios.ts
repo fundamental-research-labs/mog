@@ -91,7 +91,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
       ok: true,
       value: { status: 'rejected' },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

@@ -520,7 +520,7 @@ test('version surface status remains available without version read grant', asyn
   let runtime: SpreadsheetRuntime | undefined;
   try {
     const versionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
-    const directVersionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
+    const refsMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionRefsNamespace;
     const reviewMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewApi;
     const assertVersionCapabilityEntry = (
       matrix: object,
@@ -557,8 +557,8 @@ test('version surface status remains available without version read grant', asyn
         capabilities: ['version:reviewRead'],
       },
     ]);
-    assertVersionCapabilityEntry(directVersionMatrix, 'revert', ['version:revert']);
-    assertVersionCapabilityEntry(directVersionMatrix, 'promotePendingRemote', [
+    assertVersionCapabilityEntry(versionMatrix, 'revert', ['version:revert']);
+    assertVersionCapabilityEntry(refsMatrix, 'promotePendingRemote', [
       'version:remotePromote',
       'version:provenance',
     ]);
@@ -640,7 +640,7 @@ test('version surface status remains available without version read grant', asyn
         retryable: false,
       },
     });
-    const promoteRemoteDenied = await facade.version.promotePendingRemote();
+    const promoteRemoteDenied = await facade.version.refs.promotePendingRemote();
     assert.equal(promoteRemoteDenied.ok, false);
     if (!promoteRemoteDenied.ok) {
       assert.equal(promoteRemoteDenied.error.code, 'version_capability_unavailable');

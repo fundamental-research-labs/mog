@@ -83,7 +83,7 @@ describe('WorkbookVersion public operation feature gates', () => {
       error: blockedEditingError('checkout'),
     });
     await expect(
-      version.createBranch({ name: 'scenario/blocked' as any, targetCommitId: COMMIT_ID }),
+      version.refs.createBranch({ name: 'scenario/blocked' as any, targetCommitId: COMMIT_ID }),
     ).resolves.toMatchObject({
       ok: false,
       error: blockedEditingError('createBranch'),

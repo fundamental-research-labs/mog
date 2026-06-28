@@ -32,7 +32,7 @@ export function registerPendingRemotePromotionProviderHostGateBoundaryScenarios(
       'promotePendingRemoteSegments',
     );
 
-    const result = await wb.version.promotePendingRemote();
+    const result = await wb.version.refs.promotePendingRemote();
 
     expect(result).toMatchObject({
       ok: false,

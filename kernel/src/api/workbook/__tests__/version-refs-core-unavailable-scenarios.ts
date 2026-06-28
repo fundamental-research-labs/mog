@@ -8,7 +8,7 @@ export function registerPublicRefUnavailableScenarios(): void {
   it('fails closed when no branch service is attached', async () => {
     const version = new WorkbookVersionImpl({ versioning: {} } as any);
 
-    await expect(version.listRefs()).resolves.toMatchObject({
+    await expect(version.refs.listRefs()).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
@@ -17,7 +17,7 @@ export function registerPublicRefUnavailableScenarios(): void {
     });
 
     await expect(
-      version.createBranch({ name: 'scenario/missing' as any, targetCommitId: COMMIT_A }),
+      version.refs.createBranch({ name: 'scenario/missing' as any, targetCommitId: COMMIT_A }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -32,7 +32,7 @@ export function registerPublicRefUnavailableScenarios(): void {
     });
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'scenario/missing' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),
@@ -63,7 +63,7 @@ export function registerPublicRefUnavailableScenarios(): void {
       versioning: { refStore },
     } as any);
 
-    await expect(version.listRefs()).resolves.toMatchObject({
+    await expect(version.refs.listRefs()).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

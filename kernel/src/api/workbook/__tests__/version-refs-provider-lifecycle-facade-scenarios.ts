@@ -26,7 +26,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     });
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/provider/ref' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
@@ -40,7 +40,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     });
 
     await expect(
-      wb.version.readRef('refs/heads/scenario/provider/ref' as any),
+      wb.version.refs.readRef('refs/heads/scenario/provider/ref' as any),
     ).resolves.toMatchObject({
       ok: true,
       value: {
@@ -54,7 +54,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
       },
     });
 
-    await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
+    await expect(wb.version.refs.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
       value: {
         items: [
@@ -68,7 +68,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     });
 
     await expect(
-      wb.version.listRefs({ prefix: 'refs/heads/scenario/provider' as any }),
+      wb.version.refs.listRefs({ prefix: 'refs/heads/scenario/provider' as any }),
     ).resolves.toMatchObject({
       ok: true,
       value: {
@@ -83,7 +83,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     });
 
     await expect(
-      wb.version.fastForwardBranch({
+      wb.version.refs.fastForwardBranch({
         name: 'scenario/provider/ref' as any,
         nextCommitId: child.commit.id,
         expectedHead: initialized.rootCommit.id,
@@ -125,7 +125,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
       },
     });
 
-    await expect(wb.version.listRefs()).resolves.toMatchObject({
+    await expect(wb.version.refs.listRefs()).resolves.toMatchObject({
       ok: true,
       value: {
         items: [
@@ -139,7 +139,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
     });
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/read-only' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
@@ -155,7 +155,7 @@ export function registerProviderRefLifecycleFacadeScenarios(): void {
       },
     });
 
-    await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
+    await expect(wb.version.refs.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
       value: {
         items: [],

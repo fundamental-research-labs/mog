@@ -40,7 +40,7 @@ export function registerProviderCheckoutStaleRefHeadScenario(): void {
       const branchBase = branchBaseResult.value;
       sourceWb.markClean();
 
-      const created = await sourceWb.version.createBranch({
+      const created = await sourceWb.version.refs.createBranch({
         name: 'scenario/provider-admission' as any,
         targetCommitId: branchBase.id,
       });

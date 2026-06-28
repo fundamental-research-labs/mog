@@ -76,6 +76,7 @@ export interface WorkbookVersion {
   readonly reviews: WorkbookVersionReviewNamespace;
   readonly artifacts: VersionMergeReviewArtifactNamespace;
   readonly proposals: VersionProposalPorcelainApi;
+  readonly refs: WorkbookVersionRefsNamespace;
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
@@ -85,9 +86,6 @@ export interface WorkbookVersion {
     options?: ListVersionCommitsInput,
   ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
-  promotePendingRemote(
-    options?: VersionPromotePendingRemoteOptions,
-  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   checkout(
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
@@ -122,26 +120,6 @@ export interface WorkbookVersion {
   diffWorkingTree(
     options?: VersionWorkingTreeDiffOptions,
   ): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
-  readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  readRef(
-    name: VersionMainRefName | VersionRefName | VersionBranchName,
-  ): Promise<VersionResult<VersionBranchRefReadResult>>;
-  readRef(
-    name: VersionRefSelector | VersionBranchName,
-  ): Promise<VersionResult<VersionRefReadResult>>;
-  getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
-  getRef(
-    name: VersionMainRefName | VersionRefName | VersionBranchName,
-  ): Promise<VersionResult<VersionBranchRefReadResult>>;
-  getRef(
-    name: VersionRefSelector | VersionBranchName,
-  ): Promise<VersionResult<VersionRefReadResult>>;
-  listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
-  createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
-  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;
-  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
-  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
-  deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
   commitCurrent(
     options?: VersionCommitCurrentOptions,
   ): Promise<VersionResult<WorkbookCommitSummary>>;
@@ -179,4 +157,30 @@ export interface WorkbookVersion {
     options?: VersionPreviewMergeOptions,
   ): Promise<VersionResult<VersionMergeReview>>;
   getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
+}
+
+export interface WorkbookVersionRefsNamespace {
+  promotePendingRemote(
+    options?: VersionPromotePendingRemoteOptions,
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
+  readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  readRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  readRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
+  getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
+  getRef(
+    name: VersionMainRefName | VersionRefName | VersionBranchName,
+  ): Promise<VersionResult<VersionBranchRefReadResult>>;
+  getRef(
+    name: VersionRefSelector | VersionBranchName,
+  ): Promise<VersionResult<VersionRefReadResult>>;
+  listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;
+  createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;
+  fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;
+  updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
+  deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
+  deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
 }

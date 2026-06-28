@@ -27,7 +27,7 @@ export async function createPersistedCleanMergeReplayArtifact(
   );
   const baseHead = await expectHead(firstWb);
 
-  const branch = await firstWb.version.createBranch({
+  const branch = await firstWb.version.refs.createBranch({
     name: INDEXEDDB_CLEAN_MERGE_REPLAY_BRANCH as any,
     targetCommitId: baseCommit.id,
     expectedAbsent: true,

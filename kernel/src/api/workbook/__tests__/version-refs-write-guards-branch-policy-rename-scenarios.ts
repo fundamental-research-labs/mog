@@ -10,13 +10,13 @@ export function registerWriteGuardBranchPolicyRenameScenarios(): void {
   it('rejects public rename shapes and name-only metadata mutations without moving refs', async () => {
     const { branchService, version } =
       createWorkbookVersionWithBranchService('scenario/rename-source');
-    await version.createBranch({
+    await version.refs.createBranch({
       name: 'scenario/rename-source' as any,
       targetCommitId: COMMIT_A,
     });
     const fastForwardBranch = jest.spyOn(branchService, 'fastForwardBranch');
 
-    const renameShape = await version.updateBranch({
+    const renameShape = await version.refs.updateBranch({
       name: 'scenario/rename-source' as any,
       nextCommitId: COMMIT_A,
       expectedHead: COMMIT_A,
@@ -40,7 +40,7 @@ export function registerWriteGuardBranchPolicyRenameScenarios(): void {
     });
     expect(fastForwardBranch).not.toHaveBeenCalled();
 
-    const metadataOnly = await version.updateBranch({
+    const metadataOnly = await version.refs.updateBranch({
       name: 'scenario/rename-source' as any,
       nextCommitId: COMMIT_A,
       expectedHead: COMMIT_A,

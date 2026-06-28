@@ -290,9 +290,9 @@ export function useVersionHistoryPanelActions({
       if (!setRunningAction(action, 'Creating branch')) return;
       const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
         targetCommitIdOverride
-          ? workbook.version.createBranch({
+          ? workbook.version.refs.createBranch({
               name: normalizedBranch.branch.refName as Parameters<
-                WorkbookVersion['createBranch']
+                WorkbookVersion['refs']['createBranch']
               >[0]['name'],
               targetCommitId,
               expectedAbsent: true,

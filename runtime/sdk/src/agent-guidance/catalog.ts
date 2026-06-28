@@ -194,7 +194,7 @@ if (applied.status === "conflicted") {
 }
 const newHeadId = "commitRef" in applied ? applied.commitRef.id : undefined;`;
 
-const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.readRef("refs/heads/main");
+const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.refs.readRef("refs/heads/main");
 if (!applyTargetRefResult.ok || applyTargetRefResult.value.status !== "success") {
   throw new Error(
     applyTargetRefResult.ok
@@ -319,7 +319,7 @@ if (!acceptResult.ok) {
   throw new Error(acceptResult.error.reason);
 }`;
 
-const versionRevertSnippet = `const targetRefResult = await wb.version.readRef("refs/heads/main");
+const versionRevertSnippet = `const targetRefResult = await wb.version.refs.readRef("refs/heads/main");
 if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
   throw new Error(
     targetRefResult.ok
@@ -708,7 +708,7 @@ export const apiGuidanceCatalog = [
     ],
     message: 'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
-      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commitCurrent`, `wb.version.createBranchFromCurrent`, `wb.version.checkoutBranch`, and `wb.version.diffCurrent` for common workflows; direct lower-level operations remain available for explicit CAS, merge, apply, and revert workflows.',
+      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commitCurrent`, `wb.version.createBranchFromCurrent`, `wb.version.checkoutBranch`, and `wb.version.diffCurrent` for common workflows; lower-level ref plumbing lives under `wb.version.refs` for explicit CAS, merge, apply, and revert workflows.',
     mogReplacements: [
       {
         path: 'createWorkbook',

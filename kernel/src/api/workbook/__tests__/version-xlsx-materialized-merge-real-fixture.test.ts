@@ -56,7 +56,7 @@ describe('WorkbookVersion XLSX materialized merge real fixture', () => {
         resolvedFrom: 'HEAD',
       });
 
-      const branch = await wb.version.createBranch({
+      const branch = await wb.version.refs.createBranch({
         name: BRANCH_REF,
         targetCommitId: rootHead.id,
         expectedAbsent: true,

@@ -41,7 +41,7 @@ export function registerProposalBranchStaleScenarios(): void {
         actualTargetHeadId: graph.rootCommitId,
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -113,7 +113,7 @@ export function registerProposalBranchStaleScenarios(): void {
         ]),
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

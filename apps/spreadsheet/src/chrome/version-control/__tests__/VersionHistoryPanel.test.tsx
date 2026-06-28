@@ -63,7 +63,7 @@ describe('VersionHistoryPanelContent', () => {
       pageSize: 20,
       includeDiagnostics: true,
     });
-    expect(workbook.version.listRefs).toHaveBeenCalledWith({ includeDiagnostics: true });
+    expect(workbook.version.refs.listRefs).toHaveBeenCalledWith({ includeDiagnostics: true });
     expect(screen.getByTestId(parentDiffButtonTestId(PARENT_COMMIT_ID))).toBeDisabled();
 
     await user.click(screen.getByTestId('panel-version-history-refresh'));

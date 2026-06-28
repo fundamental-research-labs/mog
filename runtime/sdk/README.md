@@ -214,30 +214,24 @@ sources to `createWorkbook(...)`, not to `versionStore`.
 
 Commit, branch, checkout, merge, and revert all return `VersionResult`
 receipts. Check `ok` before reading `value`; merge and revert also return
-operation-specific status receipts. Read the current ref before mutating a ref
-and pass `expectedHead` / `expectedTargetHead` so stale writes fail closed.
+operation-specific status receipts. Use the direct porcelain methods for common
+workflows: `commitCurrent`, `createBranchFromCurrent`, `checkoutBranch`,
+`checkoutCommit`, `listBranches`, `diffCurrent`, `diffBranch`, `previewMerge`,
+and `getMergeReview`. Lower-level ref plumbing such as `readRef`,
+`createBranch`, `fastForwardBranch`, and `deleteRef` lives under
+`wb.version.refs` for explicit CAS and service workflows.
 
 ```javascript
 import { createWorkbook } from '@mog-sdk/sdk';
-
-const mainRef = 'refs/heads/main';
-const budgetRef = 'refs/heads/budget-q1';
 
 function diagnosticText(diagnostics) {
   return diagnostics.map((diagnostic) => diagnostic.safeMessage ?? 'Version diagnostic').join('\n');
 }
 
-function expectAppliedCommit(result) {
-  if (result.status === 'blocked' || result.status === 'staleTargetHead') {
-    throw new Error(diagnosticText(result.diagnostics));
-  }
-  if (result.status === 'conflicted') {
-    throw new Error(`Merge still has ${result.requiredResolutionCount} unresolved conflicts`);
-  }
-  if (result.status === 'planned') {
-    throw new Error('applyMerge planned the merge but did not mutate the target ref');
-  }
-  return result.commitRef;
+async function valueOf(resultPromise) {
+  const result = await resultPromise;
+  if (!result.ok) throw new Error(result.error.reason);
+  return result.value;
 }
 
 const wb = await createWorkbook({
@@ -251,270 +245,63 @@ const wb = await createWorkbook({
 });
 
 try {
-  const rootHeadResult = await wb.version.getHead();
-  if (!rootHeadResult.ok) throw new Error(rootHeadResult.error.reason);
-  if (!rootHeadResult.value.refRevision) {
-    throw new Error('Main version head is missing its ref revision');
-  }
-
   await wb.activeSheet.setCell('A1', 'Base forecast');
-  const baseResult = await wb.version.commit({
-    message: 'Initial budget model',
-    expectedHead: {
-      commitId: rootHeadResult.value.id,
-      revision: rootHeadResult.value.refRevision,
-    },
-  });
-  if (!baseResult.ok) throw new Error(baseResult.error.reason);
-  const baseCommit = baseResult.value;
-  wb.markClean();
+  const baseCommit = await valueOf(wb.version.commitCurrent({ message: 'Initial budget model' }));
 
-  const branchResult = await wb.version.createBranch({
-    name: budgetRef,
-    targetCommitId: baseCommit.id,
-    expectedAbsent: true,
-  });
-  if (!branchResult.ok) throw new Error(branchResult.error.reason);
-
-  const checkoutResult = await wb.version.checkout(
-    { kind: 'ref', name: budgetRef },
-    { requireClean: true },
-  );
-  if (!checkoutResult.ok) throw new Error(checkoutResult.error.reason);
-  if (checkoutResult.value.materialization !== 'applied') {
+  await valueOf(wb.version.createBranchFromCurrent('budget-q1', { expectedAbsent: true }));
+  const checkout = await valueOf(wb.version.checkoutBranch('budget-q1', { requireClean: true }));
+  if (checkout.materialization !== 'applied') {
     throw new Error('Checkout did not materialize workbook state');
   }
 
   await wb.activeSheet.setCell('B2', 1200);
-  const scenarioHeadResult = await wb.version.getHead();
-  if (!scenarioHeadResult.ok) throw new Error(scenarioHeadResult.error.reason);
-  if (!scenarioHeadResult.value.refRevision) {
-    throw new Error('Scenario branch head is missing its ref revision');
-  }
-
-  const scenarioCommitResult = await wb.version.commit({
-    message: 'Scenario revenue upside',
-    expectedHead: {
-      commitId: scenarioHeadResult.value.id,
-      revision: scenarioHeadResult.value.refRevision,
-    },
-  });
-  if (!scenarioCommitResult.ok) throw new Error(scenarioCommitResult.error.reason);
-  const scenarioCommit = scenarioCommitResult.value;
-  wb.markClean();
-
-  const mainCheckoutResult = await wb.version.checkout(
-    { kind: 'ref', name: mainRef },
-    { requireClean: true },
+  const scenarioCommit = await valueOf(
+    wb.version.commitCurrent({ message: 'Scenario revenue upside' }),
   );
-  if (!mainCheckoutResult.ok) throw new Error(mainCheckoutResult.error.reason);
 
+  await valueOf(wb.version.checkoutBranch('main', { requireClean: true }));
   await wb.activeSheet.setCell('C2', 'main note');
-  const mainHeadResult = await wb.version.getHead();
-  if (!mainHeadResult.ok) throw new Error(mainHeadResult.error.reason);
-  if (!mainHeadResult.value.refRevision) {
-    throw new Error('Main branch head is missing its ref revision');
-  }
+  await valueOf(wb.version.commitCurrent({ message: 'Main branch note' }));
 
-  const mainCommitResult = await wb.version.commit({
-    message: 'Main branch note',
-    expectedHead: {
-      commitId: mainHeadResult.value.id,
-      revision: mainHeadResult.value.refRevision,
-    },
-  });
-  if (!mainCommitResult.ok) throw new Error(mainCommitResult.error.reason);
-  wb.markClean();
+  const diff = await valueOf(wb.version.diffBranch('budget-q1'));
+  console.log(`Branch diff has ${diff.items.length} semantic changes`);
 
-  const mainRefResult = await wb.version.readRef(mainRef);
-  if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
-    throw new Error(
-      mainRefResult.ok
-        ? diagnosticText(mainRefResult.value.diagnostics)
-        : mainRefResult.error.reason,
-    );
-  }
-
-  const expectedTargetHead = {
-    commitId: mainRefResult.value.ref.commitId,
-    revision: mainRefResult.value.ref.revision,
-  };
-
-  const previewResult = await wb.version.merge(
-    {
-      base: baseCommit.id,
-      ours: expectedTargetHead.commitId,
-      theirs: scenarioCommit.id,
-    },
-    {
-      mode: 'preview',
-      targetRef: mainRef,
-      expectedTargetHead,
-      persistReviewRecord: true,
-    },
+  const review = await valueOf(
+    wb.version.previewMerge({ from: 'budget-q1', into: 'main' }, { persistReviewRecord: true }),
   );
-  if (!previewResult.ok) throw new Error(previewResult.error.reason);
+  if (review.status === 'blocked') throw new Error(diagnosticText(review.diagnostics));
 
-  const preview = previewResult.value;
-  if (preview.status === 'blocked') {
-    throw new Error(diagnosticText(preview.diagnostics));
+  const resolvedReview =
+    review.status === 'conflicted' ? review.chooseAll('acceptTheirs') : review;
+  const applied = await valueOf(resolvedReview.apply({ materializeActiveCheckout: true }));
+  if (applied.status === 'blocked' || applied.status === 'staleTargetHead') {
+    throw new Error(diagnosticText(applied.diagnostics));
   }
-
-  const resolutions =
-    preview.status === 'conflicted'
-      ? preview.conflicts.map((conflict) => {
-          const option =
-            conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs') ??
-            conflict.resolutionOptions[0];
-          if (!option) throw new Error(`No resolution option for ${conflict.conflictId}`);
-          return {
-            conflictId: conflict.conflictId,
-            expectedConflictDigest: conflict.conflictDigest,
-            optionId: option.optionId,
-            kind: option.kind,
-          };
-        })
-      : [];
-
-  const applyResult = await wb.version.applyMerge(
-    {
-      base: baseCommit.id,
-      ours: expectedTargetHead.commitId,
-      theirs: scenarioCommit.id,
-      resolutions,
-    },
-    {
-      mode: 'apply',
-      targetRef: mainRef,
-      expectedTargetHead,
-    },
-  );
-  if (!applyResult.ok) throw new Error(applyResult.error.reason);
-
-  const mergedHead = expectAppliedCommit(applyResult.value);
-  if (!mergedHead.refRevision) {
-    throw new Error('Merged target ref is missing its revision');
+  if (applied.status === 'conflicted') {
+    throw new Error(`Merge still has ${applied.requiredResolutionCount} unresolved conflicts`);
   }
-
-  const revertResult = await wb.version.revert(
-    {
-      target: { kind: 'mergeCommit', commitId: mergedHead.id, mainlineParent: 1 },
-      targetRef: mainRef,
-      expectedTargetHead: {
-        commitId: mergedHead.id,
-        revision: mergedHead.refRevision,
-      },
-      preflight: {
-        cas: {
-          refName: mainRef,
-          expectedRevision: mergedHead.refRevision,
-        },
-      },
-      reason: 'Back out scenario merge',
-    },
-    { includeDiagnostics: true },
-  );
-  if (!revertResult.ok) throw new Error(revertResult.error.reason);
-  if (revertResult.value.status === 'rejected' || revertResult.value.status === 'requires-review') {
-    throw new Error(diagnosticText(revertResult.value.diagnostics));
-  }
-  if (revertResult.value.status === 'planned') {
-    throw new Error('revert planned the change but did not mutate the target ref');
+  if (applied.status === 'planned') {
+    throw new Error('Merge planned the change but did not mutate the target ref');
   }
 
   console.log({
     baseCommit: baseCommit.id,
     scenarioCommit: scenarioCommit.id,
-    mergedCommit: mergedHead.id,
-    revertCommit: revertResult.value.commitRef?.id,
+    mergedCommit: applied.commitRef?.id,
   });
 } finally {
   await wb.dispose();
 }
 ```
 
-For shorter flows, the same contracts apply: create a branch from a known
-commit, pass `expectedHead` on commits that advance mutable refs, call
-`wb.markClean()` before checkout if your host still considers the working copy
-dirty, read the target ref immediately before merge preview and carry that same
-`expectedTargetHead` into `applyMerge`, and read the target ref immediately
-before `revert`.
+Direct `merge`/`applyMerge` and `revert` remain available for service callers
+that already own base/ours/theirs commit IDs, expected target heads, and custom
+resolution records. In those flows, read mutable refs through
+`wb.version.refs.readRef(...)` immediately before the write and carry the same
+`expectedTargetHead` into the mutating call so stale refs fail closed.
 
 ```typescript
-const initialHeadResult = await wb.version.getHead();
-if (!initialHeadResult.ok || !initialHeadResult.value.refRevision) {
-  throw new Error(
-    initialHeadResult.ok
-      ? 'Current head is missing its ref revision'
-      : initialHeadResult.error.reason,
-  );
-}
-
-await wb.activeSheet.setCell('A1', 'Base forecast');
-const baseResult = await wb.version.commit({
-  message: 'Initial budget model',
-  expectedHead: {
-    commitId: initialHeadResult.value.id,
-    revision: initialHeadResult.value.refRevision,
-  },
-});
-if (!baseResult.ok) throw new Error(baseResult.error.reason);
-const baseCommit = baseResult.value;
-wb.markClean();
-
-const budgetRefName = 'refs/heads/budget-q1';
-const branchResult = await wb.version.createBranch({
-  name: budgetRefName,
-  targetCommitId: baseCommit.id,
-  expectedAbsent: true,
-});
-if (!branchResult.ok) throw new Error(branchResult.error.reason);
-const budgetRef = branchResult.value;
-
-const checkoutResult = await wb.version.checkout(
-  {
-    kind: 'ref',
-    name: budgetRef.name,
-  },
-  { requireClean: true },
-);
-if (!checkoutResult.ok) throw new Error(checkoutResult.error.reason);
-if (checkoutResult.value.materialization !== 'applied') {
-  throw new Error('Checkout did not materialize workbook state');
-}
-
-await wb.activeSheet.setCell('B2', 1200);
-const scenarioHeadResult = await wb.version.getHead();
-if (!scenarioHeadResult.ok || !scenarioHeadResult.value.refRevision) {
-  throw new Error(
-    scenarioHeadResult.ok
-      ? 'Checked-out branch head is missing its ref revision'
-      : scenarioHeadResult.error.reason,
-  );
-}
-
-const scenarioCommitResult = await wb.version.commit({
-  message: 'Scenario revenue upside',
-  expectedHead: {
-    commitId: scenarioHeadResult.value.id,
-    revision: scenarioHeadResult.value.refRevision,
-  },
-});
-if (!scenarioCommitResult.ok) throw new Error(scenarioCommitResult.error.reason);
-const scenarioCommit = scenarioCommitResult.value;
-wb.markClean();
-```
-
-Merge preview is read-only. `applyMerge` is the mutating operation; pass a
-concrete `targetRef` and the same `expectedTargetHead` used by the accepted
-preview so a moved target ref returns `staleTargetHead` instead of applying over
-newer work. When preview returns `conflicted`, each applied resolution must echo
-the previewed `conflictId`, `conflictDigest`, selected `optionId`, and option
-`kind`. If apply returns `staleTargetHead`, re-read the target ref and preview
-again.
-
-```typescript
-const mainRefResult = await wb.version.readRef('refs/heads/main');
+const mainRefResult = await wb.version.refs.readRef('refs/heads/main');
 if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
   throw new Error(
     mainRefResult.ok
@@ -530,9 +317,9 @@ const expectedTargetHead = {
 
 const previewResult = await wb.version.merge(
   {
-    base: baseCommit.id,
+    base: baseCommitId,
     ours: expectedTargetHead.commitId,
-    theirs: scenarioCommit.id,
+    theirs: branchCommitId,
   },
   {
     mode: 'preview',
@@ -566,9 +353,9 @@ const resolutions =
 
 const applyResult = await wb.version.applyMerge(
   {
-    base: baseCommit.id,
+    base: baseCommitId,
     ours: expectedTargetHead.commitId,
-    theirs: scenarioCommit.id,
+    theirs: branchCommitId,
     resolutions,
   },
   {
@@ -597,7 +384,7 @@ Revert supports single commits, ranges, and merge commits. Use `dryRun` when a
 review gate must inspect diagnostics before the target ref can move.
 
 ```typescript
-const mainRefResult = await wb.version.readRef('refs/heads/main');
+const mainRefResult = await wb.version.refs.readRef('refs/heads/main');
 if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
   throw new Error(
     mainRefResult.ok
@@ -608,7 +395,7 @@ if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
 
 const revertResult = await wb.version.revert(
   {
-    target: { kind: 'commit', commitId: scenarioCommit.id },
+    target: { kind: 'commit', commitId: branchCommitId },
     targetRef: 'refs/heads/main',
     expectedTargetHead: {
       commitId: mainRefResult.value.ref.commitId,

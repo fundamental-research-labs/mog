@@ -28,7 +28,7 @@ export function registerProviderW8RedactionActiveRefPreflightScenarios(): void {
       };
       const version = createVersionWithBranchService(branchService);
 
-      const blocked = await version.deleteRef({
+      const blocked = await version.refs.deleteRef({
         name: SECRET_REF_NAME as any,
         expectedHead: AUX_COMMIT_ID as any,
         expectedRefRevision: { kind: 'counter', value: '0' },

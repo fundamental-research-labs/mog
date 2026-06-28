@@ -36,7 +36,7 @@ export type {
   WorkbookVersionDiagnosticCode,
 } from './version-shared';
 
-export type { WorkbookVersion } from './version-workbook';
+export type { WorkbookVersion, WorkbookVersionRefsNamespace } from './version-workbook';
 export type * from './version-diff';
 export type * from './version-diff-metadata';
 export type * from './version-working-tree-diff';

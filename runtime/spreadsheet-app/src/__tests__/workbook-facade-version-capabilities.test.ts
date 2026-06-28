@@ -18,13 +18,12 @@ import type {
 } from '../public-types';
 
 type VersionFacade = SpreadsheetWorkbookFacade['version'];
+type VersionRefsFacade = VersionFacade['refs'];
 type VersionReviewAdvancedFacade = VersionFacade['reviews']['advanced'];
 type VersionArtifactAdvancedFacade = VersionFacade['artifacts']['advanced'];
 type VersionSurfaceCapability = Extract<SpreadsheetCapability, `version:${string}`>;
 type VersionSurfaceStatus = Awaited<ReturnType<VersionFacade['getSurfaceStatus']>>;
-type VersionMatrixInterface =
-  | 'WorkbookVersion' | 'WorkbookVersionReviewApi'
-  | 'VersionMergeReviewArtifactApi';
+type VersionMatrixInterface = 'WorkbookVersion' | 'WorkbookVersionRefsNamespace' | 'WorkbookVersionReviewApi' | 'VersionMergeReviewArtifactApi';
 
 type VersionFacadeOperationKind = 'version-result' | 'throws-on-denied' | 'capability-free-status';
 
@@ -38,12 +37,10 @@ type VersionFacadeResultCase = {
   readonly invoke: (version: VersionFacade) => unknown | Promise<unknown>;
 };
 
-const REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY = [
-  {
-    when: { argumentIndex: 0, path: ['reviewId'], presence: 'present' },
-    capabilities: ['version:reviewRead'],
-  },
-] as const satisfies SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
+const REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY = [{
+  when: { argumentIndex: 0, path: ['reviewId'], presence: 'present' },
+  capabilities: ['version:reviewRead'],
+}] as const satisfies SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
 
 const COMMIT_A = `commit:sha256:${'a'.repeat(64)}` as const;
 const COMMIT_B = `commit:sha256:${'b'.repeat(64)}` as const;
@@ -53,30 +50,13 @@ const TEST_BRANCH = 'refs/heads/scenario/facade-matrix' as const;
 const TEST_REVISION = { kind: 'counter', value: '1' } as const;
 const TEST_DIGEST = { algorithm: 'sha256', digest: 'd'.repeat(64) } as const;
 const TEST_AUTHOR = { kind: 'user', trust: 'trusted', displayName: 'Runtime test' } as const;
-const TEST_REDACTION_POLICY = {
-  mode: 'default',
-  redactSecrets: true,
-  redactExternalLinks: true,
-  redactAgentTrace: true,
-} as const;
+const TEST_REDACTION_POLICY = { mode: 'default', redactSecrets: true, redactExternalLinks: true, redactAgentTrace: true } as const;
 
-const EXPECTED_VERSION_MATRIX_METHODS = {
-  WorkbookVersion: [
-    'applyMerge', 'checkout', 'commit', 'createBranch', 'deleteBranch', 'deleteRef',
-    'checkoutBranch', 'checkoutCommit', 'commitCurrent', 'createBranchFromCurrent',
-    'diff', 'fastForwardBranch', 'getHead', 'getRef', 'listCommits', 'listRefs',
-    'diffBranch', 'diffCurrent', 'getCurrent', 'getMergeReview', 'getStatus',
-    'getSurfaceStatus', 'listBranches', 'merge', 'previewMerge', 'promotePendingRemote',
-    'readRef', 'revert', 'updateBranch',
-  ],
-  WorkbookVersionReviewApi: [
-    'appendReviewDecision', 'createReview', 'getReview', 'getReviewDiff', 'listReviews',
-    'updateReviewStatus',
-  ],
-  VersionMergeReviewArtifactApi: [
-    'getMergeConflictDetail', 'putMergeResolutionPayload', 'saveMergeResolutions',
-  ],
-} as const satisfies Record<VersionMatrixInterface, readonly string[]>;
+const VERSION_MATRIX_INTERFACES = ['WorkbookVersion', 'WorkbookVersionRefsNamespace', 'WorkbookVersionReviewApi', 'VersionMergeReviewArtifactApi'] as const satisfies readonly VersionMatrixInterface[];
+
+function operationMethods(interfaceName: VersionMatrixInterface): readonly string[] {
+  return VERSION_FACADE_OPERATION_CASES.filter((testCase) => testCase.interfaceName === interfaceName).map((testCase) => testCase.methodName);
+}
 
 const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
   {
@@ -117,10 +97,48 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
   },
   {
     interfaceName: 'WorkbookVersion',
+    methodName: 'diffBranchOverview',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffBranchOverview(TEST_BRANCH, { against: MAIN_REF }),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
     methodName: 'diffCurrent',
     kind: 'version-result',
     capabilities: ['version:diff'],
     invoke: (version) => version.diffCurrent(MAIN_REF),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffCurrentOverview',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffCurrentOverview(MAIN_REF),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffGroupDetail',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) =>
+      version.diffGroupDetail(COMMIT_A, COMMIT_B, {
+        groupId: 'group:facade-matrix',
+      } as Parameters<VersionFacade['diffGroupDetail']>[2]),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffOverview',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffOverview(COMMIT_A, COMMIT_B),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffWorkingTree',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffWorkingTree({}),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -199,40 +217,40 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.commit({ message: 'Facade matrix test commit' }),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'createBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.createBranch({
+      version.refs.createBranch({
         name: TEST_BRANCH,
         targetCommitId: COMMIT_A,
         expectedAbsent: true,
-      } as Parameters<VersionFacade['createBranch']>[0]),
+      } as Parameters<VersionRefsFacade['createBranch']>[0]),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'deleteBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.deleteBranch({
+      version.refs.deleteBranch({
         name: TEST_BRANCH,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['deleteBranch']>[0]),
+      } as Parameters<VersionRefsFacade['deleteBranch']>[0]),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'deleteRef',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.deleteRef({
+      version.refs.deleteRef({
         name: TEST_BRANCH,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['deleteRef']>[0]),
+      } as Parameters<VersionRefsFacade['deleteRef']>[0]),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -242,17 +260,17 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.diff(COMMIT_A, COMMIT_B),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'fastForwardBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.fastForwardBranch({
+      version.refs.fastForwardBranch({
         name: TEST_BRANCH,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['fastForwardBranch']>[0]),
+      } as Parameters<VersionRefsFacade['fastForwardBranch']>[0]),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -262,11 +280,11 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.getHead(),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'getRef',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.getRef('HEAD'),
+    invoke: (version) => version.refs.getRef('HEAD'),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -276,11 +294,11 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.listCommits({}),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'listRefs',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.listRefs({}),
+    invoke: (version) => version.refs.listRefs({}),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -290,19 +308,19 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.merge({ base: COMMIT_A, ours: COMMIT_B, theirs: COMMIT_C }),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'promotePendingRemote',
     kind: 'version-result',
     capabilities: ['version:remotePromote', 'version:provenance'],
     deniedCapabilities: ['version:remotePromote', 'version:provenance'],
-    invoke: (version) => version.promotePendingRemote(),
+    invoke: (version) => version.refs.promotePendingRemote(),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'readRef',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.readRef('HEAD'),
+    invoke: (version) => version.refs.readRef('HEAD'),
   },
   {
     interfaceName: 'WorkbookVersion',
@@ -317,17 +335,17 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
       } as Parameters<VersionFacade['revert']>[0]),
   },
   {
-    interfaceName: 'WorkbookVersion',
+    interfaceName: 'WorkbookVersionRefsNamespace',
     methodName: 'updateBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.updateBranch({
+      version.refs.updateBranch({
         name: TEST_BRANCH,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['updateBranch']>[0]),
+      } as Parameters<VersionRefsFacade['updateBranch']>[0]),
   },
   {
     interfaceName: 'WorkbookVersionReviewApi',
@@ -739,6 +757,7 @@ test('workbook version facade sub-api matrix exposes advanced namespaces', () =>
   >;
 
   assert.equal(subApis.WorkbookVersion?.graph, undefined);
+  assert.equal(subApis.WorkbookVersion?.refs?.targetInterface, 'WorkbookVersionRefsNamespace');
   assert.equal(
     subApis.WorkbookVersion?.reviews?.targetInterface,
     'WorkbookVersionReviewNamespace',
@@ -774,18 +793,12 @@ test('workbook version facade matrix is pinned to namespaced operation sets', ()
     'operation cases must be unique',
   );
 
-  for (const [interfaceName, expectedMethods] of Object.entries(
-    EXPECTED_VERSION_MATRIX_METHODS,
-  ) as [VersionMatrixInterface, readonly string[]][]) {
-    const caseMethods = VERSION_FACADE_OPERATION_CASES.filter(
-      (testCase) => testCase.interfaceName === interfaceName,
-    )
-      .map((testCase) => testCase.methodName)
-      .sort();
+  for (const interfaceName of VERSION_MATRIX_INTERFACES) {
+    const caseMethods = [...operationMethods(interfaceName)].sort();
     const matrixMethods = Object.keys(mutableMatrix(interfaceName)).sort();
 
-    assert.deepEqual(caseMethods, [...expectedMethods].sort(), `${interfaceName} test cases`);
-    assert.deepEqual(matrixMethods, [...expectedMethods].sort(), `${interfaceName} matrix keys`);
+    assert.ok(caseMethods.length > 0, `${interfaceName} must have operation cases`);
+    assert.deepEqual(matrixMethods, caseMethods, `${interfaceName} matrix keys`);
   }
 });
 
@@ -948,10 +961,8 @@ test('workbook version facade missing matrix entries fail closed for result fami
     'runtime-version-result-facade-missing-matrix-entry',
     new Set(),
     async (version) => {
-      for (const [interfaceName, expectedMethods] of Object.entries(
-        EXPECTED_VERSION_MATRIX_METHODS,
-      ) as [VersionMatrixInterface, readonly string[]][]) {
-        for (const methodName of expectedMethods) {
+      for (const interfaceName of VERSION_MATRIX_INTERFACES) {
+        for (const methodName of operationMethods(interfaceName)) {
           const testCase = operationCase(interfaceName, methodName);
           await withTemporaryVersionMatrixEntry(interfaceName, methodName, undefined, async () => {
             assert.throws(

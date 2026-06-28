@@ -29,7 +29,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         errorLabel: 'main alpha',
       });
 
-      const created = await version.createBranch({
+      const created = await version.refs.createBranch({
         name: 'scenario/manual-smoke' as any,
         targetCommitId: mainAlpha.id,
       });
@@ -63,7 +63,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           refRevision: created.value.revision,
         },
       });
-      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -74,7 +74,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.getRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -108,7 +108,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
       if (!betaCommit.ok) throw new Error(`expected beta commit success: ${betaCommit.error.code}`);
 
       await expect(
-        version.readRef('refs/heads/scenario/manual-smoke' as any),
+        version.refs.readRef('refs/heads/scenario/manual-smoke' as any),
       ).resolves.toMatchObject({
         ok: true,
         value: {
@@ -119,7 +119,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -129,7 +129,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.getRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -139,7 +139,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -270,7 +270,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
       const branchRevertCommitId = branchRevert.value.commitRef.id;
 
       await expect(
-        version.readRef('refs/heads/scenario/manual-smoke' as any),
+        version.refs.readRef('refs/heads/scenario/manual-smoke' as any),
       ).resolves.toMatchObject({
         ok: true,
         value: {
@@ -281,7 +281,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -291,7 +291,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.getRef('HEAD')).resolves.toMatchObject({
+      await expect(version.refs.getRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -301,7 +301,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
           },
         },
       });
-      await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+      await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -384,7 +384,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         errorLabel: 'undo isolation base',
       });
 
-      const created = await wb.version.createBranch({
+      const created = await wb.version.refs.createBranch({
         name: 'scenario/undo-isolation' as any,
         targetCommitId: branchBase.id,
         expectedAbsent: true,
@@ -465,7 +465,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         errorLabel: 'branch base',
       });
 
-      const created = await sourceWb.version.createBranch({
+      const created = await sourceWb.version.refs.createBranch({
         name: 'scenario/status' as any,
         targetCommitId: branchBase.id,
       });

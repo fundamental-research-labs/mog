@@ -22,7 +22,7 @@ export function registerPendingRemotePromotionProviderBatchStatusBlockingScenari
       'failedAfterMutation',
     ],
   ] as const)(
-    'blocks %s source sync batches through wb.version.promotePendingRemote',
+    'blocks %s source sync batches through wb.version.refs.promotePendingRemote',
     async (_label, terminal, batchStatusState) => {
       const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const namespace = await initializeProvider(
@@ -37,7 +37,7 @@ export function registerPendingRemotePromotionProviderBatchStatusBlockingScenari
       const headBefore = await expectReadHeadSuccess(graph);
       const wb = createPromotionAuthorizedWorkbook({ provider });
 
-      const result = await wb.version.promotePendingRemote();
+      const result = await wb.version.refs.promotePendingRemote();
 
       expect(result).toMatchObject({
         ok: true,

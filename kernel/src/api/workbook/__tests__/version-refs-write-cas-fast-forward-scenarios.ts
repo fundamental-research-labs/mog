@@ -10,10 +10,10 @@ import { expectRedactedExpectedHeadConflict } from './version-refs-write-cas-hel
 export function registerWriteCasFastForwardScenarios(): void {
   it('fast-forwards and updateBranch aliases fast-forward with stale guards', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
-    await version.createBranch({ name: 'scenario/advance' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({ name: 'scenario/advance' as any, targetCommitId: COMMIT_A });
 
     await expect(
-      version.fastForwardBranch({
+      version.refs.fastForwardBranch({
         name: 'scenario/advance' as any,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
@@ -29,7 +29,7 @@ export function registerWriteCasFastForwardScenarios(): void {
     });
 
     await expect(
-      version.updateBranch({
+      version.refs.updateBranch({
         name: 'scenario/advance' as any,
         nextCommitId: COMMIT_C,
         expectedHead: COMMIT_B,
@@ -44,7 +44,7 @@ export function registerWriteCasFastForwardScenarios(): void {
       },
     });
 
-    const stale = await version.fastForwardBranch({
+    const stale = await version.refs.fastForwardBranch({
       name: 'scenario/advance' as any,
       nextCommitId: COMMIT_A,
       expectedHead: COMMIT_B,

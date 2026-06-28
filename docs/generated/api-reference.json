@@ -1111,11 +1111,6 @@
           "docstring": null,
           "usedTypes": []
         },
-        "version.promotePendingRemote": {
-          "signature": "version.promotePendingRemote(options?: VersionPromotePendingRemoteOptions | undefined): Promise<VersionResult<VersionPromotePendingRemoteResult>>",
-          "docstring": null,
-          "usedTypes": []
-        },
         "version.checkout": {
           "signature": "version.checkout(target: VersionCheckoutTarget, options?: VersionCheckoutOptions | undefined): Promise<VersionResult<CheckoutVersionResult>>",
           "docstring": null,
@@ -1141,43 +1136,18 @@
           "docstring": null,
           "usedTypes": []
         },
-        "version.readRef": {
-          "signature": "version.readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
+        "version.diffOverview": {
+          "signature": "version.diffOverview(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.getRef": {
-          "signature": "version.getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
+        "version.diffGroupDetail": {
+          "signature": "version.diffGroupDetail(base: VersionCommitish, target: VersionCommitish, options: VersionDiffGroupDetailOptions): Promise<VersionResult<VersionSemanticDiffPage>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.listRefs": {
-          "signature": "version.listRefs(options?: VersionListRefsOptions | undefined): Promise<VersionResult<Paged<VersionRef>>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.createBranch": {
-          "signature": "version.createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.fastForwardBranch": {
-          "signature": "version.fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.updateBranch": {
-          "signature": "version.updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.deleteBranch": {
-          "signature": "version.deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.deleteRef": {
-          "signature": "version.deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
+        "version.diffWorkingTree": {
+          "signature": "version.diffWorkingTree(options?: VersionWorkingTreeDiffOptions | undefined): Promise<VersionResult<VersionWorkingTreeDiffPage>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -1211,8 +1181,18 @@
           "docstring": null,
           "usedTypes": []
         },
+        "version.diffCurrentOverview": {
+          "signature": "version.diffCurrentOverview(target?: VersionDiffPorcelainTarget | undefined, options?: VersionDiffOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
         "version.diffBranch": {
           "signature": "version.diffBranch(branch: VersionBranchNameInput, options?: VersionDiffBranchOptions | undefined): Promise<VersionResult<VersionSemanticDiffPage>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.diffBranchOverview": {
+          "signature": "version.diffBranchOverview(branch: VersionBranchNameInput, options?: VersionDiffBranchOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -1223,6 +1203,51 @@
         },
         "version.getMergeReview": {
           "signature": "version.getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.promotePendingRemote": {
+          "signature": "version.refs.promotePendingRemote(options?: VersionPromotePendingRemoteOptions | undefined): Promise<VersionResult<VersionPromotePendingRemoteResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.readRef": {
+          "signature": "version.refs.readRef(name: VersionBranchName | VersionRefSelector): Promise<VersionResult<VersionRefReadResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.getRef": {
+          "signature": "version.refs.getRef(name: VersionBranchName | VersionRefSelector): Promise<VersionResult<VersionRefReadResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.listRefs": {
+          "signature": "version.refs.listRefs(options?: VersionListRefsOptions | undefined): Promise<VersionResult<Paged<VersionRef>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.createBranch": {
+          "signature": "version.refs.createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.fastForwardBranch": {
+          "signature": "version.refs.fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.updateBranch": {
+          "signature": "version.refs.updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.deleteBranch": {
+          "signature": "version.refs.deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.deleteRef": {
+          "signature": "version.refs.deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -4762,7 +4787,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-28T04:34:08.586Z",
+  "generated": "2026-06-28T05:34:07.481Z",
   "formatPresets": {
     "general": {
       "default": {

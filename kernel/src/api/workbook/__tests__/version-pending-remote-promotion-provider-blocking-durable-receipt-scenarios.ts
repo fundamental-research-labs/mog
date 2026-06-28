@@ -23,7 +23,7 @@ export function registerPendingRemotePromotionProviderDurableReceiptBlockingScen
     const headBefore = await expectReadHeadSuccess(graph);
     const wb = createPromotionAuthorizedWorkbook({ provider });
 
-    const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+    const result = await wb.version.refs.promotePendingRemote({ includeDiagnostics: true });
 
     await expectBlockedPromotion(
       result,

@@ -318,6 +318,7 @@ export function versionFailureFromStoreDiagnostics<T>(
 
 function publicVersionTargetForOperation(operation: VersionResultOperation): string {
   if (DIRECT_VERSION_OPERATIONS.has(operation)) return `workbook.version.${operation}`;
+  if (REFS_OPERATIONS.has(operation)) return `workbook.version.refs.${operation}`;
   if (REVIEW_ADVANCED_OPERATIONS.has(operation)) {
     return `workbook.version.reviews.advanced.${operation}`;
   }
@@ -338,7 +339,6 @@ const DIRECT_VERSION_OPERATIONS = new Set<VersionResultOperation>([
   'merge',
   'applyMerge',
   'revert',
-  'promotePendingRemote',
   'diff',
   'diffOverview',
   'diffGroupDetail',
@@ -347,6 +347,10 @@ const DIRECT_VERSION_OPERATIONS = new Set<VersionResultOperation>([
   'diffBranch',
   'diffBranchOverview',
   'diffWorkingTree',
+]);
+
+const REFS_OPERATIONS = new Set<VersionResultOperation>([
+  'promotePendingRemote',
   'readRef',
   'getRef',
   'listRefs',

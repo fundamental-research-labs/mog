@@ -16,7 +16,7 @@ export function registerProviderW8RedactionDeletePreflightScenarios(): void {
     const version = createVersionWithBranchService(branchService);
     const malformedRefName = 'Scenario/Provider-Secret';
 
-    const malformed = await version.deleteRef({
+    const malformed = await version.refs.deleteRef({
       name: malformedRefName as any,
       expectedHead: AUX_COMMIT_ID as any,
       expectedRefRevision: { kind: 'counter', value: '0' },

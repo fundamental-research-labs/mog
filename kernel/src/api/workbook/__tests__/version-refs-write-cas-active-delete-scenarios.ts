@@ -8,13 +8,13 @@ export function registerWriteCasActiveDeleteScenarios(): void {
   it('blocks deleting the active branch before tombstoning the current head', async () => {
     const { branchService, version } =
       createWorkbookVersionWithBranchService('scenario/active-delete');
-    await version.createBranch({
+    await version.refs.createBranch({
       name: 'scenario/active-delete' as any,
       targetCommitId: COMMIT_A,
     });
 
     async function expectActiveHead() {
-      await expect(version.getRef('HEAD')).resolves.toEqual({
+      await expect(version.refs.getRef('HEAD')).resolves.toEqual({
         ok: true,
         value: {
           status: 'success',
@@ -34,7 +34,7 @@ export function registerWriteCasActiveDeleteScenarios(): void {
       [
         'deleteBranch',
         () =>
-          version.deleteBranch({
+          version.refs.deleteBranch({
             name: 'scenario/active-delete' as any,
             expectedHead: COMMIT_A,
             expectedRefRevision: refVersion('0'),
@@ -43,7 +43,7 @@ export function registerWriteCasActiveDeleteScenarios(): void {
       [
         'deleteRef',
         () =>
-          version.deleteRef({
+          version.refs.deleteRef({
             name: 'refs/heads/scenario/active-delete' as any,
             expectedHead: COMMIT_A,
             expectedRefRevision: refVersion('0'),

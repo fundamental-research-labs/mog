@@ -35,7 +35,7 @@ export function registerPendingRemotePromotionProviderSourceBatchScenarios(): vo
     });
     const wb = createPromotionAuthorizedWorkbook({ provider });
 
-    const result = await wb.version.promotePendingRemote();
+    const result = await wb.version.refs.promotePendingRemote();
 
     expect(result).toMatchObject({
       ok: true,

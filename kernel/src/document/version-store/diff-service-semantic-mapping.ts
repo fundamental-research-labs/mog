@@ -209,6 +209,9 @@ function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): Versio
   if (value.domainId === 'cells.formulas') {
     return mapRustCellFormulaChange(value);
   }
+  if (value.domainId === 'cells.formats.direct') {
+    return mapRustDirectFormatChange(value);
+  }
   if (value.domainId === 'sheets') {
     return mapRustSheetChange(value);
   }
@@ -395,6 +398,27 @@ function mapRustCellFormulaChange(
   });
 }
 
+function mapRustDirectFormatChange(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiffEntry | null {
+  if (value.objectKind !== 'direct-format') return null;
+
+  const cell = rustDirectFormatCoordinates(value);
+  if (!cell) return null;
+  const before = mapRustDirectFormatDiffValue(value.beforeRecord);
+  const after = mapRustDirectFormatDiffValue(value.afterRecord);
+  if (!before || !after) return null;
+
+  return rustCellEntry({
+    changeId: value.changeId as string,
+    domain: 'cells.formats.direct',
+    propertyPath: ['format'],
+    cell,
+    before,
+    after,
+  });
+}
+
 function rustCellEntry(input: {
   readonly changeId: string;
   readonly domain: string;
@@ -469,6 +493,13 @@ function rustCellCoordinatesFromObjectId(value: unknown): RustCellCoordinates | 
   return { sheetId: match[1]!, row, column };
 }
 
+function rustDirectFormatCoordinates(
+  value: Readonly<Record<string, unknown>>,
+): RustCellCoordinates | null {
+  if (typeof value.objectId !== 'string') return null;
+  return rustCellCoordinatesFromObjectId(stripRustObjectPrefix(value.objectId, 'direct-format:'));
+}
+
 function mapRustCellValueDiffValue(value: unknown): VersionDiffValue | null {
   if (value === undefined) return blankDiffValue();
   const evidence = rustRecordEvidence(value);
@@ -517,6 +548,48 @@ function mapCanonicalFormula(value: unknown): VersionSemanticValue | undefined {
   return typeof value.normalizedFormula === 'string'
     ? { kind: 'formula', formula: value.normalizedFormula }
     : undefined;
+}
+
+function mapRustDirectFormatDiffValue(value: unknown): VersionDiffValue | null {
+  if (value === undefined) return { kind: 'value', value: null };
+  const evidence = rustRecordEvidence(value);
+  if (!evidence || !isRecord(evidence.record)) return null;
+  const properties =
+    evidence.record.properties === undefined
+      ? {}
+      : isRecord(evidence.record.properties)
+        ? evidence.record.properties
+        : null;
+  if (!properties) return null;
+  return { kind: 'value', value: mapPlainJsonObjectValue(properties) };
+}
+
+function mapPlainJsonObjectValue(
+  value: Readonly<Record<string, unknown>>,
+): Extract<VersionSemanticValue, { readonly kind: 'object' }> {
+  return {
+    kind: 'object',
+    fields: Object.keys(value)
+      .sort()
+      .flatMap((key) => {
+        const mapped = mapPlainJsonValue(value[key]);
+        return mapped === undefined ? [] : [{ key, value: mapped }];
+      }),
+  };
+}
+
+function mapPlainJsonValue(value: unknown, depth = 0): VersionSemanticValue | undefined {
+  if (depth > 16) return undefined;
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (Array.isArray(value)) {
+    const values = value.map((item) => mapPlainJsonValue(item, depth + 1));
+    return values.some((item) => item === undefined)
+      ? undefined
+      : { kind: 'array', values: values as VersionSemanticValue[] };
+  }
+  if (!isRecord(value)) return undefined;
+  return mapPlainJsonObjectValue(value);
 }
 
 function rustRecordEvidence(value: unknown): {

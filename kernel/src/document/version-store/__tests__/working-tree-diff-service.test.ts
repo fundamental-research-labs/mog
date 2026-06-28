@@ -107,6 +107,61 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(result.items[0]?.after).toEqual({ kind: 'value', value: 'hello' });
   });
 
+  it('projects a dirty direct-format edit from the Rust semantic diff', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 3, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [
+          semanticDirectFormatChange({
+            changeId: 'added:direct-format:cell:sheet-1:r2:c1',
+            sheetId: 'sheet-1',
+            row: 2,
+            column: 1,
+            properties: {
+              numberFormat: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+            },
+          }),
+        ],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      structural: {
+        kind: 'metadata',
+        changeId: 'added:direct-format:cell:sheet-1:r2:c1',
+        domain: 'cells.formats.direct',
+        entityId: 'sheet-1!B3',
+        propertyPath: ['format'],
+      },
+      before: { kind: 'value', value: null },
+      after: {
+        kind: 'value',
+        value: {
+          kind: 'object',
+          fields: [
+            {
+              key: 'numberFormat',
+              value: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+            },
+          ],
+        },
+      },
+      display: { address: { kind: 'value', value: 'B3' } },
+      historical: { cell: { sheetId: 'sheet-1', row: 2, column: 1 } },
+    });
+  });
+
   it('projects a dirty sheet create from the Rust semantic diff', async () => {
     const before = semanticEnvelope('before');
     const after = semanticEnvelope('after');
@@ -823,6 +878,32 @@ function semanticCellValueChange(changeId: string, after: string) {
       record: {
         valueKind: 'string',
         canonicalValue: after,
+      },
+    },
+  };
+}
+
+function semanticDirectFormatChange(input: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly row: number;
+  readonly column: number;
+  readonly properties: Readonly<Record<string, unknown>>;
+}) {
+  const cellObjectId = `cell:${input.sheetId}:r${input.row}:c${input.column}`;
+  const objectId = `direct-format:${cellObjectId}`;
+  return {
+    changeId: input.changeId,
+    kind: 'added',
+    domainId: 'cells.formats.direct',
+    objectId,
+    objectKind: 'direct-format',
+    afterRecord: {
+      objectId,
+      objectKind: 'direct-format',
+      domainId: 'cells.formats.direct',
+      record: {
+        properties: input.properties,
       },
     },
   };

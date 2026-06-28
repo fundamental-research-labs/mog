@@ -56,6 +56,73 @@ describe('createComputeBridgeSemanticStateReader', () => {
     });
     expect(result.changes[0]?.beforeRecord).toBeUndefined();
   });
+
+  it('attaches direct-format record evidence to Rust format semantic changes', async () => {
+    const before = semanticState({
+      'sheet#0': sheetState({
+        cells: {
+          'cell:sheet#0:r2:c1': {
+            objectId: 'cell:sheet#0:r2:c1',
+            sheetId: 'sheet#0',
+            row: 2,
+            column: 1,
+          },
+        },
+      }),
+    });
+    const after = semanticState({
+      'sheet#0': sheetState({
+        cells: {
+          'cell:sheet#0:r2:c1': {
+            objectId: 'cell:sheet#0:r2:c1',
+            sheetId: 'sheet#0',
+            row: 2,
+            column: 1,
+            directFormat: {
+              properties: {
+                numberFormat: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+              },
+            },
+          },
+        },
+      }),
+    });
+    const objectId = 'direct-format:cell:sheet#0:r2:c1';
+    const diff: SemanticWorkbookDiff = {
+      beforeDigest: digest('before'),
+      afterDigest: digest('after'),
+      changes: [
+        {
+          changeId: 'added:direct-format:cell:sheet#0:r2:c1',
+          kind: 'added',
+          domainId: 'cells.formats.direct',
+          objectId,
+          objectKind: 'direct-format',
+        },
+      ],
+    };
+    const reader = createComputeBridgeSemanticStateReader({
+      semanticWorkbookStateEnvelope: jest.fn(async () => ({
+        state: after,
+        stateDigest: digest('after'),
+      })),
+      diffSemanticWorkbookStates: jest.fn(async () => diff),
+    });
+
+    const result = await reader.diffSemanticStates(before, after);
+
+    expect(result.changes[0]?.afterRecord).toEqual({
+      objectId,
+      objectKind: 'direct-format',
+      domainId: 'cells.formats.direct',
+      record: {
+        properties: {
+          numberFormat: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+        },
+      },
+    });
+    expect(result.changes[0]?.beforeRecord).toBeUndefined();
+  });
 });
 
 function semanticState(
@@ -65,6 +132,21 @@ function semanticState(
     schemaVersion: '1',
     domains: {},
     sheets,
+  };
+}
+
+function sheetState(
+  overrides: Partial<SemanticWorkbookState['sheets'][string]> = {},
+): SemanticWorkbookState['sheets'][string] {
+  return {
+    sheetId: 'sheet#0',
+    name: 'Sheet 1',
+    rowCount: 1000,
+    columnCount: 26,
+    rows: {},
+    columns: {},
+    cells: {},
+    ...overrides,
   };
 }
 

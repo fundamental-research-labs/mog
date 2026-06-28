@@ -842,7 +842,78 @@ function formatDiffValue(entry: VersionDiffEntry, side: 'before' | 'after'): str
     const rowColumnValue = formatVersionRowColumnDiffValue(rowColumnSummary, value, side);
     if (rowColumnValue) return rowColumnValue;
   }
+  const directFormatValue = formatDirectCellFormatDiffValue(entry, value);
+  if (directFormatValue) return truncateValue(directFormatValue, 96);
   return truncateValue(formatSemanticValue(value.value), 96);
+}
+
+function formatDirectCellFormatDiffValue(
+  entry: VersionDiffEntry,
+  value: VersionDiffValue,
+): string | undefined {
+  if (
+    entry.structural.kind !== 'metadata' ||
+    entry.structural.domain !== 'cells.formats.direct' ||
+    entry.structural.propertyPath.length !== 1 ||
+    entry.structural.propertyPath[0] !== 'format' ||
+    value.kind !== 'value'
+  ) {
+    return undefined;
+  }
+  if (value.value === null) return 'No direct format';
+
+  const fields = semanticObjectFields(value.value);
+  if (!fields) return undefined;
+  const formattedFields = fields.flatMap((field) => {
+    const formatted = formatDirectCellFormatField(field.key, field.value);
+    return formatted ? [formatted] : [];
+  });
+  if (formattedFields.length === 0) return 'Direct format';
+  return formattedFields.join(', ');
+}
+
+function formatDirectCellFormatField(key: string, value: VersionSemanticValue): string | undefined {
+  if (key === 'kind' && value === 'Removed') return 'Direct format removed';
+  if (key === 'numberFormat' && typeof value === 'string') {
+    return `Number format: ${formatNumberFormatLabel(value)}`;
+  }
+  return `${formatFormatPropertyName(key)}: ${formatSemanticValue(value)}`;
+}
+
+const NUMBER_FORMAT_LABELS: Readonly<Record<string, string>> = {
+  General: 'General',
+  '@': 'Text',
+  '0': 'Number',
+  '0.00': 'Number (2 decimals)',
+  '#,##0': 'Number (thousands)',
+  '#,##0.00': 'Number (thousands, 2 decimals)',
+  '$#,##0': 'Currency (USD)',
+  '$#,##0.00': 'Currency (USD, 2 decimals)',
+  '0%': 'Percentage',
+  '0.00%': 'Percentage (2 decimals)',
+  '0.00E+00': 'Scientific',
+};
+
+const ACCOUNTING_FORMAT_LABELS: Readonly<Record<string, string>> = {
+  '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)': 'Accounting (USD)',
+  '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)': 'Accounting (EUR)',
+  '_(£* #,##0.00_);_(£* (#,##0.00);_(£* "-"??_);_(@_)': 'Accounting (GBP)',
+};
+
+function formatNumberFormatLabel(formatCode: string): string {
+  const known = NUMBER_FORMAT_LABELS[formatCode];
+  if (known) return known;
+
+  const accounting = ACCOUNTING_FORMAT_LABELS[formatCode];
+  if (accounting) return accounting;
+  if (formatCode.includes('_(') && formatCode.includes('*')) return 'Accounting (custom)';
+  return formatCode;
+}
+
+function formatFormatPropertyName(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/^./, (first) => first.toUpperCase());
 }
 
 function formatSemanticValue(value: VersionSemanticValue, depth = 0): string {

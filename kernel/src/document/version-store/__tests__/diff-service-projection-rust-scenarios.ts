@@ -76,6 +76,72 @@ export function registerDiffServiceProjectionRustScenarios(): void {
     });
   });
 
+  it('projects raw Rust semantic direct-format changes', async () => {
+    const rustChanges = [
+      rawDirectFormatChange({
+        changeId: 'rust-format-b3',
+        sheetId: 'sheet#0',
+        row: 2,
+        column: 1,
+        properties: {
+          numberFormat: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+        },
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: 'before-digest',
+          afterStateDigest: 'after-digest',
+        },
+        changes: rustChanges,
+        semanticDiff: {
+          beforeDigest: 'before-digest',
+          afterDigest: 'after-digest',
+          changes: rustChanges,
+          diagnostics: [],
+        },
+        reviewChanges: [],
+      },
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    await expect(
+      service.diff({ kind: 'commit', id: rootCommitId }, { kind: 'commit', id: childCommitId }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      items: [
+        {
+          structural: {
+            kind: 'metadata',
+            changeId: 'rust-format-b3',
+            domain: 'cells.formats.direct',
+            entityId: 'sheet#0!B3',
+            propertyPath: ['format'],
+          },
+          before: { kind: 'value', value: null },
+          after: {
+            kind: 'value',
+            value: {
+              kind: 'object',
+              fields: [
+                {
+                  key: 'numberFormat',
+                  value: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
+                },
+              ],
+            },
+          },
+          display: { address: { kind: 'value', value: 'B3' } },
+          historical: { cell: { sheetId: 'sheet#0', row: 2, column: 1 } },
+        },
+      ],
+      diagnostics: [],
+    });
+  });
+
   it('projects a Rust cell value edit once when aggregate and child value changes are both present', async () => {
     const rustChanges = [
       rawCellValueChange({
@@ -314,6 +380,32 @@ function rawCellValueChildChange(input: {
       record: {
         valueKind: typeof input.value,
         canonicalValue: input.value,
+      },
+    },
+  };
+}
+
+function rawDirectFormatChange(input: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly row: number;
+  readonly column: number;
+  readonly properties: Readonly<Record<string, unknown>>;
+}) {
+  const cellId = cellObjectId(input);
+  const objectId = `direct-format:${cellId}`;
+  return {
+    changeId: input.changeId,
+    kind: 'added',
+    domainId: 'cells.formats.direct',
+    objectId,
+    objectKind: 'direct-format',
+    afterRecord: {
+      objectId,
+      objectKind: 'direct-format',
+      domainId: 'cells.formats.direct',
+      record: {
+        properties: input.properties,
       },
     },
   };

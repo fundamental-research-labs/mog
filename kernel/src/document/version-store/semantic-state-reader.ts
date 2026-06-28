@@ -112,6 +112,10 @@ function semanticObjectRecordValue(state: SemanticWorkbookState, change: Semanti
   if (change.domainId === 'cells.values' && change.objectKind === 'cell-value') {
     return semanticCellRecord(state, stripObjectPrefix(change.objectId, 'value:'))?.value;
   }
+  if (change.domainId === 'cells.formats.direct' && change.objectKind === 'direct-format') {
+    return semanticCellRecord(state, stripObjectPrefix(change.objectId, 'direct-format:'))
+      ?.directFormat;
+  }
   return undefined;
 }
 

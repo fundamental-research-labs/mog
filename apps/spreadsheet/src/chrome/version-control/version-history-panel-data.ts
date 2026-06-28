@@ -37,22 +37,19 @@ export type VersionHistoryWorkbook = {
     WorkbookVersion,
     | 'getSurfaceStatus'
     | 'getStatus'
+    | 'getHead'
+    | 'readRef'
+    | 'listCommits'
+    | 'listRefs'
+    | 'createBranch'
+    | 'promotePendingRemote'
+    | 'revert'
+    | 'diff'
     | 'commitCurrent'
     | 'createBranchFromCurrent'
     | 'checkoutBranch'
     | 'checkoutCommit'
   > & {
-    readonly graph: Pick<
-      WorkbookVersion['graph'],
-      | 'getHead'
-      | 'readRef'
-      | 'listCommits'
-      | 'listRefs'
-      | 'createBranch'
-      | 'promotePendingRemote'
-      | 'revert'
-      | 'diff'
-    >;
     readonly reviews: {
       readonly advanced: Pick<WorkbookVersion['reviews']['advanced'], 'listReviews'>;
     };

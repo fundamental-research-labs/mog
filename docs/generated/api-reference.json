@@ -1167,7 +1167,7 @@
           "usedTypes": []
         },
         "version.updateBranch": {
-          "signature": "version.updateBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
+          "signature": "version.updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -4762,7 +4762,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-28T04:16:41.282Z",
+  "generated": "2026-06-28T04:34:08.586Z",
   "formatPresets": {
     "general": {
       "default": {

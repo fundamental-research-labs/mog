@@ -120,22 +120,20 @@ describe('VersionHistoryPanelContent', () => {
 
   it('shows partial version diagnostics without dropping available commit history', async () => {
     const workbook = createWorkbook({
-      graph: {
-        getHead: jest.fn(async () => ({
-          ok: false,
-          error: {
-            code: 'target_unavailable',
-            target: 'workbook.version.getHead',
-            diagnostics: [
-              {
-                code: 'VERSION_GRAPH_UNINITIALIZED',
-                severity: 'warning',
-                message: 'Graph not initialized.',
-              },
-            ],
-          },
-        })),
-      },
+      getHead: jest.fn(async () => ({
+        ok: false,
+        error: {
+          code: 'target_unavailable',
+          target: 'workbook.version.getHead',
+          diagnostics: [
+            {
+              code: 'VERSION_GRAPH_UNINITIALIZED',
+              severity: 'warning',
+              message: 'Graph not initialized.',
+            },
+          ],
+        },
+      })),
     });
 
     renderVersionHistoryPanel({ workbook });
@@ -500,16 +498,14 @@ describe('VersionHistoryPanelContent', () => {
           },
         }),
       ),
-      graph: {
-        getHead: jest.fn(async () => ({
-          ok: true,
-          value: {
-            id: LATEST_COMMIT_ID,
-            refName: 'refs/heads/main',
-            refRevision: { kind: 'counter', value: '9' },
-          },
-        })),
-      },
+      getHead: jest.fn(async () => ({
+        ok: true,
+        value: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: { kind: 'counter', value: '9' },
+        },
+      })),
     });
 
     const { user } = renderVersionHistoryPanel({ workbook });
@@ -557,16 +553,14 @@ describe('VersionHistoryPanelContent', () => {
           },
         }),
       ),
-      graph: {
-        getHead: jest.fn(async () => ({
-          ok: true,
-          value: {
-            id: LATEST_COMMIT_ID,
-            refName: 'refs/heads/main',
-            refRevision: { kind: 'counter', value: '9' },
-          },
-        })),
-      },
+      getHead: jest.fn(async () => ({
+        ok: true,
+        value: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: { kind: 'counter', value: '9' },
+        },
+      })),
     });
 
     const { user } = renderVersionHistoryPanel({ workbook });

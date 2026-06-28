@@ -57,24 +57,9 @@ export function renderVersionHistoryPanel({
 
 type VersionHistoryVersion = VersionHistoryWorkbook['version'];
 
-type VersionHistoryDirectVersionOverrides = Partial<
-  Pick<
-    VersionHistoryVersion,
-    | 'getHead'
-    | 'readRef'
-    | 'listCommits'
-    | 'listRefs'
-    | 'createBranch'
-    | 'promotePendingRemote'
-    | 'revert'
-    | 'diff'
-  >
->;
-
 type VersionHistoryWorkbookVersionOverrides = Partial<
   Omit<VersionHistoryVersion, 'reviews' | 'proposals'>
 > & {
-  readonly graph?: VersionHistoryDirectVersionOverrides;
   readonly reviews?: {
     readonly advanced?: Partial<VersionHistoryVersion['reviews']['advanced']>;
   };
@@ -85,7 +70,6 @@ export function createWorkbook(
   overrides: VersionHistoryWorkbookVersionOverrides = {},
 ): VersionHistoryWorkbook {
   const {
-    graph: graphOverrides,
     reviews: reviewsOverrides,
     proposals: proposalsOverrides,
     ...topLevelOverrides
@@ -195,7 +179,6 @@ export function createWorkbook(
       },
     })),
     diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
-    ...graphOverrides,
   };
   const reviews = {
     advanced: {

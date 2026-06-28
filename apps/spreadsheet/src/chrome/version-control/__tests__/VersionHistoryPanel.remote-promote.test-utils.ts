@@ -57,10 +57,8 @@ export function createRemotePromotionWorkbook({
 }: CreateRemotePromotionWorkbookOptions = {}): VersionHistoryWorkbook {
   return createWorkbook({
     getSurfaceStatus: getSurfaceStatus ?? jest.fn(async () => surface),
-    graph: {
-      promotePendingRemote:
-        promotePendingRemote ?? jest.fn(async () => successfulRemotePromotionResult()),
-    },
+    promotePendingRemote:
+      promotePendingRemote ?? jest.fn(async () => successfulRemotePromotionResult()),
   });
 }
 

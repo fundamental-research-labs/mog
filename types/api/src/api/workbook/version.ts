@@ -921,7 +921,7 @@ export interface VersionFastForwardBranchOptions {
   readonly expectedRefRevision: VersionCounterRecordRevision;
 }
 
-export type VersionUpdateBranchOptions = VersionFastForwardBranchOptions;
+export interface VersionUpdateBranchOptions extends VersionFastForwardBranchOptions {}
 
 export interface VersionDeleteRefOptions {
   readonly name: VersionBranchName | VersionRefName;

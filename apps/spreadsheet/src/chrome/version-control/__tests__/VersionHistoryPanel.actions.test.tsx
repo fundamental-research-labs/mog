@@ -258,9 +258,7 @@ describe('VersionHistoryPanelContent action flows', () => {
       .mockImplementationOnce(async () => refreshedRefs.promise);
     const workbook = createWorkbook({
       createBranchFromCurrent: jest.fn(async () => branchResult.promise),
-      graph: {
-        listRefs,
-      },
+      listRefs,
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -553,7 +551,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     'renders a distinct %s parent diff preview state',
     async (_, page, state, title, label) => {
       const workbook = createWorkbook({
-        graph: { diff: jest.fn(async () => ({ ok: true, value: page })) },
+        diff: jest.fn(async () => ({ ok: true, value: page })),
       });
 
       const { user } = renderVersionHistoryPanel({ workbook });
@@ -581,9 +579,7 @@ describe('VersionHistoryPanelContent action flows', () => {
         ),
       ),
       checkoutBranch: jest.fn(async () => failedInvalidState('Checkout rejected by version provider.')),
-      graph: {
-        diff: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
-      },
+      diff: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 

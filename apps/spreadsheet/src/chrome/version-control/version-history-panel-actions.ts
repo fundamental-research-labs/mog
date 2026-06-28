@@ -251,7 +251,7 @@ export function useVersionHistoryPanelActions({
         targetCommitIdOverride
           ? workbook.version.createBranch({
               name: normalizedBranch.branch.refName as Parameters<
-                WorkbookVersion['graph']['createBranch']
+                WorkbookVersion['createBranch']
               >[0]['name'],
               targetCommitId,
               expectedAbsent: true,

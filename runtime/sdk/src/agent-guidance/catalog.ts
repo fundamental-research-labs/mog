@@ -708,7 +708,7 @@ export const apiGuidanceCatalog = [
     ],
     message: 'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
-      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commitCurrent`, `wb.version.createBranchFromCurrent`, `wb.version.checkoutBranch`, and `wb.version.diffCurrent` for common workflows; advanced graph operations remain available for explicit CAS, merge, apply, and revert workflows.',
+      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commitCurrent`, `wb.version.createBranchFromCurrent`, `wb.version.checkoutBranch`, and `wb.version.diffCurrent` for common workflows; direct lower-level operations remain available for explicit CAS, merge, apply, and revert workflows.',
     mogReplacements: [
       {
         path: 'createWorkbook',

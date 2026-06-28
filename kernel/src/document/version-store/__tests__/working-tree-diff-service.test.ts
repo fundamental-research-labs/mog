@@ -75,6 +75,38 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(result.currentSemanticStateDigest).toMatchObject({ digest: 'after' });
   });
 
+  it('diffs against the current branch head when no explicit checkout session exists', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({
+        dirty: true,
+        current: {
+          checkedOutCommitId: undefined,
+          refHeadAtMaterialization: undefined,
+          branchName: 'main',
+          currentRefHeadId: BASE_COMMIT_ID,
+        },
+      }),
+      basis: basisState({ revision: 2, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      activeCheckout: { status: 'absent' },
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [semanticChange('change-1', 'implicit-base')],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.baseCommitId).toBe(BASE_COMMIT_ID);
+    expect(result.targetRef).toBe('refs/heads/main');
+    expect(result.items[0]?.after).toEqual({ kind: 'value', value: 'implicit-base' });
+  });
+
   it('fails closed for uncaptured dirty mutations', async () => {
     const before = semanticEnvelope('before');
     const after = semanticEnvelope('after');
@@ -153,16 +185,23 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
 
     expect(result.status).toBe('degraded');
     if (result.status !== 'degraded') return;
-    expect(result.diagnostics).toEqual([
-      expect.objectContaining({ issueCode }),
-    ]);
+    expect(result.diagnostics).toEqual([expect.objectContaining({ issueCode })]);
     expect(services.semanticStateReader.diffSemanticStates).not.toHaveBeenCalled();
   });
 
   it('fails closed when no active checkout base can be resolved', async () => {
     const current = semanticEnvelope('current');
     const services = createHarness({
-      surface: surfaceStatus({ dirty: true }),
+      surface: surfaceStatus({
+        dirty: true,
+        current: {
+          headCommitId: undefined,
+          branchName: undefined,
+          currentRefHeadId: undefined,
+          checkedOutCommitId: undefined,
+          refHeadAtMaterialization: undefined,
+        },
+      }),
       basis: basisState({ revision: 1, beforeSemanticState: current, pendingCaptured: 1 }),
       currentStates: [current],
       activeCheckout: { status: 'absent' },
@@ -176,6 +215,7 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
       expect.objectContaining({ issueCode: 'VERSION_WORKING_TREE_DIFF_UNAVAILABLE' }),
     );
     expect(services.semanticMutationCapture.readWorkingTreeBasis).not.toHaveBeenCalled();
+    expect(services.semanticStateReader.readCurrentSemanticState).not.toHaveBeenCalled();
   });
 
   it('fails closed when the current semantic state cannot be read', async () => {
@@ -462,12 +502,13 @@ function createHarness(input: {
       if (input.readCurrentSemanticStateError) throw input.readCurrentSemanticStateError;
       return currentStates.shift() ?? lastCurrentState;
     }),
-    diffSemanticStates: jest.fn(async () =>
-      input.semanticDiff ?? {
-        beforeDigest: lastCurrentState.stateDigest,
-        afterDigest: lastCurrentState.stateDigest,
-        changes: [],
-      },
+    diffSemanticStates: jest.fn(
+      async () =>
+        input.semanticDiff ?? {
+          beforeDigest: lastCurrentState.stateDigest,
+          afterDigest: lastCurrentState.stateDigest,
+          changes: [],
+        },
     ),
   };
   const providerInstance = provider(input.providerAccess);
@@ -483,7 +524,10 @@ function createHarness(input: {
   return { service, semanticStateReader, semanticMutationCapture, provider: providerInstance };
 }
 
-function activeCheckout(): Extract<WorkingTreeActiveCheckoutHeadResolution, { status: 'resolved' }> {
+function activeCheckout(): Extract<
+  WorkingTreeActiveCheckoutHeadResolution,
+  { status: 'resolved' }
+> {
   return {
     status: 'resolved',
     session: {

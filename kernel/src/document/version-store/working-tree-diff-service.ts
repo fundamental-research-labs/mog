@@ -21,11 +21,7 @@ import {
   isPublicVersionDiffCursor,
 } from '@mog-sdk/contracts/versioning';
 
-import {
-  canonicalJsonStringify,
-  sha256ObjectDigest,
-  utf8Encode,
-} from './object-store-canonical';
+import { canonicalJsonStringify, sha256ObjectDigest, utf8Encode } from './object-store-canonical';
 import type { VersionStoreProvider } from './provider';
 import type {
   SemanticMutationCaptureServices,
@@ -44,6 +40,7 @@ import { parseDiffOptions } from './diff-service-pagination';
 import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
 
 const VERSION_WORKING_TREE_CURSOR_CACHE_MAX_ENTRIES = 512;
+const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 export type WorkbookVersionWorkingTreeDiffServiceOptions = {
   readonly provider: VersionStoreProvider;
@@ -101,7 +98,10 @@ export type WorkbookVersionWorkingTreeDiffPage =
 
 type WorkingTreeObservation = {
   readonly surface: VersionSurfaceStatus;
-  readonly active: Extract<WorkingTreeActiveCheckoutHeadResolution, { readonly status: 'resolved' }>;
+  readonly active: Extract<
+    WorkingTreeActiveCheckoutHeadResolution,
+    { readonly status: 'resolved' }
+  >;
   readonly basis: SemanticMutationCaptureWorkingTreeBasis;
   readonly currentSemanticState: SemanticWorkbookStateEnvelope;
   readonly baseSemanticStateDigest: ObjectDigest;
@@ -237,18 +237,16 @@ export class WorkbookVersionWorkingTreeDiffService {
   > {
     let surface: VersionSurfaceStatus;
     let active: WorkingTreeActiveCheckoutHeadResolution;
-    let currentSemanticState: SemanticWorkbookStateEnvelope;
     try {
       surface = await this.readSurfaceStatus();
       active = await this.readActiveCheckoutHead();
-      currentSemanticState = await this.semanticStateReader.readCurrentSemanticState();
     } catch (error) {
       return {
         ok: false,
         diagnostics: [
           diagnostic(
             'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
-            error instanceof Error ? error.message : 'Working-tree diff state read failed.',
+            diagnosticMessageFromError(error, 'Working-tree diff state read failed.'),
             {
               recoverability: 'retry',
               details: { category: 'stateReadFailed' },
@@ -258,41 +256,45 @@ export class WorkbookVersionWorkingTreeDiffService {
       };
     }
 
-    if (active.status !== 'resolved') {
+    const resolvedActive = resolveWorkingTreeActiveCheckout(surface, active);
+    if (!resolvedActive.ok) {
+      return { ok: false, diagnostics: resolvedActive.diagnostics };
+    }
+
+    let basis: SemanticMutationCaptureWorkingTreeBasis;
+    let currentSemanticState: SemanticWorkbookStateEnvelope;
+    try {
+      basis = this.semanticMutationCapture.readWorkingTreeBasis();
+      currentSemanticState = await this.semanticStateReader.readCurrentSemanticState();
+    } catch (error) {
       return {
         ok: false,
         diagnostics: [
           diagnostic(
             'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
-            active.status === 'absent'
-              ? 'Working-tree diff requires an active checkout base commit.'
-              : 'Active checkout HEAD could not be resolved for working-tree diff.',
+            diagnosticMessageFromError(error, 'Working-tree diff state read failed.'),
             {
               recoverability: 'retry',
-              details: {
-                category: active.status === 'absent' ? 'activeCheckoutAbsent' : 'activeHeadDegraded',
-                ...(active.status === 'degraded'
-                  ? { sourceDiagnosticCount: active.result.diagnostics.length }
-                  : {}),
-              },
+              details: { category: 'stateReadFailed' },
             },
           ),
         ],
       };
     }
 
-    const basis = this.semanticMutationCapture.readWorkingTreeBasis();
     const baseSemanticStateDigest =
       surface.dirty.hasUncommittedLocalChanges && basis.beforeSemanticState
         ? publicObjectDigest(basis.beforeSemanticState.stateDigest)
         : publicObjectDigest(currentSemanticState.stateDigest);
-    const targetRef = active.session.detached ? undefined : active.head.refName;
+    const targetRef = resolvedActive.active.session.detached
+      ? undefined
+      : resolvedActive.active.head.refName;
 
     return {
       ok: true,
       observation: {
         surface,
-        active,
+        active: resolvedActive.active,
         basis,
         currentSemanticState,
         baseSemanticStateDigest,
@@ -340,7 +342,7 @@ export class WorkbookVersionWorkingTreeDiffService {
         diagnostics: [
           diagnostic(
             'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
-            error instanceof Error ? error.message : 'Working-tree semantic diff failed.',
+            diagnosticMessageFromError(error, 'Working-tree semantic diff failed.'),
             {
               recoverability: 'retry',
               details: { category: 'semanticDiffFailed' },
@@ -421,6 +423,100 @@ export class WorkbookVersionWorkingTreeDiffService {
         `working-tree-diff:sha256:${identityDigest.digest}` as VersionWorkingTreeDiffId,
     };
   }
+}
+
+function resolveWorkingTreeActiveCheckout(
+  surface: VersionSurfaceStatus,
+  active: WorkingTreeActiveCheckoutHeadResolution,
+):
+  | {
+      readonly ok: true;
+      readonly active: Extract<
+        WorkingTreeActiveCheckoutHeadResolution,
+        { readonly status: 'resolved' }
+      >;
+    }
+  | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] } {
+  if (active.status === 'resolved') return { ok: true, active };
+  if (active.status === 'degraded') {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic(
+          'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
+          'Active checkout HEAD could not be resolved for working-tree diff.',
+          {
+            recoverability: 'retry',
+            details: {
+              category: 'activeHeadDegraded',
+              sourceDiagnosticCount: active.result.diagnostics.length,
+            },
+          },
+        ),
+      ],
+    };
+  }
+
+  const implicit = implicitCurrentBranchCheckout(surface);
+  if (implicit) return { ok: true, active: implicit };
+
+  return {
+    ok: false,
+    diagnostics: [
+      diagnostic(
+        'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
+        'Working-tree diff requires an active checkout base commit.',
+        {
+          recoverability: 'retry',
+          details: { category: 'activeCheckoutAbsent' },
+        },
+      ),
+    ],
+  };
+}
+
+function implicitCurrentBranchCheckout(
+  surface: VersionSurfaceStatus,
+): Extract<WorkingTreeActiveCheckoutHeadResolution, { readonly status: 'resolved' }> | null {
+  const current = surface.current;
+  if (current.detached || !current.headCommitId || !current.branchName) return null;
+
+  const refName = publicRefNameFromBranchName(current.branchName);
+  if (!refName) return null;
+
+  const refHeadAtMaterialization =
+    current.refHeadAtMaterialization ?? current.currentRefHeadId ?? current.headCommitId;
+  return {
+    status: 'resolved',
+    session: {
+      checkedOutCommitId: current.checkedOutCommitId ?? current.headCommitId,
+      branchName: current.branchName,
+      refHeadAtMaterialization,
+      detached: false,
+    },
+    head: {
+      id: current.headCommitId as WorkbookCommitId,
+      refName,
+      resolvedFrom: refName,
+    },
+  };
+}
+
+function publicRefNameFromBranchName(
+  branchName: string,
+): VersionMainRefName | VersionRefName | null {
+  const value = branchName.trim();
+  if (value.length === 0) return null;
+  if (value.startsWith(VERSION_BRANCH_REF_PREFIX)) {
+    return value as VersionMainRefName | VersionRefName;
+  }
+  return `${VERSION_BRANCH_REF_PREFIX}${value}` as VersionMainRefName | VersionRefName;
+}
+
+function diagnosticMessageFromError(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.trim();
+  return message.length > 0 && message !== 'Error' ? message : fallback;
 }
 
 function workingTreeBlockingDiagnostics(
@@ -601,12 +697,16 @@ function workingTreeBlockingDiagnostics(
   return diagnostics;
 }
 
-function sameWorkingTreeObservation(left: WorkingTreeObservation, right: WorkingTreeObservation): boolean {
+function sameWorkingTreeObservation(
+  left: WorkingTreeObservation,
+  right: WorkingTreeObservation,
+): boolean {
   return (
     left.surface.current.headCommitId === right.surface.current.headCommitId &&
     left.surface.current.checkedOutCommitId === right.surface.current.checkedOutCommitId &&
     left.surface.current.currentRefHeadId === right.surface.current.currentRefHeadId &&
-    left.surface.current.refHeadAtMaterialization === right.surface.current.refHeadAtMaterialization &&
+    left.surface.current.refHeadAtMaterialization ===
+      right.surface.current.refHeadAtMaterialization &&
     left.surface.current.branchName === right.surface.current.branchName &&
     left.surface.current.detached === right.surface.current.detached &&
     left.surface.current.stale === right.surface.current.stale &&
@@ -620,7 +720,10 @@ function sameWorkingTreeObservation(left: WorkingTreeObservation, right: Working
     left.basis.pendingUncapturedNormalMutationCount ===
       right.basis.pendingUncapturedNormalMutationCount &&
     left.basis.semanticStateCaptureFailure === right.basis.semanticStateCaptureFailure &&
-    sameOptionalDigest(left.basis.beforeSemanticState?.stateDigest, right.basis.beforeSemanticState?.stateDigest) &&
+    sameOptionalDigest(
+      left.basis.beforeSemanticState?.stateDigest,
+      right.basis.beforeSemanticState?.stateDigest,
+    ) &&
     sameDigest(left.currentSemanticStateDigest, right.currentSemanticStateDigest) &&
     sameActiveCheckoutIdentity(left.active, right.active)
   );
@@ -660,7 +763,10 @@ function sameActiveCheckoutIdentity(
   left: Extract<WorkingTreeActiveCheckoutHeadResolution, { readonly status: 'resolved' }>,
   right: Extract<WorkingTreeActiveCheckoutHeadResolution, { readonly status: 'resolved' }>,
 ): boolean {
-  return canonicalJsonStringify(activeCheckoutIdentity(left)) === canonicalJsonStringify(activeCheckoutIdentity(right));
+  return (
+    canonicalJsonStringify(activeCheckoutIdentity(left)) ===
+    canonicalJsonStringify(activeCheckoutIdentity(right))
+  );
 }
 
 function activeCheckoutIdentity(
@@ -698,9 +804,12 @@ function parseWorkingTreePageToken(
     });
   }
   if (!isPublicVersionDiffCursor(token)) {
-    return staleWorkingTreeCursor('diff pageToken uses an unsupported public cursor order or version.', {
-      category: 'unsupportedCursor',
-    });
+    return staleWorkingTreeCursor(
+      'diff pageToken uses an unsupported public cursor order or version.',
+      {
+        category: 'unsupportedCursor',
+      },
+    );
   }
   const entry = PUBLIC_WORKING_TREE_CURSOR_CACHE.get(token);
   if (!entry) {
@@ -740,8 +849,7 @@ function publicWorkingTreePageTokenFor(entry: WorkingTreeCursorCacheEntry): Vers
 }
 
 function nextPublicWorkingTreeCursorHandle(): string {
-  publicWorkingTreeCursorSequence =
-    (publicWorkingTreeCursorSequence + 1) % Number.MAX_SAFE_INTEGER;
+  publicWorkingTreeCursorSequence = (publicWorkingTreeCursorSequence + 1) % Number.MAX_SAFE_INTEGER;
   return `wt.${randomCursorSegment()}.${Date.now().toString(36)}.${publicWorkingTreeCursorSequence.toString(36)}`;
 }
 

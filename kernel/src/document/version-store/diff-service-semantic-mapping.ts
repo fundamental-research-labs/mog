@@ -12,6 +12,7 @@ import type {
 import { diagnostic, type DiffServiceDiagnostic } from './diff-service-diagnostics';
 import { mapEntriesWithOrderKeys, type MappedSemanticDiffEntry } from './diff-service-order-key';
 import { projectReviewAccessDiffValue } from './review-access-projection';
+import { semanticReviewChangesFromPayload } from './semantic-review-projection';
 
 const REDACTED_VALUE_REASONS = new Set([
   'permission-denied',
@@ -36,11 +37,7 @@ export function mapSemanticChangeSet(
     };
   }
 
-  const changes = Array.isArray(payload.changes) ? payload.changes : null;
-  const reviewChanges =
-    Array.isArray(payload.reviewChanges) && payload.reviewChanges.length > 0
-      ? payload.reviewChanges
-      : changes;
+  const reviewChanges = semanticReviewChangesFromPayload(payload);
   if (!reviewChanges) {
     return {
       ok: false,

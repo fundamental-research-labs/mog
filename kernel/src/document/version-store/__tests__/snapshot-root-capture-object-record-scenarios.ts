@@ -21,12 +21,10 @@ export function registerSnapshotRootCaptureObjectRecordScenarios(): void {
     expect(record.preimage).toMatchObject({
       objectType: WORKBOOK_SNAPSHOT_ROOT_OBJECT_TYPE,
       schemaVersion: 1,
-      payloadEncoding: 'mog-canonical-json-v1',
+      payloadEncoding: 'bytes',
       dependencies: [],
     });
-    expect(record.preimage.payload).toEqual(
-      createYrsFullStateSnapshotRootPayload(FULL_STATE_BYTES),
-    );
+    expect(Array.from(record.preimage.payload as Uint8Array)).toEqual([...FULL_STATE_BYTES]);
     expect(Array.from(decodeWorkbookSnapshotRootRecord(record))).toEqual([...FULL_STATE_BYTES]);
   });
 

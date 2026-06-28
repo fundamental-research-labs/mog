@@ -3,6 +3,7 @@ import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import type { MutationResult } from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
+import type { CompactCellValueReviewProjection } from './semantic-review-projection';
 
 export interface SemanticMutationCaptureProjectionInput {
   readonly operation: string;
@@ -56,4 +57,5 @@ export type PendingSemanticMutation = {
   readonly directEdits: readonly DirectEditPosition[];
   readonly directEditRanges: readonly DirectEditRange[];
   readonly changes: readonly VersionSemanticChangeRecord[];
+  readonly compactReviewProjection?: CompactCellValueReviewProjection;
 };

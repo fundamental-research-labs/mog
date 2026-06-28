@@ -40,6 +40,24 @@ function createMockCtx(overrides: Record<string, jest.Mock> = {}): any {
 
 const SHEET_ID = sheetId('sheet-1');
 
+function expectRangeMutationOptions(
+  startRow: number,
+  startCol: number,
+  endRow: number,
+  endCol: number,
+  operationContext: unknown = expect.objectContaining({
+    capturePolicy: 'commitEligible',
+    domainIds: ['cells'],
+    sheetIds: [SHEET_ID],
+    writeAdmissionMode: 'capture',
+  }),
+) {
+  return expect.objectContaining({
+    directEditRanges: [{ sheetId: SHEET_ID, startRow, startCol, endRow, endCol }],
+    operationContext,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // clearRange
 // ---------------------------------------------------------------------------
@@ -56,7 +74,14 @@ describe('clearRange', () => {
     });
 
     expect(result.cellCount).toBe(12);
-    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(SHEET_ID, 0, 0, 2, 3);
+    expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      0,
+      0,
+      2,
+      3,
+      expectRangeMutationOptions(0, 0, 2, 3),
+    );
     expect(ctx.order).toEqual(['await:allSheets', 'clearRangeByPosition']);
   });
 
@@ -82,17 +107,13 @@ describe('clearRange', () => {
       options as any,
     );
 
-    const captureOptions = {
-      ...options,
-      directEditRanges: [{ sheetId: SHEET_ID, startRow: 0, startCol: 0, endRow: 1, endCol: 1 }],
-    };
     expect(ctx.computeBridge.clearRangeByPosition).toHaveBeenCalledWith(
       SHEET_ID,
       0,
       0,
       1,
       1,
-      captureOptions,
+      expectRangeMutationOptions(0, 0, 1, 1, options.operationContext),
     );
   });
 
@@ -169,12 +190,16 @@ describe('setRange', () => {
     ]);
 
     // value goes through `toCellInput` — no \x00 sentinel.
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-      { row: 0, col: 0, input: { kind: 'parse', text: 'hello' } },
-      { row: 0, col: 1, input: { kind: 'value', value: 42 } },
-      { row: 1, col: 0, input: { kind: 'value', value: true } },
-      { row: 1, col: 1, input: { kind: 'clear' } },
-    ]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        { row: 0, col: 0, input: { kind: 'parse', text: 'hello' } },
+        { row: 0, col: 1, input: { kind: 'value', value: 42 } },
+        { row: 1, col: 0, input: { kind: 'value', value: true } },
+        { row: 1, col: 1, input: { kind: 'clear' } },
+      ],
+      expectRangeMutationOptions(0, 0, 1, 1),
+    );
     expect(ctx.order).toEqual(['await:allSheets', 'setCellsByPosition']);
   });
 
@@ -186,19 +211,25 @@ describe('setRange', () => {
     // `{ kind: 'literal', text: '' }` instead of this helper.
     const ctx = createMockCtx();
     await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [['', null]]);
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-      { row: 0, col: 0, input: { kind: 'clear' } },
-      { row: 0, col: 1, input: { kind: 'clear' } },
-    ]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        { row: 0, col: 0, input: { kind: 'clear' } },
+        { row: 0, col: 1, input: { kind: 'clear' } },
+      ],
+      expectRangeMutationOptions(0, 0, 0, 1),
+    );
   });
 
   it('preserves formulas starting with =', async () => {
     const ctx = createMockCtx();
     await RangeOps.setRange(ctx, SHEET_ID, 0, 0, [['=SUM(A1:A10)']]);
 
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-      { row: 0, col: 0, input: { kind: 'parse', text: '=SUM(A1:A10)' } },
-    ]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [{ row: 0, col: 0, input: { kind: 'parse', text: '=SUM(A1:A10)' } }],
+      expectRangeMutationOptions(0, 0, 0, 0),
+    );
   });
 
   it('routes Date values through setDateValue instead of string coercion', async () => {
@@ -208,12 +239,34 @@ describe('setRange', () => {
       [new Date('2026-02-01T00:00:00.000Z'), null],
     ]);
 
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(SHEET_ID, [
-      { row: 0, col: 0, input: { kind: 'parse', text: 'start' } },
-      { row: 1, col: 1, input: { kind: 'clear' } },
-    ]);
-    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(1, SHEET_ID, 0, 1, 2026, 1, 1);
-    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(2, SHEET_ID, 1, 0, 2026, 2, 1);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        { row: 0, col: 0, input: { kind: 'parse', text: 'start' } },
+        { row: 1, col: 1, input: { kind: 'clear' } },
+      ],
+      expectRangeMutationOptions(0, 0, 1, 1),
+    );
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      0,
+      1,
+      2026,
+      1,
+      1,
+      expectRangeMutationOptions(0, 0, 1, 1),
+    );
+    expect(ctx.computeBridge.setDateValue).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      1,
+      0,
+      2026,
+      2,
+      1,
+      expectRangeMutationOptions(0, 0, 1, 1),
+    );
     expect(ctx.order).toEqual([
       'await:allSheets',
       'setCellsByPosition',
@@ -242,7 +295,7 @@ describe('setRange', () => {
     expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
       SHEET_ID,
       [{ row: 0, col: 0, input: { kind: 'parse', text: 'hello' } }],
-      options,
+      expectRangeMutationOptions(0, 0, 0, 0, options.operationContext),
     );
   });
 

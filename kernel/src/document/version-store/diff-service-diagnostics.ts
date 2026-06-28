@@ -5,6 +5,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 import { VERSION_DIFF_PAGE_ORDER } from '@mog-sdk/contracts/versioning';
 
+import { DEFERRED_SNAPSHOT_ROOT_COMPLETENESS_CODE } from './commit-service-snapshot-materialization';
 import type { WorkbookCommit, WorkbookCommitCompletenessDiagnostic } from './commit-store';
 import type { VersionStoreDiagnostic } from './provider';
 
@@ -35,6 +36,7 @@ export function diffCompletenessDiagnostics(
     if (!selector) continue;
 
     for (const source of commit.payload.completenessDiagnostics) {
+      if (source.code === DEFERRED_SNAPSHOT_ROOT_COMPLETENESS_CODE) continue;
       diagnostics.push(completenessDiagnostic(selector, source));
     }
   }

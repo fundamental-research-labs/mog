@@ -45,6 +45,9 @@ function createMockCtx() {
       setCellsByPosition: jest.fn().mockImplementation(async () => {
         order.push('setCellsByPosition');
       }),
+      setCellValuesParsed: jest.fn().mockImplementation(async () => {
+        order.push('setCellValuesParsed');
+      }),
       setDateValue: jest.fn().mockImplementation(async () => {
         order.push('setDateValue');
       }),
@@ -147,16 +150,16 @@ describe('CellOps filter reapply materialization', () => {
     expect(ctx.computeBridge.getAllTablesInSheet).toHaveBeenCalledTimes(1);
     expect(ctx.computeBridge.getTableAtCell).not.toHaveBeenCalled();
     expect(ctx.computeBridge.renameTableColumn).toHaveBeenCalledWith('Sales', 1, 'Area', options);
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.setCellValuesParsed).toHaveBeenCalledWith(
       SHEET_ID,
-      [{ row: 1, col: 0, input: { kind: 'parse', text: 'West' } }],
+      [[1, 0, 'West']],
       options,
     );
     expect(ctx.computeBridge.getMutationHandler).toHaveBeenCalledTimes(1);
     expect(ctx.order).toEqual([
       'await:allSheets',
       'renameTableColumn',
-      'setCellsByPosition',
+      'setCellValuesParsed',
       'getActiveFilters',
       'applyFilter',
     ]);
@@ -189,9 +192,9 @@ describe('CellOps filter reapply materialization', () => {
     );
 
     expect(result).toEqual({ cellsWritten: 2, errors: null });
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+    expect(ctx.computeBridge.setCellValuesParsed).toHaveBeenCalledWith(
       SHEET_ID,
-      [{ row: 1, col: 0, input: { kind: 'parse', text: 'West' } }],
+      [[1, 0, 'West']],
       options,
     );
     expect(ctx.computeBridge.setDateValue).toHaveBeenCalledWith(
@@ -205,7 +208,7 @@ describe('CellOps filter reapply materialization', () => {
     );
     expect(ctx.order).toEqual([
       'await:allSheets',
-      'setCellsByPosition',
+      'setCellValuesParsed',
       'setDateValue',
       'getActiveFilters',
       'applyFilter',

@@ -245,6 +245,7 @@ export abstract class WorkbookImplFoundation {
     new Set<SnapshotRootFreshLifecycleMaterialization>();
   protected _dirty = false;
   protected _dirtyStatusSequence = 0;
+  private _dirtyRefreshQueued = false;
   protected readonly checkoutTransactions = createWorkbookCheckoutTransactionCoordinator({
     readContext: () => this.ctx,
     isDirty: () => this._dirty,
@@ -544,7 +545,7 @@ export abstract class WorkbookImplFoundation {
   private markDirty(): void {
     if (this._dirty) {
       this._dirtyStatusSequence += 1;
-      this.emitVersionDirtyStatusChanged(true, true);
+      this.queueVersionDirtyRefresh();
       return;
     }
     this.setDirtyState(true);
@@ -556,6 +557,16 @@ export abstract class WorkbookImplFoundation {
     this._dirty = next;
     this._dirtyStatusSequence += 1;
     this.emitVersionDirtyStatusChanged(next, previous);
+  }
+
+  private queueVersionDirtyRefresh(): void {
+    if (this._dirtyRefreshQueued) return;
+    this._dirtyRefreshQueued = true;
+    queueMicrotask(() => {
+      this._dirtyRefreshQueued = false;
+      if (!this._dirty) return;
+      this.emitVersionDirtyStatusChanged(true, true);
+    });
   }
 
   private emitVersionDirtyStatusChanged(

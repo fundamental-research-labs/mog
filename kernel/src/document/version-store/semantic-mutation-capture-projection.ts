@@ -25,6 +25,10 @@ import {
   mapDirectCellFormatChanges,
 } from './semantic-mutation-direct-format-capture';
 import {
+  COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
+  compactPlainCellValueReviewProjectionFromCellChanges,
+} from './semantic-review-projection';
+import {
   mapSheetCopyChanges,
   mapSheetCreateChanges,
   mapSheetFrozenPaneChanges,
@@ -45,6 +49,19 @@ export type {
 export { isDirectCellValueOperation } from './semantic-mutation-cell-write-projection';
 
 const MUTATION_SEGMENT_INLINE_CHANGE_ID_LIMIT = 1_000;
+const MUTATION_SEGMENT_INLINE_DIRECT_EDIT_LIMIT = 1_000;
+
+export function compactCellWriteReviewProjectionForMutation(
+  input: SemanticMutationCaptureProjectionInput,
+) {
+  if (!isDirectCellValueOperation(input.operation)) return null;
+  return compactPlainCellValueReviewProjectionFromCellChanges({
+    changedCells: input.result.recalc?.changedCells ?? [],
+    directEdits: input.directEdits,
+    directEditRanges: input.directEditRanges,
+    minimumChangeCount: COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
+  });
+}
 
 export function mapMutationResultToSemanticChanges(
   input: SemanticMutationCaptureProjectionInput,
@@ -101,27 +118,28 @@ export function mapMutationResultToSemanticChanges(
 
 export function mutationSegmentPayload(record: PendingSemanticMutation): unknown {
   const changeIds = record.changes.map((change) => change.structural.changeId);
+  const compactProjectionChangeCount = record.compactReviewProjection?.changeCount ?? 0;
+  const changeIdCount =
+    changeIds.length === 0 && compactProjectionChangeCount > 0
+      ? compactProjectionChangeCount
+      : changeIds.length;
+  const directEditProjection = mutationSegmentDirectEditProjection(record);
   return {
     schemaVersion: 1,
     segmentId: `mutation-${record.sequence}`,
     operation: record.operation,
     capturedAt: record.capturedAt,
-    ...(changeIds.length <= MUTATION_SEGMENT_INLINE_CHANGE_ID_LIMIT
+    ...(changeIdCount <= MUTATION_SEGMENT_INLINE_CHANGE_ID_LIMIT
       ? { changeIds }
       : {
           changeIds: [],
-          changeIdCount: changeIds.length,
+          changeIdCount,
           omittedChangeIds: {
             reason: 'large-change-set',
-            count: changeIds.length,
+            count: changeIdCount,
           },
         }),
-    directEdits: record.directEdits.map((edit) => ({
-      sheetId: edit.sheetId,
-      row: edit.row,
-      col: edit.col,
-      address: toA1(edit.row, edit.col),
-    })),
+    ...directEditProjection,
     ...(record.directEditRanges.length === 0
       ? {}
       : {
@@ -132,6 +150,51 @@ export function mutationSegmentPayload(record: PendingSemanticMutation): unknown
         }),
     ...(record.operationContext ? { operationContext: record.operationContext } : {}),
   };
+}
+
+function mutationSegmentDirectEditProjection(
+  record: PendingSemanticMutation,
+): Readonly<Record<string, unknown>> {
+  const directEditCount = record.directEdits.length;
+  if (directEditCount <= MUTATION_SEGMENT_INLINE_DIRECT_EDIT_LIMIT) {
+    return {
+      directEdits: record.directEdits.map((edit) => ({
+        sheetId: edit.sheetId,
+        row: edit.row,
+        col: edit.col,
+        address: toA1(edit.row, edit.col),
+      })),
+    };
+  }
+
+  const reason = directEditRangesCoverAll(record.directEdits, record.directEditRanges)
+    ? 'covered-by-direct-edit-ranges'
+    : 'large-change-set';
+  return {
+    directEdits: [],
+    directEditCount,
+    omittedDirectEdits: {
+      reason,
+      count: directEditCount,
+    },
+  };
+}
+
+function directEditRangesCoverAll(
+  directEdits: PendingSemanticMutation['directEdits'],
+  directEditRanges: PendingSemanticMutation['directEditRanges'],
+): boolean {
+  if (directEdits.length === 0 || directEditRanges.length === 0) return false;
+  return directEdits.every((edit) =>
+    directEditRanges.some(
+      (range) =>
+        range.sheetId === edit.sheetId &&
+        edit.row >= range.startRow &&
+        edit.row <= range.endRow &&
+        edit.col >= range.startCol &&
+        edit.col <= range.endCol,
+    ),
+  );
 }
 
 export function authorForRecords(

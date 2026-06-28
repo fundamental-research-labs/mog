@@ -36,13 +36,14 @@ import { isValidAddress } from '../../internal/utils';
 import { invalidateWorksheetValidationCache } from '../validation-cache';
 import { calendarPartsInTz } from './calendar-tz';
 import { type CellInput, toCellInput } from './cell-input';
-import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
+import {
+  isExternalFormulaWritePromise,
+  prepareExternalFormulaWrite,
+} from '../../../services/external-formulas';
 import { assertUnprotectedTableDefinition } from '../protected-table-operations';
 import { withDirectEditRange, type MutationAdmissionOptions } from '../../../bridges/compute';
-import {
-  compactRectangularCellWriteVersionMutationOptions,
-  ensureCellWriteVersionMutationOptions,
-} from '../../internal/cell-write-version-options';
+import { ensureCellWriteVersionMutationOptions } from '../../internal/cell-write-version-options';
+import { dispatchBulkCellEdits } from './cell-bulk-write-dispatch';
 
 /**
  * Get complete cell data including formula, format, etc.
@@ -554,13 +555,9 @@ export async function setCells(
   if (cells.length === 0) return { cellsWritten: 0, errors: null };
   const mutationOptions = cellMutationOptions(ctx, sheetId, 'worksheet.setCells', options);
 
-  // --- Resolve addresses in TS & normalise values ---
   const errors: Array<{ addr: string; error: string }> = [];
   const resolvedCells: ResolvedCellWrite[] = [];
-  // Use a Map keyed by "row,col" for last-write-wins dedup
   const deduped = new Map<string, { row: number; col: number; input: CellInput }>();
-  // Date values take a separate path (bridge.setDateValue) so they get a date
-  // serial + date format, not String(Date).
   const dateWrites = new Map<string, { row: number; col: number; date: Date }>();
 
   for (const c of cells) {
@@ -609,7 +606,8 @@ export async function setCells(
     if (value instanceof Date) {
       // Last-write-wins across both paths: a later date overwrites an earlier
       // string write at the same coord (and vice versa).
-      await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      if (isExternalFormulaWritePromise(prepared)) await prepared;
       deduped.delete(key);
       tableHeaderWrites.delete(key);
       dateWrites.set(key, { row, col, date: value });
@@ -617,7 +615,8 @@ export async function setCells(
     }
 
     // Normalise value the same way setCell does.
-    const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+    const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+    const preparedValue = isExternalFormulaWritePromise(prepared) ? await prepared : prepared;
     const input = toCellInput(preparedValue as CellValuePrimitive);
 
     // Last-write-wins: later entries overwrite earlier ones for the same position
@@ -651,13 +650,8 @@ export async function setCells(
         wroteHeader;
     }
 
-    // --- Use the mutation pipeline path for primitives ---
     if (edits.length > 0) {
-      await ctx.computeBridge.setCellsByPosition(
-        sheetId,
-        edits,
-        compactRectangularCellWriteVersionMutationOptions(mutationOptions, sheetId, edits),
-      );
+      await dispatchBulkCellEdits(ctx, sheetId, edits, mutationOptions);
     }
     // Date writes go through Rust's date path so the serial and default format
     // are derived in the session timezone, independent of browser/worker/host.

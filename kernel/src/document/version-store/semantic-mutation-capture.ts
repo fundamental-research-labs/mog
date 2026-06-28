@@ -24,16 +24,20 @@ import {
 } from './semantic-mutation-capture-lanes';
 import {
   authorForRecords,
+  compactCellWriteReviewProjectionForMutation,
   isDirectCellValueOperation,
   mapMutationResultToSemanticChanges,
   mutationSegmentPayload,
   type PendingSemanticMutation,
 } from './semantic-mutation-capture-projection';
 import {
+  buildCompactReviewProjectionOnlySemanticChangeSetPayload,
   buildReviewProjectionOnlySemanticChangeSetPayload,
   buildRustBackedSemanticChangeSetPayload,
   canUseReviewProjectionOnlyPayload,
 } from './semantic-mutation-rust-diff-capture';
+import { isIgnorableDirectCellFormatMutation } from './semantic-mutation-direct-format-capture';
+import { materializeCompactReviewChanges } from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 
 export interface VersionMutationCaptureRecordInput {
@@ -188,9 +192,13 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     const capturedAt = input.operationContext?.createdAt ?? this.now().toISOString();
     const directEdits = input.directEdits ? [...input.directEdits] : [];
     const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
-    const changes = mapMutationResultToSemanticChanges(input, sequence);
+    const compactReviewProjection =
+      lane === 'normalLocal' ? compactCellWriteReviewProjectionForMutation(input) : null;
+    const changes = compactReviewProjection
+      ? []
+      : mapMutationResultToSemanticChanges(input, sequence);
     if (changes.length === 0) {
-      if (shouldDeferEmptySemanticChangeSetToRustDiff(input, lane)) {
+      if (compactReviewProjection || shouldDeferEmptySemanticChangeSetToRustDiff(input, lane)) {
         this.pendingNormal.push({
           sequence,
           operation: input.operation,
@@ -199,9 +207,13 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
           directEdits,
           directEditRanges,
           changes,
+          ...(compactReviewProjection ? { compactReviewProjection } : {}),
         });
         this.nextNormalSequence++;
         this.bumpNormalCaptureRevision();
+        return;
+      }
+      if (shouldSkipEmptySemanticChangeSet(input, lane)) {
         return;
       }
       if (lane === 'normalLocal') {
@@ -221,6 +233,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       directEdits,
       directEditRanges,
       changes,
+      ...(compactReviewProjection ? { compactReviewProjection } : {}),
     };
 
     if (lane === 'normalLocal') {
@@ -253,15 +266,17 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (admissionFailure) return admissionFailure;
 
     const records = [...this.pendingNormal];
-    const changes = records.flatMap((record) => [...record.changes]);
-    const semanticChangeSetPayload = canUseReviewProjectionOnlyPayload(changes)
-      ? buildReviewProjectionOnlySemanticChangeSetPayload(changes)
-      : await buildRustBackedSemanticChangeSetPayload({
+    const compactProjectionOnlyRecord = compactProjectionOnlyNormalCommitRecord(records);
+    const semanticChangeSetPayload = compactProjectionOnlyRecord
+      ? buildCompactReviewProjectionOnlySemanticChangeSetPayload(
+          compactProjectionOnlyRecord.compactReviewProjection,
+        )
+      : await semanticChangeSetPayloadForRecords({
           commit: input,
+          records,
           semanticStateReader: this.semanticStateReader,
           beforeSemanticState: this.beforeNormalSemanticState,
           semanticStateCaptureFailure: this.semanticStateCaptureFailure,
-          reviewChanges: changes,
         });
     if (semanticChangeSetPayload.status !== 'success') return semanticChangeSetPayload;
     const semanticChangeSetRecord = await objectRecord(
@@ -400,6 +415,53 @@ function objectRecord(
   });
 }
 
+async function semanticChangeSetPayloadForRecords(input: {
+  readonly commit: Parameters<VersionNormalCommitCapture>[0];
+  readonly records: readonly PendingSemanticMutation[];
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly beforeSemanticState?: SemanticWorkbookStateEnvelope;
+  readonly semanticStateCaptureFailure?: string;
+}) {
+  const reviewChanges = input.records.flatMap((record) =>
+    record.compactReviewProjection
+      ? [...materializeCompactReviewChanges(record.compactReviewProjection)]
+      : [...record.changes],
+  );
+
+  return canUseReviewProjectionOnlyPayload(reviewChanges)
+    ? buildReviewProjectionOnlySemanticChangeSetPayload(reviewChanges)
+    : buildRustBackedSemanticChangeSetPayload({
+        commit: input.commit,
+        semanticStateReader: input.semanticStateReader,
+        beforeSemanticState: input.beforeSemanticState,
+        semanticStateCaptureFailure: input.semanticStateCaptureFailure,
+        reviewChanges,
+      });
+}
+
+function compactProjectionOnlyNormalCommitRecord(
+  records: readonly PendingSemanticMutation[],
+): (PendingSemanticMutation & {
+  readonly compactReviewProjection: NonNullable<PendingSemanticMutation['compactReviewProjection']>;
+}) | null {
+  let compactRecord:
+    | (PendingSemanticMutation & {
+        readonly compactReviewProjection: NonNullable<
+          PendingSemanticMutation['compactReviewProjection']
+        >;
+      })
+    | null = null;
+  for (const record of records) {
+    if (record.changes.length > 0) return null;
+    if (!record.compactReviewProjection) continue;
+    if (compactRecord) return null;
+    compactRecord = record as PendingSemanticMutation & {
+      readonly compactReviewProjection: NonNullable<PendingSemanticMutation['compactReviewProjection']>;
+    };
+  }
+  return compactRecord;
+}
+
 function shouldDeferEmptySemanticChangeSetToRustDiff(
   input: VersionMutationCaptureRecordInput,
   lane: ReturnType<typeof classifySemanticMutationCaptureLane>,
@@ -407,6 +469,14 @@ function shouldDeferEmptySemanticChangeSetToRustDiff(
   if (lane !== 'normalLocal') return false;
   if (!isDirectCellValueOperation(input.operation)) return false;
   return hasDirectEditEvidence(input);
+}
+
+function shouldSkipEmptySemanticChangeSet(
+  input: VersionMutationCaptureRecordInput,
+  lane: ReturnType<typeof classifySemanticMutationCaptureLane>,
+): boolean {
+  if (lane !== 'normalLocal') return false;
+  return isIgnorableDirectCellFormatMutation(input);
 }
 
 function shouldCapturePreMutationSemanticState(

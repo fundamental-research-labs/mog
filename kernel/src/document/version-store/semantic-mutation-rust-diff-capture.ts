@@ -1,10 +1,13 @@
 import type { VersionNormalCommitCaptureInput } from './commit-service';
 import type { VersionStoreFailure } from './provider';
 import { missingNormalSemanticChangeSetFailure } from './semantic-mutation-capture-diagnostics';
+import {
+  COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
+  compactPlainCellValueReviewChanges,
+  type CompactCellValueReviewProjection,
+} from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
-
-const REVIEW_PROJECTION_SEMANTIC_DIFF_BYPASS_MIN_CHANGE_COUNT = 10_000;
 
 export async function buildRustBackedSemanticChangeSetPayload(input: {
   readonly commit: VersionNormalCommitCaptureInput;
@@ -47,6 +50,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
         'Normal version commits require a semantic state change.',
       );
     }
+    const compactReviewProjection = compactPlainCellValueReviewChanges(input.reviewChanges);
     return {
       status: 'success',
       payload: {
@@ -63,7 +67,9 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
           afterDigest: afterSemanticState.stateDigest,
           changes: [],
         },
-        reviewChanges: input.reviewChanges,
+        ...(compactReviewProjection
+          ? { compactReviewProjection }
+          : { reviewChanges: input.reviewChanges }),
       },
     };
   }
@@ -105,6 +111,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
 export function buildReviewProjectionOnlySemanticChangeSetPayload(
   reviewChanges: readonly unknown[],
 ): { readonly status: 'success'; readonly payload: unknown } {
+  const compactReviewProjection = compactPlainCellValueReviewChanges(reviewChanges);
   return {
     status: 'success',
     payload: {
@@ -114,40 +121,35 @@ export function buildReviewProjectionOnlySemanticChangeSetPayload(
         reviewProjectionChangeCount: reviewChanges.length,
       },
       changes: [],
-      reviewChanges,
+      ...(compactReviewProjection
+        ? { compactReviewProjection }
+        : { reviewChanges }),
+    },
+  };
+}
+
+export function buildCompactReviewProjectionOnlySemanticChangeSetPayload(
+  compactReviewProjection: CompactCellValueReviewProjection,
+): { readonly status: 'success'; readonly payload: unknown } {
+  return {
+    status: 'success',
+    payload: {
+      schemaVersion: 1,
+      source: {
+        kind: 'semanticMutationProjection',
+        reviewProjectionChangeCount: compactReviewProjection.changeCount,
+      },
+      changes: [],
+      compactReviewProjection,
     },
   };
 }
 
 export function canUseReviewProjectionOnlyPayload(reviewChanges: readonly unknown[]): boolean {
   return (
-    reviewChanges.length >= REVIEW_PROJECTION_SEMANTIC_DIFF_BYPASS_MIN_CHANGE_COUNT &&
-    reviewChanges.every(isPlainCellValueReviewChange)
+    reviewChanges.length >= COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT &&
+    compactPlainCellValueReviewChanges(reviewChanges) !== null
   );
-}
-
-function isPlainCellValueReviewChange(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  const structural = value.structural;
-  if (!isRecord(structural)) return false;
-  if (structural.kind !== 'metadata' || structural.domain !== 'cell') return false;
-  if (!Array.isArray(structural.propertyPath)) return false;
-  if (structural.propertyPath.length !== 1 || structural.propertyPath[0] !== 'value') {
-    return false;
-  }
-  return isPlainCellValueEndpoint(value.before) && isPlainCellValueEndpoint(value.after);
-}
-
-function isPlainCellValueEndpoint(value: unknown): boolean {
-  if (!isRecord(value) || value.kind !== 'value') return false;
-  return isPlainCellReviewValue(value.value);
-}
-
-function isPlainCellReviewValue(value: unknown): boolean {
-  if (value === null) return true;
-  if (typeof value === 'string' || typeof value === 'boolean') return true;
-  if (typeof value === 'number') return Number.isFinite(value);
-  return isRecord(value) && value.kind === 'blank' && Object.keys(value).length === 1;
 }
 
 function sameDigest(left: unknown, right: unknown): boolean {

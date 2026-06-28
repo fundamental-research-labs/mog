@@ -42,6 +42,15 @@ function formulaTrackerKey(ctx: DocumentContext): object {
   return ctx.computeBridge as unknown as object;
 }
 
+export function isExternalFormulaWritePromise(value: unknown): value is Promise<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
+}
+
 export function trackExternalFormulaWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
@@ -74,13 +83,13 @@ export function getTrackedExternalFormulas(ctx: DocumentContext): readonly Exter
   return [...(formulasByContext.get(formulaTrackerKey(ctx))?.values() ?? [])];
 }
 
-export async function prepareExternalFormulaWrite(
+export function prepareExternalFormulaWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
   row: number,
   col: number,
   value: unknown,
-): Promise<unknown> {
+): unknown | Promise<unknown> {
   if (typeof value !== 'string' || !value.startsWith('=')) {
     trackExternalFormulaWrite(ctx, sheetId, row, col, value);
     return value;
@@ -92,6 +101,17 @@ export async function prepareExternalFormulaWrite(
     return value;
   }
 
+  return prepareExternalFormulaWriteAsync(ctx, sheetId, row, col, value, refs);
+}
+
+async function prepareExternalFormulaWriteAsync(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: string,
+  refs: readonly ParsedExternalRef[],
+): Promise<unknown> {
   await assertExternalFormulaWriteAllowed(ctx, value, refs);
   trackExternalFormulaWrite(ctx, sheetId, row, col, value);
   return materializeFormula(ctx, value);

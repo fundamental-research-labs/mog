@@ -7,6 +7,26 @@ import {
 } from './version-commit-dirty-tracking-test-utils';
 
 export function registerAsyncCommitDirtyTrackingScenarios(): void {
+  it('coalesces dirty refresh events while already dirty', async () => {
+    const eventBus = createMockEventBus();
+    createWorkbook({ eventBus });
+
+    eventBus.emit({ type: 'test:dirty-initial' });
+    eventBus.emit({ type: 'test:dirty-followup-1' });
+    eventBus.emit({ type: 'test:dirty-followup-2' });
+
+    await Promise.resolve();
+
+    const dirtyEvents = eventBus.emit.mock.calls
+      .map(([event]) => event as { type?: string; statusRevision?: number })
+      .filter((event) => event.type === 'workbook:version-dirty-status-changed');
+
+    expect(dirtyEvents).toEqual([
+      expect.objectContaining({ statusRevision: 1 }),
+      expect.objectContaining({ statusRevision: 3 }),
+    ]);
+  });
+
   it('ignores non-mutating workbook events while clearing committed dirty state', async () => {
     const eventBus = createMockEventBus();
     let resolveCommit!: (value: unknown) => void;

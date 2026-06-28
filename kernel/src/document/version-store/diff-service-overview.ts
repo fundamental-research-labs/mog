@@ -37,6 +37,7 @@ import {
   publicPageTokenFor,
 } from './diff-service-pagination';
 import { objectDigestFor } from './merge-apply-intent-store';
+import { semanticReviewChangesFromPayload } from './semantic-review-projection';
 
 const DIFF_PROJECTION_VERSION = 1;
 const DEFAULT_GROUP_LIMIT = 50;
@@ -634,11 +635,7 @@ function projectSemanticChange(value: unknown, sourceIndex: number): SemanticCha
 }
 
 function semanticChanges(payload: unknown): readonly unknown[] | null {
-  if (!isRecord(payload) || payload.schemaVersion !== 1) return null;
-  if (Array.isArray(payload.reviewChanges) && payload.reviewChanges.length > 0) {
-    return payload.reviewChanges;
-  }
-  return Array.isArray(payload.changes) ? payload.changes : null;
+  return semanticReviewChangesFromPayload(payload);
 }
 
 function changeMatchesFilters(change: SemanticChange, filters: VersionDiffFilters | undefined) {

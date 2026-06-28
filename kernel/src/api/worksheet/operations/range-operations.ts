@@ -21,7 +21,10 @@ import { KernelError } from '../../../errors';
 import { normalizeRange, rangeToA1, toA1 } from '../../internal/utils';
 
 import { classifyRangeValueType, normalizeCellValue } from '../../internal/value-conversions';
-import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
+import {
+  isExternalFormulaWritePromise,
+  prepareExternalFormulaWrite,
+} from '../../../services/external-formulas';
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
@@ -332,12 +335,14 @@ export async function setRange(
       const col = startCol + c;
       const value = values[r][c];
       if (value instanceof Date) {
-        await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+        const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+        if (isExternalFormulaWritePromise(prepared)) await prepared;
         dateWrites.push({ row, col, date: value });
         continue;
       }
 
-      const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      const preparedValue = isExternalFormulaWritePromise(prepared) ? await prepared : prepared;
       // Route every SDK value through the shared helper so the
       // Literal/Parse/Clear distinction is preserved structurally — no
       // in-band \x00 sentinels.

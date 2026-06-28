@@ -125,6 +125,39 @@ describe('semantic mutation capture dirty state', () => {
     });
   });
 
+  it('captures parsed bulk cell writes with edit evidence', async () => {
+    const { capture, readCurrentSemanticState } = createCaptureWithReader();
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.setCells:parsed',
+      domainIds: ['cells.values'],
+    });
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 },
+    ];
+
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_set_cell_values_parsed',
+      operationContext,
+      directEditRanges,
+    });
+
+    expect(readCurrentSemanticState).toHaveBeenCalledTimes(1);
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_cell_values_parsed',
+      operationContext,
+      directEditRanges,
+      result: mutationResult(),
+    });
+
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: true,
+      hasUncapturedNormalMutations: false,
+    });
+  });
+
   it('reads a working-tree basis without draining pending normal capture', async () => {
     const { capture } = createCaptureWithReader();
     const operationContext = normalLocalOperationContext({
@@ -261,6 +294,7 @@ describe('semantic mutation capture dirty state', () => {
         operationId: 'worksheet.paste:large-plain-values',
         domainIds: ['cells.values'],
       }),
+      directEdits: cellDirectEdits(100, 100),
       directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
       result: mutationResult({ recalc: { ...mutationResult().recalc, changedCells: cellChanges(100, 100) } }),
     });
@@ -274,22 +308,22 @@ describe('semantic mutation capture dirty state', () => {
         reviewProjectionChangeCount: 10_000,
       },
       changes: [],
-      reviewChanges: expect.arrayContaining([
-        expect.objectContaining({
-          structural: expect.objectContaining({
-            changeId: 'mutation-1:cell:0',
-            domain: 'cell',
-            entityId: 'sheet-1!A1',
-            propertyPath: ['value'],
-          }),
-          after: { kind: 'value', value: 1 },
-          historical: { cell: { sheetId: 'sheet-1', row: 0, column: 0 } },
-        }),
-      ]),
+      compactReviewProjection: {
+        schemaVersion: 1,
+        kind: 'rectangularCellValueProjection',
+        sheetId: 'sheet-1',
+        rowStart: 0,
+        rowEnd: 99,
+        columnStart: 0,
+        columnEnd: 99,
+        changeCount: 10_000,
+        before: { kind: 'constant', value: { kind: 'blank' } },
+        after: { kind: 'constant', value: 1 },
+      },
     });
     expect(
       (captured.input.semanticChangeSetRecord.preimage.payload as any).reviewChanges,
-    ).toHaveLength(10_000);
+    ).toBeUndefined();
     expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
       segmentId: 'mutation-1',
       operation: 'compute_batch_set_cells_by_position',
@@ -297,6 +331,8 @@ describe('semantic mutation capture dirty state', () => {
       changeIdCount: 10_000,
       omittedChangeIds: { reason: 'large-change-set', count: 10_000 },
       directEdits: [],
+      directEditCount: 10_000,
+      omittedDirectEdits: { reason: 'covered-by-direct-edit-ranges', count: 10_000 },
       directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
     });
   });
@@ -325,6 +361,16 @@ function cellChanges(rows: number, columns: number): MutationResult['recalc']['c
         oldValue: undefined,
         value: 1,
       } as MutationResult['recalc']['changedCells'][number]);
+    }
+  }
+  return out;
+}
+
+function cellDirectEdits(rows: number, columns: number): Array<{ sheetId: string; row: number; col: number }> {
+  const out: Array<{ sheetId: string; row: number; col: number }> = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      out.push({ sheetId: 'sheet-1', row, col });
     }
   }
   return out;

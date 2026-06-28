@@ -6,6 +6,7 @@ import {
   type VersionObjectRecord,
 } from './object-store';
 import {
+  decodeWorkbookSnapshotRootRecord,
   decodeYrsFullStateSnapshotRootPayload,
   validateWorkbookSnapshotRootRecord,
   validateYrsFullStateSnapshotRootPayload,
@@ -164,7 +165,7 @@ function decodeSnapshotRoot(snapshotRoot: unknown): DecodedSnapshotRoot {
   if (isVersionObjectRecordCandidate(snapshotRoot)) {
     const record = validateWorkbookSnapshotRootRecord(snapshotRoot as VersionObjectRecord<unknown>);
     const namespace = normalizeVersionGraphNamespace(record.namespace, 'record.namespace');
-    const bytes = decodeYrsFullStateSnapshotRootPayload(record.preimage.payload);
+    const bytes = decodeWorkbookSnapshotRootRecord(record);
     return Object.freeze({
       source: 'record',
       bytes,

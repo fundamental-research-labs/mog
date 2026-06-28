@@ -12,6 +12,7 @@ import type { VersionSemanticChangeRecord } from './semantic-mutation-capture-pr
 export function isDirectCellValueOperation(operation: string): boolean {
   return (
     operation === 'compute_batch_set_cells_by_position' ||
+    operation === 'compute_set_cell_values_parsed' ||
     operation === 'compute_set_date_value' ||
     operation === 'compute_set_time_value' ||
     operation === 'compute_clear_range_by_position' ||

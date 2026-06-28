@@ -7,6 +7,40 @@ import {
 } from './semantic-mutation-capture-formats-helpers';
 
 export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): void {
+  it('treats default General direct format writes as semantic no-ops', () => {
+    const capture = createFormatSemanticMutationCapture();
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_format_for_ranges',
+      operationContext: operationContext(),
+      result: mutationResult({
+        propertyChanges: [
+          {
+            sheetId: 'sheet-1',
+            cellId: 'cell-a1',
+            position: { row: 0, col: 0 },
+            kind: 'Set',
+            format: { numberFormat: 'General' },
+          },
+          {
+            sheetId: 'sheet-1',
+            cellId: 'cell-b1',
+            position: { row: 0, col: 1 },
+            kind: 'Set',
+            format: {},
+          },
+        ],
+      }),
+    });
+
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 0,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: false,
+      hasUncapturedNormalMutations: false,
+    });
+  });
+
   it('captures a single-cell direct format property change as cells.formats.direct', async () => {
     const capture = createFormatSemanticMutationCapture();
 

@@ -131,8 +131,18 @@ describe('Rust-backed semantic mutation capture', () => {
         afterDigest: AFTER_DIGEST,
         changes: [],
       },
-      reviewChanges,
+      compactReviewProjection: {
+        schemaVersion: 1,
+        kind: 'rectangularCellValueProjection',
+        sheetId: 'sheet-1',
+        rowStart: 0,
+        rowEnd: 99,
+        columnStart: 0,
+        columnEnd: 99,
+        changeCount: LARGE_REVIEW_PROJECTION_CHANGE_COUNT,
+      },
     });
+    expect(result.payload).not.toHaveProperty('reviewChanges');
   });
 
   it('keeps Rust semantic diff for large formula-shaped cell value change sets', async () => {

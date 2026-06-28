@@ -32,13 +32,13 @@ export function VersionHistoryDiffPreview({
   if (!diffPreview) {
     return (
       <section
-        className="flex min-h-[172px] flex-col gap-3 rounded-sm border border-ss-border bg-ss-surface-secondary p-3"
+        className="flex min-h-[132px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
         aria-label="Diff viewer"
         data-testid="version-history-diff-viewer"
         data-state={diffEnabled ? 'idle' : 'unavailable'}
       >
         <DiffViewerHeader stateLabel={diffEnabled ? 'No diff' : 'Unavailable'} />
-        <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-ss-border bg-ss-surface px-3 py-6 text-body-sm text-ss-text-secondary">
+        <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-ss-border bg-ss-surface px-3 py-4 text-[11px] text-ss-text-secondary">
           {diffEnabled ? 'No diff loaded' : 'Diff unavailable'}
         </div>
         {!diffEnabled && diffDisabledReason ? (
@@ -57,13 +57,13 @@ export function VersionHistoryDiffPreview({
   const count = diffPreview.page.items.length;
   const state = versionDiffPreviewState(diffPreview.page);
   const summaryId = 'version-history-parent-diff-summary';
-  const summary = `Diff Viewer Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
+  const summary = `Diff base ${shortCommitId(diffPreview.base)} target ${shortCommitId(
     diffPreview.target,
   )} State ${state.label}. Change count ${count}`;
 
   return (
     <section
-      className="flex min-h-[220px] flex-col gap-3 rounded-sm border border-ss-border bg-ss-surface-secondary p-3"
+      className="flex min-h-[160px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
       aria-label="Diff viewer"
       aria-describedby={summaryId}
       data-testid="version-history-diff-viewer"
@@ -71,9 +71,9 @@ export function VersionHistoryDiffPreview({
       data-state={state.kind}
     >
       <div data-testid="version-history-parent-diff" data-state={state.kind} className="contents">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <DiffViewerHeader stateLabel={state.label} />
-          <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[11px] font-medium text-ss-text-secondary">
+          <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary">
             {count} {count === 1 ? 'change' : 'changes'}
           </span>
         </div>
@@ -87,13 +87,10 @@ export function VersionHistoryDiffPreview({
         >
           {summary}
         </p>
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          <CommitPill label="Base" commitId={diffPreview.base} />
-          <CommitPill label="Target" commitId={diffPreview.target} />
-        </div>
+        <CommitRange base={diffPreview.base} target={diffPreview.target} />
         {state.kind === 'changes' ? (
           <ol
-            className="m-0 flex max-h-[360px] flex-col gap-2 overflow-y-auto p-0 list-none"
+            className="m-0 flex max-h-[300px] flex-col gap-1.5 overflow-y-auto p-0 list-none"
             data-testid="version-history-diff-change-list"
           >
             {diffPreview.page.items.map((entry, index) => (
@@ -102,7 +99,7 @@ export function VersionHistoryDiffPreview({
           </ol>
         ) : (
           <div
-            className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2.5 py-2 text-body-sm"
+            className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2.5 py-2 text-[11px]"
             data-testid="version-history-parent-diff-state"
           >
             <div className="font-medium text-ss-text">{state.title}</div>
@@ -125,40 +122,41 @@ export function VersionHistoryDiffPreview({
 
 function DiffViewerHeader({ stateLabel }: { readonly stateLabel: string }): React.JSX.Element {
   return (
-    <div className="flex min-w-0 items-center gap-2 text-body-sm font-semibold text-ss-text">
-      <GitCompare size={16} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
-      <span className="truncate">Diff Viewer</span>
-      <span className="shrink-0 text-[11px] font-medium uppercase text-ss-text-tertiary">
-        {stateLabel}
-      </span>
+    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-ss-text">
+      <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">{stateLabel}</span>
     </div>
   );
 }
 
-function CommitPill({
-  label,
-  commitId,
+function CommitRange({
+  base,
+  target,
 }: {
-  readonly label: string;
-  readonly commitId: WorkbookCommitId;
+  readonly base: WorkbookCommitId;
+  readonly target: WorkbookCommitId;
 }): React.JSX.Element {
   return (
-    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5">
-      <div className="text-[10px] font-medium uppercase text-ss-text-tertiary">{label}</div>
-      <div className="truncate font-mono text-[11px] text-ss-text">{shortCommitId(commitId)}</div>
+    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-0.5 text-[10px] text-ss-text-secondary">
+      <span className="sr-only">
+        Base {shortCommitId(base)} target {shortCommitId(target)}
+      </span>
+      <div className="truncate font-mono" aria-hidden="true">
+        {shortCommitId(base)}...{shortCommitId(target)}
+      </div>
     </div>
   );
 }
 
 function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.JSX.Element {
   return (
-    <li className="rounded-sm border border-ss-border bg-ss-surface px-2.5 py-2">
-      <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-body-sm font-medium text-ss-text">
+    <li className="overflow-hidden rounded-sm border border-ss-border bg-ss-surface">
+      <div className="flex min-w-0 items-center justify-between gap-2 border-b border-ss-border-light bg-ss-surface-secondary px-2 py-1">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <div className="min-w-0 shrink-0 truncate text-[11px] font-medium text-ss-text">
             {diffEntryTitle(entry)}
           </div>
-          <div className="mt-0.5 truncate font-mono text-[11px] text-ss-text-secondary">
+          <div className="min-w-0 truncate font-mono text-[10px] text-ss-text-secondary">
             {versionDiffEntryLabel(entry)}
           </div>
         </div>
@@ -168,27 +166,46 @@ function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.J
           </span>
         ) : null}
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <DiffValueCell label="Before" value={entry.before} />
-        <DiffValueCell label="After" value={entry.after} />
+      <div className="font-mono text-[10px] leading-4">
+        <DiffLine label="Before" marker="-" tone="removed" value={entry.before} />
+        <DiffLine label="After" marker="+" tone="added" value={entry.after} />
       </div>
     </li>
   );
 }
 
-function DiffValueCell({
+function DiffLine({
   label,
+  marker,
+  tone,
   value,
 }: {
   readonly label: string;
+  readonly marker: '-' | '+';
+  readonly tone: 'removed' | 'added';
   readonly value: VersionDiffValue;
 }): React.JSX.Element {
+  const formattedValue = formatDiffValue(value);
+  const toneClass =
+    tone === 'removed'
+      ? 'border-l-ss-error bg-ss-error-bg text-ss-error-text'
+      : 'border-l-ss-success bg-ss-success-bg text-ss-success-text';
+
   return (
-    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 py-1.5">
-      <div className="text-[10px] font-medium uppercase text-ss-text-tertiary">{label}</div>
-      <div className="break-words font-mono text-[11px] leading-snug text-ss-text">
-        {formatDiffValue(value)}
-      </div>
+    <div
+      className={`grid grid-cols-[1.25rem_minmax(0,1fr)] border-l-2 ${toneClass}`}
+      aria-label={`${label}: ${formattedValue}`}
+    >
+      <span
+        className="select-none border-r border-current/15 text-center font-semibold"
+        aria-hidden="true"
+      >
+        {marker}
+      </span>
+      <span className="min-w-0 break-words px-1.5 py-0.5">
+        <span className="sr-only">{label}: </span>
+        {formattedValue}
+      </span>
     </div>
   );
 }

@@ -185,7 +185,7 @@ export function CurrentBranchMenu({
                   <button
                     type="button"
                     data-testid="version-history-create-branch-button"
-                    onClick={onCreateBranch}
+                    onClick={() => onCreateBranch()}
                     disabled={!branchEnabled}
                     aria-describedby={!branchEnabled && branchStatus ? branchReasonId : undefined}
                     title={!branchEnabled ? branchStatus : undefined}

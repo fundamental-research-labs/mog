@@ -226,9 +226,22 @@ describe('VersionHistoryPanelContent', () => {
     expect(parentDiffButton).toHaveAccessibleName(
       `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
     );
-    expect(screen.getByTestId(parentDiffButtonTestId(PARENT_COMMIT_ID))).toBeDisabled();
+    const rootDiffButton = screen.getByTestId(parentDiffButtonTestId(PARENT_COMMIT_ID));
+    expect(rootDiffButton).toBeDisabled();
+    expect(rootDiffButton).not.toHaveAccessibleDescription(
+      'Root commits do not have a parent diff.',
+    );
+    expect(screen.queryByText('Root commits do not have a parent diff.')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId(commitMenuButtonTestId(PARENT_COMMIT_ID)));
+    const rootContextDiffButton = screen.getByTestId(
+      `version-history-context-diff-${safeDomId(PARENT_COMMIT_ID)}`,
+    );
+    expect(rootContextDiffButton).toBeDisabled();
+    expect(rootContextDiffButton).toHaveAccessibleDescription(
+      'Root commits do not have a parent diff.',
+    );
     expectReasonById(
-      `version-diff-disabled-${safeDomId(PARENT_COMMIT_ID)}`,
+      `version-context-diff-disabled-${safeDomId(PARENT_COMMIT_ID)}`,
       'Root commits do not have a parent diff.',
     );
     expect(screen.queryByRole('region', { name: 'Version availability' })).not.toBeInTheDocument();
@@ -475,7 +488,19 @@ describe('VersionHistoryPanelContent', () => {
       'main is stale because the branch head moved. Checkout is blocked until the active checkout session is refreshed.',
     );
     expect(rootDiffButton).toBeDisabled();
-    expect(rootDiffButton).toHaveAccessibleDescription('Root commits do not have a parent diff.');
+    expect(rootDiffButton).not.toHaveAccessibleDescription(
+      'Root commits do not have a parent diff.',
+    );
+    expect(screen.queryByText('Root commits do not have a parent diff.')).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId(commitMenuButtonTestId(PARENT_COMMIT_ID)));
+    const rootContextDiffButton = screen.getByTestId(
+      `version-history-context-diff-${safeDomId(PARENT_COMMIT_ID)}`,
+    );
+    expect(rootContextDiffButton).toBeDisabled();
+    expect(rootContextDiffButton).toHaveAccessibleDescription(
+      'Root commits do not have a parent diff.',
+    );
     expect(screen.getByText('Root commits do not have a parent diff.')).toBeVisible();
   });
 

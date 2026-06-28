@@ -52,8 +52,6 @@ describe('createComputeBridgeSemanticStateReader', () => {
       record: {
         sheetId: 'sheet-2',
         name: 'Sheet 2',
-        rowCount: 1000,
-        columnCount: 26,
       },
     });
     expect(result.changes[0]?.beforeRecord).toBeUndefined();

@@ -145,11 +145,7 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
         kind: 'value',
         value: {
           kind: 'object',
-          fields: [
-            { key: 'name', value: 'Sheet 2' },
-            { key: 'rowCount', value: 1000 },
-            { key: 'columnCount', value: 26 },
-          ],
+          fields: [{ key: 'name', value: 'Sheet 2' }],
         },
       },
       display: { entityLabel: { kind: 'value', value: 'Sheet 2' } },

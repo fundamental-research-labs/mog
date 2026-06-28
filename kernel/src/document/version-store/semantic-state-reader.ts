@@ -99,8 +99,6 @@ function semanticObjectRecordValue(state: SemanticWorkbookState, change: Semanti
       ? {
           sheetId: sheet.sheetId,
           name: sheet.name,
-          rowCount: sheet.rowCount,
-          columnCount: sheet.columnCount,
         }
       : undefined;
   }

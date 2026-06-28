@@ -249,16 +249,6 @@ function mapRustSheetChange(value: Readonly<Record<string, unknown>>): VersionDi
       entityLabel: projection.afterName,
     });
   }
-  if (projection.kind === 'updated') {
-    return rustSheetStructuralEntry({
-      changeId: value.changeId as string,
-      propertyPath: ['sheet'],
-      sheetId: projection.after.sheetId,
-      before: rustSheetDiffValue(projection.before),
-      after: rustSheetDiffValue(projection.after),
-      entityLabel: projection.after.name,
-    });
-  }
 
   return null;
 }
@@ -296,15 +286,12 @@ type RustSheetProjection =
       readonly beforeName: string;
       readonly afterName: string;
     }
-  | { readonly kind: 'updated'; readonly before: RustSheetRecord; readonly after: RustSheetRecord }
   | { readonly kind: 'unchanged' }
   | { readonly kind: 'unsupported' };
 
 type RustSheetRecord = {
   readonly sheetId: string;
   readonly name: string;
-  readonly rowCount?: number;
-  readonly columnCount?: number;
 };
 
 function rustSheetProjection(value: Readonly<Record<string, unknown>>): RustSheetProjection {
@@ -321,11 +308,7 @@ function rustSheetProjection(value: Readonly<Record<string, unknown>>): RustShee
   if (!before && after) return { kind: 'added', sheet: after };
   if (before && !after) return { kind: 'removed', sheet: before };
   if (!before || !after) return { kind: 'unsupported' };
-  if (
-    before.sheetId === after.sheetId &&
-    before.name !== after.name &&
-    sameRustSheetShape(before, after)
-  ) {
+  if (before.sheetId === after.sheetId && before.name !== after.name) {
     return {
       kind: 'renamed',
       sheetId: after.sheetId,
@@ -333,9 +316,7 @@ function rustSheetProjection(value: Readonly<Record<string, unknown>>): RustShee
       afterName: after.name,
     };
   }
-  return sameRustSheetRecord(before, after)
-    ? { kind: 'unchanged' }
-    : { kind: 'updated', before, after };
+  return sameRustSheetRecord(before, after) ? { kind: 'unchanged' } : { kind: 'unsupported' };
 }
 
 function isRustSheetChangeRecord(
@@ -360,10 +341,6 @@ function rustSheetRecord(value: unknown): RustSheetRecord | null {
   return {
     sheetId,
     name: evidence.record.name,
-    ...(isSafeCoordinate(evidence.record.rowCount) ? { rowCount: evidence.record.rowCount } : {}),
-    ...(isSafeCoordinate(evidence.record.columnCount)
-      ? { columnCount: evidence.record.columnCount }
-      : {}),
   };
 }
 
@@ -371,23 +348,11 @@ function rustSheetDiffValue(sheet: RustSheetRecord): VersionDiffValue {
   const fields: { key: string; value: VersionSemanticValue }[] = [
     { key: 'name', value: sheet.name },
   ];
-  if (sheet.rowCount !== undefined) fields.push({ key: 'rowCount', value: sheet.rowCount });
-  if (sheet.columnCount !== undefined) {
-    fields.push({ key: 'columnCount', value: sheet.columnCount });
-  }
   return { kind: 'value', value: { kind: 'object', fields } };
 }
 
 function sameRustSheetRecord(left: RustSheetRecord, right: RustSheetRecord): boolean {
-  return (
-    left.sheetId === right.sheetId &&
-    left.name === right.name &&
-    sameRustSheetShape(left, right)
-  );
-}
-
-function sameRustSheetShape(left: RustSheetRecord, right: RustSheetRecord): boolean {
-  return left.rowCount === right.rowCount && left.columnCount === right.columnCount;
+  return left.sheetId === right.sheetId && left.name === right.name;
 }
 
 function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {

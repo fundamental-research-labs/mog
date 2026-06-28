@@ -189,6 +189,7 @@ export function registerDiffServiceProjectionRustScenarios(): void {
 
     expect(result.status).toBe('success');
     if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(3);
     expect(result.items).toEqual([
       expect.objectContaining({
         structural: {
@@ -226,19 +227,8 @@ export function registerDiffServiceProjectionRustScenarios(): void {
         after: { kind: 'value', value: null },
         display: { entityLabel: { kind: 'value', value: 'Archive' } },
       }),
-      expect.objectContaining({
-        structural: {
-          kind: 'metadata',
-          changeId: 'rust-sheet-shape',
-          domain: 'sheet',
-          entityId: 'sheet#4',
-          propertyPath: ['sheet'],
-        },
-        before: rustSheetDiffValue('Data', { rowCount: 1000 }),
-        after: rustSheetDiffValue('Data', { rowCount: 1200 }),
-        display: { entityLabel: { kind: 'value', value: 'Data' } },
-      }),
     ]);
+    expect(result.items.map((item) => item.structural.changeId)).not.toContain('rust-sheet-shape');
   });
 }
 
@@ -431,19 +421,12 @@ function rawSheetRecord(
   };
 }
 
-function rustSheetDiffValue(
-  name: string,
-  input: { readonly rowCount?: number; readonly columnCount?: number } = {},
-) {
+function rustSheetDiffValue(name: string) {
   return {
     kind: 'value',
     value: {
       kind: 'object',
-      fields: [
-        { key: 'name', value: name },
-        { key: 'rowCount', value: input.rowCount ?? 1000 },
-        { key: 'columnCount', value: input.columnCount ?? 26 },
-      ],
+      fields: [{ key: 'name', value: name }],
     },
   };
 }

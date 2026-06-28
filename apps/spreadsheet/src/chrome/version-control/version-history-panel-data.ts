@@ -37,19 +37,27 @@ export type VersionHistoryWorkbook = {
     WorkbookVersion,
     | 'getSurfaceStatus'
     | 'getStatus'
-    | 'getHead'
-    | 'readRef'
-    | 'listCommits'
-    | 'commit'
-    | 'listRefs'
-    | 'createBranch'
-    | 'checkout'
-    | 'promotePendingRemote'
-    | 'revert'
-    | 'diff'
-    | 'listReviews'
-    | 'listProposals'
-  >;
+    | 'commitCurrent'
+    | 'createBranchFromCurrent'
+    | 'checkoutBranch'
+    | 'checkoutCommit'
+  > & {
+    readonly graph: Pick<
+      WorkbookVersion['graph'],
+      | 'getHead'
+      | 'readRef'
+      | 'listCommits'
+      | 'listRefs'
+      | 'createBranch'
+      | 'promotePendingRemote'
+      | 'revert'
+      | 'diff'
+    >;
+    readonly reviews: {
+      readonly advanced: Pick<WorkbookVersion['reviews']['advanced'], 'listReviews'>;
+    };
+    readonly proposals: Pick<WorkbookVersion['proposals'], 'list'>;
+  };
   readonly on?: (
     event: VersionHistoryWorkbookRefreshEvent,
     handler: (event: unknown) => void,
@@ -146,21 +154,24 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
 
     const [rollout, head, commits, refs, reviews, proposals] = await Promise.all([
       readValue('VERSION_UI_STATUS_FAILED', () => workbook.version.getStatus()),
-      readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.getHead()),
+      readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.graph.getHead()),
       readVersionResult('VERSION_UI_COMMITS_FAILED', () =>
-        workbook.version.listCommits({ pageSize: COMMIT_PAGE_SIZE, includeDiagnostics: true }),
+        workbook.version.graph.listCommits({
+          pageSize: COMMIT_PAGE_SIZE,
+          includeDiagnostics: true,
+        }),
       ),
       readVersionResult('VERSION_UI_REFS_FAILED', () =>
-        workbook.version.listRefs({ includeDiagnostics: true }),
+        workbook.version.graph.listRefs({ includeDiagnostics: true }),
       ),
       readReviews
         ? readVersionResult('VERSION_UI_REVIEWS_FAILED', () =>
-            workbook.version.listReviews({ limit: REVIEW_PAGE_SIZE }),
+            workbook.version.reviews.advanced.listReviews({ limit: REVIEW_PAGE_SIZE }),
           )
         : Promise.resolve(emptyPagedRead<WorkbookVersionReviewRecordSummary>(REVIEW_PAGE_SIZE)),
       readProposals
         ? readVersionResult('VERSION_UI_PROPOSALS_FAILED', () =>
-            workbook.version.listProposals({ limit: PROPOSAL_PAGE_SIZE }),
+            workbook.version.proposals.list({ limit: PROPOSAL_PAGE_SIZE }),
           )
         : Promise.resolve(emptyPagedRead<AgentProposalSummary>(PROPOSAL_PAGE_SIZE)),
     ]);

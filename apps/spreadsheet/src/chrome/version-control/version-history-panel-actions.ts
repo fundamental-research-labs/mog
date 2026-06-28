@@ -20,7 +20,11 @@ import {
   type VersionPanelActionKind,
   type VersionPanelActionRun,
 } from './version-history-panel-action-run';
-import { displayBranchName, validateVersionBranchCreationName } from './version-branch-name';
+import {
+  displayBranchName,
+  normalizeVersionBranchNameInput,
+  validateVersionBranchCreationName,
+} from './version-branch-name';
 import {
   commitDirtyRefreshFenceRequiresRefresh,
   commitDirtyRefreshFenceSnapshot,
@@ -195,20 +199,9 @@ export function useVersionHistoryPanelActions({
     const dirtyRefreshFenceData = data;
 
     const message = commitMessage.trim();
-    const expectedHead =
-      data.head?.id && data.head.refRevision
-        ? {
-            commitId: data.head.id,
-            revision: data.head.refRevision,
-          }
-        : undefined;
-    const options: NonNullable<Parameters<WorkbookVersion['commit']>[0]> = expectedHead
-      ? { message, expectedHead }
-      : { message };
-
     if (!setRunningAction(action, 'Committing changes')) return;
     const result = await readVersionResult('VERSION_UI_COMMIT_FAILED', () =>
-      workbook.version.commit(options),
+      workbook.version.commitCurrent({ message }),
     );
     if (!isActionCurrent(action)) return;
     if (!result.ok) {
@@ -250,16 +243,20 @@ export function useVersionHistoryPanelActions({
         return;
       }
 
-      const name = normalizedBranch.branch.refName as Parameters<
-        WorkbookVersion['createBranch']
-      >[0]['name'];
+      const name = normalizedBranch.branch.branchName as Parameters<
+        WorkbookVersion['createBranchFromCurrent']
+      >[0];
       if (!setRunningAction(action, 'Creating branch')) return;
       const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
-        workbook.version.createBranch({
-          name,
-          targetCommitId,
-          expectedAbsent: true,
-        }),
+        targetCommitIdOverride
+          ? workbook.version.graph.createBranch({
+              name: normalizedBranch.branch.refName as Parameters<
+                WorkbookVersion['graph']['createBranch']
+              >[0]['name'],
+              targetCommitId,
+              expectedAbsent: true,
+            })
+          : workbook.version.createBranchFromCurrent(name, { expectedAbsent: true }),
       );
       if (!isActionCurrent(action)) return;
       if (!result.ok) {
@@ -298,14 +295,10 @@ export function useVersionHistoryPanelActions({
       const dirtyRefreshFenceData = data;
 
       if (!setRunningAction(action, 'Checking out branch')) return;
+      const normalizedBranch = normalizeVersionBranchNameInput(ref.name);
+      const branchName = normalizedBranch.ok ? normalizedBranch.branch.branchName : ref.name;
       const result = await readVersionResult('VERSION_UI_CHECKOUT_FAILED', () =>
-        workbook.version.checkout(
-          {
-            kind: 'ref',
-            name: ref.name,
-          },
-          { includeDiagnostics: true },
-        ),
+        workbook.version.checkoutBranch(branchName, { includeDiagnostics: true }),
       );
       if (!isActionCurrent(action)) return;
       if (!result.ok) {
@@ -338,13 +331,7 @@ export function useVersionHistoryPanelActions({
 
       if (!setRunningAction(action, 'Checking out commit')) return;
       const result = await readVersionResult('VERSION_UI_CHECKOUT_FAILED', () =>
-        workbook.version.checkout(
-          {
-            kind: 'commit',
-            id: commitId,
-          },
-          { includeDiagnostics: true },
-        ),
+        workbook.version.checkoutCommit(commitId, { includeDiagnostics: true }),
       );
       if (!isActionCurrent(action)) return;
       if (!result.ok) {
@@ -375,7 +362,7 @@ export function useVersionHistoryPanelActions({
 
       setActionState({ status: 'running', label: 'Loading parent diff' });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.diff(parentId, commit.id, {
+        workbook.version.graph.diff(parentId, commit.id, {
           pageSize: 50,
           includeDiagnostics: true,
         }),
@@ -405,7 +392,7 @@ export function useVersionHistoryPanelActions({
       const label = target.recordKind === 'review' ? 'review' : 'proposal';
       setActionState({ status: 'running', label: `Loading ${label} diff` });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.diff(target.baseCommitId, target.targetCommitId, {
+        workbook.version.graph.diff(target.baseCommitId, target.targetCommitId, {
           pageSize: 50,
           includeDiagnostics: true,
         }),

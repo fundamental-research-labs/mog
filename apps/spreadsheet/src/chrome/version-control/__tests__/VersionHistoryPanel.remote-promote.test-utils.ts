@@ -30,7 +30,7 @@ type CreateRemotePromotionSurfaceStatusOptions = {
 type CreateRemotePromotionWorkbookOptions = {
   readonly surface?: VersionSurfaceStatus;
   readonly getSurfaceStatus?: VersionHistoryWorkbook['version']['getSurfaceStatus'];
-  readonly promotePendingRemote?: VersionHistoryWorkbook['version']['promotePendingRemote'];
+  readonly promotePendingRemote?: VersionHistoryWorkbook['version']['graph']['promotePendingRemote'];
 };
 
 export function createRemotePromotionSurfaceStatus({
@@ -57,14 +57,16 @@ export function createRemotePromotionWorkbook({
 }: CreateRemotePromotionWorkbookOptions = {}): VersionHistoryWorkbook {
   return createWorkbook({
     getSurfaceStatus: getSurfaceStatus ?? jest.fn(async () => surface),
-    promotePendingRemote:
-      promotePendingRemote ?? jest.fn(async () => successfulRemotePromotionResult()),
+    graph: {
+      promotePendingRemote:
+        promotePendingRemote ?? jest.fn(async () => successfulRemotePromotionResult()),
+    },
   });
 }
 
 export function successfulRemotePromotionResult(
   overrides: Partial<VersionPromotePendingRemoteResult> = {},
-): Awaited<ReturnType<VersionHistoryWorkbook['version']['promotePendingRemote']>> {
+): Awaited<ReturnType<VersionHistoryWorkbook['version']['graph']['promotePendingRemote']>> {
   return {
     ok: true,
     value: {

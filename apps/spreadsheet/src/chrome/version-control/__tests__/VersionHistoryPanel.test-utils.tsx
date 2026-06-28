@@ -55,12 +55,28 @@ export function renderVersionHistoryPanel({
   return { user, workbook, onClose, ...rendered };
 }
 
+type VersionHistoryVersion = VersionHistoryWorkbook['version'];
+
+type VersionHistoryWorkbookVersionOverrides = Partial<
+  Omit<VersionHistoryVersion, 'graph' | 'reviews' | 'proposals'>
+> & {
+  readonly graph?: Partial<VersionHistoryVersion['graph']>;
+  readonly reviews?: {
+    readonly advanced?: Partial<VersionHistoryVersion['reviews']['advanced']>;
+  };
+  readonly proposals?: Partial<VersionHistoryVersion['proposals']>;
+};
+
 export function createWorkbook(
-  overrides: Partial<VersionHistoryWorkbook['version']> = {},
+  overrides: VersionHistoryWorkbookVersionOverrides = {},
 ): VersionHistoryWorkbook {
-  const version = {
-    getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
-    getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
+  const {
+    graph: graphOverrides,
+    reviews: reviewsOverrides,
+    proposals: proposalsOverrides,
+    ...topLevelOverrides
+  } = overrides;
+  const graph = {
     getHead: jest.fn(async () => ({
       ok: true,
       value: {
@@ -69,26 +85,28 @@ export function createWorkbook(
         refRevision: REF_REVISION,
       },
     })),
-    readRef: jest.fn(async (name: Parameters<VersionHistoryWorkbook['version']['readRef']>[0]) => ({
-      ok: true,
-      value: {
-        status: 'success',
-        ref:
-          name === 'HEAD'
-            ? {
-                name: 'HEAD',
-                target: 'refs/heads/main',
-                revision: REF_REVISION,
-              }
-            : {
-                name,
-                commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
-                revision:
-                  name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
-              },
-        diagnostics: [],
-      },
-    })),
+    readRef: jest.fn(
+      async (name: Parameters<VersionHistoryVersion['graph']['readRef']>[0]) => ({
+        ok: true,
+        value: {
+          status: 'success',
+          ref:
+            name === 'HEAD'
+              ? {
+                  name: 'HEAD',
+                  target: 'refs/heads/main',
+                  revision: REF_REVISION,
+                }
+              : {
+                  name,
+                  commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
+                  revision:
+                    name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+                },
+          diagnostics: [],
+        },
+      }),
+    ),
     listCommits: jest.fn(async () => ({
       ok: true,
       value: {
@@ -129,32 +147,8 @@ export function createWorkbook(
         limit: 2,
       },
     })),
-    listReviews: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    listProposals: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    commit: jest.fn(async () => ({
-      ok: true,
-      value: {
-        id: HEAD_COMMIT_ID,
-        parents: [PARENT_COMMIT_ID],
-        createdAt: '2026-06-22T10:15:00.000Z',
-        author: { redacted: false, displayName: 'Reviewer' },
-        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
-      },
-    })),
     createBranch: jest.fn(
-      async (options: Parameters<VersionHistoryWorkbook['version']['createBranch']>[0]) => ({
+      async (options: Parameters<VersionHistoryVersion['graph']['createBranch']>[0]) => ({
         ok: true,
         value: {
           name: options.name,
@@ -173,41 +167,111 @@ export function createWorkbook(
         diagnostics: [],
       },
     })),
-    checkout: jest.fn(
-      async (target: Parameters<VersionHistoryWorkbook['version']['checkout']>[0]) => {
-        const commitId = target.kind === 'commit' ? target.id : PARENT_COMMIT_ID;
-        return {
-          ok: true,
-          value: {
-            status: 'success',
-            materialization: 'planned',
-            plan: {
-              strategy: 'fullSnapshot',
-              target:
-                target.kind === 'commit'
-                  ? {
-                      kind: 'commit',
-                      commitId,
-                    }
-                  : {
-                      kind: 'ref',
-                      refName: target.kind === 'ref' ? target.name : 'refs/heads/budget',
-                      commitId,
-                      refRevision: { kind: 'counter', value: '2' },
-                    },
-              commitId,
-              parentCommitIds: [],
-              requiredDependencies: [],
-              requiredDependencyCount: 0,
-            },
-            diagnostics: [],
-            mutationGuarantee: 'no-workbook-mutation',
-          },
-        };
+    revert: jest.fn(async () => ({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        status: 'planned',
+        target: {
+          kind: 'commit',
+          commitId: PARENT_COMMIT_ID,
+        },
+        diagnostics: [],
+        mutationGuarantee: 'no-write-attempted',
       },
-    ),
+    })),
     diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
-    ...overrides,
+    ...graphOverrides,
+  };
+  const reviews = {
+    advanced: {
+      listReviews: jest.fn(async () => ({
+        ok: true,
+        value: {
+          items: [],
+          limit: 5,
+        },
+      })),
+      ...reviewsOverrides?.advanced,
+    },
+  };
+  const proposals = {
+    list: jest.fn(async () => ({
+      ok: true,
+      value: {
+        items: [],
+        limit: 5,
+      },
+    })),
+    ...proposalsOverrides,
+  };
+  const version = {
+    getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
+    getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
+    commitCurrent: jest.fn(async () => ({
+      ok: true,
+      value: {
+        id: HEAD_COMMIT_ID,
+        parents: [PARENT_COMMIT_ID],
+        createdAt: '2026-06-22T10:15:00.000Z',
+        author: { redacted: false, displayName: 'Reviewer' },
+        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
+      },
+    })),
+    createBranchFromCurrent: jest.fn(async (name) => ({
+      ok: true,
+      value: {
+        name: `refs/heads/${name}`,
+        commitId: HEAD_COMMIT_ID,
+        revision: { kind: 'counter', value: '3' },
+      },
+    })),
+    checkoutBranch: jest.fn(async (name) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        plan: {
+          strategy: 'fullSnapshot',
+          target: {
+            kind: 'ref',
+            refName: name === 'budget' ? 'refs/heads/budget' : `refs/heads/${name}`,
+            commitId: PARENT_COMMIT_ID,
+            refRevision: { kind: 'counter', value: '2' },
+          },
+          commitId: PARENT_COMMIT_ID,
+          parentCommitIds: [],
+          requiredDependencies: [],
+          requiredDependencyCount: 0,
+        },
+        diagnostics: [],
+        mutationGuarantee: 'no-workbook-mutation',
+      },
+    })),
+    checkoutCommit: jest.fn(async (commitId) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        plan: {
+          strategy: 'fullSnapshot',
+          target: {
+            kind: 'commit',
+            commitId,
+          },
+          commitId,
+          parentCommitIds: [],
+          requiredDependencies: [],
+          requiredDependencyCount: 0,
+        },
+        diagnostics: [],
+        mutationGuarantee: 'no-workbook-mutation',
+      },
+    })),
+    graph,
+    reviews,
+    proposals,
+    ...topLevelOverrides,
   };
 
   return { version } as unknown as VersionHistoryWorkbook;

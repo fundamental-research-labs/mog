@@ -443,6 +443,23 @@ function workingTreeBlockingDiagnostics(
     );
   }
 
+  if (dirty.unsupportedDirtyDomains.length > 0) {
+    diagnostics.push(
+      diagnostic(
+        'VERSION_WORKING_TREE_DIFF_UNSUPPORTED_DIRTY_STATE',
+        'Working-tree diff is blocked by unsupported dirty workbook domains.',
+        {
+          recoverability: 'unsupported',
+          details: {
+            category: 'unsupportedDirtyDomain',
+            unsupportedDirtyDomainCount: dirty.unsupportedDirtyDomains.length,
+            firstUnsupportedDirtyDomain: dirty.unsupportedDirtyDomains[0] ?? null,
+          },
+        },
+      ),
+    );
+  }
+
   if (dirty.pendingProviderWrites) {
     diagnostics.push(
       diagnostic(

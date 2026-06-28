@@ -33,6 +33,7 @@ import {
 import type { FindInRangeOptions } from '../../../bridges/compute/compute-types.gen';
 import type { CellAddress, DocumentContext } from './shared';
 import { parseRefIdSimple } from './validation-helpers';
+import { ensureCellWriteVersionMutationOptions } from '../../internal/cell-write-version-options';
 
 // =============================================================================
 // Clear with Mode
@@ -97,31 +98,33 @@ export async function clearWithMode(
   const mode = validateClearApplyTo(applyTo);
 
   const n = normalizeRange(range);
-  const cellContentOptions = options
-    ? withDirectEditRange(options, sheetId, n.startRow, n.startCol, n.endRow, n.endCol)
-    : undefined;
+  const baseOptions = ensureCellWriteVersionMutationOptions(ctx, options, {
+    operationIdPrefix: `worksheet.clear.${mode}`,
+    sheetIds: [sheetId],
+    domainIds: clearModeDomainIds(mode),
+  });
+  const cellContentOptions = withDirectEditRange(
+    baseOptions,
+    sheetId,
+    n.startRow,
+    n.startCol,
+    n.endRow,
+    n.endCol,
+  );
   const promises: Promise<unknown>[] = [];
 
   if (mode === 'all') {
     // 'all' mode: full cell deletion (values + formulas + formats + hyperlinks).
     // clearRangeByPosition wipes cell properties (including format) along with values.
     promises.push(
-      cellContentOptions
-        ? ctx.computeBridge.clearRangeByPosition(
-            sheetId,
-            n.startRow,
-            n.startCol,
-            n.endRow,
-            n.endCol,
-            cellContentOptions,
-          )
-        : ctx.computeBridge.clearRangeByPosition(
-            sheetId,
-            n.startRow,
-            n.startCol,
-            n.endRow,
-            n.endCol,
-          ),
+      ctx.computeBridge.clearRangeByPosition(
+        sheetId,
+        n.startRow,
+        n.startCol,
+        n.endRow,
+        n.endCol,
+        cellContentOptions,
+      ),
     );
   } else if (mode === 'contents') {
     // 'contents' mode: clear values + formulas, PRESERVE formats and cell identity.
@@ -130,52 +133,38 @@ export async function clearWithMode(
     // etc.) survives the wipe. Do NOT use `clearRangeByPosition` here — it drops
     // properties unconditionally.
     promises.push(
-      cellContentOptions
-        ? ctx.computeBridge.clearRange(
-            sheetId,
-            n.startRow,
-            n.startCol,
-            n.endRow,
-            n.endCol,
-            cellContentOptions,
-          )
-        : ctx.computeBridge.clearRange(sheetId, n.startRow, n.startCol, n.endRow, n.endCol),
+      ctx.computeBridge.clearRange(
+        sheetId,
+        n.startRow,
+        n.startCol,
+        n.endRow,
+        n.endCol,
+        cellContentOptions,
+      ),
     );
   }
 
   if (mode === 'all' || mode === 'formats') {
     promises.push(
-      options
-        ? ctx.computeBridge.clearFormatForRanges(
-            sheetId,
-            [[n.startRow, n.startCol, n.endRow, n.endCol]],
-            options,
-          )
-        : ctx.computeBridge.clearFormatForRanges(sheetId, [
-            [n.startRow, n.startCol, n.endRow, n.endCol],
-          ]),
+      ctx.computeBridge.clearFormatForRanges(
+        sheetId,
+        [[n.startRow, n.startCol, n.endRow, n.endCol]],
+        cellContentOptions,
+      ),
     );
   }
 
   if (mode === 'all' || mode === 'hyperlinks') {
     // Single bridge call clears all hyperlinks in the range.
     promises.push(
-      options
-        ? ctx.computeBridge.clearHyperlinksInRange(
-            sheetId,
-            n.startRow,
-            n.startCol,
-            n.endRow,
-            n.endCol,
-            options,
-          )
-        : ctx.computeBridge.clearHyperlinksInRange(
-            sheetId,
-            n.startRow,
-            n.startCol,
-            n.endRow,
-            n.endCol,
-          ),
+      ctx.computeBridge.clearHyperlinksInRange(
+        sheetId,
+        n.startRow,
+        n.startCol,
+        n.endRow,
+        n.endCol,
+        cellContentOptions,
+      ),
     );
   }
 
@@ -183,6 +172,19 @@ export async function clearWithMode(
 
   const cellCount = (n.endRow - n.startRow + 1) * (n.endCol - n.startCol + 1);
   return { cellCount };
+}
+
+function clearModeDomainIds(mode: ClearApplyTo): readonly string[] {
+  switch (mode) {
+    case 'formats':
+      return ['cells.formats.direct'];
+    case 'hyperlinks':
+      return ['cells.hyperlinks'];
+    case 'all':
+      return ['cells', 'cells.formats.direct', 'cells.hyperlinks'];
+    case 'contents':
+      return ['cells'];
+  }
 }
 
 // =============================================================================

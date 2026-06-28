@@ -29,4 +29,32 @@ export function registerCheckoutRebindCaptureResetScenario(): void {
       }),
     );
   });
+
+  it('drops derived working-tree diff services so checkout gets fresh semantic readers', () => {
+    const resetNormalCaptureForCheckout = jest.fn();
+    const staleWorkingTreeDiffService = { diffWorkingTree: jest.fn() };
+    const nextContext = createDocumentContext();
+
+    const config = rebindVersioningAfterCheckout({
+      versioning: {
+        semanticMutationCapture: {
+          resetNormalCaptureForCheckout,
+        },
+        workingTreeDiffService: staleWorkingTreeDiffService,
+        versionWorkingTreeDiffService: staleWorkingTreeDiffService,
+      },
+      nextContext,
+      operationContext: OPERATION_CONTEXT,
+    }) as Record<string, unknown>;
+
+    expect(config.workingTreeDiffService).toBeUndefined();
+    expect(config.versionWorkingTreeDiffService).toBeUndefined();
+    expect(config.semanticStateReader).toEqual(
+      expect.objectContaining({
+        readCurrentSemanticState: expect.any(Function),
+        diffSemanticStates: expect.any(Function),
+      }),
+    );
+    expect(resetNormalCaptureForCheckout).toHaveBeenCalledTimes(1);
+  });
 }

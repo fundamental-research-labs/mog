@@ -28,6 +28,7 @@ import type {
 import type { StoreCellData } from '@mog-sdk/contracts/store';
 import type { DocumentContext } from '../../context/types';
 import { withDirectEditRange } from '../../bridges/compute';
+import { createCellWriteVersionMutationOptions } from '../../api/internal/cell-write-version-options';
 import { createVersionOperationContext } from '../../api/internal/version-operation-context';
 
 // =============================================================================
@@ -108,7 +109,20 @@ export function clearRange(
     }
 
     if (cellIds.length > 0) {
-      void ctx.computeBridge.batchClearCells(cellIds);
+      void ctx.computeBridge.batchClearCells(
+        cellIds,
+        withDirectEditRange(
+          createCellWriteVersionMutationOptions(ctx, {
+            operationIdPrefix: 'cells.clearRange',
+            sheetIds: [sheetId],
+          }),
+          sheetId,
+          startRow,
+          startCol,
+          endRow,
+          endCol,
+        ),
+      );
     }
   })();
 }
@@ -155,7 +169,20 @@ export async function clearRangeAndReturnIds(
   }
 
   if (cellIds.length > 0) {
-    void ctx.computeBridge.batchClearCells(cellIds);
+    void ctx.computeBridge.batchClearCells(
+      cellIds,
+      withDirectEditRange(
+        createCellWriteVersionMutationOptions(ctx, {
+          operationIdPrefix: 'cells.clearRangeAndReturnIds',
+          sheetIds: [sheetId],
+        }),
+        sheetId,
+        range.startRow,
+        range.startCol,
+        range.endRow,
+        range.endCol,
+      ),
+    );
   }
 
   return cellIds;

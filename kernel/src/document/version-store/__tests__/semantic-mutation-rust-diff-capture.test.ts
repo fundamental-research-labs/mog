@@ -11,6 +11,7 @@ const BEFORE_DIGEST = digest('1');
 const AFTER_DIGEST = digest('2');
 const CELL_BEFORE_DIGEST = digest('3');
 const CELL_AFTER_DIGEST = digest('4');
+const LARGE_REVIEW_PROJECTION_CHANGE_COUNT = 10_000;
 
 describe('Rust-backed semantic mutation capture', () => {
   it('rejects review-projected changes when no Rust semantic reader is available', async () => {
@@ -91,6 +92,81 @@ describe('Rust-backed semantic mutation capture', () => {
       semanticDiff,
     });
   });
+
+  it('uses review projection only for large plain cell value change sets', async () => {
+    const before = semanticState('alpha');
+    const after = semanticState('beta');
+    let diffCallCount = 0;
+    const reviewChanges = largePlainCellValueReviewChanges();
+
+    const result = await buildRustBackedSemanticChangeSetPayload({
+      commit: captureInput(),
+      semanticStateReader: {
+        readCurrentSemanticState: async () => envelope(after, AFTER_DIGEST),
+        diffSemanticStates: async () => {
+          diffCallCount += 1;
+          return semanticDiff();
+        },
+      },
+      beforeSemanticState: envelope(before, BEFORE_DIGEST),
+      reviewChanges,
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') {
+      throw new Error(`expected success: ${result.diagnostics[0]?.code}`);
+    }
+    expect(diffCallCount).toBe(0);
+    expect(result.payload).toMatchObject({
+      schemaVersion: 1,
+      source: {
+        kind: 'rustSemanticStateReviewProjection',
+        beforeStateDigest: BEFORE_DIGEST,
+        afterStateDigest: AFTER_DIGEST,
+        reviewProjectionChangeCount: LARGE_REVIEW_PROJECTION_CHANGE_COUNT,
+      },
+      changes: [],
+      semanticDiff: {
+        beforeDigest: BEFORE_DIGEST,
+        afterDigest: AFTER_DIGEST,
+        changes: [],
+      },
+      reviewChanges,
+    });
+  });
+
+  it('keeps Rust semantic diff for large formula-shaped cell value change sets', async () => {
+    const before = semanticState('alpha');
+    const after = semanticState('beta');
+    let diffCallCount = 0;
+    const reviewChanges = largePlainCellValueReviewChanges({
+      after: { kind: 'formula', formula: '=A1+1', result: 2 },
+    });
+
+    const result = await buildRustBackedSemanticChangeSetPayload({
+      commit: captureInput(),
+      semanticStateReader: {
+        readCurrentSemanticState: async () => envelope(after, AFTER_DIGEST),
+        diffSemanticStates: async () => {
+          diffCallCount += 1;
+          return semanticDiff();
+        },
+      },
+      beforeSemanticState: envelope(before, BEFORE_DIGEST),
+      reviewChanges,
+    });
+
+    expect(result.status).toBe('success');
+    expect(diffCallCount).toBe(1);
+    if (result.status !== 'success') {
+      throw new Error(`expected success: ${result.diagnostics[0]?.code}`);
+    }
+    expect(result.payload).toMatchObject({
+      source: { kind: 'rustSemanticDiff' },
+      changes: [expect.objectContaining({ changeId: 'updated:cell:sheet#0:r0:c0' })],
+      reviewChanges,
+    });
+  });
 });
 
 function semanticState(value: string): SemanticWorkbookState {
@@ -134,6 +210,48 @@ function envelope(
   stateDigest: ObjectDigest,
 ): SemanticWorkbookStateEnvelope {
   return { state, stateDigest };
+}
+
+function semanticDiff(): SemanticWorkbookDiff {
+  return {
+    beforeDigest: BEFORE_DIGEST,
+    afterDigest: AFTER_DIGEST,
+    changes: [
+      {
+        changeId: 'updated:cell:sheet#0:r0:c0',
+        kind: 'updated',
+        domainId: 'cells.values',
+        objectId: 'cell:sheet#0:r0:c0',
+        objectKind: 'cell',
+        beforeDigest: CELL_BEFORE_DIGEST,
+        afterDigest: CELL_AFTER_DIGEST,
+      },
+    ],
+  };
+}
+
+function largePlainCellValueReviewChanges(
+  options: { readonly after?: unknown } = {},
+): readonly unknown[] {
+  return Array.from({ length: LARGE_REVIEW_PROJECTION_CHANGE_COUNT }, (_, index) => ({
+    structural: {
+      kind: 'metadata',
+      changeId: `mutation-1:cell:${index}`,
+      domain: 'cell',
+      entityId: `sheet-1!R${Math.floor(index / 100)}C${index % 100}`,
+      propertyPath: ['value'],
+    },
+    before: { kind: 'value', value: { kind: 'blank' } },
+    after: { kind: 'value', value: options.after ?? 1 },
+    display: { address: { kind: 'value', value: 'A1' } },
+    historical: {
+      cell: {
+        sheetId: 'sheet-1',
+        row: Math.floor(index / 100),
+        column: index % 100,
+      },
+    },
+  }));
 }
 
 function digest(seed: string): ObjectDigest {

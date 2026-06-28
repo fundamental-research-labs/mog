@@ -251,6 +251,55 @@ describe('semantic mutation capture dirty state', () => {
       hasUncapturedNormalMutations: false,
     });
   });
+
+  it('captures large fully projected plain cell writes without a Rust semantic reader', async () => {
+    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext: normalLocalOperationContext({
+        operationId: 'worksheet.paste:large-plain-values',
+        domainIds: ['cells.values'],
+      }),
+      directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
+      result: mutationResult({ recalc: { ...mutationResult().recalc, changedCells: cellChanges(100, 100) } }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      source: {
+        kind: 'semanticMutationProjection',
+        reviewProjectionChangeCount: 10_000,
+      },
+      changes: [],
+      reviewChanges: expect.arrayContaining([
+        expect.objectContaining({
+          structural: expect.objectContaining({
+            changeId: 'mutation-1:cell:0',
+            domain: 'cell',
+            entityId: 'sheet-1!A1',
+            propertyPath: ['value'],
+          }),
+          after: { kind: 'value', value: 1 },
+          historical: { cell: { sheetId: 'sheet-1', row: 0, column: 0 } },
+        }),
+      ]),
+    });
+    expect(
+      (captured.input.semanticChangeSetRecord.preimage.payload as any).reviewChanges,
+    ).toHaveLength(10_000);
+    expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      segmentId: 'mutation-1',
+      operation: 'compute_batch_set_cells_by_position',
+      changeIds: [],
+      changeIdCount: 10_000,
+      omittedChangeIds: { reason: 'large-change-set', count: 10_000 },
+      directEdits: [],
+      directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
+    });
+  });
 });
 
 function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {
@@ -264,6 +313,21 @@ function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult
     },
     ...overrides,
   } as MutationResult;
+}
+
+function cellChanges(rows: number, columns: number): MutationResult['recalc']['changedCells'] {
+  const out: MutationResult['recalc']['changedCells'] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      out.push({
+        sheetId: 'sheet-1',
+        position: { row, col },
+        oldValue: undefined,
+        value: 1,
+      } as MutationResult['recalc']['changedCells'][number]);
+    }
+  }
+  return out;
 }
 
 function captureInput(): VersionNormalCommitCaptureInput {

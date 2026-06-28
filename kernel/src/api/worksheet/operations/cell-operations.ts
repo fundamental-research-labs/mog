@@ -39,10 +39,10 @@ import { type CellInput, toCellInput } from './cell-input';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 import { assertUnprotectedTableDefinition } from '../protected-table-operations';
 import { withDirectEditRange, type MutationAdmissionOptions } from '../../../bridges/compute';
-
-// =============================================================================
-// Cell Read Operations
-// =============================================================================
+import {
+  compactRectangularCellWriteVersionMutationOptions,
+  ensureCellWriteVersionMutationOptions,
+} from '../../internal/cell-write-version-options';
 
 /**
  * Get complete cell data including formula, format, etc.
@@ -409,13 +409,15 @@ export async function setCell(
   value: CellValuePrimitive,
   options?: MutationAdmissionOptions,
 ): Promise<void> {
+  const mutationOptions = cellMutationOptions(ctx, sheetId, 'worksheet.setCell', options);
+
   if (!isValidAddress(row, col)) {
     throw KernelError.from(null, 'COMPUTE_ERROR', `Invalid cell address: row=${row}, col=${col}`);
   }
 
   const tableHeaderWrite = await resolveTableHeaderWrite(ctx, sheetId, row, col, value);
   if (tableHeaderWrite) {
-    if (await applyTableHeaderWrite(ctx, sheetId, tableHeaderWrite, false, options)) {
+    if (await applyTableHeaderWrite(ctx, sheetId, tableHeaderWrite, false, mutationOptions)) {
       await reapplyActiveFiltersAfterWrite(ctx, sheetId);
     }
     return;
@@ -432,7 +434,7 @@ export async function setCell(
   // Single-element batch — Rust handles CellId resolution, recalc, AND
   // locale-aware date format inference (e.g. "3/15/2024" → number value +
   // M/d/yyyy format applied atomically inside the mutation pipeline).
-  await ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }], options);
+  await ctx.computeBridge.setCellsByPosition(sheetId, [{ row, col, input }], mutationOptions);
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
@@ -550,6 +552,7 @@ export async function setCells(
   options?: MutationAdmissionOptions,
 ): Promise<SetCellsResult> {
   if (cells.length === 0) return { cellsWritten: 0, errors: null };
+  const mutationOptions = cellMutationOptions(ctx, sheetId, 'worksheet.setCells', options);
 
   // --- Resolve addresses in TS & normalise values ---
   const errors: Array<{ addr: string; error: string }> = [];
@@ -644,45 +647,31 @@ export async function setCells(
     let wroteHeader = false;
     for (const headerWrite of headerWrites) {
       wroteHeader =
-        (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true, options)) || wroteHeader;
+        (await applyTableHeaderWrite(ctx, sheetId, headerWrite, true, mutationOptions)) ||
+        wroteHeader;
     }
 
     // --- Use the mutation pipeline path for primitives ---
     if (edits.length > 0) {
-      if (options) {
-        await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
-      } else {
-        await ctx.computeBridge.setCellsByPosition(sheetId, edits);
-      }
+      await ctx.computeBridge.setCellsByPosition(
+        sheetId,
+        edits,
+        compactRectangularCellWriteVersionMutationOptions(mutationOptions, sheetId, edits),
+      );
     }
-    // --- Date writes go through setDateValue so Rust produces a
-    // date serial + applies a default date format when the cell is unformatted.
-    // Calendar parts are resolved in the session's userTimezone (never host-local)
-    // so the same Date instant produces the same calendar serial regardless of
-    // whether the kernel is running in a browser, on a remote worker, or in a
-    // headless test.
+    // Date writes go through Rust's date path so the serial and default format
+    // are derived in the session timezone, independent of browser/worker/host.
     for (const d of dates) {
       const parts = calendarPartsInTz(d.date, ctx.userTimezone);
-      if (options) {
-        await ctx.computeBridge.setDateValue(
-          sheetId,
-          d.row,
-          d.col,
-          parts.year,
-          parts.month,
-          parts.day,
-          options,
-        );
-      } else {
-        await ctx.computeBridge.setDateValue(
-          sheetId,
-          d.row,
-          d.col,
-          parts.year,
-          parts.month,
-          parts.day,
-        );
-      }
+      await ctx.computeBridge.setDateValue(
+        sheetId,
+        d.row,
+        d.col,
+        parts.year,
+        parts.month,
+        parts.day,
+        mutationOptions,
+      );
     }
     if (edits.length > 0 || dates.length > 0 || wroteHeader) {
       await reapplyActiveFiltersAfterWrite(ctx, sheetId);
@@ -727,8 +716,17 @@ export async function setDateValue(
   date: { year: number; month: number; day: number },
   options?: MutationAdmissionOptions,
 ): Promise<void> {
+  const mutationOptions = cellMutationOptions(ctx, sheetId, 'worksheet.setDateValue', options);
   await awaitAllSheetsBeforeCellWrite(ctx);
-  await ctx.computeBridge.setDateValue(sheetId, row, col, date.year, date.month, date.day, options);
+  await ctx.computeBridge.setDateValue(
+    sheetId,
+    row,
+    col,
+    date.year,
+    date.month,
+    date.day,
+    mutationOptions,
+  );
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
@@ -751,6 +749,7 @@ export async function setTimeValue(
   time: { hours: number; minutes: number; seconds: number },
   options?: MutationAdmissionOptions,
 ): Promise<void> {
+  const mutationOptions = cellMutationOptions(ctx, sheetId, 'worksheet.setTimeValue', options);
   await awaitAllSheetsBeforeCellWrite(ctx);
   await ctx.computeBridge.setTimeValue(
     sheetId,
@@ -759,9 +758,13 @@ export async function setTimeValue(
     time.hours,
     time.minutes,
     time.seconds,
-    options,
+    mutationOptions,
   );
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
+}
+
+function cellMutationOptions(ctx: DocumentContext, sheetId: SheetId, operationIdPrefix: string, options?: MutationAdmissionOptions): MutationAdmissionOptions {
+  return ensureCellWriteVersionMutationOptions(ctx, options, { operationIdPrefix, sheetIds: [sheetId] });
 }
 
 // =============================================================================

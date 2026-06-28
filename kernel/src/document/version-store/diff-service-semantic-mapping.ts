@@ -57,6 +57,7 @@ export function mapSemanticChangeSet(
   for (let index = 0; index < reviewChanges.length; index++) {
     const entry = mapSemanticChange(reviewChanges[index]);
     if (!entry) {
+      if (isIgnorableRustAggregateChange(reviewChanges[index])) continue;
       return {
         ok: false,
         diagnostics: [
@@ -79,9 +80,22 @@ export function mapSemanticChangeSet(
   };
 }
 
+function isIgnorableRustAggregateChange(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    value.domainId === 'sheets' &&
+    value.objectKind === 'sheet' &&
+    !('beforeRecord' in value) &&
+    !('afterRecord' in value)
+  );
+}
+
 function mapSemanticChange(value: unknown): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
+  return mapReviewSemanticChange(value) ?? mapRustSemanticChange(value);
+}
 
+function mapReviewSemanticChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
   const structural = mapStructuralMetadata(value);
   const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
   const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
@@ -100,6 +114,241 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
     ...(display ? { display } : {}),
     ...(historical ? { historical } : {}),
   };
+}
+
+function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
+  if (
+    typeof value.changeId !== 'string' ||
+    typeof value.domainId !== 'string' ||
+    typeof value.objectId !== 'string' ||
+    typeof value.objectKind !== 'string'
+  ) {
+    return null;
+  }
+
+  if (value.domainId === 'cells.values') {
+    return mapRustCellValueChange(value);
+  }
+  if (value.domainId === 'cells.formulas') {
+    return mapRustCellFormulaChange(value);
+  }
+  return null;
+}
+
+function mapRustCellValueChange(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiffEntry | null {
+  if (value.objectKind !== 'cell' && value.objectKind !== 'cell-value') return null;
+
+  const cell = rustCellCoordinates(value);
+  if (!cell) return null;
+  const before = mapRustCellValueDiffValue(value.beforeRecord);
+  const after = mapRustCellValueDiffValue(value.afterRecord);
+  if (!before || !after) return null;
+
+  return rustCellEntry({
+    changeId: value.changeId as string,
+    domain: 'cells.values',
+    propertyPath: ['value'],
+    cell,
+    before,
+    after,
+  });
+}
+
+function mapRustCellFormulaChange(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiffEntry | null {
+  if (value.objectKind !== 'cell-formula' && value.objectKind !== 'cell') return null;
+
+  const cell = rustCellCoordinates(value);
+  if (!cell) return null;
+  const before = mapRustCellFormulaDiffValue(value.beforeRecord);
+  const after = mapRustCellFormulaDiffValue(value.afterRecord);
+  if (!before || !after) return null;
+
+  return rustCellEntry({
+    changeId: value.changeId as string,
+    domain: 'cells.formulas',
+    propertyPath: ['formula'],
+    cell,
+    before,
+    after,
+  });
+}
+
+function rustCellEntry(input: {
+  readonly changeId: string;
+  readonly domain: string;
+  readonly propertyPath: readonly string[];
+  readonly cell: RustCellCoordinates;
+  readonly before: VersionDiffValue;
+  readonly after: VersionDiffValue;
+}): VersionDiffEntry {
+  const address = a1Address(input.cell.row, input.cell.column);
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId: input.changeId,
+      domain: input.domain,
+      entityId: `${input.cell.sheetId}!${address}`,
+      propertyPath: [...input.propertyPath],
+    },
+    before: input.before,
+    after: input.after,
+    display: { address: { kind: 'value', value: address } },
+    historical: {
+      cell: {
+        sheetId: input.cell.sheetId,
+        row: input.cell.row,
+        column: input.cell.column,
+      },
+    },
+  };
+}
+
+type RustCellCoordinates = {
+  readonly sheetId: string;
+  readonly row: number;
+  readonly column: number;
+};
+
+function rustCellCoordinates(
+  value: Readonly<Record<string, unknown>>,
+): RustCellCoordinates | null {
+  return (
+    rustCellCoordinatesFromEvidence(value.afterRecord) ??
+    rustCellCoordinatesFromEvidence(value.beforeRecord) ??
+    rustCellCoordinatesFromObjectId(value.objectId)
+  );
+}
+
+function rustCellCoordinatesFromEvidence(value: unknown): RustCellCoordinates | null {
+  const evidence = rustRecordEvidence(value);
+  if (!evidence || !isRecord(evidence.record)) return null;
+  return rustCellCoordinatesFromRecord(evidence.record);
+}
+
+function rustCellCoordinatesFromRecord(
+  record: Readonly<Record<string, unknown>>,
+): RustCellCoordinates | null {
+  if (
+    typeof record.sheetId !== 'string' ||
+    !isSafeCoordinate(record.row) ||
+    !isSafeCoordinate(record.column)
+  ) {
+    return null;
+  }
+  return { sheetId: record.sheetId, row: record.row, column: record.column };
+}
+
+function rustCellCoordinatesFromObjectId(value: unknown): RustCellCoordinates | null {
+  if (typeof value !== 'string') return null;
+  const cellObjectId = stripRustObjectPrefix(stripRustObjectPrefix(value, 'value:'), 'formula:');
+  const match = /^cell:(.+):r([0-9]+):c([0-9]+)$/.exec(cellObjectId);
+  if (!match) return null;
+  const row = Number(match[2]);
+  const column = Number(match[3]);
+  if (!Number.isSafeInteger(row) || !Number.isSafeInteger(column)) return null;
+  return { sheetId: match[1]!, row, column };
+}
+
+function mapRustCellValueDiffValue(value: unknown): VersionDiffValue | null {
+  if (value === undefined) return blankDiffValue();
+  const evidence = rustRecordEvidence(value);
+  if (!evidence) return null;
+  const semanticValue = mapRustCellValueEvidenceRecord(evidence.record);
+  return semanticValue === undefined ? null : { kind: 'value', value: semanticValue };
+}
+
+function mapRustCellValueEvidenceRecord(value: unknown): VersionSemanticValue | undefined {
+  if (value === undefined) return { kind: 'blank' };
+  if (isRecord(value) && rustCellCoordinatesFromRecord(value)) {
+    return 'value' in value ? mapCanonicalCellValue(value.value) : { kind: 'blank' };
+  }
+  return mapCanonicalCellValue(value);
+}
+
+function mapCanonicalCellValue(value: unknown): VersionSemanticValue | undefined {
+  if (value === undefined) return { kind: 'blank' };
+  if (!isRecord(value)) return undefined;
+  if (typeof value.valueKind !== 'string' && !('canonicalValue' in value)) return undefined;
+  if (value.canonicalValue === undefined || value.valueKind === 'blank') {
+    return { kind: 'blank' };
+  }
+  return mapSemanticValue(value.canonicalValue);
+}
+
+function mapRustCellFormulaDiffValue(value: unknown): VersionDiffValue | null {
+  if (value === undefined) return blankDiffValue();
+  const evidence = rustRecordEvidence(value);
+  if (!evidence) return null;
+  const semanticValue = mapRustFormulaEvidenceRecord(evidence.record);
+  return semanticValue === undefined ? null : { kind: 'value', value: semanticValue };
+}
+
+function mapRustFormulaEvidenceRecord(value: unknown): VersionSemanticValue | undefined {
+  if (value === undefined) return { kind: 'blank' };
+  if (isRecord(value) && rustCellCoordinatesFromRecord(value)) {
+    return 'formula' in value ? mapCanonicalFormula(value.formula) : { kind: 'blank' };
+  }
+  return mapCanonicalFormula(value);
+}
+
+function mapCanonicalFormula(value: unknown): VersionSemanticValue | undefined {
+  if (value === undefined) return { kind: 'blank' };
+  if (!isRecord(value)) return undefined;
+  return typeof value.normalizedFormula === 'string'
+    ? { kind: 'formula', formula: value.normalizedFormula }
+    : undefined;
+}
+
+function rustRecordEvidence(value: unknown):
+  | {
+      readonly objectId: string;
+      readonly objectKind: string;
+      readonly domainId: string;
+      readonly record: unknown;
+    }
+  | null {
+  if (
+    !isRecord(value) ||
+    typeof value.objectId !== 'string' ||
+    typeof value.objectKind !== 'string' ||
+    typeof value.domainId !== 'string' ||
+    !('record' in value)
+  ) {
+    return null;
+  }
+  return {
+    objectId: value.objectId,
+    objectKind: value.objectKind,
+    domainId: value.domainId,
+    record: value.record,
+  };
+}
+
+function blankDiffValue(): VersionDiffValue {
+  return { kind: 'value', value: { kind: 'blank' } };
+}
+
+function stripRustObjectPrefix(value: string, prefix: string): string {
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
+}
+
+function a1Address(row: number, column: number): string {
+  return `${columnLabel(column)}${row + 1}`;
+}
+
+function columnLabel(column: number): string {
+  let index = column + 1;
+  let label = '';
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    index = Math.floor((index - 1) / 26);
+  }
+  return label;
 }
 
 function mapDiffHistoricalMetadata(value: unknown): VersionDiffHistoricalMetadata | null {

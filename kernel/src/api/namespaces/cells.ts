@@ -26,7 +26,9 @@ import type { IEventBus } from '@mog-sdk/contracts/events';
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { CellWriteData, StoreCellData } from '@mog-sdk/contracts/store';
 import type { ComputeBridge } from '../../bridges/compute/compute-bridge';
+import { withDirectEditRange } from '../../bridges/compute';
 import type { DocumentContext } from '../../context/types';
+import { createCellWriteVersionMutationOptions } from '../internal/cell-write-version-options';
 import { toCellInput } from '../worksheet/operations/cell-input';
 
 // Re-export CellWriteData so namespace consumers can import it alongside Cells.*
@@ -136,7 +138,13 @@ export async function set(
 ): Promise<void> {
   const { computeBridge } = ctx as DocumentContext;
   const input = data.formula ? (data.formula as string) : String(data.raw ?? '');
-  await computeBridge.setCellValueParsed(sheetId, row, col, input);
+  await computeBridge.setCellValueParsed(
+    sheetId,
+    row,
+    col,
+    input,
+    cellNamespaceOptions(ctx as DocumentContext, 'cells.set', sheetId, row, col),
+  );
 }
 
 /**
@@ -151,7 +159,13 @@ export async function setValue(
   value: CellRawValue | FormulaA1,
 ): Promise<void> {
   const { computeBridge } = ctx as DocumentContext;
-  await computeBridge.setCellValueParsed(sheetId, row, col, String(value ?? ''));
+  await computeBridge.setCellValueParsed(
+    sheetId,
+    row,
+    col,
+    String(value ?? ''),
+    cellNamespaceOptions(ctx as DocumentContext, 'cells.setValue', sheetId, row, col),
+  );
 }
 
 /**
@@ -168,7 +182,14 @@ export async function setBatch(
     col: e.col,
     input: toCellInput(e.value as string | number | boolean | null | undefined),
   }));
-  await computeBridge.setCellsByPosition(sheetId, mapped);
+  await computeBridge.setCellsByPosition(
+    sheetId,
+    mapped,
+    createCellWriteVersionMutationOptions(ctx as DocumentContext, {
+      operationIdPrefix: 'cells.setBatch',
+      sheetIds: [sheetId],
+    }),
+  );
 }
 
 /**
@@ -183,9 +204,32 @@ export async function remove(
   const { computeBridge } = ctx as DocumentContext;
   const cellId = await computeBridge.getCellIdAt(sheetId, row, col);
   if (cellId) {
-    await computeBridge.batchClearCells([toCellId(cellId)]);
+    await computeBridge.batchClearCells(
+      [toCellId(cellId)],
+      cellNamespaceOptions(ctx as DocumentContext, 'cells.remove', sheetId, row, col),
+    );
   }
 }
 
 /** @deprecated Use remove() instead. */
 export const del = remove;
+
+function cellNamespaceOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+) {
+  return withDirectEditRange(
+    createCellWriteVersionMutationOptions(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+    }),
+    sheetId,
+    row,
+    col,
+    row,
+    col,
+  );
+}

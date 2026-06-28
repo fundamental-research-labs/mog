@@ -44,6 +44,8 @@ export type {
 
 export { isDirectCellValueOperation } from './semantic-mutation-cell-write-projection';
 
+const MUTATION_SEGMENT_INLINE_CHANGE_ID_LIMIT = 1_000;
+
 export function mapMutationResultToSemanticChanges(
   input: SemanticMutationCaptureProjectionInput,
   sequence: number,
@@ -98,12 +100,22 @@ export function mapMutationResultToSemanticChanges(
 }
 
 export function mutationSegmentPayload(record: PendingSemanticMutation): unknown {
+  const changeIds = record.changes.map((change) => change.structural.changeId);
   return {
     schemaVersion: 1,
     segmentId: `mutation-${record.sequence}`,
     operation: record.operation,
     capturedAt: record.capturedAt,
-    changeIds: record.changes.map((change) => change.structural.changeId),
+    ...(changeIds.length <= MUTATION_SEGMENT_INLINE_CHANGE_ID_LIMIT
+      ? { changeIds }
+      : {
+          changeIds: [],
+          changeIdCount: changeIds.length,
+          omittedChangeIds: {
+            reason: 'large-change-set',
+            count: changeIds.length,
+          },
+        }),
     directEdits: record.directEdits.map((edit) => ({
       sheetId: edit.sheetId,
       row: edit.row,

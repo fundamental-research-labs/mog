@@ -137,7 +137,7 @@ export function VersionHistoryWorkingTreeDiffPreview({
   const count = page.items.length;
   const state = versionDiffPreviewState(page);
   const summaryId = 'version-history-working-tree-diff-summary';
-  const summary = `Working tree diff base ${shortCommitId(page.baseCommitId)} State ${
+  const summary = `Uncommitted changes. Working tree diff base ${shortCommitId(page.baseCommitId)} State ${
     state.label
   }. Change count ${count}`;
 
@@ -152,7 +152,7 @@ export function VersionHistoryWorkingTreeDiffPreview({
     >
       <div data-testid="version-history-working-tree-diff" data-state={state.kind} className="contents">
         <div className="flex items-center justify-between gap-2">
-          <DiffViewerHeader stateLabel={state.label} />
+          <DiffViewerHeader stateLabel="Uncommitted changes" />
           <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary">
             {count} {count === 1 ? 'change' : 'changes'}
           </span>

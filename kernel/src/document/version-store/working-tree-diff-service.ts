@@ -119,6 +119,12 @@ type WorkingTreeCursorCacheEntry = {
   readonly offset: number;
 };
 
+type WorkingTreeMappedEntries = {
+  readonly items: readonly MappedSemanticDiffEntry[];
+  readonly baseSemanticStateDigest?: ObjectDigest;
+  readonly currentSemanticStateDigest?: ObjectDigest;
+};
+
 const PUBLIC_WORKING_TREE_CURSOR_CACHE = new Map<string, WorkingTreeCursorCacheEntry>();
 let publicWorkingTreeCursorSequence = 0;
 
@@ -163,15 +169,16 @@ export class WorkbookVersionWorkingTreeDiffService {
     const blockingDiagnostics = workingTreeBlockingDiagnostics(observation.observation);
     if (blockingDiagnostics.length > 0) return degradedDiffPage(blockingDiagnostics);
 
-    const identity = await this.workingTreeIdentity(observation.observation);
+    const entries = await this.entriesForObservation(observation.observation);
+    if (!entries.ok) return degradedDiffPage(entries.diagnostics);
+
+    const identityObservation = applyEntryDigests(observation.observation, entries);
+    const identity = await this.workingTreeIdentity(identityObservation);
     const pageToken = parseWorkingTreePageToken(
       parsedOptions.options.pageToken,
       identity.workingTreeDiffId,
     );
     if (!pageToken.ok) return degradedDiffPage(pageToken.diagnostics);
-
-    const entries = await this.entriesForObservation(observation.observation);
-    if (!entries.ok) return degradedDiffPage(entries.diagnostics);
 
     const offset = pageStartOffset(entries.items, { kind: 'offset', offset: pageToken.offset });
     const pageEntries = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
@@ -206,13 +213,13 @@ export class WorkbookVersionWorkingTreeDiffService {
       status: 'success',
       kind: 'workingTree',
       workingTreeDiffId: identity.workingTreeDiffId,
-      baseCommitId: observation.observation.active.head.id,
-      ...(observation.observation.targetRef ? { targetRef: observation.observation.targetRef } : {}),
-      captureRevision: observation.observation.basis.revision,
-      dirtyStatusRevision: observation.observation.surface.dirty.statusRevision,
-      checkoutPreflightToken: observation.observation.surface.dirty.checkoutPreflightToken,
-      baseSemanticStateDigest: observation.observation.baseSemanticStateDigest,
-      currentSemanticStateDigest: observation.observation.currentSemanticStateDigest,
+      baseCommitId: identityObservation.active.head.id,
+      ...(identityObservation.targetRef ? { targetRef: identityObservation.targetRef } : {}),
+      captureRevision: identityObservation.basis.revision,
+      dirtyStatusRevision: identityObservation.surface.dirty.statusRevision,
+      checkoutPreflightToken: identityObservation.surface.dirty.checkoutPreflightToken,
+      baseSemanticStateDigest: identityObservation.baseSemanticStateDigest,
+      currentSemanticStateDigest: identityObservation.currentSemanticStateDigest,
       items: pageItems,
       ...(nextPageToken ? { nextPageToken } : {}),
       readRevision: {
@@ -298,10 +305,7 @@ export class WorkbookVersionWorkingTreeDiffService {
   private async entriesForObservation(
     observation: WorkingTreeObservation,
   ): Promise<
-    | {
-        readonly ok: true;
-        readonly items: readonly MappedSemanticDiffEntry[];
-      }
+    | ({ readonly ok: true } & WorkingTreeMappedEntries)
     | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] }
   > {
     if (!observation.surface.dirty.hasUncommittedLocalChanges) {
@@ -346,28 +350,20 @@ export class WorkbookVersionWorkingTreeDiffService {
       };
     }
 
-    if (
-      !sameDigest(semanticDiff.beforeDigest, beforeSemanticState.stateDigest) ||
-      !sameDigest(semanticDiff.afterDigest, observation.currentSemanticState.stateDigest)
-    ) {
+    const pageDigests = semanticDiffPageDigests(semanticDiff);
+    if (!pageDigests.ok) {
       return {
         ok: false,
         diagnostics: [
           diagnostic(
             'VERSION_WORKING_TREE_DIFF_DIGEST_MISMATCH',
-            'Working-tree semantic diff digests did not match the captured states.',
+            'Working-tree semantic diff did not return usable state digests.',
             {
               recoverability: 'retry',
               details: {
-                category: 'semanticDigestMismatch',
-                beforeDigestMatches: sameDigest(
-                  semanticDiff.beforeDigest,
-                  beforeSemanticState.stateDigest,
-                ),
-                afterDigestMatches: sameDigest(
-                  semanticDiff.afterDigest,
-                  observation.currentSemanticState.stateDigest,
-                ),
+                category: 'semanticDiffDigestMissing',
+                beforeDigestPresent: publicObjectDigest(semanticDiff.beforeDigest).digest !== '',
+                afterDigestPresent: publicObjectDigest(semanticDiff.afterDigest).digest !== '',
               },
             },
           ),
@@ -385,7 +381,14 @@ export class WorkbookVersionWorkingTreeDiffService {
       changes: semanticDiff.changes,
       semanticDiff,
     });
-    return entries.ok ? entries : { ok: false, diagnostics: entries.diagnostics };
+    return entries.ok
+      ? {
+          ok: true,
+          items: entries.items,
+          baseSemanticStateDigest: pageDigests.baseSemanticStateDigest,
+          currentSemanticStateDigest: pageDigests.currentSemanticStateDigest,
+        }
+      : { ok: false, diagnostics: entries.diagnostics };
   }
 
   private async workingTreeIdentity(
@@ -621,6 +624,36 @@ function sameWorkingTreeObservation(left: WorkingTreeObservation, right: Working
     sameDigest(left.currentSemanticStateDigest, right.currentSemanticStateDigest) &&
     sameActiveCheckoutIdentity(left.active, right.active)
   );
+}
+
+function applyEntryDigests(
+  observation: WorkingTreeObservation,
+  entries: WorkingTreeMappedEntries,
+): WorkingTreeObservation {
+  if (!entries.baseSemanticStateDigest || !entries.currentSemanticStateDigest) {
+    return observation;
+  }
+  return {
+    ...observation,
+    baseSemanticStateDigest: entries.baseSemanticStateDigest,
+    currentSemanticStateDigest: entries.currentSemanticStateDigest,
+  };
+}
+
+function semanticDiffPageDigests(
+  semanticDiff: Awaited<ReturnType<VersionSemanticStateReaderPort['diffSemanticStates']>>,
+):
+  | {
+      readonly ok: true;
+      readonly baseSemanticStateDigest: ObjectDigest;
+      readonly currentSemanticStateDigest: ObjectDigest;
+    }
+  | { readonly ok: false } {
+  const baseSemanticStateDigest = publicObjectDigest(semanticDiff.beforeDigest);
+  const currentSemanticStateDigest = publicObjectDigest(semanticDiff.afterDigest);
+  return baseSemanticStateDigest.digest !== '' && currentSemanticStateDigest.digest !== ''
+    ? { ok: true, baseSemanticStateDigest, currentSemanticStateDigest }
+    : { ok: false };
 }
 
 function sameActiveCheckoutIdentity(

@@ -36,6 +36,7 @@ describe('VersionHistoryPanelContent working-tree diff', () => {
     expect(diffWorkingTree).toHaveBeenCalledWith({ pageSize: 50, includeDiagnostics: true });
     expect(viewer).toHaveAccessibleName('Working tree diff viewer');
     expect(viewer).toHaveAttribute('data-state', 'changes');
+    expect(viewer).toHaveTextContent('Uncommitted changes');
     expect(viewer).toHaveTextContent('working tree');
     expect(within(viewer).getByTestId('version-history-working-tree-diff-change-list')).toHaveTextContent(
       '42',

@@ -29,7 +29,11 @@ import {
   mutationSegmentPayload,
   type PendingSemanticMutation,
 } from './semantic-mutation-capture-projection';
-import { buildRustBackedSemanticChangeSetPayload } from './semantic-mutation-rust-diff-capture';
+import {
+  buildReviewProjectionOnlySemanticChangeSetPayload,
+  buildRustBackedSemanticChangeSetPayload,
+  canUseReviewProjectionOnlyPayload,
+} from './semantic-mutation-rust-diff-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 
 export interface VersionMutationCaptureRecordInput {
@@ -250,13 +254,15 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
 
     const records = [...this.pendingNormal];
     const changes = records.flatMap((record) => [...record.changes]);
-    const semanticChangeSetPayload = await buildRustBackedSemanticChangeSetPayload({
-      commit: input,
-      semanticStateReader: this.semanticStateReader,
-      beforeSemanticState: this.beforeNormalSemanticState,
-      semanticStateCaptureFailure: this.semanticStateCaptureFailure,
-      reviewChanges: changes,
-    });
+    const semanticChangeSetPayload = canUseReviewProjectionOnlyPayload(changes)
+      ? buildReviewProjectionOnlySemanticChangeSetPayload(changes)
+      : await buildRustBackedSemanticChangeSetPayload({
+          commit: input,
+          semanticStateReader: this.semanticStateReader,
+          beforeSemanticState: this.beforeNormalSemanticState,
+          semanticStateCaptureFailure: this.semanticStateCaptureFailure,
+          reviewChanges: changes,
+        });
     if (semanticChangeSetPayload.status !== 'success') return semanticChangeSetPayload;
     const semanticChangeSetRecord = await objectRecord(
       input.namespace,

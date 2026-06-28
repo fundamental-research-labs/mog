@@ -9,6 +9,7 @@ import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import { quoteSheetName } from '@mog/spreadsheet-utils/a1';
 import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { KernelError } from '../errors';
+import { ensureCellWriteVersionMutationOptions } from '../api/internal/cell-write-version-options';
 
 export interface ExternalFormulaCell {
   readonly sheetId: SheetId;
@@ -223,11 +224,14 @@ export async function materializeExternalFormulas(
     materialized += 1;
   }
   for (const [sheetId, edits] of editsBySheet) {
-    if (options) {
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
-    } else {
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits);
-    }
+    await ctx.computeBridge.setCellsByPosition(
+      sheetId,
+      edits,
+      ensureCellWriteVersionMutationOptions(ctx, options, {
+        operationIdPrefix: 'externalFormulas.materialize',
+        sheetIds: [sheetId],
+      }),
+    );
   }
   return materialized;
 }

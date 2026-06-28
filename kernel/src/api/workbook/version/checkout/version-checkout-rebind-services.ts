@@ -17,6 +17,8 @@ const CHECKOUT_REBIND_DERIVED_SERVICE_KEYS = [
   'versionMergeService',
   'diffService',
   'versionDiffService',
+  'workingTreeDiffService',
+  'versionWorkingTreeDiffService',
   'branchService',
   'branchRefService',
   'refLifecycleService',

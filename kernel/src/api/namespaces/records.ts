@@ -35,8 +35,10 @@ import { type CellValue, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import { rawToCellValue } from '@mog/spreadsheet-utils/rich-text';
 
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
+import { withDirectEditRange } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
 import { KernelError } from '../../errors';
+import { createCellWriteVersionMutationOptions } from '../internal/cell-write-version-options';
 
 // Domain reads (from kernel domain)
 import * as TablesCore from '../../domain/tables/core';
@@ -330,7 +332,14 @@ export async function create(
     }
   }
   if (edits.length > 0) {
-    await dctx.computeBridge.setCellsByPosition(toSheetId(table.sheetId), edits);
+    await dctx.computeBridge.setCellsByPosition(
+      toSheetId(table.sheetId),
+      edits,
+      createCellWriteVersionMutationOptions(dctx, {
+        operationIdPrefix: 'records.create',
+        sheetIds: [toSheetId(table.sheetId)],
+      }),
+    );
   }
 
   // Expand table range to include new row
@@ -409,7 +418,14 @@ export async function update(
     });
   }
   if (edits.length > 0) {
-    await dctx.computeBridge.setCellsByPosition(toSheetId(table.sheetId), edits);
+    await dctx.computeBridge.setCellsByPosition(
+      toSheetId(table.sheetId),
+      edits,
+      createCellWriteVersionMutationOptions(dctx, {
+        operationIdPrefix: 'records.update',
+        sheetIds: [toSheetId(table.sheetId)],
+      }),
+    );
   }
 }
 
@@ -453,6 +469,17 @@ export async function remove(ctx: IKernelContext, tableId: string, rowId: RowId)
     range.startCol,
     rowIndex,
     lastColIndex,
+    withDirectEditRange(
+      createCellWriteVersionMutationOptions(dctx, {
+        operationIdPrefix: 'records.remove',
+        sheetIds: [toSheetId(table.sheetId)],
+      }),
+      toSheetId(table.sheetId),
+      rowIndex,
+      range.startCol,
+      rowIndex,
+      lastColIndex,
+    ),
   );
 }
 

@@ -33,6 +33,8 @@ import type { DocumentContext } from '../../context/types';
 import { computeValueToRaw, computeValueToCellValue } from './cell-iteration';
 import { toCellInput } from '../../api/worksheet/operations/cell-input';
 import type { CellInput } from '../../bridges/compute/compute-types.gen';
+import { withDirectEditRange } from '../../bridges/compute';
+import { createCellWriteVersionMutationOptions } from '../../api/internal/cell-write-version-options';
 
 // =============================================================================
 // Set Cell Value
@@ -72,7 +74,10 @@ export function setValue(
     void (async () => {
       const cellId = await ctx.computeBridge.getCellIdAt(sheetId, row, col);
       if (cellId) {
-        void ctx.computeBridge.batchClearCells([toCellId(cellId)]);
+        void ctx.computeBridge.batchClearCells(
+          [toCellId(cellId)],
+          cellWriteOptions(ctx, 'grid.setCell', sheetId, row, col),
+        );
       }
     })();
     return cellRef;
@@ -87,6 +92,7 @@ export function setValue(
       row,
       col,
       toCellInput(rawInput),
+      cellWriteOptions(ctx, 'grid.setCell', sheetId, row, col),
     );
   })();
 
@@ -122,12 +128,25 @@ export function setValueAsText(
   const cellRef: CellAddress = { sheetId, row, col };
 
   if (value === '' || value === null || value === undefined) {
-    void ctx.computeBridge.clearRangeByPosition(sheetId, row, col, row, col);
+    void ctx.computeBridge.clearRangeByPosition(
+      sheetId,
+      row,
+      col,
+      row,
+      col,
+      cellWriteOptions(ctx, 'grid.setValueAsText', sheetId, row, col),
+    );
     return cellRef;
   }
 
   // Store as literal text — Rust generates CellId internally
-  void ctx.computeBridge.setCellValueAsText(sheetId, row, col, value);
+  void ctx.computeBridge.setCellValueAsText(
+    sheetId,
+    row,
+    col,
+    value,
+    cellWriteOptions(ctx, 'grid.setValueAsText', sheetId, row, col),
+  );
 
   return cellRef;
 }
@@ -175,7 +194,14 @@ export function setValues(
       }),
     );
 
-    await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+    await ctx.computeBridge.setCellsByPosition(
+      sheetId,
+      edits,
+      createCellWriteVersionMutationOptions(ctx, {
+        operationIdPrefix: `grid.setValues.${_origin}`,
+        sheetIds: [sheetId],
+      }),
+    );
   })();
 
   // Build return refs
@@ -226,6 +252,7 @@ export function setFormulaDirect(
       row,
       col,
       toCellInput(formulaInput),
+      cellWriteOptions(ctx, 'grid.setFormulaDirect', sheetId, row, col),
     );
   })();
 
@@ -410,6 +437,28 @@ export function getEffectiveValue(data: StoreCellData): CellValue | null {
     return data.computed ?? null;
   }
   return rawToCellValue(data.raw) ?? null;
+}
+
+function cellWriteOptions(
+  ctx: DocumentContext,
+  operationIdPrefix: string,
+  sheetId: SheetId,
+  startRow: number,
+  startCol: number,
+  endRow = startRow,
+  endCol = startCol,
+) {
+  return withDirectEditRange(
+    createCellWriteVersionMutationOptions(ctx, {
+      operationIdPrefix,
+      sheetIds: [sheetId],
+    }),
+    sheetId,
+    startRow,
+    startCol,
+    endRow,
+    endCol,
+  );
 }
 
 /**

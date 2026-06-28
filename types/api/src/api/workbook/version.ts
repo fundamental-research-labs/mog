@@ -35,7 +35,7 @@ export type {
   WorkbookVersionDiagnosticCode,
 } from './version-shared';
 
-export type { VersionGraphApi, WorkbookVersion } from './version-workbook';
+export type { WorkbookVersion } from './version-workbook';
 export type * from './version-merge-review';
 export type * from './version-pending-remote-promotion';
 export type * from './version-proposal';

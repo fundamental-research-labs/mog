@@ -48,17 +48,6 @@ const VERSION_METHOD_REQUIREMENTS = {
   getStatus: ['version:read'],
   getSurfaceStatus: [],
   getCurrent: ['version:read'],
-  listBranches: ['version:read'],
-  diffCurrent: ['version:diff'],
-  diffBranch: ['version:diff'],
-  commitCurrent: ['version:commit'],
-  checkoutBranch: ['version:checkout'],
-  checkoutCommit: ['version:checkout'],
-  createBranchFromCurrent: ['version:read', 'version:branch'],
-  previewMerge: ['version:mergePreview'],
-  getMergeReview: ['version:mergePreview'],
-};
-const VERSION_GRAPH_METHOD_REQUIREMENTS = {
   getHead: ['version:read'],
   listCommits: ['version:read'],
   readRef: ['version:read'],
@@ -76,6 +65,15 @@ const VERSION_GRAPH_METHOD_REQUIREMENTS = {
   updateBranch: ['version:branch'],
   deleteBranch: ['version:branch'],
   deleteRef: ['version:branch'],
+  listBranches: ['version:read'],
+  diffCurrent: ['version:diff'],
+  diffBranch: ['version:diff'],
+  commitCurrent: ['version:commit'],
+  checkoutBranch: ['version:checkout'],
+  checkoutCommit: ['version:checkout'],
+  createBranchFromCurrent: ['version:read', 'version:branch'],
+  previewMerge: ['version:mergePreview'],
+  getMergeReview: ['version:mergePreview'],
 };
 const VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS = {
   listReviews: ['version:reviewRead'],
@@ -248,7 +246,6 @@ function capabilityEntry(requirements) {
 
 function versionInterfaceRequirements(interfaceName) {
   if (interfaceName === 'WorkbookVersion') return VERSION_METHOD_REQUIREMENTS;
-  if (interfaceName === 'VersionGraphApi') return VERSION_GRAPH_METHOD_REQUIREMENTS;
   if (interfaceName === 'WorkbookVersionReviewApi') {
     return VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS;
   }
@@ -700,13 +697,6 @@ function assertVersionCapabilityMatrix() {
 assertVersionCapabilityMatrix();
 
 function assertVersionSubApiInterfaces(subApiInterfaces) {
-  const versionGraph = subApiInterfaces.WorkbookVersion?.graph;
-  if (versionGraph?.targetInterface !== 'VersionGraphApi') {
-    throw new Error(
-      'workbook facade sub-api interfaces must expose WorkbookVersion.graph',
-    );
-  }
-
   const versionReviews = subApiInterfaces.WorkbookVersion?.reviews;
   if (versionReviews?.targetInterface !== 'WorkbookVersionReviewNamespace') {
     throw new Error(
@@ -785,10 +775,6 @@ function assertVersionInterfaceRequirements(interfaceName, requirements) {
   }
 }
 
-assertVersionInterfaceRequirements(
-  'VersionGraphApi',
-  VERSION_GRAPH_METHOD_REQUIREMENTS,
-);
 assertVersionInterfaceRequirements(
   'WorkbookVersionReviewApi',
   VERSION_REVIEW_ADVANCED_METHOD_REQUIREMENTS,

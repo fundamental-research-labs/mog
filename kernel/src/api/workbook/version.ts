@@ -26,7 +26,6 @@ import type {
   VersionDiffPorcelainTarget,
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
-  VersionGraphApi,
   VersionGetMergeConflictDetailRequest,
   VersionGetMergeReviewInput,
   VersionGetReviewDiffInput,
@@ -143,7 +142,7 @@ abstract class WorkbookVersionNamespaceBase {
   }
 }
 
-class WorkbookVersionGraphImpl extends WorkbookVersionNamespaceBase implements VersionGraphApi {
+class WorkbookVersionCoreImpl extends WorkbookVersionNamespaceBase {
   async getHead(): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions = {}): Promise<VersionResult<VersionHead>> {
@@ -355,24 +354,14 @@ class WorkbookVersionArtifactNamespaceImpl implements VersionMergeReviewArtifact
   }
 }
 
-export class WorkbookVersionImpl implements WorkbookVersion {
-  private readonly ctxSource: WorkbookVersionContextSource;
-
+export class WorkbookVersionImpl extends WorkbookVersionCoreImpl implements WorkbookVersion {
   constructor(
     ctx: WorkbookVersionContextSource,
-    private readonly options: {
+    options: {
       readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
     } = {},
   ) {
-    this.ctxSource = ctx;
-  }
-
-  private get ctx(): DocumentContext {
-    return typeof this.ctxSource === 'function' ? this.ctxSource() : this.ctxSource;
-  }
-
-  get graph(): VersionGraphApi {
-    return new WorkbookVersionGraphImpl(() => this.ctx, this.options);
+    super(ctx, options);
   }
 
   get reviews(): WorkbookVersionReviewNamespace {

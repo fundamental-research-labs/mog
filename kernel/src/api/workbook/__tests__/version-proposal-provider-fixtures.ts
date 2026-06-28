@@ -125,7 +125,7 @@ export function approveReview(
   expectedRevision: number,
   clientRequestId: string,
 ) {
-  return version.updateReviewStatus({
+  return version.reviews.advanced.updateReviewStatus({
     reviewId,
     expectedRevision,
     clientRequestId,

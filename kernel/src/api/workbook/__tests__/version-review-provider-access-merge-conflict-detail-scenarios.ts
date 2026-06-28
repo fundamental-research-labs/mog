@@ -53,7 +53,7 @@ export function registerReviewProviderAccessMergeConflictDetailScenarios(): void
     };
     const version = new WorkbookVersionImpl({ versioning: { provider: deniedProvider } } as any);
 
-    const result = await version.getMergeConflictDetail({
+    const result = await version.artifacts.advanced.getMergeConflictDetail({
       ...mergeReviewBaseInput(resultDigest),
       conflictId: 'conflict:w9-04:secret',
       expectedConflictDigest: digest('9'),
@@ -99,7 +99,7 @@ export function registerReviewProviderAccessMergeConflictDetailScenarios(): void
     expect(put.status).toBe('success');
     const version = new WorkbookVersionImpl({ versioning: { provider } } as any);
 
-    const result = await version.getMergeConflictDetail({
+    const result = await version.artifacts.advanced.getMergeConflictDetail({
       resultId: mergeResultIdForReviewDigest(previewRecord.digest),
       resultDigest: previewRecord.digest,
       redactionPolicyDigest: previewRecord.digest,

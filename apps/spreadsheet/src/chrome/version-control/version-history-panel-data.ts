@@ -154,15 +154,15 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
 
     const [rollout, head, commits, refs, reviews, proposals] = await Promise.all([
       readValue('VERSION_UI_STATUS_FAILED', () => workbook.version.getStatus()),
-      readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.graph.getHead()),
+      readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.getHead()),
       readVersionResult('VERSION_UI_COMMITS_FAILED', () =>
-        workbook.version.graph.listCommits({
+        workbook.version.listCommits({
           pageSize: COMMIT_PAGE_SIZE,
           includeDiagnostics: true,
         }),
       ),
       readVersionResult('VERSION_UI_REFS_FAILED', () =>
-        workbook.version.graph.listRefs({ includeDiagnostics: true }),
+        workbook.version.listRefs({ includeDiagnostics: true }),
       ),
       readReviews
         ? readVersionResult('VERSION_UI_REVIEWS_FAILED', () =>

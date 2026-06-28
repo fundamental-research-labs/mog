@@ -211,7 +211,7 @@ function remapReviewDiffFailure<T>(
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: result.error.diagnostics,
       },
     };
@@ -236,7 +236,7 @@ function targetUnavailable<T>(code: string, message: string): VersionResult<T> {
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: 'workbook.version.updateReviewStatus',
+      target: 'workbook.version.reviews.advanced.updateReviewStatus',
       diagnostics: [diagnostic(code, 'warning', message)],
     },
   };

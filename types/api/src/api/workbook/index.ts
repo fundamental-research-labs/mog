@@ -96,7 +96,6 @@ export type {
   VersionGetHeadOptions,
   VersionGetReviewDiffInput,
   VersionGetReviewInput,
-  VersionGraphApi,
   VersionHead,
   VersionListCommitsOptions,
   VersionListRefsOptions,

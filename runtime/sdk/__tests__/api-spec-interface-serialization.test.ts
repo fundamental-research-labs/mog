@@ -21,10 +21,6 @@ interface GeneratedApiSpecFixture {
       functions: Record<string, { signature: string; targetInterface?: string }>;
       members: Record<string, { signature: string; targetInterface?: string }>;
     };
-    VersionGraphApi?: {
-      functions: Record<string, { signature: string; targetInterface?: string }>;
-      members: Record<string, { signature: string; targetInterface?: string }>;
-    };
     WorkbookVersionReviewApi?: {
       functions: Record<string, { signature: string; targetInterface?: string }>;
       members: Record<string, { signature: string; targetInterface?: string }>;
@@ -84,35 +80,23 @@ describe('api spec interface serialization', () => {
     const workbookVersion = apiSpec.interfaces.WorkbookVersion;
     expect(workbookVersion).toBeDefined();
     if (!workbookVersion) throw new Error('Generated API spec is missing WorkbookVersion');
-    expect(workbookVersion.members.graph).toEqual(
-      expect.objectContaining({
-        signature: 'readonly graph: VersionGraphApi;',
-        targetInterface: 'VersionGraphApi',
-      }),
-    );
-    expect(workbookVersion.functions.getHead).toBeUndefined();
-    expect(workbookVersion.functions.listCommits).toBeUndefined();
-    expect(workbookVersion.functions.commit).toBeUndefined();
-    expect(workbookVersion.functions.diff).toBeUndefined();
-
-    const graphApi = apiSpec.interfaces.VersionGraphApi;
-    expect(graphApi).toBeDefined();
-    expect(graphApi?.functions.getHead.signature).toContain(
+    expect(workbookVersion.members.graph).toBeUndefined();
+    expect(workbookVersion.functions.getHead.signature).toContain(
       'Promise<VersionResult<VersionHead>>',
     );
-    expect(graphApi?.functions.listCommits.signature).toContain(
+    expect(workbookVersion.functions.listCommits.signature).toContain(
       'Promise<VersionResult<Paged<WorkbookCommitSummary>>>',
     );
-    expect(graphApi?.functions.commit.signature).toContain(
+    expect(workbookVersion.functions.commit.signature).toContain(
       'Promise<VersionResult<WorkbookCommitSummary>>',
     );
-    expect(graphApi?.functions.diff.signature).toContain(
+    expect(workbookVersion.functions.diff.signature).toContain(
       'Promise<VersionResult<VersionSemanticDiffPage>>',
     );
-    expect(graphApi?.functions.applyMerge.signature).toContain(
+    expect(workbookVersion.functions.applyMerge.signature).toContain(
       'Promise<VersionResult<VersionApplyMergeResult>>',
     );
-    expect(graphApi?.functions.revert.signature).toContain(
+    expect(workbookVersion.functions.revert.signature).toContain(
       'Promise<VersionResult<VersionRevertResult>>',
     );
     expect(apiSpec.types.WorkbookCommitSummary.source.file).toBe(

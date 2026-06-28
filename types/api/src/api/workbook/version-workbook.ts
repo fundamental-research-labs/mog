@@ -64,7 +64,13 @@ import type {
 import type { VersionProposalPorcelainApi } from './version-proposal';
 import type { WorkbookVersionReviewNamespace } from './version-review';
 
-export interface VersionGraphApi {
+export interface WorkbookVersion {
+  readonly reviews: WorkbookVersionReviewNamespace;
+  readonly artifacts: VersionMergeReviewArtifactNamespace;
+  readonly proposals: VersionProposalPorcelainApi;
+  getStatus(): Promise<WorkbookVersionStatus>;
+  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
+  getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(
@@ -115,16 +121,6 @@ export interface VersionGraphApi {
   updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
   deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
   deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
-}
-
-export interface WorkbookVersion {
-  readonly graph: VersionGraphApi;
-  readonly reviews: WorkbookVersionReviewNamespace;
-  readonly artifacts: VersionMergeReviewArtifactNamespace;
-  readonly proposals: VersionProposalPorcelainApi;
-  getStatus(): Promise<WorkbookVersionStatus>;
-  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
-  getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
   commitCurrent(
     options?: VersionCommitCurrentOptions,
   ): Promise<VersionResult<WorkbookCommitSummary>>;

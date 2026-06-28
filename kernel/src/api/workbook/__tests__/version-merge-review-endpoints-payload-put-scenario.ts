@@ -22,7 +22,7 @@ export function registerMergeReviewEndpointPayloadPutScenario(): void {
         });
 
         await expect(
-          sourceWb.version.putMergeResolutionPayload({
+          sourceWb.version.artifacts.advanced.putMergeResolutionPayload({
             ...request,
             value: { kind: 'value', value: 'tampered' },
           }),
@@ -33,7 +33,7 @@ export function registerMergeReviewEndpointPayloadPutScenario(): void {
           },
         });
 
-        const put = await sourceWb.version.putMergeResolutionPayload(request);
+        const put = await sourceWb.version.artifacts.advanced.putMergeResolutionPayload(request);
         if (!put.ok) throw new Error(`expected payload put success: ${put.error.code}`);
 
         expect(put.value).toMatchObject({

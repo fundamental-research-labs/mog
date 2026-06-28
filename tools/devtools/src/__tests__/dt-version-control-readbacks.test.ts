@@ -82,19 +82,17 @@ describe('__dt.versionControl readbacks', () => {
         calls.push({ method: 'getSurfaceStatus' });
         return surfaceStatus;
       },
-      graph: {
-        getHead: async (options?: unknown) => {
-          calls.push({ method: 'getHead', options });
-          return head;
-        },
-        listCommits: async (options?: unknown) => {
-          calls.push({ method: 'listCommits', options });
-          return commits;
-        },
-        listRefs: async (options?: unknown) => {
-          calls.push({ method: 'listRefs', options });
-          return refs;
-        },
+      getHead: async (options?: unknown) => {
+        calls.push({ method: 'getHead', options });
+        return head;
+      },
+      listCommits: async (options?: unknown) => {
+        calls.push({ method: 'listCommits', options });
+        return commits;
+      },
+      listRefs: async (options?: unknown) => {
+        calls.push({ method: 'listRefs', options });
+        return refs;
       },
     };
 
@@ -119,9 +117,7 @@ describe('__dt.versionControl readbacks', () => {
   test('awaits shell handle.workbook and does not inspect private document context', async () => {
     const head = { ok: true, value: { id: `commit:sha256:${'b'.repeat(64)}` } };
     const version = {
-      graph: {
-        getHead: async () => head,
-      },
+      getHead: async () => head,
     };
     runtime = setupRuntime();
     const api = runtime.api;

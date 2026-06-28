@@ -108,7 +108,8 @@ const WORKSHEET_SUB_APIS: Record<string, string> = {
   WorksheetFormControls: 'formControls',
 };
 
-// Workbook sub-APIs
+// Workbook sub-APIs. Nested workbook APIs can use dotted prefixes so the
+// generated reference exposes the actual call path.
 const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookSheets: 'sheets',
   WorkbookNames: 'names',
@@ -121,6 +122,10 @@ const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookTheme: 'theme',
   WorkbookSlicers: 'slicers',
   WorkbookVersion: 'version',
+  WorkbookVersionReviewApi: 'version.reviews.advanced',
+  VersionMergeReviewArtifactApi: 'version.artifacts.advanced',
+  VersionProposalPorcelainApi: 'version.proposals',
+  VersionProposalApi: 'version.proposals.advanced',
   WorkbookViewport: 'viewport',
 };
 

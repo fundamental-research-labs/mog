@@ -90,7 +90,7 @@ export async function firstReviewDiffTarget(
   version: WorkbookVersionImpl,
   reviewId: string,
 ): Promise<WorkbookVersionReviewDecisionTarget> {
-  const diff = await version.getReviewDiff({ reviewId });
+  const diff = await version.reviews.advanced.getReviewDiff({ reviewId });
   if (!diff.ok) throw new Error(`expected review diff success: ${diff.error.code}`);
   return diff.value.changes[0].target;
 }

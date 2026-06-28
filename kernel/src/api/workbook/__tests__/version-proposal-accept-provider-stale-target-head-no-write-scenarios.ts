@@ -59,11 +59,11 @@ export function registerTargetHeadNoWriteScenarios(): void {
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
 
-    const approvedReview = await version.getReview({ reviewId: ready.reviewId });
+    const approvedReview = await version.reviews.advanced.getReview({ reviewId: ready.reviewId });
     if (!approvedReview.ok) {
       throw new Error(`expected approved review before retry: ${approvedReview.error.code}`);
     }
-    const rejectedReview = await version.updateReviewStatus({
+    const rejectedReview = await version.reviews.advanced.updateReviewStatus({
       reviewId: ready.reviewId,
       expectedRevision: approvedReview.value.revision,
       clientRequestId: 'proposal-review-reject-after-stale-no-write',
@@ -87,7 +87,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'rejected' },
     });

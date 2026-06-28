@@ -17,7 +17,7 @@ export function registerRequestAndDiagnosticRedactionScenarios(): void {
     it('rejects conflict detail requests whose expected conflict digest does not match', async () => {
       await withReviewArtifact('conflict-digest-mismatch', async ({ version, preview }) => {
         const conflict = preview.conflicts[0];
-        const result = await version.getMergeConflictDetail({
+        const result = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -77,7 +77,7 @@ export function registerRequestAndDiagnosticRedactionScenarios(): void {
         },
       } as any);
 
-      const result = await version.getMergeConflictDetail({
+      const result = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: mergeResultIdForPreviewDigest(resultDigest),
         resultDigest,
         redactionPolicyDigest: resultDigest,
@@ -130,7 +130,7 @@ export function registerRequestAndDiagnosticRedactionScenarios(): void {
       await withReviewArtifact(
         'cross-workspace-conflict-id',
         async ({ version, preview }) => {
-          const result = await version.getMergeConflictDetail({
+          const result = await version.artifacts.advanced.getMergeConflictDetail({
             resultId: preview.resultId,
             resultDigest: preview.resultDigest,
             redactionPolicyDigest: preview.resultDigest,

@@ -58,12 +58,12 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByText('budget')).toBeInTheDocument();
     expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(1);
     expect(workbook.version.getStatus).toHaveBeenCalledTimes(1);
-    expect(workbook.version.graph.getHead).toHaveBeenCalledTimes(1);
-    expect(workbook.version.graph.listCommits).toHaveBeenCalledWith({
+    expect(workbook.version.getHead).toHaveBeenCalledTimes(1);
+    expect(workbook.version.listCommits).toHaveBeenCalledWith({
       pageSize: 20,
       includeDiagnostics: true,
     });
-    expect(workbook.version.graph.listRefs).toHaveBeenCalledWith({ includeDiagnostics: true });
+    expect(workbook.version.listRefs).toHaveBeenCalledWith({ includeDiagnostics: true });
     expect(screen.getByTestId(parentDiffButtonTestId(PARENT_COMMIT_ID))).toBeDisabled();
 
     await user.click(screen.getByTestId('panel-version-history-refresh'));
@@ -125,7 +125,7 @@ describe('VersionHistoryPanelContent', () => {
           ok: false,
           error: {
             code: 'target_unavailable',
-            target: 'workbook.version.graph.getHead',
+            target: 'workbook.version.getHead',
             diagnostics: [
               {
                 code: 'VERSION_GRAPH_UNINITIALIZED',

@@ -57,10 +57,24 @@ export function renderVersionHistoryPanel({
 
 type VersionHistoryVersion = VersionHistoryWorkbook['version'];
 
+type VersionHistoryDirectVersionOverrides = Partial<
+  Pick<
+    VersionHistoryVersion,
+    | 'getHead'
+    | 'readRef'
+    | 'listCommits'
+    | 'listRefs'
+    | 'createBranch'
+    | 'promotePendingRemote'
+    | 'revert'
+    | 'diff'
+  >
+>;
+
 type VersionHistoryWorkbookVersionOverrides = Partial<
-  Omit<VersionHistoryVersion, 'graph' | 'reviews' | 'proposals'>
+  Omit<VersionHistoryVersion, 'reviews' | 'proposals'>
 > & {
-  readonly graph?: Partial<VersionHistoryVersion['graph']>;
+  readonly graph?: VersionHistoryDirectVersionOverrides;
   readonly reviews?: {
     readonly advanced?: Partial<VersionHistoryVersion['reviews']['advanced']>;
   };
@@ -76,7 +90,7 @@ export function createWorkbook(
     proposals: proposalsOverrides,
     ...topLevelOverrides
   } = overrides;
-  const graph = {
+  const directVersionMethods = {
     getHead: jest.fn(async () => ({
       ok: true,
       value: {
@@ -86,7 +100,7 @@ export function createWorkbook(
       },
     })),
     readRef: jest.fn(
-      async (name: Parameters<VersionHistoryVersion['graph']['readRef']>[0]) => ({
+      async (name: Parameters<VersionHistoryVersion['readRef']>[0]) => ({
         ok: true,
         value: {
           status: 'success',
@@ -148,7 +162,7 @@ export function createWorkbook(
       },
     })),
     createBranch: jest.fn(
-      async (options: Parameters<VersionHistoryVersion['graph']['createBranch']>[0]) => ({
+      async (options: Parameters<VersionHistoryVersion['createBranch']>[0]) => ({
         ok: true,
         value: {
           name: options.name,
@@ -208,6 +222,7 @@ export function createWorkbook(
   const version = {
     getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
     getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
+    ...directVersionMethods,
     commitCurrent: jest.fn(async () => ({
       ok: true,
       value: {
@@ -268,7 +283,6 @@ export function createWorkbook(
         mutationGuarantee: 'no-workbook-mutation',
       },
     })),
-    graph,
     reviews,
     proposals,
     ...topLevelOverrides,

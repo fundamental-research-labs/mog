@@ -28,16 +28,16 @@ export function registerVersionReviewFacadeDelegationScenario(): void {
     };
     const version = createVersion(reviewService);
 
-    await expect(version.listReviews({ limit: 25 })).resolves.toEqual({
+    await expect(version.reviews.advanced.listReviews({ limit: 25 })).resolves.toEqual({
       ok: true,
       value: { items: [review], limit: 25 },
     });
-    await expect(version.getReview({ reviewId: REVIEW_ID })).resolves.toEqual({
+    await expect(version.reviews.advanced.getReview({ reviewId: REVIEW_ID })).resolves.toEqual({
       ok: true,
       value: review,
     });
     await expect(
-      version.createReview({
+      version.reviews.advanced.createReview({
         clientRequestId: 'create-1',
         subject: {
           kind: 'commitRange',
@@ -49,7 +49,7 @@ export function registerVersionReviewFacadeDelegationScenario(): void {
       }),
     ).resolves.toEqual({ ok: true, value: review });
     await expect(
-      version.appendReviewDecision({
+      version.reviews.advanced.appendReviewDecision({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'decision-1',
@@ -61,7 +61,7 @@ export function registerVersionReviewFacadeDelegationScenario(): void {
       }),
     ).resolves.toEqual({ ok: true, value: review });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'status-1',
@@ -69,7 +69,7 @@ export function registerVersionReviewFacadeDelegationScenario(): void {
         actor: AUTHOR,
       }),
     ).resolves.toEqual({ ok: true, value: review });
-    await expect(version.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toEqual({
+    await expect(version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toEqual({
       ok: true,
       value: diffPage,
     });

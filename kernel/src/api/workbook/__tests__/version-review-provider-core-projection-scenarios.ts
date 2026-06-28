@@ -14,7 +14,7 @@ export function registerReviewProviderCoreProjectionScenarios(): void {
     attachWorkbookVersioning(ctx, { provider });
     const version = new WorkbookVersionImpl(ctx);
 
-    const created = await version.createReview({
+    const created = await version.reviews.advanced.createReview({
       ...createReviewInput('projection-review-1'),
       createdBy: SENSITIVE_ACTOR,
     });
@@ -23,15 +23,15 @@ export function registerReviewProviderCoreProjectionScenarios(): void {
     expect(JSON.stringify(created.value)).not.toContain('agent-secret');
     expect(created.value.redaction.redactedFields).toContain('reviewAuthors.principalTrace');
 
-    const listed = await version.listReviews({});
+    const listed = await version.reviews.advanced.listReviews({});
     if (!listed.ok) throw new Error(`expected list success: ${listed.error.code}`);
     expect(JSON.stringify(listed.value)).not.toContain('principal-secret');
 
-    const fetched = await version.getReview({ reviewId: created.value.id });
+    const fetched = await version.reviews.advanced.getReview({ reviewId: created.value.id });
     if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
     expect(JSON.stringify(fetched.value)).not.toContain('principal-secret');
 
-    const decision = await version.appendReviewDecision({
+    const decision = await version.reviews.advanced.appendReviewDecision({
       reviewId: created.value.id,
       expectedRevision: 1,
       clientRequestId: 'projection-decision-1',
@@ -48,7 +48,7 @@ export function registerReviewProviderCoreProjectionScenarios(): void {
     expect(JSON.stringify(decision.value)).not.toContain('agent-secret');
     expect(JSON.stringify(decision.value)).toContain('publicNote');
 
-    const status = await version.updateReviewStatus({
+    const status = await version.reviews.advanced.updateReviewStatus({
       reviewId: created.value.id,
       expectedRevision: 2,
       clientRequestId: 'projection-status-1',

@@ -81,7 +81,6 @@ export type {
   VersionGetMergeReviewInput,
   VersionLiveCollaborationState,
   VersionGetHeadOptions,
-  VersionGraphApi,
   VersionHead,
   VersionListCommitsOptions,
   VersionListRefsOptions,

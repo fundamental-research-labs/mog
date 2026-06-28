@@ -520,7 +520,7 @@ test('version surface status remains available without version read grant', asyn
   let runtime: SpreadsheetRuntime | undefined;
   try {
     const versionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
-    const graphMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.VersionGraphApi;
+    const directVersionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
     const reviewMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewApi;
     const assertVersionCapabilityEntry = (
       matrix: object,
@@ -557,8 +557,8 @@ test('version surface status remains available without version read grant', asyn
         capabilities: ['version:reviewRead'],
       },
     ]);
-    assertVersionCapabilityEntry(graphMatrix, 'revert', ['version:revert']);
-    assertVersionCapabilityEntry(graphMatrix, 'promotePendingRemote', [
+    assertVersionCapabilityEntry(directVersionMatrix, 'revert', ['version:revert']);
+    assertVersionCapabilityEntry(directVersionMatrix, 'promotePendingRemote', [
       'version:remotePromote',
       'version:provenance',
     ]);
@@ -602,18 +602,18 @@ test('version surface status remains available without version read grant', asyn
       () => void facade.version.getStatus(),
       /Capability "version:read" is denied for WorkbookVersion\.getStatus/,
     );
-    assert.deepEqual(await facade.version.graph.getHead(), {
+    assert.deepEqual(await facade.version.getHead(), {
       ok: false,
       error: {
         code: 'version_capability_unavailable',
         capability: 'version:read',
         dependency: 'hostCapability',
-        reason: 'Capability "version:read" is denied for VersionGraphApi.getHead',
+        reason: 'Capability "version:read" is denied for WorkbookVersion.getHead',
         retryable: false,
       },
     });
-    const applyMergeDenied = await facade.version.graph.applyMerge(
-      {} as Parameters<typeof facade.version.graph.applyMerge>[0],
+    const applyMergeDenied = await facade.version.applyMerge(
+      {} as Parameters<typeof facade.version.applyMerge>[0],
     );
     assert.equal(applyMergeDenied.ok, false);
     if (!applyMergeDenied.ok) {
@@ -627,8 +627,8 @@ test('version surface status remains available without version read grant', asyn
         ]);
       }
     }
-    const revertDenied = await facade.version.graph.revert(
-      {} as Parameters<typeof facade.version.graph.revert>[0],
+    const revertDenied = await facade.version.revert(
+      {} as Parameters<typeof facade.version.revert>[0],
     );
     assert.deepEqual(revertDenied, {
       ok: false,
@@ -636,11 +636,11 @@ test('version surface status remains available without version read grant', asyn
         code: 'version_capability_unavailable',
         capability: 'version:revert',
         dependency: 'hostCapability',
-        reason: 'Capability "version:revert" is denied for VersionGraphApi.revert',
+        reason: 'Capability "version:revert" is denied for WorkbookVersion.revert',
         retryable: false,
       },
     });
-    const promoteRemoteDenied = await facade.version.graph.promotePendingRemote();
+    const promoteRemoteDenied = await facade.version.promotePendingRemote();
     assert.equal(promoteRemoteDenied.ok, false);
     if (!promoteRemoteDenied.ok) {
       assert.equal(promoteRemoteDenied.error.code, 'version_capability_unavailable');

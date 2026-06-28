@@ -84,7 +84,7 @@ describe('WorkbookVersion applyMerge sealed payload refs', () => {
           sealedPayloadRef: payload,
         };
 
-        const saved = await sourceWb.version.saveMergeResolutions({
+        const saved = await sourceWb.version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

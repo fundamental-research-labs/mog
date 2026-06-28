@@ -19,7 +19,7 @@ export function registerReviewProviderAccessServiceGetReviewScenarios(): void {
             ok: false,
             error: {
               code: 'target_unavailable',
-              target: 'workbook.version.getReview',
+              target: 'workbook.version.reviews.advanced.getReview',
               diagnostics: [
                 {
                   code: 'VERSION_PERMISSION_DENIED',
@@ -47,7 +47,7 @@ export function registerReviewProviderAccessServiceGetReviewScenarios(): void {
       },
     } as any);
 
-    const result = await version.getReview({ reviewId: `review:sha256:${'a'.repeat(64)}` });
+    const result = await version.reviews.advanced.getReview({ reviewId: `review:sha256:${'a'.repeat(64)}` });
 
     expect(result).toMatchObject({
       ok: false,

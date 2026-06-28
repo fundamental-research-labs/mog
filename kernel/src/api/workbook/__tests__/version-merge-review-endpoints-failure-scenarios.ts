@@ -14,7 +14,7 @@ export function registerMergeReviewEndpointFailureScenarios(): void {
   it('fails closed when result id and digest do not match', async () => {
     await withPersistedConflictPreview('digest-mismatch', async ({ sourceWb, preview }) => {
       const conflict = preview.conflicts[0];
-      const result = await sourceWb.version.getMergeConflictDetail({
+      const result = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
         resultId: `merge-result:${'0'.repeat(64)}` as any,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -28,7 +28,7 @@ export function registerMergeReviewEndpointFailureScenarios(): void {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getMergeConflictDetail',
+          target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
           diagnostics: [
             expect.objectContaining({
               code: 'VERSION_MERGE_RESOLUTION_MISMATCH',
@@ -66,7 +66,7 @@ export function registerMergeReviewEndpointFailureScenarios(): void {
         item.graphId,
         item.conflict,
         async ({ sourceWb, preview }) => {
-          const result = await sourceWb.version.getMergeConflictDetail({
+          const result = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
             resultId: preview.resultId,
             resultDigest: preview.resultDigest,
             redactionPolicyDigest: preview.resultDigest,
@@ -102,7 +102,7 @@ export function registerMergeReviewEndpointFailureScenarios(): void {
     let wb: Workbook | undefined;
     try {
       wb = await handle.workbook();
-      const result = await wb.version.getMergeConflictDetail({
+      const result = await wb.version.artifacts.advanced.getMergeConflictDetail({
         resultId: `merge-result:${digest.digest}` as any,
         resultDigest: digest,
         redactionPolicyDigest: digest,
@@ -116,7 +116,7 @@ export function registerMergeReviewEndpointFailureScenarios(): void {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getMergeConflictDetail',
+          target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
           diagnostics: [
             expect.objectContaining({
               code: 'VERSION_STORE_UNAVAILABLE',

@@ -48,7 +48,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied' },
     });
@@ -92,7 +92,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         ok: true,
         value: { status: 'applied', revision: 6 },
       });
-      await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
         ok: true,
         value: { status: 'applied' },
       });
@@ -147,7 +147,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied' },
     });
@@ -197,7 +197,7 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       ok: true,
       value: { status: 'merge_conflicted', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

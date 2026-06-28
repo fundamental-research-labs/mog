@@ -6,12 +6,12 @@ export function registerReviewProviderMarkResolvedScenario(): void {
     const { review, version } = await createCellA1AndSheetOrderApprovalReview(
       'approval-mark-resolved-1',
     );
-    const diff = await version.getReviewDiff({ reviewId: review.id, limit: 2 });
+    const diff = await version.reviews.advanced.getReviewDiff({ reviewId: review.id, limit: 2 });
     if (!diff.ok) throw new Error(`expected review diff success: ${diff.error.code}`);
     const target = diff.value.changes[0].target;
     const otherTarget = diff.value.changes[1].target;
 
-    const requested = await version.appendReviewDecision({
+    const requested = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 1,
       clientRequestId: 'request-change-for-mark-resolved',
@@ -20,7 +20,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
     if (!requested.ok) throw new Error(`expected request-change success: ${requested.error.code}`);
     const requestDecisionId = requested.value.decisions[0].id;
 
-    const wrongTargetResolution = await version.appendReviewDecision({
+    const wrongTargetResolution = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 2,
       clientRequestId: 'mark-resolved-wrong-target',
@@ -33,7 +33,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
     });
     expect(wrongTargetResolution).toMatchObject({ ok: true, value: { revision: 3 } });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 3,
         clientRequestId: 'approve-after-wrong-target-resolution',
@@ -45,7 +45,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
       error: { code: 'invalid_state', state: 'unresolved_request_change' },
     });
 
-    const missingSupersede = await version.appendReviewDecision({
+    const missingSupersede = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 3,
       clientRequestId: 'mark-resolved-missing-supersede',
@@ -53,7 +53,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
     });
     expect(missingSupersede).toMatchObject({ ok: true, value: { revision: 4 } });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 4,
         clientRequestId: 'approve-after-missing-supersede',
@@ -65,7 +65,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
       error: { code: 'invalid_state', state: 'unresolved_request_change' },
     });
 
-    const resolved = await version.appendReviewDecision({
+    const resolved = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 4,
       clientRequestId: 'mark-resolved-with-supersede',
@@ -78,7 +78,7 @@ export function registerReviewProviderMarkResolvedScenario(): void {
     });
     expect(resolved).toMatchObject({ ok: true, value: { revision: 5 } });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 5,
         clientRequestId: 'approve-after-mark-resolved',

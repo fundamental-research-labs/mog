@@ -4828,6 +4828,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.applyMerge",
+      "stableId": "WorkbookVersion.applyMerge",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "applyMerge",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.artifacts",
       "stableId": "WorkbookVersion.artifacts",
       "root": "subApi",
@@ -4925,6 +4944,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.checkout",
+      "stableId": "WorkbookVersion.checkout",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "checkout",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkout(\n    target: VersionCheckoutTarget,\n    options?: VersionCheckoutOptions,\n  ): Promise<VersionResult<CheckoutVersionResult>>;",
+      "typeText": "Promise<VersionResult<CheckoutVersionResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.checkoutBranch",
       "stableId": "WorkbookVersion.checkoutBranch",
       "root": "subApi",
@@ -4963,6 +5001,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.commit",
+      "stableId": "WorkbookVersion.commit",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "commit",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;",
+      "typeText": "Promise<VersionResult<WorkbookCommitSummary>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.commitCurrent",
       "stableId": "WorkbookVersion.commitCurrent",
       "root": "subApi",
@@ -4982,6 +5039,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.createBranch",
+      "stableId": "WorkbookVersion.createBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.createBranchFromCurrent",
       "stableId": "WorkbookVersion.createBranchFromCurrent",
       "root": "subApi",
@@ -4993,6 +5069,63 @@
       "asyncModel": "promise",
       "signature": "createBranchFromCurrent(\n    name: VersionBranchNameInput,\n    options?: VersionCreateBranchFromCurrentOptions,\n  ): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.deleteBranch",
+      "stableId": "WorkbookVersion.deleteBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "deleteBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.deleteRef",
+      "stableId": "WorkbookVersion.deleteRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "deleteRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.diff",
+      "stableId": "WorkbookVersion.diff",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "diff",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "diff(\n    base: VersionCommitish,\n    target: VersionCommitish,\n    options?: VersionDiffOptions,\n  ): Promise<VersionResult<VersionSemanticDiffPage>>;",
+      "typeText": "Promise<VersionResult<VersionSemanticDiffPage>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5039,6 +5172,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.fastForwardBranch",
+      "stableId": "WorkbookVersion.fastForwardBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "fastForwardBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.getCurrent",
       "stableId": "WorkbookVersion.getCurrent",
       "root": "subApi",
@@ -5058,6 +5210,25 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.getHead",
+      "stableId": "WorkbookVersion.getHead",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getHead",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getHead(): Promise<VersionResult<VersionHead>>;",
+      "typeText": "Promise<VersionResult<VersionHead>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.getMergeReview",
       "stableId": "WorkbookVersion.getMergeReview",
       "root": "subApi",
@@ -5069,6 +5240,25 @@
       "asyncModel": "promise",
       "signature": "getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;",
       "typeText": "Promise<VersionResult<VersionMergeReview>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.getRef",
+      "stableId": "WorkbookVersion.getRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5115,349 +5305,6 @@
     },
     {
       "schemaVersion": "1",
-      "path": "wb.version.graph",
-      "stableId": "WorkbookVersion.graph",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "WorkbookVersion",
-      "member": "graph",
-      "kind": "property",
-      "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "readonly graph: VersionGraphApi;",
-      "typeText": "VersionGraphApi",
-      "compatibility": [],
-      "targetInterface": "VersionGraphApi",
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.applyMerge",
-      "stableId": "VersionGraphApi.applyMerge",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "applyMerge",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
-      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.checkout",
-      "stableId": "VersionGraphApi.checkout",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "checkout",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "checkout(\n    target: VersionCheckoutTarget,\n    options?: VersionCheckoutOptions,\n  ): Promise<VersionResult<CheckoutVersionResult>>;",
-      "typeText": "Promise<VersionResult<CheckoutVersionResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.commit",
-      "stableId": "VersionGraphApi.commit",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "commit",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;",
-      "typeText": "Promise<VersionResult<WorkbookCommitSummary>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.createBranch",
-      "stableId": "VersionGraphApi.createBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "createBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.deleteBranch",
-      "stableId": "VersionGraphApi.deleteBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "deleteBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.deleteRef",
-      "stableId": "VersionGraphApi.deleteRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "deleteRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.diff",
-      "stableId": "VersionGraphApi.diff",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "diff",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "diff(\n    base: VersionCommitish,\n    target: VersionCommitish,\n    options?: VersionDiffOptions,\n  ): Promise<VersionResult<VersionSemanticDiffPage>>;",
-      "typeText": "Promise<VersionResult<VersionSemanticDiffPage>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.fastForwardBranch",
-      "stableId": "VersionGraphApi.fastForwardBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "fastForwardBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.getHead",
-      "stableId": "VersionGraphApi.getHead",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "getHead",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "getHead(): Promise<VersionResult<VersionHead>>;",
-      "typeText": "Promise<VersionResult<VersionHead>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.getRef",
-      "stableId": "VersionGraphApi.getRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "getRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.listCommits",
-      "stableId": "VersionGraphApi.listCommits",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "listCommits",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
-      "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.listRefs",
-      "stableId": "VersionGraphApi.listRefs",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "listRefs",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
-      "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.merge",
-      "stableId": "VersionGraphApi.merge",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "merge",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
-      "typeText": "Promise<VersionResult<VersionMergeResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.promotePendingRemote",
-      "stableId": "VersionGraphApi.promotePendingRemote",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "promotePendingRemote",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
-      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.readRef",
-      "stableId": "VersionGraphApi.readRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "readRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.revert",
-      "stableId": "VersionGraphApi.revert",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "revert",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
-      "typeText": "Promise<VersionResult<VersionRevertResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.updateBranch",
-      "stableId": "VersionGraphApi.updateBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "updateBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    {
-      "schemaVersion": "1",
       "path": "wb.version.listBranches",
       "stableId": "WorkbookVersion.listBranches",
       "root": "subApi",
@@ -5477,6 +5324,63 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.listCommits",
+      "stableId": "WorkbookVersion.listCommits",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listCommits",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.listRefs",
+      "stableId": "WorkbookVersion.listRefs",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listRefs",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
+      "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.merge",
+      "stableId": "WorkbookVersion.merge",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "merge",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.previewMerge",
       "stableId": "WorkbookVersion.previewMerge",
       "root": "subApi",
@@ -5488,6 +5392,25 @@
       "asyncModel": "promise",
       "signature": "previewMerge(\n    input: VersionPreviewMergeInput,\n    options?: VersionPreviewMergeOptions,\n  ): Promise<VersionResult<VersionMergeReview>>;",
       "typeText": "Promise<VersionResult<VersionMergeReview>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.promotePendingRemote",
+      "stableId": "WorkbookVersion.promotePendingRemote",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "promotePendingRemote",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
+      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -5840,6 +5763,44 @@
     },
     {
       "schemaVersion": "1",
+      "path": "wb.version.readRef",
+      "stableId": "WorkbookVersion.readRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "readRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "readRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.revert",
+      "stableId": "WorkbookVersion.revert",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "revert",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
+      "typeText": "Promise<VersionResult<VersionRevertResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "wb.version.reviews",
       "stableId": "WorkbookVersion.reviews",
       "root": "subApi",
@@ -5989,6 +5950,25 @@
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-review.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "wb.version.updateBranch",
+      "stableId": "WorkbookVersion.updateBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "updateBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
       },
       "ownerPackage": "@mog/types-api"
     },
@@ -24562,6 +24542,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.applyMerge": {
+      "schemaVersion": "1",
+      "path": "wb.version.applyMerge",
+      "stableId": "WorkbookVersion.applyMerge",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "applyMerge",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.artifacts": {
       "schemaVersion": "1",
       "path": "wb.version.artifacts",
@@ -24659,6 +24658,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.checkout": {
+      "schemaVersion": "1",
+      "path": "wb.version.checkout",
+      "stableId": "WorkbookVersion.checkout",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "checkout",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "checkout(\n    target: VersionCheckoutTarget,\n    options?: VersionCheckoutOptions,\n  ): Promise<VersionResult<CheckoutVersionResult>>;",
+      "typeText": "Promise<VersionResult<CheckoutVersionResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.checkoutBranch": {
       "schemaVersion": "1",
       "path": "wb.version.checkoutBranch",
@@ -24697,6 +24715,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.commit": {
+      "schemaVersion": "1",
+      "path": "wb.version.commit",
+      "stableId": "WorkbookVersion.commit",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "commit",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;",
+      "typeText": "Promise<VersionResult<WorkbookCommitSummary>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.commitCurrent": {
       "schemaVersion": "1",
       "path": "wb.version.commitCurrent",
@@ -24716,6 +24753,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.createBranch": {
+      "schemaVersion": "1",
+      "path": "wb.version.createBranch",
+      "stableId": "WorkbookVersion.createBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "createBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.createBranchFromCurrent": {
       "schemaVersion": "1",
       "path": "wb.version.createBranchFromCurrent",
@@ -24729,6 +24785,63 @@
       "asyncModel": "promise",
       "signature": "createBranchFromCurrent(\n    name: VersionBranchNameInput,\n    options?: VersionCreateBranchFromCurrentOptions,\n  ): Promise<VersionResult<VersionRef>>;",
       "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.deleteBranch": {
+      "schemaVersion": "1",
+      "path": "wb.version.deleteBranch",
+      "stableId": "WorkbookVersion.deleteBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "deleteBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.deleteRef": {
+      "schemaVersion": "1",
+      "path": "wb.version.deleteRef",
+      "stableId": "WorkbookVersion.deleteRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "deleteRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.diff": {
+      "schemaVersion": "1",
+      "path": "wb.version.diff",
+      "stableId": "WorkbookVersion.diff",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "diff",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "diff(\n    base: VersionCommitish,\n    target: VersionCommitish,\n    options?: VersionDiffOptions,\n  ): Promise<VersionResult<VersionSemanticDiffPage>>;",
+      "typeText": "Promise<VersionResult<VersionSemanticDiffPage>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24773,6 +24886,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.fastForwardBranch": {
+      "schemaVersion": "1",
+      "path": "wb.version.fastForwardBranch",
+      "stableId": "WorkbookVersion.fastForwardBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "fastForwardBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.getCurrent": {
       "schemaVersion": "1",
       "path": "wb.version.getCurrent",
@@ -24792,6 +24924,25 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.getHead": {
+      "schemaVersion": "1",
+      "path": "wb.version.getHead",
+      "stableId": "WorkbookVersion.getHead",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getHead",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getHead(): Promise<VersionResult<VersionHead>>;",
+      "typeText": "Promise<VersionResult<VersionHead>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.getMergeReview": {
       "schemaVersion": "1",
       "path": "wb.version.getMergeReview",
@@ -24805,6 +24956,25 @@
       "asyncModel": "promise",
       "signature": "getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;",
       "typeText": "Promise<VersionResult<VersionMergeReview>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.getRef": {
+      "schemaVersion": "1",
+      "path": "wb.version.getRef",
+      "stableId": "WorkbookVersion.getRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "getRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -24849,349 +25019,6 @@
       },
       "ownerPackage": "@mog/types-api"
     },
-    "wb.version.graph": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph",
-      "stableId": "WorkbookVersion.graph",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "WorkbookVersion",
-      "member": "graph",
-      "kind": "property",
-      "visibility": "public",
-      "asyncModel": "sync",
-      "signature": "readonly graph: VersionGraphApi;",
-      "typeText": "VersionGraphApi",
-      "compatibility": [],
-      "targetInterface": "VersionGraphApi",
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.applyMerge": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.applyMerge",
-      "stableId": "VersionGraphApi.applyMerge",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "applyMerge",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "applyMerge(\n    input: VersionApplyMergeInput,\n    options?: VersionApplyMergeOptions,\n  ): Promise<VersionResult<VersionApplyMergeResult>>;",
-      "typeText": "Promise<VersionResult<VersionApplyMergeResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.checkout": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.checkout",
-      "stableId": "VersionGraphApi.checkout",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "checkout",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "checkout(\n    target: VersionCheckoutTarget,\n    options?: VersionCheckoutOptions,\n  ): Promise<VersionResult<CheckoutVersionResult>>;",
-      "typeText": "Promise<VersionResult<CheckoutVersionResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.commit": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.commit",
-      "stableId": "VersionGraphApi.commit",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "commit",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;",
-      "typeText": "Promise<VersionResult<WorkbookCommitSummary>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.createBranch": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.createBranch",
-      "stableId": "VersionGraphApi.createBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "createBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.deleteBranch": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.deleteBranch",
-      "stableId": "VersionGraphApi.deleteBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "deleteBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.deleteRef": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.deleteRef",
-      "stableId": "VersionGraphApi.deleteRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "deleteRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.diff": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.diff",
-      "stableId": "VersionGraphApi.diff",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "diff",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "diff(\n    base: VersionCommitish,\n    target: VersionCommitish,\n    options?: VersionDiffOptions,\n  ): Promise<VersionResult<VersionSemanticDiffPage>>;",
-      "typeText": "Promise<VersionResult<VersionSemanticDiffPage>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.fastForwardBranch": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.fastForwardBranch",
-      "stableId": "VersionGraphApi.fastForwardBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "fastForwardBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.getHead": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.getHead",
-      "stableId": "VersionGraphApi.getHead",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "getHead",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "getHead(): Promise<VersionResult<VersionHead>>;",
-      "typeText": "Promise<VersionResult<VersionHead>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.getRef": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.getRef",
-      "stableId": "VersionGraphApi.getRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "getRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "getRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.listCommits": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.listCommits",
-      "stableId": "VersionGraphApi.listCommits",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "listCommits",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
-      "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.listRefs": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.listRefs",
-      "stableId": "VersionGraphApi.listRefs",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "listRefs",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
-      "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.merge": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.merge",
-      "stableId": "VersionGraphApi.merge",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "merge",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
-      "typeText": "Promise<VersionResult<VersionMergeResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.promotePendingRemote": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.promotePendingRemote",
-      "stableId": "VersionGraphApi.promotePendingRemote",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "promotePendingRemote",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
-      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.readRef": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.readRef",
-      "stableId": "VersionGraphApi.readRef",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "readRef",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;",
-      "typeText": "Promise<VersionResult<VersionSymbolicRefReadResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.revert": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.revert",
-      "stableId": "VersionGraphApi.revert",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "revert",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
-      "typeText": "Promise<VersionResult<VersionRevertResult>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
-    "wb.version.graph.updateBranch": {
-      "schemaVersion": "1",
-      "path": "wb.version.graph.updateBranch",
-      "stableId": "VersionGraphApi.updateBranch",
-      "root": "subApi",
-      "parentRoot": "workbook",
-      "interface": "VersionGraphApi",
-      "member": "updateBranch",
-      "kind": "method",
-      "visibility": "public",
-      "asyncModel": "promise",
-      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
-      "typeText": "Promise<VersionResult<VersionRef>>",
-      "compatibility": [],
-      "source": {
-        "file": "types/api/src/api/workbook/version-workbook.ts"
-      },
-      "ownerPackage": "@mog/types-api"
-    },
     "wb.version.listBranches": {
       "schemaVersion": "1",
       "path": "wb.version.listBranches",
@@ -25211,6 +25038,63 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.listCommits": {
+      "schemaVersion": "1",
+      "path": "wb.version.listCommits",
+      "stableId": "WorkbookVersion.listCommits",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listCommits",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listCommits(\n    options?: ListVersionCommitsInput,\n  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;",
+      "typeText": "Promise<VersionResult<Paged<WorkbookCommitSummary>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.listRefs": {
+      "schemaVersion": "1",
+      "path": "wb.version.listRefs",
+      "stableId": "WorkbookVersion.listRefs",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "listRefs",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listRefs(options?: ListVersionRefsInput): Promise<VersionResult<Paged<VersionRef>>>;",
+      "typeText": "Promise<VersionResult<Paged<VersionRef>>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.merge": {
+      "schemaVersion": "1",
+      "path": "wb.version.merge",
+      "stableId": "WorkbookVersion.merge",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "merge",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "merge(\n    input: VersionMergeInput,\n    options?: VersionMergeOptions,\n  ): Promise<VersionResult<VersionMergeResult>>;",
+      "typeText": "Promise<VersionResult<VersionMergeResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.previewMerge": {
       "schemaVersion": "1",
       "path": "wb.version.previewMerge",
@@ -25224,6 +25108,25 @@
       "asyncModel": "promise",
       "signature": "previewMerge(\n    input: VersionPreviewMergeInput,\n    options?: VersionPreviewMergeOptions,\n  ): Promise<VersionResult<VersionMergeReview>>;",
       "typeText": "Promise<VersionResult<VersionMergeReview>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.promotePendingRemote": {
+      "schemaVersion": "1",
+      "path": "wb.version.promotePendingRemote",
+      "stableId": "WorkbookVersion.promotePendingRemote",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "promotePendingRemote",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "promotePendingRemote(\n    options?: VersionPromotePendingRemoteOptions,\n  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;",
+      "typeText": "Promise<VersionResult<VersionPromotePendingRemoteResult>>",
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-workbook.ts"
@@ -25574,6 +25477,44 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "wb.version.readRef": {
+      "schemaVersion": "1",
+      "path": "wb.version.readRef",
+      "stableId": "WorkbookVersion.readRef",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "readRef",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "readRef(\n    name: VersionRefSelector | VersionBranchName,\n  ): Promise<VersionResult<VersionRefReadResult>>;",
+      "typeText": "Promise<VersionResult<VersionRefReadResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.revert": {
+      "schemaVersion": "1",
+      "path": "wb.version.revert",
+      "stableId": "WorkbookVersion.revert",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "revert",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "revert(\n    input: VersionRevertInput,\n    options?: VersionRevertOptions,\n  ): Promise<VersionResult<VersionRevertResult>>;",
+      "typeText": "Promise<VersionResult<VersionRevertResult>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "wb.version.reviews": {
       "schemaVersion": "1",
       "path": "wb.version.reviews",
@@ -25725,6 +25666,25 @@
       "compatibility": [],
       "source": {
         "file": "types/api/src/api/workbook/version-review.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "wb.version.updateBranch": {
+      "schemaVersion": "1",
+      "path": "wb.version.updateBranch",
+      "stableId": "WorkbookVersion.updateBranch",
+      "root": "subApi",
+      "parentRoot": "workbook",
+      "interface": "WorkbookVersion",
+      "member": "updateBranch",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;",
+      "typeText": "Promise<VersionResult<VersionRef>>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/workbook/version-workbook.ts"
       },
       "ownerPackage": "@mog/types-api"
     },

@@ -16,7 +16,7 @@ export function registerVersionReviewValidationScenarios(): void {
     const version = createVersion({ createReview, updateReviewStatus });
 
     await expect(
-      version.createReview({
+      version.reviews.advanced.createReview({
         clientRequestId: 'create-1',
         subject: {
           kind: 'commitRange',
@@ -36,7 +36,7 @@ export function registerVersionReviewValidationScenarios(): void {
     });
     expect(createReview).not.toHaveBeenCalled();
 
-    await expect(version.getReviewDiff({})).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReviewDiff({})).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'invalid_state',
@@ -44,7 +44,7 @@ export function registerVersionReviewValidationScenarios(): void {
       },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'status-1',
@@ -54,14 +54,14 @@ export function registerVersionReviewValidationScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
       },
     });
     expect(updateReviewStatus).not.toHaveBeenCalled();
 
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'status-applied',
@@ -72,7 +72,7 @@ export function registerVersionReviewValidationScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_INVALID_OPTIONS',

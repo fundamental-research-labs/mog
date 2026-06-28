@@ -263,7 +263,7 @@ export function versionFailureFromStoreDiagnostics<T>(
 }
 
 function publicVersionTargetForOperation(operation: VersionResultOperation): string {
-  if (GRAPH_OPERATIONS.has(operation)) return `workbook.version.graph.${operation}`;
+  if (DIRECT_VERSION_OPERATIONS.has(operation)) return `workbook.version.${operation}`;
   if (REVIEW_ADVANCED_OPERATIONS.has(operation)) {
     return `workbook.version.reviews.advanced.${operation}`;
   }
@@ -276,7 +276,7 @@ function publicVersionTargetForOperation(operation: VersionResultOperation): str
   return `workbook.version.${operation}`;
 }
 
-const GRAPH_OPERATIONS = new Set<VersionResultOperation>([
+const DIRECT_VERSION_OPERATIONS = new Set<VersionResultOperation>([
   'getHead',
   'listCommits',
   'commit',

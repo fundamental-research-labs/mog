@@ -17,7 +17,7 @@ import {
 
 export async function maybeAddMogVersionMetadataToXlsx(
   ctx: DocumentContext,
-  version: Pick<WorkbookVersion, 'graph'>,
+  version: Pick<WorkbookVersion, 'getHead'>,
   xlsxBytes: Uint8Array,
   options: WorkbookXlsxExportOptions | undefined,
   sink: MogVersionMetadataExportSink = MOG_VERSION_METADATA_EXPORT_SINK,
@@ -34,9 +34,9 @@ const MOG_VERSION_METADATA_EXPORT_SINK: MogVersionMetadataExportSink = {
 
 async function authorizeMogVersionMetadataExportSink(
   ctx: DocumentContext,
-  version: Pick<WorkbookVersion, 'graph'>,
+  version: Pick<WorkbookVersion, 'getHead'>,
 ): Promise<MogVersionMetadataExportSinkAuthorization> {
-  const head = await version.graph.getHead();
+  const head = await version.getHead();
   if (!head.ok) {
     const reason = hasVersionHeadFailureDiagnostics(head.error)
       ? 'redaction-failed'

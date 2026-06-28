@@ -70,7 +70,6 @@ export type {
   VersionGetMergeConflictDetailRequest,
   VersionGetMergeReviewInput,
   VersionGetHeadOptions,
-  VersionGraphApi,
   VersionHead,
   VersionListCommitsOptions,
   VersionListRefsOptions,

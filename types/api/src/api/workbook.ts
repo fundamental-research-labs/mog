@@ -100,7 +100,7 @@ export type {
   VersionDiffDisplay, VersionDiffDisplayValue, VersionDiffCursor, VersionDiffEntry, VersionDiffInput, VersionDiffOptions, VersionDiffResourceLimit, VersionDiffResourceLimitKind, VersionDiffResourceLimitSummary, VersionDiffResourceLimitUnit, VersionDiffStructuralMetadata, VersionDiffValue, VersionDiagnosticCode,
   VersionDiagnosticMessageId, VersionDiagnosticPublicPayload,
   VersionFastForwardBranchOptions, VersionGetMergeConflictDetailRequest, VersionGetMergeReviewInput,
-  VersionGetHeadOptions, VersionGraphApi, VersionHead, VersionListCommitsOptions, VersionListRefsOptions,
+  VersionGetHeadOptions, VersionHead, VersionListCommitsOptions, VersionListRefsOptions,
   VersionLiveCollaborationState, VersionMainRefName,
   VersionApplyMergeInput, VersionApplyMergeMutationGuarantee, VersionApplyMergeOptions,
   VersionApplyMergeResolution, VersionApplyMergeResult,

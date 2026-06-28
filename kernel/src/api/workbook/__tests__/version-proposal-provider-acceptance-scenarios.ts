@@ -48,7 +48,7 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       ok: true,
       value: { status: 'ready_for_review', revision: 5 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'open' },
     });
@@ -126,7 +126,7 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       ok: true,
       value: { status: 'stale', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

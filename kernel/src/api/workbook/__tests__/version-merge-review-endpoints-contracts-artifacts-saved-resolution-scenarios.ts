@@ -13,7 +13,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
   it('reads resolved conflict detail from saved resolution artifacts', async () => {
     await withReviewArtifact('saved-resolution-readback', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
-      const saved = await version.saveMergeResolutions({
+      const saved = await version.artifacts.advanced.saveMergeResolutions({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -25,7 +25,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
         throw new Error('expected saved resolution artifact digests');
       }
 
-      const detail = await version.getMergeConflictDetail({
+      const detail = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -61,7 +61,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
           throw new Error('expected multi-sheet range conflict fixture');
         }
 
-        const partial = await version.saveMergeResolutions({
+        const partial = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -85,7 +85,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
         });
         expect(partial.value.resolvedAttemptDigest).toBeUndefined();
 
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -115,7 +115,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
           [gammaRange, 'acceptBase'],
         ] as const) {
           const option = requireResolutionOption(conflict, kind);
-          const detail = await version.getMergeConflictDetail({
+          const detail = await version.artifacts.advanced.getMergeConflictDetail({
             resultId: preview.resultId,
             resultDigest: preview.resultDigest,
             redactionPolicyDigest: preview.resultDigest,
@@ -149,7 +149,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
       'saved-resolution-digest-mismatch',
       async ({ version, preview, target }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -161,7 +161,7 @@ export function registerSavedResolutionArtifactScenarios(): void {
           throw new Error('expected saved resolution artifact digests');
         }
 
-        const detail = await version.getMergeConflictDetail({
+        const detail = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

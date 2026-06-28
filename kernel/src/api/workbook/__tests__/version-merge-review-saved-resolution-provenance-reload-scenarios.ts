@@ -61,7 +61,7 @@ export function registerSavedResolutionProvenanceReloadReviewTests(): void {
       'v1-saved-resolution-reload',
       async ({ version, preview, target, reload }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -94,7 +94,7 @@ export function registerSavedResolutionProvenanceReloadReviewTests(): void {
         expect(reloadedResolutionSet.preimage.payload).not.toHaveProperty('targetRef');
         expect(reloadedResolutionSet.preimage.payload).not.toHaveProperty('expectedTargetHead');
 
-        const detail = await reloaded.version.getMergeConflictDetail({
+        const detail = await reloaded.version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -126,7 +126,7 @@ export function registerSavedResolutionProvenanceReloadReviewTests(): void {
       'resolved-attempt-result-drift-reload',
       async ({ graph, namespace, version, preview, target, reload }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -166,7 +166,7 @@ export function registerSavedResolutionProvenanceReloadReviewTests(): void {
         });
 
         const reloaded = await reload();
-        const result = await reloaded.version.getMergeConflictDetail({
+        const result = await reloaded.version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

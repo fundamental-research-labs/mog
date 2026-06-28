@@ -698,7 +698,6 @@ export function createConsoleAPI(
       | null
       | undefined;
     if (!version || typeof version !== 'object') return null;
-    if (!version.graph || typeof version.graph !== 'object') return null;
     return version as DevToolsWorkbookVersionReadFacade;
   }
 
@@ -724,20 +723,20 @@ export function createConsoleAPI(
 
     async getHead(options) {
       const version = await getActiveWorkbookVersionReadFacade();
-      if (typeof version?.graph.getHead !== 'function') return null;
-      return await version.graph.getHead(options);
+      if (typeof version?.getHead !== 'function') return null;
+      return await version.getHead(options);
     },
 
     async listCommits(options) {
       const version = await getActiveWorkbookVersionReadFacade();
-      if (typeof version?.graph.listCommits !== 'function') return null;
-      return await version.graph.listCommits(options);
+      if (typeof version?.listCommits !== 'function') return null;
+      return await version.listCommits(options);
     },
 
     async listRefs(options) {
       const version = await getActiveWorkbookVersionReadFacade();
-      if (typeof version?.graph.listRefs !== 'function') return null;
-      return await version.graph.listRefs(options);
+      if (typeof version?.listRefs !== 'function') return null;
+      return await version.listRefs(options);
     },
   };
 

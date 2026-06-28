@@ -194,7 +194,7 @@ if (applied.status === "conflicted") {
 }
 const newHeadId = "commitRef" in applied ? applied.commitRef.id : undefined;`;
 
-const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.graph.readRef("refs/heads/main");
+const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.readRef("refs/heads/main");
 if (!applyTargetRefResult.ok || applyTargetRefResult.value.status !== "success") {
   throw new Error(
     applyTargetRefResult.ok
@@ -206,7 +206,7 @@ const applyExpectedTargetHead = {
   commitId: applyTargetRefResult.value.ref.commitId,
   revision: applyTargetRefResult.value.ref.revision,
 };
-const applyResult = await wb.version.graph.applyMerge(
+const applyResult = await wb.version.applyMerge(
   {
     base: baseCommitId,
     ours: applyExpectedTargetHead.commitId,
@@ -319,7 +319,7 @@ if (!acceptResult.ok) {
   throw new Error(acceptResult.error.reason);
 }`;
 
-const versionRevertSnippet = `const targetRefResult = await wb.version.graph.readRef("refs/heads/main");
+const versionRevertSnippet = `const targetRefResult = await wb.version.readRef("refs/heads/main");
 if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
   throw new Error(
     targetRefResult.ok
@@ -328,7 +328,7 @@ if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
   );
 }
 const commitToRevertId = branchCommit.id;
-const revertResult = await wb.version.graph.revert(
+const revertResult = await wb.version.revert(
   {
     target: { kind: "commit", commitId: commitToRevertId },
     targetRef: "refs/heads/main",
@@ -756,12 +756,12 @@ export const apiGuidanceCatalog = [
         note: 'Advanced CAS delegate for explicit proposal acceptance. Prefer proposal.accept() for application code that does not need to assemble the full CAS payload.',
       },
       {
-        path: 'wb.version.graph.applyMerge',
+        path: 'wb.version.applyMerge',
         snippet: versionApplyMergeSnippet,
         note: 'Advanced CAS escape hatch for service callers that already have base/ours/theirs, targetRef, expectedTargetHead, and conflict-resolution records. Prefer previewMerge and review.apply for branch merges.',
       },
       {
-        path: 'wb.version.graph.revert',
+        path: 'wb.version.revert',
         snippet: versionRevertSnippet,
         note: 'Revert with an explicit target ref and expected target head; dry-run first with { dryRun: true } when the host needs review before mutation.',
       },

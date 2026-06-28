@@ -14,7 +14,7 @@ export function registerSavedResolutionPayloadStaleRefReviewTests(): void {
     await withReviewFixture('stale-sealed-payload-ref', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
       const option = requireResolutionOption(conflict, 'acceptTheirs');
-      const payload = await version.putMergeResolutionPayload({
+      const payload = await version.artifacts.advanced.putMergeResolutionPayload({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -29,7 +29,7 @@ export function registerSavedResolutionPayloadStaleRefReviewTests(): void {
       });
       if (!payload.ok) throw new Error(`expected sealed payload: ${payload.error.code}`);
 
-      const saved = await version.saveMergeResolutions({
+      const saved = await version.artifacts.advanced.saveMergeResolutions({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -46,7 +46,7 @@ export function registerSavedResolutionPayloadStaleRefReviewTests(): void {
         throw new Error('expected saved sealed payload resolution set');
       }
 
-      const result = await version.getMergeConflictDetail({
+      const result = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,

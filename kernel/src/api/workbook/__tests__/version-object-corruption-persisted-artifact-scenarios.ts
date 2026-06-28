@@ -23,12 +23,12 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
         }),
       ).rejects.toMatchObject({ diagnostic: { code: 'VERSION_OBJECT_CORRUPTION' } });
 
-      const result = await fixture.version.getMergeConflictDetail(
+      const result = await fixture.version.artifacts.advanced.getMergeConflictDetail(
         conflictDetailInput(fixture, { valueRole: 'theirs' }),
       );
 
       expectRepairDiagnostic(result, {
-        target: 'workbook.version.getMergeConflictDetail',
+        target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
         code: 'VERSION_INVALID_COMMIT_PAYLOAD',
       });
       expectNoLeaks(result);
@@ -63,7 +63,7 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
       );
       corruptStoredRecord(fixture.graph, resolutionRecord);
 
-      const result = await fixture.version.getMergeConflictDetail(
+      const result = await fixture.version.artifacts.advanced.getMergeConflictDetail(
         conflictDetailInput(fixture, {
           valueRole: 'resolved',
           resolutionSetDigest: saved.resolutionSetDigest,
@@ -71,7 +71,7 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
       );
 
       expectRepairDiagnostic(result, {
-        target: 'workbook.version.getMergeConflictDetail',
+        target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
         code: 'VERSION_INVALID_COMMIT_PAYLOAD',
       });
       expectNoLeaks(result);
@@ -87,7 +87,7 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
       );
       corruptStoredRecord(fixture.graph, attemptRecord);
 
-      const result = await fixture.version.getMergeConflictDetail(
+      const result = await fixture.version.artifacts.advanced.getMergeConflictDetail(
         conflictDetailInput(fixture, {
           valueRole: 'resolved',
           resolvedAttemptDigest: saved.resolvedAttemptDigest,
@@ -95,7 +95,7 @@ export function registerVersionObjectCorruptionPersistedArtifactScenarios(): voi
       );
 
       expectRepairDiagnostic(result, {
-        target: 'workbook.version.getMergeConflictDetail',
+        target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
         code: 'VERSION_INVALID_COMMIT_PAYLOAD',
       });
       expectNoLeaks(result);

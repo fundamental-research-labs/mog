@@ -64,7 +64,7 @@ export function registerProposalBranchStaleScenarios(): void {
         ],
       },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

@@ -28,7 +28,7 @@ export function registerReviewProviderAccessProviderDiffScenarios(): void {
       ],
     );
     const version = versionForProvider(graph.provider);
-    const review = await version.createReview(
+    const review = await version.reviews.advanced.createReview(
       createReviewInput(
         'denied-review-diff-detail-projection',
         graph.rootCommitId,
@@ -37,13 +37,13 @@ export function registerReviewProviderAccessProviderDiffScenarios(): void {
     );
     if (!review.ok) throw new Error(`expected review create success: ${review.error.code}`);
 
-    const result = await version.getReviewDiff({ reviewId: review.value.id });
+    const result = await version.reviews.advanced.getReviewDiff({ reviewId: review.value.id });
 
     expect(result).toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
       },
     });
     expect(result).not.toHaveProperty('value');

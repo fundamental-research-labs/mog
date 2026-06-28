@@ -249,7 +249,7 @@ export function useVersionHistoryPanelActions({
       if (!setRunningAction(action, 'Creating branch')) return;
       const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
         targetCommitIdOverride
-          ? workbook.version.graph.createBranch({
+          ? workbook.version.createBranch({
               name: normalizedBranch.branch.refName as Parameters<
                 WorkbookVersion['graph']['createBranch']
               >[0]['name'],
@@ -362,7 +362,7 @@ export function useVersionHistoryPanelActions({
 
       setActionState({ status: 'running', label: 'Loading parent diff' });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.graph.diff(parentId, commit.id, {
+        workbook.version.diff(parentId, commit.id, {
           pageSize: 50,
           includeDiagnostics: true,
         }),
@@ -392,7 +392,7 @@ export function useVersionHistoryPanelActions({
       const label = target.recordKind === 'review' ? 'review' : 'proposal';
       setActionState({ status: 'running', label: `Loading ${label} diff` });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.graph.diff(target.baseCommitId, target.targetCommitId, {
+        workbook.version.diff(target.baseCommitId, target.targetCommitId, {
           pageSize: 50,
           includeDiagnostics: true,
         }),

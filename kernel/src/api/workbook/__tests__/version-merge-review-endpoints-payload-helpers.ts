@@ -60,7 +60,7 @@ export async function putAcceptTheirsPayload(input: {
   readonly payload: VersionSealedResolutionPayloadRef;
 }> {
   const option = acceptTheirsOption(input.conflict);
-  const payload = await input.sourceWb.version.putMergeResolutionPayload(
+  const payload = await input.sourceWb.version.artifacts.advanced.putMergeResolutionPayload(
     mergeResolutionPayloadRequest({
       preview: input.preview,
       conflict: input.conflict,

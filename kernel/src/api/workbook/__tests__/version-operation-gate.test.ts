@@ -89,7 +89,7 @@ describe('WorkbookVersion public operation feature gates', () => {
       error: blockedEditingError('createBranch'),
     });
     await expect(
-      version.createReview({
+      version.reviews.advanced.createReview({
         clientRequestId: 'review-1',
         subject: { kind: 'commit', commitId: COMMIT_ID },
         createdBy: REVIEW_AUTHOR,

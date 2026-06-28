@@ -34,7 +34,7 @@ export function registerReviewProviderDiffCompletenessScenarios(): void {
       ],
     });
     const version = versionForProvider(graph.provider);
-    const review = await version.createReview({
+    const review = await version.reviews.advanced.createReview({
       ...createReviewInput('hidden-unsupported-domain-review'),
       subject: {
         kind: 'commitRange',
@@ -44,13 +44,13 @@ export function registerReviewProviderDiffCompletenessScenarios(): void {
     });
     if (!review.ok) throw new Error(`expected review create success: ${review.error.code}`);
 
-    const diff = await version.getReviewDiff({ reviewId: review.value.id });
+    const diff = await version.reviews.advanced.getReviewDiff({ reviewId: review.value.id });
 
     expect(diff).toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN',
@@ -62,7 +62,7 @@ export function registerReviewProviderDiffCompletenessScenarios(): void {
     });
     expectUnsupportedAuthoredDomainDetailsRedacted(JSON.stringify(diff));
 
-    const approved = await version.updateReviewStatus({
+    const approved = await version.reviews.advanced.updateReviewStatus({
       reviewId: review.value.id,
       expectedRevision: 1,
       clientRequestId: 'hidden-unsupported-domain-approve',
@@ -73,7 +73,7 @@ export function registerReviewProviderDiffCompletenessScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_UNSUPPORTED_AUTHORED_DOMAIN' })],
       },
     });

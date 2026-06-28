@@ -18,13 +18,12 @@ import type {
 } from '../public-types';
 
 type VersionFacade = SpreadsheetWorkbookFacade['version'];
-type VersionGraphFacade = VersionFacade['graph'];
 type VersionReviewAdvancedFacade = VersionFacade['reviews']['advanced'];
 type VersionArtifactAdvancedFacade = VersionFacade['artifacts']['advanced'];
 type VersionSurfaceCapability = Extract<SpreadsheetCapability, `version:${string}`>;
 type VersionSurfaceStatus = Awaited<ReturnType<VersionFacade['getSurfaceStatus']>>;
 type VersionMatrixInterface =
-  | 'WorkbookVersion' | 'VersionGraphApi' | 'WorkbookVersionReviewApi'
+  | 'WorkbookVersion' | 'WorkbookVersionReviewApi'
   | 'VersionMergeReviewArtifactApi';
 
 type VersionFacadeOperationKind = 'version-result' | 'throws-on-denied' | 'capability-free-status';
@@ -63,14 +62,12 @@ const TEST_REDACTION_POLICY = {
 
 const EXPECTED_VERSION_MATRIX_METHODS = {
   WorkbookVersion: [
-    'checkoutBranch', 'checkoutCommit', 'commitCurrent', 'createBranchFromCurrent',
-    'diffBranch', 'diffCurrent', 'getCurrent', 'getMergeReview', 'getStatus',
-    'getSurfaceStatus', 'listBranches', 'previewMerge',
-  ],
-  VersionGraphApi: [
     'applyMerge', 'checkout', 'commit', 'createBranch', 'deleteBranch', 'deleteRef',
+    'checkoutBranch', 'checkoutCommit', 'commitCurrent', 'createBranchFromCurrent',
     'diff', 'fastForwardBranch', 'getHead', 'getRef', 'listCommits', 'listRefs',
-    'merge', 'promotePendingRemote', 'readRef', 'revert', 'updateBranch',
+    'diffBranch', 'diffCurrent', 'getCurrent', 'getMergeReview', 'getStatus',
+    'getSurfaceStatus', 'listBranches', 'merge', 'previewMerge', 'promotePendingRemote',
+    'readRef', 'revert', 'updateBranch',
   ],
   WorkbookVersionReviewApi: [
     'appendReviewDecision', 'createReview', 'getReview', 'getReviewDiff', 'listReviews',
@@ -172,165 +169,165 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
     invoke: (version) => version.previewMerge({ from: TEST_BRANCH, into: MAIN_REF }),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'applyMerge',
     kind: 'version-result',
     capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
     deniedCapabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
     invoke: (version) =>
-      version.graph.applyMerge({
+      version.applyMerge({
         base: COMMIT_A,
         ours: COMMIT_B,
         theirs: COMMIT_C,
-      } as Parameters<VersionGraphFacade['applyMerge']>[0]),
+      } as Parameters<VersionFacade['applyMerge']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'checkout',
     kind: 'version-result',
     capabilities: ['version:checkout'],
     invoke: (version) =>
-      version.graph.checkout({ kind: 'commit', id: COMMIT_A } as Parameters<
-        VersionGraphFacade['checkout']
+      version.checkout({ kind: 'commit', id: COMMIT_A } as Parameters<
+        VersionFacade['checkout']
       >[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'commit',
     kind: 'version-result',
     capabilities: ['version:commit'],
-    invoke: (version) => version.graph.commit({ message: 'Facade matrix test commit' }),
+    invoke: (version) => version.commit({ message: 'Facade matrix test commit' }),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'createBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.graph.createBranch({
+      version.createBranch({
         name: TEST_BRANCH,
         targetCommitId: COMMIT_A,
         expectedAbsent: true,
-      } as Parameters<VersionGraphFacade['createBranch']>[0]),
+      } as Parameters<VersionFacade['createBranch']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'deleteBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.graph.deleteBranch({
+      version.deleteBranch({
         name: TEST_BRANCH,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionGraphFacade['deleteBranch']>[0]),
+      } as Parameters<VersionFacade['deleteBranch']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'deleteRef',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.graph.deleteRef({
+      version.deleteRef({
         name: TEST_BRANCH,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionGraphFacade['deleteRef']>[0]),
+      } as Parameters<VersionFacade['deleteRef']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'diff',
     kind: 'version-result',
     capabilities: ['version:diff'],
-    invoke: (version) => version.graph.diff(COMMIT_A, COMMIT_B),
+    invoke: (version) => version.diff(COMMIT_A, COMMIT_B),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'fastForwardBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.graph.fastForwardBranch({
+      version.fastForwardBranch({
         name: TEST_BRANCH,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionGraphFacade['fastForwardBranch']>[0]),
+      } as Parameters<VersionFacade['fastForwardBranch']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'getHead',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.graph.getHead(),
+    invoke: (version) => version.getHead(),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'getRef',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.graph.getRef('HEAD'),
+    invoke: (version) => version.getRef('HEAD'),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'listCommits',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.graph.listCommits({}),
+    invoke: (version) => version.listCommits({}),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'listRefs',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.graph.listRefs({}),
+    invoke: (version) => version.listRefs({}),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'merge',
     kind: 'version-result',
     capabilities: ['version:mergePreview'],
-    invoke: (version) => version.graph.merge({ base: COMMIT_A, ours: COMMIT_B, theirs: COMMIT_C }),
+    invoke: (version) => version.merge({ base: COMMIT_A, ours: COMMIT_B, theirs: COMMIT_C }),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'promotePendingRemote',
     kind: 'version-result',
     capabilities: ['version:remotePromote', 'version:provenance'],
     deniedCapabilities: ['version:remotePromote', 'version:provenance'],
-    invoke: (version) => version.graph.promotePendingRemote(),
+    invoke: (version) => version.promotePendingRemote(),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'readRef',
     kind: 'version-result',
     capabilities: ['version:read'],
-    invoke: (version) => version.graph.readRef('HEAD'),
+    invoke: (version) => version.readRef('HEAD'),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'revert',
     kind: 'version-result',
     capabilities: ['version:revert'],
     invoke: (version) =>
-      version.graph.revert({
+      version.revert({
         target: { kind: 'commit', commitId: COMMIT_A },
         targetRef: MAIN_REF,
         reason: 'Facade matrix revert',
-      } as Parameters<VersionGraphFacade['revert']>[0]),
+      } as Parameters<VersionFacade['revert']>[0]),
   },
   {
-    interfaceName: 'VersionGraphApi',
+    interfaceName: 'WorkbookVersion',
     methodName: 'updateBranch',
     kind: 'version-result',
     capabilities: ['version:branch'],
     invoke: (version) =>
-      version.graph.updateBranch({
+      version.updateBranch({
         name: TEST_BRANCH,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
         expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionGraphFacade['updateBranch']>[0]),
+      } as Parameters<VersionFacade['updateBranch']>[0]),
   },
   {
     interfaceName: 'WorkbookVersionReviewApi',
@@ -741,7 +738,7 @@ test('workbook version facade sub-api matrix exposes advanced namespaces', () =>
     Record<string, { readonly targetInterface?: string }>
   >;
 
-  assert.equal(subApis.WorkbookVersion?.graph?.targetInterface, 'VersionGraphApi');
+  assert.equal(subApis.WorkbookVersion?.graph, undefined);
   assert.equal(
     subApis.WorkbookVersion?.reviews?.targetInterface,
     'WorkbookVersionReviewNamespace',
@@ -882,8 +879,8 @@ test('workbook version facade denied review, revert, and checkout results stay U
     deniedCapabilities,
     async (version) => {
       for (const testCase of [
-        versionCase('VersionGraphApi', 'checkout'),
-        versionCase('VersionGraphApi', 'revert'),
+        versionCase('WorkbookVersion', 'checkout'),
+        versionCase('WorkbookVersion', 'revert'),
         versionCase('WorkbookVersionReviewApi', 'listReviews'),
       ]) {
         const [expectedCapability] = testCase.capabilities;

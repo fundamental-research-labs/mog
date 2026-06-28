@@ -32,11 +32,11 @@ export function registerVersionReviewDiffScenarios(): void {
       })),
     });
 
-    await expect(version.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_REVIEW_DIFF_INCOMPLETE',
@@ -51,7 +51,7 @@ export function registerVersionReviewDiffScenarios(): void {
         ],
       },
     });
-    const result = await version.getReviewDiff({ reviewId: REVIEW_ID });
+    const result = await version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('macros.vba');
     expect(serialized).not.toContain('private macro source');

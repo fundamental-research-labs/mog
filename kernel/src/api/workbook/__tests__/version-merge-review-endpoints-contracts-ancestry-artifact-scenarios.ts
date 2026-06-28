@@ -14,7 +14,7 @@ export function registerMergeReviewEndpointContractsAncestryArtifactScenarios():
       async ({ version, preview, target }) => {
         const conflict = preview.conflicts[0];
         const option = requireResolutionOption(conflict, 'acceptTheirs');
-        const detail = await version.getMergeConflictDetail({
+        const detail = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -23,7 +23,7 @@ export function registerMergeReviewEndpointContractsAncestryArtifactScenarios():
           valueRole: 'theirs',
           purpose: 'review',
         });
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -31,7 +31,7 @@ export function registerMergeReviewEndpointContractsAncestryArtifactScenarios():
           expectedTargetHead: target,
           resolutions: [resolutionFor(conflict, 'acceptTheirs')],
         });
-        const payload = await version.putMergeResolutionPayload({
+        const payload = await version.artifacts.advanced.putMergeResolutionPayload({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

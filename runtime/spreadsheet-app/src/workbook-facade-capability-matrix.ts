@@ -3800,53 +3800,6 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
       },
       targetInterface: 'VersionMergeReviewArtifactNamespace',
     },
-    graph: {
-      signature: 'readonly graph: VersionGraphApi;',
-      docstring: '',
-      usedTypes: ['VersionGraphApi'],
-      stableId: 'WorkbookVersion.graph',
-      canonicalPath: 'wb.version.graph',
-      root: 'subApi',
-      parentRoot: 'workbook',
-      interface: 'WorkbookVersion',
-      method: 'graph',
-      kind: 'property',
-      visibility: 'public',
-      asyncModel: 'sync',
-      parameters: [],
-      returns: {
-        type: {
-          kind: 'objectRef',
-          name: 'VersionGraphApi',
-        },
-        typeText: 'VersionGraphApi',
-      },
-      typeScript: {
-        signature: 'readonly graph: VersionGraphApi;',
-        parameters: [],
-        returnTypeText: 'VersionGraphApi',
-      },
-      ownership: {
-        package: '@mog/types-api',
-      },
-      ownerPackage: '@mog/types-api',
-      alias: {
-        aliasOf: null,
-        aliases: [],
-        replacement: null,
-      },
-      deprecation: {
-        deprecated: false,
-        message: null,
-        replacement: null,
-        since: null,
-      },
-      compatibility: [],
-      source: {
-        file: 'types/api/src/api/workbook/version-workbook.ts',
-      },
-      targetInterface: 'VersionGraphApi',
-    },
     proposals: {
       signature: 'readonly proposals: VersionProposalPorcelainApi;',
       docstring: '',
@@ -5788,93 +5741,6 @@ export const WORKBOOK_SUB_API_INTERFACES: WorkbookSubApiInterfaces = {
 };
 
 export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
-  VersionGraphApi: {
-    applyMerge: {
-      decision: 'allow',
-      capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
-      returnsVersionResult: true,
-    },
-    checkout: {
-      decision: 'allow',
-      capabilities: ['version:checkout'],
-      returnsVersionResult: true,
-    },
-    commit: {
-      decision: 'allow',
-      capabilities: ['version:commit'],
-      returnsVersionResult: true,
-    },
-    createBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-    deleteBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-    deleteRef: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-    diff: {
-      decision: 'allow',
-      capabilities: ['version:diff'],
-      returnsVersionResult: true,
-    },
-    fastForwardBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-    getHead: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    getRef: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    listCommits: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    listRefs: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    merge: {
-      decision: 'allow',
-      capabilities: ['version:mergePreview'],
-      returnsVersionResult: true,
-    },
-    promotePendingRemote: {
-      decision: 'allow',
-      capabilities: ['version:remotePromote', 'version:provenance'],
-      returnsVersionResult: true,
-    },
-    readRef: {
-      decision: 'allow',
-      capabilities: ['version:read'],
-      returnsVersionResult: true,
-    },
-    revert: {
-      decision: 'allow',
-      capabilities: ['version:revert'],
-      returnsVersionResult: true,
-    },
-    updateBranch: {
-      decision: 'allow',
-      capabilities: ['version:branch'],
-      returnsVersionResult: true,
-    },
-  },
   VersionMergeReviewArtifactApi: {
     getMergeConflictDetail: {
       decision: 'allow',
@@ -6979,6 +6845,16 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
     },
   },
   WorkbookVersion: {
+    applyMerge: {
+      decision: 'allow',
+      capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
+      returnsVersionResult: true,
+    },
+    checkout: {
+      decision: 'allow',
+      capabilities: ['version:checkout'],
+      returnsVersionResult: true,
+    },
     checkoutBranch: {
       decision: 'allow',
       capabilities: ['version:checkout'],
@@ -6989,14 +6865,39 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:checkout'],
       returnsVersionResult: true,
     },
+    commit: {
+      decision: 'allow',
+      capabilities: ['version:commit'],
+      returnsVersionResult: true,
+    },
     commitCurrent: {
       decision: 'allow',
       capabilities: ['version:commit'],
       returnsVersionResult: true,
     },
+    createBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
     createBranchFromCurrent: {
       decision: 'allow',
       capabilities: ['version:read', 'version:branch'],
+      returnsVersionResult: true,
+    },
+    deleteBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    deleteRef: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
+    diff: {
+      decision: 'allow',
+      capabilities: ['version:diff'],
       returnsVersionResult: true,
     },
     diffBranch: {
@@ -7009,7 +6910,17 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:diff'],
       returnsVersionResult: true,
     },
+    fastForwardBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
+      returnsVersionResult: true,
+    },
     getCurrent: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
+    getHead: {
       decision: 'allow',
       capabilities: ['version:read'],
       returnsVersionResult: true,
@@ -7018,6 +6929,11 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
       returns: ['VersionMergeReview'],
+      returnsVersionResult: true,
+    },
+    getRef: {
+      decision: 'allow',
+      capabilities: ['version:read'],
       returnsVersionResult: true,
     },
     getStatus: {
@@ -7033,10 +6949,45 @@ export const WORKBOOK_FACADE_CAPABILITY_MATRIX = {
       capabilities: ['version:read'],
       returnsVersionResult: true,
     },
+    listCommits: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
+    listRefs: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
+    merge: {
+      decision: 'allow',
+      capabilities: ['version:mergePreview'],
+      returnsVersionResult: true,
+    },
     previewMerge: {
       decision: 'allow',
       capabilities: ['version:mergePreview'],
       returns: ['VersionMergeReview'],
+      returnsVersionResult: true,
+    },
+    promotePendingRemote: {
+      decision: 'allow',
+      capabilities: ['version:remotePromote', 'version:provenance'],
+      returnsVersionResult: true,
+    },
+    readRef: {
+      decision: 'allow',
+      capabilities: ['version:read'],
+      returnsVersionResult: true,
+    },
+    revert: {
+      decision: 'allow',
+      capabilities: ['version:revert'],
+      returnsVersionResult: true,
+    },
+    updateBranch: {
+      decision: 'allow',
+      capabilities: ['version:branch'],
       returnsVersionResult: true,
     },
   },

@@ -30,7 +30,7 @@ type CreateRemotePromotionSurfaceStatusOptions = {
 type CreateRemotePromotionWorkbookOptions = {
   readonly surface?: VersionSurfaceStatus;
   readonly getSurfaceStatus?: VersionHistoryWorkbook['version']['getSurfaceStatus'];
-  readonly promotePendingRemote?: VersionHistoryWorkbook['version']['graph']['promotePendingRemote'];
+  readonly promotePendingRemote?: VersionHistoryWorkbook['version']['promotePendingRemote'];
 };
 
 export function createRemotePromotionSurfaceStatus({
@@ -66,7 +66,7 @@ export function createRemotePromotionWorkbook({
 
 export function successfulRemotePromotionResult(
   overrides: Partial<VersionPromotePendingRemoteResult> = {},
-): Awaited<ReturnType<VersionHistoryWorkbook['version']['graph']['promotePendingRemote']>> {
+): Awaited<ReturnType<VersionHistoryWorkbook['version']['promotePendingRemote']>> {
   return {
     ok: true,
     value: {

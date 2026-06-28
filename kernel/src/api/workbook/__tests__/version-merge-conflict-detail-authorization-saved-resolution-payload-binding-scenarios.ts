@@ -30,7 +30,7 @@ export function registerSavedResolutionPayloadBindingScenarios(): void {
           purpose: 'custom',
           domainPayloadSchema: 'w9-06.custom-resolution.v1',
         });
-        const customSave = await version.saveMergeResolutions({
+        const customSave = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -58,7 +58,7 @@ export function registerSavedResolutionPayloadBindingScenarios(): void {
           value: option.value as any,
           purpose: 'chooseValue',
         });
-        const accessMismatchSave = await version.saveMergeResolutions({
+        const accessMismatchSave = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: mutateDigest(preview.resultDigest),

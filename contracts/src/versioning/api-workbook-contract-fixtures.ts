@@ -37,7 +37,6 @@ import type {
   VersionFastForwardBranchOptions,
   VersionGetMergeConflictDetailRequest,
   VersionGetMergeReviewInput,
-  VersionGraphApi,
   VersionHead,
   VersionListBranchesOptions,
   VersionMainRefName,
@@ -107,6 +106,23 @@ type ExpectedWorkbookVersionMethodName =
   | 'getStatus'
   | 'getSurfaceStatus'
   | 'getCurrent'
+  | 'getHead'
+  | 'listCommits'
+  | 'commit'
+  | 'promotePendingRemote'
+  | 'checkout'
+  | 'merge'
+  | 'applyMerge'
+  | 'revert'
+  | 'diff'
+  | 'readRef'
+  | 'getRef'
+  | 'listRefs'
+  | 'createBranch'
+  | 'fastForwardBranch'
+  | 'updateBranch'
+  | 'deleteBranch'
+  | 'deleteRef'
   | 'commitCurrent'
   | 'checkoutBranch'
   | 'checkoutCommit'
@@ -118,12 +134,11 @@ type ExpectedWorkbookVersionMethodName =
   | 'getMergeReview';
 type ExpectedWorkbookVersionMemberName =
   | ExpectedWorkbookVersionMethodName
-  | 'graph'
   | 'reviews'
   | 'artifacts'
   | 'proposals';
 
-interface ExpectedWorkbookVersionCoreMethods {
+interface ExpectedWorkbookVersionCoreMethods extends ExpectedWorkbookVersionDirectMethods {
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
@@ -138,7 +153,7 @@ interface ExpectedWorkbookVersionCoreMethods {
   getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
 }
 
-interface ExpectedVersionGraphMethods {
+interface ExpectedWorkbookVersionDirectMethods {
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
@@ -165,6 +180,23 @@ interface ExpectedVersionGraphMethods {
 
 type ExpectedWorkbookVersionResultByMethod = {
   readonly getCurrent: VersionResult<VersionCurrentCheckout>;
+  readonly getHead: VersionResult<VersionHead>;
+  readonly listCommits: VersionResult<Paged<WorkbookCommitSummary>>;
+  readonly commit: VersionResult<WorkbookCommitSummary>;
+  readonly promotePendingRemote: VersionResult<VersionPromotePendingRemoteResult>;
+  readonly checkout: VersionResult<CheckoutVersionResult>;
+  readonly merge: VersionResult<VersionMergeResult>;
+  readonly applyMerge: VersionResult<VersionApplyMergeResult>;
+  readonly revert: VersionResult<VersionRevertResult>;
+  readonly diff: VersionResult<VersionSemanticDiffPage>;
+  readonly readRef: VersionResult<VersionRefReadResult>;
+  readonly getRef: VersionResult<VersionRefReadResult>;
+  readonly listRefs: VersionResult<Paged<VersionRef>>;
+  readonly createBranch: VersionResult<VersionRef>;
+  readonly fastForwardBranch: VersionResult<VersionRef>;
+  readonly updateBranch: VersionResult<VersionRef>;
+  readonly deleteBranch: VersionResult<VersionRef>;
+  readonly deleteRef: VersionResult<VersionRef>;
   readonly commitCurrent: VersionResult<WorkbookCommitSummary>;
   readonly checkoutBranch: VersionResult<CheckoutVersionResult>;
   readonly checkoutCommit: VersionResult<CheckoutVersionResult>;
@@ -847,12 +879,6 @@ type _ContractsWorkbookVersionCoreMethodsKeepPublicContracts = Assert<
     Pick<WorkbookVersion, keyof ExpectedWorkbookVersionCoreMethods>,
     ExpectedWorkbookVersionCoreMethods
   >
->;
-type _ContractsWorkbookVersionGraphMethodsKeepPublicContracts = Assert<
-  IsMutuallyAssignable<Pick<VersionGraphApi, keyof ExpectedVersionGraphMethods>, ExpectedVersionGraphMethods>
->;
-type _ContractsWorkbookVersionExposesGraphNamespace = Assert<
-  IsEqual<WorkbookVersion['graph'], VersionGraphApi>
 >;
 type _ContractsWorkbookVersionExposesReviewNamespace = Assert<
   IsEqual<WorkbookVersion['reviews'], WorkbookVersionReviewNamespace>

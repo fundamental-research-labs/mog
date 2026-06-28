@@ -7,7 +7,7 @@ export async function saveResolution(fixture: ObjectCorruptionFixture): Promise<
   readonly resolutionSetDigest: ObjectDigest;
   readonly resolvedAttemptDigest?: ObjectDigest;
 }> {
-  const saved = await fixture.version.saveMergeResolutions({
+  const saved = await fixture.version.artifacts.advanced.saveMergeResolutions({
     resultId: fixture.preview.resultId,
     resultDigest: fixture.preview.resultDigest,
     redactionPolicyDigest: fixture.preview.resultDigest,

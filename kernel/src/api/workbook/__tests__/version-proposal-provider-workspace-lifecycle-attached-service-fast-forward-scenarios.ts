@@ -149,7 +149,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: review.value.id })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId: review.value.id })).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'applied',

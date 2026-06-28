@@ -139,5 +139,5 @@ function mapDiffOverviewResult(value: unknown): VersionDiffOverview | WorkbookDi
       ),
     ]);
   }
-  return value as VersionDiffOverview;
+  return value as unknown as VersionDiffOverview;
 }

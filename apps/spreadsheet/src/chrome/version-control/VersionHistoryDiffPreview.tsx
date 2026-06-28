@@ -1,4 +1,4 @@
-import { GitCompare } from 'lucide-react';
+import { Filter, GitCompare } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type {
   VersionDiffEntry,
@@ -67,6 +67,8 @@ export function VersionHistoryDiffPreview({
   readonly onLoadMoreDetail: () => void;
   readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
 }): React.JSX.Element {
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
   if (!diffPreview) {
     return (
       <section
@@ -111,13 +113,21 @@ export function VersionHistoryDiffPreview({
       <div data-testid="version-history-parent-diff" data-state={state} className="contents">
         <div className="flex items-center justify-between gap-2">
           <DiffViewerHeader stateLabel="Changes" />
-          <span
-            className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary"
-            data-testid="version-history-diff-total-count"
-            data-count-precision={summary.countPrecision}
-          >
-            {formatSummaryCount(summary)}
-          </span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <DiffFilterMenu
+              preview={diffPreview}
+              open={filtersOpen}
+              onOpenChange={setFiltersOpen}
+              onFiltersChange={onFiltersChange}
+            />
+            <span
+              className="rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary"
+              data-testid="version-history-diff-total-count"
+              data-count-precision={summary.countPrecision}
+            >
+              {formatSummaryCount(summary)}
+            </span>
+          </div>
         </div>
         <p
           id={summaryId}
@@ -131,7 +141,6 @@ export function VersionHistoryDiffPreview({
         </p>
         <CommitRange base={diffPreview.base} target={diffPreview.target} />
         <DiffOverview preview={diffPreview} />
-        <DiffFilterControls preview={diffPreview} onFiltersChange={onFiltersChange} />
         <DiffGroupList
           preview={diffPreview}
           onLoadMoreGroups={onLoadMoreGroups}
@@ -141,6 +150,78 @@ export function VersionHistoryDiffPreview({
       </div>
     </section>
   );
+}
+
+function DiffFilterMenu({
+  preview,
+  open,
+  onOpenChange,
+  onFiltersChange,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
+}): React.JSX.Element {
+  const activeCount = activeFilterCount(preview.filters);
+  const disabled = !onFiltersChange || (!hasFilterOptions(preview) && activeCount === 0);
+  const label = activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        data-testid="version-history-diff-filter-button"
+        aria-label={label}
+        aria-expanded={open && !disabled}
+        disabled={disabled}
+        onClick={() => onOpenChange(!open)}
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface px-1.5 text-[10px] font-medium text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text disabled:opacity-50 disabled:hover:bg-ss-surface"
+      >
+        <Filter size={12} strokeWidth={1.75} aria-hidden="true" />
+        <span>Filter</span>
+        {activeCount > 0 ? (
+          <span
+            className="ml-0.5 rounded-sm bg-ss-primary px-1 text-[9px] leading-4 text-white"
+            aria-hidden="true"
+          >
+            {activeCount}
+          </span>
+        ) : null}
+      </button>
+      {open && !disabled ? (
+        <div
+          role="dialog"
+          aria-label="Diff filters"
+          data-testid="version-history-diff-filter-menu"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') onOpenChange(false);
+          }}
+          className="absolute right-0 top-full z-ss-popover mt-1 w-[284px] rounded-sm border border-ss-border bg-ss-surface p-2 shadow-ss-dropdown"
+        >
+          <DiffFilterControls
+            preview={preview}
+            onFiltersChange={onFiltersChange}
+            layout="menu"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function activeFilterCount(filters: VersionDiffFilterSelection | undefined): number {
+  if (!filters) return 0;
+  return (
+    Number(Boolean(filters.sheetId)) +
+    Number(Boolean(filters.domain)) +
+    Number(Boolean(filters.operation))
+  );
+}
+
+function hasFilterOptions(preview: VersionDiffPreview): boolean {
+  const options = diffFilterOptions(preview);
+  return options.sheets.length > 0 || options.domains.length > 0 || options.operations.length > 0;
 }
 
 export function versionDiffFiltersFromSelection(
@@ -274,9 +355,11 @@ function DiffOverview({ preview }: { readonly preview: VersionDiffPreview }): Re
 function DiffFilterControls({
   preview,
   onFiltersChange,
+  layout = 'inline',
 }: {
   readonly preview: VersionDiffPreview;
   readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
+  readonly layout?: 'inline' | 'menu';
 }): React.JSX.Element {
   const options = diffFilterOptions(preview);
   const filters = preview.filters ?? {};
@@ -291,7 +374,11 @@ function DiffFilterControls({
 
   return (
     <div
-      className="grid grid-cols-3 gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]"
+      className={
+        layout === 'menu'
+          ? 'grid grid-cols-1 gap-2 text-[11px]'
+          : 'grid grid-cols-3 gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]'
+      }
       data-testid="version-history-diff-filters"
     >
       <label className="flex min-w-0 flex-col gap-0.5">
@@ -353,11 +440,13 @@ function DiffFilterControls({
         label="Address"
         testId="version-history-diff-filter-address"
         reason={addressReason}
+        layout={layout}
       />
       <DisabledFilterControl
         label="Search"
         testId="version-history-diff-filter-search"
         reason={searchReason}
+        layout={layout}
       />
     </div>
   );
@@ -367,14 +456,22 @@ function DisabledFilterControl({
   label,
   testId,
   reason,
+  layout = 'inline',
 }: {
   readonly label: string;
   readonly testId: string;
   readonly reason: string;
+  readonly layout?: 'inline' | 'menu';
 }): React.JSX.Element {
   const reasonId = `${testId}-reason`;
   return (
-    <label className="col-span-3 flex min-w-0 flex-col gap-0.5 sm:col-span-1">
+    <label
+      className={
+        layout === 'menu'
+          ? 'flex min-w-0 flex-col gap-0.5'
+          : 'col-span-3 flex min-w-0 flex-col gap-0.5 sm:col-span-1'
+      }
+    >
       <span className="text-[10px] font-medium text-ss-text-secondary">{label}</span>
       <input
         data-testid={testId}

@@ -569,6 +569,9 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
     await screen.findByTestId('version-history-diff-viewer');
 
+    expect(screen.queryByTestId('version-history-diff-filters')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('version-history-diff-filter-button'));
+    expect(await screen.findByTestId('version-history-diff-filter-menu')).toBeInTheDocument();
     expect(screen.getByTestId('version-history-diff-filter-address')).toBeDisabled();
     expect(screen.getByTestId('version-history-diff-filter-address')).toHaveAccessibleDescription(
       'Address filters require a historical range index.',

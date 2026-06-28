@@ -1,10 +1,15 @@
 import { GitCompare } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type {
   VersionDiffEntry,
   VersionDiffDisplayValue,
+  VersionDiffGroup,
+  VersionDiffGroupId,
+  VersionDiffOverview,
   VersionDiffValue,
   VersionSemanticDiffPage,
   VersionSemanticValue,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
@@ -17,21 +22,37 @@ import {
   versionRowColumnDiffSummary,
   versionRowColumnDiffTitle,
 } from './version-history-format';
+import { safeDomId } from './availability/version-action-availability';
 
 export type VersionDiffPreview = {
   readonly base: WorkbookCommitId;
   readonly target: WorkbookCommitId;
-  readonly page: VersionSemanticDiffPage;
+  readonly overview: VersionDiffOverview;
+  readonly activeGroupId?: VersionDiffGroupId;
+  readonly detailPages: readonly VersionSemanticDiffPage[];
+  readonly detailItems: readonly VersionDiffEntry[];
+  readonly detailNextCursor?: VersionSemanticDiffPage['nextCursor'];
+  readonly loadedDetailCount: number;
+  readonly loadedDetailPageCount: number;
+  readonly hasMoreDetail: boolean;
+  readonly loadingGroups: boolean;
+  readonly loadingDetail: boolean;
 };
 
 export function VersionHistoryDiffPreview({
   diffPreview,
   diffEnabled = true,
   diffDisabledReason,
+  onLoadMoreGroups,
+  onSelectGroup,
+  onLoadMoreDetail,
 }: {
   readonly diffPreview?: VersionDiffPreview;
   readonly diffEnabled?: boolean;
   readonly diffDisabledReason?: string;
+  readonly onLoadMoreGroups: () => void;
+  readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
+  readonly onLoadMoreDetail: () => void;
 }): React.JSX.Element {
   if (!diffPreview) {
     return (
@@ -58,12 +79,12 @@ export function VersionHistoryDiffPreview({
     );
   }
 
-  const count = diffPreview.page.items.length;
-  const state = versionDiffPreviewState(diffPreview.page);
+  const summary = diffPreview.overview.summary;
+  const state = summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
   const summaryId = 'version-history-parent-diff-summary';
-  const summary = `Diff base ${shortCommitId(diffPreview.base)} target ${shortCommitId(
+  const summaryText = `Diff base ${shortCommitId(diffPreview.base)} target ${shortCommitId(
     diffPreview.target,
-  )} State ${state.label}. Change count ${count}`;
+  )}. ${formatSummaryCount(summary)}. Loaded detail ${diffPreview.loadedDetailCount}`;
 
   return (
     <section
@@ -72,9 +93,64 @@ export function VersionHistoryDiffPreview({
       aria-describedby={summaryId}
       data-testid="version-history-diff-viewer"
       data-loaded="true"
+      data-state={state}
+    >
+      <div data-testid="version-history-parent-diff" data-state={state} className="contents">
+        <div className="flex items-center justify-between gap-2">
+          <DiffViewerHeader stateLabel="Changes" />
+          <span
+            className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary"
+            data-testid="version-history-diff-total-count"
+            data-count-precision={summary.countPrecision}
+          >
+            {formatSummaryCount(summary)}
+          </span>
+        </div>
+        <p
+          id={summaryId}
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="version-history-parent-diff-status"
+        >
+          {summaryText}
+        </p>
+        <CommitRange base={diffPreview.base} target={diffPreview.target} />
+        <DiffOverview preview={diffPreview} />
+        <DiffGroupList
+          preview={diffPreview}
+          onLoadMoreGroups={onLoadMoreGroups}
+          onSelectGroup={onSelectGroup}
+        />
+        <DiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
+      </div>
+    </section>
+  );
+}
+
+export function VersionHistoryWorkingTreeDiffPreview({
+  page,
+}: {
+  readonly page: VersionWorkingTreeDiffPage;
+}): React.JSX.Element {
+  const count = page.items.length;
+  const state = versionDiffPreviewState(page);
+  const summaryId = 'version-history-working-tree-diff-summary';
+  const summary = `Working tree diff base ${shortCommitId(page.baseCommitId)} State ${
+    state.label
+  }. Change count ${count}`;
+
+  return (
+    <section
+      className="flex min-h-[160px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
+      aria-label="Working tree diff viewer"
+      aria-describedby={summaryId}
+      data-testid="version-history-working-tree-diff-viewer"
+      data-loaded="true"
       data-state={state.kind}
     >
-      <div data-testid="version-history-parent-diff" data-state={state.kind} className="contents">
+      <div data-testid="version-history-working-tree-diff" data-state={state.kind} className="contents">
         <div className="flex items-center justify-between gap-2">
           <DiffViewerHeader stateLabel={state.label} />
           <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary">
@@ -87,30 +163,30 @@ export function VersionHistoryDiffPreview({
           role="status"
           aria-live="polite"
           aria-atomic="true"
-          data-testid="version-history-parent-diff-status"
+          data-testid="version-history-working-tree-diff-status"
         >
           {summary}
         </p>
-        <CommitRange base={diffPreview.base} target={diffPreview.target} />
+        <WorkingTreeRange page={page} />
         {state.kind === 'changes' ? (
-          <ol
+          <div
             className="m-0 flex max-h-[300px] flex-col gap-1.5 overflow-y-auto p-0 list-none"
-            data-testid="version-history-diff-change-list"
+            data-testid="version-history-working-tree-diff-change-list"
           >
-            {diffPreview.page.items.map((entry, index) => (
+            {page.items.map((entry, index) => (
               <DiffChangeRow key={index} entry={entry} />
             ))}
-          </ol>
+          </div>
         ) : (
           <div
             className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2.5 py-2 text-[11px]"
-            data-testid="version-history-parent-diff-state"
+            data-testid="version-history-working-tree-diff-state"
           >
             <div className="font-medium text-ss-text">{state.title}</div>
             <div className="text-ss-text-secondary">{state.message}</div>
             {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
               <ol className="m-0 mt-2 flex flex-col gap-1 p-0 list-none">
-                {diffPreview.page.items.map((entry, index) => (
+                {page.items.map((entry, index) => (
                   <li key={index} className="text-[11px] text-ss-text-secondary truncate">
                     {versionDiffEntryLabel(entry)}
                   </li>
@@ -121,6 +197,199 @@ export function VersionHistoryDiffPreview({
         )}
       </div>
     </section>
+  );
+}
+
+function DiffOverview({ preview }: { readonly preview: VersionDiffPreview }): React.JSX.Element {
+  const { summary, resourceLimits } = preview.overview;
+  return (
+    <div
+      className="grid gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]"
+      data-testid="version-history-diff-overview"
+      data-count-precision={summary.countPrecision}
+      data-exact-total={summary.exactTotalChanges ?? ''}
+      data-minimum-count={summary.minimumChangeCount ?? ''}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-ss-text">{formatSummaryCount(summary)}</span>
+        <span
+          className="text-ss-text-secondary"
+          data-testid="version-history-diff-loaded-count"
+        >
+          {preview.loadedDetailCount} loaded
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-x-2 gap-y-1 text-ss-text-secondary">
+        <span>{preview.overview.groups.items.length} groups</span>
+        <span>{preview.loadedDetailPageCount} detail pages cached</span>
+        {preview.hasMoreDetail ? <span>More detail available</span> : null}
+        {summary.incomplete ? <span className="font-medium text-ss-warning">Incomplete</span> : null}
+      </div>
+      {summary.domainCounts.length > 0 ? (
+        <div className="flex flex-wrap gap-1" data-testid="version-history-diff-domain-counts">
+          {summary.domainCounts.slice(0, 6).map((count) => (
+            <span
+              key={count.domain}
+              className="rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 py-0.5"
+            >
+              {count.domain}: {count.exactCount ?? count.minimumCount ?? count.totalEstimate ?? '?'}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {resourceLimits?.exactTotalCountUnavailable ? (
+        <div className="text-ss-text-secondary" data-testid="version-history-diff-resource-limits">
+          Exact total unavailable within scan budget
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DiffGroupList({
+  preview,
+  onLoadMoreGroups,
+  onSelectGroup,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onLoadMoreGroups: () => void;
+  readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
+}): React.JSX.Element {
+  const groups = preview.overview.groups.items;
+  if (groups.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-empty-groups"
+      >
+        No grouped changes
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <ol
+        className="m-0 flex max-h-[220px] flex-col gap-1 overflow-y-auto p-0 list-none"
+        data-testid="version-history-diff-group-list"
+      >
+        {groups.map((group) => (
+          <li key={group.groupId}>
+            <button
+              type="button"
+              data-testid={`version-history-diff-group-row-${safeDomId(group.groupId)}`}
+              data-group-kind={group.kind}
+              data-change-count={group.changeCount ?? group.minimumChangeCount ?? ''}
+              aria-pressed={preview.activeGroupId === group.groupId}
+              onClick={() => onSelectGroup(group.groupId)}
+              className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-ss-surface-hover aria-pressed:border-ss-primary aria-pressed:bg-ss-primary/10"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-ss-text">
+                  {formatGroupTitle(group)}
+                </span>
+                <span className="block truncate text-ss-text-secondary">
+                  {group.domain} - {group.operation} - historical metadata
+                </span>
+              </span>
+              <span className="shrink-0 text-ss-text-secondary">
+                {formatGroupCount(group)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      {preview.overview.groups.nextCursor ? (
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-groups"
+          onClick={onLoadMoreGroups}
+          disabled={preview.loadingGroups}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingGroups ? 'Loading groups' : 'Load more groups'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DiffDetail({
+  preview,
+  onLoadMoreDetail,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onLoadMoreDetail: () => void;
+}): React.JSX.Element | null {
+  if (!preview.activeGroupId) return null;
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="version-history-diff-detail">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-ss-text-secondary">
+        <span>
+          {preview.loadedDetailCount} loaded across {preview.loadedDetailPageCount} pages
+        </span>
+        {preview.hasMoreDetail ? <span>More available</span> : null}
+      </div>
+      <VirtualDetailList items={preview.detailItems} />
+      {preview.hasMoreDetail ? (
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-detail"
+          onClick={onLoadMoreDetail}
+          disabled={preview.loadingDetail}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingDetail ? 'Loading detail' : 'Load more'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VirtualDetailList({
+  items,
+}: {
+  readonly items: readonly VersionDiffEntry[];
+}): React.JSX.Element {
+  const rowHeight = 92;
+  const viewportHeight = 276;
+  const [scrollTop, setScrollTop] = useState(0);
+  const visible = useMemo(() => {
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 2);
+    const count = Math.ceil(viewportHeight / rowHeight) + 4;
+    return {
+      start,
+      end: Math.min(items.length, start + count),
+    };
+  }, [items.length, scrollTop]);
+  const visibleItems = items.slice(visible.start, visible.end);
+
+  return (
+    <div
+      className="relative overflow-y-auto rounded-sm border border-ss-border bg-ss-surface"
+      style={{ height: viewportHeight }}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      data-testid="version-history-diff-detail-viewport"
+      data-visible-count={visibleItems.length}
+      data-total-loaded={items.length}
+    >
+      <div className="m-0 p-0" style={{ height: items.length * rowHeight, position: 'relative' }}>
+        {visibleItems.map((entry, index) => (
+          <div
+            key={diffEntryKey(entry, visible.start + index)}
+            style={{
+              position: 'absolute',
+              top: (visible.start + index) * rowHeight,
+              left: 0,
+              right: 0,
+              height: rowHeight,
+              padding: 4,
+            }}
+          >
+            <DiffChangeRow entry={entry} />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -152,9 +421,27 @@ function CommitRange({
   );
 }
 
+function WorkingTreeRange({
+  page,
+}: {
+  readonly page: VersionWorkingTreeDiffPage;
+}): React.JSX.Element {
+  return (
+    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-0.5 text-[10px] text-ss-text-secondary">
+      <span className="sr-only">
+        Working tree base {shortCommitId(page.baseCommitId)} current semantic state{' '}
+        {page.currentSemanticStateDigest.digest}
+      </span>
+      <div className="truncate font-mono" aria-hidden="true">
+        {shortCommitId(page.baseCommitId)}...working tree
+      </div>
+    </div>
+  );
+}
+
 function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.JSX.Element {
   return (
-    <li className="overflow-hidden rounded-sm border border-ss-border bg-ss-surface">
+    <article className="overflow-hidden rounded-sm border border-ss-border bg-ss-surface">
       <div className="flex min-w-0 items-center justify-between gap-2 border-b border-ss-border-light bg-ss-surface-secondary px-2 py-1">
         <div className="min-w-0 truncate text-[11px] font-medium text-ss-text">
           {diffEntryTitle(entry)}
@@ -169,7 +456,7 @@ function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.J
         <DiffLine label="Before" marker="-" tone="removed" side="before" entry={entry} />
         <DiffLine label="After" marker="+" tone="added" side="after" entry={entry} />
       </div>
-    </li>
+    </article>
   );
 }
 
@@ -266,4 +553,36 @@ function formatSemanticObjectValue(value: VersionSemanticValue, depth: number): 
 
 function truncateValue(value: string, maxLength: number): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function formatSummaryCount(summary: VersionDiffOverview['summary']): string {
+  if (summary.exactTotalChanges !== undefined) {
+    return `${summary.exactTotalChanges} ${
+      summary.exactTotalChanges === 1 ? 'change' : 'changes'
+    }`;
+  }
+  if (summary.minimumChangeCount !== undefined) return `${summary.minimumChangeCount}+ changes`;
+  if (summary.totalEstimate !== undefined) return `About ${summary.totalEstimate} changes`;
+  return 'Change count unavailable';
+}
+
+function formatGroupTitle(group: VersionDiffGroup): string {
+  const address = formatDisplayValue(group.address);
+  const sheetName = formatDisplayValue(group.sheetName);
+  if (sheetName && address) return `${sheetName} ${address}`;
+  if (address) return address;
+  if (group.sheetId && group.kind !== 'domain') return `${group.sheetId} ${group.kind}`;
+  return `${group.domain} ${group.kind}`;
+}
+
+function formatGroupCount(group: VersionDiffGroup): string {
+  if (group.changeCount !== undefined) return String(group.changeCount);
+  if (group.minimumChangeCount !== undefined) return `${group.minimumChangeCount}+`;
+  if (group.totalEstimate !== undefined) return `~${group.totalEstimate}`;
+  return '?';
+}
+
+function diffEntryKey(entry: VersionDiffEntry, index: number): string {
+  if (entry.structural.kind === 'metadata') return entry.structural.changeId;
+  return `${versionDiffEntryLabel(entry)}-${index}`;
 }

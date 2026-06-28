@@ -11,8 +11,10 @@ import type {
   VersionRefReadResult,
   VersionResult,
   VersionCheckoutResult,
+  VersionDiffOverview,
   VersionSemanticDiffPage,
   VersionStoreDiagnostic,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitRef,
   WorkbookCommitSummary,
   WorkbookDiffPage,
@@ -24,6 +26,7 @@ import {
   VERSION_CAPABILITY_KEYS,
   type VersionMergePublicOperation,
 } from './version/merge/version-merge-capability';
+import type { WorkbookVersionWorkingTreeDiffPage } from '../../document/version-store/working-tree-diff-service';
 import {
   projectVersionHistoryDiagnosticsForAccess,
   projectVersionStoreDiagnosticsForPublicResult,
@@ -52,8 +55,13 @@ type VersionResultOperation =
   | 'checkoutBranch'
   | 'checkoutCommit'
   | 'diff'
+  | 'diffOverview'
+  | 'diffGroupDetail'
   | 'diffCurrent'
+  | 'diffCurrentOverview'
   | 'diffBranch'
+  | 'diffBranchOverview'
+  | 'diffWorkingTree'
   | 'merge'
   | 'previewMerge'
   | 'getMergeReview'
@@ -182,7 +190,10 @@ export function versionResultFromApplyMerge(
 export function versionResultFromDiffPage(
   result: WorkbookDiffPage,
   limit: number,
-  operation: Extract<VersionResultOperation, 'diff' | 'diffCurrent' | 'diffBranch'> = 'diff',
+  operation: Extract<
+    VersionResultOperation,
+    'diff' | 'diffCurrent' | 'diffBranch' | 'diffGroupDetail'
+  > = 'diff',
 ): VersionResult<VersionSemanticDiffPage> {
   if (result.status === 'degraded') {
     return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
@@ -191,6 +202,49 @@ export function versionResultFromDiffPage(
   return {
     ok: true,
     value: {
+      items: result.items,
+      ...(result.nextPageToken ? { nextCursor: result.nextPageToken as PageCursor } : {}),
+      limit,
+      readRevision: result.readRevision,
+      order: result.order,
+      ...(result.resourceLimits ? { resourceLimits: result.resourceLimits } : {}),
+    },
+  };
+}
+
+export function versionResultFromDiffOverview(
+  result: VersionDiffOverview | WorkbookDiffPage,
+  operation: Extract<
+    VersionResultOperation,
+    'diffOverview' | 'diffCurrentOverview' | 'diffBranchOverview'
+  > = 'diffOverview',
+): VersionResult<VersionDiffOverview> {
+  if ('status' in result && result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
+  }
+  return { ok: true, value: result as VersionDiffOverview };
+}
+
+export function versionResultFromWorkingTreeDiffPage(
+  result: WorkbookVersionWorkingTreeDiffPage,
+  limit: number,
+): VersionResult<VersionWorkingTreeDiffPage> {
+  if (result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics('diffWorkingTree', result.diagnostics);
+  }
+
+  return {
+    ok: true,
+    value: {
+      kind: 'workingTree',
+      workingTreeDiffId: result.workingTreeDiffId,
+      baseCommitId: result.baseCommitId,
+      ...(result.targetRef ? { targetRef: result.targetRef } : {}),
+      captureRevision: result.captureRevision,
+      dirtyStatusRevision: result.dirtyStatusRevision,
+      checkoutPreflightToken: result.checkoutPreflightToken,
+      baseSemanticStateDigest: result.baseSemanticStateDigest,
+      currentSemanticStateDigest: result.currentSemanticStateDigest,
       items: result.items,
       ...(result.nextPageToken ? { nextCursor: result.nextPageToken as PageCursor } : {}),
       limit,
@@ -286,6 +340,13 @@ const DIRECT_VERSION_OPERATIONS = new Set<VersionResultOperation>([
   'revert',
   'promotePendingRemote',
   'diff',
+  'diffOverview',
+  'diffGroupDetail',
+  'diffCurrent',
+  'diffCurrentOverview',
+  'diffBranch',
+  'diffBranchOverview',
+  'diffWorkingTree',
   'readRef',
   'getRef',
   'listRefs',

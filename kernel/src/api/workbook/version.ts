@@ -22,7 +22,11 @@ import type {
   VersionCurrentCheckout,
   VersionDeleteRefOptions,
   VersionDiffBranchOptions,
+  VersionDiffBranchOverviewOptions,
+  VersionDiffGroupDetailOptions,
   VersionDiffOptions,
+  VersionDiffOverview,
+  VersionDiffOverviewOptions,
   VersionDiffPorcelainTarget,
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
@@ -64,6 +68,8 @@ import type {
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
   VersionUpdateReviewStatusInput,
+  VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitSummary,
   WorkbookCommitIdInput,
   WorkbookVersion,
@@ -83,8 +89,13 @@ import {
   checkoutCommitWorkbookVersionFacade,
   commitCurrentWorkbookVersionFacade,
   commitWorkbookVersionFacade,
+  diffBranchOverviewWorkbookVersionFacade,
   diffBranchWorkbookVersionFacade,
+  diffCurrentOverviewWorkbookVersionFacade,
   diffCurrentWorkbookVersionFacade,
+  diffGroupDetailWorkbookVersionFacade,
+  diffOverviewWorkbookVersionFacade,
+  diffWorkingTreeWorkbookVersionFacade,
   diffWorkbookVersionFacade,
   getWorkbookVersionFacadeCurrent,
   getWorkbookVersionFacadeHead,
@@ -209,6 +220,28 @@ class WorkbookVersionCoreImpl extends WorkbookVersionNamespaceBase {
     options: VersionDiffOptions = {},
   ): Promise<VersionResult<VersionSemanticDiffPage>> {
     return diffWorkbookVersionFacade(this.ctx, base, target, options);
+  }
+
+  async diffOverview(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffOverviewOptions = {},
+  ): Promise<VersionResult<VersionDiffOverview>> {
+    return diffOverviewWorkbookVersionFacade(this.ctx, base, target, options);
+  }
+
+  async diffGroupDetail(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffGroupDetailOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>> {
+    return diffGroupDetailWorkbookVersionFacade(this.ctx, base, target, options);
+  }
+
+  async diffWorkingTree(
+    options: VersionWorkingTreeDiffOptions = {},
+  ): Promise<VersionResult<VersionWorkingTreeDiffPage>> {
+    return diffWorkingTreeWorkbookVersionFacade(this.ctx, options);
   }
 
   async readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
@@ -454,11 +487,25 @@ export class WorkbookVersionImpl extends WorkbookVersionCoreImpl implements Work
     return diffCurrentWorkbookVersionFacade(this.ctx, target, options);
   }
 
+  async diffCurrentOverview(
+    target: VersionDiffPorcelainTarget = 'main',
+    options: VersionDiffOverviewOptions = {},
+  ): Promise<VersionResult<VersionDiffOverview>> {
+    return diffCurrentOverviewWorkbookVersionFacade(this.ctx, target, options);
+  }
+
   async diffBranch(
     branch: VersionBranchNameInput,
     options: VersionDiffBranchOptions = {},
   ): Promise<VersionResult<VersionSemanticDiffPage>> {
     return diffBranchWorkbookVersionFacade(this.ctx, branch, options);
+  }
+
+  async diffBranchOverview(
+    branch: VersionBranchNameInput,
+    options: VersionDiffBranchOverviewOptions = {},
+  ): Promise<VersionResult<VersionDiffOverview>> {
+    return diffBranchOverviewWorkbookVersionFacade(this.ctx, branch, options);
   }
 
   async listBranches(

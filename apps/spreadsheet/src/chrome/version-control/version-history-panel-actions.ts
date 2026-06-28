@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  VersionDiffEntry,
+  VersionDiffGroupId,
+  VersionDiffOverview,
+  VersionMergeConflictResolutionOptionKind,
+  VersionMergeReview,
   VersionRef,
+  VersionSemanticDiffPage,
   WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
@@ -9,6 +15,7 @@ import type {
 import {
   getBranchAvailability,
   getCheckoutAvailability,
+  getCapabilityAvailability,
   getCommitAvailability,
   getDiffAvailability,
 } from './availability/version-action-availability';
@@ -42,6 +49,15 @@ type UseVersionHistoryPanelActionsInput = {
   readonly load: () => Promise<void>;
 };
 
+export type VersionMergeReviewPanelState = {
+  readonly sourceRef: VersionRef;
+  readonly review: VersionMergeReview;
+};
+
+const VERSION_DIFF_DETAIL_PAGE_SIZE = 50;
+const VERSION_DIFF_MAX_CACHED_ROWS = 1_000;
+const VERSION_DIFF_MAX_CACHED_PAGES = 20;
+
 export function useVersionHistoryPanelActions({
   workbook,
   data,
@@ -52,7 +68,9 @@ export function useVersionHistoryPanelActions({
   const [branchName, setBranchName] = useState('');
   const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
   const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
+  const [mergeReview, setMergeReview] = useState<VersionMergeReviewPanelState | undefined>();
   const actionSequenceRef = useRef(0);
+  const diffGenerationRef = useRef(0);
   const activeActionRef = useRef<VersionPanelActionRun | undefined>(undefined);
   const latestDataRef = useRef<VersionHistoryData | undefined>(data);
   const commitDirtyRefreshFenceRef = useRef<CommitDirtyRefreshFence | undefined>(undefined);
@@ -105,10 +123,24 @@ export function useVersionHistoryPanelActions({
   );
   const checkoutAvailability = getCheckoutAvailability(data, actionBusy, loading);
   const diffAvailability = getDiffAvailability(data, actionBusy, loading);
+  const mergePreviewAvailability = getCapabilityAvailability(
+    data,
+    actionBusy,
+    loading,
+    'version:mergePreview',
+  );
+  const mergeApplyAvailability = getCapabilityAvailability(
+    data,
+    actionBusy,
+    loading,
+    'version:mergeApply',
+  );
   const canCommit = commitAvailability.enabled;
   const canCreateBranch = branchAvailability.enabled;
   const canCheckout = checkoutAvailability.enabled;
   const canDiff = diffAvailability.enabled;
+  const canPreviewMerge = mergePreviewAvailability.enabled;
+  const canApplyMerge = mergeApplyAvailability.enabled;
 
   useEffect(
     () => () => {
@@ -151,6 +183,15 @@ export function useVersionHistoryPanelActions({
   const isActionCurrent = useCallback((action: VersionPanelActionRun) => {
     const active = activeActionRef.current;
     return active?.id === action.id && active.kind === action.kind;
+  }, []);
+
+  const beginDiffLoad = useCallback(() => {
+    diffGenerationRef.current += 1;
+    return diffGenerationRef.current;
+  }, []);
+
+  const isDiffGenerationCurrent = useCallback((generation: number) => {
+    return diffGenerationRef.current === generation;
   }, []);
 
   const setRunningAction = useCallback(
@@ -360,22 +401,24 @@ export function useVersionHistoryPanelActions({
       const parentId = commit.parents[0];
       if (!canDiff || !parentId) return;
 
+      const generation = beginDiffLoad();
       setActionState({ status: 'running', label: 'Loading parent diff' });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.diff(parentId, commit.id, {
-          pageSize: 50,
+        workbook.version.diffOverview(parentId, commit.id, {
+          groupLimit: 50,
           includeDiagnostics: true,
         }),
       );
+      if (!isDiffGenerationCurrent(generation)) return;
       if (!result.ok) {
         setActionState({ status: 'error', diagnostic: result.diagnostic });
         return;
       }
 
-      setDiffPreview({ base: parentId, target: commit.id, page: result.value });
+      setDiffPreview(createDiffPreview(parentId, commit.id, result.value));
       setActionState({ status: 'idle' });
     },
-    [canDiff, workbook],
+    [beginDiffLoad, canDiff, isDiffGenerationCurrent, workbook],
   );
 
   const getBranchAvailabilityForCommit = useCallback(
@@ -390,27 +433,235 @@ export function useVersionHistoryPanelActions({
       if (!canDiff) return;
 
       const label = target.recordKind === 'review' ? 'review' : 'proposal';
+      const generation = beginDiffLoad();
       setActionState({ status: 'running', label: `Loading ${label} diff` });
       const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
-        workbook.version.diff(target.baseCommitId, target.targetCommitId, {
-          pageSize: 50,
+        workbook.version.diffOverview(target.baseCommitId, target.targetCommitId, {
+          groupLimit: 50,
           includeDiagnostics: true,
         }),
       );
+      if (!isDiffGenerationCurrent(generation)) return;
       if (!result.ok) {
         setActionState({ status: 'error', diagnostic: result.diagnostic });
         return;
       }
 
-      setDiffPreview({
-        base: target.baseCommitId,
-        target: target.targetCommitId,
-        page: result.value,
-      });
+      setDiffPreview(createDiffPreview(target.baseCommitId, target.targetCommitId, result.value));
       setActionState({ status: 'success', message: `Loaded ${label} diff` });
     },
-    [canDiff, workbook],
+    [beginDiffLoad, canDiff, isDiffGenerationCurrent, workbook],
   );
+
+  const handleLoadMoreDiffGroups = useCallback(async () => {
+    const current = diffPreview;
+    const cursor = current?.overview.groups.nextCursor;
+    if (!current || !cursor || current.loadingGroups) return;
+    const generation = diffGenerationRef.current;
+    const { base, target } = current;
+    setDiffPreview((preview) =>
+      preview && preview.base === base && preview.target === target
+        ? { ...preview, loadingGroups: true }
+        : preview,
+    );
+    const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+      workbook.version.diffOverview(base, target, {
+        groupLimit: current.overview.groups.limit,
+        groupPageToken: cursor,
+        includeDiagnostics: true,
+      }),
+    );
+    if (!isDiffGenerationCurrent(generation)) return;
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      setDiffPreview((preview) =>
+        preview && preview.base === base && preview.target === target
+          ? { ...preview, loadingGroups: false }
+          : preview,
+      );
+      return;
+    }
+    setDiffPreview((preview) =>
+      preview && preview.base === base && preview.target === target
+        ? appendDiffOverviewGroups(preview, result.value)
+        : preview,
+    );
+  }, [diffPreview, isDiffGenerationCurrent, workbook]);
+
+  const handleSelectDiffGroup = useCallback(
+    async (groupId: VersionDiffGroupId) => {
+      const current = diffPreview;
+      if (!current) return;
+      const generation = diffGenerationRef.current;
+      const { base, target } = current;
+      setDiffPreview((preview) =>
+        preview && preview.base === base && preview.target === target
+          ? {
+              ...preview,
+              activeGroupId: groupId,
+              detailPages: [],
+              detailItems: [],
+              detailNextCursor: undefined,
+              loadedDetailCount: 0,
+              loadedDetailPageCount: 0,
+              hasMoreDetail: false,
+              loadingDetail: true,
+            }
+          : preview,
+      );
+      const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+        workbook.version.diffGroupDetail(base, target, {
+          groupId,
+          pageSize: VERSION_DIFF_DETAIL_PAGE_SIZE,
+          includeDiagnostics: true,
+        }),
+      );
+      if (!isDiffGenerationCurrent(generation)) return;
+      if (!result.ok) {
+        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        setDiffPreview((preview) =>
+          preview && preview.base === base && preview.target === target
+            ? { ...preview, loadingDetail: false }
+            : preview,
+        );
+        return;
+      }
+      setDiffPreview((preview) =>
+        preview && preview.base === base && preview.target === target
+          ? replaceDiffDetailPage(preview, groupId, result.value)
+          : preview,
+      );
+    },
+    [diffPreview, isDiffGenerationCurrent, workbook],
+  );
+
+  const handleLoadMoreDiffDetail = useCallback(async () => {
+    const current = diffPreview;
+    if (
+      !current ||
+      !current.activeGroupId ||
+      !current.detailNextCursor ||
+      current.loadingDetail
+    ) {
+      return;
+    }
+    const generation = diffGenerationRef.current;
+    const { base, target, activeGroupId, detailNextCursor } = current;
+    setDiffPreview((preview) =>
+      preview && preview.base === base && preview.target === target
+        ? { ...preview, loadingDetail: true }
+        : preview,
+    );
+    const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+      workbook.version.diffGroupDetail(base, target, {
+        groupId: activeGroupId,
+        pageToken: detailNextCursor,
+        pageSize: VERSION_DIFF_DETAIL_PAGE_SIZE,
+        includeDiagnostics: true,
+      }),
+    );
+    if (!isDiffGenerationCurrent(generation)) return;
+    if (!result.ok) {
+      setActionState({ status: 'error', diagnostic: result.diagnostic });
+      setDiffPreview((preview) =>
+        preview && preview.base === base && preview.target === target
+          ? { ...preview, loadingDetail: false }
+          : preview,
+      );
+      return;
+    }
+    setDiffPreview((preview) =>
+      preview && preview.base === base && preview.target === target
+        ? appendDiffDetailPage(preview, activeGroupId, result.value)
+        : preview,
+    );
+  }, [diffPreview, isDiffGenerationCurrent, workbook]);
+
+  const handlePreviewMerge = useCallback(
+    async (sourceRef: VersionRef) => {
+      if (!canPreviewMerge) return;
+      const action = beginAction('merge-preview');
+      if (!action) return;
+
+      const normalizedBranch = normalizeVersionBranchNameInput(sourceRef.name);
+      const source =
+        normalizedBranch.ok ? normalizedBranch.branch.branchName : displayBranchName(sourceRef.name);
+
+      if (!setRunningAction(action, 'Previewing merge')) return;
+      const result = await readVersionResult('VERSION_UI_MERGE_PREVIEW_FAILED', () =>
+        workbook.version.previewMerge(
+          { from: source, into: 'current' },
+          { includeDiagnostics: true, persistReviewRecord: true },
+        ),
+      );
+      if (!isActionCurrent(action)) return;
+      if (!result.ok) {
+        completeAction(action, { status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
+
+      setMergeReview({ sourceRef, review: result.value });
+      completeAction(action, {
+        status: 'success',
+        message: mergeReviewStatusMessage(result.value),
+      });
+    },
+    [
+      beginAction,
+      canPreviewMerge,
+      completeAction,
+      isActionCurrent,
+      setRunningAction,
+      workbook,
+    ],
+  );
+
+  const handleChooseMergeResolution = useCallback(
+    (conflictId: string, kind: VersionMergeConflictResolutionOptionKind) => {
+      setMergeReview((current) =>
+        current
+          ? {
+              ...current,
+              review: current.review.choose(conflictId, kind),
+            }
+          : current,
+      );
+    },
+    [],
+  );
+
+  const handleApplyMerge = useCallback(async () => {
+    if (!mergeReview || !canApplyMerge) return;
+    const action = beginAction('merge-apply');
+    if (!action) return;
+
+    if (!setRunningAction(action, 'Applying merge')) return;
+    const result = await readVersionResult('VERSION_UI_MERGE_APPLY_FAILED', () =>
+      mergeReview.review.apply({
+        includeDiagnostics: true,
+        materializeActiveCheckout: true,
+      }),
+    );
+    if (!isActionCurrent(action)) return;
+    if (!result.ok) {
+      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
+      return;
+    }
+
+    setMergeReview(undefined);
+    await refreshThenCompleteAction(action, {
+      status: 'success',
+      message: `Applied merge from ${displayBranchName(mergeReview.sourceRef.name)}`,
+    });
+  }, [
+    beginAction,
+    canApplyMerge,
+    completeAction,
+    isActionCurrent,
+    mergeReview,
+    refreshThenCompleteAction,
+    setRunningAction,
+  ]);
 
   return {
     actionState,
@@ -420,6 +671,8 @@ export function useVersionHistoryPanelActions({
     canCommit,
     canCreateBranch,
     canDiff,
+    canApplyMerge,
+    canPreviewMerge,
     checkoutDisabledReason: checkoutAvailability.disabledReason,
     commitDisabledReason: commitAvailability.disabledReason,
     commitMessage,
@@ -431,9 +684,119 @@ export function useVersionHistoryPanelActions({
     handleCommit,
     handleCreateBranch,
     handleDiffCommit,
+    handleLoadMoreDiffDetail,
+    handleLoadMoreDiffGroups,
+    handleApplyMerge,
+    handleChooseMergeResolution,
+    handlePreviewMerge,
     handleReviewProposalDiff,
+    handleSelectDiffGroup,
     currentOrHeadCommitId,
+    mergeApplyDisabledReason: mergeApplyAvailability.disabledReason,
+    mergePreviewDisabledReason: mergePreviewAvailability.disabledReason,
+    mergeReview,
     setBranchName,
     setCommitMessage,
   };
+}
+
+function mergeReviewStatusMessage(review: VersionMergeReview): string {
+  if (review.status === 'conflicted') {
+    return `Merge preview has ${review.conflicts.length} conflicts`;
+  }
+  if (review.status === 'clean') return 'Previewed clean merge';
+  if (review.status === 'fastForward') return 'Merge preview ready to apply';
+  if (review.status === 'alreadyMerged') return 'Branch is already merged';
+  return 'Merge preview blocked';
+}
+
+function createDiffPreview(
+  base: WorkbookCommitId,
+  target: WorkbookCommitId,
+  overview: VersionDiffOverview,
+): VersionDiffPreview {
+  return {
+    base,
+    target,
+    overview,
+    detailPages: [],
+    detailItems: [],
+    loadedDetailCount: 0,
+    loadedDetailPageCount: 0,
+    hasMoreDetail: false,
+    loadingGroups: false,
+    loadingDetail: false,
+  };
+}
+
+function appendDiffOverviewGroups(
+  preview: VersionDiffPreview,
+  overviewPage: VersionDiffOverview,
+): VersionDiffPreview {
+  return {
+    ...preview,
+    overview: {
+      ...overviewPage,
+      groups: {
+        ...overviewPage.groups,
+        items: [...preview.overview.groups.items, ...overviewPage.groups.items],
+      },
+    },
+    loadingGroups: false,
+  };
+}
+
+function replaceDiffDetailPage(
+  preview: VersionDiffPreview,
+  groupId: VersionDiffGroupId,
+  page: VersionSemanticDiffPage,
+): VersionDiffPreview {
+  const bounded = boundedDetailCache([page]);
+  return {
+    ...preview,
+    activeGroupId: groupId,
+    detailPages: bounded.pages,
+    detailItems: bounded.items,
+    detailNextCursor: page.nextCursor,
+    loadedDetailCount: bounded.items.length,
+    loadedDetailPageCount: bounded.pages.length,
+    hasMoreDetail: Boolean(page.nextCursor),
+    loadingDetail: false,
+  };
+}
+
+function appendDiffDetailPage(
+  preview: VersionDiffPreview,
+  groupId: VersionDiffGroupId,
+  page: VersionSemanticDiffPage,
+): VersionDiffPreview {
+  if (preview.activeGroupId !== groupId) return preview;
+  const bounded = boundedDetailCache([...preview.detailPages, page]);
+  return {
+    ...preview,
+    detailPages: bounded.pages,
+    detailItems: bounded.items,
+    detailNextCursor: page.nextCursor,
+    loadedDetailCount: bounded.items.length,
+    loadedDetailPageCount: bounded.pages.length,
+    hasMoreDetail: Boolean(page.nextCursor),
+    loadingDetail: false,
+  };
+}
+
+function boundedDetailCache(pages: readonly VersionSemanticDiffPage[]): {
+  readonly pages: readonly VersionSemanticDiffPage[];
+  readonly items: readonly VersionDiffEntry[];
+} {
+  const retainedPages = pages.slice(-VERSION_DIFF_MAX_CACHED_PAGES);
+  const retainedItems: VersionDiffEntry[] = [];
+  const boundedPages: VersionSemanticDiffPage[] = [];
+  for (const page of retainedPages.slice().reverse()) {
+    if (retainedItems.length >= VERSION_DIFF_MAX_CACHED_ROWS) break;
+    const remaining = VERSION_DIFF_MAX_CACHED_ROWS - retainedItems.length;
+    const items = page.items.slice(-remaining);
+    retainedItems.unshift(...items);
+    boundedPages.unshift(page);
+  }
+  return { pages: boundedPages, items: retainedItems };
 }

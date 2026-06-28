@@ -69,6 +69,13 @@ export function mapCellWriteChanges(
       display: {
         address: { kind: 'value', value: address },
       },
+      historical: {
+        cell: {
+          sheetId: cell.sheetId,
+          row: cell.position.row,
+          column: cell.position.col,
+        },
+      },
     });
   }
   return changes;

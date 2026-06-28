@@ -32,6 +32,20 @@ export type VersionSemanticChangeRecord = {
     readonly address?: { readonly kind: 'value'; readonly value: string };
     readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
   };
+  readonly historical?: {
+    readonly cell?: {
+      readonly sheetId: string;
+      readonly row: number;
+      readonly column: number;
+    };
+    readonly range?: {
+      readonly sheetId: string;
+      readonly rowStart: number;
+      readonly rowEnd: number;
+      readonly columnStart: number;
+      readonly columnEnd: number;
+    };
+  };
 };
 
 export type PendingSemanticMutation = {

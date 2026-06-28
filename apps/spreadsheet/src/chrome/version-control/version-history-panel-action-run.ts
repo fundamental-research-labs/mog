@@ -2,6 +2,8 @@ export type VersionPanelActionKind =
   | 'branch'
   | 'checkout'
   | 'commit'
+  | 'merge-apply'
+  | 'merge-preview'
   | 'remote-promote'
   | 'rollback';
 

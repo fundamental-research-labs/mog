@@ -20,6 +20,7 @@ import {
   hasWorkbookVersionReviewRecordStoreProvider,
 } from '../../document/version-store/review-provider-service';
 import { createWorkbookVersionReviewDiffService } from '../../document/version-store/review-diff-service';
+import { createWorkbookVersionWorkingTreeDiffService } from '../../document/version-store/working-tree-diff-service';
 import {
   createPendingRemotePromotionService,
   type PendingRemotePromotionService,
@@ -45,6 +46,8 @@ import {
 } from './version/merge/version-merge-materializer';
 import { createProviderBackedWorkbookVersionProvenanceTruthService } from './version/provenance/version-provenance-truth-service';
 import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
+import { getWorkbookVersionStatus } from './version/status/version-status';
+import { getWorkbookVersionSurfaceStatus } from './version/surface-status/version-surface-status';
 import type { WorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
 
 type MutableVersioningContext = DocumentContext & {
@@ -149,6 +152,7 @@ export function attachWorkbookVersioning(
     !providerWriteActivityTracker &&
     !provenanceTruthService &&
     !config.reviewService &&
+    !config.workingTreeDiffService &&
     !config.proposalService &&
     !config.proposalWorkspaceService &&
     !config.readLiveCollaborationStatus &&
@@ -163,6 +167,20 @@ export function attachWorkbookVersioning(
     existing.diffService ??
     existing.versionDiffService ??
     (config.provider ? createWorkbookVersionDiffService({ provider: config.provider }) : undefined);
+  const workingTreeDiffService =
+    config.workingTreeDiffService ??
+    existing.workingTreeDiffService ??
+    existing.versionWorkingTreeDiffService ??
+    (config.provider && semanticCapture && semanticStateReader
+      ? createWorkbookVersionWorkingTreeDiffService({
+          provider: config.provider,
+          semanticMutationCapture: semanticCapture,
+          semanticStateReader,
+          readSurfaceStatus: () =>
+            getWorkbookVersionSurfaceStatus(ctx, getWorkbookVersionStatus(ctx)),
+          readActiveCheckoutHead: () => readActiveCheckoutHead(ctx),
+        })
+      : undefined);
   const checkoutSnapshotMaterializer =
     config.checkoutSnapshotMaterializer ??
     (isCheckoutSnapshotMaterializer(existing.checkoutSnapshotMaterializer)
@@ -273,6 +291,12 @@ export function attachWorkbookVersioning(
         }
       : {}),
     ...(diffService ? { diffService } : {}),
+    ...(workingTreeDiffService
+      ? {
+          workingTreeDiffService,
+          versionWorkingTreeDiffService: workingTreeDiffService,
+        }
+      : {}),
     ...(checkoutService ? { checkoutService } : {}),
     ...(mergeService ? { mergeService } : {}),
     ...(revertService ? { revertService, versionRevertService: revertService } : {}),
@@ -443,7 +467,8 @@ function isSemanticMutationCaptureServices(
     isRecord(value.mutationCapture) &&
     typeof value.mutationCapture.recordMutationResult === 'function' &&
     typeof value.captureNormalCommit === 'function' &&
-    typeof value.capturePendingRemoteSegment === 'function'
+    typeof value.capturePendingRemoteSegment === 'function' &&
+    typeof value.readWorkingTreeBasis === 'function'
   );
 }
 

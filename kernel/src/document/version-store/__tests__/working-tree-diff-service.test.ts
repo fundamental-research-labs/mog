@@ -1,0 +1,327 @@
+import { jest } from '@jest/globals';
+
+import type {
+  VersionSurfaceStatus,
+  WorkbookCommitId,
+  WorkbookCommitRef,
+} from '@mog-sdk/contracts/api';
+
+import type { SemanticWorkbookStateEnvelope } from '../../../bridges/compute/compute-types.gen';
+import type { SemanticMutationCaptureServices } from '../semantic-mutation-capture';
+import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
+import type { VersionStoreProvider } from '../provider';
+import { createWorkbookVersionWorkingTreeDiffService } from '../working-tree-diff-service';
+
+const BASE_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
+const REF_REVISION = { kind: 'counter', value: '1' } as const;
+
+describe('WorkbookVersionWorkingTreeDiffService', () => {
+  it('returns an empty read-only page for a clean working tree', async () => {
+    const before = semanticEnvelope('before');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: false }),
+      basis: basisState({ revision: 0 }),
+      currentStates: [before, before],
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toEqual([]);
+    expect(result.kind).toBe('workingTree');
+    expect(result.baseCommitId).toBe(BASE_COMMIT_ID);
+    expect(result.baseSemanticStateDigest).toMatchObject({ digest: 'before' });
+    expect(result.currentSemanticStateDigest).toMatchObject({ digest: 'before' });
+    expect(services.semanticStateReader.diffSemanticStates).not.toHaveBeenCalled();
+  });
+
+  it('diffs captured dirty preimage against current semantic state', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 3, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [semanticChange('change-1', '42')],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.structural).toMatchObject({
+      kind: 'metadata',
+      changeId: 'change-1',
+      entityId: 'sheet-1!A1',
+    });
+    expect(result.items[0]?.after).toEqual({ kind: 'value', value: '42' });
+    expect(result.captureRevision).toBe(3);
+    expect(result.baseSemanticStateDigest).toMatchObject({ digest: 'before' });
+    expect(result.currentSemanticStateDigest).toMatchObject({ digest: 'after' });
+  });
+
+  it('fails closed for uncaptured dirty mutations', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: {
+        ...basisState({ revision: 1, beforeSemanticState: before, pendingCaptured: 1 }),
+        pendingUncapturedNormalMutationCount: 1,
+        hasPendingNormalMutations: true,
+        hasUncapturedNormalMutations: true,
+        pendingUncapturedNormalMutationSummaries: [
+          {
+            sequence: 1,
+            operation: 'compute_set_cell',
+            capturedAt: '2026-06-28T00:00:00.000Z',
+            reason: 'missingOperationContext',
+          },
+        ],
+      },
+      currentStates: [after],
+    });
+
+    const result = await services.service.diffWorkingTree();
+
+    expect(result.status).toBe('degraded');
+    if (result.status !== 'degraded') return;
+    expect(result.diagnostics[0]?.issueCode).toBe('VERSION_WORKING_TREE_DIFF_UNCAPTURED');
+    expect(services.semanticStateReader.diffSemanticStates).not.toHaveBeenCalled();
+  });
+
+  it('rejects mid-request dirty status changes', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: [
+        surfaceStatus({ dirty: true, statusRevision: 'dirty-1' }),
+        surfaceStatus({ dirty: true, statusRevision: 'dirty-2' }),
+      ],
+      basis: basisState({ revision: 1, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [semanticChange('change-1', '42')],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree();
+
+    expect(result.status).toBe('degraded');
+    if (result.status !== 'degraded') return;
+    expect(result.diagnostics[0]?.issueCode).toBe('VERSION_WORKING_TREE_DIFF_STALE');
+  });
+
+  it('binds page tokens to the current working-tree identity', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const changedAfter = semanticEnvelope('changed-after');
+    const first = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 1, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [semanticChange('change-1', '42'), semanticChange('change-2', '43')],
+      },
+    });
+    const firstPage = await first.service.diffWorkingTree({ pageSize: 1 });
+    expect(firstPage.status).toBe('success');
+    if (firstPage.status !== 'success') return;
+    expect(firstPage.nextPageToken).toBeDefined();
+
+    const second = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 1, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [changedAfter],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: changedAfter.stateDigest,
+        changes: [semanticChange('change-1', '42'), semanticChange('change-2', '43')],
+      },
+    });
+    const stalePage = await second.service.diffWorkingTree({
+      pageSize: 1,
+      pageToken: firstPage.nextPageToken,
+    });
+
+    expect(stalePage.status).toBe('degraded');
+    if (stalePage.status !== 'degraded') return;
+    expect(stalePage.diagnostics[0]?.issueCode).toBe('VERSION_STALE_PAGE_CURSOR');
+  });
+});
+
+function createHarness(input: {
+  readonly surface: VersionSurfaceStatus | readonly VersionSurfaceStatus[];
+  readonly basis: ReturnType<typeof basisState>;
+  readonly currentStates: readonly SemanticWorkbookStateEnvelope[];
+  readonly semanticDiff?: Awaited<ReturnType<VersionSemanticStateReaderPort['diffSemanticStates']>>;
+}) {
+  const surfaces = Array.isArray(input.surface) ? [...input.surface] : [input.surface];
+  const currentStates = [...input.currentStates];
+  const lastSurface = surfaces.at(-1)!;
+  const lastCurrentState = currentStates.at(-1)!;
+  const semanticStateReader: VersionSemanticStateReaderPort = {
+    readCurrentSemanticState: jest.fn(async () => currentStates.shift() ?? lastCurrentState),
+    diffSemanticStates: jest.fn(async () =>
+      input.semanticDiff ?? {
+        beforeDigest: input.currentStates[0]!.stateDigest,
+        afterDigest: input.currentStates[0]!.stateDigest,
+        changes: [],
+      },
+    ),
+  };
+  const service = createWorkbookVersionWorkingTreeDiffService({
+    provider: provider(),
+    semanticMutationCapture: capture(input.basis),
+    semanticStateReader,
+    readSurfaceStatus: jest.fn(async () => surfaces.shift() ?? lastSurface),
+    readActiveCheckoutHead: jest.fn(async () => ({
+      status: 'resolved',
+      session: {
+        checkedOutCommitId: BASE_COMMIT_ID,
+        branchName: 'main',
+        refHeadAtMaterialization: BASE_COMMIT_ID,
+        detached: false,
+      },
+      head: {
+        id: BASE_COMMIT_ID,
+        refName: 'refs/heads/main',
+        resolvedFrom: 'refs/heads/main',
+        refRevision: REF_REVISION,
+      } satisfies WorkbookCommitRef,
+    })),
+  });
+
+  return { service, semanticStateReader };
+}
+
+function provider(): VersionStoreProvider {
+  return {
+    documentScope: { documentId: 'document-1' },
+    accessContext: {
+      principalScope: 'test-principal',
+      capabilityIds: ['version:diff'],
+      diagnosticsAllowed: true,
+    },
+    capabilities: {} as VersionStoreProvider['capabilities'],
+    readGraphRegistry: jest.fn() as never,
+    initializeGraph: jest.fn() as never,
+    openGraph: jest.fn() as never,
+    scanDocumentIntegrity: jest.fn() as never,
+    close: jest.fn() as never,
+    dispose: jest.fn() as never,
+  };
+}
+
+function capture(basis: ReturnType<typeof basisState>): SemanticMutationCaptureServices {
+  return {
+    mutationCapture: { recordMutationResult: jest.fn() },
+    captureNormalCommit: jest.fn() as never,
+    capturePendingRemoteSegment: jest.fn() as never,
+    readNormalCommitCaptureState: jest.fn(() => basis),
+    readWorkingTreeBasis: jest.fn(() => basis),
+    resetNormalCaptureForCheckout: jest.fn(),
+  };
+}
+
+function basisState(input: {
+  readonly revision: number;
+  readonly beforeSemanticState?: SemanticWorkbookStateEnvelope;
+  readonly pendingCaptured?: number;
+}) {
+  const pendingCaptured = input.pendingCaptured ?? 0;
+  return {
+    revision: input.revision,
+    pendingCapturedNormalMutationCount: pendingCaptured,
+    pendingUncapturedNormalMutationCount: 0,
+    hasPendingNormalMutations: pendingCaptured > 0,
+    hasUncapturedNormalMutations: false,
+    ...(input.beforeSemanticState ? { beforeSemanticState: input.beforeSemanticState } : {}),
+    pendingUncapturedNormalMutationSummaries: [],
+  };
+}
+
+function surfaceStatus(input: {
+  readonly dirty: boolean;
+  readonly statusRevision?: string;
+}): VersionSurfaceStatus {
+  return {
+    schemaVersion: 1,
+    documentId: 'document-1',
+    stage: 'authoring',
+    featureGateEnabled: true,
+    storage: { ready: true, backend: 'memory', diagnostics: [] },
+    current: {
+      headCommitId: BASE_COMMIT_ID,
+      branchName: 'refs/heads/main',
+      checkedOutCommitId: BASE_COMMIT_ID,
+      currentRefHeadId: BASE_COMMIT_ID,
+      detached: false,
+      stale: false,
+    },
+    dirty: {
+      statusRevision: input.statusRevision ?? 'dirty-1',
+      checkoutPreflightToken: `token-${input.statusRevision ?? 'dirty-1'}`,
+      hasUncommittedLocalChanges: input.dirty,
+      commitEligibleChanges: input.dirty,
+      unsupportedDirtyDomains: [],
+      pendingProviderWrites: false,
+      pendingRecalc: false,
+      checkoutSafe: true,
+      unsafeReasons: [],
+      source: 'VC-05',
+      diagnostics: [],
+    },
+    capabilities: {
+      'version:read': { enabled: true },
+      'version:diff': { enabled: true },
+      'version:commit': { enabled: true },
+      'version:branch': { enabled: true },
+      'version:checkout': { enabled: true },
+      'version:mergePreview': { enabled: true },
+      'version:mergeApply': { enabled: true },
+      'version:reviewRead': { enabled: true },
+      'version:reviewWrite': { enabled: true },
+      'version:proposal': { enabled: true },
+      'version:provenance': { enabled: true },
+      'version:remotePromote': { enabled: true },
+      'version:revert': { enabled: true },
+    },
+    diagnostics: [],
+  };
+}
+
+function semanticEnvelope(digest: string): SemanticWorkbookStateEnvelope {
+  return {
+    state: {
+      schemaVersion: '1',
+      domains: {},
+      sheets: {},
+    },
+    stateDigest: {
+      algorithm: 'sha256',
+      value: digest,
+    },
+  };
+}
+
+function semanticChange(changeId: string, after: string) {
+  return {
+    changeId,
+    domain: 'cells.values',
+    entityId: 'sheet-1!A1',
+    propertyPath: ['value'],
+    before: { kind: 'value', value: { kind: 'blank' } },
+    after: { kind: 'value', value: after },
+  };
+}

@@ -3,7 +3,6 @@
  * THE definitive API for all workbook-level operations.
  * Every consumer -- headless agents, LLM code, OS apps, browser app -- uses this.
  * No exceptions, no bypasses.
- *
  * ## Sub-API namespaces
  *
  * Domain-specific operations are grouped into readonly sub-API accessors:
@@ -79,7 +78,6 @@ import type { AccessPrincipal } from '@mog-sdk/types-document/security';
 import type { Worksheet, WorksheetWithInternals } from './worksheet';
 import type { IFloatingObjectManager } from '../kernel/floating-object-manager';
 import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-commands/execution';
-
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
@@ -134,11 +132,13 @@ export type {
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
 export type * from './workbook/version-porcelain';
+export type * from './workbook/version-diff';
+export type * from './workbook/version-diff-metadata';
+export type * from './workbook/version-working-tree-diff';
 export type * from './workbook/version-proposal';
 export type * from './workbook/version-revert';
 export type * from './workbook/version-review';
 export type * from './workbook/xlsx-export';
-
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {
   /**

@@ -15,6 +15,7 @@ import type {
   WorkbookCommitId,
   WorkbookCommitIdInput,
 } from './version';
+import type { VersionDiffOverviewOptions } from './version-diff';
 
 export interface VersionCurrentCheckoutSafeActions {
   readonly canCommit: boolean;
@@ -62,6 +63,10 @@ export type VersionDiffPorcelainTarget =
     };
 
 export interface VersionDiffBranchOptions extends VersionDiffOptions {
+  readonly against?: VersionDiffPorcelainTarget;
+}
+
+export interface VersionDiffBranchOverviewOptions extends VersionDiffOverviewOptions {
   readonly against?: VersionDiffPorcelainTarget;
 }
 

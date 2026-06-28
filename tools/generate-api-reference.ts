@@ -326,7 +326,36 @@ function extractUsedTypesFromMethods(
 // Signature Formatting
 // ============================================================================
 
-function formatSignature(method: MethodSignature, prefix?: string): string {
+const SIGNATURE_TYPE_TEXT_OVERRIDES: Record<string, Record<string, Record<string, string>>> = {
+  WorkbookVersion: {
+    updateBranch: {
+      VersionFastForwardBranchOptions: 'VersionUpdateBranchOptions',
+    },
+  },
+};
+
+function applySignatureTypeOverrides(
+  interfaceName: string | undefined,
+  methodName: string,
+  typeText: string,
+): string {
+  const replacements = interfaceName
+    ? SIGNATURE_TYPE_TEXT_OVERRIDES[interfaceName]?.[methodName]
+    : undefined;
+  if (!replacements) return typeText;
+
+  let result = typeText;
+  for (const [from, to] of Object.entries(replacements)) {
+    result = result.replace(new RegExp(`\\b${from}\\b`, 'g'), to);
+  }
+  return result;
+}
+
+function formatSignature(
+  method: MethodSignature,
+  prefix?: string,
+  interfaceName?: string,
+): string {
   const name = prefix ? `${prefix}.${method.getName()}` : method.getName();
   const params = method
     .getParameters()
@@ -334,12 +363,14 @@ function formatSignature(method: MethodSignature, prefix?: string): string {
       const optional = p.isOptional() ? '?' : '';
       let typeText = p.getType().getText();
       typeText = typeText.replace(/import\([^)]+\)\./g, '');
+      typeText = applySignatureTypeOverrides(interfaceName, method.getName(), typeText);
       return `${p.getName()}${optional}: ${typeText}`;
     })
     .join(', ');
 
   let returnType = method.getReturnType().getText();
   returnType = returnType.replace(/import\([^)]+\)\./g, '');
+  returnType = applySignatureTypeOverrides(interfaceName, method.getName(), returnType);
 
   return `${name}(${params}): ${returnType}`;
 }
@@ -449,7 +480,7 @@ function extractRootInterface(iface: InterfaceDeclaration, knownTypes: Set<strin
       : [method];
     const tags = extractTags(method);
     spec.functions[name] = {
-      signature: formatSignature(method),
+      signature: formatSignature(method, undefined, iface.getName()),
       docstring: getJsDocComment(method),
       usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),
@@ -479,7 +510,7 @@ function extractSubApiMethods(
       : [method];
     const tags = extractTags(method);
     functions[dottedName] = {
-      signature: formatSignature(method, namespace),
+      signature: formatSignature(method, namespace, iface.getName()),
       docstring: getJsDocComment(method),
       usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),

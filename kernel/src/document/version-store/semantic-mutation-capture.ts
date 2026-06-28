@@ -57,6 +57,7 @@ export interface SemanticMutationCaptureServices {
   readonly captureNormalCommit: VersionNormalCommitCapture;
   readonly capturePendingRemoteSegment: VersionPendingRemoteCapture;
   readNormalCommitCaptureState(): SemanticMutationCaptureNormalState;
+  readWorkingTreeBasis(): SemanticMutationCaptureWorkingTreeBasis;
   resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void;
 }
 
@@ -77,6 +78,20 @@ export interface SemanticMutationCaptureNormalState {
   readonly pendingUncapturedNormalMutationCount: number;
   readonly hasPendingNormalMutations: boolean;
   readonly hasUncapturedNormalMutations: boolean;
+}
+
+export interface SemanticMutationCaptureWorkingTreeBasis
+  extends SemanticMutationCaptureNormalState {
+  readonly beforeSemanticState?: SemanticWorkbookStateEnvelope;
+  readonly semanticStateCaptureFailure?: string;
+  readonly pendingUncapturedNormalMutationSummaries: readonly PendingUncapturedNormalMutationSummary[];
+}
+
+export interface PendingUncapturedNormalMutationSummary {
+  readonly sequence: number;
+  readonly operation: string;
+  readonly capturedAt: string;
+  readonly reason: PendingUncapturedNormalMutation['reason'];
 }
 
 const DEFAULT_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
@@ -103,6 +118,7 @@ export function createSemanticMutationCapture(
     captureNormalCommit: (input) => buffer.captureNormalCommit(input),
     capturePendingRemoteSegment: (input) => buffer.capturePendingRemoteSegment(input),
     readNormalCommitCaptureState: () => buffer.readNormalCommitCaptureState(),
+    readWorkingTreeBasis: () => buffer.readWorkingTreeBasis(),
     resetNormalCaptureForCheckout: (input) => buffer.resetNormalCaptureForCheckout(input),
   };
 }
@@ -300,6 +316,24 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       hasPendingNormalMutations:
         pendingCapturedNormalMutationCount > 0 || pendingUncapturedNormalMutationCount > 0,
       hasUncapturedNormalMutations: pendingUncapturedNormalMutationCount > 0,
+    };
+  }
+
+  readWorkingTreeBasis(): SemanticMutationCaptureWorkingTreeBasis {
+    return {
+      ...this.readNormalCommitCaptureState(),
+      ...(this.beforeNormalSemanticState
+        ? { beforeSemanticState: this.beforeNormalSemanticState }
+        : {}),
+      ...(this.semanticStateCaptureFailure
+        ? { semanticStateCaptureFailure: this.semanticStateCaptureFailure }
+        : {}),
+      pendingUncapturedNormalMutationSummaries: this.pendingUncapturedNormal.map((record) => ({
+        sequence: record.sequence,
+        operation: record.operation,
+        capturedAt: record.capturedAt,
+        reason: record.reason,
+      })),
     };
   }
 

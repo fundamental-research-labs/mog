@@ -1,9 +1,11 @@
 import '@testing-library/jest-dom';
 
+import { jest } from '@jest/globals';
 import { render, screen, within } from '@testing-library/react';
 import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
 
 import { VersionHistoryDiffPreview } from '../VersionHistoryDiffPreview';
+import { DIFF_GROUP_ID, versionDiffOverview } from './VersionHistoryPanel.test-utils';
 
 const BASE_COMMIT_ID =
   'commit:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -12,13 +14,28 @@ const TARGET_COMMIT_ID =
 
 describe('VersionHistoryDiffPreview', () => {
   it('renders semantic changes as compact unified diff rows', () => {
+    const page = semanticDiffPage();
     render(
       <VersionHistoryDiffPreview
         diffPreview={{
           base: BASE_COMMIT_ID,
           target: TARGET_COMMIT_ID,
-          page: semanticDiffPage(),
+          overview: versionDiffOverview({
+            baseCommitId: BASE_COMMIT_ID,
+            targetCommitId: TARGET_COMMIT_ID,
+          }),
+          activeGroupId: DIFF_GROUP_ID,
+          detailPages: [page],
+          detailItems: page.items,
+          loadedDetailCount: page.items.length,
+          loadedDetailPageCount: 1,
+          hasMoreDetail: false,
+          loadingGroups: false,
+          loadingDetail: false,
         }}
+        onLoadMoreGroups={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onLoadMoreDetail={jest.fn()}
       />,
     );
 
@@ -30,32 +47,48 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).toHaveTextContent('Cell A1');
     expect(viewer).not.toHaveTextContent('cells value');
 
-    const changeList = within(viewer).getByTestId('version-history-diff-change-list');
-    expect(within(changeList).getByLabelText('Before: Blank')).toBeInTheDocument();
-    expect(within(changeList).getByLabelText('After: 42')).toBeInTheDocument();
+    const viewport = within(viewer).getByTestId('version-history-diff-detail-viewport');
+    expect(within(viewport).getByLabelText('Before: Blank')).toBeInTheDocument();
+    expect(within(viewport).getByLabelText('After: 42')).toBeInTheDocument();
   });
 
   it('renders row and column insertions as spreadsheet structure changes', () => {
+    const page = semanticDiffPage([
+      rowColumnInsertion({
+        changeId: 'mutation-1:row:0',
+        axis: 'row',
+        index: 1,
+        displayRef: '2:2',
+      }),
+      rowColumnInsertion({
+        changeId: 'mutation-1:column:1',
+        axis: 'column',
+        index: 2,
+        displayRef: 'C:C',
+      }),
+    ]);
     render(
       <VersionHistoryDiffPreview
         diffPreview={{
           base: BASE_COMMIT_ID,
           target: TARGET_COMMIT_ID,
-          page: semanticDiffPage([
-            rowColumnInsertion({
-              changeId: 'mutation-1:row:0',
-              axis: 'row',
-              index: 1,
-              displayRef: '2:2',
-            }),
-            rowColumnInsertion({
-              changeId: 'mutation-1:column:1',
-              axis: 'column',
-              index: 2,
-              displayRef: 'C:C',
-            }),
-          ]),
+          overview: versionDiffOverview({
+            baseCommitId: BASE_COMMIT_ID,
+            targetCommitId: TARGET_COMMIT_ID,
+            exactTotalChanges: page.items.length,
+          }),
+          activeGroupId: DIFF_GROUP_ID,
+          detailPages: [page],
+          detailItems: page.items,
+          loadedDetailCount: page.items.length,
+          loadedDetailPageCount: 1,
+          hasMoreDetail: false,
+          loadingGroups: false,
+          loadingDetail: false,
         }}
+        onLoadMoreGroups={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onLoadMoreDetail={jest.fn()}
       />,
     );
 
@@ -67,10 +100,10 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).not.toHaveTextContent('rows-columns order');
     expect(viewer).not.toHaveTextContent('Object (4)');
 
-    const changeList = within(viewer).getByTestId('version-history-diff-change-list');
-    expect(within(changeList).getAllByLabelText('Before: Not present')).toHaveLength(2);
-    expect(within(changeList).getByLabelText('After: Inserted row 2')).toBeInTheDocument();
-    expect(within(changeList).getByLabelText('After: Inserted column C')).toBeInTheDocument();
+    const viewport = within(viewer).getByTestId('version-history-diff-detail-viewport');
+    expect(within(viewport).getAllByLabelText('Before: Not present')).toHaveLength(2);
+    expect(within(viewport).getByLabelText('After: Inserted row 2')).toBeInTheDocument();
+    expect(within(viewport).getByLabelText('After: Inserted column C')).toBeInTheDocument();
   });
 });
 

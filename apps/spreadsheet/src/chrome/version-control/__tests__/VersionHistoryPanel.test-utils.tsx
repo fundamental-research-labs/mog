@@ -4,10 +4,15 @@ import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
   VersionCapabilityState,
+  VersionDiffGroup,
+  VersionDiffGroupId,
+  VersionDiffOverview,
+  VersionMergeReview,
   VersionRecordRevision,
   VersionResult,
   VersionSemanticDiffPage,
   VersionSurfaceStatus,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
@@ -22,6 +27,7 @@ export const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommi
 export const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 export const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
 export const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
+export const DIFF_GROUP_ID = 'diff-group:cells:A1' as VersionDiffGroupId;
 
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:read',
@@ -179,6 +185,30 @@ export function createWorkbook(
       },
     })),
     diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
+    diffOverview: jest.fn(
+      async (
+        baseCommitId: Parameters<VersionHistoryVersion['diffOverview']>[0],
+        targetCommitId: Parameters<VersionHistoryVersion['diffOverview']>[1],
+      ) => ({
+        ok: true,
+        value: versionDiffOverview({
+          baseCommitId: baseCommitId as WorkbookCommitId,
+          targetCommitId: targetCommitId as WorkbookCommitId,
+        }),
+      }),
+    ),
+    diffGroupDetail: jest.fn(async () => ({
+      ok: true,
+      value: semanticDiffPage([diffEntry()]),
+    })),
+    diffWorkingTree: jest.fn(async () => ({
+      ok: true,
+      value: workingTreeDiffPage([diffEntry()]),
+    })),
+    previewMerge: jest.fn(async () => ({
+      ok: true,
+      value: createCleanMergeReview(),
+    })),
   };
   const reviews = {
     advanced: {
@@ -281,6 +311,163 @@ export function semanticDiffPage(items: VersionSemanticDiffPage['items']): Versi
     readRevision: { kind: 'counter', value: '4' },
     order: 'semantic-change-order',
   };
+}
+
+export function workingTreeDiffPage(
+  items: VersionSemanticDiffPage['items'],
+): VersionWorkingTreeDiffPage {
+  return {
+    ...semanticDiffPage(items),
+    kind: 'workingTree',
+    workingTreeDiffId: `working-tree-diff:sha256:${'d'.repeat(64)}`,
+    baseCommitId: HEAD_COMMIT_ID,
+    targetRef: 'refs/heads/main',
+    captureRevision: 1,
+    dirtyStatusRevision: '1',
+    checkoutPreflightToken: 'token-1',
+    baseSemanticStateDigest: {
+      algorithm: 'sha256',
+      digest: 'base-semantic-state',
+    },
+    currentSemanticStateDigest: {
+      algorithm: 'sha256',
+      digest: 'current-semantic-state',
+    },
+  };
+}
+
+export function versionDiffOverview({
+  baseCommitId = PARENT_COMMIT_ID,
+  targetCommitId = HEAD_COMMIT_ID,
+  exactTotalChanges = 1,
+  summary: summaryOverrides = {},
+  groups,
+}: {
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly targetCommitId?: WorkbookCommitId;
+  readonly exactTotalChanges?: number | null;
+  readonly summary?: Partial<VersionDiffOverview['summary']>;
+  readonly groups?: readonly VersionDiffGroup[];
+} = {}): VersionDiffOverview {
+  const hasExactTotalChanges = exactTotalChanges !== null;
+  const groupChangeCount = hasExactTotalChanges
+    ? exactTotalChanges
+    : summaryOverrides.minimumChangeCount ?? 1;
+
+  return {
+    baseCommitId,
+    targetCommitId,
+    readRevision: { kind: 'counter', value: '4' },
+    order: 'semantic-change-order',
+    summary: {
+      ...(hasExactTotalChanges ? { exactTotalChanges } : {}),
+      countPrecision: 'exact',
+      domainCounts: hasExactTotalChanges
+        ? [
+            {
+              domain: 'cells',
+              exactCount: exactTotalChanges,
+              countPrecision: 'exact',
+            },
+          ]
+        : [],
+      operationCounts: hasExactTotalChanges
+        ? [
+            {
+              operation: 'changed',
+              exactCount: exactTotalChanges,
+              countPrecision: 'exact',
+            },
+          ]
+        : [],
+      incomplete: false,
+      diagnostics: [],
+      ...summaryOverrides,
+    },
+    groups: {
+      items:
+        groups ??
+        (groupChangeCount > 0
+          ? [
+              {
+                groupId: DIFF_GROUP_ID,
+                key: {
+                  kind: 'cellRange',
+                  sheetId: 'sheet-1',
+                  domain: 'cells',
+                  operation: 'changed',
+                  rowStart: 1,
+                  rowEnd: 1,
+                  columnStart: 1,
+                  columnEnd: 1,
+                },
+                kind: 'cellRange',
+                domain: 'cells',
+                sheetId: 'sheet-1',
+                sheetName: { kind: 'value', value: 'Sheet1' },
+                address: { kind: 'value', value: 'A1' },
+                operation: 'changed',
+                changeCount: groupChangeCount,
+                countPrecision: 'exact',
+                sampleChangeIds: ['change-1'],
+                hasDetail: true,
+                diagnostics: [],
+              },
+            ]
+          : []),
+      limit: 50,
+    },
+    unsupportedFilters: [],
+    diagnostics: [],
+  };
+}
+
+export function createCleanMergeReview(
+  overrides: Partial<VersionMergeReview> = {},
+): VersionMergeReview {
+  const review = {
+    schemaVersion: 1,
+    status: 'clean',
+    from: {
+      kind: 'branch',
+      name: 'budget',
+      refName: 'refs/heads/budget',
+      commitId: PARENT_COMMIT_ID,
+    },
+    into: {
+      kind: 'current',
+      commitId: HEAD_COMMIT_ID,
+      refName: 'refs/heads/main',
+      detached: false,
+    },
+    changes: [],
+    conflicts: [],
+    selectedResolutions: [],
+    diagnostics: [],
+    choose: jest.fn(),
+    chooseAll: jest.fn(),
+    save: jest.fn(),
+    toApplyInput: jest.fn(),
+    apply: jest.fn(async () => ({
+      ok: true,
+      value: {
+        status: 'applied',
+        commitRef: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: REF_REVISION,
+        },
+        diagnostics: [],
+      },
+    })),
+    ...overrides,
+  } as unknown as VersionMergeReview;
+  return {
+    ...review,
+    choose: jest.fn(() => review),
+    chooseAll: jest.fn(() => review),
+    ...overrides,
+  } as VersionMergeReview;
 }
 
 export function diffEntry({

@@ -125,6 +125,44 @@ describe('semantic mutation capture dirty state', () => {
     });
   });
 
+  it('reads a working-tree basis without draining pending normal capture', async () => {
+    const { capture } = createCaptureWithReader();
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.setCell:working-tree-basis',
+      domainIds: ['cells.values'],
+    });
+    const directEdits = [{ sheetId: 'sheet-1', row: 0, col: 0 }];
+
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+    });
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+      result: mutationResult(),
+    });
+
+    const before = capture.readNormalCommitCaptureState();
+    const basis = capture.readWorkingTreeBasis();
+    const after = capture.readNormalCommitCaptureState();
+
+    expect(basis).toMatchObject({
+      revision: before.revision,
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: true,
+      hasUncapturedNormalMutations: false,
+      beforeSemanticState: expect.objectContaining({
+        stateDigest: expect.objectContaining({ digest: 'semantic-state-digest' }),
+      }),
+      pendingUncapturedNormalMutationSummaries: [],
+    });
+    expect(after).toEqual(before);
+  });
+
   it('keeps uncaptured normal mutations in the capture state after successful finalization', async () => {
     const capture = createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
 

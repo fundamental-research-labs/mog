@@ -2,9 +2,10 @@ import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
+import type { VersionDiffOverview } from '@mog-sdk/contracts/api';
 
 import {
+  DIFF_GROUP_ID,
   HEAD_COMMIT_ID,
   PARENT_COMMIT_ID,
   REF_REVISION,
@@ -18,8 +19,6 @@ import {
   createBranchFromCommitTestId,
   createSurfaceStatus,
   createWorkbook,
-  diffDiagnostic,
-  diffEntry,
   expectActionResult,
   expectDisabledButtonReason,
   failedInvalidBranchName,
@@ -28,59 +27,56 @@ import {
   openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
-  semanticDiffPage,
+  safeDomId,
   shortCommitId,
+  versionDiffOverview,
   type VersionHistoryWorkbook,
 } from './VersionHistoryPanel.test-utils';
 
 type ParentDiffPreviewCase = readonly [
   label: string,
-  page: VersionSemanticDiffPage,
+  overview: VersionDiffOverview,
   state: string,
   title: string,
   statusLabel: string,
 ];
 
 const parentDiffPreviewCases: readonly ParentDiffPreviewCase[] = [
-  ['empty', semanticDiffPage([]), 'empty', 'Diff returned no entries', 'Empty preview'],
+  ['empty', versionDiffOverview({ exactTotalChanges: 0 }), 'empty', 'No grouped changes', '0 changes'],
   [
-    'unsupported',
-    semanticDiffPage([
-      diffEntry({ diagnostics: [diffDiagnostic('unsupportedDomain', 'unsupported')] }),
-    ]),
-    'unsupported',
-    'Unsupported semantic state',
-    'Unsupported state',
+    'changes',
+    versionDiffOverview(),
+    'changes',
+    'cells',
+    '1 change',
   ],
   [
-    'stale',
-    semanticDiffPage([
-      diffEntry({ diagnostics: [diffDiagnostic('VERSION_REF_CONFLICT', 'retry')] }),
-    ]),
-    'stale',
-    'Stale diff reference',
-    'Stale reference',
-  ],
-  [
-    'conflict-only',
-    semanticDiffPage([diffEntry({ changeId: 'merge-conflict:sha256:1' })]),
-    'conflict-only',
-    'Conflicts only',
-    'Conflicts only',
-  ],
-  [
-    'redacted',
-    semanticDiffPage([
-      {
-        structural: { kind: 'redacted', reason: 'permission-denied' },
-        before: { kind: 'redacted', reason: 'redaction-policy' },
-        after: { kind: 'redacted', reason: 'historical-acl-unavailable' },
-        diagnostics: [diffDiagnostic('VERSION_PERMISSION_DENIED', 'unsupported')],
+    'incomplete',
+    versionDiffOverview({
+      exactTotalChanges: null,
+      summary: {
+        minimumChangeCount: 1,
+        countPrecision: 'lowerBound',
+        domainCounts: [
+          {
+            domain: 'cells',
+            minimumCount: 1,
+            countPrecision: 'lowerBound',
+          },
+        ],
+        operationCounts: [
+          {
+            operation: 'changed',
+            minimumCount: 1,
+            countPrecision: 'lowerBound',
+          },
+        ],
+        incomplete: true,
       },
-    ]),
-    'redacted',
-    'Restricted diff entries',
-    'Restricted entries',
+    }),
+    'incomplete',
+    'Incomplete',
+    '1+ changes',
   ],
 ];
 
@@ -524,8 +520,8 @@ describe('VersionHistoryPanelContent action flows', () => {
 
     await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
     await waitFor(() =>
-      expect(workbook.version.diff).toHaveBeenCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-        pageSize: 50,
+      expect(workbook.version.diffOverview).toHaveBeenCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
+        groupLimit: 50,
         includeDiagnostics: true,
       }),
     );
@@ -533,25 +529,43 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument();
     expect(diffViewer).toHaveAttribute('data-state', 'changes');
     expect(diffViewer).toHaveTextContent('Changes');
-    expect(diffViewer).toHaveTextContent('sheet-1!A1');
+    expect(screen.getByTestId('version-history-diff-overview')).toHaveTextContent('1 change');
+    expect(screen.getByTestId('version-history-diff-group-list')).toHaveTextContent('cells');
+    expect(diffViewer).not.toHaveTextContent('sheet-1!A1');
     expect(diffViewer).not.toHaveTextContent('cells value');
-    expect(diffViewer).toHaveTextContent('Blank');
-    expect(diffViewer).toHaveTextContent('42');
     const diffStatus = within(diffViewer).getByRole('status');
     expect(diffStatus).toHaveAttribute('aria-live', 'polite');
     expect(diffStatus).toHaveAttribute('aria-atomic', 'true');
     expect(diffStatus).toHaveTextContent(
       `Diff base ${shortCommitId(PARENT_COMMIT_ID)} target ${shortCommitId(
         HEAD_COMMIT_ID,
-      )} State Changes. Change count 1`,
+      )}. 1 change. Loaded detail 0`,
     );
+
+    await user.click(
+      screen.getByTestId(`version-history-diff-group-row-${safeDomId(DIFF_GROUP_ID)}`),
+    );
+    await waitFor(() =>
+      expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
+        PARENT_COMMIT_ID,
+        HEAD_COMMIT_ID,
+        {
+          groupId: DIFF_GROUP_ID,
+          pageSize: 50,
+          includeDiagnostics: true,
+        },
+      ),
+    );
+    expect(await screen.findByTestId('version-history-diff-detail')).toHaveTextContent('sheet-1!A1');
+    expect(diffViewer).toHaveTextContent('Blank');
+    expect(diffViewer).toHaveTextContent('42');
   });
 
   it.each(parentDiffPreviewCases)(
     'renders a distinct %s parent diff preview state',
-    async (_, page, state, title, label) => {
+    async (_, overview, state, title, label) => {
       const workbook = createWorkbook({
-        diff: jest.fn(async () => ({ ok: true, value: page })),
+        diffOverview: jest.fn(async () => ({ ok: true, value: overview })),
       });
 
       const { user } = renderVersionHistoryPanel({ workbook });
@@ -561,10 +575,7 @@ describe('VersionHistoryPanelContent action flows', () => {
       const diffViewer = await screen.findByTestId('version-history-diff-viewer');
       expect(diffViewer).toHaveAttribute('data-state', state);
       expect(diffViewer).toHaveTextContent(title);
-      expect(within(diffViewer).getByRole('status')).toHaveTextContent(`State ${label}`);
-      if (state === 'redacted') {
-        expect(diffViewer).toHaveTextContent('Redacted change');
-      }
+      expect(within(diffViewer).getByRole('status')).toHaveTextContent(label);
       expect(diffViewer).not.toHaveTextContent('No semantic changes');
     },
   );
@@ -579,7 +590,7 @@ describe('VersionHistoryPanelContent action flows', () => {
         ),
       ),
       checkoutBranch: jest.fn(async () => failedInvalidState('Checkout rejected by version provider.')),
-      diff: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
+      diffOverview: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 

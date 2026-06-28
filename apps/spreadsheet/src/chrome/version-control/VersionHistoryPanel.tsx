@@ -14,7 +14,9 @@ import {
   DiagnosticsBlock,
   VersionHistoryPanelHeader,
   VersionStatusAlerts,
+  WorkingTreeDiffSection,
 } from './VersionHistoryPanelSections';
+import { MergeReviewSection } from './VersionMergeReviewSection';
 
 export interface VersionHistoryPanelProps {
   readonly onClose: () => void;
@@ -72,9 +74,12 @@ export function VersionHistoryPanelContent({
               checkoutEnabled={actions.canCheckout}
               branchDisabledReason={actions.branchDisabledReason}
               checkoutDisabledReason={actions.checkoutDisabledReason}
+              mergePreviewEnabled={actions.canPreviewMerge}
+              mergePreviewDisabledReason={actions.mergePreviewDisabledReason}
               onBranchNameChange={actions.setBranchName}
               onCreateBranch={actions.handleCreateBranch}
               onCheckoutRef={actions.handleCheckoutRef}
+              onPreviewMerge={actions.handlePreviewMerge}
             />
           ) : undefined
         }
@@ -113,11 +118,24 @@ export function VersionHistoryPanelContent({
               onCommitMessageChange={actions.setCommitMessage}
               onCommit={actions.handleCommit}
             />
+            <WorkingTreeDiffSection diff={data.workingTreeDiff} />
             <VersionHistoryDiffPreview
               diffPreview={actions.diffPreview}
               diffEnabled={actions.canDiff}
               diffDisabledReason={actions.diffDisabledReason}
+              onLoadMoreGroups={actions.handleLoadMoreDiffGroups}
+              onSelectGroup={actions.handleSelectDiffGroup}
+              onLoadMoreDetail={actions.handleLoadMoreDiffDetail}
             />
+            {actions.mergeReview ? (
+              <MergeReviewSection
+                state={actions.mergeReview}
+                applyEnabled={actions.canApplyMerge}
+                applyDisabledReason={actions.mergeApplyDisabledReason}
+                onChooseResolution={actions.handleChooseMergeResolution}
+                onApply={actions.handleApplyMerge}
+              />
+            ) : null}
             <CommitList
               branchName={actions.branchName}
               commits={data.commits}

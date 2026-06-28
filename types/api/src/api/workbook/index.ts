@@ -6,6 +6,9 @@
 
 export type { WorkbookHistory } from './history';
 export type * from './xlsx-export';
+export type * from './version-diff';
+export type * from './version-diff-metadata';
+export type * from './version-working-tree-diff';
 export type {
   AcceptAgentProposalInput,
   AgentProposal,
@@ -201,6 +204,9 @@ export type {
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
   VersionUpdateReviewStatusInput,
+  VersionWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage,
   RejectAgentProposalInput,
   StartProposalWorkspaceInput,
   SupersedeAgentProposalInput,

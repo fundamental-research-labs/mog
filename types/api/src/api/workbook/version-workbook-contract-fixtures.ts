@@ -27,11 +27,15 @@ import type {
   VersionCreateBranchOptions,
   VersionCurrentCheckout,
   VersionDeleteRefOptions,
+  VersionDiffBranchOverviewOptions,
   VersionDiffBranchOptions,
   VersionDiagnostic,
   VersionDiagnosticCode,
   VersionDiagnosticPublicPayload,
+  VersionDiffGroupDetailOptions,
   VersionDiffOptions,
+  VersionDiffOverview,
+  VersionDiffOverviewOptions,
   VersionDiffPorcelainTarget,
   VersionError,
   VersionFastForwardBranchOptions,
@@ -73,6 +77,8 @@ import type {
   VersionSurfaceStatus,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
   WorkbookCommitIdInput,
   WorkbookCommitRef,
@@ -109,6 +115,9 @@ type ExpectedWorkbookVersionMethodName =
   | 'applyMerge'
   | 'revert'
   | 'diff'
+  | 'diffOverview'
+  | 'diffGroupDetail'
+  | 'diffWorkingTree'
   | 'readRef'
   | 'getRef'
   | 'listRefs'
@@ -123,7 +132,9 @@ type ExpectedWorkbookVersionMethodName =
   | 'createBranchFromCurrent'
   | 'listBranches'
   | 'diffCurrent'
+  | 'diffCurrentOverview'
   | 'diffBranch'
+  | 'diffBranchOverview'
   | 'previewMerge'
   | 'getMergeReview';
 type ExpectedWorkbookVersionMemberName =
@@ -156,10 +167,12 @@ interface ExpectedWorkbookVersionCoreMethods extends ExpectedWorkbookVersionDire
     target?: VersionDiffPorcelainTarget,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffCurrentOverview(target?: VersionDiffPorcelainTarget, options?: VersionDiffOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
   diffBranch(
     branch: VersionBranchNameInput,
     options?: VersionDiffBranchOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffBranchOverview(branch: VersionBranchNameInput, options?: VersionDiffBranchOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
   previewMerge(input: VersionPreviewMergeInput, options?: VersionPreviewMergeOptions): Promise<VersionResult<VersionMergeReview>>;
   getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
 }
@@ -188,6 +201,9 @@ interface ExpectedWorkbookVersionDirectMethods {
     target: VersionCommitish,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffOverview(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
+  diffGroupDetail(base: VersionCommitish, target: VersionCommitish, options: VersionDiffGroupDetailOptions): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffWorkingTree(options?: VersionWorkingTreeDiffOptions): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
   readRef(
     name: VersionMainRefName | VersionRefName | VersionBranchName,
@@ -221,6 +237,9 @@ type ExpectedWorkbookVersionResultByMethod = {
   readonly applyMerge: VersionResult<VersionApplyMergeResult>;
   readonly revert: VersionResult<VersionRevertResult>;
   readonly diff: VersionResult<VersionSemanticDiffPage>;
+  readonly diffOverview: VersionResult<VersionDiffOverview>;
+  readonly diffGroupDetail: VersionResult<VersionSemanticDiffPage>;
+  readonly diffWorkingTree: VersionResult<VersionWorkingTreeDiffPage>;
   readonly readRef: VersionResult<VersionRefReadResult>;
   readonly getRef: VersionResult<VersionRefReadResult>;
   readonly listRefs: VersionResult<Paged<VersionRef>>;
@@ -235,7 +254,9 @@ type ExpectedWorkbookVersionResultByMethod = {
   readonly previewMerge: VersionResult<VersionMergeReview>;
   readonly getMergeReview: VersionResult<VersionMergeReview>;
   readonly diffCurrent: VersionResult<VersionSemanticDiffPage>;
+  readonly diffCurrentOverview: VersionResult<VersionDiffOverview>;
   readonly diffBranch: VersionResult<VersionSemanticDiffPage>;
+  readonly diffBranchOverview: VersionResult<VersionDiffOverview>;
   readonly listBranches: VersionResult<Paged<VersionBranchSummary>>;
   readonly createBranchFromCurrent: VersionResult<VersionRef>;
 };

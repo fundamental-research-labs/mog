@@ -50,6 +50,9 @@ import type {
   VersionSemanticValue as ContractsApiSemanticValue,
   VersionSealedResolutionPayloadRef as ContractsApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
+  VersionWorkingTreeDiffId as ContractsApiWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as ContractsApiWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage as ContractsApiWorkingTreeDiffPage,
   Workbook as ContractsApiWorkbook,
   WorkbookDiffPage as ContractsApiDiffPage,
   WorkbookVersion as ContractsApiWorkbookVersion,
@@ -111,6 +114,9 @@ import type {
   VersionSemanticValue as ContractsWorkbookSemanticValue,
   VersionSealedResolutionPayloadRef as ContractsWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
+  VersionWorkingTreeDiffId as ContractsWorkbookWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as ContractsWorkbookWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage as ContractsWorkbookWorkingTreeDiffPage,
   WorkbookDiffPage as ContractsWorkbookDiffPage,
   WorkbookVersion as ContractsWorkbookVersion,
   WorkbookVersionStatus as ContractsWorkbookVersionStatus,
@@ -339,6 +345,15 @@ type _ContractsApiWorkbookEntryExportsVersionHead = Assert<
 >;
 type _ContractsApiWorkbookEntryExportsSemanticDiffPage = Assert<
   IsEqual<ContractsApiSemanticDiffPage, ContractsWorkbookSemanticDiffPage>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffPage = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffPage, ContractsWorkbookWorkingTreeDiffPage>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffOptions = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffOptions, ContractsWorkbookWorkingTreeDiffOptions>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffId = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffId, ContractsWorkbookWorkingTreeDiffId>
 >;
 type _ContractsApiWorkbookEntryExportsPaged = Assert<
   IsEqual<ContractsApiPaged<string>, ContractsWorkbookPaged<string>>

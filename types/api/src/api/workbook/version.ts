@@ -15,6 +15,7 @@ import type {
   VersionSurfaceDiagnosticCode,
   WorkbookVersionDiagnosticCode,
 } from './version-shared';
+import type { VersionDiffHistoricalMetadata } from './version-diff-metadata';
 
 export type {
   JsonValue,
@@ -36,6 +37,9 @@ export type {
 } from './version-shared';
 
 export type { WorkbookVersion } from './version-workbook';
+export type * from './version-diff';
+export type * from './version-diff-metadata';
+export type * from './version-working-tree-diff';
 export type * from './version-merge-review';
 export type * from './version-pending-remote-promotion';
 export type * from './version-proposal';
@@ -606,6 +610,7 @@ export interface VersionDiffEntry {
   readonly before: VersionDiffValue;
   readonly after: VersionDiffValue;
   readonly display?: VersionDiffDisplay;
+  readonly historical?: VersionDiffHistoricalMetadata;
   readonly diagnostics?: readonly VersionStoreDiagnostic[];
 }
 
@@ -921,7 +926,7 @@ export interface VersionFastForwardBranchOptions {
   readonly expectedRefRevision: VersionCounterRecordRevision;
 }
 
-export interface VersionUpdateBranchOptions extends VersionFastForwardBranchOptions {}
+export type VersionUpdateBranchOptions = VersionFastForwardBranchOptions;
 
 export interface VersionDeleteRefOptions {
   readonly name: VersionBranchName | VersionRefName;

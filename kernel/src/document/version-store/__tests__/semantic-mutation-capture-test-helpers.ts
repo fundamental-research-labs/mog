@@ -123,6 +123,7 @@ export function createRustBackedTestSemanticMutationCapture(
     },
     capturePendingRemoteSegment: (input) => capture.capturePendingRemoteSegment(input),
     readNormalCommitCaptureState: () => capture.readNormalCommitCaptureState(),
+    readWorkingTreeBasis: () => capture.readWorkingTreeBasis(),
     resetNormalCaptureForCheckout: (input) => {
       pendingBeforeCapture = undefined;
       capture.resetNormalCaptureForCheckout(input);

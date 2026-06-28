@@ -32,11 +32,18 @@ import type {
   VersionSemanticDiffPage,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitIdInput,
   WorkbookCommitSummary,
   WorkbookVersionStatus,
   VersionSurfaceStatus,
 } from './version';
+import type {
+  VersionDiffGroupDetailOptions,
+  VersionDiffOverview,
+  VersionDiffOverviewOptions,
+} from './version-diff';
 import type {
   VersionBranchSummary,
   VersionCheckoutBranchOptions,
@@ -45,6 +52,7 @@ import type {
   VersionCreateBranchFromCurrentOptions,
   VersionCurrentCheckout,
   VersionDiffBranchOptions,
+  VersionDiffBranchOverviewOptions,
   VersionDiffPorcelainTarget,
   VersionListBranchesOptions,
 } from './version-porcelain';
@@ -101,6 +109,19 @@ export interface WorkbookVersion {
     target: VersionCommitish,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffOverview(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  diffGroupDetail(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffGroupDetailOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffWorkingTree(
+    options?: VersionWorkingTreeDiffOptions,
+  ): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
   readRef(
     name: VersionMainRefName | VersionRefName | VersionBranchName,
@@ -141,10 +162,18 @@ export interface WorkbookVersion {
     target?: VersionDiffPorcelainTarget,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffCurrentOverview(
+    target?: VersionDiffPorcelainTarget,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
   diffBranch(
     branch: VersionBranchNameInput,
     options?: VersionDiffBranchOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffBranchOverview(
+    branch: VersionBranchNameInput,
+    options?: VersionDiffBranchOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
   previewMerge(
     input: VersionPreviewMergeInput,
     options?: VersionPreviewMergeOptions,

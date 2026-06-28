@@ -8,6 +8,7 @@ import type {
   VersionResult,
   VersionRevertResult,
   VersionSurfaceStatus,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
@@ -45,6 +46,10 @@ export type VersionHistoryWorkbook = {
     | 'promotePendingRemote'
     | 'revert'
     | 'diff'
+    | 'diffOverview'
+    | 'diffGroupDetail'
+    | 'diffWorkingTree'
+    | 'previewMerge'
     | 'commitCurrent'
     | 'createBranchFromCurrent'
     | 'checkoutBranch'
@@ -76,8 +81,19 @@ export type VersionHistoryData = {
   readonly proposals: readonly AgentProposalSummary[];
   readonly reviewDiagnostic?: VersionPanelDiagnostic;
   readonly proposalDiagnostic?: VersionPanelDiagnostic;
+  readonly workingTreeDiff?: VersionHistoryWorkingTreeDiff;
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
+
+export type VersionHistoryWorkingTreeDiff =
+  | {
+      readonly status: 'loaded';
+      readonly page: VersionWorkingTreeDiffPage;
+    }
+  | {
+      readonly status: 'blocked';
+      readonly diagnostic: VersionPanelDiagnostic;
+    };
 
 export type CommitDirtySnapshot = {
   readonly statusRevision: string;
@@ -184,11 +200,15 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     const surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
     const headValue = head.ok ? head.value : undefined;
     const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
+    const workingTreeDiff = surfaceValue?.dirty.hasUncommittedLocalChanges
+      ? await readVersionHistoryWorkingTreeDiff(workbook)
+      : undefined;
 
     const data: VersionHistoryData = {
       ...(surfaceValue ? { surface: surfaceValue } : {}),
       ...(rollout.ok ? { rollout: rollout.value } : {}),
       ...(projectedHead ? { head: projectedHead } : {}),
+      ...(workingTreeDiff ? { workingTreeDiff } : {}),
       commits: commits.ok ? commits.value.items : [],
       refs: refs.ok ? refs.value.items : [],
       reviews: reviews.ok ? reviews.value.items : [],
@@ -294,6 +314,17 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     diagnostics,
     loading: loadState.status === 'loading',
   };
+}
+
+async function readVersionHistoryWorkingTreeDiff(
+  workbook: VersionHistoryWorkbook,
+): Promise<VersionHistoryWorkingTreeDiff> {
+  const result = await readVersionResult('VERSION_UI_WORKING_TREE_DIFF_FAILED', () =>
+    workbook.version.diffWorkingTree({ pageSize: 50, includeDiagnostics: true }),
+  );
+  return result.ok
+    ? { status: 'loaded', page: result.value }
+    : { status: 'blocked', diagnostic: result.diagnostic };
 }
 
 function commitDirtySnapshot(

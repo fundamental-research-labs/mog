@@ -134,6 +134,7 @@ function isSemanticMutationCaptureWithPendingRemoteSegment(
     typeof value.mutationCapture.recordMutationResult === 'function' &&
     typeof value.captureNormalCommit === 'function' &&
     typeof value.capturePendingRemoteSegment === 'function' &&
+    typeof value.readWorkingTreeBasis === 'function' &&
     typeof value.resetNormalCaptureForCheckout === 'function'
   );
 }

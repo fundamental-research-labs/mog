@@ -26,9 +26,13 @@ import {
 } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
+import { VersionHistoryWorkingTreeDiffPreview } from './VersionHistoryDiffPreview';
 import { displayBranchName, publicBranchLabel } from './version-branch-name';
 import { formatRelativeCommitTime, shortCommitId } from './version-history-format';
-import type { VersionHistoryData } from './version-history-panel-data';
+import type {
+  VersionHistoryData,
+  VersionHistoryWorkingTreeDiff,
+} from './version-history-panel-data';
 
 export function VersionHistoryPanelHeader({
   branchControl,
@@ -83,32 +87,42 @@ export function CurrentBranchMenu({
   sourceCommitId,
   branchEnabled,
   checkoutEnabled,
+  mergePreviewEnabled,
   branchDisabledReason,
   checkoutDisabledReason,
+  mergePreviewDisabledReason,
   onBranchNameChange,
   onCreateBranch,
   onCheckoutRef,
+  onPreviewMerge,
 }: {
   readonly data: VersionHistoryData;
   readonly branchName: string;
   readonly sourceCommitId?: WorkbookCommitId;
   readonly branchEnabled: boolean;
   readonly checkoutEnabled: boolean;
+  readonly mergePreviewEnabled: boolean;
   readonly branchDisabledReason?: string;
   readonly checkoutDisabledReason?: string;
+  readonly mergePreviewDisabledReason?: string;
   readonly onBranchNameChange: (value: string) => void;
   readonly onCreateBranch: () => void;
   readonly onCheckoutRef: (ref: VersionRef) => void;
+  readonly onPreviewMerge: (ref: VersionRef) => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const checkoutReasonId = 'version-checkout-disabled-reason';
   const branchReasonId = 'version-branch-disabled-reason';
+  const mergePreviewReasonId = 'version-merge-preview-disabled-reason';
   const checkoutStatus =
     sanitizeVersionStatusText(checkoutDisabledReason, 'Checkout is unavailable.') ??
     'Checkout is unavailable.';
   const branchStatus =
     sanitizeVersionStatusText(branchDisabledReason, 'Create branch is unavailable.') ??
     'Create branch is unavailable.';
+  const mergePreviewStatus =
+    sanitizeVersionStatusText(mergePreviewDisabledReason, 'Merge preview is unavailable.') ??
+    'Merge preview is unavailable.';
   const currentBranchName = currentBranchRefName(data);
   const currentCheckout = currentCheckoutSummary(data, currentBranchName);
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
@@ -225,49 +239,78 @@ export function CurrentBranchMenu({
                         ? `Current branch ${branchLabel}`
                         : `Checkout ${branchLabel}`;
                       return (
-                        <li key={ref.name}>
-                          <button
-                            type="button"
-                            data-testid={`version-history-checkout-branch-${safeDomId(ref.name)}`}
-                            onClick={() => {
-                              if (!current) onCheckoutRef(ref);
-                            }}
-                            disabled={current || !checkoutEnabled}
-                            aria-label={buttonLabel}
-                            aria-describedby={
-                              !current && !checkoutEnabled ? checkoutReasonId : undefined
-                            }
-                            title={
-                              current
-                                ? 'Current branch'
-                                : !checkoutEnabled
-                                  ? checkoutStatus
-                                  : undefined
-                            }
-                            className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:cursor-default disabled:opacity-70 disabled:hover:bg-transparent"
-                          >
+                        <li
+                          key={ref.name}
+                          data-testid={`version-history-branch-row-${safeDomId(ref.name)}`}
+                        >
+                          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover">
                             <span className="min-w-0">
                               <span className="block truncate font-medium">{branchLabel}</span>
                               <span className="block truncate font-mono text-[11px] text-ss-text-secondary">
                                 {shortCommitId(ref.commitId)}
                               </span>
                             </span>
-                            {current ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-ss-primary">
-                                <Check size={13} strokeWidth={1.75} aria-hidden="true" />
-                                Current
-                              </span>
-                            ) : (
-                              <span className="text-[11px] font-medium text-ss-text-secondary">
-                                Checkout
-                              </span>
-                            )}
-                          </button>
+                            <span className="flex shrink-0 items-center gap-1">
+                              {!current ? (
+                                <button
+                                  type="button"
+                                  data-testid={`version-history-preview-merge-${safeDomId(
+                                    ref.name,
+                                  )}`}
+                                  data-capability="version:mergePreview"
+                                  onClick={() => onPreviewMerge(ref)}
+                                  disabled={!mergePreviewEnabled}
+                                  aria-describedby={
+                                    !mergePreviewEnabled ? mergePreviewReasonId : undefined
+                                  }
+                                  title={!mergePreviewEnabled ? mergePreviewStatus : undefined}
+                                  className="inline-flex h-7 items-center justify-center rounded-sm px-2 text-[11px] font-medium text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text disabled:opacity-50 disabled:hover:bg-transparent"
+                                >
+                                  Preview merge
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                data-testid={`version-history-checkout-branch-${safeDomId(
+                                  ref.name,
+                                )}`}
+                                onClick={() => {
+                                  if (!current) onCheckoutRef(ref);
+                                }}
+                                disabled={current || !checkoutEnabled}
+                                aria-label={buttonLabel}
+                                aria-describedby={
+                                  !current && !checkoutEnabled ? checkoutReasonId : undefined
+                                }
+                                title={
+                                  current
+                                    ? 'Current branch'
+                                    : !checkoutEnabled
+                                      ? checkoutStatus
+                                      : undefined
+                                }
+                                className="inline-flex h-7 items-center justify-center rounded-sm px-2 text-[11px] font-medium text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text disabled:opacity-70 disabled:hover:bg-transparent"
+                              >
+                                {current ? (
+                                  <span className="inline-flex items-center gap-1 text-ss-primary">
+                                    <Check size={13} strokeWidth={1.75} aria-hidden="true" />
+                                    Current
+                                  </span>
+                                ) : (
+                                  'Checkout'
+                                )}
+                              </button>
+                            </span>
+                          </div>
                         </li>
                       );
                     })}
                   </ol>
                 )}
+                <DisabledReason
+                  id={mergePreviewReasonId}
+                  reason={!mergePreviewEnabled ? mergePreviewStatus : undefined}
+                />
               </div>
             </div>
           </div>
@@ -293,6 +336,34 @@ export function VersionStatusAlerts({
       ) : null}
       <VersionCurrentStaleStatus surface={data.surface} />
     </>
+  );
+}
+
+export function WorkingTreeDiffSection({
+  diff,
+}: {
+  readonly diff?: VersionHistoryWorkingTreeDiff;
+}): React.JSX.Element | null {
+  if (!diff) return null;
+  if (diff.status === 'loaded') {
+    return <VersionHistoryWorkingTreeDiffPreview page={diff.page} />;
+  }
+
+  return (
+    <section
+      className="flex flex-col gap-2 rounded-sm border border-ss-warning/40 bg-ss-warning/10 p-2.5"
+      aria-label="Working tree diff"
+      data-testid="version-history-working-tree-diff-blocked"
+    >
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ss-text">
+        <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+        <span>Working tree diff</span>
+      </div>
+      <DiagnosticsBlock
+        diagnostics={[diff.diagnostic]}
+        emptyMessage="Working tree diff unavailable"
+      />
+    </section>
   );
 }
 

@@ -2,6 +2,7 @@ import type {
   VersionDiffDisplay,
   VersionDiffDisplayValue,
   VersionDiffEntry,
+  VersionDiffHistoricalMetadata,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
   VersionRedactedValue,
@@ -88,12 +89,65 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
 
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
   if (value.display !== undefined && !display) return null;
+  const historical =
+    value.historical === undefined ? undefined : mapDiffHistoricalMetadata(value.historical);
+  if (value.historical !== undefined && !historical) return null;
 
   return {
     structural,
     before,
     after,
     ...(display ? { display } : {}),
+    ...(historical ? { historical } : {}),
+  };
+}
+
+function mapDiffHistoricalMetadata(value: unknown): VersionDiffHistoricalMetadata | null {
+  if (!isRecord(value)) return null;
+  const historical: VersionDiffHistoricalMetadata = {
+    ...(value.cell === undefined ? {} : { cell: mapCellCoordinate(value.cell) }),
+    ...(value.range === undefined ? {} : { range: mapRangeCoordinate(value.range) }),
+  };
+  if (value.cell !== undefined && !historical.cell) return null;
+  if (value.range !== undefined && !historical.range) return null;
+  return historical.cell || historical.range ? historical : null;
+}
+
+function mapCellCoordinate(value: unknown): VersionDiffHistoricalMetadata['cell'] | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.sheetId !== 'string' ||
+    !isSafeCoordinate(value.row) ||
+    !isSafeCoordinate(value.column)
+  ) {
+    return undefined;
+  }
+  return {
+    sheetId: value.sheetId,
+    row: value.row,
+    column: value.column,
+  };
+}
+
+function mapRangeCoordinate(value: unknown): VersionDiffHistoricalMetadata['range'] | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.sheetId !== 'string' ||
+    !isSafeCoordinate(value.rowStart) ||
+    !isSafeCoordinate(value.rowEnd) ||
+    !isSafeCoordinate(value.columnStart) ||
+    !isSafeCoordinate(value.columnEnd) ||
+    value.rowEnd < value.rowStart ||
+    value.columnEnd < value.columnStart
+  ) {
+    return undefined;
+  }
+  return {
+    sheetId: value.sheetId,
+    rowStart: value.rowStart,
+    rowEnd: value.rowEnd,
+    columnStart: value.columnStart,
+    columnEnd: value.columnEnd,
   };
 }
 
@@ -248,6 +302,10 @@ function mapSemanticValues(
   return mapped.some((value) => value === undefined)
     ? undefined
     : (mapped as readonly VersionSemanticValue[]);
+}
+
+function isSafeCoordinate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

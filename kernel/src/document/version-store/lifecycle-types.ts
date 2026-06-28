@@ -24,6 +24,7 @@ import type { SemanticMutationCaptureServices } from './semantic-mutation-captur
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import type { VersionHistoryRootKind } from './version-history-root-policy';
+import type { WorkbookVersionWorkingTreeDiffService } from './working-tree-diff-service';
 import type { XlsxVersionExistingGraphImportInput } from './xlsx-import-root';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -60,6 +61,7 @@ export type ResolvedWorkbookVersioningConfig = {
   >;
   readonly revertService?: Pick<WorkbookVersionRevertService, 'revert'>;
   readonly reviewService?: WorkbookVersionReviewService;
+  readonly workingTreeDiffService?: Pick<WorkbookVersionWorkingTreeDiffService, 'diffWorkingTree'>;
   readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;

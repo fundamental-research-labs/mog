@@ -448,6 +448,102 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
     }
   });
 
+  it('keeps checkout clean after committing a sheet add on a branch and switching back to main', async () => {
+    const { provider, initialized } = await initializeVersionGraph();
+    const handle = await createBranchLifecycleDocumentHandle();
+    installVersionDomainDetectorNoopsOnHandles(handle);
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+      installVersionDomainDetectorNoopsOnWorkbook(wb);
+      const mainBase = await commitActiveSheetBaseCell({
+        wb,
+        initialized,
+        value: 'main sheet-add base',
+        errorLabel: 'main sheet-add base',
+      });
+
+      const created = await wb.version.refs.createBranch({
+        name: 'scenario/sheet-add-clean-checkout' as any,
+        targetCommitId: mainBase.id,
+        expectedAbsent: true,
+      });
+      if (!created.ok) {
+        throw new Error(`expected sheet-add branch create success: ${created.error.code}`);
+      }
+
+      const branchCheckout = await wb.version.checkout({
+        kind: 'ref',
+        name: created.value.name,
+      });
+      if (!branchCheckout.ok) {
+        throw new Error(
+          `expected sheet-add branch checkout success: ${branchCheckout.error.code}`,
+        );
+      }
+
+      await wb.sheets.add('Branch Only Sheet');
+      expect(wb.sheetNames).toContain('Branch Only Sheet');
+
+      const branchCommit = await wb.version.commit({
+        message: 'add branch-only sheet',
+        expectedHead: {
+          commitId: mainBase.id,
+          revision: created.value.revision,
+        },
+      });
+      if (!branchCommit.ok) {
+        throw new Error(`expected sheet-add branch commit success: ${branchCommit.error.code}`);
+      }
+      expect(branchCommit.value.parents).toEqual([mainBase.id]);
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        dirty: { hasUncommittedLocalChanges: false },
+      });
+      expect(wb.isDirty).toBe(false);
+
+      const mainCheckout = await wb.version.checkout({
+        kind: 'ref',
+        name: 'refs/heads/main',
+      });
+      if (!mainCheckout.ok) {
+        throw new Error(
+          `expected main checkout after sheet-add commit: ${mainCheckout.error.code}`,
+        );
+      }
+      expect(wb.sheetNames).not.toContain('Branch Only Sheet');
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: {
+          headCommitId: mainBase.id,
+          checkedOutCommitId: mainBase.id,
+          branchName: 'main',
+          refHeadAtMaterialization: mainBase.id,
+          currentRefHeadId: mainBase.id,
+          detached: false,
+          stale: false,
+        },
+        dirty: {
+          hasUncommittedLocalChanges: false,
+          checkoutSafe: true,
+        },
+      });
+      expect(wb.isDirty).toBe(false);
+
+      const workingTreeDiff = await wb.version.diffWorkingTree({ includeDiagnostics: true });
+      expect(workingTreeDiff).toMatchObject({
+        ok: true,
+        value: {
+          kind: 'workingTree',
+          baseCommitId: mainBase.id,
+          items: [],
+        },
+      });
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
+
   it('reports applied branch checkout session status and stale external ref movement', async () => {
     const { provider, initialized } = await initializeVersionGraph();
     const sourceHandle = await createBranchLifecycleDocumentHandle();

@@ -384,6 +384,7 @@ function createSurfaceStatusService() {
       hasUncommittedLocalChanges: false,
       calculationState: 'done',
       checkoutInProgress: false,
+      commitInProgress: false,
       revision: 0,
       contextGeneration: 0,
     }),

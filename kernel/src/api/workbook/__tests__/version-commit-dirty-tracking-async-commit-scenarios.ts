@@ -59,6 +59,52 @@ export function registerAsyncCommitDirtyTrackingScenarios(): void {
     expect(wb.isDirty).toBe(false);
   });
 
+  it('reports commit-in-progress in the version surface while an async commit is settling', async () => {
+    const eventBus = createMockEventBus();
+    let resolveCommit!: (value: unknown) => void;
+    let notifyCommitStarted!: () => void;
+    const commitStarted = new Promise<void>((resolve) => {
+      notifyCommitStarted = resolve;
+    });
+    const commit = jest.fn(() => {
+      notifyCommitStarted();
+      return new Promise((resolve) => {
+        resolveCommit = resolve;
+      });
+    });
+    const wb = createWorkbook({
+      eventBus,
+      versioning: {
+        writeService: { commit } as any,
+      },
+    });
+    eventBus.emit({ type: 'test:dirty-before-commit' });
+
+    const commitResult = wb.version.commit();
+    await commitStarted;
+
+    await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+      dirty: {
+        hasUncommittedLocalChanges: true,
+        checkoutSafe: false,
+        statusRevision: expect.stringContaining('commit:busy'),
+        unsafeReasons: expect.arrayContaining([
+          expect.objectContaining({ code: 'version.surfaceStatus.commitInProgress' }),
+        ]),
+      },
+    });
+
+    resolveCommit(commitSummary('child'));
+    await expect(commitResult).resolves.toMatchObject({ ok: true });
+
+    const settledSurface = await wb.version.getSurfaceStatus();
+    expect(wb.isDirty).toBe(false);
+    expect(settledSurface.dirty.statusRevision).toContain('commit:idle');
+    expect(settledSurface.dirty.unsafeReasons.map((reason) => reason.code)).not.toContain(
+      'version.surfaceStatus.commitInProgress',
+    );
+  });
+
   it('keeps workbook dirty when a real mutation event lands during the async commit', async () => {
     const eventBus = createMockEventBus();
     let resolveCommit!: (value: unknown) => void;

@@ -32,6 +32,7 @@ export type WorkbookVersionSurfaceDirtyState = {
   readonly hasUncommittedLocalChanges: boolean;
   readonly calculationState: 'done' | 'calculating' | 'pending';
   readonly checkoutInProgress: boolean;
+  readonly commitInProgress: boolean;
   readonly revision: number;
   readonly contextGeneration: number;
 };

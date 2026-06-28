@@ -214,6 +214,37 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(services.semanticStateReader.diffSemanticStates).not.toHaveBeenCalled();
   });
 
+  it('blocks dirty working-tree diff while a version commit is settling', async () => {
+    const commitInProgress = surfaceDiagnostic('version.surfaceStatus.commitInProgress');
+    const services = createHarness({
+      surface: surfaceStatus({
+        dirty: true,
+        dirtyFields: {
+          checkoutSafe: false,
+          unsafeReasons: [commitInProgress],
+          diagnostics: [commitInProgress],
+        },
+      }),
+      basis: basisState({ revision: 1 }),
+      currentStates: [semanticEnvelope('current')],
+    });
+
+    const result = await services.service.diffWorkingTree();
+
+    expect(result.status).toBe('degraded');
+    if (result.status !== 'degraded') return;
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        issueCode: 'VERSION_WORKING_TREE_DIFF_COMMIT_IN_PROGRESS',
+        details: expect.objectContaining({ category: 'commitInProgress' }),
+      }),
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.issueCode)).not.toContain(
+      'VERSION_WORKING_TREE_DIFF_UNAVAILABLE',
+    );
+    expect(services.semanticStateReader.diffSemanticStates).not.toHaveBeenCalled();
+  });
+
   it.each([
     [
       'stale checkout',
@@ -724,6 +755,15 @@ function surfaceStatus(input: {
       'version:revert': { enabled: true },
     },
     diagnostics: [],
+  };
+}
+
+function surfaceDiagnostic(code: string): VersionSurfaceStatus['dirty']['diagnostics'][number] {
+  return {
+    code,
+    severity: 'warning',
+    message: code,
+    dependency: 'VC-05',
   };
 }
 

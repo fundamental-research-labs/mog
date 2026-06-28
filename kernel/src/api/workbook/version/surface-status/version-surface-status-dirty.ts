@@ -247,6 +247,15 @@ function dirtyStatusFromState(
           ),
         ]
       : []),
+    ...(state.commitInProgress
+      ? [
+          diagnostic(
+            'version.surfaceStatus.commitInProgress',
+            'warning',
+            'A version commit is still settling; checkout and live working-tree diff are temporarily unsafe.',
+          ),
+        ]
+      : []),
     ...providerWrites.unsafeReasons,
     ...liveCollaboration.unsafeReasons,
   ];
@@ -257,6 +266,7 @@ function dirtyStatusFromState(
     `dirty:${state.hasUncommittedLocalChanges ? 'yes' : 'no'}`,
     `calc:${state.calculationState}`,
     `checkout:${state.checkoutInProgress ? 'busy' : 'idle'}`,
+    `commit:${state.commitInProgress ? 'busy' : 'idle'}`,
     `providerWrites:${providerWrites.statusRevision}`,
     `liveCollaboration:${liveCollaboration.statusRevision}`,
   ].join('|');

@@ -56,6 +56,8 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
       readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
       readonly readState: () => WorkbookVersionDirtyTrackingState;
       readonly markCleanIfRevisionUnchanged: (revision: number) => boolean;
+      readonly beginCommit?: () => void;
+      readonly endCommit?: () => void;
     },
   ) {
     super(ctx, {
@@ -71,25 +73,35 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
   ): Promise<VersionResult<WorkbookCommitSummary>> {
     const beforeCommit = this.dirtyTracking.readState();
     const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
-    const result = await super.commit(options);
-    if (result.ok) {
-      this.recordCheckoutBranchCommit(beforeSaveHead, options, result.value);
+    this.dirtyTracking.beginCommit?.();
+    try {
+      const result = await super.commit(options);
+      if (result.ok) {
+        this.recordCheckoutBranchCommit(beforeSaveHead, options, result.value);
+      }
+      if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
+        this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
+      }
+      return result;
+    } finally {
+      this.dirtyTracking.endCommit?.();
     }
-    if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
-      this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
-    }
-    return result;
   }
 
   override async commitCurrent(
     options: VersionCommitCurrentOptions = {},
   ): Promise<VersionResult<WorkbookCommitSummary>> {
     const beforeCommit = this.dirtyTracking.readState();
-    const result = await super.commitCurrent(options);
-    if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
-      this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
+    this.dirtyTracking.beginCommit?.();
+    try {
+      const result = await super.commitCurrent(options);
+      if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
+        this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
+      }
+      return result;
+    } finally {
+      this.dirtyTracking.endCommit?.();
     }
-    return result;
   }
 
   override async applyMerge(

@@ -197,12 +197,19 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     if (!reviews.ok) diagnostics.push(reviews.diagnostic);
     if (!proposals.ok) diagnostics.push(proposals.diagnostic);
 
-    const surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
+    let surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
     const headValue = head.ok ? head.value : undefined;
-    const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
-    const workingTreeDiff = surfaceValue?.dirty.hasUncommittedLocalChanges
-      ? await readVersionHistoryWorkingTreeDiff(workbook)
+    const workingTreeDiffRead = surfaceValue?.dirty.hasUncommittedLocalChanges
+      ? await readVersionHistoryWorkingTreeDiffForSurface(workbook, surfaceValue)
       : undefined;
+    if (workingTreeDiffRead?.surface) {
+      surfaceValue = workingTreeDiffRead.surface;
+    }
+    if (workingTreeDiffRead?.diagnostic) {
+      diagnostics.push(workingTreeDiffRead.diagnostic);
+    }
+    const workingTreeDiff = workingTreeDiffRead?.workingTreeDiff;
+    const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
 
     const data: VersionHistoryData = {
       ...(surfaceValue ? { surface: surfaceValue } : {}),
@@ -327,10 +334,65 @@ async function readVersionHistoryWorkingTreeDiff(
     : { status: 'blocked', diagnostic: result.diagnostic };
 }
 
+async function readVersionHistoryWorkingTreeDiffForSurface(
+  workbook: VersionHistoryWorkbook,
+  surface: VersionSurfaceStatus,
+): Promise<{
+  readonly surface: VersionSurfaceStatus;
+  readonly workingTreeDiff?: VersionHistoryWorkingTreeDiff;
+  readonly diagnostic?: VersionPanelDiagnostic;
+}> {
+  let currentSurface = surface;
+  let currentSnapshot = dirtySnapshotFromSurface(currentSurface);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const workingTreeDiff = await readVersionHistoryWorkingTreeDiff(workbook);
+    if (!workingTreeDiffNeedsSurfaceFence(workingTreeDiff, currentSnapshot)) {
+      return { surface: currentSurface, workingTreeDiff };
+    }
+
+    const refreshedSurfaceRead = await readValue('VERSION_UI_SURFACE_STATUS_FAILED', () =>
+      workbook.version.getSurfaceStatus(),
+    );
+
+    if (!refreshedSurfaceRead.ok) {
+      return {
+        surface: currentSurface,
+        workingTreeDiff,
+        diagnostic: refreshedSurfaceRead.diagnostic,
+      };
+    }
+
+    const refreshedSurface =
+      projectVersionHistorySurface(refreshedSurfaceRead.value) ?? refreshedSurfaceRead.value;
+    const refreshedSnapshot = dirtySnapshotFromSurface(refreshedSurface);
+    if (!refreshedSurface.dirty.hasUncommittedLocalChanges) {
+      return { surface: refreshedSurface };
+    }
+    if (sameDirtySnapshot(currentSnapshot, refreshedSnapshot)) {
+      return { surface: currentSurface, workingTreeDiff };
+    }
+    if (!workingTreeDiffNeedsSurfaceFence(workingTreeDiff, refreshedSnapshot)) {
+      return { surface: refreshedSurface, workingTreeDiff };
+    }
+
+    currentSurface = refreshedSurface;
+    currentSnapshot = refreshedSnapshot;
+  }
+
+  return { surface: currentSurface };
+}
+
 function commitDirtySnapshot(
   data: VersionHistoryData | undefined,
 ): CommitDirtySnapshot | undefined {
-  const dirty = data?.surface?.dirty;
+  return dirtySnapshotFromSurface(data?.surface);
+}
+
+function dirtySnapshotFromSurface(
+  surface: VersionSurfaceStatus | undefined,
+): CommitDirtySnapshot | undefined {
+  const dirty = surface?.dirty;
   if (!dirty) return undefined;
   if (
     dirty.source !== 'VC-05' ||
@@ -344,6 +406,32 @@ function commitDirtySnapshot(
     checkoutPreflightToken: dirty.checkoutPreflightToken,
     hasUncommittedLocalChanges: dirty.hasUncommittedLocalChanges,
   };
+}
+
+function sameDirtySnapshot(
+  left: CommitDirtySnapshot | undefined,
+  right: CommitDirtySnapshot | undefined,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.statusRevision === right.statusRevision &&
+    left.checkoutPreflightToken === right.checkoutPreflightToken &&
+    left.hasUncommittedLocalChanges === right.hasUncommittedLocalChanges
+  );
+}
+
+function workingTreeDiffNeedsSurfaceFence(
+  diff: VersionHistoryWorkingTreeDiff,
+  surfaceSnapshot: CommitDirtySnapshot | undefined,
+): boolean {
+  if (diff.status === 'blocked') return true;
+  if (diff.page.items.length > 0) return false;
+  if (!surfaceSnapshot) return true;
+  return (
+    diff.page.dirtyStatusRevision !== surfaceSnapshot.statusRevision ||
+    diff.page.checkoutPreflightToken !== surfaceSnapshot.checkoutPreflightToken
+  );
 }
 
 async function readValue<T>(

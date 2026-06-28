@@ -9,6 +9,7 @@ export function createMalformedProviderWriteActivityStatusService() {
       hasUncommittedLocalChanges: false,
       calculationState: 'done',
       checkoutInProgress: false,
+      commitInProgress: false,
       revision: 1,
       contextGeneration: 1,
     }),

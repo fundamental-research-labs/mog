@@ -41,6 +41,7 @@ import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
 
 const VERSION_WORKING_TREE_CURSOR_CACHE_MAX_ENTRIES = 512;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
+const VERSION_SURFACE_COMMIT_IN_PROGRESS_CODE = 'version.surfaceStatus.commitInProgress';
 
 export type WorkbookVersionWorkingTreeDiffServiceOptions = {
   readonly provider: VersionStoreProvider;
@@ -584,6 +585,20 @@ function workingTreeBlockingDiagnostics(
     );
   }
 
+  if (dirtyHasDiagnostic(dirty, VERSION_SURFACE_COMMIT_IN_PROGRESS_CODE)) {
+    diagnostics.push(
+      diagnostic(
+        'VERSION_WORKING_TREE_DIFF_COMMIT_IN_PROGRESS',
+        'Working-tree diff is blocked while a version commit is still settling.',
+        {
+          recoverability: 'retry',
+          details: { category: 'commitInProgress' },
+        },
+      ),
+    );
+    return diagnostics;
+  }
+
   const liveCollaboration = dirty.liveCollaboration;
   if (
     liveCollaboration &&
@@ -695,6 +710,12 @@ function workingTreeBlockingDiagnostics(
   }
 
   return diagnostics;
+}
+
+function dirtyHasDiagnostic(dirty: VersionSurfaceStatus['dirty'], code: string): boolean {
+  return [...dirty.unsafeReasons, ...dirty.diagnostics].some(
+    (diagnostic) => diagnostic.code === code,
+  );
 }
 
 function sameWorkingTreeObservation(

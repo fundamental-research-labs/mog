@@ -83,4 +83,52 @@ describe('VersionHistoryPanelContent working-tree diff', () => {
     );
     expect(within(blocked).queryByRole('button', { name: /stage/i })).not.toBeInTheDocument();
   });
+
+  it('suppresses a stale dirty working-tree diagnostic when the fenced surface is clean', async () => {
+    const dirtySurface = createSurfaceStatus({
+      dirty: {
+        statusRevision: 'dirty:before-checkout',
+        checkoutPreflightToken: 'token:before-checkout',
+        hasUncommittedLocalChanges: true,
+        commitEligibleChanges: true,
+      },
+    });
+    const cleanSurface = createSurfaceStatus({
+      dirty: {
+        statusRevision: 'dirty:after-checkout',
+        checkoutPreflightToken: 'token:after-checkout',
+        hasUncommittedLocalChanges: false,
+        commitEligibleChanges: false,
+        checkoutSafe: true,
+      },
+    });
+    const getSurfaceStatus = jest
+      .fn()
+      .mockResolvedValueOnce(dirtySurface)
+      .mockResolvedValueOnce(cleanSurface);
+    const diffWorkingTree = jest.fn(async () =>
+      failedInvalidState(
+        'Working-tree diff has dirty workbook state but no captured mutation basis.',
+      ),
+    );
+    const workbook = createWorkbook({
+      getSurfaceStatus,
+      diffWorkingTree,
+    });
+
+    renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await waitFor(() => expect(getSurfaceStatus).toHaveBeenCalledTimes(2));
+    expect(diffWorkingTree).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Uncommitted changes')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('version-history-working-tree-diff-blocked'),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        'Working-tree diff has dirty workbook state but no captured mutation basis.',
+      ),
+    ).not.toBeInTheDocument();
+  });
 });

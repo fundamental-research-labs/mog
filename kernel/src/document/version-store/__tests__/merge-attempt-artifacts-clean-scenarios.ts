@@ -114,4 +114,36 @@ export function registerMergeAttemptArtifactsCleanScenarios(): void {
       store.getObject(mergeResolutionSetV2ArtifactRef(resolutionSetV2.digest)),
     ).resolves.toEqual(resolutionSetV2.preimage.payload);
   });
+
+  it('deduplicates ancestry-equivalent preview dependencies', async () => {
+    const commits = await commitSet('ancestry-equivalent');
+
+    const fastForward = await createMergePreviewArtifactRecord(NAMESPACE, {
+      status: 'fastForward',
+      base: commits.ours.id,
+      ours: commits.ours.id,
+      theirs: commits.theirs.id,
+    });
+    expect(fastForward.preimage.dependencies).toHaveLength(2);
+    expect(fastForward.preimage.dependencies).toEqual(
+      expect.arrayContaining([
+        commitDependency(commits.ours.id),
+        commitDependency(commits.theirs.id),
+      ]),
+    );
+
+    const alreadyMerged = await createMergePreviewArtifactRecord(NAMESPACE, {
+      status: 'alreadyMerged',
+      base: commits.theirs.id,
+      ours: commits.ours.id,
+      theirs: commits.theirs.id,
+    });
+    expect(alreadyMerged.preimage.dependencies).toHaveLength(2);
+    expect(alreadyMerged.preimage.dependencies).toEqual(
+      expect.arrayContaining([
+        commitDependency(commits.theirs.id),
+        commitDependency(commits.ours.id),
+      ]),
+    );
+  });
 }

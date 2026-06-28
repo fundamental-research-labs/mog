@@ -159,7 +159,7 @@ function mergeReviewStatusText(status: string, conflictCount: number): string {
 function mergeDiagnosticText(diagnostic: VersionStoreDiagnostic): string | undefined {
   return sanitizeVersionStatusText(
     diagnostic.safeMessage ?? diagnostic.issueCode,
-    undefined,
+    diagnostic.issueCode,
   );
 }
 

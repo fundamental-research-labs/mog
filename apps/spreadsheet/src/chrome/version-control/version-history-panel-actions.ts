@@ -386,7 +386,7 @@ export function useVersionHistoryPanelActions({
       }
 
       setDiffPreview({ base: parentId, target: commit.id, page: result.value });
-      setActionState({ status: 'success', message: 'Loaded parent diff' });
+      setActionState({ status: 'idle' });
     },
     [canDiff, workbook],
   );

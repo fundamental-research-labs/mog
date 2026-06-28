@@ -537,8 +537,8 @@ describe('VersionHistoryPanelContent action flows', () => {
         includeDiagnostics: true,
       }),
     );
-    await expectActionResult('Loaded parent diff', 'success');
     const diffViewer = await screen.findByTestId('version-history-diff-viewer');
+    expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument();
     expect(diffViewer).toHaveAttribute('data-state', 'changes');
     expect(diffViewer).toHaveTextContent('Changes');
     expect(diffViewer).toHaveTextContent('sheet-1!A1');

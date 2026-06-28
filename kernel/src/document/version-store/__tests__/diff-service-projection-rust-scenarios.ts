@@ -75,6 +75,66 @@ export function registerDiffServiceProjectionRustScenarios(): void {
       diagnostics: [],
     });
   });
+
+  it('projects a Rust cell value edit once when aggregate and child value changes are both present', async () => {
+    const rustChanges = [
+      rawCellValueChange({
+        changeId: 'rust-cell-a1-aggregate',
+        sheetId: 'sheet#0',
+        row: 0,
+        column: 0,
+        value: 'hello',
+      }),
+      rawCellValueChildChange({
+        changeId: 'rust-cell-a1-value',
+        sheetId: 'sheet#0',
+        row: 0,
+        column: 0,
+        value: 'hello',
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: 'before-digest',
+          afterStateDigest: 'after-digest',
+        },
+        changes: rustChanges,
+        semanticDiff: {
+          beforeDigest: 'before-digest',
+          afterDigest: 'after-digest',
+          changes: rustChanges,
+          diagnostics: [],
+        },
+        reviewChanges: [],
+      },
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    const result = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+    );
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      structural: {
+        kind: 'metadata',
+        changeId: 'rust-cell-a1-value',
+        domain: 'cells.values',
+        entityId: 'sheet#0!A1',
+        propertyPath: ['value'],
+      },
+      before: { kind: 'value', value: { kind: 'blank' } },
+      after: { kind: 'value', value: 'hello' },
+      display: { address: { kind: 'value', value: 'A1' } },
+      historical: { cell: { sheetId: 'sheet#0', row: 0, column: 0 } },
+    });
+  });
 }
 
 function rawCellValueChange(input: {
@@ -132,6 +192,33 @@ function rawCellFormulaChange(input: {
         dynamicArray: false,
         volatile: false,
         aggregate: false,
+      },
+    },
+  };
+}
+
+function rawCellValueChildChange(input: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly row: number;
+  readonly column: number;
+  readonly value: unknown;
+}) {
+  const cellId = cellObjectId(input);
+  const objectId = `value:${cellId}`;
+  return {
+    changeId: input.changeId,
+    kind: 'added',
+    domainId: 'cells.values',
+    objectId,
+    objectKind: 'cell-value',
+    afterRecord: {
+      objectId,
+      objectKind: 'cell-value',
+      domainId: 'cells.values',
+      record: {
+        valueKind: typeof input.value,
+        canonicalValue: input.value,
       },
     },
   };

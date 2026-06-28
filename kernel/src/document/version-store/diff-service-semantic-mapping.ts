@@ -20,6 +20,11 @@ const REDACTED_VALUE_REASONS = new Set([
   'historical-acl-unavailable',
 ]);
 
+type ProjectableSemanticChange = {
+  readonly value: unknown;
+  readonly sourceIndex: number;
+};
+
 export function mapSemanticChangeSet(
   payload: unknown,
 ):
@@ -50,11 +55,13 @@ export function mapSemanticChangeSet(
     };
   }
 
+  const projectableChanges = projectableSemanticChanges(reviewChanges);
   const entries: { readonly entry: VersionDiffEntry; readonly source: unknown }[] = [];
-  for (let index = 0; index < reviewChanges.length; index++) {
-    const entry = mapSemanticChange(reviewChanges[index]);
+  for (let index = 0; index < projectableChanges.length; index++) {
+    const projectableChange = projectableChanges[index]!;
+    const entry = mapSemanticChange(projectableChange.value);
     if (!entry) {
-      if (isIgnorableRustAggregateChange(reviewChanges[index])) continue;
+      if (isIgnorableRustAggregateChange(projectableChange.value)) continue;
       return {
         ok: false,
         diagnostics: [
@@ -62,19 +69,94 @@ export function mapSemanticChangeSet(
             'VERSION_UNSUPPORTED_SCHEMA',
             'Semantic change record is not supported by this diff slice.',
             {
-              details: { itemIndex: index },
+              details: { itemIndex: projectableChange.sourceIndex },
             },
           ),
         ],
       };
     }
-    entries.push({ entry, source: reviewChanges[index] });
+    entries.push({ entry, source: projectableChange.value });
   }
 
   return {
     ok: true,
     items: mapEntriesWithOrderKeys(entries),
   };
+}
+
+function projectableSemanticChanges(
+  changes: readonly unknown[],
+): readonly ProjectableSemanticChange[] {
+  const childChanges = rustSpecificCellChangeIds(changes);
+  return changes.flatMap((change, sourceIndex) =>
+    shouldProjectSemanticChange(change, childChanges) ? [{ value: change, sourceIndex }] : [],
+  );
+}
+
+function rustSpecificCellChangeIds(changes: readonly unknown[]): {
+  readonly valueCellIds: ReadonlySet<string>;
+  readonly formulaCellIds: ReadonlySet<string>;
+} {
+  const valueCellIds = new Set<string>();
+  const formulaCellIds = new Set<string>();
+
+  for (const change of changes) {
+    if (!isRecord(change) || typeof change.objectId !== 'string') continue;
+    if (change.domainId === 'cells.values' && change.objectKind === 'cell-value') {
+      valueCellIds.add(stripRustObjectPrefix(change.objectId, 'value:'));
+    }
+    if (change.domainId === 'cells.formulas' && change.objectKind === 'cell-formula') {
+      formulaCellIds.add(stripRustObjectPrefix(change.objectId, 'formula:'));
+    }
+  }
+
+  return { valueCellIds, formulaCellIds };
+}
+
+function shouldProjectSemanticChange(
+  change: unknown,
+  childChanges: {
+    readonly valueCellIds: ReadonlySet<string>;
+    readonly formulaCellIds: ReadonlySet<string>;
+  },
+): boolean {
+  if (!isRecord(change) || change.objectKind !== 'cell' || typeof change.objectId !== 'string') {
+    return true;
+  }
+
+  if (change.domainId === 'cells.values') {
+    if (childChanges.valueCellIds.has(change.objectId)) return false;
+    return rustAggregateValueProjectionState(change) !== 'unchanged';
+  }
+
+  if (change.domainId === 'cells.formulas') {
+    if (childChanges.formulaCellIds.has(change.objectId)) return false;
+    return rustAggregateFormulaProjectionState(change) !== 'unchanged';
+  }
+
+  return true;
+}
+
+function rustAggregateValueProjectionState(
+  change: Readonly<Record<string, unknown>>,
+): 'changed' | 'unchanged' | 'unsupported' {
+  const before = mapRustCellValueDiffValue(change.beforeRecord);
+  const after = mapRustCellValueDiffValue(change.afterRecord);
+  if (!before || !after) return 'unsupported';
+  return sameDiffValue(before, after) ? 'unchanged' : 'changed';
+}
+
+function rustAggregateFormulaProjectionState(
+  change: Readonly<Record<string, unknown>>,
+): 'changed' | 'unchanged' | 'unsupported' {
+  const before = mapRustCellFormulaDiffValue(change.beforeRecord);
+  const after = mapRustCellFormulaDiffValue(change.afterRecord);
+  if (!before || !after) return 'unsupported';
+  return sameDiffValue(before, after) ? 'unchanged' : 'changed';
+}
+
+function sameDiffValue(left: VersionDiffValue, right: VersionDiffValue): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function isIgnorableRustAggregateChange(value: unknown): boolean {
@@ -92,7 +174,9 @@ function mapSemanticChange(value: unknown): VersionDiffEntry | null {
   return mapReviewSemanticChange(value) ?? mapRustSemanticChange(value);
 }
 
-function mapReviewSemanticChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
+function mapReviewSemanticChange(
+  value: Readonly<Record<string, unknown>>,
+): VersionDiffEntry | null {
   const structural = mapStructuralMetadata(value);
   const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
   const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
@@ -132,9 +216,7 @@ function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): Versio
   return null;
 }
 
-function mapRustCellValueChange(
-  value: Readonly<Record<string, unknown>>,
-): VersionDiffEntry | null {
+function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
   if (value.objectKind !== 'cell' && value.objectKind !== 'cell-value') return null;
 
   const cell = rustCellCoordinates(value);
@@ -210,9 +292,7 @@ type RustCellCoordinates = {
   readonly column: number;
 };
 
-function rustCellCoordinates(
-  value: Readonly<Record<string, unknown>>,
-): RustCellCoordinates | null {
+function rustCellCoordinates(value: Readonly<Record<string, unknown>>): RustCellCoordinates | null {
   return (
     rustCellCoordinatesFromEvidence(value.afterRecord) ??
     rustCellCoordinatesFromEvidence(value.beforeRecord) ??
@@ -300,14 +380,12 @@ function mapCanonicalFormula(value: unknown): VersionSemanticValue | undefined {
     : undefined;
 }
 
-function rustRecordEvidence(value: unknown):
-  | {
-      readonly objectId: string;
-      readonly objectKind: string;
-      readonly domainId: string;
-      readonly record: unknown;
-    }
-  | null {
+function rustRecordEvidence(value: unknown): {
+  readonly objectId: string;
+  readonly objectKind: string;
+  readonly domainId: string;
+  readonly record: unknown;
+} | null {
   if (
     !isRecord(value) ||
     typeof value.objectId !== 'string' ||

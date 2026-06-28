@@ -75,6 +75,38 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(result.currentSemanticStateDigest).toMatchObject({ digest: 'after' });
   });
 
+  it('projects a dirty cell value edit once when Rust emits cell aggregate and value child changes', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 3, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [
+          semanticChange('added:cell:sheet-1:r0:c0', 'hello'),
+          semanticCellValueChange('added:value:cell:sheet-1:r0:c0', 'hello'),
+        ],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.structural).toMatchObject({
+      kind: 'metadata',
+      changeId: 'added:value:cell:sheet-1:r0:c0',
+      domain: 'cells.values',
+      entityId: 'sheet-1!A1',
+      propertyPath: ['value'],
+    });
+    expect(result.items[0]?.after).toEqual({ kind: 'value', value: 'hello' });
+  });
+
   it('diffs against the current branch head when no explicit checkout session exists', async () => {
     const before = semanticEnvelope('before');
     const after = semanticEnvelope('after');
@@ -685,6 +717,27 @@ function semanticChange(changeId: string, after: string) {
           valueKind: 'string',
           canonicalValue: after,
         },
+      },
+    },
+  };
+}
+
+function semanticCellValueChange(changeId: string, after: string) {
+  const cellObjectId = 'cell:sheet-1:r0:c0';
+  const objectId = `value:${cellObjectId}`;
+  return {
+    changeId,
+    kind: 'added',
+    domainId: 'cells.values',
+    objectId,
+    objectKind: 'cell-value',
+    afterRecord: {
+      objectId,
+      objectKind: 'cell-value',
+      domainId: 'cells.values',
+      record: {
+        valueKind: 'string',
+        canonicalValue: after,
       },
     },
   };

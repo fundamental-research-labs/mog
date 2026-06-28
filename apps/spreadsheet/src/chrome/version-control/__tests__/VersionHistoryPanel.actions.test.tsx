@@ -46,7 +46,7 @@ const parentDiffPreviewCases: readonly ParentDiffPreviewCase[] = [
     'changes',
     versionDiffOverview(),
     'changes',
-    'cells',
+    'Changes',
     '1 change',
   ],
   [
@@ -528,7 +528,8 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument();
     expect(diffViewer).toHaveAttribute('data-state', 'changes');
     expect(diffViewer).toHaveTextContent('Changes');
-    expect(screen.getByTestId('version-history-diff-overview')).toHaveTextContent('1 change');
+    expect(screen.queryByTestId('version-history-diff-overview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('version-history-diff-total-count')).toHaveTextContent('1 change');
     expect(screen.queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
     expect(await screen.findByTestId('version-history-diff-inline-detail')).toHaveTextContent(
       'sheet-1!A1',
@@ -540,7 +541,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffStatus).toHaveTextContent(
       `Diff base ${shortCommitId(PARENT_COMMIT_ID)} target ${shortCommitId(
         HEAD_COMMIT_ID,
-      )}. 1 change. Loaded detail 1`,
+      )}. 1 change.`,
     );
     await waitFor(() =>
       expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(

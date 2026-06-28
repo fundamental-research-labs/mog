@@ -100,10 +100,11 @@ export function VersionHistoryDiffPreview({
 
   const summary = diffPreview.overview.summary;
   const state = summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
+  const stateLabel = state === 'incomplete' ? 'Incomplete' : 'Changes';
   const summaryId = 'version-history-parent-diff-summary';
   const summaryText = `Diff base ${shortCommitId(diffPreview.base)} target ${shortCommitId(
     diffPreview.target,
-  )}. ${formatSummaryCount(summary)}. Loaded detail ${diffPreview.loadedDetailCount}`;
+  )}. ${formatSummaryCount(summary)}.`;
 
   return (
     <section
@@ -116,7 +117,7 @@ export function VersionHistoryDiffPreview({
     >
       <div data-testid="version-history-parent-diff" data-state={state} className="contents">
         <div className="flex items-center justify-between gap-2">
-          <DiffViewerHeader stateLabel="Changes" />
+          <DiffViewerHeader stateLabel={stateLabel} />
           <div className="flex shrink-0 items-center gap-1.5">
             <DiffFilterMenu
               preview={diffPreview}
@@ -144,7 +145,6 @@ export function VersionHistoryDiffPreview({
           {summaryText}
         </p>
         <CommitRange base={diffPreview.base} target={diffPreview.target} />
-        <DiffOverview preview={diffPreview} />
         {diffPreview.inlineDetailMode ? (
           <InlineDiffDetail preview={diffPreview} />
         ) : (
@@ -313,52 +313,6 @@ export function VersionHistoryWorkingTreeDiffPreview({
         )}
       </div>
     </section>
-  );
-}
-
-function DiffOverview({ preview }: { readonly preview: VersionDiffPreview }): React.JSX.Element {
-  const { summary, resourceLimits } = preview.overview;
-  return (
-    <div
-      className="grid gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]"
-      data-testid="version-history-diff-overview"
-      data-count-precision={summary.countPrecision}
-      data-exact-total={summary.exactTotalChanges ?? ''}
-      data-minimum-count={summary.minimumChangeCount ?? ''}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-ss-text">{formatSummaryCount(summary)}</span>
-        <span
-          className="text-ss-text-secondary"
-          data-testid="version-history-diff-loaded-count"
-        >
-          {preview.loadedDetailCount} loaded
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-x-2 gap-y-1 text-ss-text-secondary">
-        <span>{preview.overview.groups.items.length} groups</span>
-        <span>{preview.loadedDetailPageCount} detail pages cached</span>
-        {preview.hasMoreDetail ? <span>More detail available</span> : null}
-        {summary.incomplete ? <span className="font-medium text-ss-warning">Incomplete</span> : null}
-      </div>
-      {summary.domainCounts.length > 0 ? (
-        <div className="flex flex-wrap gap-1" data-testid="version-history-diff-domain-counts">
-          {summary.domainCounts.slice(0, 6).map((count) => (
-            <span
-              key={count.domain}
-              className="rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 py-0.5"
-            >
-              {count.domain}: {count.exactCount ?? count.minimumCount ?? count.totalEstimate ?? '?'}
-            </span>
-          ))}
-        </div>
-      ) : null}
-      {resourceLimits?.exactTotalCountUnavailable ? (
-        <div className="text-ss-text-secondary" data-testid="version-history-diff-resource-limits">
-          Exact total unavailable within scan budget
-        </div>
-      ) : null}
-    </div>
   );
 }
 

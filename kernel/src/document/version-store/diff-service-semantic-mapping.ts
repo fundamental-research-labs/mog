@@ -160,13 +160,9 @@ function sameDiffValue(left: VersionDiffValue, right: VersionDiffValue): boolean
 }
 
 function isIgnorableRustAggregateChange(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    value.domainId === 'sheets' &&
-    value.objectKind === 'sheet' &&
-    !('beforeRecord' in value) &&
-    !('afterRecord' in value)
-  );
+  if (!isRustSheetChangeRecord(value)) return false;
+  if (!('beforeRecord' in value) && !('afterRecord' in value)) return true;
+  return rustSheetProjection(value).kind === 'unchanged';
 }
 
 function mapSemanticChange(value: unknown): VersionDiffEntry | null {
@@ -213,7 +209,185 @@ function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): Versio
   if (value.domainId === 'cells.formulas') {
     return mapRustCellFormulaChange(value);
   }
+  if (value.domainId === 'sheets') {
+    return mapRustSheetChange(value);
+  }
   return null;
+}
+
+function mapRustSheetChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
+  if (value.objectKind !== 'sheet') return null;
+
+  const projection = rustSheetProjection(value);
+  if (projection.kind === 'added') {
+    return rustSheetStructuralEntry({
+      changeId: value.changeId as string,
+      propertyPath: ['sheet'],
+      sheetId: projection.sheet.sheetId,
+      before: { kind: 'value', value: null },
+      after: rustSheetDiffValue(projection.sheet),
+      entityLabel: projection.sheet.name,
+    });
+  }
+  if (projection.kind === 'removed') {
+    return rustSheetStructuralEntry({
+      changeId: value.changeId as string,
+      propertyPath: ['sheet'],
+      sheetId: projection.sheet.sheetId,
+      before: rustSheetDiffValue(projection.sheet),
+      after: { kind: 'value', value: null },
+      entityLabel: projection.sheet.name,
+    });
+  }
+  if (projection.kind === 'renamed') {
+    return rustSheetStructuralEntry({
+      changeId: value.changeId as string,
+      propertyPath: ['name'],
+      sheetId: projection.sheetId,
+      before: { kind: 'value', value: projection.beforeName },
+      after: { kind: 'value', value: projection.afterName },
+      entityLabel: projection.afterName,
+    });
+  }
+  if (projection.kind === 'updated') {
+    return rustSheetStructuralEntry({
+      changeId: value.changeId as string,
+      propertyPath: ['sheet'],
+      sheetId: projection.after.sheetId,
+      before: rustSheetDiffValue(projection.before),
+      after: rustSheetDiffValue(projection.after),
+      entityLabel: projection.after.name,
+    });
+  }
+
+  return null;
+}
+
+function rustSheetStructuralEntry(input: {
+  readonly changeId: string;
+  readonly propertyPath: readonly string[];
+  readonly sheetId: string;
+  readonly before: VersionDiffValue;
+  readonly after: VersionDiffValue;
+  readonly entityLabel: string;
+}): VersionDiffEntry {
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId: input.changeId,
+      domain: 'sheet',
+      entityId: input.sheetId,
+      propertyPath: [...input.propertyPath],
+    },
+    before: input.before,
+    after: input.after,
+    display: {
+      entityLabel: { kind: 'value', value: input.entityLabel },
+    },
+  };
+}
+
+type RustSheetProjection =
+  | { readonly kind: 'added'; readonly sheet: RustSheetRecord }
+  | { readonly kind: 'removed'; readonly sheet: RustSheetRecord }
+  | {
+      readonly kind: 'renamed';
+      readonly sheetId: string;
+      readonly beforeName: string;
+      readonly afterName: string;
+    }
+  | { readonly kind: 'updated'; readonly before: RustSheetRecord; readonly after: RustSheetRecord }
+  | { readonly kind: 'unchanged' }
+  | { readonly kind: 'unsupported' };
+
+type RustSheetRecord = {
+  readonly sheetId: string;
+  readonly name: string;
+  readonly rowCount?: number;
+  readonly columnCount?: number;
+};
+
+function rustSheetProjection(value: Readonly<Record<string, unknown>>): RustSheetProjection {
+  if (!isRustSheetChangeRecord(value)) return { kind: 'unsupported' };
+
+  const hasBeforeRecord = 'beforeRecord' in value;
+  const hasAfterRecord = 'afterRecord' in value;
+  const before = rustSheetRecord(value.beforeRecord);
+  const after = rustSheetRecord(value.afterRecord);
+  if ((hasBeforeRecord && !before) || (hasAfterRecord && !after)) {
+    return { kind: 'unsupported' };
+  }
+  if (!before && !after) return { kind: 'unchanged' };
+  if (!before && after) return { kind: 'added', sheet: after };
+  if (before && !after) return { kind: 'removed', sheet: before };
+  if (!before || !after) return { kind: 'unsupported' };
+  if (
+    before.sheetId === after.sheetId &&
+    before.name !== after.name &&
+    sameRustSheetShape(before, after)
+  ) {
+    return {
+      kind: 'renamed',
+      sheetId: after.sheetId,
+      beforeName: before.name,
+      afterName: after.name,
+    };
+  }
+  return sameRustSheetRecord(before, after)
+    ? { kind: 'unchanged' }
+    : { kind: 'updated', before, after };
+}
+
+function isRustSheetChangeRecord(
+  value: unknown,
+): value is Readonly<Record<string, unknown>> & {
+  readonly domainId: 'sheets';
+  readonly objectKind: 'sheet';
+} {
+  return isRecord(value) && value.domainId === 'sheets' && value.objectKind === 'sheet';
+}
+
+function rustSheetRecord(value: unknown): RustSheetRecord | null {
+  const evidence = rustRecordEvidence(value);
+  if (!evidence || !isRecord(evidence.record)) return null;
+
+  const sheetId =
+    typeof evidence.record.sheetId === 'string'
+      ? evidence.record.sheetId
+      : stripRustObjectPrefix(evidence.objectId, 'sheet:');
+  if (sheetId.length === 0 || typeof evidence.record.name !== 'string') return null;
+
+  return {
+    sheetId,
+    name: evidence.record.name,
+    ...(isSafeCoordinate(evidence.record.rowCount) ? { rowCount: evidence.record.rowCount } : {}),
+    ...(isSafeCoordinate(evidence.record.columnCount)
+      ? { columnCount: evidence.record.columnCount }
+      : {}),
+  };
+}
+
+function rustSheetDiffValue(sheet: RustSheetRecord): VersionDiffValue {
+  const fields: { key: string; value: VersionSemanticValue }[] = [
+    { key: 'name', value: sheet.name },
+  ];
+  if (sheet.rowCount !== undefined) fields.push({ key: 'rowCount', value: sheet.rowCount });
+  if (sheet.columnCount !== undefined) {
+    fields.push({ key: 'columnCount', value: sheet.columnCount });
+  }
+  return { kind: 'value', value: { kind: 'object', fields } };
+}
+
+function sameRustSheetRecord(left: RustSheetRecord, right: RustSheetRecord): boolean {
+  return (
+    left.sheetId === right.sheetId &&
+    left.name === right.name &&
+    sameRustSheetShape(left, right)
+  );
+}
+
+function sameRustSheetShape(left: RustSheetRecord, right: RustSheetRecord): boolean {
+  return left.rowCount === right.rowCount && left.columnCount === right.columnCount;
 }
 
 function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {

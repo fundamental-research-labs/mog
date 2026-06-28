@@ -93,6 +93,17 @@ function semanticObjectRecord(
 }
 
 function semanticObjectRecordValue(state: SemanticWorkbookState, change: SemanticChange): unknown {
+  if (change.domainId === 'sheets' && change.objectKind === 'sheet') {
+    const sheet = state.sheets[stripObjectPrefix(change.objectId, 'sheet:')];
+    return sheet
+      ? {
+          sheetId: sheet.sheetId,
+          name: sheet.name,
+          rowCount: sheet.rowCount,
+          columnCount: sheet.columnCount,
+        }
+      : undefined;
+  }
   if (change.domainId === 'cells.formulas' && change.objectKind === 'cell-formula') {
     const cell = semanticCellRecord(state, stripObjectPrefix(change.objectId, 'formula:'));
     return cell?.formula;

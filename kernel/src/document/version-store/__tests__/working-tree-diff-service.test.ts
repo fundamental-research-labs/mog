@@ -107,6 +107,55 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(result.items[0]?.after).toEqual({ kind: 'value', value: 'hello' });
   });
 
+  it('projects a dirty sheet create from the Rust semantic diff', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 3, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [
+          semanticSheetChange({
+            changeId: 'added:sheet:sheet-2',
+            sheetId: 'sheet-2',
+            name: 'Sheet 2',
+          }),
+        ],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({ pageSize: 10 });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      structural: {
+        kind: 'metadata',
+        changeId: 'added:sheet:sheet-2',
+        domain: 'sheet',
+        entityId: 'sheet-2',
+        propertyPath: ['sheet'],
+      },
+      before: { kind: 'value', value: null },
+      after: {
+        kind: 'value',
+        value: {
+          kind: 'object',
+          fields: [
+            { key: 'name', value: 'Sheet 2' },
+            { key: 'rowCount', value: 1000 },
+            { key: 'columnCount', value: 26 },
+          ],
+        },
+      },
+      display: { entityLabel: { kind: 'value', value: 'Sheet 2' } },
+    });
+  });
+
   it('diffs against the current branch head when no explicit checkout session exists', async () => {
     const before = semanticEnvelope('before');
     const after = semanticEnvelope('after');
@@ -738,6 +787,32 @@ function semanticCellValueChange(changeId: string, after: string) {
       record: {
         valueKind: 'string',
         canonicalValue: after,
+      },
+    },
+  };
+}
+
+function semanticSheetChange(input: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly name: string;
+}) {
+  const objectId = `sheet:${input.sheetId}`;
+  return {
+    changeId: input.changeId,
+    kind: 'added',
+    domainId: 'sheets',
+    objectId,
+    objectKind: 'sheet',
+    afterRecord: {
+      objectId,
+      objectKind: 'sheet',
+      domainId: 'sheets',
+      record: {
+        sheetId: input.sheetId,
+        name: input.name,
+        rowCount: 1000,
+        columnCount: 26,
       },
     },
   };

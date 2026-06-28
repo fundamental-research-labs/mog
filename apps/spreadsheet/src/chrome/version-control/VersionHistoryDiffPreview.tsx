@@ -39,6 +39,10 @@ export type VersionDiffPreview = {
   readonly hasMoreDetail: boolean;
   readonly loadingGroups: boolean;
   readonly loadingDetail: boolean;
+  readonly inlineDetailMode: boolean;
+  readonly inlineDetailItems: readonly VersionDiffEntry[];
+  readonly loadingInlineDetail: boolean;
+  readonly inlineDetailHasMore: boolean;
   readonly filters?: VersionDiffFilterSelection;
 };
 
@@ -141,12 +145,18 @@ export function VersionHistoryDiffPreview({
         </p>
         <CommitRange base={diffPreview.base} target={diffPreview.target} />
         <DiffOverview preview={diffPreview} />
-        <DiffGroupList
-          preview={diffPreview}
-          onLoadMoreGroups={onLoadMoreGroups}
-          onSelectGroup={onSelectGroup}
-        />
-        <DiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
+        {diffPreview.inlineDetailMode ? (
+          <InlineDiffDetail preview={diffPreview} />
+        ) : (
+          <>
+            <DiffGroupList
+              preview={diffPreview}
+              onLoadMoreGroups={onLoadMoreGroups}
+              onSelectGroup={onSelectGroup}
+            />
+            <DiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
+          </>
+        )}
       </div>
     </section>
   );
@@ -626,6 +636,16 @@ function DiffDetail({
   readonly onLoadMoreDetail: () => void;
 }): React.JSX.Element | null {
   if (!preview.activeGroupId) return null;
+  if (preview.loadingDetail && preview.detailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-detail"
+      >
+        Loading detail
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-1.5" data-testid="version-history-diff-detail">
       <div className="flex items-center justify-between gap-2 text-[11px] text-ss-text-secondary">
@@ -650,13 +670,52 @@ function DiffDetail({
   );
 }
 
+function InlineDiffDetail({
+  preview,
+}: {
+  readonly preview: VersionDiffPreview;
+}): React.JSX.Element {
+  if (preview.loadingInlineDetail && preview.inlineDetailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-inline-detail"
+      >
+        Loading changes
+      </div>
+    );
+  }
+
+  if (preview.inlineDetailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-inline-detail"
+      >
+        No detail rows
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="version-history-diff-inline-detail">
+      <VirtualDetailList items={preview.inlineDetailItems} />
+      {preview.inlineDetailHasMore ? (
+        <div className="text-[11px] text-ss-text-secondary">
+          More changes are available in grouped detail.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function VirtualDetailList({
   items,
 }: {
   readonly items: readonly VersionDiffEntry[];
 }): React.JSX.Element {
   const rowHeight = 92;
-  const viewportHeight = 276;
+  const viewportHeight = Math.max(rowHeight, Math.min(276, Math.max(1, items.length) * rowHeight));
   const [scrollTop, setScrollTop] = useState(0);
   const visible = useMemo(() => {
     const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 2);

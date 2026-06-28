@@ -32,6 +32,10 @@ describe('VersionHistoryDiffPreview', () => {
           hasMoreDetail: false,
           loadingGroups: false,
           loadingDetail: false,
+          inlineDetailMode: false,
+          inlineDetailItems: [],
+          loadingInlineDetail: false,
+          inlineDetailHasMore: false,
         }}
         onLoadMoreGroups={jest.fn()}
         onSelectGroup={jest.fn()}
@@ -85,6 +89,10 @@ describe('VersionHistoryDiffPreview', () => {
           hasMoreDetail: false,
           loadingGroups: false,
           loadingDetail: false,
+          inlineDetailMode: false,
+          inlineDetailItems: [],
+          loadingInlineDetail: false,
+          inlineDetailHasMore: false,
         }}
         onLoadMoreGroups={jest.fn()}
         onSelectGroup={jest.fn()}

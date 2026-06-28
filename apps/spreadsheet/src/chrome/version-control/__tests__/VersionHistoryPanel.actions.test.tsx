@@ -27,7 +27,6 @@ import {
   openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
-  safeDomId,
   shortCommitId,
   versionDiffOverview,
   type VersionHistoryWorkbook,
@@ -530,8 +529,10 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffViewer).toHaveAttribute('data-state', 'changes');
     expect(diffViewer).toHaveTextContent('Changes');
     expect(screen.getByTestId('version-history-diff-overview')).toHaveTextContent('1 change');
-    expect(screen.getByTestId('version-history-diff-group-list')).toHaveTextContent('cells');
-    expect(diffViewer).not.toHaveTextContent('sheet-1!A1');
+    expect(screen.queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('version-history-diff-inline-detail')).toHaveTextContent(
+      'sheet-1!A1',
+    );
     expect(diffViewer).not.toHaveTextContent('cells value');
     const diffStatus = within(diffViewer).getByRole('status');
     expect(diffStatus).toHaveAttribute('aria-live', 'polite');
@@ -539,11 +540,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffStatus).toHaveTextContent(
       `Diff base ${shortCommitId(PARENT_COMMIT_ID)} target ${shortCommitId(
         HEAD_COMMIT_ID,
-      )}. 1 change. Loaded detail 0`,
-    );
-
-    await user.click(
-      screen.getByTestId(`version-history-diff-group-row-${safeDomId(DIFF_GROUP_ID)}`),
+      )}. 1 change. Loaded detail 1`,
     );
     await waitFor(() =>
       expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
@@ -551,12 +548,11 @@ describe('VersionHistoryPanelContent action flows', () => {
         HEAD_COMMIT_ID,
         {
           groupId: DIFF_GROUP_ID,
-          pageSize: 50,
+          pageSize: 200,
           includeDiagnostics: true,
         },
       ),
     );
-    expect(await screen.findByTestId('version-history-diff-detail')).toHaveTextContent('sheet-1!A1');
     expect(diffViewer).toHaveTextContent('Blank');
     expect(diffViewer).toHaveTextContent('42');
   });
@@ -615,16 +611,13 @@ describe('VersionHistoryPanelContent action flows', () => {
       },
     });
 
-    await user.click(
-      screen.getByTestId(`version-history-diff-group-row-${safeDomId(DIFF_GROUP_ID)}`),
-    );
     await waitFor(() =>
       expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
         PARENT_COMMIT_ID,
         HEAD_COMMIT_ID,
         {
           groupId: DIFF_GROUP_ID,
-          pageSize: 50,
+          pageSize: 200,
           includeDiagnostics: true,
           filters: {
             sheetIds: ['sheet-1'],

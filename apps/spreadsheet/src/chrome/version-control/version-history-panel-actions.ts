@@ -59,6 +59,8 @@ export type VersionMergeReviewPanelState = {
 };
 
 const VERSION_DIFF_DETAIL_PAGE_SIZE = 50;
+const VERSION_DIFF_INLINE_DETAIL_MAX_CHANGES = 200;
+const VERSION_DIFF_INLINE_DETAIL_PAGE_SIZE = 200;
 const VERSION_DIFF_MAX_CACHED_ROWS = 1_000;
 const VERSION_DIFF_MAX_CACHED_PAGES = 20;
 
@@ -225,6 +227,44 @@ export function useVersionHistoryPanelActions({
       return completeAction(action, nextState);
     },
     [completeAction, isActionCurrent, load, setRunningAction],
+  );
+
+  const loadInlineDiffDetail = useCallback(
+    async (preview: VersionDiffPreview, generation: number) => {
+      if (!preview.inlineDetailMode) return preview;
+
+      const groups = inlineDetailGroups(preview.overview);
+      const results = await Promise.all(
+        groups.map((group) =>
+          readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+            workbook.version.diffGroupDetail(preview.base, preview.target, {
+              groupId: group.groupId,
+              pageSize: VERSION_DIFF_INLINE_DETAIL_PAGE_SIZE,
+              includeDiagnostics: true,
+              ...diffFilterOptionsInput(preview.filters ?? {}),
+            }),
+          ),
+        ),
+      );
+      if (!isDiffGenerationCurrent(generation)) return undefined;
+
+      const failed = results.find((result) => !result.ok);
+      if (failed && !failed.ok) {
+        setActionState({ status: 'error', diagnostic: failed.diagnostic });
+        setDiffPreview((current) =>
+          current && current.base === preview.base && current.target === preview.target
+            ? { ...current, loadingInlineDetail: false }
+            : current,
+        );
+        return undefined;
+      }
+
+      return withInlineDetailPages(
+        preview,
+        results.map((result) => (result.ok ? result.value : undefined)).filter(isDefined),
+      );
+    },
+    [isDiffGenerationCurrent, workbook],
   );
 
   const cancelAction = useCallback(
@@ -419,10 +459,19 @@ export function useVersionHistoryPanelActions({
         return;
       }
 
-      setDiffPreview(createDiffPreview(parentId, commit.id, result.value));
+      const preview = createDiffPreview(parentId, commit.id, result.value);
+      if (preview.inlineDetailMode) {
+        const loadingPreview = { ...preview, loadingInlineDetail: true };
+        setDiffPreview(loadingPreview);
+        const hydratedPreview = await loadInlineDiffDetail(loadingPreview, generation);
+        if (!hydratedPreview) return;
+        setDiffPreview(hydratedPreview);
+      } else {
+        setDiffPreview(preview);
+      }
       setActionState({ status: 'idle' });
     },
-    [beginDiffLoad, canDiff, isDiffGenerationCurrent, workbook],
+    [beginDiffLoad, canDiff, isDiffGenerationCurrent, loadInlineDiffDetail, workbook],
   );
 
   const getBranchAvailabilityForCommit = useCallback(
@@ -451,10 +500,19 @@ export function useVersionHistoryPanelActions({
         return;
       }
 
-      setDiffPreview(createDiffPreview(target.baseCommitId, target.targetCommitId, result.value));
+      const preview = createDiffPreview(target.baseCommitId, target.targetCommitId, result.value);
+      if (preview.inlineDetailMode) {
+        const loadingPreview = { ...preview, loadingInlineDetail: true };
+        setDiffPreview(loadingPreview);
+        const hydratedPreview = await loadInlineDiffDetail(loadingPreview, generation);
+        if (!hydratedPreview) return;
+        setDiffPreview(hydratedPreview);
+      } else {
+        setDiffPreview(preview);
+      }
       setActionState({ status: 'success', message: `Loaded ${label} diff` });
     },
-    [beginDiffLoad, canDiff, isDiffGenerationCurrent, workbook],
+    [beginDiffLoad, canDiff, isDiffGenerationCurrent, loadInlineDiffDetail, workbook],
   );
 
   const handleLoadMoreDiffGroups = useCallback(async () => {
@@ -620,10 +678,19 @@ export function useVersionHistoryPanelActions({
         );
         return;
       }
-      setDiffPreview(createDiffPreview(base, target, result.value, filters));
+      const nextPreview = createDiffPreview(base, target, result.value, filters);
+      if (nextPreview.inlineDetailMode) {
+        const loadingPreview = { ...nextPreview, loadingInlineDetail: true };
+        setDiffPreview(loadingPreview);
+        const hydratedPreview = await loadInlineDiffDetail(loadingPreview, generation);
+        if (!hydratedPreview) return;
+        setDiffPreview(hydratedPreview);
+      } else {
+        setDiffPreview(nextPreview);
+      }
       setActionState({ status: 'idle' });
     },
-    [beginDiffLoad, diffPreview, isDiffGenerationCurrent, workbook],
+    [beginDiffLoad, diffPreview, isDiffGenerationCurrent, loadInlineDiffDetail, workbook],
   );
 
   const handlePreviewMerge = useCallback(
@@ -766,6 +833,7 @@ function createDiffPreview(
   overview: VersionDiffOverview,
   filters: VersionDiffFilterSelection = {},
 ): VersionDiffPreview {
+  const inlineDetailMode = shouldInlineDiffDetail(overview);
   return {
     base,
     target,
@@ -778,6 +846,10 @@ function createDiffPreview(
     hasMoreDetail: false,
     loadingGroups: false,
     loadingDetail: false,
+    inlineDetailMode,
+    inlineDetailItems: [],
+    loadingInlineDetail: false,
+    inlineDetailHasMore: false,
   };
 }
 
@@ -851,6 +923,42 @@ function boundedDetailCache(pages: readonly VersionSemanticDiffPage[]): {
     boundedPages.unshift(page);
   }
   return { pages: boundedPages, items: retainedItems };
+}
+
+function shouldInlineDiffDetail(overview: VersionDiffOverview): boolean {
+  const total = overview.summary.exactTotalChanges;
+  if (total === undefined || total === 0 || total > VERSION_DIFF_INLINE_DETAIL_MAX_CHANGES) {
+    return false;
+  }
+  if (overview.groups.nextCursor) return false;
+  const groups = inlineDetailGroups(overview);
+  return groups.length > 0 && groups.length === overview.groups.items.length;
+}
+
+function inlineDetailGroups(overview: VersionDiffOverview): VersionDiffOverview['groups']['items'] {
+  return overview.groups.items.filter((group) => group.hasDetail !== false);
+}
+
+function withInlineDetailPages(
+  preview: VersionDiffPreview,
+  pages: readonly VersionSemanticDiffPage[],
+): VersionDiffPreview {
+  const items = pages.flatMap((page) => page.items);
+  return {
+    ...preview,
+    detailPages: pages,
+    detailItems: items,
+    loadedDetailCount: items.length,
+    loadedDetailPageCount: pages.length,
+    hasMoreDetail: pages.some((page) => Boolean(page.nextCursor)),
+    inlineDetailItems: items,
+    inlineDetailHasMore: pages.some((page) => Boolean(page.nextCursor)),
+    loadingInlineDetail: false,
+  };
+}
+
+function isDefined<T>(value: T | undefined): value is T {
+  return value !== undefined;
 }
 
 function diffFilterOptionsInput(

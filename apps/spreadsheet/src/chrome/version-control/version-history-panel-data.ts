@@ -356,11 +356,11 @@ function emptyPagedRead<T>(limit: number): { readonly ok: true; readonly value: 
   return { ok: true, value: { items: [], limit } };
 }
 
-export function resolveSelectedOrHeadCommitId(
+export function resolvePreferredOrHeadCommitId(
   data: VersionHistoryData,
-  selectedCommitId: WorkbookCommitId | undefined,
+  preferredCommitId: WorkbookCommitId | undefined,
 ): WorkbookCommitId | undefined {
-  if (selectedCommitId) return selectedCommitId;
+  if (preferredCommitId) return preferredCommitId;
   return currentCheckoutCommitId(data.surface?.current) ?? data.head?.id;
 }
 

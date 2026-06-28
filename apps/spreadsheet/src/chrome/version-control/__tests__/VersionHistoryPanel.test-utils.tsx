@@ -39,7 +39,6 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:remotePromote',
 ];
 
-
 type RenderVersionHistoryPanelOptions = {
   readonly workbook?: VersionHistoryWorkbook;
   readonly onClose?: () => void;
@@ -174,28 +173,39 @@ export function createWorkbook(
         diagnostics: [],
       },
     })),
-    checkout: jest.fn(async () => ({
-      ok: true,
-      value: {
-        status: 'success',
-        materialization: 'planned',
-        plan: {
-          strategy: 'fullSnapshot',
-          target: {
-            kind: 'ref',
-            refName: 'refs/heads/budget',
-            commitId: PARENT_COMMIT_ID,
-            refRevision: { kind: 'counter', value: '2' },
+    checkout: jest.fn(
+      async (target: Parameters<VersionHistoryWorkbook['version']['checkout']>[0]) => {
+        const commitId = target.kind === 'commit' ? target.id : PARENT_COMMIT_ID;
+        return {
+          ok: true,
+          value: {
+            status: 'success',
+            materialization: 'planned',
+            plan: {
+              strategy: 'fullSnapshot',
+              target:
+                target.kind === 'commit'
+                  ? {
+                      kind: 'commit',
+                      commitId,
+                    }
+                  : {
+                      kind: 'ref',
+                      refName: target.kind === 'ref' ? target.name : 'refs/heads/budget',
+                      commitId,
+                      refRevision: { kind: 'counter', value: '2' },
+                    },
+              commitId,
+              parentCommitIds: [],
+              requiredDependencies: [],
+              requiredDependencyCount: 0,
+            },
+            diagnostics: [],
+            mutationGuarantee: 'no-workbook-mutation',
           },
-          commitId: PARENT_COMMIT_ID,
-          parentCommitIds: [],
-          requiredDependencies: [],
-          requiredDependencyCount: 0,
-        },
-        diagnostics: [],
-        mutationGuarantee: 'no-workbook-mutation',
+        };
       },
-    })),
+    ),
     diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
     ...overrides,
   };
@@ -383,8 +393,28 @@ export function failedNotFound<T = never>(target: string, reason: string): Versi
   return { ok: false, error: { code: 'not_found', target, reason } };
 }
 
-export function branchTargetTestId(commitId: string): string {
-  return `version-history-branch-target-${safeDomId(commitId)}`;
+export function commitRowTestId(commitId: string): string {
+  return `version-history-commit-row-${safeDomId(commitId)}`;
+}
+
+export function commitMenuButtonTestId(commitId: string): string {
+  return `version-history-commit-menu-button-${safeDomId(commitId)}`;
+}
+
+export function checkoutCommitTestId(commitId: string): string {
+  return `version-history-checkout-commit-${safeDomId(commitId)}`;
+}
+
+export function createBranchFromCommitTestId(commitId: string): string {
+  return `version-history-create-branch-from-commit-${safeDomId(commitId)}`;
+}
+
+export function commitBranchNameInputTestId(commitId: string): string {
+  return `version-history-commit-branch-name-input-${safeDomId(commitId)}`;
+}
+
+export function createBranchFromCommitSubmitTestId(commitId: string): string {
+  return `version-history-create-branch-from-commit-submit-${safeDomId(commitId)}`;
 }
 
 export function checkoutBranchTestId(refName: string): string {

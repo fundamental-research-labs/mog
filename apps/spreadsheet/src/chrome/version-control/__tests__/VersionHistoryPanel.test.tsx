@@ -12,8 +12,8 @@ import {
   HEAD_COMMIT_ID,
   LATEST_COMMIT_ID,
   PARENT_COMMIT_ID,
-  branchTargetTestId,
   checkoutBranchTestId,
+  commitMenuButtonTestId,
   createDeferred,
   createSurfaceStatus,
   createWorkbook,
@@ -173,6 +173,9 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
       'Current branch',
     );
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveAccessibleName(
+      'Current branch main',
+    );
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent('main');
     expect(screen.getByTestId('version-history-current-branch-trigger')).not.toHaveTextContent(
       shortCommitId(HEAD_COMMIT_ID),
@@ -191,17 +194,17 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByTestId('version-history-branch-name-input')).toHaveAccessibleName(
       'Branch name',
     );
-    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+    expect(screen.getByTestId('version-history-branch-source-summary')).toHaveAttribute(
       'data-version-commit-id',
       HEAD_COMMIT_ID,
     );
     expect(screen.getByTestId('version-history-create-branch-button')).toBeDisabled();
     expectReasonById('version-branch-disabled-reason', 'Enter a branch name.');
 
-    expect(screen.getByTestId(branchTargetTestId(HEAD_COMMIT_ID))).toHaveAccessibleName(
-      `Use ${shortCommitId(HEAD_COMMIT_ID)} as branch target`,
+    expect(screen.getByTestId(commitMenuButtonTestId(HEAD_COMMIT_ID))).toHaveAccessibleName(
+      `Open actions for ${shortCommitId(HEAD_COMMIT_ID)}`,
     );
-    expect(screen.getAllByText('Target')[0]).toBeVisible();
+    expect(screen.queryByText('Target')).not.toBeInTheDocument();
     expect(screen.getByTestId(checkoutBranchTestId('refs/heads/budget'))).toHaveAccessibleName(
       'Checkout budget',
     );
@@ -505,7 +508,7 @@ describe('VersionHistoryPanelContent', () => {
     expect(staleStatus).not.toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
     expect(staleStatus).not.toHaveTextContent(shortCommitId(LATEST_COMMIT_ID));
     await openCurrentBranchMenu(user);
-    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+    expect(screen.getByTestId('version-history-branch-source-summary')).toHaveAttribute(
       'data-version-commit-id',
       HEAD_COMMIT_ID,
     );
@@ -550,17 +553,18 @@ describe('VersionHistoryPanelContent', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     const statusSummary = await screen.findByRole('region', { name: 'Version status' });
-    expect(statusSummary).not.toHaveTextContent(shortCommitId(PARENT_COMMIT_ID));
+    expect(statusSummary).toHaveTextContent('Current checkout');
+    expect(statusSummary).toHaveTextContent(`Detached at ${shortCommitId(PARENT_COMMIT_ID)}`);
     expect(statusSummary).not.toHaveTextContent('refs/heads/main');
     expect(statusSummary).not.toHaveTextContent('main');
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
-      'Detached or unavailable',
+      `Detached at ${shortCommitId(PARENT_COMMIT_ID)}`,
     );
     await openCurrentBranchMenu(user);
     expect(screen.getByTestId('version-history-current-commit')).toHaveTextContent(
       shortCommitId(PARENT_COMMIT_ID),
     );
-    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
+    expect(screen.getByTestId('version-history-branch-source-summary')).toHaveAttribute(
       'data-version-commit-id',
       PARENT_COMMIT_ID,
     );

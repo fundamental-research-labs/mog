@@ -54,6 +54,36 @@ export function shortCommitId(id: string): string {
     : id;
 }
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+const DAY_MS = 24 * HOUR_MS;
+
+const RELATIVE_COMMIT_TIME_UNITS = [
+  { singular: 'year', plural: 'years', ms: 365 * DAY_MS },
+  { singular: 'month', plural: 'months', ms: 30 * DAY_MS },
+  { singular: 'week', plural: 'weeks', ms: 7 * DAY_MS },
+  { singular: 'day', plural: 'days', ms: DAY_MS },
+  { singular: 'hour', plural: 'hours', ms: HOUR_MS },
+  { singular: 'minute', plural: 'minutes', ms: MINUTE_MS },
+] as const;
+
+export function formatRelativeCommitTime(value: string, nowMs = Date.now()): string {
+  const timestampMs = Date.parse(value);
+  if (Number.isNaN(timestampMs)) return value;
+
+  const diffMs = nowMs - timestampMs;
+  const absDiffMs = Math.abs(diffMs);
+  if (absDiffMs < MINUTE_MS) return 'just now';
+
+  const unit =
+    RELATIVE_COMMIT_TIME_UNITS.find((candidate) => absDiffMs >= candidate.ms) ??
+    RELATIVE_COMMIT_TIME_UNITS[RELATIVE_COMMIT_TIME_UNITS.length - 1];
+  const amount = Math.max(1, Math.floor(absDiffMs / unit.ms));
+  const label = amount === 1 ? unit.singular : unit.plural;
+
+  return diffMs >= 0 ? `${amount} ${label} ago` : `in ${amount} ${label}`;
+}
+
 export function versionDiffPreviewState(page: VersionSemanticDiffPage): VersionDiffPreviewState {
   if (page.items.length > 0 && page.items.every((entry) => entry.structural.kind !== 'metadata')) {
     return {

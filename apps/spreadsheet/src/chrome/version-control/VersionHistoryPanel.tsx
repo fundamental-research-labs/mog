@@ -67,7 +67,7 @@ export function VersionHistoryPanelContent({
             <CurrentBranchMenu
               data={data}
               branchName={actions.branchName}
-              targetCommitId={actions.selectedOrHeadCommitId}
+              sourceCommitId={actions.currentOrHeadCommitId}
               branchEnabled={actions.canCreateBranch}
               checkoutEnabled={actions.canCheckout}
               branchDisabledReason={actions.branchDisabledReason}
@@ -119,11 +119,16 @@ export function VersionHistoryPanelContent({
               diffDisabledReason={actions.diffDisabledReason}
             />
             <CommitList
+              branchName={actions.branchName}
               commits={data.commits}
-              selectedCommitId={actions.selectedCommitId}
+              checkoutEnabled={actions.canCheckout}
+              checkoutDisabledReason={actions.checkoutDisabledReason}
               diffEnabled={actions.canDiff}
               diffDisabledReason={actions.diffDisabledReason}
-              onSelectCommit={actions.setSelectedCommitId}
+              getBranchAvailabilityForCommit={actions.getBranchAvailabilityForCommit}
+              onBranchNameChange={actions.setBranchName}
+              onCheckoutCommit={actions.handleCheckoutCommit}
+              onCreateBranchFromCommit={actions.handleCreateBranch}
               onDiffCommit={actions.handleDiffCommit}
             />
             {showReviewProposalSurface ? (

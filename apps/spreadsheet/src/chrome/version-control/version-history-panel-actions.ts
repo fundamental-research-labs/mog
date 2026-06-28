@@ -25,7 +25,7 @@ import {
   commitDirtyRefreshFenceRequiresRefresh,
   commitDirtyRefreshFenceSnapshot,
   readVersionResult,
-  resolveSelectedOrHeadCommitId,
+  resolvePreferredOrHeadCommitId,
   type CommitDirtyRefreshFence,
   type VersionHistoryData,
   type VersionHistoryWorkbook,
@@ -46,7 +46,6 @@ export function useVersionHistoryPanelActions({
 }: UseVersionHistoryPanelActionsInput) {
   const [commitMessage, setCommitMessage] = useState('');
   const [branchName, setBranchName] = useState('');
-  const [selectedCommitId, setSelectedCommitId] = useState<WorkbookCommitId | undefined>();
   const [actionState, setActionState] = useState<VersionActionState>({ status: 'idle' });
   const [diffPreview, setDiffPreview] = useState<VersionDiffPreview | undefined>();
   const actionSequenceRef = useRef(0);
@@ -59,9 +58,7 @@ export function useVersionHistoryPanelActions({
   latestDataRef.current = data;
 
   const actionBusy = actionState.status === 'running';
-  const selectedOrHeadCommitId = data
-    ? resolveSelectedOrHeadCommitId(data, selectedCommitId)
-    : undefined;
+  const currentOrHeadCommitId = data ? resolvePreferredOrHeadCommitId(data, undefined) : undefined;
   const setCommitDirtyRefreshRequired = useCallback((fence: CommitDirtyRefreshFence) => {
     commitDirtyRefreshFenceRef.current = fence;
     setCommitDirtyRefreshFence(fence);
@@ -100,7 +97,7 @@ export function useVersionHistoryPanelActions({
     actionBusy,
     loading,
     branchName,
-    selectedOrHeadCommitId,
+    currentOrHeadCommitId,
   );
   const checkoutAvailability = getCheckoutAvailability(data, actionBusy, loading);
   const diffAvailability = getDiffAvailability(data, actionBusy, loading);
@@ -221,7 +218,6 @@ export function useVersionHistoryPanelActions({
 
     markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
     setCommitMessage('');
-    setSelectedCommitId(result.value.id);
     await refreshThenCompleteAction(action, { status: 'success', message: 'Committed changes' });
   }, [
     beginAction,
@@ -237,53 +233,62 @@ export function useVersionHistoryPanelActions({
     workbook,
   ]);
 
-  const handleCreateBranch = useCallback(async () => {
-    if (!data || !canCreateBranch || !selectedOrHeadCommitId) return;
-    const action = beginAction('branch');
-    if (!action) return;
+  const handleCreateBranch = useCallback(
+    async (targetCommitIdOverride?: WorkbookCommitId) => {
+      const targetCommitId = targetCommitIdOverride ?? currentOrHeadCommitId;
+      const availability =
+        targetCommitId === currentOrHeadCommitId
+          ? branchAvailability
+          : getBranchAvailability(data, actionBusy, loading, branchName, targetCommitId);
+      if (!data || !availability.enabled || !targetCommitId) return;
+      const action = beginAction('branch');
+      if (!action) return;
 
-    const normalizedBranch = validateVersionBranchCreationName(branchName, data.refs);
-    if (!normalizedBranch.ok) {
-      cancelAction(action);
-      return;
-    }
+      const normalizedBranch = validateVersionBranchCreationName(branchName, data.refs);
+      if (!normalizedBranch.ok) {
+        cancelAction(action);
+        return;
+      }
 
-    const name = normalizedBranch.branch.refName as Parameters<
-      WorkbookVersion['createBranch']
-    >[0]['name'];
-    if (!setRunningAction(action, 'Creating branch')) return;
-    const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
-      workbook.version.createBranch({
-        name,
-        targetCommitId: selectedOrHeadCommitId,
-        expectedAbsent: true,
-      }),
-    );
-    if (!isActionCurrent(action)) return;
-    if (!result.ok) {
-      completeAction(action, { status: 'error', diagnostic: result.diagnostic });
-      return;
-    }
+      const name = normalizedBranch.branch.refName as Parameters<
+        WorkbookVersion['createBranch']
+      >[0]['name'];
+      if (!setRunningAction(action, 'Creating branch')) return;
+      const result = await readVersionResult('VERSION_UI_CREATE_BRANCH_FAILED', () =>
+        workbook.version.createBranch({
+          name,
+          targetCommitId,
+          expectedAbsent: true,
+        }),
+      );
+      if (!isActionCurrent(action)) return;
+      if (!result.ok) {
+        completeAction(action, { status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
 
-    setBranchName('');
-    setSelectedCommitId(result.value.commitId);
-    await refreshThenCompleteAction(action, {
-      status: 'success',
-      message: `Created ${displayBranchName(result.value.name)}`,
-    });
-  }, [
-    beginAction,
-    branchName,
-    canCreateBranch,
-    cancelAction,
-    completeAction,
-    data,
-    isActionCurrent,
-    refreshThenCompleteAction,
-    selectedOrHeadCommitId,
-    setRunningAction,
-    workbook,
-  ]);
+      setBranchName('');
+      await refreshThenCompleteAction(action, {
+        status: 'success',
+        message: `Created ${displayBranchName(result.value.name)}`,
+      });
+    },
+    [
+      beginAction,
+      branchName,
+      cancelAction,
+      completeAction,
+      actionBusy,
+      branchAvailability,
+      data,
+      currentOrHeadCommitId,
+      isActionCurrent,
+      loading,
+      refreshThenCompleteAction,
+      setRunningAction,
+      workbook,
+    ],
+  );
 
   const handleCheckoutRef = useCallback(
     async (ref: VersionRef) => {
@@ -309,11 +314,46 @@ export function useVersionHistoryPanelActions({
       }
 
       markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
-      setSelectedCommitId(result.value.plan.commitId);
-      await refreshThenCompleteAction(action, {
-        status: 'success',
-        message: `Checked out ${displayBranchName(ref.name)}`,
-      });
+      await refreshThenCompleteAction(action, { status: 'idle' });
+    },
+    [
+      beginAction,
+      canCheckout,
+      completeAction,
+      data,
+      isActionCurrent,
+      markCommitDirtyRefreshRequired,
+      refreshThenCompleteAction,
+      setRunningAction,
+      workbook,
+    ],
+  );
+
+  const handleCheckoutCommit = useCallback(
+    async (commitId: WorkbookCommitId) => {
+      if (!canCheckout) return;
+      const action = beginAction('checkout');
+      if (!action) return;
+      const dirtyRefreshFenceData = data;
+
+      if (!setRunningAction(action, 'Checking out commit')) return;
+      const result = await readVersionResult('VERSION_UI_CHECKOUT_FAILED', () =>
+        workbook.version.checkout(
+          {
+            kind: 'commit',
+            id: commitId,
+          },
+          { includeDiagnostics: true },
+        ),
+      );
+      if (!isActionCurrent(action)) return;
+      if (!result.ok) {
+        completeAction(action, { status: 'error', diagnostic: result.diagnostic });
+        return;
+      }
+
+      markCommitDirtyRefreshRequired(dirtyRefreshFenceData);
+      await refreshThenCompleteAction(action, { status: 'idle' });
     },
     [
       beginAction,
@@ -349,6 +389,13 @@ export function useVersionHistoryPanelActions({
       setActionState({ status: 'success', message: 'Loaded parent diff' });
     },
     [canDiff, workbook],
+  );
+
+  const getBranchAvailabilityForCommit = useCallback(
+    (commitId: WorkbookCommitId) => {
+      return getBranchAvailability(data, actionBusy, loading, branchName, commitId);
+    },
+    [actionBusy, branchName, data, loading],
   );
 
   const handleReviewProposalDiff = useCallback(
@@ -391,15 +438,15 @@ export function useVersionHistoryPanelActions({
     commitMessage,
     diffDisabledReason: diffAvailability.disabledReason,
     diffPreview,
+    getBranchAvailabilityForCommit,
+    handleCheckoutCommit,
     handleCheckoutRef,
     handleCommit,
     handleCreateBranch,
     handleDiffCommit,
     handleReviewProposalDiff,
-    selectedCommitId,
-    selectedOrHeadCommitId,
+    currentOrHeadCommitId,
     setBranchName,
     setCommitMessage,
-    setSelectedCommitId,
   };
 }

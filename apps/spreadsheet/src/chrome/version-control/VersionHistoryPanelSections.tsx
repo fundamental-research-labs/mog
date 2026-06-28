@@ -1,10 +1,11 @@
-import { useState, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   Check,
   ChevronRight,
   GitBranch,
   GitCommit,
   GitCompare,
+  MoreHorizontal,
   Plus,
   RefreshCw,
   X,
@@ -15,16 +16,18 @@ import type {
   WorkbookCommitId,
   WorkbookCommitSummary,
 } from '@mog-sdk/contracts/api';
+import { createVirtualRef, Popover, PopoverAnchor, PopoverContent } from '@mog/shell';
 
 import {
   DisabledReason,
   safeDomId,
   sanitizeVersionStatusText,
+  type VersionActionAvailability,
 } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
 import { displayBranchName, publicBranchLabel } from './version-branch-name';
-import { shortCommitId } from './version-history-format';
+import { formatRelativeCommitTime, shortCommitId } from './version-history-format';
 import type { VersionHistoryData } from './version-history-panel-data';
 
 export function VersionHistoryPanelHeader({
@@ -77,7 +80,7 @@ export function VersionHistoryPanelHeader({
 export function CurrentBranchMenu({
   data,
   branchName,
-  targetCommitId,
+  sourceCommitId,
   branchEnabled,
   checkoutEnabled,
   branchDisabledReason,
@@ -88,7 +91,7 @@ export function CurrentBranchMenu({
 }: {
   readonly data: VersionHistoryData;
   readonly branchName: string;
-  readonly targetCommitId?: WorkbookCommitId;
+  readonly sourceCommitId?: WorkbookCommitId;
   readonly branchEnabled: boolean;
   readonly checkoutEnabled: boolean;
   readonly branchDisabledReason?: string;
@@ -107,9 +110,7 @@ export function CurrentBranchMenu({
     sanitizeVersionStatusText(branchDisabledReason, 'Create branch is unavailable.') ??
     'Create branch is unavailable.';
   const currentBranchName = currentBranchRefName(data);
-  const currentBranchLabel = currentBranchName
-    ? displayBranchName(currentBranchName)
-    : 'Detached or unavailable';
+  const currentCheckout = currentCheckoutSummary(data, currentBranchName);
   const headId = data.head?.id ?? data.surface?.current.headCommitId;
 
   return (
@@ -124,7 +125,7 @@ export function CurrentBranchMenu({
           className="flex h-7 min-w-0 cursor-pointer list-none items-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-body-sm [&::-webkit-details-marker]:hidden"
           data-testid="version-history-current-branch-trigger"
           tabIndex={0}
-          aria-label={`Current branch ${currentBranchLabel}`}
+          aria-label={currentCheckout.ariaLabel}
         >
           <GitBranch
             size={15}
@@ -132,11 +133,13 @@ export function CurrentBranchMenu({
             aria-hidden="true"
             className="shrink-0 text-ss-text-secondary"
           />
-          <span className="shrink-0 text-[11px] font-medium uppercase text-ss-text-tertiary">
-            Current branch
-          </span>
-          <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-ss-text">
-            {currentBranchLabel}
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+            <span className="shrink-0 text-[11px] font-medium text-ss-text-tertiary">
+              {currentCheckout.statusLabel}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-body-sm font-medium text-ss-text">
+              {currentCheckout.label}
+            </span>
           </span>
           <ChevronRight
             size={15}
@@ -178,9 +181,9 @@ export function CurrentBranchMenu({
                   className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <TargetSummary
-                    testId="version-history-branch-target-summary"
-                    commitId={targetCommitId}
+                  <BranchSourceSummary
+                    testId="version-history-branch-source-summary"
+                    commitId={sourceCommitId}
                   />
                   <button
                     type="button"
@@ -299,12 +302,53 @@ function currentBranchRefName(data: VersionHistoryData): string | undefined {
   return branchName && publicBranchLabel(branchName) ? branchName : undefined;
 }
 
+function currentCheckoutSummary(
+  data: VersionHistoryData,
+  currentBranchName: string | undefined,
+): {
+  readonly statusLabel: string;
+  readonly label: string;
+  readonly ariaLabel: string;
+} {
+  if (currentBranchName) {
+    const label = displayBranchName(currentBranchName);
+    return { statusLabel: 'Current branch', label, ariaLabel: `Current branch ${label}` };
+  }
+
+  const commitId =
+    data.surface?.current.checkedOutCommitId ??
+    data.surface?.current.headCommitId ??
+    data.head?.id;
+  if (data.surface?.current.detached) {
+    if (commitId) {
+      const label = `Detached at ${shortCommitId(commitId)}`;
+      return { statusLabel: 'Current checkout', label, ariaLabel: `Current checkout ${label}` };
+    }
+    return {
+      statusLabel: 'Current checkout',
+      label: 'Detached checkout',
+      ariaLabel: 'Current checkout detached',
+    };
+  }
+
+  if (commitId) {
+    const label = shortCommitId(commitId);
+    return { statusLabel: 'Current checkout', label, ariaLabel: `Current checkout ${label}` };
+  }
+
+  return {
+    statusLabel: 'Current checkout',
+    label: 'Unavailable',
+    ariaLabel: 'Current checkout unavailable',
+  };
+}
+
 function isCurrentBranchRef(currentBranchName: string | undefined, ref: VersionRef): boolean {
   if (!currentBranchName) return false;
   return displayBranchName(currentBranchName) === displayBranchName(ref.name);
 }
 
-function TargetSummary({
+function BranchSourceSummary({
   testId,
   commitId,
 }: {
@@ -317,27 +361,65 @@ function TargetSummary({
       data-testid={testId}
       data-version-commit-id={commitId}
     >
-      Target {commitId ? shortCommitId(commitId) : 'unavailable'}
+      From current checkout {commitId ? shortCommitId(commitId) : 'unavailable'}
     </span>
   );
 }
 
 export function CommitList({
+  branchName,
   commits,
-  selectedCommitId,
+  checkoutEnabled,
+  checkoutDisabledReason,
   diffEnabled,
   diffDisabledReason,
-  onSelectCommit,
+  getBranchAvailabilityForCommit,
+  onBranchNameChange,
+  onCheckoutCommit,
+  onCreateBranchFromCommit,
   onDiffCommit,
 }: {
+  readonly branchName: string;
   readonly commits: readonly WorkbookCommitSummary[];
-  readonly selectedCommitId?: WorkbookCommitId;
+  readonly checkoutEnabled: boolean;
+  readonly checkoutDisabledReason?: string;
   readonly diffEnabled: boolean;
   readonly diffDisabledReason?: string;
-  readonly onSelectCommit: (commitId: WorkbookCommitId) => void;
+  readonly getBranchAvailabilityForCommit: (
+    commitId: WorkbookCommitId,
+  ) => VersionActionAvailability;
+  readonly onBranchNameChange: (value: string) => void;
+  readonly onCheckoutCommit: (commitId: WorkbookCommitId) => void;
+  readonly onCreateBranchFromCommit: (commitId: WorkbookCommitId) => void;
   readonly onDiffCommit: (commit: WorkbookCommitSummary) => void;
 }): React.JSX.Element {
+  const [contextMenu, setContextMenu] = useState<CommitContextMenuState | undefined>();
   const diffReasonId = 'version-diff-disabled-reason';
+  const checkoutReasonId = 'version-commit-checkout-disabled-reason';
+  const checkoutStatus =
+    sanitizeVersionStatusText(checkoutDisabledReason, 'Checkout is unavailable.') ??
+    'Checkout is unavailable.';
+
+  const openCommitMenu = (
+    commit: WorkbookCommitSummary,
+    point: { readonly x: number; readonly y: number },
+  ) => {
+    setContextMenu({
+      commit,
+      mode: 'actions',
+      x: Math.max(8, point.x),
+      y: Math.max(8, point.y),
+    });
+  };
+
+  const beginBranchFromCommit = (commit: WorkbookCommitSummary) => {
+    onBranchNameChange('');
+    setContextMenu((current) =>
+      current && current.commit.id === commit.id
+        ? { ...current, mode: 'branch' }
+        : { commit, mode: 'branch', x: 24, y: 96 },
+    );
+  };
 
   return (
     <section className="flex flex-col gap-2" aria-label="Recent commits">
@@ -349,7 +431,7 @@ export function CommitList({
       {commits.length === 0 ? (
         <div className="text-body-sm text-ss-text-secondary py-2">No commits available</div>
       ) : (
-        <ol className="flex flex-col gap-2 m-0 p-0 list-none">
+        <ol className="flex flex-col gap-1.5 m-0 p-0 list-none">
           {commits.map((commit) => {
             const rootDiffReason =
               commit.parents.length === 0 ? 'Root commits do not have a parent diff.' : undefined;
@@ -362,61 +444,78 @@ export function CommitList({
                 : undefined;
             const buttonTitle = !diffEnabled ? diffDisabledReason : rootDiffReason;
             const commitTestId = safeDomId(commit.id);
+            const menuOpen = contextMenu?.commit.id === commit.id;
 
             return (
               <li
                 key={commit.id}
-                className={`border rounded-sm p-2 bg-ss-surface ${
-                  selectedCommitId === commit.id ? 'border-ss-primary' : 'border-ss-border'
+                data-testid={`version-history-commit-row-${commitTestId}`}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  openCommitMenu(commit, { x: event.clientX, y: event.clientY });
+                }}
+                className={`border rounded-sm bg-ss-surface px-2 py-1.5 ${
+                  menuOpen ? 'border-ss-primary' : 'border-ss-border'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-body-sm font-medium text-ss-text truncate">
-                      {annotationText(commit.annotation?.title) ??
-                        annotationText(commit.annotation?.message) ??
-                        shortCommitId(commit.id)}
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="min-w-0 flex-1 truncate text-body-sm font-medium leading-4 text-ss-text">
+                        {annotationText(commit.annotation?.title) ??
+                          annotationText(commit.annotation?.message) ??
+                          shortCommitId(commit.id)}
+                      </div>
+                      <time
+                        className="shrink-0 whitespace-nowrap text-[11px] leading-4 text-ss-text-secondary"
+                        dateTime={commit.createdAt}
+                      >
+                        {formatRelativeCommitTime(commit.createdAt)}
+                      </time>
                     </div>
-                    <div className="font-mono text-[11px] text-ss-text-secondary truncate">
-                      {shortCommitId(commit.id)}
+                    <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-3 text-ss-text-secondary">
+                      <span className="shrink-0 truncate font-mono">{shortCommitId(commit.id)}</span>
+                      <span aria-hidden="true" className="shrink-0">
+                        ·
+                      </span>
+                      <span className="min-w-0 truncate">
+                        {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <time
-                      className="text-[11px] text-ss-text-secondary"
-                      dateTime={commit.createdAt}
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid={`version-history-parent-diff-button-${commitTestId}`}
+                      onClick={() => onDiffCommit(commit)}
+                      disabled={!commitDiffEnabled}
+                      aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
+                      aria-describedby={describedBy}
+                      title={buttonTitle}
+                      className="inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
                     >
-                      {formatCommitTime(commit.createdAt)}
-                    </time>
-                    <span className="text-[11px] font-medium text-ss-text-secondary">Target</span>
-                    <input
-                      type="radio"
-                      name="version-history-branch-target"
-                      data-testid={`version-history-branch-target-${commitTestId}`}
-                      checked={selectedCommitId === commit.id}
-                      onChange={() => onSelectCommit(commit.id)}
-                      aria-label={`Use ${shortCommitId(commit.id)} as branch target`}
-                      className="h-3.5 w-3.5 accent-ss-primary"
-                    />
+                      <GitCompare size={12} strokeWidth={1.75} aria-hidden="true" />
+                      <span>Diff</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`version-history-commit-menu-button-${commitTestId}`}
+                      onClick={(event) => {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        openCommitMenu(commit, {
+                          x: rect.right || event.clientX,
+                          y: rect.bottom || event.clientY,
+                        });
+                      }}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      aria-label={`Open actions for ${shortCommitId(commit.id)}`}
+                      title="Commit actions"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text"
+                    >
+                      <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
                   </div>
-                </div>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0 text-[11px] text-ss-text-secondary truncate">
-                    {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}
-                  </div>
-                  <button
-                    type="button"
-                    data-testid={`version-history-parent-diff-button-${commitTestId}`}
-                    onClick={() => onDiffCommit(commit)}
-                    disabled={!commitDiffEnabled}
-                    aria-label={`Diff ${shortCommitId(commit.id)} against parent`}
-                    aria-describedby={describedBy}
-                    title={buttonTitle}
-                    className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-[11px] font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
-                  >
-                    <GitCompare size={13} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Diff</span>
-                  </button>
                 </div>
                 {diffEnabled ? (
                   <DisabledReason id={commitDiffReasonId} reason={rootDiffReason} />
@@ -426,7 +525,240 @@ export function CommitList({
           })}
         </ol>
       )}
+      {contextMenu ? (
+        <CommitContextMenu
+          state={contextMenu}
+          branchName={branchName}
+          branchAvailability={getBranchAvailabilityForCommit(contextMenu.commit.id)}
+          checkoutEnabled={checkoutEnabled}
+          checkoutReasonId={checkoutReasonId}
+          checkoutStatus={checkoutStatus}
+          diffEnabled={diffEnabled}
+          diffDisabledReason={diffDisabledReason}
+          onBranchNameChange={onBranchNameChange}
+          onBeginBranch={() => beginBranchFromCommit(contextMenu.commit)}
+          onClose={() => setContextMenu(undefined)}
+          onCancelBranch={() =>
+            setContextMenu((current) => (current ? { ...current, mode: 'actions' } : current))
+          }
+          onCheckoutCommit={() => {
+            const commitId = contextMenu.commit.id;
+            setContextMenu(undefined);
+            onCheckoutCommit(commitId);
+          }}
+          onCreateBranch={() => {
+            const commitId = contextMenu.commit.id;
+            setContextMenu(undefined);
+            onCreateBranchFromCommit(commitId);
+          }}
+          onDiffCommit={() => {
+            const commit = contextMenu.commit;
+            setContextMenu(undefined);
+            onDiffCommit(commit);
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+type CommitContextMenuState = {
+  readonly commit: WorkbookCommitSummary;
+  readonly mode: 'actions' | 'branch';
+  readonly x: number;
+  readonly y: number;
+};
+
+function CommitContextMenu({
+  state,
+  branchName,
+  branchAvailability,
+  checkoutEnabled,
+  checkoutReasonId,
+  checkoutStatus,
+  diffEnabled,
+  diffDisabledReason,
+  onBranchNameChange,
+  onBeginBranch,
+  onClose,
+  onCancelBranch,
+  onCheckoutCommit,
+  onCreateBranch,
+  onDiffCommit,
+}: {
+  readonly state: CommitContextMenuState;
+  readonly branchName: string;
+  readonly branchAvailability: VersionActionAvailability;
+  readonly checkoutEnabled: boolean;
+  readonly checkoutReasonId: string;
+  readonly checkoutStatus: string;
+  readonly diffEnabled: boolean;
+  readonly diffDisabledReason?: string;
+  readonly onBranchNameChange: (value: string) => void;
+  readonly onBeginBranch: () => void;
+  readonly onClose: () => void;
+  readonly onCancelBranch: () => void;
+  readonly onCheckoutCommit: () => void;
+  readonly onCreateBranch: () => void;
+  readonly onDiffCommit: () => void;
+}): React.JSX.Element {
+  const virtualRef = useRef(createVirtualRef(state.x, state.y));
+  virtualRef.current = createVirtualRef(state.x, state.y);
+  const commitId = state.commit.id;
+  const shortId = shortCommitId(commitId);
+  const commitTestId = safeDomId(commitId);
+  const rootDiffReason =
+    state.commit.parents.length === 0 ? 'Root commits do not have a parent diff.' : undefined;
+  const commitDiffEnabled = diffEnabled && !rootDiffReason;
+  const diffStatus =
+    sanitizeVersionStatusText(
+      !diffEnabled ? diffDisabledReason : rootDiffReason,
+      'Diff is unavailable.',
+    ) ?? 'Diff is unavailable.';
+  const branchReasonId = `version-commit-branch-disabled-${commitTestId}`;
+
+  const handleOpenChange = (open: boolean) => {
+    if (!open) onClose();
+  };
+
+  if (state.mode === 'branch') {
+    const branchStatus =
+      sanitizeVersionStatusText(
+        branchAvailability.disabledReason,
+        'Create branch is unavailable.',
+      ) ?? 'Create branch is unavailable.';
+
+    return (
+      <Popover open={true} onOpenChange={handleOpenChange}>
+        <PopoverAnchor virtualRef={virtualRef} />
+        <PopoverContent
+          side="bottom"
+          align="start"
+          sideOffset={0}
+          width={260}
+          role="dialog"
+          aria-label={`Create branch from ${shortId}`}
+          data-testid="version-history-commit-context-menu"
+          data-commit-id={commitId}
+          className="p-2"
+          onCloseAutoFocus={(event) => event.preventDefault()}
+        >
+          <form
+            className="flex flex-col gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (branchAvailability.enabled) onCreateBranch();
+            }}
+          >
+            <div className="min-w-0">
+              <div className="truncate text-body-sm font-medium text-ss-text">
+                Create branch from commit
+              </div>
+              <div className="truncate font-mono text-[11px] text-ss-text-secondary">{shortId}</div>
+            </div>
+            <label htmlFor={`version-commit-branch-name-${commitTestId}`} className="sr-only">
+              Branch name
+            </label>
+            <input
+              id={`version-commit-branch-name-${commitTestId}`}
+              data-testid={`version-history-commit-branch-name-input-${commitTestId}`}
+              type="text"
+              value={branchName}
+              onChange={(event) => onBranchNameChange(event.currentTarget.value)}
+              placeholder="budget-forecast"
+              autoFocus
+              className="w-full rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-body-sm text-ss-text outline-none focus:border-ss-primary"
+            />
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={onCancelBranch}
+                className="inline-flex h-7 items-center justify-center rounded-sm px-2 text-body-sm text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                data-testid={`version-history-create-branch-from-commit-submit-${commitTestId}`}
+                disabled={!branchAvailability.enabled}
+                aria-describedby={!branchAvailability.enabled ? branchReasonId : undefined}
+                title={!branchAvailability.enabled ? branchStatus : undefined}
+                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-sm border border-ss-border bg-ss-surface-secondary px-2 text-body-sm font-medium text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-ss-surface-secondary"
+              >
+                <Plus size={13} strokeWidth={1.75} aria-hidden="true" />
+                <span>Create branch</span>
+              </button>
+            </div>
+            <DisabledReason
+              id={branchReasonId}
+              reason={!branchAvailability.enabled ? branchStatus : undefined}
+            />
+          </form>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
+  return (
+    <Popover open={true} onOpenChange={handleOpenChange}>
+      <PopoverAnchor virtualRef={virtualRef} />
+      <PopoverContent
+        side="bottom"
+        align="start"
+        sideOffset={0}
+        width={236}
+        role="menu"
+        aria-label={`Commit actions for ${shortId}`}
+        data-testid="version-history-commit-context-menu"
+        data-commit-id={commitId}
+        className="p-1"
+        onCloseAutoFocus={(event) => event.preventDefault()}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          data-testid={`version-history-checkout-commit-${commitTestId}`}
+          onClick={onCheckoutCommit}
+          disabled={!checkoutEnabled}
+          aria-describedby={!checkoutEnabled ? checkoutReasonId : undefined}
+          title={!checkoutEnabled ? checkoutStatus : undefined}
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <GitCommit size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">Checkout commit</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid={`version-history-create-branch-from-commit-${commitTestId}`}
+          onClick={onBeginBranch}
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover"
+        >
+          <GitBranch size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">Create branch from commit</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-testid={`version-history-context-diff-${commitTestId}`}
+          onClick={onDiffCommit}
+          disabled={!commitDiffEnabled}
+          title={!commitDiffEnabled ? diffStatus : undefined}
+          className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-body-sm text-ss-text transition-colors hover:bg-ss-surface-hover disabled:opacity-50 disabled:hover:bg-transparent"
+        >
+          <GitCompare size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate">Diff against parent</span>
+        </button>
+        <DisabledReason
+          id={checkoutReasonId}
+          reason={!checkoutEnabled ? checkoutStatus : undefined}
+        />
+        <DisabledReason
+          id={`version-context-diff-disabled-${commitTestId}`}
+          reason={!commitDiffEnabled ? diffStatus : undefined}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -457,15 +789,4 @@ export function DiagnosticsBlock({
 
 function annotationText(value: VersionAnnotationText | undefined): string | undefined {
   return value ? (value.kind === 'text' ? value.value : 'Redacted') : undefined;
-}
-
-function formatCommitTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
 }

@@ -142,6 +142,19 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.getByText('Graph not initialized.')).toBeInTheDocument();
   });
 
+  it('renders commit history timestamps as relative time', async () => {
+    const dateNow = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-06-22T10:42:00.000Z'));
+
+    try {
+      renderVersionHistoryPanel();
+
+      expect(await screen.findByText('32 minutes ago')).toBeInTheDocument();
+      expect(screen.getByText('42 minutes ago')).toBeInTheDocument();
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   it('calls the close handler from the panel close affordance', async () => {
     const onClose = jest.fn();
 

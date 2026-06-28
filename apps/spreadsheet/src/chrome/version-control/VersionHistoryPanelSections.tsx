@@ -316,9 +316,7 @@ function currentCheckoutSummary(
   }
 
   const commitId =
-    data.surface?.current.checkedOutCommitId ??
-    data.surface?.current.headCommitId ??
-    data.head?.id;
+    data.surface?.current.checkedOutCommitId ?? data.surface?.current.headCommitId ?? data.head?.id;
   if (data.surface?.current.detached) {
     if (commitId) {
       const label = `Detached at ${shortCommitId(commitId)}`;
@@ -474,9 +472,11 @@ export function CommitList({
                       </time>
                     </div>
                     <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-3 text-ss-text-secondary">
-                      <span className="shrink-0 truncate font-mono">{shortCommitId(commit.id)}</span>
+                      <span className="shrink-0 truncate font-mono">
+                        {shortCommitId(commit.id)}
+                      </span>
                       <span aria-hidden="true" className="shrink-0">
-                        ·
+                        |
                       </span>
                       <span className="min-w-0 truncate">
                         {commit.author.displayName ?? commit.author.actorKind ?? 'Unknown author'}

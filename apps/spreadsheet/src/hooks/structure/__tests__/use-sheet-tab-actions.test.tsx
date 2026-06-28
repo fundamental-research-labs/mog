@@ -11,7 +11,13 @@ type ImportDurabilityMock = {
 
 const setActiveSheetMock = jest.fn();
 const openDeleteSheetConfirmDialogMock = jest.fn();
-const workbookOnMock = jest.fn().mockReturnValue(jest.fn());
+const workbookEventHandlers = new Map<string, Array<() => void>>();
+const workbookOnMock = jest.fn((event: string, handler: () => void) => {
+  const handlers = workbookEventHandlers.get(event) ?? [];
+  handlers.push(handler);
+  workbookEventHandlers.set(event, handlers);
+  return jest.fn();
+});
 let activeSheetId = 'sheet-1' as SheetId;
 let importDurabilityMock: ImportDurabilityMock | undefined;
 
@@ -59,9 +65,10 @@ const { useSheetTabActions } = await import('../use-sheet-tab-actions');
 describe('useSheetTabActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    workbookEventHandlers.clear();
+    resetSheetNames();
     activeSheetId = 'sheet-1' as SheetId;
     importDurabilityMock = undefined;
-    workbookOnMock.mockReturnValue(jest.fn());
   });
 
   it('materializes a pending imported sheet before activating it', async () => {
@@ -120,4 +127,35 @@ describe('useSheetTabActions', () => {
 
     expect(setActiveSheetMock).toHaveBeenCalledTimes(1);
   });
+
+  it('refreshes tab metadata when version checkout materializes a different mirror', () => {
+    const { result } = renderHook(() => useSheetTabActions());
+
+    expect(result.current.sheets.map((sheet) => sheet.name)).toEqual([
+      'Sheet1',
+      'Sheet2',
+      'Sheet3',
+    ]);
+
+    act(() => {
+      sheetNames.clear();
+      sheetNames.set('sheet-1' as SheetId, 'Sheet1');
+      const checkoutHandlers =
+        workbookEventHandlers.get('workbook:version-checkout-materialized') ??
+        [];
+      expect(checkoutHandlers).toHaveLength(1);
+      checkoutHandlers.forEach((handler) => handler());
+    });
+
+    expect(result.current.sheets.map((sheet) => sheet.name)).toEqual([
+      'Sheet1',
+    ]);
+  });
 });
+
+function resetSheetNames(): void {
+  sheetNames.clear();
+  sheetNames.set('sheet-1' as SheetId, 'Sheet1');
+  sheetNames.set('sheet-2' as SheetId, 'Sheet2');
+  sheetNames.set('sheet-3' as SheetId, 'Sheet3');
+}

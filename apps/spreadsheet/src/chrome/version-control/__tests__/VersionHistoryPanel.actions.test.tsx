@@ -561,6 +561,78 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(diffViewer).toHaveTextContent('42');
   });
 
+  it('applies sheet, domain, and operation filters through the public diff overview APIs', async () => {
+    const workbook = createWorkbook();
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    await screen.findByTestId('version-history-diff-viewer');
+
+    expect(screen.getByTestId('version-history-diff-filter-address')).toBeDisabled();
+    expect(screen.getByTestId('version-history-diff-filter-address')).toHaveAccessibleDescription(
+      'Address filters require a historical range index.',
+    );
+    expect(screen.getByTestId('version-history-diff-filter-search')).toBeDisabled();
+    expect(screen.getByTestId('version-history-diff-filter-search')).toHaveAccessibleDescription(
+      'Formula and text search requires a redaction-aware search index.',
+    );
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-domain'), {
+      target: { value: 'cells' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(2));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
+      groupLimit: 50,
+      includeDiagnostics: true,
+      filters: { domains: ['cells'] },
+    });
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-sheet'), {
+      target: { value: 'sheet-1' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(3));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
+      groupLimit: 50,
+      includeDiagnostics: true,
+      filters: { sheetIds: ['sheet-1'], domains: ['cells'] },
+    });
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-operation'), {
+      target: { value: 'changed' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(4));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
+      groupLimit: 50,
+      includeDiagnostics: true,
+      filters: {
+        sheetIds: ['sheet-1'],
+        domains: ['cells'],
+        operations: ['changed'],
+      },
+    });
+
+    await user.click(
+      screen.getByTestId(`version-history-diff-group-row-${safeDomId(DIFF_GROUP_ID)}`),
+    );
+    await waitFor(() =>
+      expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
+        PARENT_COMMIT_ID,
+        HEAD_COMMIT_ID,
+        {
+          groupId: DIFF_GROUP_ID,
+          pageSize: 50,
+          includeDiagnostics: true,
+          filters: {
+            sheetIds: ['sheet-1'],
+            domains: ['cells'],
+            operations: ['changed'],
+          },
+        },
+      ),
+    );
+  });
+
   it.each(parentDiffPreviewCases)(
     'renders a distinct %s parent diff preview state',
     async (_, overview, state, title, label) => {

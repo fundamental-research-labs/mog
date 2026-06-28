@@ -126,6 +126,7 @@ export function VersionHistoryPanelContent({
               onLoadMoreGroups={actions.handleLoadMoreDiffGroups}
               onSelectGroup={actions.handleSelectDiffGroup}
               onLoadMoreDetail={actions.handleLoadMoreDiffDetail}
+              onFiltersChange={actions.handleDiffFiltersChange}
             />
             {actions.mergeReview ? (
               <MergeReviewSection

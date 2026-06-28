@@ -3,9 +3,11 @@ import { useMemo, useState } from 'react';
 import type {
   VersionDiffEntry,
   VersionDiffDisplayValue,
+  VersionDiffFilters,
   VersionDiffGroup,
   VersionDiffGroupId,
   VersionDiffOverview,
+  VersionDiffOperation,
   VersionDiffValue,
   VersionSemanticDiffPage,
   VersionSemanticValue,
@@ -37,6 +39,15 @@ export type VersionDiffPreview = {
   readonly hasMoreDetail: boolean;
   readonly loadingGroups: boolean;
   readonly loadingDetail: boolean;
+  readonly filters?: VersionDiffFilterSelection;
+};
+
+export type VersionDiffFilterOperation = Exclude<VersionDiffOperation, 'mixed'>;
+
+export type VersionDiffFilterSelection = {
+  readonly sheetId?: string;
+  readonly domain?: string;
+  readonly operation?: VersionDiffFilterOperation;
 };
 
 export function VersionHistoryDiffPreview({
@@ -46,6 +57,7 @@ export function VersionHistoryDiffPreview({
   onLoadMoreGroups,
   onSelectGroup,
   onLoadMoreDetail,
+  onFiltersChange,
 }: {
   readonly diffPreview?: VersionDiffPreview;
   readonly diffEnabled?: boolean;
@@ -53,6 +65,7 @@ export function VersionHistoryDiffPreview({
   readonly onLoadMoreGroups: () => void;
   readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
   readonly onLoadMoreDetail: () => void;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
 }): React.JSX.Element {
   if (!diffPreview) {
     return (
@@ -118,6 +131,7 @@ export function VersionHistoryDiffPreview({
         </p>
         <CommitRange base={diffPreview.base} target={diffPreview.target} />
         <DiffOverview preview={diffPreview} />
+        <DiffFilterControls preview={diffPreview} onFiltersChange={onFiltersChange} />
         <DiffGroupList
           preview={diffPreview}
           onLoadMoreGroups={onLoadMoreGroups}
@@ -127,6 +141,17 @@ export function VersionHistoryDiffPreview({
       </div>
     </section>
   );
+}
+
+export function versionDiffFiltersFromSelection(
+  selection: VersionDiffFilterSelection,
+): VersionDiffFilters | undefined {
+  const filters: VersionDiffFilters = {
+    ...(selection.sheetId ? { sheetIds: [selection.sheetId] } : {}),
+    ...(selection.domain ? { domains: [selection.domain] } : {}),
+    ...(selection.operation ? { operations: [selection.operation] } : {}),
+  };
+  return Object.keys(filters).length === 0 ? undefined : filters;
 }
 
 export function VersionHistoryWorkingTreeDiffPreview({
@@ -244,6 +269,189 @@ function DiffOverview({ preview }: { readonly preview: VersionDiffPreview }): Re
       ) : null}
     </div>
   );
+}
+
+function DiffFilterControls({
+  preview,
+  onFiltersChange,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
+}): React.JSX.Element {
+  const options = diffFilterOptions(preview);
+  const filters = preview.filters ?? {};
+  const addressReason = unsupportedFilterReason(preview.overview, 'address');
+  const searchReason = unsupportedFilterReason(preview.overview, 'search');
+  const controlsDisabled = !onFiltersChange || preview.loadingGroups || preview.loadingDetail;
+
+  const update = (patch: VersionDiffFilterSelection) => {
+    if (!onFiltersChange) return;
+    onFiltersChange(cleanFilterSelection({ ...filters, ...patch }));
+  };
+
+  return (
+    <div
+      className="grid grid-cols-3 gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]"
+      data-testid="version-history-diff-filters"
+    >
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Sheet</span>
+        <select
+          data-testid="version-history-diff-filter-sheet"
+          value={filters.sheetId ?? ''}
+          onChange={(event) => update({ sheetId: event.currentTarget.value || undefined })}
+          disabled={controlsDisabled || options.sheets.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All sheets</option>
+          {options.sheets.map((sheet) => (
+            <option key={sheet.value} value={sheet.value}>
+              {sheet.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Domain</span>
+        <select
+          data-testid="version-history-diff-filter-domain"
+          value={filters.domain ?? ''}
+          onChange={(event) => update({ domain: event.currentTarget.value || undefined })}
+          disabled={controlsDisabled || options.domains.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All domains</option>
+          {options.domains.map((domain) => (
+            <option key={domain} value={domain}>
+              {domain}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Operation</span>
+        <select
+          data-testid="version-history-diff-filter-operation"
+          value={filters.operation ?? ''}
+          onChange={(event) =>
+            update({
+              operation: (event.currentTarget.value || undefined) as VersionDiffFilterOperation,
+            })
+          }
+          disabled={controlsDisabled || options.operations.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All operations</option>
+          {options.operations.map((operation) => (
+            <option key={operation} value={operation}>
+              {operation}
+            </option>
+          ))}
+        </select>
+      </label>
+      <DisabledFilterControl
+        label="Address"
+        testId="version-history-diff-filter-address"
+        reason={addressReason}
+      />
+      <DisabledFilterControl
+        label="Search"
+        testId="version-history-diff-filter-search"
+        reason={searchReason}
+      />
+    </div>
+  );
+}
+
+function DisabledFilterControl({
+  label,
+  testId,
+  reason,
+}: {
+  readonly label: string;
+  readonly testId: string;
+  readonly reason: string;
+}): React.JSX.Element {
+  const reasonId = `${testId}-reason`;
+  return (
+    <label className="col-span-3 flex min-w-0 flex-col gap-0.5 sm:col-span-1">
+      <span className="text-[10px] font-medium text-ss-text-secondary">{label}</span>
+      <input
+        data-testid={testId}
+        aria-describedby={reasonId}
+        value=""
+        readOnly
+        disabled
+        placeholder="Unavailable"
+        className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+      />
+      <span id={reasonId} className="truncate text-[10px] text-ss-text-secondary">
+        {reason}
+      </span>
+    </label>
+  );
+}
+
+function diffFilterOptions(preview: VersionDiffPreview): {
+  readonly sheets: readonly { readonly value: string; readonly label: string }[];
+  readonly domains: readonly string[];
+  readonly operations: readonly VersionDiffFilterOperation[];
+} {
+  const sheets = new Map<string, string>();
+  const domains = new Set<string>();
+  const operations = new Set<VersionDiffFilterOperation>();
+
+  for (const group of preview.overview.groups.items) {
+    if (group.sheetId) {
+      sheets.set(group.sheetId, formatDisplayValue(group.sheetName) ?? group.sheetId);
+    }
+    domains.add(group.domain);
+    if (group.operation !== 'mixed') operations.add(group.operation);
+  }
+  for (const count of preview.overview.summary.domainCounts) {
+    domains.add(count.domain);
+  }
+  for (const count of preview.overview.summary.operationCounts) {
+    operations.add(count.operation);
+  }
+
+  const filters = preview.filters ?? {};
+  if (filters.sheetId && !sheets.has(filters.sheetId)) {
+    sheets.set(filters.sheetId, filters.sheetId);
+  }
+  if (filters.domain) domains.add(filters.domain);
+  if (filters.operation) operations.add(filters.operation);
+
+  return {
+    sheets: [...sheets.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort(
+        (left, right) =>
+          left.label.localeCompare(right.label) || left.value.localeCompare(right.value),
+      ),
+    domains: [...domains].sort(),
+    operations: [...operations].sort(),
+  };
+}
+
+function unsupportedFilterReason(
+  overview: VersionDiffOverview,
+  filter: 'address' | 'search',
+): string {
+  return (
+    overview.unsupportedFilters.find((item) => item.filter === filter)?.reason ??
+    (filter === 'address'
+      ? 'Address filters require a historical range index.'
+      : 'Formula and text search requires a redaction-aware search index.')
+  );
+}
+
+function cleanFilterSelection(selection: VersionDiffFilterSelection): VersionDiffFilterSelection {
+  return {
+    ...(selection.sheetId ? { sheetId: selection.sheetId } : {}),
+    ...(selection.domain ? { domain: selection.domain } : {}),
+    ...(selection.operation ? { operation: selection.operation } : {}),
+  };
 }
 
 function DiffGroupList({

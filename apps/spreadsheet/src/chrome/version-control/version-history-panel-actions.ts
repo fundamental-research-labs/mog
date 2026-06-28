@@ -20,7 +20,11 @@ import {
   getDiffAvailability,
 } from './availability/version-action-availability';
 import { type VersionActionState } from './VersionActionStatus';
-import type { VersionDiffPreview } from './VersionHistoryDiffPreview';
+import {
+  versionDiffFiltersFromSelection,
+  type VersionDiffFilterSelection,
+  type VersionDiffPreview,
+} from './VersionHistoryDiffPreview';
 import type { ReviewProposalDiffTarget } from './ReviewProposalSurface';
 import {
   VERSION_COMMIT_DIRTY_REFRESH_EVENTS,
@@ -469,6 +473,7 @@ export function useVersionHistoryPanelActions({
         groupLimit: current.overview.groups.limit,
         groupPageToken: cursor,
         includeDiagnostics: true,
+        ...diffFilterOptionsInput(current.filters ?? {}),
       }),
     );
     if (!isDiffGenerationCurrent(generation)) return;
@@ -514,6 +519,7 @@ export function useVersionHistoryPanelActions({
           groupId,
           pageSize: VERSION_DIFF_DETAIL_PAGE_SIZE,
           includeDiagnostics: true,
+          ...diffFilterOptionsInput(current.filters ?? {}),
         }),
       );
       if (!isDiffGenerationCurrent(generation)) return;
@@ -558,6 +564,7 @@ export function useVersionHistoryPanelActions({
         pageToken: detailNextCursor,
         pageSize: VERSION_DIFF_DETAIL_PAGE_SIZE,
         includeDiagnostics: true,
+        ...diffFilterOptionsInput(current.filters ?? {}),
       }),
     );
     if (!isDiffGenerationCurrent(generation)) return;
@@ -576,6 +583,48 @@ export function useVersionHistoryPanelActions({
         : preview,
     );
   }, [diffPreview, isDiffGenerationCurrent, workbook]);
+
+  const handleDiffFiltersChange = useCallback(
+    async (filters: VersionDiffFilterSelection) => {
+      const current = diffPreview;
+      if (!current) return;
+      const generation = beginDiffLoad();
+      const { base, target } = current;
+      setDiffPreview({
+        ...current,
+        filters,
+        activeGroupId: undefined,
+        detailPages: [],
+        detailItems: [],
+        detailNextCursor: undefined,
+        loadedDetailCount: 0,
+        loadedDetailPageCount: 0,
+        hasMoreDetail: false,
+        loadingGroups: true,
+        loadingDetail: false,
+      });
+      const result = await readVersionResult('VERSION_UI_DIFF_FAILED', () =>
+        workbook.version.diffOverview(base, target, {
+          groupLimit: 50,
+          includeDiagnostics: true,
+          ...diffFilterOptionsInput(filters),
+        }),
+      );
+      if (!isDiffGenerationCurrent(generation)) return;
+      if (!result.ok) {
+        setActionState({ status: 'error', diagnostic: result.diagnostic });
+        setDiffPreview((preview) =>
+          preview && preview.base === base && preview.target === target
+            ? { ...preview, loadingGroups: false }
+            : preview,
+        );
+        return;
+      }
+      setDiffPreview(createDiffPreview(base, target, result.value, filters));
+      setActionState({ status: 'idle' });
+    },
+    [beginDiffLoad, diffPreview, isDiffGenerationCurrent, workbook],
+  );
 
   const handlePreviewMerge = useCallback(
     async (sourceRef: VersionRef) => {
@@ -686,6 +735,7 @@ export function useVersionHistoryPanelActions({
     handleDiffCommit,
     handleLoadMoreDiffDetail,
     handleLoadMoreDiffGroups,
+    handleDiffFiltersChange,
     handleApplyMerge,
     handleChooseMergeResolution,
     handlePreviewMerge,
@@ -714,11 +764,13 @@ function createDiffPreview(
   base: WorkbookCommitId,
   target: WorkbookCommitId,
   overview: VersionDiffOverview,
+  filters: VersionDiffFilterSelection = {},
 ): VersionDiffPreview {
   return {
     base,
     target,
     overview,
+    filters,
     detailPages: [],
     detailItems: [],
     loadedDetailCount: 0,
@@ -799,4 +851,11 @@ function boundedDetailCache(pages: readonly VersionSemanticDiffPage[]): {
     boundedPages.unshift(page);
   }
   return { pages: boundedPages, items: retainedItems };
+}
+
+function diffFilterOptionsInput(
+  filters: VersionDiffFilterSelection,
+): { readonly filters?: ReturnType<typeof versionDiffFiltersFromSelection> } {
+  const options = versionDiffFiltersFromSelection(filters);
+  return options ? { filters: options } : {};
 }

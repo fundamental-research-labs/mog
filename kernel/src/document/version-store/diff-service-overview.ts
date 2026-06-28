@@ -247,7 +247,7 @@ async function buildProjection(
     };
   }
 
-  const unsupportedFilters = unsupportedFilterDiagnostics(filters);
+  const unsupportedFilters = unsupportedFilterAvailability(filters);
   const changes: SemanticChange[] = [];
   const scanLimit = Math.min(rawChanges.length, EXACT_OVERVIEW_SCAN_CHANGE_LIMIT);
   for (let index = 0; index < scanLimit; index++) {
@@ -297,7 +297,7 @@ async function buildProjection(
       ),
       redactedChangeCount: changes.filter((change) => change.redacted).length,
       unsupportedChangeCount: changes.filter((change) => change.unsupported).length,
-      incomplete: !exact || unsupportedFilters.length > 0,
+      incomplete: !exact || diagnostics.length > 0,
       diagnostics: summaryDiagnostics,
     },
     unsupportedFilters,
@@ -648,35 +648,40 @@ function changeMatchesFilters(change: SemanticChange, filters: VersionDiffFilter
   return true;
 }
 
-function unsupportedFilterDiagnostics(
+function unsupportedFilterAvailability(
   filters: VersionDiffFilters | undefined,
 ): readonly VersionDiffUnsupportedFilter[] {
-  const unsupported: VersionDiffUnsupportedFilter[] = [];
-  if (filters?.address) {
-    unsupported.push(unsupportedFilter('address', 'Address filters require a historical range index.'));
-  }
-  if (filters?.search) {
-    unsupported.push(
-      unsupportedFilter('search', 'Formula and text search requires a redaction-aware search index.'),
-    );
-  }
-  return unsupported;
+  return [
+    unsupportedFilter(
+      'address',
+      'Address filters require a historical range index.',
+      Boolean(filters?.address),
+    ),
+    unsupportedFilter(
+      'search',
+      'Formula and text search requires a redaction-aware search index.',
+      Boolean(filters?.search),
+    ),
+  ];
 }
 
 function unsupportedFilter(
   filter: VersionDiffUnsupportedFilter['filter'],
   reason: string,
+  includeDiagnostic: boolean,
 ): VersionDiffUnsupportedFilter {
   return {
     filter,
     reason,
-    diagnostics: [
-      diagnostic('VERSION_INVALID_OPTIONS', reason, {
-        severity: 'warning',
-        recoverability: 'unsupported',
-        details: { filter },
-      }),
-    ],
+    diagnostics: includeDiagnostic
+      ? [
+          diagnostic('VERSION_INVALID_OPTIONS', reason, {
+            severity: 'warning',
+            recoverability: 'unsupported',
+            details: { filter },
+          }),
+        ]
+      : [],
   };
 }
 

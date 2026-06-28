@@ -38,7 +38,7 @@ import { calendarPartsInTz } from './calendar-tz';
 import { type CellInput, toCellInput } from './cell-input';
 import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
 import { assertUnprotectedTableDefinition } from '../protected-table-operations';
-import type { MutationAdmissionOptions } from '../../../bridges/compute';
+import { withDirectEditRange, type MutationAdmissionOptions } from '../../../bridges/compute';
 
 // =============================================================================
 // Cell Read Operations
@@ -790,8 +790,26 @@ export async function relocateCells(
   sheetId: SheetId,
   source: CellRange,
   target: { row: number; col: number },
+  options?: MutationAdmissionOptions,
 ): Promise<void> {
   await awaitAllSheetsBeforeCellWrite(ctx);
+  const rowCount = source.endRow - source.startRow + 1;
+  const colCount = source.endCol - source.startCol + 1;
+  const optionsWithDirectRanges = withDirectEditRange(
+    withDirectEditRange(
+      options,
+      sheetId,
+      source.startRow,
+      source.startCol,
+      source.endRow,
+      source.endCol,
+    ),
+    sheetId,
+    target.row,
+    target.col,
+    target.row + rowCount - 1,
+    target.col + colCount - 1,
+  );
   await ctx.computeBridge.relocateCellsYrs(
     sheetId,
     source.startRow,
@@ -801,6 +819,7 @@ export async function relocateCells(
     sheetId,
     target.row,
     target.col,
+    optionsWithDirectRanges,
   );
   invalidateWorksheetValidationCache(ctx, sheetId);
 }

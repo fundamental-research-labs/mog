@@ -95,8 +95,11 @@ interface VersionMutationCaptureContext {
 
 const REQUIRED_VERSION_CONTEXT_PUBLIC_MUTATION_COMMANDS = new Set([
   'compute_batch_set_cells_by_position',
+  'compute_copy_range',
   'compute_create_sheet_with_default_col_width',
   'compute_delete_sheet',
+  'compute_relocate_cells',
+  'compute_relocate_cells_yrs',
   'compute_rename_compute_sheet',
   'compute_set_date_value',
   'compute_set_time_value',

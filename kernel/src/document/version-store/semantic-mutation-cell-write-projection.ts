@@ -18,7 +18,10 @@ export function isDirectCellValueOperation(operation: string): boolean {
     operation === 'compute_clear_range' ||
     operation === 'compute_clear_range_and_return_ids' ||
     operation === 'compute_clear_range_with_mode' ||
-    operation === 'compute_replace_all_in_range'
+    operation === 'compute_replace_all_in_range' ||
+    operation === 'compute_copy_range' ||
+    operation === 'compute_relocate_cells' ||
+    operation === 'compute_relocate_cells_yrs'
   );
 }
 

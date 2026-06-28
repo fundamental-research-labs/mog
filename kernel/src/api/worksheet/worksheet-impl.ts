@@ -104,6 +104,7 @@ import { type CallableDisposable, toDisposable } from '@mog/spreadsheet-utils/di
 import { KernelError, toMogSdkError } from '../../errors';
 
 import type { RangeCellData } from '../../bridges/compute/compute-types.gen';
+import { withDirectEditRange } from '../../bridges/compute';
 import { CellMetadataCache, createCellMetadataCache } from '../../bridges/wire/cell-metadata-cache';
 import type { DocumentContext } from '../../context';
 import * as CellReads from '../../domain/cells/cell-reads';
@@ -2448,7 +2449,17 @@ export class WorksheetImpl implements Worksheet {
       endRow: targetRow + (parsed.endRow - parsed.startRow),
       endCol: targetCol + (parsed.endCol - parsed.startCol),
     });
-    await CellOps.relocateCells(this.ctx, this.sheetId, parsed, { row: targetRow, col: targetCol });
+    await CellOps.relocateCells(
+      this.ctx,
+      this.sheetId,
+      parsed,
+      { row: targetRow, col: targetCol },
+      createVersionMutationAdmissionOptions(this.ctx, {
+        operationIdPrefix: 'worksheet.moveTo',
+        sheetIds: [this.sheetId],
+        domainIds: ['cells', 'cells.formats.direct'],
+      }),
+    );
   }
 
   async copyFrom(
@@ -2531,6 +2542,18 @@ export class WorksheetImpl implements Worksheet {
       copyType,
       skipBlanks,
       transpose,
+      withDirectEditRange(
+        createVersionMutationAdmissionOptions(this.ctx, {
+          operationIdPrefix: 'worksheet.copyFrom',
+          sheetIds: [this.sheetId],
+          domainIds: ['cells', 'cells.formats.direct'],
+        }),
+        this.sheetId,
+        tr,
+        tc,
+        tr + targetRowCount - 1,
+        tc + targetColCount - 1,
+      ),
     );
   }
 

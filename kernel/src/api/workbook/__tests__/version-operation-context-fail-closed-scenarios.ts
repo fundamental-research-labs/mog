@@ -10,7 +10,10 @@ export function registerVersionOperationContextFailClosedScenarios(): void {
   describe('VersionOperationContext fail-closed admission for public worksheet/sheet writes', () => {
     it.each([
       ['compute_batch_set_cells_by_position'],
+      ['compute_copy_range'],
       ['compute_create_sheet_with_default_col_width'],
+      ['compute_relocate_cells'],
+      ['compute_relocate_cells_yrs'],
       ['compute_rename_compute_sheet'],
       ['compute_delete_sheet'],
     ])('rejects %s before transport when context is missing', async (operation) => {

@@ -13,6 +13,8 @@ function createTransport(): BridgeTransport & { call: jest.Mock } {
     call: jest.fn(async (command: string) => {
       switch (command) {
         case 'compute_batch_set_cells_by_position':
+        case 'compute_copy_range':
+        case 'compute_relocate_cells_yrs':
           return [new Uint8Array(), mutationResult()];
         case 'compute_create_data_table':
           return [

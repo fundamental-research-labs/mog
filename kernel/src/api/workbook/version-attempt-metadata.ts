@@ -295,7 +295,7 @@ function mapObjectDigest(value: unknown): ObjectDigest | undefined {
     if (!OBJECT_DIGEST_KEYS.has(key)) return undefined;
   }
   if (
-    (value.algorithm !== 'sha256' && value.algorithm !== 'blake3') ||
+    value.algorithm !== 'sha256' ||
     typeof value.digest !== 'string' ||
     !OBJECT_DIGEST_RE.test(value.digest)
   ) {

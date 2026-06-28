@@ -40,6 +40,25 @@ export {
   VERSION_DIFF_RESOURCE_LIMITS,
   isPublicVersionDiffCursor,
 } from './diff-pagination';
+export {
+  VersionPublicApiValueError,
+  VersionResultError,
+  branchName,
+  branchRef,
+  expectedHeadFromRef,
+  formatVersionDiagnostics,
+  isVersionBlocked,
+  isVersionBranchName,
+  isVersionObjectDigest,
+  isVersionRefName,
+  isVersionStaleTarget,
+  isWorkbookCommitId,
+  parseVersionBranchName,
+  parseVersionObjectDigest,
+  parseVersionRefName,
+  parseWorkbookCommitId,
+  unwrapVersionResult,
+} from './public-api-helpers';
 export * from './version-capability-gate';
 
 export const VERSION_OPERATION_KINDS = Object.freeze([
@@ -131,11 +150,11 @@ export const VERSION_HISTORY_GAP_STATUSES = Object.freeze([
 export type VersionHistoryGapStatus = (typeof VERSION_HISTORY_GAP_STATUSES)[number];
 
 export type VersionActorKind = 'user' | 'service' | 'system' | 'migration' | 'automation';
-export type VersionObjectDigestAlgorithm = 'sha256' | 'sha512' | 'blake3' | 'opaque';
+export type VersionObjectDigestAlgorithm = 'sha256';
 
 export interface ObjectDigest {
   readonly algorithm: VersionObjectDigestAlgorithm;
-  readonly value: string;
+  readonly digest: string;
   readonly byteLength?: number;
 }
 

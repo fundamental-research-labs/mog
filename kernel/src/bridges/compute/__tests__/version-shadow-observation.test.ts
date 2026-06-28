@@ -162,11 +162,17 @@ describe('version mutation shadow observation', () => {
       expect.arrayContaining([
         expect.objectContaining({
           artifactId: 'operation-context',
-          digest: expect.objectContaining({ algorithm: 'opaque' }),
+          digest: expect.objectContaining({
+            algorithm: 'sha256',
+            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          }),
         }),
         expect.objectContaining({
           artifactId: 'mutation-result',
-          digest: expect.objectContaining({ algorithm: 'opaque' }),
+          digest: expect.objectContaining({
+            algorithm: 'sha256',
+            digest: expect.stringMatching(/^[0-9a-f]{64}$/),
+          }),
         }),
       ]),
     );

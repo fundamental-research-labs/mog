@@ -7,7 +7,7 @@ export type JsonValue =
   | { readonly [key: string]: JsonValue };
 
 export type ObjectDigest = {
-  readonly algorithm: 'blake3' | 'sha256';
+  readonly algorithm: 'sha256';
   readonly digest: string;
   readonly byteLength?: number;
 };

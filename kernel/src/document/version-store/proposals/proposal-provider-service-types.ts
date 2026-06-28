@@ -1,4 +1,12 @@
-import type { VersionMainRefName, VersionRefName, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import type {
+  VersionMainRefName,
+  VersionMergeReview,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
+  VersionRefName,
+  VersionResult,
+  WorkbookCommitId,
+} from '@mog-sdk/contracts/api';
 import type { VersionAuthor as GraphVersionAuthor } from '@mog-sdk/contracts/versioning';
 
 import type { CreateBranchResult, ReadBranchResult } from '../branch-service';
@@ -46,6 +54,13 @@ export type ResolvedBranchHead = {
   readonly refName: VersionMainRefName | VersionRefName;
   readonly commitId: WorkbookCommitId;
   readonly refVersion: RefVersion;
+};
+
+export type ProposalMergeReviewService = {
+  previewMerge(
+    input: VersionPreviewMergeInput,
+    options?: VersionPreviewMergeOptions,
+  ): MaybePromise<VersionResult<VersionMergeReview>>;
 };
 
 export const PROPOSAL_BRANCH_AUTHOR: GraphVersionAuthor = Object.freeze({

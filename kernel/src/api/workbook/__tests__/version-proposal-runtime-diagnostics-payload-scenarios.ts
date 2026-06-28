@@ -36,7 +36,7 @@ export function registerProposalRuntimeDiagnosticsPayloadScenarios(): void {
       versioning: { proposalService },
     });
 
-    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
+    const result = await version.proposals.advanced.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: true,

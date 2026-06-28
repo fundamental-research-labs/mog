@@ -16,7 +16,7 @@ export async function createReadyReviewedProposal(
   approve = true,
 ) {
   const opened = await openProposalWorkspace(version, suffix);
-  const committed = await version.commitProposalWorkspace({
+  const committed = await version.proposals.advanced.commitProposalWorkspace({
     clientRequestId: `workspace-commit-${suffix}`,
     proposalId: opened.proposalId,
     workspaceId: opened.workspaceId,
@@ -25,7 +25,7 @@ export async function createReadyReviewedProposal(
     message: 'Agent proposal commit',
   });
   if (!committed.ok) throw new Error(`expected proposal commit success: ${committed.error.code}`);
-  const verified = await version.markProposalVerified({
+  const verified = await version.proposals.advanced.markProposalVerified({
     clientRequestId: `proposal-verify-${suffix}`,
     proposalId: opened.proposalId,
     expectedRevision: 3,
@@ -33,7 +33,7 @@ export async function createReadyReviewedProposal(
     verification: PASSED_VERIFICATION,
   });
   if (!verified.ok) throw new Error(`expected proposal verify success: ${verified.error.code}`);
-  const review = await version.openProposalReview({
+  const review = await version.proposals.advanced.openProposalReview({
     clientRequestId: `proposal-review-${suffix}`,
     proposalId: opened.proposalId,
     expectedRevision: 4,

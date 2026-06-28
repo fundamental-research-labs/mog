@@ -167,6 +167,63 @@ describe('SDK agent API guidance', () => {
     expect(autofillPreview).toContain('await ws.autoFill');
   });
 
+  it('surfaces proposal porcelain and advanced CAS guidance through generated metadata', () => {
+    expect(resolveGuidanceTarget('wb.version.proposals')).toEqual(
+      expect.objectContaining({
+        path: 'wb.version.proposals',
+        kind: 'property',
+        targetInterface: 'VersionProposalPorcelainApi',
+      }),
+    );
+    expect(resolveGuidanceTarget('wb.version.proposals.create')).toEqual(
+      expect.objectContaining({
+        path: 'wb.version.proposals.create',
+        kind: 'method',
+      }),
+    );
+    expect(resolveGuidanceTarget('wb.version.proposals.advanced.acceptProposal')).toEqual(
+      expect.objectContaining({
+        path: 'wb.version.proposals.advanced.acceptProposal',
+        kind: 'method',
+      }),
+    );
+
+    const proposals = api.describe('wb.version.proposals');
+    expect(proposals && 'methods' in proposals ? proposals.methods.map((m) => m.name) : []).toEqual(
+      expect.arrayContaining(['create', 'get', 'list']),
+    );
+
+    const create = api.describe('wb.version.proposals.create');
+    expect(create && 'signature' in create ? create.signature : '').toContain('create(');
+    expect(create && 'types' in create ? create.types.VersionCreateProposalPorcelainInput : null)
+      .toEqual(expect.objectContaining({ name: 'VersionCreateProposalPorcelainInput' }));
+
+    const advancedAccept = api.describe('wb.version.proposals.advanced.acceptProposal');
+    expect(advancedAccept && 'signature' in advancedAccept ? advancedAccept.signature : '').toContain(
+      'acceptProposal(',
+    );
+
+    const versionNode = api.wb.version as { proposals?: { create?: { signature?: string } } };
+    expect(versionNode.proposals?.create?.signature).toContain('create(');
+
+    const explanation = api.guidance.explain('wb.version.proposals.create');
+    expect(explanation?.kind).toBe('mog-api');
+    if (explanation?.kind !== 'mog-api') throw new Error('expected proposal guidance');
+    expect(explanation.examples.join('\n')).toContain('proposal.openWorkspace');
+    expect(explanation.examples.join('\n')).toContain('proposal.accept');
+
+    const advancedExplanation = api.guidance.explain(
+      'wb.version.proposals.advanced.createProposal',
+    );
+    expect(advancedExplanation?.kind).toBe('mog-api');
+    if (advancedExplanation?.kind !== 'mog-api') {
+      throw new Error('expected advanced proposal guidance');
+    }
+    expect(advancedExplanation.examples.join('\n')).toContain(
+      'wb.version.proposals.advanced.acceptProposal',
+    );
+  });
+
   it('analyzes and preflights common OfficeJS residue without executing code', () => {
     const source = `
       await Excel.run(async (context) => {

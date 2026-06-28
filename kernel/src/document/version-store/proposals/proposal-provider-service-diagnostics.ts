@@ -63,7 +63,7 @@ export function targetUnavailable<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: [
         diagnostic(code, severity, message, { operation }),
         ...sanitizeProposalProviderDiagnostics(sourceDiagnostics),
@@ -80,7 +80,7 @@ export function branchFailure<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: diagnostics.length
         ? diagnostics.map((item) => branchDiagnostic(item, operation))
         : [

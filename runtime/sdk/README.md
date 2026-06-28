@@ -251,14 +251,14 @@ const wb = await createWorkbook({
 });
 
 try {
-  const rootHeadResult = await wb.version.getHead();
+  const rootHeadResult = await wb.version.graph.getHead();
   if (!rootHeadResult.ok) throw new Error(rootHeadResult.error.reason);
   if (!rootHeadResult.value.refRevision) {
     throw new Error('Main version head is missing its ref revision');
   }
 
   await wb.activeSheet.setCell('A1', 'Base forecast');
-  const baseResult = await wb.version.commit({
+  const baseResult = await wb.version.graph.commit({
     message: 'Initial budget model',
     expectedHead: {
       commitId: rootHeadResult.value.id,
@@ -269,14 +269,14 @@ try {
   const baseCommit = baseResult.value;
   wb.markClean();
 
-  const branchResult = await wb.version.createBranch({
+  const branchResult = await wb.version.graph.createBranch({
     name: budgetRef,
     targetCommitId: baseCommit.id,
     expectedAbsent: true,
   });
   if (!branchResult.ok) throw new Error(branchResult.error.reason);
 
-  const checkoutResult = await wb.version.checkout(
+  const checkoutResult = await wb.version.graph.checkout(
     { kind: 'ref', name: budgetRef },
     { requireClean: true },
   );
@@ -286,13 +286,13 @@ try {
   }
 
   await wb.activeSheet.setCell('B2', 1200);
-  const scenarioHeadResult = await wb.version.getHead();
+  const scenarioHeadResult = await wb.version.graph.getHead();
   if (!scenarioHeadResult.ok) throw new Error(scenarioHeadResult.error.reason);
   if (!scenarioHeadResult.value.refRevision) {
     throw new Error('Scenario branch head is missing its ref revision');
   }
 
-  const scenarioCommitResult = await wb.version.commit({
+  const scenarioCommitResult = await wb.version.graph.commit({
     message: 'Scenario revenue upside',
     expectedHead: {
       commitId: scenarioHeadResult.value.id,
@@ -303,20 +303,20 @@ try {
   const scenarioCommit = scenarioCommitResult.value;
   wb.markClean();
 
-  const mainCheckoutResult = await wb.version.checkout(
+  const mainCheckoutResult = await wb.version.graph.checkout(
     { kind: 'ref', name: mainRef },
     { requireClean: true },
   );
   if (!mainCheckoutResult.ok) throw new Error(mainCheckoutResult.error.reason);
 
   await wb.activeSheet.setCell('C2', 'main note');
-  const mainHeadResult = await wb.version.getHead();
+  const mainHeadResult = await wb.version.graph.getHead();
   if (!mainHeadResult.ok) throw new Error(mainHeadResult.error.reason);
   if (!mainHeadResult.value.refRevision) {
     throw new Error('Main branch head is missing its ref revision');
   }
 
-  const mainCommitResult = await wb.version.commit({
+  const mainCommitResult = await wb.version.graph.commit({
     message: 'Main branch note',
     expectedHead: {
       commitId: mainHeadResult.value.id,
@@ -326,7 +326,7 @@ try {
   if (!mainCommitResult.ok) throw new Error(mainCommitResult.error.reason);
   wb.markClean();
 
-  const mainRefResult = await wb.version.readRef(mainRef);
+  const mainRefResult = await wb.version.graph.readRef(mainRef);
   if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
     throw new Error(
       mainRefResult.ok
@@ -340,7 +340,7 @@ try {
     revision: mainRefResult.value.ref.revision,
   };
 
-  const previewResult = await wb.version.merge(
+  const previewResult = await wb.version.graph.merge(
     {
       base: baseCommit.id,
       ours: expectedTargetHead.commitId,
@@ -376,7 +376,7 @@ try {
         })
       : [];
 
-  const applyResult = await wb.version.applyMerge(
+  const applyResult = await wb.version.graph.applyMerge(
     {
       base: baseCommit.id,
       ours: expectedTargetHead.commitId,
@@ -396,7 +396,7 @@ try {
     throw new Error('Merged target ref is missing its revision');
   }
 
-  const revertResult = await wb.version.revert(
+  const revertResult = await wb.version.graph.revert(
     {
       target: { kind: 'mergeCommit', commitId: mergedHead.id, mainlineParent: 1 },
       targetRef: mainRef,
@@ -441,7 +441,7 @@ dirty, read the target ref immediately before merge preview and carry that same
 before `revert`.
 
 ```typescript
-const initialHeadResult = await wb.version.getHead();
+const initialHeadResult = await wb.version.graph.getHead();
 if (!initialHeadResult.ok || !initialHeadResult.value.refRevision) {
   throw new Error(
     initialHeadResult.ok
@@ -451,7 +451,7 @@ if (!initialHeadResult.ok || !initialHeadResult.value.refRevision) {
 }
 
 await wb.activeSheet.setCell('A1', 'Base forecast');
-const baseResult = await wb.version.commit({
+const baseResult = await wb.version.graph.commit({
   message: 'Initial budget model',
   expectedHead: {
     commitId: initialHeadResult.value.id,
@@ -463,7 +463,7 @@ const baseCommit = baseResult.value;
 wb.markClean();
 
 const budgetRefName = 'refs/heads/budget-q1';
-const branchResult = await wb.version.createBranch({
+const branchResult = await wb.version.graph.createBranch({
   name: budgetRefName,
   targetCommitId: baseCommit.id,
   expectedAbsent: true,
@@ -471,7 +471,7 @@ const branchResult = await wb.version.createBranch({
 if (!branchResult.ok) throw new Error(branchResult.error.reason);
 const budgetRef = branchResult.value;
 
-const checkoutResult = await wb.version.checkout(
+const checkoutResult = await wb.version.graph.checkout(
   {
     kind: 'ref',
     name: budgetRef.name,
@@ -484,7 +484,7 @@ if (checkoutResult.value.materialization !== 'applied') {
 }
 
 await wb.activeSheet.setCell('B2', 1200);
-const scenarioHeadResult = await wb.version.getHead();
+const scenarioHeadResult = await wb.version.graph.getHead();
 if (!scenarioHeadResult.ok || !scenarioHeadResult.value.refRevision) {
   throw new Error(
     scenarioHeadResult.ok
@@ -493,7 +493,7 @@ if (!scenarioHeadResult.ok || !scenarioHeadResult.value.refRevision) {
   );
 }
 
-const scenarioCommitResult = await wb.version.commit({
+const scenarioCommitResult = await wb.version.graph.commit({
   message: 'Scenario revenue upside',
   expectedHead: {
     commitId: scenarioHeadResult.value.id,
@@ -514,7 +514,7 @@ the previewed `conflictId`, `conflictDigest`, selected `optionId`, and option
 again.
 
 ```typescript
-const mainRefResult = await wb.version.readRef('refs/heads/main');
+const mainRefResult = await wb.version.graph.readRef('refs/heads/main');
 if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
   throw new Error(
     mainRefResult.ok
@@ -528,7 +528,7 @@ const expectedTargetHead = {
   revision: mainRefResult.value.ref.revision,
 };
 
-const previewResult = await wb.version.merge(
+const previewResult = await wb.version.graph.merge(
   {
     base: baseCommit.id,
     ours: expectedTargetHead.commitId,
@@ -564,7 +564,7 @@ const resolutions =
       })
     : [];
 
-const applyResult = await wb.version.applyMerge(
+const applyResult = await wb.version.graph.applyMerge(
   {
     base: baseCommit.id,
     ours: expectedTargetHead.commitId,
@@ -597,7 +597,7 @@ Revert supports single commits, ranges, and merge commits. Use `dryRun` when a
 review gate must inspect diagnostics before the target ref can move.
 
 ```typescript
-const mainRefResult = await wb.version.readRef('refs/heads/main');
+const mainRefResult = await wb.version.graph.readRef('refs/heads/main');
 if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
   throw new Error(
     mainRefResult.ok
@@ -606,7 +606,7 @@ if (!mainRefResult.ok || mainRefResult.value.status !== 'success') {
   );
 }
 
-const revertResult = await wb.version.revert(
+const revertResult = await wb.version.graph.revert(
   {
     target: { kind: 'commit', commitId: scenarioCommit.id },
     targetRef: 'refs/heads/main',

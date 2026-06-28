@@ -1,16 +1,132 @@
-import type { JsonValue, ObjectDigest, PageCursor } from './version-shared';
+import type { JsonValue, ObjectDigest, PageCursor, VersionResult } from './version-shared';
 import type {
+  VersionApplyMergeInput,
   VersionApplyMergeResolution,
+  VersionApplyMergeResult,
+  VersionBranchNameInput,
   VersionCommitExpectedHead,
   VersionDiffValue,
   VersionMainRefName,
   VersionMergeAttemptKind,
   VersionMergeAttemptPersistence,
+  VersionMergeChange,
+  VersionMergeConflict,
   VersionMergeConflictResolutionOptionKind,
+  VersionMergeInput,
   VersionMergeResultId,
+  VersionRefNameInput,
   VersionRefName,
   VersionStoreDiagnostic,
+  WorkbookCommitId,
+  WorkbookCommitIdInput,
 } from './version';
+
+export type VersionMergeEndpoint =
+  | 'current'
+  | 'main'
+  | VersionBranchNameInput
+  | WorkbookCommitIdInput
+  | { readonly kind: 'branch'; readonly name: VersionBranchNameInput }
+  | { readonly kind: 'ref'; readonly name: VersionRefNameInput }
+  | { readonly kind: 'commit'; readonly id: WorkbookCommitIdInput }
+  | { readonly kind: 'current' };
+
+export type VersionResolvedMergeEndpoint =
+  | {
+      readonly kind: 'branch';
+      readonly name: VersionBranchNameInput;
+      readonly refName: VersionMainRefName | VersionRefName;
+      readonly commitId: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'ref';
+      readonly refName: VersionMainRefName | VersionRefName;
+      readonly commitId: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'commit';
+      readonly commitId: WorkbookCommitId;
+    }
+  | {
+      readonly kind: 'current';
+      readonly commitId: WorkbookCommitId;
+      readonly refName?: VersionMainRefName | VersionRefName;
+      readonly detached: boolean;
+    };
+
+export interface VersionPreviewMergeInput {
+  readonly from: VersionMergeEndpoint;
+  readonly into?: VersionMergeEndpoint;
+  readonly base?: WorkbookCommitIdInput;
+}
+
+export interface VersionPreviewMergeOptions {
+  readonly includeDiagnostics?: boolean;
+  readonly persistReviewRecord?: boolean;
+}
+
+export interface VersionGetMergeReviewInput {
+  readonly resultId: VersionMergeResultId;
+  readonly resultDigest: ObjectDigest;
+  readonly redactionPolicyDigest?: ObjectDigest;
+  readonly from?: VersionResolvedMergeEndpoint;
+  readonly into?: VersionResolvedMergeEndpoint;
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly targetHead?: VersionCommitExpectedHead;
+}
+
+export interface VersionMergeReviewApplyOptions {
+  readonly includeDiagnostics?: boolean;
+  readonly materializeActiveCheckout?: boolean;
+}
+
+export interface VersionMergeReviewConflictDetailOptions {
+  readonly valueRole: VersionMergeConflictValueRole;
+  readonly purpose?: VersionMergeConflictDetailPurpose;
+  readonly pageToken?: PageCursor;
+  readonly maxBytes?: number;
+  readonly optionId?: string;
+  readonly kind?: VersionMergeConflictResolutionOptionKind;
+}
+
+export type VersionMergeReviewStatus =
+  | 'clean'
+  | 'conflicted'
+  | 'fastForward'
+  | 'alreadyMerged'
+  | 'blocked';
+
+export interface VersionMergeReview {
+  readonly schemaVersion: 1;
+  readonly status: VersionMergeReviewStatus;
+  readonly from: VersionResolvedMergeEndpoint;
+  readonly into: VersionResolvedMergeEndpoint;
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly mergeInput?: VersionMergeInput;
+  readonly targetRef?: VersionMainRefName | VersionRefName;
+  readonly targetHead?: VersionCommitExpectedHead;
+  readonly resultId?: VersionMergeResultId;
+  readonly resultDigest?: ObjectDigest;
+  readonly previewArtifactDigest?: ObjectDigest;
+  readonly resolutionSetDigest?: ObjectDigest;
+  readonly resolvedAttemptDigest?: ObjectDigest;
+  readonly redactionPolicyDigest?: ObjectDigest;
+  readonly attemptKind?: VersionMergeAttemptKind;
+  readonly attemptPersistence?: VersionMergeAttemptPersistence;
+  readonly changes: readonly VersionMergeChange[];
+  readonly conflicts: readonly VersionMergeConflict[];
+  readonly selectedResolutions: readonly VersionApplyMergeResolution[];
+  readonly diagnostics: readonly VersionStoreDiagnostic[];
+  choose(conflictId: string, option: VersionMergeConflictResolutionOptionKind): VersionMergeReview;
+  chooseAll(option: VersionMergeConflictResolutionOptionKind): VersionMergeReview;
+  save(): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;
+  toApplyInput(): VersionApplyMergeInput;
+  apply(options?: VersionMergeReviewApplyOptions): Promise<VersionResult<VersionApplyMergeResult>>;
+  getConflictDetail(
+    conflictId: string,
+    options: VersionMergeReviewConflictDetailOptions,
+  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;
+}
 
 export type VersionMergeEndpointDeniedStatus =
   | 'authorizationDenied'
@@ -142,3 +258,19 @@ export interface VersionSealedResolutionPayloadRef {
 }
 
 export type VersionPutMergeResolutionPayloadResult = VersionSealedResolutionPayloadRef;
+
+export interface VersionMergeReviewArtifactApi {
+  saveMergeResolutions(
+    input: VersionSaveMergeResolutionsRequest,
+  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;
+  getMergeConflictDetail(
+    input: VersionGetMergeConflictDetailRequest,
+  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;
+  putMergeResolutionPayload(
+    input: VersionPutMergeResolutionPayloadRequest,
+  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
+}
+
+export interface VersionMergeReviewArtifactNamespace {
+  readonly advanced: VersionMergeReviewArtifactApi;
+}

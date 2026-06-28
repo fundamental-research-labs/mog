@@ -23,7 +23,7 @@ export function registerProposalBranchStaleScenarios(): void {
       ready.proposalCommitId,
     );
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-proposal-branch-stale',
       proposalId: ready.proposalId,
       expectedRevision: 5,
@@ -48,7 +48,7 @@ export function registerProposalBranchStaleScenarios(): void {
         ref: { commitId: graph.rootCommitId },
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -91,11 +91,11 @@ export function registerProposalBranchStaleScenarios(): void {
       resolutionPolicy: 'fastForwardOnly',
     } as const;
 
-    const accepted = await version.acceptProposal(acceptInput);
-    const retry = await version.acceptProposal(acceptInput);
+    const accepted = await version.proposals.advanced.acceptProposal(acceptInput);
+    const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toEqual(accepted);
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',

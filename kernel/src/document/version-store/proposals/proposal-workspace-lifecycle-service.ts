@@ -104,7 +104,7 @@ export function proposalWorkspaceStaleHeadResult<T>(input: {
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${input.operation}`,
+      target: `workbook.version.proposals.advanced.${input.operation}`,
       diagnostics: [proposalWorkspaceStaleHeadDiagnostic(input)],
     },
   };

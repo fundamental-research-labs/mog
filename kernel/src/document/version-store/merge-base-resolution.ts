@@ -20,16 +20,53 @@ export type VersionMergeBaseResolution =
       readonly diagnostic: PublicVersionStoreDiagnostic;
     };
 
+export type VersionComputedMergeBaseResolution =
+  | { readonly status: 'alreadyMerged'; readonly base: WorkbookCommitId }
+  | { readonly status: 'fastForward'; readonly base: WorkbookCommitId }
+  | { readonly status: 'divergent'; readonly base: WorkbookCommitId }
+  | {
+      readonly status: 'blocked';
+      readonly diagnostic: PublicVersionStoreDiagnostic;
+    };
+
 export function resolveVersionMergeBase(
   input: VersionMergeInput,
   ours: VersionMergeBaseCommitRead,
   theirs: VersionMergeBaseCommitRead,
 ): VersionMergeBaseResolution {
-  if (input.ours === input.theirs || commitClosureContains(ours, input.theirs)) {
-    return { status: 'alreadyMerged' };
+  const computed = computeVersionMergeBase(input.ours, input.theirs, ours, theirs);
+  if (computed.status === 'alreadyMerged' || computed.status === 'fastForward') {
+    return computed;
   }
-  if (commitClosureContains(theirs, input.ours)) {
-    return { status: 'fastForward' };
+  if (computed.status === 'blocked') return computed;
+  if (computed.base !== input.base) {
+    return {
+      status: 'blocked',
+      diagnostic: diagnostic(
+        'VERSION_MERGE_BASE_MISMATCH',
+        'Merge preview requires the requested base to match the lowest common ancestor.',
+        {
+          recoverability: 'unsupported',
+          payload: { diagnosticCode: 'expectedBaseMismatch' },
+        },
+      ),
+    };
+  }
+
+  return { status: 'divergent' };
+}
+
+export function computeVersionMergeBase(
+  oursCommitId: WorkbookCommitId,
+  theirsCommitId: WorkbookCommitId,
+  ours: VersionMergeBaseCommitRead,
+  theirs: VersionMergeBaseCommitRead,
+): VersionComputedMergeBaseResolution {
+  if (oursCommitId === theirsCommitId || commitClosureContains(ours, theirsCommitId)) {
+    return { status: 'alreadyMerged', base: theirsCommitId };
+  }
+  if (commitClosureContains(theirs, oursCommitId)) {
+    return { status: 'fastForward', base: oursCommitId };
   }
 
   const commitsById = new Map<WorkbookCommitId, WorkbookCommit>();
@@ -77,21 +114,7 @@ export function resolveVersionMergeBase(
     };
   }
 
-  if (lowestCommonAncestorIds[0] !== input.base) {
-    return {
-      status: 'blocked',
-      diagnostic: diagnostic(
-        'VERSION_MERGE_BASE_MISMATCH',
-        'Merge preview requires the requested base to match the lowest common ancestor.',
-        {
-          recoverability: 'unsupported',
-          payload: { diagnosticCode: 'expectedBaseMismatch' },
-        },
-      ),
-    };
-  }
-
-  return { status: 'divergent' };
+  return { status: 'divergent', base: lowestCommonAncestorIds[0] };
 }
 
 function commitClosureContains(

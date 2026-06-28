@@ -16,6 +16,7 @@ import type {
   MaybePromise,
   ProposalBranchService,
   ProposalGraphProvider,
+  ProposalMergeReviewService,
   ProposalProviderOperation,
   ResolvedBranchHead,
 } from './proposal-provider-service-types';
@@ -27,6 +28,7 @@ export type ProviderBackedAgentProposalServiceOptions = {
   readonly openStore: () => Promise<AgentProposalMetadataStore>;
   readonly branchService?: ProposalBranchService;
   readonly graphProvider?: ProposalGraphProvider;
+  readonly mergeReviewService?: ProposalMergeReviewService;
   readonly reviewService?: WorkbookVersionReviewService;
   readonly workspaceService?: ProposalWorkspaceLifecycleService;
 };
@@ -82,12 +84,20 @@ export type ProviderBackedAgentProposalServiceContext =
 export function createProviderBackedAgentProposalServiceContext(
   options: ProviderBackedAgentProposalServiceOptions,
 ): ProviderBackedAgentProposalServiceContext {
-  const { openStore, branchService, graphProvider, reviewService, workspaceService } = options;
+  const {
+    openStore,
+    branchService,
+    graphProvider,
+    mergeReviewService,
+    reviewService,
+    workspaceService,
+  } = options;
 
   return {
     openStore,
     branchService,
     graphProvider,
+    mergeReviewService,
     reviewService,
     workspaceService,
     openProposalStore(operation) {

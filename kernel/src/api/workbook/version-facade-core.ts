@@ -1,24 +1,35 @@
 import type {
   CheckoutVersionResult,
   Paged,
+  VersionBranchNameInput,
   VersionCheckoutOptions,
   VersionCheckoutTarget,
   VersionCommitish,
+  VersionCommitCurrentOptions,
   VersionCommitOptions,
+  VersionCurrentCheckout,
+  VersionDiffBranchOptions,
   VersionDiffOptions,
+  VersionDiffPorcelainTarget,
   VersionGetHeadOptions,
   VersionHead,
   VersionListCommitsOptions,
+  VersionMainRefName,
+  VersionRefName,
+  VersionRefNameInput,
+  VersionRefSelector,
   VersionResult,
   VersionSemanticDiffPage,
   VersionStoreDiagnostic,
   WorkbookCommitSummary,
+  WorkbookCommitIdInput,
   WorkbookVersionStatus,
 } from '@mog-sdk/contracts/api';
 import { VERSION_DIFF_DEFAULT_PAGE_LIMIT } from '@mog-sdk/contracts/versioning';
 
 import type { DocumentContext } from '../../context';
 import { checkoutWorkbookVersion, type VersionCheckoutTransactionGuard } from './version-checkout';
+import { publicDiagnostic as commitPublicDiagnostic } from './version/commit/version-commit-diagnostics';
 import {
   type ActiveCheckoutWriteRefName,
   detachedImplicitCheckoutWriteDiagnostic,
@@ -35,6 +46,7 @@ import { readWorkbookVersionFacadeGate } from './version-facade-gate';
 import { listWorkbookVersionCommits } from './version/list-commits/version-list-commits';
 import {
   VERSION_HEAD_REF,
+  VERSION_MAIN_REF,
   degradedHead,
   mapHeadResult,
   mapLegacyHeadResult,
@@ -60,6 +72,15 @@ export function getWorkbookVersionFacadeSurfaceStatus(
   status: WorkbookVersionStatus,
 ) {
   return getWorkbookVersionSurfaceStatus(ctx, status);
+}
+
+export async function getWorkbookVersionFacadeCurrent(
+  ctx: DocumentContext,
+): Promise<VersionResult<VersionCurrentCheckout>> {
+  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'getCurrent', 'version:read');
+  if (gateDiagnostics) return versionFailureFromStoreDiagnostics('getCurrent', gateDiagnostics);
+  const surface = await getWorkbookVersionSurfaceStatus(ctx, getWorkbookVersionStatus(ctx));
+  return { ok: true, value: currentCheckoutFromSurface(surface) };
 }
 
 export async function getWorkbookVersionFacadeHead(
@@ -114,10 +135,11 @@ export async function listWorkbookVersionFacadeCommits(
 export async function commitWorkbookVersionFacade(
   ctx: DocumentContext,
   options: VersionCommitOptions = {},
+  operation: 'commit' | 'commitCurrent' = 'commit',
 ): Promise<VersionResult<WorkbookCommitSummary>> {
   const commitOptions = await commitOptionsForActiveCheckout(ctx, options);
   if (!commitOptions.ok) {
-    return versionFailureFromStoreDiagnostics('commit', commitOptions.diagnostics);
+    return versionFailureFromStoreDiagnostics(operation, commitOptions.diagnostics);
   }
   const result = await commitWorkbookVersion(ctx, commitOptions.options);
   if (result.ok && commitOptions.activeCheckoutRefName) {
@@ -126,14 +148,60 @@ export async function commitWorkbookVersionFacade(
   return result;
 }
 
+export async function commitCurrentWorkbookVersionFacade(
+  ctx: DocumentContext,
+  options: VersionCommitCurrentOptions = {},
+): Promise<VersionResult<WorkbookCommitSummary>> {
+  const invalidAdvancedKeys = advancedCommitKeys(options);
+  if (invalidAdvancedKeys.length > 0) {
+    return versionFailureFromStoreDiagnostics(
+      'commitCurrent',
+      invalidAdvancedKeys.map((option) => porcelainInvalidOptionDiagnostic('commitCurrent', option)),
+    );
+  }
+  return commitWorkbookVersionFacade(ctx, options, 'commitCurrent');
+}
+
 export async function checkoutWorkbookVersionFacade(
   ctx: DocumentContext,
   target: VersionCheckoutTarget,
   options: VersionCheckoutOptions = {},
   checkoutTransactionGuard?: VersionCheckoutTransactionGuard,
+  operation: 'checkout' | 'checkoutBranch' | 'checkoutCommit' = 'checkout',
 ): Promise<VersionResult<CheckoutVersionResult>> {
   return versionResultFromCheckout(
     await checkoutWorkbookVersion(ctx, target, options, checkoutTransactionGuard),
+    operation,
+  );
+}
+
+export async function checkoutBranchWorkbookVersionFacade(
+  ctx: DocumentContext,
+  name: VersionBranchNameInput,
+  options: VersionCheckoutOptions = {},
+  checkoutTransactionGuard?: VersionCheckoutTransactionGuard,
+): Promise<VersionResult<CheckoutVersionResult>> {
+  return checkoutWorkbookVersionFacade(
+    ctx,
+    { kind: 'ref', name: branchRefName(name) },
+    options,
+    checkoutTransactionGuard,
+    'checkoutBranch',
+  );
+}
+
+export async function checkoutCommitWorkbookVersionFacade(
+  ctx: DocumentContext,
+  commit: WorkbookCommitIdInput,
+  options: VersionCheckoutOptions = {},
+  checkoutTransactionGuard?: VersionCheckoutTransactionGuard,
+): Promise<VersionResult<CheckoutVersionResult>> {
+  return checkoutWorkbookVersionFacade(
+    ctx,
+    { kind: 'commit', id: commit as never },
+    options,
+    checkoutTransactionGuard,
+    'checkoutCommit',
   );
 }
 
@@ -142,12 +210,13 @@ export async function diffWorkbookVersionFacade(
   base: VersionCommitish,
   target: VersionCommitish,
   options: VersionDiffOptions = {},
+  operation: 'diff' | 'diffCurrent' | 'diffBranch' = 'diff',
 ): Promise<VersionResult<VersionSemanticDiffPage>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'diff', 'version:diff');
-  if (gateDiagnostics) return versionFailureFromStoreDiagnostics('diff', gateDiagnostics);
+  if (gateDiagnostics) return versionFailureFromStoreDiagnostics(operation, gateDiagnostics);
   const activeCheckoutSelectors = await diffCommitishForActiveCheckout(ctx, base, target);
   if (!activeCheckoutSelectors.ok) {
-    return versionFailureFromStoreDiagnostics('diff', activeCheckoutSelectors.diagnostics);
+    return versionFailureFromStoreDiagnostics(operation, activeCheckoutSelectors.diagnostics);
   }
   return versionResultFromDiffPage(
     await diffWorkbookVersion(
@@ -157,6 +226,151 @@ export async function diffWorkbookVersionFacade(
       options,
     ),
     options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT,
+    operation,
+  );
+}
+
+export async function diffCurrentWorkbookVersionFacade(
+  ctx: DocumentContext,
+  target: VersionDiffPorcelainTarget = 'main',
+  options: VersionDiffOptions = {},
+): Promise<VersionResult<VersionSemanticDiffPage>> {
+  return diffWorkbookVersionFacade(
+    ctx,
+    commitishFromPorcelainTarget(target),
+    { kind: 'ref', name: VERSION_HEAD_REF },
+    options,
+    'diffCurrent',
+  );
+}
+
+export async function diffBranchWorkbookVersionFacade(
+  ctx: DocumentContext,
+  branch: VersionBranchNameInput,
+  options: VersionDiffBranchOptions = {},
+): Promise<VersionResult<VersionSemanticDiffPage>> {
+  const { against = 'main', ...diffOptions } = options;
+  return diffWorkbookVersionFacade(
+    ctx,
+    commitishFromPorcelainTarget(against),
+    { kind: 'ref', name: branchRefName(branch) },
+    diffOptions,
+    'diffBranch',
+  );
+}
+
+function currentCheckoutFromSurface(
+  surface: Awaited<ReturnType<typeof getWorkbookVersionSurfaceStatus>>,
+): VersionCurrentCheckout {
+  const current = surface.current;
+  const refName = refNameFromBranchName(current.branchName);
+  const status: VersionCurrentCheckout['status'] = current.stale
+    ? 'stale'
+    : current.detached
+      ? 'detached'
+      : current.branchName
+        ? 'attached'
+        : 'absent';
+  const blockedReasons = [
+    ...surface.storage.diagnostics,
+    ...surface.dirty.unsafeReasons,
+    ...surface.dirty.diagnostics,
+    ...surface.diagnostics,
+  ];
+  return {
+    schemaVersion: 1,
+    status,
+    ...(current.branchName ? { branchName: current.branchName } : {}),
+    ...(refName ? { refName } : {}),
+    ...(current.headCommitId ? { commitId: current.headCommitId as never } : {}),
+    ...(current.checkedOutCommitId
+      ? { checkedOutCommitId: current.checkedOutCommitId as never }
+      : {}),
+    ...(current.refHeadAtMaterialization
+      ? { refHeadAtMaterialization: current.refHeadAtMaterialization as never }
+      : {}),
+    ...(current.currentRefHeadId ? { currentRefHeadId: current.currentRefHeadId as never } : {}),
+    detached: current.detached,
+    stale: current.stale,
+    ...(current.staleReason ? { staleReason: current.staleReason } : {}),
+    dirty: surface.dirty,
+    capabilities: surface.capabilities,
+    safeActions: {
+      canCommit:
+        capabilityEnabled(surface, 'version:commit') &&
+        !current.stale &&
+        !current.detached &&
+        surface.dirty.commitEligibleChanges,
+      canCreateBranch: capabilityEnabled(surface, 'version:branch') && Boolean(current.headCommitId),
+      canCheckout:
+        capabilityEnabled(surface, 'version:checkout') &&
+        surface.dirty.checkoutSafe &&
+        !surface.dirty.pendingProviderWrites,
+      canDiff: capabilityEnabled(surface, 'version:diff') && Boolean(current.headCommitId),
+      canMerge:
+        capabilityEnabled(surface, 'version:mergePreview') &&
+        capabilityEnabled(surface, 'version:mergeApply'),
+      blockedReasons,
+    },
+    diagnostics: blockedReasons,
+  };
+}
+
+function capabilityEnabled(
+  surface: Awaited<ReturnType<typeof getWorkbookVersionSurfaceStatus>>,
+  capability: keyof Awaited<ReturnType<typeof getWorkbookVersionSurfaceStatus>>['capabilities'],
+): boolean {
+  return surface.capabilities[capability]?.enabled === true;
+}
+
+function branchRefName(value: VersionBranchNameInput): VersionMainRefName | VersionRefName {
+  const text = String(value);
+  if (text.startsWith('refs/heads/')) return text as VersionMainRefName | VersionRefName;
+  return text === 'main' ? VERSION_MAIN_REF : (`refs/heads/${text}` as VersionRefName);
+}
+
+function refNameFromBranchName(
+  branchName: string | undefined,
+): VersionMainRefName | VersionRefName | undefined {
+  return branchName ? branchRefName(branchName) : undefined;
+}
+
+function commitishFromPorcelainTarget(target: VersionDiffPorcelainTarget): VersionCommitish {
+  if (target === 'current') return { kind: 'ref', name: VERSION_HEAD_REF };
+  if (typeof target === 'string') {
+    return isCommitIdString(target)
+      ? (target as never)
+      : { kind: 'ref', name: branchRefName(target) };
+  }
+  if (target.kind === 'commit') return { kind: 'commit', id: target.id as never };
+  if (target.kind === 'branch') return { kind: 'ref', name: branchRefName(target.name) };
+  return { kind: 'ref', name: refSelectorName(target.name) };
+}
+
+function refSelectorName(value: VersionRefNameInput): VersionRefSelector {
+  const text = String(value);
+  return text === VERSION_HEAD_REF ? VERSION_HEAD_REF : branchRefName(text);
+}
+
+function isCommitIdString(value: string): boolean {
+  return /^commit:sha256:[0-9a-f]{64}$/.test(value);
+}
+
+function advancedCommitKeys(options: VersionCommitCurrentOptions): readonly string[] {
+  if (!options || typeof options !== 'object') return [];
+  return ['targetRef', 'expectedHead'].filter((key) => Object.hasOwn(options, key));
+}
+
+function porcelainInvalidOptionDiagnostic(operation: string, option: string): VersionStoreDiagnostic {
+  return commitPublicDiagnostic(
+    'VERSION_INVALID_OPTIONS',
+    `workbook.version.${operation} does not accept advanced commit option "${option}".`,
+    {
+      severity: 'error',
+      recoverability: 'none',
+      payload: { operation, option },
+      mutationGuarantee: 'no-write-attempted',
+    },
   );
 }
 

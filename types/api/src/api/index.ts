@@ -177,6 +177,7 @@ export type {
   WorkbookCommitSummary,
   WorkbookDiffPage,
 } from './workbook';
+export type * from './workbook/version-porcelain';
 export type * from './workbook/version-proposal';
 export type * from './workbook/version-revert';
 export type {

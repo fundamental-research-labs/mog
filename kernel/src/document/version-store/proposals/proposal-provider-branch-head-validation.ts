@@ -166,7 +166,7 @@ function targetUnavailable<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: [diagnostic(code, severity, message, { operation })],
     },
   };
@@ -180,7 +180,7 @@ function branchFailure<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: diagnostics.length
         ? diagnostics.map((item) => cloneDiagnostic(item, operation))
         : [
@@ -200,7 +200,7 @@ function graphFailure<T>(operation: string, diagnostics: readonly unknown[]): Ve
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: diagnostics.length
         ? diagnostics.map((item) => graphDiagnostic(item, operation))
         : [

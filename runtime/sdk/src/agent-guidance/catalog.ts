@@ -129,46 +129,28 @@ const wb = await createWorkbook({
   },
 });`;
 
-const versionCommitSnippet = `const headResult = await wb.version.getHead();
-if (!headResult.ok) {
-  throw new Error(headResult.error.reason);
-}
-if (!headResult.value.refRevision) {
-  throw new Error("Current version head is not attached to a mutable ref");
-}
-const commitResult = await wb.version.commit({
+const versionCommitSnippet = `const commitResult = await wb.version.commitCurrent({
   message: "Update forecast inputs",
-  expectedHead: {
-    commitId: headResult.value.id,
-    revision: headResult.value.refRevision,
-  },
 });
 if (!commitResult.ok) {
   throw new Error(commitResult.error.reason);
 }
 const commitId = commitResult.value.id;`;
 
-const versionBranchSnippet = `const targetHeadResult = await wb.version.getHead();
-if (!targetHeadResult.ok) {
-  throw new Error(targetHeadResult.error.reason);
-}
-const branchResult = await wb.version.createBranch({
-  name: "refs/heads/budget-q1",
-  targetCommitId: targetHeadResult.value.id,
-  expectedAbsent: true,
-});
+const versionBranchSnippet = `const branchResult = await wb.version.createBranchFromCurrent("budget-q1");
 if (!branchResult.ok) {
   throw new Error(branchResult.error.reason);
 }
 const branchRef = branchResult.value;`;
 
-const versionCheckoutSnippet = `wb.markClean();
-const checkoutResult = await wb.version.checkout({
-  kind: "ref",
-  name: "refs/heads/budget-q1",
-}, {
-  requireClean: true,
-});
+const versionCheckoutSnippet = `const current = await wb.version.getCurrent();
+if (!current.ok) {
+  throw new Error(current.error.reason);
+}
+if (!current.value.safeActions.canCheckout) {
+  throw new Error(current.value.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+const checkoutResult = await wb.version.checkoutBranch("budget-q1", { requireClean: true });
 if (!checkoutResult.ok) {
   throw new Error(checkoutResult.error.reason);
 }
@@ -176,54 +158,43 @@ if (checkoutResult.value.materialization !== "applied") {
   throw new Error("Checkout planned but did not materialize workbook state");
 }`;
 
-const versionMergePreviewSnippet = `const mainRefResult = await wb.version.readRef("refs/heads/main");
-if (!mainRefResult.ok || mainRefResult.value.status !== "success") {
-  throw new Error(
-    mainRefResult.ok
-      ? mainRefResult.value.diagnostics[0]?.safeMessage ?? "Main ref unavailable"
-      : mainRefResult.error.reason,
-  );
+const versionDiffSnippet = `const diffResult = await wb.version.diffCurrent("main");
+if (!diffResult.ok) {
+  throw new Error(diffResult.error.reason);
 }
-const expectedTargetHead = {
-  commitId: mainRefResult.value.ref.commitId,
-  revision: mainRefResult.value.ref.revision,
-};
-const mergeInput = {
-  base: baseCommitId,
-  ours: expectedTargetHead.commitId,
-  theirs: branchCommitId,
-};
-const previewResult = await wb.version.merge(mergeInput, {
-  mode: "preview",
-  targetRef: "refs/heads/main",
-  expectedTargetHead,
-  persistReviewRecord: true,
-});
-if (!previewResult.ok) {
-  throw new Error(previewResult.error.reason);
+if (diffResult.value.status === "blocked") {
+  throw new Error(diffResult.value.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
 }
-const preview = previewResult.value;
-if (preview.status === "blocked") {
-  throw new Error(preview.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
-}
-const resolutions = preview.status === "conflicted"
-  ? preview.conflicts.map((conflict) => {
-      const option =
-        conflict.resolutionOptions.find((candidate) => candidate.kind === "acceptTheirs") ??
-        conflict.resolutionOptions[0];
-      if (!option) {
-        throw new Error("No resolution option for " + conflict.conflictId);
-      }
-      return {
-        conflictId: conflict.conflictId,
-        expectedConflictDigest: conflict.conflictDigest,
-        optionId: option.optionId,
-        kind: option.kind,
-      };
-    })
-  : [];`;
+const changes = diffResult.value.changes;`;
 
-const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.readRef("refs/heads/main");
+const versionMergePreviewSnippet = `const reviewResult = await wb.version.previewMerge({
+  from: "budget-q1",
+  into: "main",
+});
+if (!reviewResult.ok) {
+  throw new Error(reviewResult.error.reason);
+}
+const review = reviewResult.value;
+if (review.status === "blocked") {
+  throw new Error(review.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+if (review.status === "conflicted") {
+  review.chooseAll("acceptTheirs");
+}
+const applyResult = await review.apply();
+if (!applyResult.ok) {
+  throw new Error(applyResult.error.reason);
+}
+const applied = applyResult.value;
+if (applied.status === "staleTargetHead") {
+  throw new Error(applied.diagnostics.map((diagnostic) => diagnostic.safeMessage).join("\\n"));
+}
+if (applied.status === "conflicted") {
+  throw new Error("Merge still has " + applied.requiredResolutionCount + " unresolved conflicts");
+}
+const newHeadId = "commitRef" in applied ? applied.commitRef.id : undefined;`;
+
+const versionApplyMergeSnippet = `const applyTargetRefResult = await wb.version.graph.readRef("refs/heads/main");
 if (!applyTargetRefResult.ok || applyTargetRefResult.value.status !== "success") {
   throw new Error(
     applyTargetRefResult.ok
@@ -235,7 +206,7 @@ const applyExpectedTargetHead = {
   commitId: applyTargetRefResult.value.ref.commitId,
   revision: applyTargetRefResult.value.ref.revision,
 };
-const applyResult = await wb.version.applyMerge(
+const applyResult = await wb.version.graph.applyMerge(
   {
     base: baseCommitId,
     ours: applyExpectedTargetHead.commitId,
@@ -263,7 +234,92 @@ if (applied.status === "planned") {
 }
 const newHeadId = applied.commitRef.id;`;
 
-const versionRevertSnippet = `const targetRefResult = await wb.version.readRef("refs/heads/main");
+const versionProposalPorcelainSnippet = `const proposalActor = {
+  kind: "agent",
+  trust: "trusted",
+  displayName: "Forecast Agent",
+  principalId: "forecast-agent",
+  agentRunId: "forecast-agent-run",
+};
+const proposalResult = await wb.version.proposals.create({
+  title: "Update forecast inputs",
+  into: "main",
+  agentRunId: proposalActor.agentRunId,
+  agent: proposalActor,
+});
+if (!proposalResult.ok) {
+  throw new Error(proposalResult.error.reason);
+}
+let proposal = proposalResult.value;
+const workspaceResult = await proposal.openWorkspace({ actor: proposalActor });
+if (!workspaceResult.ok) {
+  throw new Error(workspaceResult.error.reason);
+}
+const proposalWorkspace = workspaceResult.value;
+const proposalWorkbook = await proposalWorkspace.workbook();
+await proposalWorkbook.activeSheet.setValue("B4", 0.12);
+const commitResult = await proposalWorkspace.commit({
+  message: "Update forecast input B4",
+  actor: proposalActor,
+});
+if (!commitResult.ok) {
+  throw new Error(commitResult.error.reason);
+}
+proposal = commitResult.value;
+const reviewResult = await proposal.markReadyForReview({ actor: proposalActor });
+if (!reviewResult.ok) {
+  throw new Error(reviewResult.error.reason);
+}
+const acceptResult = await proposal.accept({
+  actor: proposalActor,
+  policy: "allowCleanMerge",
+});
+if (!acceptResult.ok) {
+  throw new Error(acceptResult.error.reason);
+}
+if (acceptResult.value.status === "merge_conflicted") {
+  throw new Error("Proposal has merge conflicts: " + acceptResult.value.conflictIds.join(", "));
+}
+const acceptedHeadId = acceptResult.value.newHeadId;`;
+
+const versionProposalAdvancedSnippet = `const proposalActor = {
+  kind: "agent",
+  trust: "trusted",
+  displayName: "Forecast Agent",
+  principalId: "forecast-agent",
+  agentRunId: "forecast-agent-run",
+};
+const advancedProposalResult = await wb.version.proposals.advanced.createProposal({
+  clientRequestId: "proposal-create-forecast-agent-run",
+  title: "Update forecast inputs",
+  targetRef: "refs/heads/main",
+  agentRunId: proposalActor.agentRunId,
+  agent: proposalActor,
+  redactionPolicy: {
+    mode: "default",
+    redactSecrets: true,
+    redactExternalLinks: true,
+    redactAgentTrace: true,
+  },
+});
+if (!advancedProposalResult.ok) {
+  throw new Error(advancedProposalResult.error.reason);
+}
+const advancedProposal = advancedProposalResult.value;
+const acceptResult = await wb.version.proposals.advanced.acceptProposal({
+  clientRequestId: "proposal-accept-forecast-agent-run",
+  proposalId: advancedProposal.id,
+  expectedRevision: advancedProposal.revision,
+  expectedTargetHeadId: advancedProposal.targetHeadIdAtCreation,
+  expectedTargetRefRevision: advancedProposal.targetRefRevisionAtCreation,
+  actor: proposalActor,
+  resolutionPolicy: "fastForwardOnly",
+});
+if (!acceptResult.ok) {
+  throw new Error(acceptResult.error.reason);
+}`;
+
+const versionRevertSnippet = `const targetRefResult = await wb.version.graph.readRef("refs/heads/main");
 if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
   throw new Error(
     targetRefResult.ok
@@ -272,7 +328,7 @@ if (!targetRefResult.ok || targetRefResult.value.status !== "success") {
   );
 }
 const commitToRevertId = branchCommit.id;
-const revertResult = await wb.version.revert(
+const revertResult = await wb.version.graph.revert(
   {
     target: { kind: "commit", commitId: commitToRevertId },
     targetRef: "refs/heads/main",
@@ -652,7 +708,7 @@ export const apiGuidanceCatalog = [
     ],
     message: 'Workbook version history APIs are exposed through the `wb.version` public API slice.',
     suggestion:
-      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commit`, `wb.version.createBranch`, `wb.version.checkout`, `wb.version.merge`, `wb.version.applyMerge`, and `wb.version.revert`; every operation returns a VersionResult and merge/revert calls also return status receipts.',
+      'Configure version history with `createWorkbook({ documentId, versionStore })`, then use `wb.version.commitCurrent`, `wb.version.createBranchFromCurrent`, `wb.version.checkoutBranch`, and `wb.version.diffCurrent` for common workflows; advanced graph operations remain available for explicit CAS, merge, apply, and revert workflows.',
     mogReplacements: [
       {
         path: 'createWorkbook',
@@ -660,32 +716,52 @@ export const apiGuidanceCatalog = [
         note: 'Version-store config belongs to createWorkbook options. Supported public kinds are memory, in-memory, memory-durable-snapshot, indexeddb, and browser; use documentId/workspaceId/principalScope for scope.',
       },
       {
-        path: 'wb.version.commit',
+        path: 'wb.version.commitCurrent',
         snippet: versionCommitSnippet,
-        note: 'Commit captures the current workbook working state and advances the active or explicit target ref. Read the head first and pass expectedHead so stale ref writes fail closed.',
+        note: 'Commit captures the current workbook working state and advances the active attached checkout branch with the current expected head inferred by the facade.',
       },
       {
-        path: 'wb.version.createBranch',
+        path: 'wb.version.createBranchFromCurrent',
         snippet: versionBranchSnippet,
-        note: 'Create public refs under refs/heads/<branch-name> for branch workflows.',
+        note: 'Create a public branch at the current checkout head; the returned ref is canonicalized under refs/heads/<branch-name>.',
       },
       {
-        path: 'wb.version.checkout',
+        path: 'wb.version.checkoutBranch',
         snippet: versionCheckoutSnippet,
         note: 'Checkout refuses dirty or unsafe state and reports whether workbook state was materialized.',
       },
       {
-        path: 'wb.version.merge',
+        path: 'wb.version.diffCurrent',
+        snippet: versionDiffSnippet,
+        note: 'Compare the current checkout with a common target such as main without manually resolving refs.',
+      },
+      {
+        path: 'wb.version.previewMerge',
         snippet: versionMergePreviewSnippet,
-        note: 'Merge is read-only by default; inspect blocked/conflicted/clean/fast-forward statuses before applying, and carry the accepted preview target head into applyMerge.',
+        note: 'Preview resolves public branch names, stores the accepted target head, and returns a review handle whose apply method preserves stale-target detection.',
       },
       {
-        path: 'wb.version.applyMerge',
+        path: 'wb.version.proposals.create',
+        snippet: versionProposalPorcelainSnippet,
+        note: 'Primary proposal authoring path: create the proposal, open an isolated proposal workspace, commit the workspace, mark ready for review, and accept through the proposal handle.',
+      },
+      {
+        path: 'wb.version.proposals.advanced.createProposal',
+        snippet: versionProposalAdvancedSnippet,
+        note: 'Advanced CAS delegate for service callers that already supply request ids, target refs, revisions, expected target heads, actors, and redaction policy.',
+      },
+      {
+        path: 'wb.version.proposals.advanced.acceptProposal',
+        snippet: versionProposalAdvancedSnippet,
+        note: 'Advanced CAS delegate for explicit proposal acceptance. Prefer proposal.accept() for application code that does not need to assemble the full CAS payload.',
+      },
+      {
+        path: 'wb.version.graph.applyMerge',
         snippet: versionApplyMergeSnippet,
-        note: 'Apply merge with a concrete target ref and the expected target head from the accepted preview so stale refs fail closed. If preview was conflicted, pass one resolution per conflict with the previewed conflictId, digest, optionId, and kind.',
+        note: 'Advanced CAS escape hatch for service callers that already have base/ours/theirs, targetRef, expectedTargetHead, and conflict-resolution records. Prefer previewMerge and review.apply for branch merges.',
       },
       {
-        path: 'wb.version.revert',
+        path: 'wb.version.graph.revert',
         snippet: versionRevertSnippet,
         note: 'Revert with an explicit target ref and expected target head; dry-run first with { dryRun: true } when the host needs review before mutation.',
       },

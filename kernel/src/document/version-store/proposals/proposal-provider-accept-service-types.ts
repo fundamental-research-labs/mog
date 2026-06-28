@@ -5,7 +5,11 @@ import type {
   WorkbookVersionReviewRecord,
 } from '@mog-sdk/contracts/api';
 
-import type { ProposalGraphProvider, ResolvedBranchHead } from './proposal-provider-service-types';
+import type {
+  ProposalGraphProvider,
+  ProposalMergeReviewService,
+  ResolvedBranchHead,
+} from './proposal-provider-service-types';
 import type { AgentProposalMetadataStore } from './proposal-store';
 import type { WorkbookVersionMarkReviewAppliedInput } from '../review-service';
 
@@ -15,6 +19,7 @@ export type AcceptProviderBackedAgentProposalOptions = {
   readonly input: AcceptAgentProposalInput;
   readonly openStore: () => Promise<AgentProposalMetadataStore>;
   readonly graphProvider?: ProposalGraphProvider;
+  readonly mergeReviewService?: ProposalMergeReviewService;
   readonly ensureCommitExists: (commitId: WorkbookCommitId) => Promise<CommitExistsResult>;
   readonly resolveTargetHead: (targetRef: string) => Promise<ResolutionResult>;
   readonly getReview?: (reviewId: string) => Promise<VersionResult<WorkbookVersionReviewRecord>>;

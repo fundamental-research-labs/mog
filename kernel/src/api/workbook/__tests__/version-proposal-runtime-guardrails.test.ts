@@ -20,7 +20,7 @@ describe('WorkbookVersion proposal runtime guardrails', () => {
       versioning: { proposalService },
     });
 
-    const result = await version.acceptProposal({
+    const result = await version.proposals.advanced.acceptProposal({
       ...acceptInput('accept-malformed-proposal-id'),
       proposalId: 'proposal:sha256:not-a-digest',
     } as any);
@@ -29,7 +29,7 @@ describe('WorkbookVersion proposal runtime guardrails', () => {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.acceptProposal',
+        target: 'workbook.version.proposals.advanced.acceptProposal',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_INVALID_PROPOSAL_ID',
@@ -55,7 +55,7 @@ describe('WorkbookVersion proposal runtime guardrails', () => {
       versioning: { proposalService },
     });
 
-    const createResult = await version.createProposal({
+    const createResult = await version.proposals.advanced.createProposal({
       clientRequestId: 'create-untrusted-agent',
       title: 'Denied proposal',
       targetRef: 'refs/heads/main',
@@ -63,7 +63,7 @@ describe('WorkbookVersion proposal runtime guardrails', () => {
       agent: { ...AGENT, trust: 'unknown', principalId: 'agent-secret' },
       redactionPolicy: REDACTION_POLICY,
     } as any);
-    const acceptResult = await version.acceptProposal({
+    const acceptResult = await version.proposals.advanced.acceptProposal({
       ...acceptInput('accept-untrusted-actor'),
       actor: { ...ACTOR, trust: 'unknown', principalId: 'actor-secret' },
     } as any);
@@ -120,7 +120,7 @@ describe('WorkbookVersion proposal runtime guardrails', () => {
       versioning: { proposalService },
     });
 
-    const result = await version.createProposal({
+    const result = await version.proposals.advanced.createProposal({
       clientRequestId: 'create-denied',
       title: 'Denied proposal',
       targetRef: 'refs/heads/main',

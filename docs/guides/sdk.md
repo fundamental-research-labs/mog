@@ -284,12 +284,12 @@ The basic public flow is:
 1. Pass `documentId` plus a supported `versionStore` to `createWorkbook(...)`.
 2. Before each commit, read the current head and pass `expectedHead` with the
    head commit ID and ref revision.
-3. Create branches with `wb.version.createBranch(...)`, then checkout the
-   branch through `wb.version.checkout(...)` after the workbook is clean.
-4. Preview merges with `wb.version.merge(...)`. Preview is read-only.
+3. Create branches with `wb.version.graph.createBranch(...)`, then checkout the
+   branch through `wb.version.graph.checkout(...)` after the workbook is clean.
+4. Preview merges with `wb.version.graph.merge(...)`. Preview is read-only.
 5. If the preview is conflicted, choose a resolution for every conflict and pass
    those conflict IDs, digests, option IDs, and option kinds to
-   `wb.version.applyMerge(...)`.
+   `wb.version.graph.applyMerge(...)`.
 6. Apply the accepted merge preview with the same `targetRef` and
    `expectedTargetHead`. If the target moved, handle `staleTargetHead` by
    re-reading the target and previewing again. Non-materializing direct applies
@@ -321,7 +321,7 @@ async function valueOf(resultPromise) {
 }
 
 async function readRef(wb, refName) {
-  const result = await valueOf(wb.version.readRef(refName));
+  const result = await valueOf(wb.version.graph.readRef(refName));
   if (result.status !== 'success') throw new Error(failFromDiagnostics(result.diagnostics));
   return result.ref;
 }
@@ -337,12 +337,12 @@ const wb = await createWorkbook({
 });
 
 try {
-  const rootHead = await valueOf(wb.version.getHead());
+  const rootHead = await valueOf(wb.version.graph.getHead());
   if (!rootHead.refRevision) throw new Error('Main version head is missing its ref revision');
 
   await wb.activeSheet.setCell('A1', 'Base forecast');
   const baseCommit = await valueOf(
-    wb.version.commit({
+    wb.version.graph.commit({
       message: 'Initial budget model',
       expectedHead: { commitId: rootHead.id, revision: rootHead.refRevision },
     }),
@@ -350,7 +350,7 @@ try {
   wb.markClean();
 
   await valueOf(
-    wb.version.createBranch({
+    wb.version.graph.createBranch({
       name: budgetRef,
       targetCommitId: baseCommit.id,
       expectedAbsent: true,
@@ -358,29 +358,29 @@ try {
   );
 
   const checkout = await valueOf(
-    wb.version.checkout({ kind: 'ref', name: budgetRef }, { requireClean: true }),
+    wb.version.graph.checkout({ kind: 'ref', name: budgetRef }, { requireClean: true }),
   );
   if (checkout.materialization !== 'applied') {
     throw new Error('Checkout did not materialize workbook state');
   }
 
   await wb.activeSheet.setCell('B2', 1200);
-  const branchHead = await valueOf(wb.version.getHead());
+  const branchHead = await valueOf(wb.version.graph.getHead());
   if (!branchHead.refRevision) throw new Error('Scenario branch head is missing its revision');
   const branchCommit = await valueOf(
-    wb.version.commit({
+    wb.version.graph.commit({
       message: 'Scenario revenue upside',
       expectedHead: { commitId: branchHead.id, revision: branchHead.refRevision },
     }),
   );
   wb.markClean();
 
-  await valueOf(wb.version.checkout({ kind: 'ref', name: mainRef }, { requireClean: true }));
+  await valueOf(wb.version.graph.checkout({ kind: 'ref', name: mainRef }, { requireClean: true }));
   const mainHead = await readRef(wb, mainRef);
   const expectedTargetHead = { commitId: mainHead.commitId, revision: mainHead.revision };
 
   const preview = await valueOf(
-    wb.version.merge(
+    wb.version.graph.merge(
       { base: baseCommit.id, ours: expectedTargetHead.commitId, theirs: branchCommit.id },
       { mode: 'preview', targetRef: mainRef, expectedTargetHead },
     ),
@@ -404,7 +404,7 @@ try {
       : [];
 
   const applied = await valueOf(
-    wb.version.applyMerge(
+    wb.version.graph.applyMerge(
       {
         base: baseCommit.id,
         ours: expectedTargetHead.commitId,
@@ -426,7 +426,7 @@ try {
   if (!applied.commitRef.refRevision) throw new Error('Merged target ref is missing its revision');
 
   const reverted = await valueOf(
-    wb.version.revert(
+    wb.version.graph.revert(
       {
         target: { kind: 'commit', commitId: branchCommit.id },
         targetRef: mainRef,

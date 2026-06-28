@@ -21,7 +21,7 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
     const ready = await createReadyReviewedProposal(version, graph, 'missing-review', false);
 
     await expect(
-      version.acceptProposal({
+      version.proposals.advanced.acceptProposal({
         clientRequestId: 'proposal-accept-missing-review',
         proposalId: ready.proposalId,
         expectedRevision: 5,
@@ -37,7 +37,7 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
         reason: expect.stringContaining(ready.reviewId),
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, reviewId: ready.reviewId },
     });
@@ -61,7 +61,7 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
     );
 
     await expect(
-      version.acceptProposal({
+      version.proposals.advanced.acceptProposal({
         clientRequestId: 'proposal-accept-stale-target',
         proposalId: ready.proposalId,
         expectedRevision: 5,
@@ -78,7 +78,7 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
         actualTargetHeadId: movedMainCommitId,
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',

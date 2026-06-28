@@ -34,7 +34,7 @@ export function registerProposalRuntimeDiagnosticsServiceCreateScenarios(): void
       versioning: { proposalService },
     });
 
-    const result = await version.createProposal({
+    const result = await version.proposals.advanced.createProposal({
       clientRequestId: 'create-stale-head',
       title: 'Stale proposal',
       targetRef: 'refs/heads/main',
@@ -47,7 +47,7 @@ export function registerProposalRuntimeDiagnosticsServiceCreateScenarios(): void
     expect(result).toMatchObject({
       ok: false,
       error: {
-        target: 'workbook.version.createProposal',
+        target: 'workbook.version.proposals.advanced.createProposal',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_PROPOSAL_STALE_HEAD',

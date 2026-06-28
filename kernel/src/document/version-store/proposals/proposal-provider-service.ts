@@ -44,7 +44,11 @@ import {
   acceptProviderBackedProposal,
   openProviderBackedProposalReview,
 } from './proposal-provider-service-review-operations';
-import type { ProposalBranchService, ResolvedBranchHead } from './proposal-provider-service-types';
+import type {
+  ProposalBranchService,
+  ProposalMergeReviewService,
+  ResolvedBranchHead,
+} from './proposal-provider-service-types';
 import {
   commitProviderBackedProposalWorkspace,
   disposeProviderBackedAgentProposalWorkspace,
@@ -145,6 +149,7 @@ export function createProviderBackedAgentProposalService(options: {
   readonly provider: AgentProposalMetadataStoreProvider;
   readonly branchService?: unknown;
   readonly graphProvider?: unknown;
+  readonly mergeReviewService?: ProposalMergeReviewService;
   readonly reviewService?: unknown;
   readonly workspaceService?: unknown;
 }): ProviderBackedAgentProposalService {
@@ -156,6 +161,7 @@ export function createProviderBackedAgentProposalService(options: {
     ...(isProposalGraphProvider(options.graphProvider)
       ? { graphProvider: options.graphProvider }
       : {}),
+    ...(options.mergeReviewService ? { mergeReviewService: options.mergeReviewService } : {}),
     ...(isWorkbookVersionReviewService(options.reviewService)
       ? { reviewService: options.reviewService }
       : {}),

@@ -666,7 +666,7 @@ const publicDomainPolicyExportSurface: PublicVersioningDomainPolicySurface = Obj
 });
 const digest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
-  value: 'sha256:vc03-05-public-export-surface',
+  digest: 'sha256:vc03-05-public-export-surface',
 });
 const releaseArtifactManifest: ReleaseArtifactManifest = Object.freeze({
   schemaVersion: 'mog.versioning.releaseArtifactManifest.v1',
@@ -950,7 +950,7 @@ const shadowObservation: VersionShadowObservationRecord = Object.freeze({
   }),
   redaction: Object.freeze({
     policy: 'metadata-only',
-    policyDigest: digest.value,
+    policyDigest: digest.digest,
     omitted: Object.freeze(['cellValues', 'authorId', 'providerPayload']),
   }),
   sourceArtifactRefs: Object.freeze([

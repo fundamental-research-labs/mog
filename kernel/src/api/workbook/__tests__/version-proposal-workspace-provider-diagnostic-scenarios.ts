@@ -13,12 +13,12 @@ export function registerProposalWorkspaceDiagnosticScenarios(): void {
     const graph = await graphWithRoot();
     const workspaceService = unsafeStartDiagnosticWorkspaceService();
     const version = versionForProvider(graph.provider, workspaceService);
-    const created = await version.createProposal(
+    const created = await version.proposals.advanced.createProposal(
       createProposalInput('proposal-create-unsafe-diagnostics'),
     );
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
 
-    const opened = await version.startProposalWorkspace({
+    const opened = await version.proposals.advanced.startProposalWorkspace({
       clientRequestId: 'workspace-open-unsafe-diagnostics',
       proposalId: created.value.id,
       expectedRevision: 1,
@@ -29,7 +29,7 @@ export function registerProposalWorkspaceDiagnosticScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.startProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.startProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'TEST_UNSAFE_WORKSPACE_DIAGNOSTIC',
@@ -66,7 +66,7 @@ export function registerProposalWorkspaceDiagnosticScenarios(): void {
     expect(serialized).not.toContain('principalId');
     expect(serialized).not.toContain('agentRunId');
     expect(serialized).not.toContain('providerId');
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },
     });

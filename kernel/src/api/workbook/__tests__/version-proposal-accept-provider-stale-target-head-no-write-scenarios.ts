@@ -35,13 +35,13 @@ export function registerTargetHeadNoWriteScenarios(): void {
       resolutionPolicy: 'fastForwardOnly',
     } as const;
 
-    const noWriteAttempt = await version.acceptProposal(acceptInput);
+    const noWriteAttempt = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(noWriteAttempt).toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.acceptProposal',
+        target: 'workbook.version.proposals.advanced.acceptProposal',
         diagnostics: [
           expect.objectContaining({
             code: 'proposal_accept_stale_update_no_write',
@@ -54,7 +54,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
         ],
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
@@ -73,7 +73,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
     });
     expect(rejectedReview).toMatchObject({ ok: true, value: { status: 'rejected' } });
 
-    const retry = await version.acceptProposal(acceptInput);
+    const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toMatchObject({
       ok: false,
@@ -83,7 +83,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
         allowed: ['approved'],
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });

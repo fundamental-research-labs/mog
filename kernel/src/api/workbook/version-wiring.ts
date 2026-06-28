@@ -1,4 +1,5 @@
 import type { DocumentContext } from '../../context';
+import type { VersionPreviewMergeInput, VersionPreviewMergeOptions } from '@mog-sdk/contracts/api';
 import { createProviderBackedBranchLifecycleService } from '../../document/version-store/branch-provider-service';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
 import { createProviderBackedCheckoutMaterializationService } from '../../document/version-store/checkout-provider-service';
@@ -37,6 +38,7 @@ import {
   type VersionSemanticStateReaderPort,
 } from '../../document/version-store/semantic-state-reader';
 import type { WorkbookVersioningConfig } from './types';
+import { previewMergeWorkbookVersionFacade } from './version-facade-merge';
 import {
   DEFAULT_MERGE_COMMIT_MATERIALIZER_KIND,
   createSemanticMergeCommitCapture,
@@ -221,6 +223,18 @@ export function attachWorkbookVersioning(
           provider: config.provider,
           ...(branchService ? { branchService } : {}),
           graphProvider: config.provider,
+          mergeReviewService: {
+            previewMerge: (
+              input: VersionPreviewMergeInput,
+              options?: VersionPreviewMergeOptions,
+            ) =>
+              previewMergeWorkbookVersionFacade(
+                ctx,
+                input,
+                options,
+                config.checkoutTransactionGuard,
+              ),
+          },
           ...(reviewService ? { reviewService } : {}),
           ...(proposalWorkspaceService ? { workspaceService: proposalWorkspaceService } : {}),
         })

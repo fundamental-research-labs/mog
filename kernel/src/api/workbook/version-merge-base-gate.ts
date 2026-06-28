@@ -6,6 +6,7 @@ import type {
 } from '@mog-sdk/contracts/api';
 
 import {
+  computeVersionMergeBase,
   resolveVersionMergeBase,
   type VersionMergeBaseCommitRead,
 } from '../../document/version-store/merge-base-resolution';
@@ -19,6 +20,7 @@ import {
   mapGraphDiagnostics,
   providerErrorDiagnostic,
   publicDiagnostic,
+  serviceUnavailableDiagnostic,
 } from './version-merge-public-diagnostics';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -76,6 +78,45 @@ export async function publicMergeBaseGateResult(
         mutationGuarantee: 'preview-only',
       }
     : null;
+}
+
+export async function computePublicMergeBase(
+  services: unknown,
+  oursCommitId: WorkbookCommitId,
+  theirsCommitId: WorkbookCommitId,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly status: 'alreadyMerged' | 'fastForward' | 'divergent';
+      readonly base: WorkbookCommitId;
+    }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  const provider = getAttachedVersionGraphProvider(services);
+  if (!provider) return { ok: false, diagnostics: [serviceUnavailableDiagnostic()] };
+
+  const opened = await openPublicMergeBaseGraph(provider);
+  if (!opened.ok) return opened;
+
+  const reads = await Promise.all([
+    readPublicMergeBaseCommit(opened.graph, oursCommitId, 'ours'),
+    readPublicMergeBaseCommit(opened.graph, theirsCommitId, 'theirs'),
+  ]);
+  const readDiagnostics = reads.flatMap((read) => (read.ok ? [] : read.diagnostics));
+  if (readDiagnostics.length > 0) return { ok: false, diagnostics: readDiagnostics };
+  const [ours, theirs] = reads;
+  if (!ours.ok || !theirs.ok) return { ok: false, diagnostics: readDiagnostics };
+
+  const resolution = computeVersionMergeBase(
+    oursCommitId,
+    theirsCommitId,
+    ours.commit,
+    theirs.commit,
+  );
+  if (resolution.status === 'blocked') {
+    return { ok: false, diagnostics: [resolution.diagnostic] };
+  }
+  return { ok: true, status: resolution.status, base: resolution.base };
 }
 
 function getAttachedVersionGraphProvider(services: unknown): AttachedVersionGraphProvider | null {

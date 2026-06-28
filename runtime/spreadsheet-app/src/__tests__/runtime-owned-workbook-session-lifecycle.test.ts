@@ -405,8 +405,8 @@ test('runtime.dispose disposes every open workbook session and stale facades rej
   assert.equal(second.getStatus(), 'disposed');
   assert.equal(runtime.getWorkbookSession(first.workbookId), null);
   assert.equal(runtime.getWorkbookSession(second.workbookId), null);
-  await assert.rejects(() => firstFacade.activeSheet.setCell('B1', 3), /disposed/i);
-  await assert.rejects(() => secondFacade.activeSheet.getCell('A1'), /disposed/i);
+  await assert.rejects(async () => firstFacade.activeSheet.setCell('B1', 3), /disposed/i);
+  await assert.rejects(async () => secondFacade.activeSheet.getCell('A1'), /disposed/i);
 });
 
 test('dispose/reopen with the same public workbookId creates a fresh session epoch', async () => {
@@ -430,7 +430,7 @@ test('dispose/reopen with the same public workbookId creates a fresh session epo
     assert.notEqual(second.epoch, first.epoch);
     assert.equal((await second.getWorkbook().activeSheet.getCell('A1')).value, null);
     await assert.rejects(
-      () => firstFacade.activeSheet.setCell('A1', 'must-reject'),
+      async () => firstFacade.activeSheet.setCell('A1', 'must-reject'),
       /disposed|stale/i,
     );
   } finally {
@@ -520,25 +520,34 @@ test('version surface status remains available without version read grant', asyn
   let runtime: SpreadsheetRuntime | undefined;
   try {
     const versionMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion;
+    const graphMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.VersionGraphApi;
+    const reviewMatrix = WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewApi;
     const assertVersionCapabilityEntry = (
-      methodName: keyof typeof versionMatrix,
+      matrix: object,
+      methodName: string,
       expected: readonly SpreadsheetCapability[],
     ) => {
-      const entry = versionMatrix[methodName] as {
-        readonly capability?: SpreadsheetCapability;
-        readonly capabilities?: readonly SpreadsheetCapability[];
-      };
+      const entry = (
+        matrix as Record<
+          string,
+          {
+            readonly capability?: SpreadsheetCapability;
+            readonly capabilities?: readonly SpreadsheetCapability[];
+          }
+        >
+      )[methodName];
+      assert.ok(entry);
       assert.equal(entry.capability, undefined);
       assert.deepEqual(entry.capabilities, expected);
     };
 
     assert.deepEqual(versionMatrix.getSurfaceStatus.capabilities, []);
     assert.equal(versionMatrix.getSurfaceStatus.capability, undefined);
-    assertVersionCapabilityEntry('getStatus', ['version:read']);
-    assertVersionCapabilityEntry('getReview', ['version:reviewRead']);
-    assertVersionCapabilityEntry('createReview', ['version:reviewWrite']);
-    assertVersionCapabilityEntry('getReviewDiff', ['version:diff']);
-    assert.deepEqual(versionMatrix.getReviewDiff.conditionalCapabilities, [
+    assertVersionCapabilityEntry(versionMatrix, 'getStatus', ['version:read']);
+    assertVersionCapabilityEntry(reviewMatrix, 'getReview', ['version:reviewRead']);
+    assertVersionCapabilityEntry(reviewMatrix, 'createReview', ['version:reviewWrite']);
+    assertVersionCapabilityEntry(reviewMatrix, 'getReviewDiff', ['version:diff']);
+    assert.deepEqual(reviewMatrix.getReviewDiff.conditionalCapabilities, [
       {
         when: {
           argumentIndex: 0,
@@ -548,10 +557,8 @@ test('version surface status remains available without version read grant', asyn
         capabilities: ['version:reviewRead'],
       },
     ]);
-    assertVersionCapabilityEntry('createProposal', ['version:proposal']);
-    assertVersionCapabilityEntry('acceptProposal', ['version:proposal', 'version:branch']);
-    assertVersionCapabilityEntry('revert', ['version:revert']);
-    assertVersionCapabilityEntry('promotePendingRemote', [
+    assertVersionCapabilityEntry(graphMatrix, 'revert', ['version:revert']);
+    assertVersionCapabilityEntry(graphMatrix, 'promotePendingRemote', [
       'version:remotePromote',
       'version:provenance',
     ]);
@@ -595,18 +602,18 @@ test('version surface status remains available without version read grant', asyn
       () => void facade.version.getStatus(),
       /Capability "version:read" is denied for WorkbookVersion\.getStatus/,
     );
-    assert.deepEqual(await facade.version.getHead(), {
+    assert.deepEqual(await facade.version.graph.getHead(), {
       ok: false,
       error: {
         code: 'version_capability_unavailable',
         capability: 'version:read',
         dependency: 'hostCapability',
-        reason: 'Capability "version:read" is denied for WorkbookVersion.getHead',
+        reason: 'Capability "version:read" is denied for VersionGraphApi.getHead',
         retryable: false,
       },
     });
-    const applyMergeDenied = await facade.version.applyMerge(
-      {} as Parameters<typeof facade.version.applyMerge>[0],
+    const applyMergeDenied = await facade.version.graph.applyMerge(
+      {} as Parameters<typeof facade.version.graph.applyMerge>[0],
     );
     assert.equal(applyMergeDenied.ok, false);
     if (!applyMergeDenied.ok) {
@@ -620,8 +627,8 @@ test('version surface status remains available without version read grant', asyn
         ]);
       }
     }
-    const revertDenied = await facade.version.revert(
-      {} as Parameters<typeof facade.version.revert>[0],
+    const revertDenied = await facade.version.graph.revert(
+      {} as Parameters<typeof facade.version.graph.revert>[0],
     );
     assert.deepEqual(revertDenied, {
       ok: false,
@@ -629,11 +636,11 @@ test('version surface status remains available without version read grant', asyn
         code: 'version_capability_unavailable',
         capability: 'version:revert',
         dependency: 'hostCapability',
-        reason: 'Capability "version:revert" is denied for WorkbookVersion.revert',
+        reason: 'Capability "version:revert" is denied for VersionGraphApi.revert',
         retryable: false,
       },
     });
-    const promoteRemoteDenied = await facade.version.promotePendingRemote();
+    const promoteRemoteDenied = await facade.version.graph.promotePendingRemote();
     assert.equal(promoteRemoteDenied.ok, false);
     if (!promoteRemoteDenied.ok) {
       assert.equal(promoteRemoteDenied.error.code, 'version_capability_unavailable');
@@ -645,19 +652,19 @@ test('version surface status remains available without version read grant', asyn
         ]);
       }
     }
-    const getReviewDenied = await facade.version.getReview({ reviewId: 'review-1' });
+    const getReviewDenied = await facade.version.reviews.advanced.getReview({ reviewId: 'review-1' });
     assert.deepEqual(getReviewDenied, {
       ok: false,
       error: {
         code: 'version_capability_unavailable',
         capability: 'version:reviewRead',
         dependency: 'hostCapability',
-        reason: 'Capability "version:reviewRead" is denied for WorkbookVersion.getReview',
+        reason: 'Capability "version:reviewRead" is denied for WorkbookVersionReviewApi.getReview',
         retryable: false,
       },
     });
-    const createReviewDenied = await facade.version.createReview(
-      {} as Parameters<typeof facade.version.createReview>[0],
+    const createReviewDenied = await facade.version.reviews.advanced.createReview(
+      {} as Parameters<typeof facade.version.reviews.advanced.createReview>[0],
     );
     assert.deepEqual(createReviewDenied, {
       ok: false,
@@ -665,11 +672,13 @@ test('version surface status remains available without version read grant', asyn
         code: 'version_capability_unavailable',
         capability: 'version:reviewWrite',
         dependency: 'hostCapability',
-        reason: 'Capability "version:reviewWrite" is denied for WorkbookVersion.createReview',
+        reason: 'Capability "version:reviewWrite" is denied for WorkbookVersionReviewApi.createReview',
         retryable: false,
       },
     });
-    const reviewDiffDenied = await facade.version.getReviewDiff({ reviewId: 'review-1' });
+    const reviewDiffDenied = await facade.version.reviews.advanced.getReviewDiff({
+      reviewId: 'review-1',
+    });
     assert.equal(reviewDiffDenied.ok, false);
     if (!reviewDiffDenied.ok) {
       assert.equal(reviewDiffDenied.error.code, 'version_capability_unavailable');
@@ -707,12 +716,15 @@ test('version review diff conditionally requires review read only for review-id 
 
     const baseCommitId = `commit:sha256:${'a'.repeat(64)}` as const;
     const headCommitId = `commit:sha256:${'b'.repeat(64)}` as const;
-    const commitRangeDiff = await facade.version.getReviewDiff({ baseCommitId, headCommitId });
+    const commitRangeDiff = await facade.version.reviews.advanced.getReviewDiff({
+      baseCommitId,
+      headCommitId,
+    });
     if (!commitRangeDiff.ok) {
       assert.notEqual(commitRangeDiff.error.code, 'version_capability_unavailable');
     }
 
-    const reviewDiff = await facade.version.getReviewDiff({ reviewId: 'review-1' });
+    const reviewDiff = await facade.version.reviews.advanced.getReviewDiff({ reviewId: 'review-1' });
     assert.equal(reviewDiff.ok, false);
     if (!reviewDiff.ok) {
       assert.equal(reviewDiff.error.code, 'version_capability_unavailable');

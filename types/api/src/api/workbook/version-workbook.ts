@@ -8,6 +8,7 @@ import type {
   VersionApplyMergeOptions,
   VersionApplyMergeResult,
   VersionBranchName,
+  VersionBranchNameInput,
   VersionBranchRefReadResult,
   VersionCheckoutOptions,
   VersionCheckoutTarget,
@@ -31,10 +32,22 @@ import type {
   VersionSemanticDiffPage,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  WorkbookCommitIdInput,
   WorkbookCommitSummary,
   WorkbookVersionStatus,
   VersionSurfaceStatus,
 } from './version';
+import type {
+  VersionBranchSummary,
+  VersionCheckoutBranchOptions,
+  VersionCheckoutCommitOptions,
+  VersionCommitCurrentOptions,
+  VersionCreateBranchFromCurrentOptions,
+  VersionCurrentCheckout,
+  VersionDiffBranchOptions,
+  VersionDiffPorcelainTarget,
+  VersionListBranchesOptions,
+} from './version-porcelain';
 import type {
   VersionRevertInput,
   VersionRevertOptions,
@@ -42,19 +55,16 @@ import type {
 } from './version-revert';
 import type { VersionResult } from './version-shared';
 import type {
-  VersionGetMergeConflictDetailRequest,
-  VersionMergeConflictDetailResult,
-  VersionPutMergeResolutionPayloadRequest,
-  VersionPutMergeResolutionPayloadResult,
-  VersionSaveMergeResolutionsRequest,
-  VersionSaveMergeResolutionsResult,
+  VersionGetMergeReviewInput,
+  VersionMergeReviewArtifactNamespace,
+  VersionMergeReview,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
 } from './version-merge-review';
-import type { VersionProposalApi } from './version-proposal';
-import type { WorkbookVersionReviewApi } from './version-review';
+import type { VersionProposalPorcelainApi } from './version-proposal';
+import type { WorkbookVersionReviewNamespace } from './version-review';
 
-export interface WorkbookVersion extends WorkbookVersionReviewApi, VersionProposalApi {
-  getStatus(): Promise<WorkbookVersionStatus>;
-  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
+export interface VersionGraphApi {
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(
@@ -80,15 +90,6 @@ export interface WorkbookVersion extends WorkbookVersionReviewApi, VersionPropos
     input: VersionRevertInput,
     options?: VersionRevertOptions,
   ): Promise<VersionResult<VersionRevertResult>>;
-  saveMergeResolutions(
-    input: VersionSaveMergeResolutionsRequest,
-  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;
-  getMergeConflictDetail(
-    input: VersionGetMergeConflictDetailRequest,
-  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;
-  putMergeResolutionPayload(
-    input: VersionPutMergeResolutionPayloadRequest,
-  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,
@@ -114,4 +115,43 @@ export interface WorkbookVersion extends WorkbookVersionReviewApi, VersionPropos
   updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>;
   deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
   deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>;
+}
+
+export interface WorkbookVersion {
+  readonly graph: VersionGraphApi;
+  readonly reviews: WorkbookVersionReviewNamespace;
+  readonly artifacts: VersionMergeReviewArtifactNamespace;
+  readonly proposals: VersionProposalPorcelainApi;
+  getStatus(): Promise<WorkbookVersionStatus>;
+  getSurfaceStatus(): Promise<VersionSurfaceStatus>;
+  getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
+  commitCurrent(
+    options?: VersionCommitCurrentOptions,
+  ): Promise<VersionResult<WorkbookCommitSummary>>;
+  createBranchFromCurrent(
+    name: VersionBranchNameInput,
+    options?: VersionCreateBranchFromCurrentOptions,
+  ): Promise<VersionResult<VersionRef>>;
+  checkoutBranch(
+    name: VersionBranchNameInput,
+    options?: VersionCheckoutBranchOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
+  checkoutCommit(
+    commit: WorkbookCommitIdInput,
+    options?: VersionCheckoutCommitOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
+  listBranches(options?: VersionListBranchesOptions): Promise<VersionResult<Paged<VersionBranchSummary>>>;
+  diffCurrent(
+    target?: VersionDiffPorcelainTarget,
+    options?: VersionDiffOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffBranch(
+    branch: VersionBranchNameInput,
+    options?: VersionDiffBranchOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  previewMerge(
+    input: VersionPreviewMergeInput,
+    options?: VersionPreviewMergeOptions,
+  ): Promise<VersionResult<VersionMergeReview>>;
+  getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
 }

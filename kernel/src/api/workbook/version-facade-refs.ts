@@ -1,10 +1,15 @@
 import type {
   Paged,
   VersionBranchName,
+  VersionBranchNameInput,
   VersionBranchRefReadResult,
+  VersionBranchSummary,
   VersionCreateBranchOptions,
+  VersionCreateBranchFromCurrentOptions,
+  VersionDegradedHeadResult,
   VersionDeleteRefOptions,
   VersionFastForwardBranchOptions,
+  VersionListBranchesOptions,
   VersionListRefsOptions,
   VersionMainRefName,
   VersionRef,
@@ -13,21 +18,27 @@ import type {
   VersionRefSelector,
   VersionRecordRevision,
   VersionResult,
+  VersionStoreDiagnostic,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
 
 import type { DocumentContext } from '../../context';
 import { readActiveCheckoutHead } from './version/status/version-active-checkout-head';
 import { readWorkbookVersionFacadeGate } from './version-facade-gate';
+import { validateVersionOperationGate } from './version-operation-gate';
 import {
   VERSION_HEAD_REF,
   VERSION_MAIN_REF,
   degradedRef,
+  mapHeadResult,
+  mapLegacyHeadResult,
   mapRefResult,
   providerErrorDiagnostic,
   serviceUnavailableDiagnostic,
 } from './version-public-read-mappers';
+import { publicDiagnostic as commitPublicDiagnostic } from './version/commit/version-commit-diagnostics';
 import {
   createWorkbookVersionBranch,
   deleteWorkbookVersionBranch,
@@ -139,6 +150,25 @@ export async function listWorkbookVersionFacadeRefs(
   );
 }
 
+export async function listWorkbookVersionFacadeBranches(
+  ctx: DocumentContext,
+  options: VersionListBranchesOptions = {},
+): Promise<VersionResult<Paged<VersionBranchSummary>>> {
+  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'listBranches', 'version:read');
+  if (gateDiagnostics) return versionFailureFromStoreDiagnostics('listBranches', gateDiagnostics);
+  const result = await listWorkbookVersionRefs(ctx, options);
+  if (result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics('listBranches', result.diagnostics);
+  }
+  return {
+    ok: true,
+    value: {
+      items: result.items.map(branchSummaryFromRef),
+      limit: VERSION_LIST_REFS_DEFAULT_PAGE_SIZE,
+    },
+  };
+}
+
 export async function createWorkbookVersionFacadeBranch(
   ctx: DocumentContext,
   options: VersionCreateBranchOptions,
@@ -146,6 +176,39 @@ export async function createWorkbookVersionFacadeBranch(
   return versionResultFromRefMutation(
     'createBranch',
     await createWorkbookVersionBranch(ctx, options),
+  );
+}
+
+export async function createWorkbookVersionFacadeBranchFromCurrent(
+  ctx: DocumentContext,
+  name: VersionBranchNameInput,
+  options: VersionCreateBranchFromCurrentOptions = {},
+): Promise<VersionResult<VersionRef>> {
+  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'createBranchFromCurrent', 'version:read');
+  if (gateDiagnostics) {
+    return versionFailureFromStoreDiagnostics('createBranchFromCurrent', gateDiagnostics);
+  }
+  const branchGateDiagnostics = validateVersionOperationGate(
+    ctx,
+    'createBranchFromCurrent',
+    'version:branch',
+    { mutates: true },
+  );
+  if (branchGateDiagnostics.length > 0) {
+    return versionFailureFromStoreDiagnostics('createBranchFromCurrent', branchGateDiagnostics);
+  }
+  const head = await readCurrentBranchTarget(ctx);
+  if (!head.ok) {
+    return versionFailureFromStoreDiagnostics('createBranchFromCurrent', head.diagnostics);
+  }
+  return versionResultFromRefMutation(
+    'createBranchFromCurrent',
+    await createWorkbookVersionBranch(ctx, {
+      name,
+      targetCommitId: head.commitId,
+      ...(options.baseCommitId ? { baseCommitId: options.baseCommitId as never } : {}),
+      ...(options.expectedAbsent ? { expectedAbsent: true } : {}),
+    }),
   );
 }
 
@@ -262,4 +325,77 @@ function isVersionRecordRevision(value: unknown): value is VersionRecordRevision
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
+}
+
+function branchSummaryFromRef(ref: VersionRef): VersionBranchSummary {
+  return {
+    name: branchNameFromRefName(ref.name),
+    refName: ref.name,
+    commitId: ref.commitId,
+    revision: ref.revision,
+    ...(ref.updatedAt ? { updatedAt: ref.updatedAt } : {}),
+  };
+}
+
+function branchNameFromRefName(refName: VersionMainRefName | VersionRefName): VersionBranchName {
+  return (refName === VERSION_MAIN_REF ? 'main' : refName.slice('refs/heads/'.length)) as VersionBranchName;
+}
+
+async function readCurrentBranchTarget(
+  ctx: DocumentContext,
+): Promise<
+  | { readonly ok: true; readonly commitId: VersionRef['commitId'] }
+  | { readonly ok: false; readonly diagnostics: readonly VersionStoreDiagnostic[] }
+> {
+  const activeCheckoutHead = await readActiveCheckoutHead(ctx);
+  if (activeCheckoutHead.status === 'resolved') {
+    return { ok: true, commitId: activeCheckoutHead.head.id };
+  }
+  if (activeCheckoutHead.status === 'degraded') {
+    return { ok: false, diagnostics: activeCheckoutHead.result.diagnostics };
+  }
+
+  const readService = getAttachedVersionReadService(ctx);
+  if (!readService) {
+    return {
+      ok: false,
+      diagnostics: [currentHeadUnavailableDiagnostic('readServiceUnavailable')],
+    };
+  }
+
+  try {
+    const head = readService.readHead
+      ? mapHeadResult(await readService.readHead())
+      : readService.getHead
+        ? mapLegacyHeadResult(await readService.getHead())
+        : null;
+    if (!head) {
+      return { ok: false, diagnostics: [currentHeadUnavailableDiagnostic('readHeadUnavailable')] };
+    }
+    if (isDegradedHead(head)) {
+      return { ok: false, diagnostics: head.diagnostics };
+    }
+    return { ok: true, commitId: head.id };
+  } catch {
+    return { ok: false, diagnostics: [currentHeadUnavailableDiagnostic('providerError')] };
+  }
+}
+
+function isDegradedHead(
+  value: WorkbookCommitRef | VersionDegradedHeadResult,
+): value is VersionDegradedHeadResult {
+  return 'status' in value && value.status === 'degraded';
+}
+
+function currentHeadUnavailableDiagnostic(reason: string) {
+  return commitPublicDiagnostic(
+    'VERSION_GRAPH_UNINITIALIZED',
+    'No current version head is available for createBranchFromCurrent.',
+    {
+      severity: 'error',
+      recoverability: 'unsupported',
+      payload: { operation: 'createBranchFromCurrent', reason },
+      mutationGuarantee: 'no-write-attempted',
+    },
+  );
 }

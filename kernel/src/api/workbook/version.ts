@@ -1,51 +1,52 @@
 import type {
-  AcceptAgentProposalInput,
-  AgentProposal,
-  AgentProposalAcceptResult,
-  AgentProposalSummary,
-  AgentProposalWorkspaceHandle,
   CheckoutVersionResult,
-  CommitProposalWorkspaceInput,
-  CreateAgentProposalInput,
-  DisposeProposalWorkspaceInput,
-  FailAgentProposalInput,
-  GetAgentProposalInput,
-  GetProposalWorkspaceInput,
-  ListAgentProposalsInput,
-  MarkAgentProposalVerifiedInput,
-  OpenProposalReviewInput,
   Paged,
-  RejectAgentProposalInput,
-  StartProposalWorkspaceInput,
-  SupersedeAgentProposalInput,
   VersionAppendReviewDecisionInput,
   VersionApplyMergeInput,
   VersionApplyMergeOptions,
   VersionApplyMergeResult,
   VersionBranchName,
+  VersionBranchNameInput,
+  VersionBranchSummary,
   VersionBranchRefReadResult,
+  VersionCheckoutBranchOptions,
+  VersionCheckoutCommitOptions,
   VersionCheckoutOptions,
   VersionCheckoutTarget,
   VersionCommitish,
+  VersionCommitCurrentOptions,
   VersionCommitOptions,
+  VersionCreateBranchFromCurrentOptions,
   VersionCreateBranchOptions,
   VersionCreateReviewInput,
+  VersionCurrentCheckout,
   VersionDeleteRefOptions,
+  VersionDiffBranchOptions,
   VersionDiffOptions,
+  VersionDiffPorcelainTarget,
   VersionFastForwardBranchOptions,
   VersionGetHeadOptions,
+  VersionGraphApi,
   VersionGetMergeConflictDetailRequest,
+  VersionGetMergeReviewInput,
   VersionGetReviewDiffInput,
   VersionGetReviewInput,
   VersionHead,
   VersionListCommitsOptions,
+  VersionListBranchesOptions,
   VersionListRefsOptions,
   VersionListReviewsInput,
   VersionMainRefName,
   VersionMergeConflictDetailResult,
+  VersionMergeReviewArtifactApi,
+  VersionMergeReviewArtifactNamespace,
   VersionMergeInput,
   VersionMergeOptions,
   VersionMergeResult,
+  VersionMergeReview,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
+  VersionProposalPorcelainApi,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
   VersionPutMergeResolutionPayloadRequest,
@@ -65,8 +66,11 @@ import type {
   VersionUpdateBranchOptions,
   VersionUpdateReviewStatusInput,
   WorkbookCommitSummary,
+  WorkbookCommitIdInput,
   WorkbookVersion,
+  WorkbookVersionReviewApi,
   WorkbookVersionReviewDiffPage,
+  WorkbookVersionReviewNamespace,
   WorkbookVersionReviewRecord,
   WorkbookVersionReviewRecordSummary,
   WorkbookVersionStatus,
@@ -76,8 +80,14 @@ import type { DocumentContext } from '../../context';
 import type { VersionCheckoutTransactionGuard } from './version-checkout';
 import {
   checkoutWorkbookVersionFacade,
+  checkoutBranchWorkbookVersionFacade,
+  checkoutCommitWorkbookVersionFacade,
+  commitCurrentWorkbookVersionFacade,
   commitWorkbookVersionFacade,
+  diffBranchWorkbookVersionFacade,
+  diffCurrentWorkbookVersionFacade,
   diffWorkbookVersionFacade,
+  getWorkbookVersionFacadeCurrent,
   getWorkbookVersionFacadeHead,
   getWorkbookVersionFacadeStatus,
   getWorkbookVersionFacadeSurfaceStatus,
@@ -86,33 +96,25 @@ import {
 import {
   applyMergeWorkbookVersionFacade,
   getMergeConflictDetailWorkbookVersionFacade,
+  getMergeReviewWorkbookVersionFacade,
   mergeWorkbookVersionFacade,
+  previewMergeWorkbookVersionFacade,
   promotePendingRemoteWorkbookVersionFacade,
   putMergeResolutionPayloadWorkbookVersionFacade,
   revertWorkbookVersionFacade,
   saveMergeResolutionsWorkbookVersionFacade,
 } from './version-facade-merge';
 import {
-  acceptWorkbookVersionProposalFacade,
-  commitWorkbookVersionProposalWorkspaceFacade,
-  createWorkbookVersionProposalFacade,
-  disposeWorkbookVersionProposalWorkspaceFacade,
-  failWorkbookVersionProposalFacade,
-  getWorkbookVersionProposalFacade,
-  getWorkbookVersionProposalWorkspaceFacade,
-  listWorkbookVersionProposalsFacade,
-  markWorkbookVersionProposalVerifiedFacade,
-  openWorkbookVersionProposalReviewFacade,
-  rejectWorkbookVersionProposalFacade,
-  startWorkbookVersionProposalWorkspaceFacade,
-  supersedeWorkbookVersionProposalFacade,
+  createWorkbookVersionProposalPorcelainFacade,
 } from './version-facade-proposals';
 import {
   createWorkbookVersionFacadeBranch,
+  createWorkbookVersionFacadeBranchFromCurrent,
   deleteWorkbookVersionFacadeBranch,
   deleteWorkbookVersionFacadeRef,
   fastForwardWorkbookVersionFacadeBranch,
   getWorkbookVersionFacadeRef,
+  listWorkbookVersionFacadeBranches,
   listWorkbookVersionFacadeRefs,
   readWorkbookVersionFacadeRef,
   updateWorkbookVersionFacadeBranch,
@@ -128,30 +130,20 @@ import {
 
 type WorkbookVersionContextSource = DocumentContext | (() => DocumentContext);
 
-export class WorkbookVersionImpl implements WorkbookVersion {
-  private readonly ctxSource: WorkbookVersionContextSource;
-
+abstract class WorkbookVersionNamespaceBase {
   constructor(
-    ctx: WorkbookVersionContextSource,
-    private readonly options: {
+    private readonly ctxSource: WorkbookVersionContextSource,
+    protected readonly options: {
       readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
     } = {},
-  ) {
-    this.ctxSource = ctx;
-  }
+  ) {}
 
-  private get ctx(): DocumentContext {
+  protected get ctx(): DocumentContext {
     return typeof this.ctxSource === 'function' ? this.ctxSource() : this.ctxSource;
   }
+}
 
-  async getStatus(): Promise<WorkbookVersionStatus> {
-    return getWorkbookVersionFacadeStatus(this.ctx);
-  }
-
-  async getSurfaceStatus() {
-    return getWorkbookVersionFacadeSurfaceStatus(this.ctx, await this.getStatus());
-  }
-
+class WorkbookVersionGraphImpl extends WorkbookVersionNamespaceBase implements VersionGraphApi {
   async getHead(): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions): Promise<VersionResult<VersionHead>>;
   async getHead(options: VersionGetHeadOptions = {}): Promise<VersionResult<VersionHead>> {
@@ -166,6 +158,12 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async commit(options: VersionCommitOptions = {}): Promise<VersionResult<WorkbookCommitSummary>> {
     return commitWorkbookVersionFacade(this.ctx, options);
+  }
+
+  async promotePendingRemote(
+    options: VersionPromotePendingRemoteOptions = {},
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>> {
+    return promotePendingRemoteWorkbookVersionFacade(this.ctx, options);
   }
 
   async checkout(
@@ -204,136 +202,6 @@ export class WorkbookVersionImpl implements WorkbookVersion {
     options: VersionRevertOptions = {},
   ): Promise<VersionResult<VersionRevertResult>> {
     return revertWorkbookVersionFacade(this.ctx, input, options);
-  }
-
-  async promotePendingRemote(
-    options: VersionPromotePendingRemoteOptions = {},
-  ): Promise<VersionResult<VersionPromotePendingRemoteResult>> {
-    return promotePendingRemoteWorkbookVersionFacade(this.ctx, options);
-  }
-
-  async saveMergeResolutions(
-    input: VersionSaveMergeResolutionsRequest,
-  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>> {
-    return saveMergeResolutionsWorkbookVersionFacade(this.ctx, input);
-  }
-
-  async getMergeConflictDetail(
-    input: VersionGetMergeConflictDetailRequest,
-  ): Promise<VersionResult<VersionMergeConflictDetailResult>> {
-    return getMergeConflictDetailWorkbookVersionFacade(this.ctx, input);
-  }
-
-  async putMergeResolutionPayload(
-    input: VersionPutMergeResolutionPayloadRequest,
-  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> {
-    return putMergeResolutionPayloadWorkbookVersionFacade(this.ctx, input);
-  }
-
-  async listReviews(
-    input: VersionListReviewsInput = {},
-  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
-    return listWorkbookVersionFacadeReviews(this.ctx, input);
-  }
-
-  async getReview(
-    input: VersionGetReviewInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return getWorkbookVersionFacadeReview(this.ctx, input);
-  }
-
-  async createReview(
-    input: VersionCreateReviewInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return createWorkbookVersionFacadeReview(this.ctx, input);
-  }
-
-  async appendReviewDecision(
-    input: VersionAppendReviewDecisionInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return appendWorkbookVersionFacadeReviewDecision(this.ctx, input);
-  }
-
-  async updateReviewStatus(
-    input: VersionUpdateReviewStatusInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return updateWorkbookVersionFacadeReviewStatus(this.ctx, input);
-  }
-
-  async getReviewDiff(
-    input: VersionGetReviewDiffInput,
-  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
-    return getWorkbookVersionFacadeReviewDiff(this.ctx, input);
-  }
-
-  async createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return createWorkbookVersionProposalFacade(this.ctx, input);
-  }
-
-  async startProposalWorkspace(
-    input: StartProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    return startWorkbookVersionProposalWorkspaceFacade(this.ctx, input);
-  }
-
-  async getProposalWorkspace(
-    input: GetProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposalWorkspaceHandle>> {
-    return getWorkbookVersionProposalWorkspaceFacade(this.ctx, input);
-  }
-
-  async disposeProposalWorkspace(
-    input: DisposeProposalWorkspaceInput,
-  ): Promise<VersionResult<{ readonly disposed: true }>> {
-    return disposeWorkbookVersionProposalWorkspaceFacade(this.ctx, input);
-  }
-
-  async commitProposalWorkspace(
-    input: CommitProposalWorkspaceInput,
-  ): Promise<VersionResult<AgentProposal>> {
-    return commitWorkbookVersionProposalWorkspaceFacade(this.ctx, input);
-  }
-
-  async failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return failWorkbookVersionProposalFacade(this.ctx, input);
-  }
-
-  async getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return getWorkbookVersionProposalFacade(this.ctx, input);
-  }
-
-  async listProposals(
-    input: ListAgentProposalsInput = {},
-  ): Promise<VersionResult<Paged<AgentProposalSummary>>> {
-    return listWorkbookVersionProposalsFacade(this.ctx, input);
-  }
-
-  async markProposalVerified(
-    input: MarkAgentProposalVerifiedInput,
-  ): Promise<VersionResult<AgentProposal>> {
-    return markWorkbookVersionProposalVerifiedFacade(this.ctx, input);
-  }
-
-  async openProposalReview(
-    input: OpenProposalReviewInput,
-  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
-    return openWorkbookVersionProposalReviewFacade(this.ctx, input);
-  }
-
-  async acceptProposal(
-    input: AcceptAgentProposalInput,
-  ): Promise<VersionResult<AgentProposalAcceptResult>> {
-    return acceptWorkbookVersionProposalFacade(this.ctx, input);
-  }
-
-  async rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>> {
-    return rejectWorkbookVersionProposalFacade(this.ctx, input);
-  }
-
-  async supersedeProposal(
-    input: SupersedeAgentProposalInput,
-  ): Promise<VersionResult<AgentProposal>> {
-    return supersedeWorkbookVersionProposalFacade(this.ctx, input);
   }
 
   async diff(
@@ -394,5 +262,219 @@ export class WorkbookVersionImpl implements WorkbookVersion {
 
   async deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>> {
     return deleteWorkbookVersionFacadeRef(this.ctx, options);
+  }
+}
+
+class WorkbookVersionArtifactAdvancedImpl
+  extends WorkbookVersionNamespaceBase
+  implements VersionMergeReviewArtifactApi
+{
+  async saveMergeResolutions(
+    input: VersionSaveMergeResolutionsRequest,
+  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>> {
+    return saveMergeResolutionsWorkbookVersionFacade(this.ctx, input);
+  }
+
+  async getMergeConflictDetail(
+    input: VersionGetMergeConflictDetailRequest,
+  ): Promise<VersionResult<VersionMergeConflictDetailResult>> {
+    return getMergeConflictDetailWorkbookVersionFacade(this.ctx, input);
+  }
+
+  async putMergeResolutionPayload(
+    input: VersionPutMergeResolutionPayloadRequest,
+  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>> {
+    return putMergeResolutionPayloadWorkbookVersionFacade(this.ctx, input);
+  }
+}
+
+class WorkbookVersionReviewAdvancedImpl
+  extends WorkbookVersionNamespaceBase
+  implements WorkbookVersionReviewApi
+{
+  async listReviews(
+    input: VersionListReviewsInput = {},
+  ): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>> {
+    return listWorkbookVersionFacadeReviews(this.ctx, input);
+  }
+
+  async getReview(
+    input: VersionGetReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return getWorkbookVersionFacadeReview(this.ctx, input);
+  }
+
+  async createReview(
+    input: VersionCreateReviewInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return createWorkbookVersionFacadeReview(this.ctx, input);
+  }
+
+  async appendReviewDecision(
+    input: VersionAppendReviewDecisionInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return appendWorkbookVersionFacadeReviewDecision(this.ctx, input);
+  }
+
+  async updateReviewStatus(
+    input: VersionUpdateReviewStatusInput,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>> {
+    return updateWorkbookVersionFacadeReviewStatus(this.ctx, input);
+  }
+
+  async getReviewDiff(
+    input: VersionGetReviewDiffInput,
+  ): Promise<VersionResult<WorkbookVersionReviewDiffPage>> {
+    return getWorkbookVersionFacadeReviewDiff(this.ctx, input);
+  }
+}
+
+class WorkbookVersionReviewNamespaceImpl implements WorkbookVersionReviewNamespace {
+  constructor(
+    private readonly ctxSource: WorkbookVersionContextSource,
+    private readonly options: {
+      readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
+    } = {},
+  ) {}
+
+  get advanced(): WorkbookVersionReviewApi {
+    return new WorkbookVersionReviewAdvancedImpl(this.ctxSource, this.options);
+  }
+}
+
+class WorkbookVersionArtifactNamespaceImpl implements VersionMergeReviewArtifactNamespace {
+  constructor(
+    private readonly ctxSource: WorkbookVersionContextSource,
+    private readonly options: {
+      readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
+    } = {},
+  ) {}
+
+  get advanced(): VersionMergeReviewArtifactApi {
+    return new WorkbookVersionArtifactAdvancedImpl(this.ctxSource, this.options);
+  }
+}
+
+export class WorkbookVersionImpl implements WorkbookVersion {
+  private readonly ctxSource: WorkbookVersionContextSource;
+
+  constructor(
+    ctx: WorkbookVersionContextSource,
+    private readonly options: {
+      readonly checkoutTransactionGuard?: VersionCheckoutTransactionGuard;
+    } = {},
+  ) {
+    this.ctxSource = ctx;
+  }
+
+  private get ctx(): DocumentContext {
+    return typeof this.ctxSource === 'function' ? this.ctxSource() : this.ctxSource;
+  }
+
+  get graph(): VersionGraphApi {
+    return new WorkbookVersionGraphImpl(() => this.ctx, this.options);
+  }
+
+  get reviews(): WorkbookVersionReviewNamespace {
+    return new WorkbookVersionReviewNamespaceImpl(() => this.ctx, this.options);
+  }
+
+  get artifacts(): VersionMergeReviewArtifactNamespace {
+    return new WorkbookVersionArtifactNamespaceImpl(() => this.ctx, this.options);
+  }
+
+  get proposals(): VersionProposalPorcelainApi {
+    return createWorkbookVersionProposalPorcelainFacade(this.ctx);
+  }
+
+  async getStatus(): Promise<WorkbookVersionStatus> {
+    return getWorkbookVersionFacadeStatus(this.ctx);
+  }
+
+  async getSurfaceStatus() {
+    return getWorkbookVersionFacadeSurfaceStatus(this.ctx, await this.getStatus());
+  }
+
+  async getCurrent(): Promise<VersionResult<VersionCurrentCheckout>> {
+    return getWorkbookVersionFacadeCurrent(this.ctx);
+  }
+
+  async commitCurrent(
+    options: VersionCommitCurrentOptions = {},
+  ): Promise<VersionResult<WorkbookCommitSummary>> {
+    return commitCurrentWorkbookVersionFacade(this.ctx, options);
+  }
+
+  async createBranchFromCurrent(
+    name: VersionBranchNameInput,
+    options: VersionCreateBranchFromCurrentOptions = {},
+  ): Promise<VersionResult<VersionRef>> {
+    return createWorkbookVersionFacadeBranchFromCurrent(this.ctx, name, options);
+  }
+
+  async checkoutBranch(
+    name: VersionBranchNameInput,
+    options: VersionCheckoutBranchOptions = {},
+  ): Promise<VersionResult<CheckoutVersionResult>> {
+    return checkoutBranchWorkbookVersionFacade(
+      this.ctx,
+      name,
+      options,
+      this.options.checkoutTransactionGuard,
+    );
+  }
+
+  async checkoutCommit(
+    commit: WorkbookCommitIdInput,
+    options: VersionCheckoutCommitOptions = {},
+  ): Promise<VersionResult<CheckoutVersionResult>> {
+    return checkoutCommitWorkbookVersionFacade(
+      this.ctx,
+      commit,
+      options,
+      this.options.checkoutTransactionGuard,
+    );
+  }
+
+  async previewMerge(
+    input: VersionPreviewMergeInput,
+    options: VersionPreviewMergeOptions = {},
+  ): Promise<VersionResult<VersionMergeReview>> {
+    return previewMergeWorkbookVersionFacade(
+      this.ctx,
+      input,
+      options,
+      this.options.checkoutTransactionGuard,
+    );
+  }
+
+  async getMergeReview(
+    input: VersionGetMergeReviewInput,
+  ): Promise<VersionResult<VersionMergeReview>> {
+    return getMergeReviewWorkbookVersionFacade(
+      this.ctx,
+      input,
+      this.options.checkoutTransactionGuard,
+    );
+  }
+
+  async diffCurrent(
+    target: VersionDiffPorcelainTarget = 'main',
+    options: VersionDiffOptions = {},
+  ): Promise<VersionResult<VersionSemanticDiffPage>> {
+    return diffCurrentWorkbookVersionFacade(this.ctx, target, options);
+  }
+
+  async diffBranch(
+    branch: VersionBranchNameInput,
+    options: VersionDiffBranchOptions = {},
+  ): Promise<VersionResult<VersionSemanticDiffPage>> {
+    return diffBranchWorkbookVersionFacade(this.ctx, branch, options);
+  }
+
+  async listBranches(
+    options: VersionListBranchesOptions = {},
+  ): Promise<VersionResult<Paged<VersionBranchSummary>>> {
+    return listWorkbookVersionFacadeBranches(this.ctx, options);
   }
 }

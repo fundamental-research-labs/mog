@@ -13,7 +13,7 @@ export function registerProposalProviderCreationScenarios(): void {
     const graph = await graphWithRoot();
     const version = versionForProvider(graph.provider);
 
-    const created = await version.createProposal(createProposalInput('proposal-create-1'));
+    const created = await version.proposals.advanced.createProposal(createProposalInput('proposal-create-1'));
     expect(created).toMatchObject({
       ok: true,
       value: {
@@ -28,11 +28,11 @@ export function registerProposalProviderCreationScenarios(): void {
     });
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
 
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { id: created.value.id, status: 'draft' },
     });
-    await expect(version.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
       ok: true,
       value: { items: [{ id: created.value.id }], totalEstimate: 1 },
     });
@@ -47,7 +47,7 @@ export function registerProposalProviderCreationScenarios(): void {
       },
     });
     await expect(
-      version.startProposalWorkspace({
+      version.proposals.advanced.startProposalWorkspace({
         clientRequestId: 'workspace-open-unavailable',
         proposalId: created.value.id,
         expectedRevision: 1,
@@ -57,7 +57,7 @@ export function registerProposalProviderCreationScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.startProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.startProposalWorkspace',
         diagnostics: [expect.objectContaining({ code: 'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE' })],
       },
     });
@@ -75,7 +75,7 @@ export function registerProposalProviderCreationScenarios(): void {
     const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
 
     await expect(
-      version.createProposal({
+      version.proposals.advanced.createProposal({
         ...createProposalInput('proposal-create-stale-base'),
         baseCommitId: graph.rootCommitId,
       }),
@@ -87,7 +87,7 @@ export function registerProposalProviderCreationScenarios(): void {
         allowed: ['current_target_head'],
       },
     });
-    await expect(version.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
       ok: true,
       value: { items: [], totalEstimate: 0 },
     });
@@ -105,14 +105,14 @@ export function registerProposalProviderCreationScenarios(): void {
     const version = versionForProvider(graph.provider, {
       proposalWorkspaceService: graphCommittingWorkspaceService(graph.provider),
     });
-    const created = await version.createProposal(
+    const created = await version.proposals.advanced.createProposal(
       createProposalInput('proposal-create-before-target-move'),
     );
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
     const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
 
     await expect(
-      version.startProposalWorkspace({
+      version.proposals.advanced.startProposalWorkspace({
         clientRequestId: 'workspace-open-after-target-move',
         proposalId: created.value.id,
         expectedRevision: 1,
@@ -124,7 +124,7 @@ export function registerProposalProviderCreationScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.startProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.startProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'stale_proposal_target_head',
@@ -137,7 +137,7 @@ export function registerProposalProviderCreationScenarios(): void {
         ],
       },
     });
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },
     });

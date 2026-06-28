@@ -22,6 +22,7 @@ import type { RefVersion } from '../../../document/version-store/refs/ref-store'
 import { DOCUMENT_SCOPE, GRAPH_AUTHOR } from './version-proposal-accept-provider-helpers-fixtures';
 
 export type InMemoryVersionStoreProvider = ReturnType<typeof createInMemoryVersionStoreProvider>;
+type CommitEdit = { readonly cell: string; readonly value: string };
 
 export async function graphWithRoot() {
   const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
@@ -37,6 +38,7 @@ export async function commitRef(
   provider: InMemoryVersionStoreProvider,
   targetRef: string,
   expectedHeadCommitId: WorkbookCommitId,
+  edit: CommitEdit = { cell: 'B1', value: 'proposal-edit' },
 ): Promise<WorkbookCommitId> {
   const namespace = namespaceForDocumentScope(DOCUMENT_SCOPE, 'graph-1');
   const graph = await provider.openGraph(namespace);
@@ -45,7 +47,7 @@ export async function commitRef(
     throw new Error(`expected ${targetRef} before proposal accept test`);
   }
   const committed = await graph.commit(
-    await commitInput(namespace, expectedHeadCommitId, ref.ref.revision, targetRef),
+    await commitInput(namespace, expectedHeadCommitId, ref.ref.revision, targetRef, edit),
   );
   if (committed.status !== 'success') {
     throw new Error(`expected ${targetRef} move success: ${committed.diagnostics[0]?.code}`);
@@ -58,22 +60,23 @@ export async function commitInput(
   expectedHeadCommitId: WorkbookCommitId,
   expectedTargetRefVersion: RefVersion,
   targetRef: string,
+  edit: CommitEdit = { cell: 'B1', value: 'proposal-edit' },
 ): Promise<CommitVersionGraphInput> {
   return {
     snapshotRootRecord: await objectRecord(namespace, 'workbook.snapshotRoot.v1', {
       label: 'proposal',
-      sheets: [{ id: 'sheet-1', cells: { B1: 'proposal-edit' } }],
+      sheets: [{ id: 'sheet-1', cells: { [edit.cell]: edit.value } }],
     }),
     semanticChangeSetRecord: await objectRecord(namespace, 'workbook.semanticChangeSet.v1', {
       schemaVersion: 1,
       changes: [
         {
-          changeId: 'proposal-change-b1',
+          changeId: `proposal-change-${edit.cell.toLowerCase()}`,
           domain: 'cell',
-          entityId: 'sheet-1!B1',
+          entityId: `sheet-1!${edit.cell}`,
           propertyPath: ['value'],
           before: { kind: 'value', value: null },
-          after: { kind: 'value', value: 'proposal-edit' },
+          after: { kind: 'value', value: edit.value },
         },
       ],
     }),

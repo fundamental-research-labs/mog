@@ -20,13 +20,13 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     const opened = await openProposalWorkspace(version, 'workspace-get');
 
     await expect(
-      version.getProposalWorkspace({ workspaceId: opened.workspaceId }),
+      version.proposals.advanced.getProposalWorkspace({ workspaceId: opened.workspaceId }),
     ).resolves.toEqual({
       ok: true,
       value: opened,
     });
     await expect(
-      version.getProposalWorkspace({ workspaceId: 'workspace:missing' }),
+      version.proposals.advanced.getProposalWorkspace({ workspaceId: 'workspace:missing' }),
     ).resolves.toMatchObject({
       ok: false,
       error: { code: 'not_found', target: 'workbook.version.proposal' },
@@ -40,7 +40,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     const opened = await openProposalWorkspace(version, 'misbound-get');
 
     await expect(
-      version.getProposalWorkspace({ workspaceId: opened.workspaceId }),
+      version.proposals.advanced.getProposalWorkspace({ workspaceId: opened.workspaceId }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -58,7 +58,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     const opened = await openProposalWorkspace(version, 'misbased-get');
 
     await expect(
-      version.getProposalWorkspace({ workspaceId: opened.workspaceId }),
+      version.proposals.advanced.getProposalWorkspace({ workspaceId: opened.workspaceId }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -76,7 +76,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     const opened = await openProposalWorkspace(version, 'workspace-dispose');
 
     await expect(
-      version.disposeProposalWorkspace({
+      version.proposals.advanced.disposeProposalWorkspace({
         clientRequestId: 'workspace-dispose-missing',
         workspaceId: 'workspace:missing',
         actor: ACTOR,
@@ -86,7 +86,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
       error: { code: 'not_found', target: 'workbook.version.proposal' },
     });
     await expect(
-      version.disposeProposalWorkspace({
+      version.proposals.advanced.disposeProposalWorkspace({
         clientRequestId: 'workspace-dispose-ok',
         workspaceId: opened.workspaceId,
         actor: ACTOR,
@@ -106,7 +106,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     );
 
     await expect(
-      version.getProposalWorkspace({
+      version.proposals.advanced.getProposalWorkspace({
         workspaceId: opened.workspaceId,
         expectedTargetHeadId: opened.targetHeadIdAtCreation,
         expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
@@ -115,7 +115,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.getProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'stale_proposal_target_head',
@@ -130,7 +130,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     });
 
     await expect(
-      version.disposeProposalWorkspace({
+      version.proposals.advanced.disposeProposalWorkspace({
         clientRequestId: 'workspace-dispose-target-advanced',
         workspaceId: opened.workspaceId,
         expectedTargetHeadId: opened.targetHeadIdAtCreation,
@@ -141,7 +141,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.disposeProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.disposeProposalWorkspace',
         diagnostics: [expect.objectContaining({ code: 'stale_proposal_target_head' })],
       },
     });
@@ -153,7 +153,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     const version = versionForProvider(graph.provider, workspaceService);
     const opened = await openProposalWorkspace(version, 'workspace-committed-handle');
 
-    const committed = await version.commitProposalWorkspace({
+    const committed = await version.proposals.advanced.commitProposalWorkspace({
       clientRequestId: 'workspace-commit-before-stale-handle-lookup',
       proposalId: opened.proposalId,
       workspaceId: opened.workspaceId,
@@ -169,7 +169,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
     });
 
     await expect(
-      version.getProposalWorkspace({
+      version.proposals.advanced.getProposalWorkspace({
         workspaceId: opened.workspaceId,
         expectedTargetHeadId: opened.targetHeadIdAtCreation,
         expectedTargetRefRevision: opened.targetRefRevisionAtCreation,
@@ -183,7 +183,7 @@ export function registerProposalWorkspaceLookupScenarios(): void {
       },
     });
     await expect(
-      version.disposeProposalWorkspace({
+      version.proposals.advanced.disposeProposalWorkspace({
         clientRequestId: 'workspace-dispose-after-committed-handle',
         workspaceId: opened.workspaceId,
         expectedTargetHeadId: opened.targetHeadIdAtCreation,

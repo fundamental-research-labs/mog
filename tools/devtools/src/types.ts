@@ -124,27 +124,29 @@ export type DevToolsVersionFacadePayload = unknown;
  */
 export interface DevToolsWorkbookVersionReadFacade {
   getSurfaceStatus(): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  getHead(
-    options?: DevToolsVersionGetHeadOptions,
-  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  listCommits(
-    options?: DevToolsVersionListCommitsOptions,
-  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  listRefs(
-    options?: DevToolsVersionListRefsOptions,
-  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  readonly graph: {
+    getHead(
+      options?: DevToolsVersionGetHeadOptions,
+    ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+    listCommits(
+      options?: DevToolsVersionListCommitsOptions,
+    ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+    listRefs(
+      options?: DevToolsVersionListRefsOptions,
+    ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  };
 }
 
 export interface DevToolsVersionControlReadbacks {
   /** Public facade read: `workbook.version.getSurfaceStatus()`. */
   getSurfaceStatus(): Promise<DevToolsVersionFacadePayload | null>;
-  /** Public facade read: `workbook.version.getHead(options)`. */
+  /** Public facade read: `workbook.version.graph.getHead(options)`. */
   getHead(options?: DevToolsVersionGetHeadOptions): Promise<DevToolsVersionFacadePayload | null>;
-  /** Public facade read: `workbook.version.listCommits(options)`. */
+  /** Public facade read: `workbook.version.graph.listCommits(options)`. */
   listCommits(
     options?: DevToolsVersionListCommitsOptions,
   ): Promise<DevToolsVersionFacadePayload | null>;
-  /** Public facade read: `workbook.version.listRefs(options)`. */
+  /** Public facade read: `workbook.version.graph.listRefs(options)`. */
   listRefs(options?: DevToolsVersionListRefsOptions): Promise<DevToolsVersionFacadePayload | null>;
 }
 

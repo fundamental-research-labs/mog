@@ -5,6 +5,7 @@ import { createSpreadsheetRuntime } from '../runtime';
 import { VERSION_SURFACE_HOST_CAPABILITY_DENIED_DIAGNOSTIC_CODE } from '../version-surface-status';
 import {
   WORKBOOK_FACADE_CAPABILITY_MATRIX,
+  WORKBOOK_SUB_API_INTERFACES,
   type SpreadsheetFacadeMatrixEntry,
 } from '../workbook-facade-capability-matrix';
 import type {
@@ -17,27 +18,30 @@ import type {
 } from '../public-types';
 
 type VersionFacade = SpreadsheetWorkbookFacade['version'];
+type VersionGraphFacade = VersionFacade['graph'];
+type VersionReviewAdvancedFacade = VersionFacade['reviews']['advanced'];
+type VersionArtifactAdvancedFacade = VersionFacade['artifacts']['advanced'];
 type VersionSurfaceCapability = Extract<SpreadsheetCapability, `version:${string}`>;
 type VersionSurfaceStatus = Awaited<ReturnType<VersionFacade['getSurfaceStatus']>>;
+type VersionMatrixInterface =
+  | 'WorkbookVersion' | 'VersionGraphApi' | 'WorkbookVersionReviewApi'
+  | 'VersionMergeReviewArtifactApi';
 
 type VersionFacadeOperationKind = 'version-result' | 'throws-on-denied' | 'capability-free-status';
 
 type VersionFacadeResultCase = {
-  readonly methodName: keyof VersionFacade & string;
+  readonly interfaceName: VersionMatrixInterface;
+  readonly methodName: string;
   readonly kind: VersionFacadeOperationKind;
   readonly capabilities: readonly SpreadsheetCapability[];
   readonly conditionalCapabilities?: SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
   readonly deniedCapabilities?: readonly SpreadsheetCapability[];
-  readonly invoke: (version: VersionFacade) => Promise<unknown>;
+  readonly invoke: (version: VersionFacade) => unknown | Promise<unknown>;
 };
 
 const REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY = [
   {
-    when: {
-      argumentIndex: 0,
-      path: ['reviewId'],
-      presence: 'present',
-    },
+    when: { argumentIndex: 0, path: ['reviewId'], presence: 'present' },
     capabilities: ['version:reviewRead'],
   },
 ] as const satisfies SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
@@ -56,78 +60,285 @@ const TEST_REDACTION_POLICY = {
   redactExternalLinks: true,
   redactAgentTrace: true,
 } as const;
-const TEST_VERIFICATION = {
-  status: 'not_run',
-  checks: [],
-  createdAt: '2026-01-01T00:00:00.000Z',
-} as const;
 
-const WORKBOOK_VERSION_METHODS_THROUGH_W7 = [
-  'acceptProposal',
-  'appendReviewDecision',
-  'applyMerge',
-  'checkout',
-  'commit',
-  'commitProposalWorkspace',
-  'createBranch',
-  'createProposal',
-  'createReview',
-  'deleteBranch',
-  'deleteRef',
-  'diff',
-  'disposeProposalWorkspace',
-  'failProposal',
-  'fastForwardBranch',
-  'getHead',
-  'getMergeConflictDetail',
-  'getProposal',
-  'getProposalWorkspace',
-  'getRef',
-  'getReview',
-  'getReviewDiff',
-  'getStatus',
-  'getSurfaceStatus',
-  'listCommits',
-  'listProposals',
-  'listRefs',
-  'listReviews',
-  'markProposalVerified',
-  'merge',
-  'openProposalReview',
-  'promotePendingRemote',
-  'putMergeResolutionPayload',
-  'readRef',
-  'rejectProposal',
-  'revert',
-  'saveMergeResolutions',
-  'startProposalWorkspace',
-  'supersedeProposal',
-  'updateBranch',
-  'updateReviewStatus',
-] as const satisfies readonly (keyof VersionFacade & string)[];
+const EXPECTED_VERSION_MATRIX_METHODS = {
+  WorkbookVersion: [
+    'checkoutBranch', 'checkoutCommit', 'commitCurrent', 'createBranchFromCurrent',
+    'diffBranch', 'diffCurrent', 'getCurrent', 'getMergeReview', 'getStatus',
+    'getSurfaceStatus', 'listBranches', 'previewMerge',
+  ],
+  VersionGraphApi: [
+    'applyMerge', 'checkout', 'commit', 'createBranch', 'deleteBranch', 'deleteRef',
+    'diff', 'fastForwardBranch', 'getHead', 'getRef', 'listCommits', 'listRefs',
+    'merge', 'promotePendingRemote', 'readRef', 'revert', 'updateBranch',
+  ],
+  WorkbookVersionReviewApi: [
+    'appendReviewDecision', 'createReview', 'getReview', 'getReviewDiff', 'listReviews',
+    'updateReviewStatus',
+  ],
+  VersionMergeReviewArtifactApi: [
+    'getMergeConflictDetail', 'putMergeResolutionPayload', 'saveMergeResolutions',
+  ],
+} as const satisfies Record<VersionMatrixInterface, readonly string[]>;
 
 const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
   {
-    methodName: 'acceptProposal',
+    interfaceName: 'WorkbookVersion',
+    methodName: 'checkoutBranch',
     kind: 'version-result',
-    capabilities: ['version:proposal', 'version:branch'],
-    deniedCapabilities: ['version:proposal', 'version:branch'],
-    invoke: (version) =>
-      version.acceptProposal({
-        clientRequestId: 'accept-proposal-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        expectedTargetHeadId: COMMIT_A,
-        actor: TEST_AUTHOR,
-        resolutionPolicy: 'fastForwardOnly',
-      } as Parameters<VersionFacade['acceptProposal']>[0]),
+    capabilities: ['version:checkout'],
+    invoke: (version) => version.checkoutBranch(TEST_BRANCH),
   },
   {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'checkoutCommit',
+    kind: 'version-result',
+    capabilities: ['version:checkout'],
+    invoke: (version) => version.checkoutCommit(COMMIT_A),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'commitCurrent',
+    kind: 'version-result',
+    capabilities: ['version:commit'],
+    invoke: (version) => version.commitCurrent({ message: 'Facade matrix current commit' }),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'createBranchFromCurrent',
+    kind: 'version-result',
+    capabilities: ['version:read', 'version:branch'],
+    deniedCapabilities: ['version:read', 'version:branch'],
+    invoke: (version) => version.createBranchFromCurrent(TEST_BRANCH),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffBranch',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffBranch(TEST_BRANCH, { against: MAIN_REF }),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'diffCurrent',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.diffCurrent(MAIN_REF),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'getCurrent',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.getCurrent(),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'getMergeReview',
+    kind: 'version-result',
+    capabilities: ['version:mergePreview'],
+    invoke: (version) =>
+      version.getMergeReview({
+        resultId: 'merge-result:facade-matrix',
+        resultDigest: TEST_DIGEST,
+      } as Parameters<VersionFacade['getMergeReview']>[0]),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'getStatus',
+    kind: 'throws-on-denied',
+    capabilities: ['version:read'],
+    invoke: (version) => version.getStatus(),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'getSurfaceStatus',
+    kind: 'capability-free-status',
+    capabilities: [],
+    invoke: (version) => version.getSurfaceStatus(),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'listBranches',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.listBranches({}),
+  },
+  {
+    interfaceName: 'WorkbookVersion',
+    methodName: 'previewMerge',
+    kind: 'version-result',
+    capabilities: ['version:mergePreview'],
+    invoke: (version) => version.previewMerge({ from: TEST_BRANCH, into: MAIN_REF }),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'applyMerge',
+    kind: 'version-result',
+    capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
+    deniedCapabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
+    invoke: (version) =>
+      version.graph.applyMerge({
+        base: COMMIT_A,
+        ours: COMMIT_B,
+        theirs: COMMIT_C,
+      } as Parameters<VersionGraphFacade['applyMerge']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'checkout',
+    kind: 'version-result',
+    capabilities: ['version:checkout'],
+    invoke: (version) =>
+      version.graph.checkout({ kind: 'commit', id: COMMIT_A } as Parameters<
+        VersionGraphFacade['checkout']
+      >[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'commit',
+    kind: 'version-result',
+    capabilities: ['version:commit'],
+    invoke: (version) => version.graph.commit({ message: 'Facade matrix test commit' }),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'createBranch',
+    kind: 'version-result',
+    capabilities: ['version:branch'],
+    invoke: (version) =>
+      version.graph.createBranch({
+        name: TEST_BRANCH,
+        targetCommitId: COMMIT_A,
+        expectedAbsent: true,
+      } as Parameters<VersionGraphFacade['createBranch']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'deleteBranch',
+    kind: 'version-result',
+    capabilities: ['version:branch'],
+    invoke: (version) =>
+      version.graph.deleteBranch({
+        name: TEST_BRANCH,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: TEST_REVISION,
+      } as Parameters<VersionGraphFacade['deleteBranch']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'deleteRef',
+    kind: 'version-result',
+    capabilities: ['version:branch'],
+    invoke: (version) =>
+      version.graph.deleteRef({
+        name: TEST_BRANCH,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: TEST_REVISION,
+      } as Parameters<VersionGraphFacade['deleteRef']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'diff',
+    kind: 'version-result',
+    capabilities: ['version:diff'],
+    invoke: (version) => version.graph.diff(COMMIT_A, COMMIT_B),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'fastForwardBranch',
+    kind: 'version-result',
+    capabilities: ['version:branch'],
+    invoke: (version) =>
+      version.graph.fastForwardBranch({
+        name: TEST_BRANCH,
+        nextCommitId: COMMIT_B,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: TEST_REVISION,
+      } as Parameters<VersionGraphFacade['fastForwardBranch']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'getHead',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.graph.getHead(),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'getRef',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.graph.getRef('HEAD'),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'listCommits',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.graph.listCommits({}),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'listRefs',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.graph.listRefs({}),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'merge',
+    kind: 'version-result',
+    capabilities: ['version:mergePreview'],
+    invoke: (version) => version.graph.merge({ base: COMMIT_A, ours: COMMIT_B, theirs: COMMIT_C }),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'promotePendingRemote',
+    kind: 'version-result',
+    capabilities: ['version:remotePromote', 'version:provenance'],
+    deniedCapabilities: ['version:remotePromote', 'version:provenance'],
+    invoke: (version) => version.graph.promotePendingRemote(),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'readRef',
+    kind: 'version-result',
+    capabilities: ['version:read'],
+    invoke: (version) => version.graph.readRef('HEAD'),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'revert',
+    kind: 'version-result',
+    capabilities: ['version:revert'],
+    invoke: (version) =>
+      version.graph.revert({
+        target: { kind: 'commit', commitId: COMMIT_A },
+        targetRef: MAIN_REF,
+        reason: 'Facade matrix revert',
+      } as Parameters<VersionGraphFacade['revert']>[0]),
+  },
+  {
+    interfaceName: 'VersionGraphApi',
+    methodName: 'updateBranch',
+    kind: 'version-result',
+    capabilities: ['version:branch'],
+    invoke: (version) =>
+      version.graph.updateBranch({
+        name: TEST_BRANCH,
+        nextCommitId: COMMIT_B,
+        expectedHead: COMMIT_A,
+        expectedRefRevision: TEST_REVISION,
+      } as Parameters<VersionGraphFacade['updateBranch']>[0]),
+  },
+  {
+    interfaceName: 'WorkbookVersionReviewApi',
     methodName: 'appendReviewDecision',
     kind: 'version-result',
     capabilities: ['version:reviewWrite'],
     invoke: (version) =>
-      version.appendReviewDecision({
+      version.reviews.advanced.appendReviewDecision({
         reviewId: 'review-1',
         expectedRevision: 1,
         clientRequestId: 'append-review-decision-request',
@@ -137,81 +348,15 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
           reviewer: TEST_AUTHOR,
           body: 'Looks good.',
         },
-      } as Parameters<VersionFacade['appendReviewDecision']>[0]),
+      } as Parameters<VersionReviewAdvancedFacade['appendReviewDecision']>[0]),
   },
   {
-    methodName: 'applyMerge',
-    kind: 'version-result',
-    capabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
-    deniedCapabilities: ['version:mergePreview', 'version:mergeApply', 'version:branch'],
-    invoke: (version) =>
-      version.applyMerge({
-        base: COMMIT_A,
-        ours: COMMIT_B,
-        theirs: COMMIT_C,
-      } as Parameters<VersionFacade['applyMerge']>[0]),
-  },
-  {
-    methodName: 'checkout',
-    kind: 'version-result',
-    capabilities: ['version:checkout'],
-    invoke: (version) =>
-      version.checkout({ kind: 'commit', id: COMMIT_A } as Parameters<
-        VersionFacade['checkout']
-      >[0]),
-  },
-  {
-    methodName: 'commit',
-    kind: 'version-result',
-    capabilities: ['version:commit'],
-    invoke: (version) => version.commit({ message: 'Facade matrix test commit' }),
-  },
-  {
-    methodName: 'commitProposalWorkspace',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.commitProposalWorkspace({
-        clientRequestId: 'commit-proposal-workspace-request',
-        proposalId: 'proposal-1',
-        workspaceId: 'workspace-1',
-        expectedRevision: 1,
-        actor: TEST_AUTHOR,
-        message: 'Commit proposal workspace',
-      } as Parameters<VersionFacade['commitProposalWorkspace']>[0]),
-  },
-  {
-    methodName: 'createBranch',
-    kind: 'version-result',
-    capabilities: ['version:branch'],
-    invoke: (version) =>
-      version.createBranch({
-        name: TEST_BRANCH,
-        targetCommitId: COMMIT_A,
-        expectedAbsent: true,
-      } as Parameters<VersionFacade['createBranch']>[0]),
-  },
-  {
-    methodName: 'createProposal',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.createProposal({
-        clientRequestId: 'create-proposal-request',
-        title: 'Facade matrix proposal',
-        targetRef: MAIN_REF,
-        baseCommitId: COMMIT_A,
-        agentRunId: 'agent-run-1',
-        agent: TEST_AUTHOR,
-        redactionPolicy: TEST_REDACTION_POLICY,
-      } as Parameters<VersionFacade['createProposal']>[0]),
-  },
-  {
+    interfaceName: 'WorkbookVersionReviewApi',
     methodName: 'createReview',
     kind: 'version-result',
     capabilities: ['version:reviewWrite'],
     invoke: (version) =>
-      version.createReview({
+      version.reviews.advanced.createReview({
         clientRequestId: 'create-review-request',
         subject: { kind: 'commitRange', baseCommitId: COMMIT_A, headCommitId: COMMIT_B },
         title: 'Facade matrix review',
@@ -219,84 +364,52 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
         baseCommitId: COMMIT_A,
         headCommitId: COMMIT_B,
         redactionPolicy: TEST_REDACTION_POLICY,
-      } as Parameters<VersionFacade['createReview']>[0]),
+      } as Parameters<VersionReviewAdvancedFacade['createReview']>[0]),
   },
   {
-    methodName: 'deleteBranch',
+    interfaceName: 'WorkbookVersionReviewApi',
+    methodName: 'getReview',
     kind: 'version-result',
-    capabilities: ['version:branch'],
-    invoke: (version) =>
-      version.deleteBranch({
-        name: TEST_BRANCH,
-        expectedHead: COMMIT_A,
-        expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['deleteBranch']>[0]),
+    capabilities: ['version:reviewRead'],
+    invoke: (version) => version.reviews.advanced.getReview({ reviewId: 'review-1' }),
   },
   {
-    methodName: 'deleteRef',
-    kind: 'version-result',
-    capabilities: ['version:branch'],
-    invoke: (version) =>
-      version.deleteRef({
-        name: TEST_BRANCH,
-        expectedHead: COMMIT_A,
-        expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['deleteRef']>[0]),
-  },
-  {
-    methodName: 'diff',
+    interfaceName: 'WorkbookVersionReviewApi',
+    methodName: 'getReviewDiff',
     kind: 'version-result',
     capabilities: ['version:diff'],
-    invoke: (version) => version.diff(COMMIT_A, COMMIT_B),
+    conditionalCapabilities: REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY,
+    deniedCapabilities: ['version:diff', 'version:reviewRead'],
+    invoke: (version) => version.reviews.advanced.getReviewDiff({ reviewId: 'review-1' }),
   },
   {
-    methodName: 'disposeProposalWorkspace',
+    interfaceName: 'WorkbookVersionReviewApi',
+    methodName: 'listReviews',
     kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.disposeProposalWorkspace({
-        clientRequestId: 'dispose-proposal-workspace-request',
-        workspaceId: 'workspace-1',
-        actor: TEST_AUTHOR,
-      } as Parameters<VersionFacade['disposeProposalWorkspace']>[0]),
+    capabilities: ['version:reviewRead'],
+    invoke: (version) => version.reviews.advanced.listReviews(),
   },
   {
-    methodName: 'failProposal',
+    interfaceName: 'WorkbookVersionReviewApi',
+    methodName: 'updateReviewStatus',
     kind: 'version-result',
-    capabilities: ['version:proposal'],
+    capabilities: ['version:reviewWrite'],
     invoke: (version) =>
-      version.failProposal({
-        clientRequestId: 'fail-proposal-request',
-        proposalId: 'proposal-1',
+      version.reviews.advanced.updateReviewStatus({
+        reviewId: 'review-1',
         expectedRevision: 1,
+        clientRequestId: 'update-review-status-request',
+        status: 'approved',
         actor: TEST_AUTHOR,
-        diagnostics: [],
-      } as Parameters<VersionFacade['failProposal']>[0]),
+      } as Parameters<VersionReviewAdvancedFacade['updateReviewStatus']>[0]),
   },
   {
-    methodName: 'fastForwardBranch',
-    kind: 'version-result',
-    capabilities: ['version:branch'],
-    invoke: (version) =>
-      version.fastForwardBranch({
-        name: TEST_BRANCH,
-        nextCommitId: COMMIT_B,
-        expectedHead: COMMIT_A,
-        expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['fastForwardBranch']>[0]),
-  },
-  {
-    methodName: 'getHead',
-    kind: 'version-result',
-    capabilities: ['version:read'],
-    invoke: (version) => version.getHead(),
-  },
-  {
+    interfaceName: 'VersionMergeReviewArtifactApi',
     methodName: 'getMergeConflictDetail',
     kind: 'version-result',
     capabilities: ['version:mergePreview'],
     invoke: (version) =>
-      version.getMergeConflictDetail({
+      version.artifacts.advanced.getMergeConflictDetail({
         resultId: 'merge-result:facade-matrix',
         resultDigest: TEST_DIGEST,
         redactionPolicyDigest: TEST_DIGEST,
@@ -304,132 +417,16 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
         expectedConflictDigest: TEST_DIGEST,
         valueRole: 'base',
         purpose: 'review',
-      } as Parameters<VersionFacade['getMergeConflictDetail']>[0]),
+      } as Parameters<VersionArtifactAdvancedFacade['getMergeConflictDetail']>[0]),
   },
   {
-    methodName: 'getProposal',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.getProposal({ proposalId: 'proposal-1' } as Parameters<
-        VersionFacade['getProposal']
-      >[0]),
-  },
-  {
-    methodName: 'getProposalWorkspace',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.getProposalWorkspace({
-        workspaceId: 'workspace-1',
-      } as Parameters<VersionFacade['getProposalWorkspace']>[0]),
-  },
-  {
-    methodName: 'getRef',
-    kind: 'version-result',
-    capabilities: ['version:read'],
-    invoke: (version) => version.getRef('HEAD'),
-  },
-  {
-    methodName: 'getReview',
-    kind: 'version-result',
-    capabilities: ['version:reviewRead'],
-    invoke: (version) => version.getReview({ reviewId: 'review-1' }),
-  },
-  {
-    methodName: 'getReviewDiff',
-    kind: 'version-result',
-    capabilities: ['version:diff'],
-    conditionalCapabilities: REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY,
-    deniedCapabilities: ['version:diff', 'version:reviewRead'],
-    invoke: (version) => version.getReviewDiff({ reviewId: 'review-1' }),
-  },
-  {
-    methodName: 'getStatus',
-    kind: 'throws-on-denied',
-    capabilities: ['version:read'],
-    invoke: (version) => version.getStatus(),
-  },
-  {
-    methodName: 'getSurfaceStatus',
-    kind: 'capability-free-status',
-    capabilities: [],
-    invoke: (version) => version.getSurfaceStatus(),
-  },
-  {
-    methodName: 'listCommits',
-    kind: 'version-result',
-    capabilities: ['version:read'],
-    invoke: (version) => version.listCommits({}),
-  },
-  {
-    methodName: 'listProposals',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) => version.listProposals({}),
-  },
-  {
-    methodName: 'listRefs',
-    kind: 'version-result',
-    capabilities: ['version:read'],
-    invoke: (version) => version.listRefs({}),
-  },
-  {
-    methodName: 'listReviews',
-    kind: 'version-result',
-    capabilities: ['version:reviewRead'],
-    invoke: (version) => version.listReviews(),
-  },
-  {
-    methodName: 'markProposalVerified',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.markProposalVerified({
-        clientRequestId: 'mark-proposal-verified-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        verification: TEST_VERIFICATION,
-        actor: TEST_AUTHOR,
-      } as Parameters<VersionFacade['markProposalVerified']>[0]),
-  },
-  {
-    methodName: 'merge',
-    kind: 'version-result',
-    capabilities: ['version:mergePreview'],
-    invoke: (version) =>
-      version.merge({
-        base: COMMIT_A,
-        ours: COMMIT_B,
-        theirs: COMMIT_C,
-      }),
-  },
-  {
-    methodName: 'openProposalReview',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.openProposalReview({
-        clientRequestId: 'open-proposal-review-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        actor: TEST_AUTHOR,
-      } as Parameters<VersionFacade['openProposalReview']>[0]),
-  },
-  {
-    methodName: 'promotePendingRemote',
-    kind: 'version-result',
-    capabilities: ['version:remotePromote', 'version:provenance'],
-    deniedCapabilities: ['version:remotePromote', 'version:provenance'],
-    invoke: (version) => version.promotePendingRemote(),
-  },
-  {
+    interfaceName: 'VersionMergeReviewArtifactApi',
     methodName: 'putMergeResolutionPayload',
     kind: 'version-result',
     capabilities: ['version:mergePreview', 'version:mergeApply'],
     deniedCapabilities: ['version:mergePreview', 'version:mergeApply'],
     invoke: (version) =>
-      version.putMergeResolutionPayload({
+      version.artifacts.advanced.putMergeResolutionPayload({
         resultId: 'merge-result:facade-matrix',
         resultDigest: TEST_DIGEST,
         redactionPolicyDigest: TEST_DIGEST,
@@ -441,101 +438,21 @@ const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
         expectedTargetHead: { commitId: COMMIT_A, revision: TEST_REVISION },
         value: null,
         purpose: 'custom',
-      } as Parameters<VersionFacade['putMergeResolutionPayload']>[0]),
+      } as Parameters<VersionArtifactAdvancedFacade['putMergeResolutionPayload']>[0]),
   },
   {
-    methodName: 'readRef',
-    kind: 'version-result',
-    capabilities: ['version:read'],
-    invoke: (version) => version.readRef('HEAD'),
-  },
-  {
-    methodName: 'rejectProposal',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.rejectProposal({
-        clientRequestId: 'reject-proposal-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        actor: TEST_AUTHOR,
-        reason: 'Rejected by facade matrix test',
-      } as Parameters<VersionFacade['rejectProposal']>[0]),
-  },
-  {
-    methodName: 'revert',
-    kind: 'version-result',
-    capabilities: ['version:revert'],
-    invoke: (version) =>
-      version.revert({
-        target: { kind: 'commit', commitId: COMMIT_A },
-        targetRef: MAIN_REF,
-        reason: 'Facade matrix revert',
-      } as Parameters<VersionFacade['revert']>[0]),
-  },
-  {
+    interfaceName: 'VersionMergeReviewArtifactApi',
     methodName: 'saveMergeResolutions',
     kind: 'version-result',
     capabilities: ['version:mergePreview', 'version:mergeApply'],
     deniedCapabilities: ['version:mergePreview', 'version:mergeApply'],
     invoke: (version) =>
-      version.saveMergeResolutions({
+      version.artifacts.advanced.saveMergeResolutions({
         resultId: 'merge-result:facade-matrix',
         resultDigest: TEST_DIGEST,
         redactionPolicyDigest: TEST_DIGEST,
         resolutions: [],
-      } as Parameters<VersionFacade['saveMergeResolutions']>[0]),
-  },
-  {
-    methodName: 'startProposalWorkspace',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.startProposalWorkspace({
-        clientRequestId: 'start-proposal-workspace-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        actor: TEST_AUTHOR,
-      } as Parameters<VersionFacade['startProposalWorkspace']>[0]),
-  },
-  {
-    methodName: 'supersedeProposal',
-    kind: 'version-result',
-    capabilities: ['version:proposal'],
-    invoke: (version) =>
-      version.supersedeProposal({
-        clientRequestId: 'supersede-proposal-request',
-        proposalId: 'proposal-1',
-        expectedRevision: 1,
-        actor: TEST_AUTHOR,
-        supersededByProposalId: 'proposal-2',
-        reason: 'Superseded by facade matrix test',
-      } as Parameters<VersionFacade['supersedeProposal']>[0]),
-  },
-  {
-    methodName: 'updateBranch',
-    kind: 'version-result',
-    capabilities: ['version:branch'],
-    invoke: (version) =>
-      version.updateBranch({
-        name: TEST_BRANCH,
-        nextCommitId: COMMIT_B,
-        expectedHead: COMMIT_A,
-        expectedRefRevision: TEST_REVISION,
-      } as Parameters<VersionFacade['updateBranch']>[0]),
-  },
-  {
-    methodName: 'updateReviewStatus',
-    kind: 'version-result',
-    capabilities: ['version:reviewWrite'],
-    invoke: (version) =>
-      version.updateReviewStatus({
-        reviewId: 'review-1',
-        expectedRevision: 1,
-        clientRequestId: 'update-review-status-request',
-        status: 'approved',
-        actor: TEST_AUTHOR,
-      } as Parameters<VersionFacade['updateReviewStatus']>[0]),
+      } as Parameters<VersionArtifactAdvancedFacade['saveMergeResolutions']>[0]),
   },
 ];
 
@@ -545,7 +462,7 @@ const VERSION_FACADE_RESULT_CASES = VERSION_FACADE_OPERATION_CASES.filter(
 
 const VERSION_FACADE_SCALAR_FALLBACK_CASES = VERSION_FACADE_RESULT_CASES.filter(
   (testCase) => testCase.capabilities.length > 0,
-).map((testCase) => testCase.methodName);
+);
 
 function savedResult(request: SpreadsheetSaveRequest): SpreadsheetSaveResult {
   return {
@@ -592,28 +509,44 @@ function runtimeOptions(
   };
 }
 
-function mutableVersionMatrix(): Record<string, SpreadsheetFacadeMatrixEntry> {
-  return WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersion as unknown as Record<
+function mutableMatrix(
+  interfaceName: VersionMatrixInterface,
+): Record<string, SpreadsheetFacadeMatrixEntry> {
+  return WORKBOOK_FACADE_CAPABILITY_MATRIX[interfaceName] as unknown as Record<
     string,
     SpreadsheetFacadeMatrixEntry
   >;
 }
 
-function versionCase(methodName: VersionFacadeResultCase['methodName']): VersionFacadeResultCase {
-  const testCase = VERSION_FACADE_RESULT_CASES.find((entry) => entry.methodName === methodName);
-  assert.ok(testCase, `missing test case for WorkbookVersion.${methodName}`);
+function operationName(testCase: VersionFacadeResultCase): string {
+  return `${testCase.interfaceName}.${testCase.methodName}`;
+}
+
+function versionCase(
+  interfaceName: VersionMatrixInterface,
+  methodName: string,
+): VersionFacadeResultCase {
+  const testCase = VERSION_FACADE_RESULT_CASES.find(
+    (entry) => entry.interfaceName === interfaceName && entry.methodName === methodName,
+  );
+  assert.ok(testCase, `missing test case for ${interfaceName}.${methodName}`);
   return testCase;
 }
 
-function operationCase(methodName: VersionFacadeResultCase['methodName']): VersionFacadeResultCase {
-  const testCase = VERSION_FACADE_OPERATION_CASES.find((entry) => entry.methodName === methodName);
-  assert.ok(testCase, `missing test case for WorkbookVersion.${methodName}`);
+function operationCase(
+  interfaceName: VersionMatrixInterface,
+  methodName: string,
+): VersionFacadeResultCase {
+  const testCase = VERSION_FACADE_OPERATION_CASES.find(
+    (entry) => entry.interfaceName === interfaceName && entry.methodName === methodName,
+  );
+  assert.ok(testCase, `missing test case for ${interfaceName}.${methodName}`);
   return testCase;
 }
 
 function assertVersionCapabilityEntry(testCase: VersionFacadeResultCase): void {
-  const entry = mutableVersionMatrix()[testCase.methodName];
-  assert.ok(entry, `WorkbookVersion.${testCase.methodName} matrix entry must exist`);
+  const entry = mutableMatrix(testCase.interfaceName)[testCase.methodName];
+  assert.ok(entry, `${operationName(testCase)} matrix entry must exist`);
   assert.equal(entry.decision, 'allow');
   assert.equal(entry.capability, undefined);
   assert.deepEqual(entry.capabilities, testCase.capabilities);
@@ -623,7 +556,7 @@ function assertVersionCapabilityEntry(testCase: VersionFacadeResultCase): void {
       ...(entry.capabilities ?? []),
       ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
     ].every((capability) => capability.startsWith('version:')),
-    `WorkbookVersion.${testCase.methodName} must not backfill generic workbook capabilities`,
+    `${operationName(testCase)} must not backfill generic workbook capabilities`,
   );
 }
 
@@ -631,7 +564,8 @@ function assertVersionDeniedResult(
   result: unknown,
   methodName: string,
   expectedCapability: SpreadsheetCapability,
-  expectedDeniedCapabilities: readonly SpreadsheetCapability[] = [expectedCapability],
+  expectedDeniedCapabilities: readonly SpreadsheetCapability[],
+  operation: string,
 ): void {
   assert.equal((result as { readonly ok?: unknown }).ok, false, `${methodName} should be denied`);
   const error = (
@@ -653,10 +587,7 @@ function assertVersionDeniedResult(
   assert.equal(error?.code, 'version_capability_unavailable');
   assert.equal(error?.capability, expectedCapability);
   assert.equal(error?.dependency, 'hostCapability');
-  assert.equal(
-    error?.reason,
-    `Capability "${expectedCapability}" is denied for WorkbookVersion.${methodName}`,
-  );
+  assert.equal(error?.reason, `Capability "${expectedCapability}" is denied for ${operation}`);
   assert.equal(error?.retryable, false);
   if (expectedDeniedCapabilities.length > 1) {
     assert.deepEqual(error?.diagnostics?.[0]?.data?.deniedCapabilities, expectedDeniedCapabilities);
@@ -667,10 +598,16 @@ function assertVersionDeniedResult(
 
 function assertUiRenderableVersionDeniedResult(
   result: unknown,
-  methodName: string,
+  testCase: VersionFacadeResultCase,
   expectedCapability: SpreadsheetCapability,
 ): void {
-  assertVersionDeniedResult(result, methodName, expectedCapability);
+  assertVersionDeniedResult(
+    result,
+    testCase.methodName,
+    expectedCapability,
+    [expectedCapability],
+    operationName(testCase),
+  );
   const error = (
     result as {
       readonly error?: {
@@ -680,7 +617,10 @@ function assertUiRenderableVersionDeniedResult(
     }
   ).error;
   assert.equal(typeof error?.reason, 'string');
-  assert.ok(error.reason.length > 0, `${methodName} denied result must include renderable reason`);
+  assert.ok(
+    error.reason.length > 0,
+    `${operationName(testCase)} denied result must include renderable reason`,
+  );
   assert.equal(error.retryable, false);
 }
 
@@ -721,6 +661,7 @@ function scalarVersionMatrixEntry(
       : {}),
     ...(entry.reason ? { reason: entry.reason } : {}),
     ...(entry.returns ? { returns: entry.returns } : {}),
+    ...(entry.returnsVersionResult ? { returnsVersionResult: entry.returnsVersionResult } : {}),
   };
 }
 
@@ -734,27 +675,28 @@ function scalarFallbackDeniedCapabilities(
   ];
 }
 
-function assertVersionResultEnvelope(result: unknown, methodName: string): void {
+function assertVersionResultEnvelope(result: unknown, testCase: VersionFacadeResultCase): void {
   assert.equal(typeof (result as { readonly ok?: unknown }).ok, 'boolean');
   if ((result as { readonly ok: boolean }).ok) {
     assert.ok(
       'value' in (result as Record<string, unknown>),
-      `${methodName} result must have value`,
+      `${operationName(testCase)} result must have value`,
     );
     return;
   }
 
   const error = (result as { readonly error?: { readonly code?: unknown } }).error;
-  assert.ok(error && typeof error === 'object', `${methodName} result must have error`);
-  assert.equal(typeof error.code, 'string', `${methodName} error must have a code`);
+  assert.ok(error && typeof error === 'object', `${operationName(testCase)} result must have error`);
+  assert.equal(typeof error.code, 'string', `${operationName(testCase)} error must have a code`);
 }
 
 async function withTemporaryVersionMatrixEntry<T>(
+  interfaceName: VersionMatrixInterface,
   methodName: string,
   replacement: SpreadsheetFacadeMatrixEntry | undefined,
   fn: () => Promise<T>,
 ): Promise<T> {
-  const matrix = mutableVersionMatrix();
+  const matrix = mutableMatrix(interfaceName);
   const original = matrix[methodName];
   if (replacement) {
     matrix[methodName] = replacement;
@@ -793,14 +735,61 @@ async function withVersionFacade<T>(
   }
 }
 
-test('workbook version facade matrix is pinned to the W7 operation set', () => {
-  const expected = [...WORKBOOK_VERSION_METHODS_THROUGH_W7].sort();
-  const caseMethods = VERSION_FACADE_OPERATION_CASES.map((testCase) => testCase.methodName).sort();
-  const matrixMethods = Object.keys(mutableVersionMatrix()).sort();
+test('workbook version facade sub-api matrix exposes advanced namespaces', () => {
+  const subApis = WORKBOOK_SUB_API_INTERFACES as Record<
+    string,
+    Record<string, { readonly targetInterface?: string }>
+  >;
 
-  assert.equal(new Set(caseMethods).size, caseMethods.length, 'operation cases must be unique');
-  assert.deepEqual(caseMethods, expected);
-  assert.deepEqual(matrixMethods, expected);
+  assert.equal(subApis.WorkbookVersion?.graph?.targetInterface, 'VersionGraphApi');
+  assert.equal(
+    subApis.WorkbookVersion?.reviews?.targetInterface,
+    'WorkbookVersionReviewNamespace',
+  );
+  assert.equal(
+    subApis.WorkbookVersionReviewNamespace?.advanced?.targetInterface,
+    'WorkbookVersionReviewApi',
+  );
+  assert.equal(
+    subApis.WorkbookVersion?.artifacts?.targetInterface,
+    'VersionMergeReviewArtifactNamespace',
+  );
+  assert.equal(
+    subApis.VersionMergeReviewArtifactNamespace?.advanced?.targetInterface,
+    'VersionMergeReviewArtifactApi',
+  );
+
+  assert.deepEqual(Object.keys(WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewNamespace), []);
+  assert.deepEqual(
+    Object.keys(WORKBOOK_FACADE_CAPABILITY_MATRIX.VersionMergeReviewArtifactNamespace),
+    [],
+  );
+});
+
+test('workbook version facade matrix is pinned to namespaced operation sets', () => {
+  const caseKeys = new Set(
+    VERSION_FACADE_OPERATION_CASES.map((testCase) => operationName(testCase)),
+  );
+
+  assert.equal(
+    caseKeys.size,
+    VERSION_FACADE_OPERATION_CASES.length,
+    'operation cases must be unique',
+  );
+
+  for (const [interfaceName, expectedMethods] of Object.entries(
+    EXPECTED_VERSION_MATRIX_METHODS,
+  ) as [VersionMatrixInterface, readonly string[]][]) {
+    const caseMethods = VERSION_FACADE_OPERATION_CASES.filter(
+      (testCase) => testCase.interfaceName === interfaceName,
+    )
+      .map((testCase) => testCase.methodName)
+      .sort();
+    const matrixMethods = Object.keys(mutableMatrix(interfaceName)).sort();
+
+    assert.deepEqual(caseMethods, [...expectedMethods].sort(), `${interfaceName} test cases`);
+    assert.deepEqual(matrixMethods, [...expectedMethods].sort(), `${interfaceName} matrix keys`);
+  }
 });
 
 test('workbook version facade matrix covers explicit result capability families', () => {
@@ -826,7 +815,7 @@ test('workbook version facade denied result families return capability-unavailab
         }
 
         const expectedCapability = testCase.capabilities[0];
-        assert.ok(expectedCapability, `${testCase.methodName} must declare a capability`);
+        assert.ok(expectedCapability, `${operationName(testCase)} must declare a capability`);
 
         if (testCase.kind === 'throws-on-denied') {
           assert.throws(
@@ -834,7 +823,7 @@ test('workbook version facade denied result families return capability-unavailab
               void testCase.invoke(version);
             },
             new RegExp(
-              `Capability "${expectedCapability}" is denied for WorkbookVersion\\.${testCase.methodName}`,
+              `Capability "${expectedCapability}" is denied for ${testCase.interfaceName}\\.${testCase.methodName}`,
             ),
           );
           continue;
@@ -845,7 +834,8 @@ test('workbook version facade denied result families return capability-unavailab
           result,
           testCase.methodName,
           expectedCapability,
-          testCase.deniedCapabilities,
+          testCase.deniedCapabilities ?? [expectedCapability],
+          operationName(testCase),
         );
       }
     },
@@ -891,12 +881,15 @@ test('workbook version facade denied review, revert, and checkout results stay U
     'runtime-version-result-facade-ui-renderable-denials',
     deniedCapabilities,
     async (version) => {
-      for (const methodName of ['checkout', 'listReviews', 'revert'] as const) {
-        const testCase = versionCase(methodName);
+      for (const testCase of [
+        versionCase('VersionGraphApi', 'checkout'),
+        versionCase('VersionGraphApi', 'revert'),
+        versionCase('WorkbookVersionReviewApi', 'listReviews'),
+      ]) {
         const [expectedCapability] = testCase.capabilities;
-        assert.ok(expectedCapability, `${methodName} must declare a capability`);
+        assert.ok(expectedCapability, `${operationName(testCase)} must declare a capability`);
         const result = await testCase.invoke(version);
-        assertUiRenderableVersionDeniedResult(result, methodName, expectedCapability);
+        assertUiRenderableVersionDeniedResult(result, testCase, expectedCapability);
       }
     },
   );
@@ -910,7 +903,7 @@ test('workbook version facade unsupported paths keep public VersionResult envelo
       for (const testCase of VERSION_FACADE_OPERATION_CASES) {
         const result = await testCase.invoke(version);
         if (testCase.kind === 'version-result') {
-          assertVersionResultEnvelope(result, testCase.methodName);
+          assertVersionResultEnvelope(result, testCase);
           continue;
         }
         assert.equal((result as { readonly schemaVersion?: unknown }).schemaVersion, 1);
@@ -928,22 +921,23 @@ test('workbook version facade denied result paths support scalar capability fall
     'runtime-version-result-facade-scalar-denied-fallback',
     deniedCapabilities,
     async (version) => {
-      for (const methodName of VERSION_FACADE_SCALAR_FALLBACK_CASES) {
-        const testCase = versionCase(methodName);
-        const original = mutableVersionMatrix()[methodName];
-        assert.ok(original, `WorkbookVersion.${methodName} matrix entry must exist`);
+      for (const testCase of VERSION_FACADE_SCALAR_FALLBACK_CASES) {
+        const original = mutableMatrix(testCase.interfaceName)[testCase.methodName];
+        assert.ok(original, `${operationName(testCase)} matrix entry must exist`);
         const [capability] = testCase.capabilities;
-        assert.ok(capability, `WorkbookVersion.${methodName} must declare a capability`);
+        assert.ok(capability, `${operationName(testCase)} must declare a capability`);
         await withTemporaryVersionMatrixEntry(
-          methodName,
+          testCase.interfaceName,
+          testCase.methodName,
           scalarVersionMatrixEntry(original, capability),
           async () => {
             const result = await testCase.invoke(version);
             assertVersionDeniedResult(
               result,
-              methodName,
+              testCase.methodName,
               capability,
               scalarFallbackDeniedCapabilities(testCase, capability),
+              operationName(testCase),
             );
           },
         );
@@ -957,18 +951,22 @@ test('workbook version facade missing matrix entries fail closed for result fami
     'runtime-version-result-facade-missing-matrix-entry',
     new Set(),
     async (version) => {
-      for (const methodName of WORKBOOK_VERSION_METHODS_THROUGH_W7) {
-        const testCase = operationCase(methodName);
-        await withTemporaryVersionMatrixEntry(methodName, undefined, async () => {
-          assert.throws(
-            () => {
-              void testCase.invoke(version);
-            },
-            new RegExp(
-              `WorkbookVersion\\.${methodName} is missing a workbook facade capability-matrix decision`,
-            ),
-          );
-        });
+      for (const [interfaceName, expectedMethods] of Object.entries(
+        EXPECTED_VERSION_MATRIX_METHODS,
+      ) as [VersionMatrixInterface, readonly string[]][]) {
+        for (const methodName of expectedMethods) {
+          const testCase = operationCase(interfaceName, methodName);
+          await withTemporaryVersionMatrixEntry(interfaceName, methodName, undefined, async () => {
+            assert.throws(
+              () => {
+                void testCase.invoke(version);
+              },
+              new RegExp(
+                `${interfaceName}\\.${methodName} is missing a workbook facade capability-matrix decision`,
+              ),
+            );
+          });
+        }
       }
     },
   );
@@ -979,11 +977,16 @@ test('workbook version facade stale surface-status matrix entry fails closed bef
     'runtime-version-surface-stale-matrix-entry',
     new Set<SpreadsheetCapability>(['version:checkout']),
     async (version) => {
-      await withTemporaryVersionMatrixEntry('getSurfaceStatus', undefined, async () => {
-        assert.throws(() => {
-          void version.getSurfaceStatus();
-        }, /WorkbookVersion\.getSurfaceStatus is missing a workbook facade capability-matrix decision/);
-      });
+      await withTemporaryVersionMatrixEntry(
+        'WorkbookVersion',
+        'getSurfaceStatus',
+        undefined,
+        async () => {
+          assert.throws(() => {
+            void version.getSurfaceStatus();
+          }, /WorkbookVersion\.getSurfaceStatus is missing a workbook facade capability-matrix decision/);
+        },
+      );
     },
   );
 });

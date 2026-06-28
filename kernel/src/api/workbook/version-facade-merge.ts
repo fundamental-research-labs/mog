@@ -5,9 +5,13 @@ import type {
   VersionCommitExpectedHead,
   VersionGetMergeConflictDetailRequest,
   VersionMergeConflictDetailResult,
+  VersionGetMergeReviewInput,
   VersionMergeInput,
   VersionMergeOptions,
   VersionMergeResult,
+  VersionMergeReview,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
   VersionPutMergeResolutionPayloadRequest,
@@ -51,6 +55,10 @@ import {
   putMergeResolutionPayloadWorkbookVersion,
   saveMergeResolutionsWorkbookVersion,
 } from './version/merge-review/version-merge-review-endpoints';
+import {
+  getMergeReviewWorkbookVersionPorcelain,
+  previewMergeWorkbookVersionPorcelain,
+} from './version/merge-review/version-merge-review-porcelain';
 import { promotePendingRemoteWorkbookVersion } from './version/pending/remote';
 import { revertWorkbookVersion } from './version/revert/version-revert';
 import {
@@ -65,6 +73,35 @@ export async function mergeWorkbookVersionFacade(
   options: VersionMergeOptions = {},
 ): Promise<VersionResult<VersionMergeResult>> {
   return versionResultFromMerge(await mergeWorkbookVersion(ctx, input, options));
+}
+
+export async function previewMergeWorkbookVersionFacade(
+  ctx: DocumentContext,
+  input: VersionPreviewMergeInput,
+  options: VersionPreviewMergeOptions = {},
+  transactionGuard?: VersionCheckoutTransactionGuard,
+): Promise<VersionResult<VersionMergeReview>> {
+  return previewMergeWorkbookVersionPorcelain(ctx, input, options, {
+    apply: (applyInput, applyOptions) =>
+      applyMergeWorkbookVersionFacade(ctx, applyInput, applyOptions, transactionGuard),
+    save: (saveInput) => saveMergeResolutionsWorkbookVersionFacade(ctx, saveInput),
+    getConflictDetail: (detailInput) =>
+      getMergeConflictDetailWorkbookVersionFacade(ctx, detailInput),
+  });
+}
+
+export async function getMergeReviewWorkbookVersionFacade(
+  ctx: DocumentContext,
+  input: VersionGetMergeReviewInput,
+  transactionGuard?: VersionCheckoutTransactionGuard,
+): Promise<VersionResult<VersionMergeReview>> {
+  return getMergeReviewWorkbookVersionPorcelain(ctx, input, {
+    apply: (applyInput, applyOptions) =>
+      applyMergeWorkbookVersionFacade(ctx, applyInput, applyOptions, transactionGuard),
+    save: (saveInput) => saveMergeResolutionsWorkbookVersionFacade(ctx, saveInput),
+    getConflictDetail: (detailInput) =>
+      getMergeConflictDetailWorkbookVersionFacade(ctx, detailInput),
+  });
 }
 
 export async function applyMergeWorkbookVersionFacade(

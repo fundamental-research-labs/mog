@@ -10,6 +10,7 @@ import type {
 } from './version-shared';
 import type {
   VersionBranchName,
+  VersionBranchNameInput,
   VersionMainRefName,
   VersionRecordRevision,
   VersionRefName,
@@ -254,4 +255,89 @@ export interface VersionProposalApi {
   ): Promise<VersionResult<AgentProposalAcceptResult>>;
   rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>;
   supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>;
+}
+
+export interface VersionCreateProposalPorcelainInput {
+  readonly title: string;
+  readonly into?: VersionMainRefName | VersionRefName | VersionBranchNameInput;
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly agentRunId?: string;
+  readonly agent?: VersionAuthor;
+  readonly proposalBranchNameHint?: VersionBranchName;
+  readonly redactionPolicy?: RedactionPolicy;
+  readonly clientRequestId?: string;
+}
+
+export interface VersionListProposalPorcelainOptions extends ListAgentProposalsInput {}
+
+export interface VersionProposalHandleOptions {
+  readonly clientRequestId?: string;
+  readonly actor?: VersionAuthor;
+  readonly expectedRevision?: number;
+  readonly expectedTargetHeadId?: WorkbookCommitId;
+  readonly expectedTargetRefRevision?: VersionRecordRevision;
+}
+
+export interface VersionProposalWorkspaceCommitOptions extends VersionProposalHandleOptions {
+  readonly message: string;
+  readonly verification?: VerificationSummary;
+}
+
+export interface VersionProposalWorkspaceHandle {
+  readonly workspace: AgentProposalWorkspaceHandle;
+  readonly proposal: VersionProposalHandle;
+  workbook<WorkbookLike = unknown>(): Promise<WorkbookLike>;
+  commit(
+    options: VersionProposalWorkspaceCommitOptions,
+  ): Promise<VersionResult<VersionProposalHandle>>;
+  dispose(options?: VersionProposalHandleOptions): Promise<VersionResult<{ readonly disposed: true }>>;
+}
+
+export interface VersionProposalAcceptOptions extends VersionProposalHandleOptions {
+  readonly policy?: AgentProposalAcceptResolutionPolicy;
+  readonly resolutionPolicy?: AgentProposalAcceptResolutionPolicy;
+}
+
+export interface VersionProposalRejectOptions extends VersionProposalHandleOptions {
+  readonly reason?: string;
+}
+
+export interface VersionProposalSupersedeOptions extends VersionProposalHandleOptions {
+  readonly supersededByProposalId?: AgentProposalId;
+  readonly reason?: string;
+}
+
+export interface VersionProposalVerificationOptions extends VersionProposalHandleOptions {
+  readonly verification: VerificationSummary;
+}
+
+export interface VersionProposalHandle {
+  readonly proposal: AgentProposal;
+  readonly id: AgentProposalId;
+  readonly status: AgentProposalStatus;
+  readonly revision: number;
+  refresh(): Promise<VersionResult<VersionProposalHandle>>;
+  openWorkspace(
+    options?: VersionProposalHandleOptions,
+  ): Promise<VersionResult<VersionProposalWorkspaceHandle>>;
+  markVerified(
+    options: VersionProposalVerificationOptions,
+  ): Promise<VersionResult<VersionProposalHandle>>;
+  markReadyForReview(
+    options?: VersionProposalHandleOptions,
+  ): Promise<VersionResult<WorkbookVersionReviewRecord>>;
+  accept(options?: VersionProposalAcceptOptions): Promise<VersionResult<AgentProposalAcceptResult>>;
+  reject(options?: VersionProposalRejectOptions): Promise<VersionResult<VersionProposalHandle>>;
+  supersede(
+    options?: VersionProposalSupersedeOptions,
+  ): Promise<VersionResult<VersionProposalHandle>>;
+}
+
+export interface VersionProposalPorcelainApi {
+  readonly advanced: VersionProposalApi;
+  create(
+    input: VersionCreateProposalPorcelainInput,
+  ): Promise<VersionResult<VersionProposalHandle>>;
+  get(id: AgentProposalId): Promise<VersionResult<VersionProposalHandle>>;
+  list(options?: VersionListProposalPorcelainOptions): Promise<VersionResult<Paged<AgentProposalSummary>>>;
 }

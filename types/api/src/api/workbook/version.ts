@@ -35,7 +35,7 @@ export type {
   WorkbookVersionDiagnosticCode,
 } from './version-shared';
 
-export type { WorkbookVersion } from './version-workbook';
+export type { VersionGraphApi, WorkbookVersion } from './version-workbook';
 export type * from './version-merge-review';
 export type * from './version-pending-remote-promotion';
 export type * from './version-proposal';
@@ -169,6 +169,7 @@ export interface WorkbookVersionHeadStatus {
 export type WorkbookCommitId = `commit:sha256:${string}` & {
   readonly __brand?: 'WorkbookCommitId';
 };
+export type WorkbookCommitIdInput = WorkbookCommitId | string;
 
 export type VersionCounterRecordRevision = {
   readonly kind: 'counter';
@@ -193,10 +194,16 @@ export type VersionMainRefName = 'refs/heads/main';
 export type VersionRefName = string & {
   readonly __brand?: 'VersionRefName';
 };
+export type VersionRefNameInput = VersionMainRefName | VersionRefName | string;
 export type VersionRefSelector = 'HEAD' | VersionMainRefName | VersionRefName;
 export type VersionBranchName = string & {
   readonly __brand?: 'VersionBranchName';
 };
+export type VersionBranchNameInput =
+  | VersionBranchName
+  | VersionMainRefName
+  | VersionRefName
+  | string;
 export type VersionBranchSelector = VersionBranchName | VersionMainRefName | VersionRefName;
 
 export type VersionPageOrder = 'topological-newest' | 'semantic-change-order';

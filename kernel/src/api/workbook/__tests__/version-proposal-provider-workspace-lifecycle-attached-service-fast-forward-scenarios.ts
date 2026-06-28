@@ -22,10 +22,10 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
       capabilities: { 'version:proposal': { enabled: true } },
     });
 
-    const created = await version.createProposal(createProposalInput('proposal-create-2'));
+    const created = await version.proposals.advanced.createProposal(createProposalInput('proposal-create-2'));
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
 
-    const opened = await version.startProposalWorkspace({
+    const opened = await version.proposals.advanced.startProposalWorkspace({
       clientRequestId: 'workspace-open-1',
       proposalId: created.value.id,
       expectedRevision: 1,
@@ -41,7 +41,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
     });
     if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
 
-    const committed = await version.commitProposalWorkspace({
+    const committed = await version.proposals.advanced.commitProposalWorkspace({
       clientRequestId: 'workspace-commit-1',
       proposalId: created.value.id,
       workspaceId: opened.value.workspaceId,
@@ -68,7 +68,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
       },
     });
 
-    const verified = await version.markProposalVerified({
+    const verified = await version.proposals.advanced.markProposalVerified({
       clientRequestId: 'proposal-verify-1',
       proposalId: created.value.id,
       expectedRevision: 3,
@@ -78,7 +78,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
     expect(verified).toMatchObject({ ok: true, value: { status: 'verified', revision: 4 } });
     if (!verified.ok) throw new Error(`expected proposal verify success: ${verified.error.code}`);
 
-    const review = await version.openProposalReview({
+    const review = await version.proposals.advanced.openProposalReview({
       clientRequestId: 'proposal-review-1',
       proposalId: created.value.id,
       expectedRevision: 4,
@@ -106,7 +106,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
     if (!approved.ok) throw new Error(`expected review approval success: ${approved.error.code}`);
     if (!approved.value.approval) throw new Error('expected approval evidence');
 
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'ready_for_review',
@@ -115,7 +115,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
       },
     });
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-1',
       proposalId: created.value.id,
       expectedRevision: 5,
@@ -145,7 +145,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
         ref: { commitId: committed.value.proposalCommitId },
       },
     });
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
@@ -159,7 +159,7 @@ export function registerProposalProviderWorkspaceLifecycleAttachedServiceFastFor
     });
 
     await expect(
-      version.acceptProposal({
+      version.proposals.advanced.acceptProposal({
         clientRequestId: 'proposal-accept-1-retry',
         proposalId: created.value.id,
         expectedRevision: 5,

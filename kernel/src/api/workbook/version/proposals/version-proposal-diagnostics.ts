@@ -15,7 +15,22 @@ export function versionProposalFailureFromDiagnostics<T>(
   operation: VersionProposalPublicOperation,
   diagnostics: readonly VersionStoreDiagnostic[],
 ): VersionResult<T> {
-  return sanitizeDiagnosticsInValue(versionFailureFromStoreDiagnostics(operation, diagnostics));
+  const result = versionFailureFromStoreDiagnostics<T>(operation, diagnostics);
+  return sanitizeDiagnosticsInValue(retargetProposalFailure(result, operation));
+}
+
+function retargetProposalFailure<T>(
+  result: VersionResult<T>,
+  operation: VersionProposalPublicOperation,
+): VersionResult<T> {
+  if (result.ok || result.error.code !== 'target_unavailable') return result;
+  return {
+    ...result,
+    error: {
+      ...result.error,
+      target: `workbook.version.proposals.advanced.${operation}`,
+    },
+  };
 }
 
 function sanitizeDiagnosticsInValue<T>(value: T): T {

@@ -2,7 +2,9 @@ import type {
   VersionApplyMergeInput,
   VersionApplyMergeOptions,
   VersionApplyMergeResult,
+  VersionCommitCurrentOptions,
   VersionCommitOptions,
+  VersionGraphApi,
   VersionMainRefName,
   VersionRecordRevision,
   VersionRefName,
@@ -65,12 +67,37 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     this.readVersionContext = typeof ctx === 'function' ? ctx : () => ctx;
   }
 
-  override async commit(
+  override get graph(): VersionGraphApi {
+    const graph = super.graph;
+    return {
+      getHead: graph.getHead.bind(graph),
+      listCommits: graph.listCommits.bind(graph),
+      commit: (options: VersionCommitOptions = {}) => this.commitGraph(options),
+      promotePendingRemote: graph.promotePendingRemote.bind(graph),
+      checkout: graph.checkout.bind(graph),
+      merge: graph.merge.bind(graph),
+      applyMerge: (input: VersionApplyMergeInput, options: VersionApplyMergeOptions = {}) =>
+        this.applyMergeGraph(input, options),
+      revert: (input: VersionRevertInput, options: VersionRevertOptions = {}) =>
+        this.revertGraph(input, options),
+      diff: graph.diff.bind(graph),
+      readRef: graph.readRef.bind(graph),
+      getRef: graph.getRef.bind(graph),
+      listRefs: graph.listRefs.bind(graph),
+      createBranch: graph.createBranch.bind(graph),
+      fastForwardBranch: graph.fastForwardBranch.bind(graph),
+      updateBranch: graph.updateBranch.bind(graph),
+      deleteBranch: graph.deleteBranch.bind(graph),
+      deleteRef: graph.deleteRef.bind(graph),
+    };
+  }
+
+  private async commitGraph(
     options: VersionCommitOptions = {},
   ): Promise<VersionResult<WorkbookCommitSummary>> {
     const beforeCommit = this.dirtyTracking.readState();
     const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
-    const result = await super.commit(options);
+    const result = await super.graph.commit(options);
     if (result.ok) {
       this.recordCheckoutBranchCommit(beforeSaveHead, options, result.value);
     }
@@ -80,24 +107,35 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
     return result;
   }
 
-  override async applyMerge(
+  override async commitCurrent(
+    options: VersionCommitCurrentOptions = {},
+  ): Promise<VersionResult<WorkbookCommitSummary>> {
+    const beforeCommit = this.dirtyTracking.readState();
+    const result = await super.commitCurrent(options);
+    if (result.ok && (await this.canMarkCleanAfterCommit(beforeCommit, result.value))) {
+      this.dirtyTracking.markCleanIfRevisionUnchanged(beforeCommit.revision);
+    }
+    return result;
+  }
+
+  private async applyMergeGraph(
     input: VersionApplyMergeInput,
     options: VersionApplyMergeOptions = {},
   ): Promise<VersionResult<VersionApplyMergeResult>> {
     const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
-    const result = await super.applyMerge(input, options);
+    const result = await super.graph.applyMerge(input, options);
     if (result.ok) {
       this.recordCheckoutBranchApplyMerge(beforeSaveHead, options, result.value);
     }
     return result;
   }
 
-  override async revert(
+  private async revertGraph(
     input: VersionRevertInput,
     options: VersionRevertOptions = {},
   ): Promise<VersionResult<VersionRevertResult>> {
     const beforeSaveHead = await this.readCurrentRuntimeSaveHeadToken();
-    const result = await super.revert(input, options);
+    const result = await super.graph.revert(input, options);
     if (result.ok) {
       this.recordCheckoutBranchRevert(beforeSaveHead, input, result.value);
     }
@@ -199,7 +237,7 @@ export class WorkbookVersionWithDirtyTracking extends WorkbookVersionImpl {
       };
       if (current.checkedOutCommitId) return surfaceToken;
 
-      const head = await this.getHead();
+      const head = await this.graph.getHead();
       if (!head.ok) return surfaceToken;
 
       return {

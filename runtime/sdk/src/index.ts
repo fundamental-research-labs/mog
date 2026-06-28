@@ -128,6 +128,25 @@ export type {
   ScreenshotOptions,
   WorkbookSecurity,
 } from '@mog-sdk/contracts/api';
+export {
+  VersionPublicApiValueError,
+  VersionResultError,
+  branchName,
+  branchRef,
+  expectedHeadFromRef,
+  formatVersionDiagnostics,
+  isVersionBlocked,
+  isVersionBranchName,
+  isVersionObjectDigest,
+  isVersionRefName,
+  isVersionStaleTarget,
+  isWorkbookCommitId,
+  parseVersionBranchName,
+  parseVersionObjectDigest,
+  parseVersionRefName,
+  parseWorkbookCommitId,
+  unwrapVersionResult,
+} from '@mog-sdk/contracts/api';
 export type {
   DocumentImportOptions as ImportOptions,
   DocumentSource,

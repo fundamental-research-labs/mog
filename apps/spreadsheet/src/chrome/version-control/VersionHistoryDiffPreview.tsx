@@ -53,6 +53,8 @@ export type VersionDiffFilterSelection = {
   readonly operation?: VersionDiffFilterOperation;
 };
 
+const DIFF_DETAIL_ROW_HEIGHT = 76;
+
 export function VersionHistoryDiffPreview({
   diffPreview,
   diffEnabled = true,
@@ -607,7 +609,7 @@ function VirtualDetailList({
 }: {
   readonly items: readonly VersionDiffEntry[];
 }): React.JSX.Element {
-  const rowHeight = 92;
+  const rowHeight = DIFF_DETAIL_ROW_HEIGHT;
   const viewportHeight = Math.max(rowHeight, Math.min(276, Math.max(1, items.length) * rowHeight));
   const [scrollTop, setScrollTop] = useState(0);
   const visible = useMemo(() => {

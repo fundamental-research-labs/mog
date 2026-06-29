@@ -52,6 +52,7 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).not.toHaveTextContent('cells value');
 
     const viewport = within(viewer).getByTestId('version-history-diff-detail-viewport');
+    expect(viewport).toHaveStyle('height: 76px');
     expect(within(viewport).getByLabelText('Before: Blank')).toBeInTheDocument();
     expect(within(viewport).getByLabelText('After: 42')).toBeInTheDocument();
   });

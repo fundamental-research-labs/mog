@@ -1,5 +1,5 @@
 {
   "imports": {
-    "@mog-sdk/wasm": "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.10.0/compute_core_wasm.js"
+    "@mog-sdk/wasm": "https://cdn.jsdelivr.net/npm/@mog-sdk/wasm@0.10.1/compute_core_wasm.js"
   }
 }

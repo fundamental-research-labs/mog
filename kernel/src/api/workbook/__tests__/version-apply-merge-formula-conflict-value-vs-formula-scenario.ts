@@ -45,7 +45,7 @@ export function registerValueVsFormulaConflictScenario() {
       );
       const baseHead = await expectHead(sourceWb);
 
-      const branch = await sourceWb.version.createBranch({
+      const branch = await sourceWb.version.refs.createBranch({
         name: 'scenario/formula-incoming' as any,
         targetCommitId: baseCommit.id,
         expectedAbsent: true,

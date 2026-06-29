@@ -258,22 +258,6 @@
       "owner": "platform-contract-migration",
     },
     {
-      "path": "apps/spreadsheet/src/chrome/version-control/merge/version-merge-review-draft-storage.ts",
-      "ruleId": "ts-date-now",
-      "category": "host-wall-time",
-      "match": "Date.now(",
-      "allowedCount": 1,
-      "owner": "platform-contract-migration",
-    },
-    {
-      "path": "apps/spreadsheet/src/chrome/version-control/merge/version-merge-review-draft-storage.ts",
-      "ruleId": "ts-runtime-global-detection",
-      "category": "runtime-detection",
-      "match": "typeof window",
-      "allowedCount": 1,
-      "owner": "platform-contract-migration",
-    },
-    {
       "path": "apps/spreadsheet/src/components/column-renderers/renderers/file-renderer.tsx",
       "ruleId": "ts-date-now",
       "category": "host-wall-time",

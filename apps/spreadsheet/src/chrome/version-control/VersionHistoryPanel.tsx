@@ -3,20 +3,20 @@ import { useEffect, useRef } from 'react';
 import { useWorkbook } from '../../internal-api';
 import { VersionActions } from './VersionActionStatus';
 import { VersionHistoryDiffPreview } from './VersionHistoryDiffPreview';
-import { VersionMergeControls } from './merge';
 import { ReviewProposalSurface } from './ReviewProposalSurface';
 import { reviewProposalAccessDiagnosticsFromSummaries } from './review-proposal-access-diagnostics';
 import { useVersionPanelFocusTrap } from './useVersionPanelFocusTrap';
 import { useVersionHistoryPanelActions } from './version-history-panel-actions';
 import { useVersionHistoryData, type VersionHistoryWorkbook } from './version-history-panel-data';
 import {
-  CapabilitySummary,
   CommitList,
+  CurrentBranchMenu,
   DiagnosticsBlock,
-  RefList,
   VersionHistoryPanelHeader,
-  VersionStatusSummary,
+  VersionStatusAlerts,
+  WorkingTreeDiffSection,
 } from './VersionHistoryPanelSections';
+import { MergeReviewSection } from './VersionMergeReviewSection';
 
 export interface VersionHistoryPanelProps {
   readonly onClose: () => void;
@@ -42,6 +42,12 @@ export function VersionHistoryPanelContent({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const { loadState, load, data, diagnostics, loading } = useVersionHistoryData(workbook);
   const actions = useVersionHistoryPanelActions({ workbook, data, loading, load });
+  const reviewProposalAccessDiagnostics = data
+    ? reviewProposalAccessDiagnosticsFromSummaries(data)
+    : undefined;
+  const showReviewProposalSurface = data
+    ? data.reviews.length > 0 || data.proposals.length > 0
+    : false;
 
   useEffect(() => {
     closeButtonRef.current?.focus({ preventScroll: true });
@@ -55,9 +61,28 @@ export function VersionHistoryPanelContent({
       data-testid="panel-version-history"
       role="complementary"
       aria-label="Version control"
-      className="flex flex-col w-[320px] max-w-[calc(100vw-24px)] h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
+      className="flex flex-col w-[440px] max-w-[calc(100vw-24px)] h-full bg-ss-surface border-l border-ss-border shadow-ss-md overflow-hidden"
     >
       <VersionHistoryPanelHeader
+        branchControl={
+          data ? (
+            <CurrentBranchMenu
+              data={data}
+              branchName={actions.branchName}
+              sourceCommitId={actions.currentOrHeadCommitId}
+              branchEnabled={actions.canCreateBranch}
+              checkoutEnabled={actions.canCheckout}
+              branchDisabledReason={actions.branchDisabledReason}
+              checkoutDisabledReason={actions.checkoutDisabledReason}
+              mergePreviewEnabled={actions.canPreviewMerge}
+              mergePreviewDisabledReason={actions.mergePreviewDisabledReason}
+              onBranchNameChange={actions.setBranchName}
+              onCreateBranch={actions.handleCreateBranch}
+              onCheckoutRef={actions.handleCheckoutRef}
+              onPreviewMerge={actions.handlePreviewMerge}
+            />
+          ) : undefined
+        }
         closeButtonRef={closeButtonRef}
         onClose={onClose}
         onRefresh={load}
@@ -83,74 +108,62 @@ export function VersionHistoryPanelContent({
         ) : null}
 
         {data ? (
-          <div className="flex flex-col gap-4 p-4">
-            <VersionStatusSummary data={data} />
-            <CapabilitySummary surface={data.surface} />
+          <div className="flex flex-col gap-3 p-3">
+            <VersionStatusAlerts data={data} />
             <VersionActions
               commitMessage={actions.commitMessage}
-              branchName={actions.branchName}
-              rollbackReason={actions.rollbackReason}
-              targetCommitId={actions.selectedOrHeadCommitId}
               actionState={actions.actionState}
               commitEnabled={actions.canCommit}
-              branchEnabled={actions.canCreateBranch}
-              rollbackEnabled={actions.canStageRollback}
-              remotePromoteEnabled={actions.canPromoteRemote}
               commitDisabledReason={actions.commitDisabledReason}
-              branchDisabledReason={actions.branchDisabledReason}
-              rollbackDisabledReason={actions.rollbackDisabledReason}
-              remotePromoteDisabledReason={actions.remotePromoteDisabledReason}
-              remotePromotionStatus={actions.remotePromotionStatus}
               onCommitMessageChange={actions.setCommitMessage}
-              onBranchNameChange={actions.setBranchName}
-              onRollbackReasonChange={actions.setRollbackReason}
               onCommit={actions.handleCommit}
-              onCreateBranch={actions.handleCreateBranch}
-              onStageRollback={actions.handleStageRollback}
-              onPromotePendingRemote={actions.handlePromotePendingRemote}
             />
-            <VersionMergeControls
-              sourceRefs={actions.mergeSources}
-              selectedSourceRefName={actions.mergeSourceRefName}
-              currentHeadId={actions.currentMergeTarget?.commitId}
-              currentRefName={actions.currentMergeTarget?.refName}
-              previewState={actions.mergePreviewState}
-              resolutionSelections={actions.mergeResolutionSelections}
-              previewEnabled={actions.canPreviewMerge}
-              applyEnabled={actions.canApplyMerge}
-              previewDisabledReason={actions.mergePreviewDisabledReason}
-              applyDisabledReason={actions.mergeApplyDisabledReason}
-              onSourceRefNameChange={actions.setMergeSourceRefName}
-              onPreviewMerge={actions.handlePreviewMerge}
-              onApplyMerge={actions.handleApplyMerge}
-              onResolutionChange={actions.handleMergeResolutionChange}
+            <WorkingTreeDiffSection diff={data.workingTreeDiff} workbook={workbook} />
+            <VersionHistoryDiffPreview
+              diffPreview={actions.diffPreview}
+              diffEnabled={actions.canDiff}
+              diffDisabledReason={actions.diffDisabledReason}
+              onLoadMoreGroups={actions.handleLoadMoreDiffGroups}
+              onSelectGroup={actions.handleSelectDiffGroup}
+              onLoadMoreDetail={actions.handleLoadMoreDiffDetail}
+              onFiltersChange={actions.handleDiffFiltersChange}
             />
-            <RefList
-              refs={data.refs}
+            {actions.mergeReview ? (
+              <MergeReviewSection
+                state={actions.mergeReview}
+                applyEnabled={actions.canApplyMerge}
+                applyDisabledReason={actions.mergeApplyDisabledReason}
+                onChooseResolution={actions.handleChooseMergeResolution}
+                onApply={actions.handleApplyMerge}
+              />
+            ) : null}
+            <CommitList
+              activeParentDiffCommitId={actions.activeParentDiffCommitId}
+              branchName={actions.branchName}
+              commits={data.commits}
               checkoutEnabled={actions.canCheckout}
               checkoutDisabledReason={actions.checkoutDisabledReason}
-              onCheckoutRef={actions.handleCheckoutRef}
-            />
-            <ReviewProposalSurface
-              surface={data.surface}
-              reviews={data.reviews}
-              proposals={data.proposals}
-              reviewDiagnostic={data.reviewDiagnostic}
-              proposalDiagnostic={data.proposalDiagnostic}
               diffEnabled={actions.canDiff}
               diffDisabledReason={actions.diffDisabledReason}
-              onOpenDiff={actions.handleReviewProposalDiff}
-              accessDiagnostics={reviewProposalAccessDiagnosticsFromSummaries(data)}
-            />
-            <CommitList
-              commits={data.commits}
-              selectedCommitId={actions.selectedCommitId}
-              diffEnabled={actions.canDiff}
-              diffDisabledReason={actions.diffDisabledReason}
-              onSelectCommit={actions.setSelectedCommitId}
+              getBranchAvailabilityForCommit={actions.getBranchAvailabilityForCommit}
+              onBranchNameChange={actions.setBranchName}
+              onCheckoutCommit={actions.handleCheckoutCommit}
+              onCreateBranchFromCommit={actions.handleCreateBranch}
               onDiffCommit={actions.handleDiffCommit}
             />
-            <VersionHistoryDiffPreview diffPreview={actions.diffPreview} />
+            {showReviewProposalSurface ? (
+              <ReviewProposalSurface
+                surface={data.surface}
+                reviews={data.reviews}
+                proposals={data.proposals}
+                reviewDiagnostic={data.reviewDiagnostic}
+                proposalDiagnostic={data.proposalDiagnostic}
+                diffEnabled={actions.canDiff}
+                diffDisabledReason={actions.diffDisabledReason}
+                onOpenDiff={actions.handleReviewProposalDiff}
+                accessDiagnostics={reviewProposalAccessDiagnostics}
+              />
+            ) : null}
             {diagnostics.length > 0 ? <DiagnosticsBlock diagnostics={diagnostics} /> : null}
           </div>
         ) : null}

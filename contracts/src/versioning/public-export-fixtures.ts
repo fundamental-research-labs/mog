@@ -50,6 +50,11 @@ import type {
   VersionSemanticValue as ContractsApiSemanticValue,
   VersionSealedResolutionPayloadRef as ContractsApiSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsApiStoreDiagnostic,
+  VersionWorkingTreeDiffId as ContractsApiWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as ContractsApiWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as ContractsApiWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as ContractsApiWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as ContractsApiWorkingTreeDiffPage,
   Workbook as ContractsApiWorkbook,
   WorkbookDiffPage as ContractsApiDiffPage,
   WorkbookVersion as ContractsApiWorkbookVersion,
@@ -111,6 +116,11 @@ import type {
   VersionSemanticValue as ContractsWorkbookSemanticValue,
   VersionSealedResolutionPayloadRef as ContractsWorkbookSealedResolutionPayloadRef,
   VersionStoreDiagnostic as ContractsWorkbookStoreDiagnostic,
+  VersionWorkingTreeDiffId as ContractsWorkbookWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as ContractsWorkbookWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as ContractsWorkbookWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as ContractsWorkbookWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as ContractsWorkbookWorkingTreeDiffPage,
   WorkbookDiffPage as ContractsWorkbookDiffPage,
   WorkbookVersion as ContractsWorkbookVersion,
   WorkbookVersionStatus as ContractsWorkbookVersionStatus,
@@ -339,6 +349,24 @@ type _ContractsApiWorkbookEntryExportsVersionHead = Assert<
 >;
 type _ContractsApiWorkbookEntryExportsSemanticDiffPage = Assert<
   IsEqual<ContractsApiSemanticDiffPage, ContractsWorkbookSemanticDiffPage>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffPage = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffPage, ContractsWorkbookWorkingTreeDiffPage>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffOptions = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffOptions, ContractsWorkbookWorkingTreeDiffOptions>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffOverview = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffOverview, ContractsWorkbookWorkingTreeDiffOverview>
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffOverviewOptions = Assert<
+  IsEqual<
+    ContractsApiWorkingTreeDiffOverviewOptions,
+    ContractsWorkbookWorkingTreeDiffOverviewOptions
+  >
+>;
+type _ContractsApiWorkbookEntryExportsWorkingTreeDiffId = Assert<
+  IsEqual<ContractsApiWorkingTreeDiffId, ContractsWorkbookWorkingTreeDiffId>
 >;
 type _ContractsApiWorkbookEntryExportsPaged = Assert<
   IsEqual<ContractsApiPaged<string>, ContractsWorkbookPaged<string>>
@@ -666,7 +694,7 @@ const publicDomainPolicyExportSurface: PublicVersioningDomainPolicySurface = Obj
 });
 const digest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
-  value: 'sha256:vc03-05-public-export-surface',
+  digest: 'sha256:vc03-05-public-export-surface',
 });
 const releaseArtifactManifest: ReleaseArtifactManifest = Object.freeze({
   schemaVersion: 'mog.versioning.releaseArtifactManifest.v1',
@@ -950,7 +978,7 @@ const shadowObservation: VersionShadowObservationRecord = Object.freeze({
   }),
   redaction: Object.freeze({
     policy: 'metadata-only',
-    policyDigest: digest.value,
+    policyDigest: digest.digest,
     omitted: Object.freeze(['cellValues', 'authorId', 'providerPayload']),
   }),
   sourceArtifactRefs: Object.freeze([

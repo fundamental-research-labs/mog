@@ -25,7 +25,7 @@ export function workspaceLookupService(): ProposalWorkspaceLifecycleService {
             ok: false,
             error: {
               code: 'target_unavailable',
-              target: 'workbook.version.getProposalWorkspace',
+              target: 'workbook.version.proposals.advanced.getProposalWorkspace',
               diagnostics: [
                 {
                   code: 'TEST_WORKSPACE_NOT_FOUND',
@@ -45,7 +45,7 @@ export function workspaceLookupService(): ProposalWorkspaceLifecycleService {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.commitProposalWorkspace',
+          target: 'workbook.version.proposals.advanced.commitProposalWorkspace',
           diagnostics: [
             {
               code: 'TEST_COMMIT_UNAVAILABLE',

@@ -19,6 +19,7 @@ import {
 import { redactDiffEntry } from './version-diff-projection-redaction';
 import {
   mapDiffDisplay,
+  mapDiffHistoricalMetadata,
   mapReviewAccessDiffValue,
   mapStructuralMetadata,
 } from './version-diff-projection-values';
@@ -80,6 +81,9 @@ function mapDiffEntry(value: unknown): VersionDiffEntry | null {
   if (!structural || !before || !after) return null;
   const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
   if (value.display !== undefined && !display) return null;
+  const historical =
+    value.historical === undefined ? undefined : mapDiffHistoricalMetadata(value.historical);
+  if (value.historical !== undefined && !historical) return null;
   const diagnostics = Array.isArray(value.diagnostics)
     ? mapGraphDiagnostics(value.diagnostics)
     : undefined;
@@ -88,6 +92,7 @@ function mapDiffEntry(value: unknown): VersionDiffEntry | null {
     before,
     after,
     ...(display ? { display } : {}),
+    ...(historical ? { historical } : {}),
     ...(diagnostics && diagnostics.length > 0 ? { diagnostics } : {}),
   });
 }

@@ -2,7 +2,7 @@ export function expectMergeReviewFailure(value: unknown, code: string): void {
   expect(value).toMatchObject({
     ok: false,
     error: {
-      target: 'workbook.version.getMergeConflictDetail',
+      target: 'workbook.version.artifacts.advanced.getMergeConflictDetail',
       diagnostics: [
         expect.objectContaining({
           code,

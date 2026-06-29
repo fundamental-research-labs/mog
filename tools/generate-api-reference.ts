@@ -108,7 +108,8 @@ const WORKSHEET_SUB_APIS: Record<string, string> = {
   WorksheetFormControls: 'formControls',
 };
 
-// Workbook sub-APIs
+// Workbook sub-APIs. Nested workbook APIs can use dotted prefixes so the
+// generated reference exposes the actual call path.
 const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookSheets: 'sheets',
   WorkbookNames: 'names',
@@ -121,6 +122,11 @@ const WORKBOOK_SUB_APIS: Record<string, string> = {
   WorkbookTheme: 'theme',
   WorkbookSlicers: 'slicers',
   WorkbookVersion: 'version',
+  WorkbookVersionRefsNamespace: 'version.refs',
+  WorkbookVersionReviewApi: 'version.reviews.advanced',
+  VersionMergeReviewArtifactApi: 'version.artifacts.advanced',
+  VersionProposalPorcelainApi: 'version.proposals',
+  VersionProposalApi: 'version.proposals.advanced',
   WorkbookViewport: 'viewport',
 };
 
@@ -321,7 +327,32 @@ function extractUsedTypesFromMethods(
 // Signature Formatting
 // ============================================================================
 
-function formatSignature(method: MethodSignature, prefix?: string): string {
+const SIGNATURE_TYPE_TEXT_OVERRIDES: Record<string, Record<string, Record<string, string>>> = {
+  WorkbookVersionRefsNamespace: {
+    updateBranch: {
+      VersionFastForwardBranchOptions: 'VersionUpdateBranchOptions',
+    },
+  },
+};
+
+function applySignatureTypeOverrides(
+  interfaceName: string | undefined,
+  methodName: string,
+  typeText: string,
+): string {
+  const replacements = interfaceName
+    ? SIGNATURE_TYPE_TEXT_OVERRIDES[interfaceName]?.[methodName]
+    : undefined;
+  if (!replacements) return typeText;
+
+  let result = typeText;
+  for (const [from, to] of Object.entries(replacements)) {
+    result = result.replace(new RegExp(`\\b${from}\\b`, 'g'), to);
+  }
+  return result;
+}
+
+function formatSignature(method: MethodSignature, prefix?: string, interfaceName?: string): string {
   const name = prefix ? `${prefix}.${method.getName()}` : method.getName();
   const params = method
     .getParameters()
@@ -329,12 +360,14 @@ function formatSignature(method: MethodSignature, prefix?: string): string {
       const optional = p.isOptional() ? '?' : '';
       let typeText = p.getType().getText();
       typeText = typeText.replace(/import\([^)]+\)\./g, '');
+      typeText = applySignatureTypeOverrides(interfaceName, method.getName(), typeText);
       return `${p.getName()}${optional}: ${typeText}`;
     })
     .join(', ');
 
   let returnType = method.getReturnType().getText();
   returnType = returnType.replace(/import\([^)]+\)\./g, '');
+  returnType = applySignatureTypeOverrides(interfaceName, method.getName(), returnType);
 
   return `${name}(${params}): ${returnType}`;
 }
@@ -367,7 +400,8 @@ function pickApiReferenceMethod(
 
 function usesBroadPublicRefOverload(interfaceName: string, methodName: string): boolean {
   return (
-    interfaceName === 'WorkbookVersion' && (methodName === 'readRef' || methodName === 'getRef')
+    interfaceName === 'WorkbookVersionRefsNamespace' &&
+    (methodName === 'readRef' || methodName === 'getRef')
   );
 }
 
@@ -444,7 +478,7 @@ function extractRootInterface(iface: InterfaceDeclaration, knownTypes: Set<strin
       : [method];
     const tags = extractTags(method);
     spec.functions[name] = {
-      signature: formatSignature(method),
+      signature: formatSignature(method, undefined, iface.getName()),
       docstring: getJsDocComment(method),
       usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),
@@ -474,7 +508,7 @@ function extractSubApiMethods(
       : [method];
     const tags = extractTags(method);
     functions[dottedName] = {
-      signature: formatSignature(method, namespace),
+      signature: formatSignature(method, namespace, iface.getName()),
       docstring: getJsDocComment(method),
       usedTypes: extractUsedTypesFromMethods(usedTypeMethods, knownTypes),
       ...(tags && { tags }),

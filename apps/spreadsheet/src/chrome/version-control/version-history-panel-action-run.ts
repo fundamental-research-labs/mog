@@ -2,9 +2,8 @@ export type VersionPanelActionKind =
   | 'branch'
   | 'checkout'
   | 'commit'
-  | 'merge-preview'
   | 'merge-apply'
-  | 'merge-restore'
+  | 'merge-preview'
   | 'remote-promote'
   | 'rollback';
 
@@ -21,5 +20,5 @@ export const VERSION_COMMIT_DIRTY_REFRESH_EVENTS = [
 export function versionPanelActionExpectsActiveWorkbookReadback(
   action: VersionPanelActionRun,
 ): boolean {
-  return action.kind === 'checkout' || action.kind === 'merge-apply';
+  return action.kind === 'checkout';
 }

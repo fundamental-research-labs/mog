@@ -34,12 +34,14 @@ export function registerProposalRuntimeDiagnosticsServiceAcceptScenarios(): void
       },
     });
 
-    const result = await version.acceptProposal(acceptInput('accept-unsupported-domain') as any);
+    const result = await version.proposals.advanced.acceptProposal(
+      acceptInput('accept-unsupported-domain') as any,
+    );
 
     expect(result).toMatchObject({
       ok: false,
       error: {
-        target: 'workbook.version.acceptProposal',
+        target: 'workbook.version.proposals.advanced.acceptProposal',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_MERGE_UNSUPPORTED_DOMAIN',

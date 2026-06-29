@@ -20,7 +20,7 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       approveReview: false,
     });
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-unapproved',
       proposalId: ready.proposalId,
       expectedRevision: 5,
@@ -37,18 +37,22 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       },
     });
 
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
         ref: { commitId: graph.rootCommitId },
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'open' },
     });
@@ -65,7 +69,7 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       approveReview: false,
     });
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-no-review-finalizer',
       proposalId: ready.proposalId,
       expectedRevision: 5,
@@ -77,19 +81,21 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.acceptProposal',
+        target: 'workbook.version.proposals.advanced.acceptProposal',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_FINALIZER_UNAVAILABLE' })],
       },
     });
 
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
         ref: { commitId: graph.rootCommitId },
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5 },
     });
@@ -104,7 +110,7 @@ export function registerProposalProviderAcceptanceScenarios(): void {
     const ready = await createReadyReviewedProposal(version, graph, 'stale');
     const movedMainCommitId = await commitMain(graph.provider, graph.rootCommitId);
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-stale',
       proposalId: ready.proposalId,
       expectedRevision: 5,
@@ -122,11 +128,15 @@ export function registerProposalProviderAcceptanceScenarios(): void {
       },
     });
 
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'stale', revision: 6 },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

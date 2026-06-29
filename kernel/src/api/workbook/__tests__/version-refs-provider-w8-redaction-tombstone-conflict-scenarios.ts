@@ -29,7 +29,7 @@ export function registerProviderW8RedactionTombstoneConflictScenarios(): void {
     };
     const version = createVersionWithBranchService(branchService);
 
-    const conflict = await version.createBranch({
+    const conflict = await version.refs.createBranch({
       name: SECRET_REF_NAME as any,
       targetCommitId: AUX_COMMIT_ID as any,
     });

@@ -19,8 +19,9 @@ export function redactDiffEntry(entry: VersionDiffEntry): VersionDiffEntry {
 function redactHiddenStructuralEntry(entry: VersionDiffEntry): VersionDiffEntry {
   const reason = redactedReason(entry.structural);
   if (!reason) return entry;
+  const { historical: _historical, ...visibleEntry } = entry;
   return {
-    ...entry,
+    ...visibleEntry,
     before: redactVisibleValue(entry.before, reason),
     after: redactVisibleValue(entry.after, reason),
     ...(entry.display ? { display: redactVisibleDisplay(entry.display, reason) } : {}),
@@ -32,8 +33,9 @@ function redactCellEntry(entry: VersionDiffEntry): VersionDiffEntry {
   const reason = redactedReason(entry.before) ?? redactedReason(entry.after);
   if (!reason) return entry;
   const structural = redactedValue(reason);
+  const { historical: _historical, ...visibleEntry } = entry;
   return {
-    ...entry,
+    ...visibleEntry,
     structural,
     ...(entry.display ? { display: redactDisplay(entry.display, reason) } : {}),
   };

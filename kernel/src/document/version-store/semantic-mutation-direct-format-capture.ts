@@ -27,6 +27,13 @@ type DirectCellFormatSemanticChangeRecord = {
   readonly display?: {
     readonly address?: { readonly kind: 'value'; readonly value: string };
   };
+  readonly historical?: {
+    readonly cell?: {
+      readonly sheetId: string;
+      readonly row: number;
+      readonly column: number;
+    };
+  };
 };
 
 export function isDirectCellFormatOperation(
@@ -74,6 +81,13 @@ export function mapDirectCellFormatChanges(
       display: {
         address: { kind: 'value', value: address },
       },
+      historical: {
+        cell: {
+          sheetId: change.sheetId,
+          row: change.position.row,
+          column: change.position.col,
+        },
+      },
     });
   }
 
@@ -81,9 +95,24 @@ export function mapDirectCellFormatChanges(
 }
 
 function semanticDirectFormatChangeValue(change: PropertyChange): VersionSemanticValue | null {
+  if (isDefaultGeneralFormatSet(change)) return null;
   if (change.kind === 'Set') return semanticFormatValue(change.format);
   if (change.kind === 'Removed') return removedFormatValue();
   return null;
+}
+
+export function isIgnorableDirectCellFormatMutation(input: {
+  readonly operation: string;
+  readonly operationContext?: VersionOperationContext;
+  readonly result: { readonly propertyChanges?: readonly PropertyChange[] };
+}): boolean {
+  if (!isDirectCellFormatOperation(input.operation, input.operationContext)) return false;
+  const propertyChanges = input.result.propertyChanges ?? [];
+  return propertyChanges.length === 0 || propertyChanges.every(isDefaultGeneralFormatSet);
+}
+
+function isDefaultGeneralFormatSet(change: PropertyChange): boolean {
+  return change.kind === 'Set' && isDefaultGeneralFormat(change.format);
 }
 
 function removedFormatValue(): VersionSemanticValue {
@@ -98,6 +127,15 @@ function semanticFormatValue(value: unknown): VersionSemanticValue | null {
   const mapped = semanticJsonValue(value);
   if (!isSemanticObjectValue(mapped) || mapped.fields.length === 0) return null;
   return mapped;
+}
+
+function isDefaultGeneralFormat(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    (keys.length === 0 || (keys.length === 1 && keys[0] === 'numberFormat')) &&
+    (value.numberFormat === undefined || value.numberFormat === 'General')
+  );
 }
 
 function semanticJsonValue(value: unknown, depth = 0): VersionSemanticValue | undefined {

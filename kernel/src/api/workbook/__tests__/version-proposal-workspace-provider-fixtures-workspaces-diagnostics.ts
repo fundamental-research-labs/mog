@@ -9,7 +9,7 @@ export function unsafeStartDiagnosticWorkspaceService(): ProposalWorkspaceLifecy
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.startProposalWorkspace',
+          target: 'workbook.version.proposals.advanced.startProposalWorkspace',
           diagnostics: [
             {
               code: 'TEST_UNSAFE_WORKSPACE_DIAGNOSTIC',

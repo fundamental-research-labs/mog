@@ -16,7 +16,7 @@ export function registerMergeCapabilityReviewEndpointScenarios(): void {
       });
       const version = new WorkbookVersionImpl(ctx as any);
 
-      const result = await (version as any)[method](input);
+      const result = await (version.artifacts.advanced as any)[method](input);
 
       expect(result).toEqual({
         ok: false,
@@ -42,7 +42,7 @@ export function registerMergeCapabilityReviewEndpointScenarios(): void {
         policySnapshot: { decisions: [{ capability, decision: 'denied' }] },
       } as any);
 
-      const result = await (version as any)[method](input);
+      const result = await (version.artifacts.advanced as any)[method](input);
 
       expect(result).toEqual({
         ok: false,
@@ -70,7 +70,7 @@ export function registerMergeCapabilityReviewEndpointScenarios(): void {
         },
       } as any);
 
-      const result = await (version as any)[method](input);
+      const result = await (version.artifacts.advanced as any)[method](input);
 
       expect(result).toEqual({
         ok: false,

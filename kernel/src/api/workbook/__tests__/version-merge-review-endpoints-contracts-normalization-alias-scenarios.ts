@@ -12,7 +12,7 @@ export function registerMergeReviewEndpointContractsNormalizationAliasScenarios(
     await withReviewArtifact('normalization-aliases', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
       const option = requireResolutionOption(conflict, 'acceptTheirs');
-      const detail = await version.getMergeConflictDetail({
+      const detail = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -21,7 +21,7 @@ export function registerMergeReviewEndpointContractsNormalizationAliasScenarios(
         valueRole: 'incoming' as any,
         purpose: 'reviewValue' as any,
       });
-      const payload = await version.putMergeResolutionPayload({
+      const payload = await version.artifacts.advanced.putMergeResolutionPayload({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,

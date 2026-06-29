@@ -2,7 +2,11 @@ import '@testing-library/jest-dom';
 
 import { screen } from '@testing-library/react';
 
-import { HEAD_COMMIT_ID, renderVersionHistoryPanel } from './VersionHistoryPanel.test-utils';
+import {
+  HEAD_COMMIT_ID,
+  renderVersionHistoryPanel,
+  shortCommitId,
+} from './VersionHistoryPanel.test-utils';
 import {
   LATEST_REMOTE_COMMIT_ID,
   createRemotePromotionSurfaceStatus,
@@ -48,10 +52,10 @@ describe('VersionHistoryPanelContent remote stale status projection', () => {
     expect(staleStatus).not.toHaveTextContent('aaaaaaaaaaaa');
     expect(staleStatus).not.toHaveTextContent('eeeeeeeeeeee');
 
-    const statusSummary = screen.getByRole('region', { name: 'Version status' });
-    expect(statusSummary).toHaveTextContent('Detached or unavailable');
-    expect(statusSummary).not.toHaveTextContent(rawProviderRef);
-    expect(statusSummary).not.toHaveTextContent('refs/heads/refs/provider-internal/main');
+    const branchTrigger = screen.getByTestId('version-history-current-branch-trigger');
+    expect(branchTrigger).toHaveTextContent(shortCommitId(HEAD_COMMIT_ID));
+    expect(branchTrigger).not.toHaveTextContent(rawProviderRef);
+    expect(branchTrigger).not.toHaveTextContent('refs/heads/refs/provider-internal/main');
   });
 
   it('projects stale pending remote reconciliation through stable redacted codes', async () => {

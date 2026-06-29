@@ -62,7 +62,7 @@ export function registerVersionStatusReadGraphServiceScenarios(): void {
     });
     expect(graphStore.listCommits).toHaveBeenCalledWith({ ref: 'refs/heads/main', pageSize: 2 });
 
-    await expect(wb.version.readRef('HEAD')).resolves.toEqual({
+    await expect(wb.version.refs.readRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -75,7 +75,7 @@ export function registerVersionStatusReadGraphServiceScenarios(): void {
       },
     });
 
-    await expect(wb.version.readRef('refs/heads/main')).resolves.toEqual({
+    await expect(wb.version.refs.readRef('refs/heads/main')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -164,7 +164,7 @@ export function registerVersionStatusReadGraphServiceScenarios(): void {
       }),
     });
 
-    await expect(wb.version.readRef('refs/heads/main')).resolves.toEqual({
+    await expect(wb.version.refs.readRef('refs/heads/main')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',

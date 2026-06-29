@@ -24,12 +24,20 @@ import {
 } from './semantic-mutation-capture-lanes';
 import {
   authorForRecords,
+  compactCellWriteReviewProjectionForMutation,
   isDirectCellValueOperation,
   mapMutationResultToSemanticChanges,
   mutationSegmentPayload,
   type PendingSemanticMutation,
 } from './semantic-mutation-capture-projection';
-import { buildRustBackedSemanticChangeSetPayload } from './semantic-mutation-rust-diff-capture';
+import {
+  buildCompactReviewProjectionOnlySemanticChangeSetPayload,
+  buildReviewProjectionOnlySemanticChangeSetPayload,
+  buildRustBackedSemanticChangeSetPayload,
+  canUseReviewProjectionOnlyPayload,
+} from './semantic-mutation-rust-diff-capture';
+import { isIgnorableDirectCellFormatMutation } from './semantic-mutation-direct-format-capture';
+import { materializeCompactReviewChanges } from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 
 export interface VersionMutationCaptureRecordInput {
@@ -52,11 +60,16 @@ export interface VersionMutationCaptureSink {
   recordMutationResult(input: VersionMutationCaptureRecordInput): void;
 }
 
+export type SemanticMutationSheetNameReader = (
+  sheetId: string,
+) => string | null | undefined | Promise<string | null | undefined>;
+
 export interface SemanticMutationCaptureServices {
   readonly mutationCapture: VersionMutationCaptureSink;
   readonly captureNormalCommit: VersionNormalCommitCapture;
   readonly capturePendingRemoteSegment: VersionPendingRemoteCapture;
   readNormalCommitCaptureState(): SemanticMutationCaptureNormalState;
+  readWorkingTreeBasis(): SemanticMutationCaptureWorkingTreeBasis;
   resetNormalCaptureForCheckout(input: VersionMutationCaptureResetInput): void;
 }
 
@@ -68,6 +81,7 @@ export interface SemanticMutationCaptureOptions {
   readonly author?: VersionAuthor;
   readonly now?: () => Date;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly readSheetName?: SemanticMutationSheetNameReader;
   readonly requireOperationContext?: boolean;
 }
 
@@ -77,6 +91,19 @@ export interface SemanticMutationCaptureNormalState {
   readonly pendingUncapturedNormalMutationCount: number;
   readonly hasPendingNormalMutations: boolean;
   readonly hasUncapturedNormalMutations: boolean;
+}
+
+export interface SemanticMutationCaptureWorkingTreeBasis extends SemanticMutationCaptureNormalState {
+  readonly beforeSemanticState?: SemanticWorkbookStateEnvelope;
+  readonly semanticStateCaptureFailure?: string;
+  readonly pendingUncapturedNormalMutationSummaries: readonly PendingUncapturedNormalMutationSummary[];
+}
+
+export interface PendingUncapturedNormalMutationSummary {
+  readonly sequence: number;
+  readonly operation: string;
+  readonly capturedAt: string;
+  readonly reason: PendingUncapturedNormalMutation['reason'];
 }
 
 const DEFAULT_CAPTURE_AUTHOR: VersionAuthor = Object.freeze({
@@ -103,6 +130,7 @@ export function createSemanticMutationCapture(
     captureNormalCommit: (input) => buffer.captureNormalCommit(input),
     capturePendingRemoteSegment: (input) => buffer.capturePendingRemoteSegment(input),
     readNormalCommitCaptureState: () => buffer.readNormalCommitCaptureState(),
+    readWorkingTreeBasis: () => buffer.readWorkingTreeBasis(),
     resetNormalCaptureForCheckout: (input) => buffer.resetNormalCaptureForCheckout(input),
   };
 }
@@ -111,12 +139,14 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
   private readonly author: VersionAuthor;
   private readonly now: () => Date;
   private readonly requireOperationContext: boolean;
+  private readonly readSheetName?: SemanticMutationSheetNameReader;
   private semanticStateReader?: VersionSemanticStateReaderPort;
   private nextNormalSequence = 1;
   private nextPendingRemoteSequence = 1;
   private pendingNormal: PendingSemanticMutation[] = [];
   private pendingUncapturedNormal: PendingUncapturedNormalMutation[] = [];
   private pendingRemote: PendingSemanticMutation[] = [];
+  private normalSheetNamesBySheetId = new Map<string, string>();
   private normalCaptureRevision = 0;
   private beforeNormalSemanticState?: SemanticWorkbookStateEnvelope;
   private semanticStateCaptureFailure?: string;
@@ -125,12 +155,23 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     this.author = options.author ?? DEFAULT_CAPTURE_AUTHOR;
     this.now = options.now ?? (() => new Date());
     this.requireOperationContext = options.requireOperationContext ?? false;
+    this.readSheetName = options.readSheetName;
     this.semanticStateReader = options.semanticStateReader;
   }
 
   async recordPreMutation(input: VersionMutationCapturePreMutationInput): Promise<void> {
+    if (this.requireOperationContext && !input.operationContext) {
+      return;
+    }
+
     if (
-      (this.requireOperationContext && !input.operationContext) ||
+      this.readSheetName &&
+      classifySemanticMutationCaptureLane(input.operationContext) === 'normalLocal'
+    ) {
+      await this.captureNormalSheetDisplayNames(input);
+    }
+
+    if (
       !this.semanticStateReader ||
       !shouldCapturePreMutationSemanticState(input) ||
       this.beforeNormalSemanticState ||
@@ -168,9 +209,17 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     const capturedAt = input.operationContext?.createdAt ?? this.now().toISOString();
     const directEdits = input.directEdits ? [...input.directEdits] : [];
     const directEditRanges = input.directEditRanges ? [...input.directEditRanges] : [];
-    const changes = mapMutationResultToSemanticChanges(input, sequence);
+    const projectionInput =
+      lane === 'normalLocal' && this.normalSheetNamesBySheetId.size > 0
+        ? { ...input, sheetNamesBySheetId: this.normalSheetNamesBySheetId }
+        : input;
+    const compactReviewProjection =
+      lane === 'normalLocal' ? compactCellWriteReviewProjectionForMutation(projectionInput) : null;
+    const changes = compactReviewProjection
+      ? []
+      : mapMutationResultToSemanticChanges(projectionInput, sequence);
     if (changes.length === 0) {
-      if (shouldDeferEmptySemanticChangeSetToRustDiff(input, lane)) {
+      if (compactReviewProjection || shouldDeferEmptySemanticChangeSetToRustDiff(input, lane)) {
         this.pendingNormal.push({
           sequence,
           operation: input.operation,
@@ -179,9 +228,13 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
           directEdits,
           directEditRanges,
           changes,
+          ...(compactReviewProjection ? { compactReviewProjection } : {}),
         });
         this.nextNormalSequence++;
         this.bumpNormalCaptureRevision();
+        return;
+      }
+      if (shouldSkipEmptySemanticChangeSet(input, lane)) {
         return;
       }
       if (lane === 'normalLocal') {
@@ -201,6 +254,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
       directEdits,
       directEditRanges,
       changes,
+      ...(compactReviewProjection ? { compactReviewProjection } : {}),
     };
 
     if (lane === 'normalLocal') {
@@ -217,6 +271,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     this.nextNormalSequence = 1;
     this.pendingNormal = [];
     this.pendingUncapturedNormal = [];
+    this.normalSheetNamesBySheetId = new Map();
     this.bumpNormalCaptureRevision();
     this.beforeNormalSemanticState = undefined;
     this.semanticStateCaptureFailure = undefined;
@@ -233,14 +288,18 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (admissionFailure) return admissionFailure;
 
     const records = [...this.pendingNormal];
-    const changes = records.flatMap((record) => [...record.changes]);
-    const semanticChangeSetPayload = await buildRustBackedSemanticChangeSetPayload({
-      commit: input,
-      semanticStateReader: this.semanticStateReader,
-      beforeSemanticState: this.beforeNormalSemanticState,
-      semanticStateCaptureFailure: this.semanticStateCaptureFailure,
-      reviewChanges: changes,
-    });
+    const compactProjectionOnlyRecord = compactProjectionOnlyNormalCommitRecord(records);
+    const semanticChangeSetPayload = compactProjectionOnlyRecord
+      ? buildCompactReviewProjectionOnlySemanticChangeSetPayload(
+          compactProjectionOnlyRecord.compactReviewProjection,
+        )
+      : await semanticChangeSetPayloadForRecords({
+          commit: input,
+          records,
+          semanticStateReader: this.semanticStateReader,
+          beforeSemanticState: this.beforeNormalSemanticState,
+          semanticStateCaptureFailure: this.semanticStateCaptureFailure,
+        });
     if (semanticChangeSetPayload.status !== 'success') return semanticChangeSetPayload;
     const semanticChangeSetRecord = await objectRecord(
       input.namespace,
@@ -303,6 +362,24 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     };
   }
 
+  readWorkingTreeBasis(): SemanticMutationCaptureWorkingTreeBasis {
+    return {
+      ...this.readNormalCommitCaptureState(),
+      ...(this.beforeNormalSemanticState
+        ? { beforeSemanticState: this.beforeNormalSemanticState }
+        : {}),
+      ...(this.semanticStateCaptureFailure
+        ? { semanticStateCaptureFailure: this.semanticStateCaptureFailure }
+        : {}),
+      pendingUncapturedNormalMutationSummaries: this.pendingUncapturedNormal.map((record) => ({
+        sequence: record.sequence,
+        operation: record.operation,
+        capturedAt: record.capturedAt,
+        reason: record.reason,
+      })),
+    };
+  }
+
   private recordUncapturedNormalMutation(
     input: VersionMutationCaptureRecordInput,
     reason: PendingUncapturedNormalMutation['reason'],
@@ -322,6 +399,26 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     this.bumpNormalCaptureRevision();
   }
 
+  private async captureNormalSheetDisplayNames(
+    input: VersionMutationCapturePreMutationInput,
+  ): Promise<void> {
+    const readSheetName = this.readSheetName;
+    if (!readSheetName) return;
+    const sheetIds = sheetIdsFromMutationEvidence(input);
+    await Promise.all(
+      sheetIds.map(async (sheetId) => {
+        try {
+          const sheetName = await readSheetName(sheetId);
+          if (typeof sheetName === 'string' && sheetName.trim().length > 0) {
+            this.normalSheetNamesBySheetId.set(sheetId, sheetName);
+          }
+        } catch {
+          // Display names are best-effort metadata; failing to read one must not block the mutation.
+        }
+      }),
+    );
+  }
+
   private drainNormalThrough(sequence: number): void {
     if (sequence <= 0) return;
     const beforeLength = this.pendingNormal.length;
@@ -332,6 +429,7 @@ class SemanticMutationCaptureBuffer implements VersionMutationCaptureSink {
     if (this.pendingNormal.length === 0) {
       this.beforeNormalSemanticState = undefined;
       this.semanticStateCaptureFailure = undefined;
+      this.normalSheetNamesBySheetId = new Map();
     }
   }
 
@@ -360,6 +458,57 @@ function objectRecord(
   });
 }
 
+async function semanticChangeSetPayloadForRecords(input: {
+  readonly commit: Parameters<VersionNormalCommitCapture>[0];
+  readonly records: readonly PendingSemanticMutation[];
+  readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly beforeSemanticState?: SemanticWorkbookStateEnvelope;
+  readonly semanticStateCaptureFailure?: string;
+}) {
+  const reviewChanges = input.records.flatMap((record) =>
+    record.compactReviewProjection
+      ? [...materializeCompactReviewChanges(record.compactReviewProjection)]
+      : [...record.changes],
+  );
+
+  return canUseReviewProjectionOnlyPayload(reviewChanges)
+    ? buildReviewProjectionOnlySemanticChangeSetPayload(reviewChanges)
+    : buildRustBackedSemanticChangeSetPayload({
+        commit: input.commit,
+        semanticStateReader: input.semanticStateReader,
+        beforeSemanticState: input.beforeSemanticState,
+        semanticStateCaptureFailure: input.semanticStateCaptureFailure,
+        reviewChanges,
+      });
+}
+
+function compactProjectionOnlyNormalCommitRecord(records: readonly PendingSemanticMutation[]):
+  | (PendingSemanticMutation & {
+      readonly compactReviewProjection: NonNullable<
+        PendingSemanticMutation['compactReviewProjection']
+      >;
+    })
+  | null {
+  let compactRecord:
+    | (PendingSemanticMutation & {
+        readonly compactReviewProjection: NonNullable<
+          PendingSemanticMutation['compactReviewProjection']
+        >;
+      })
+    | null = null;
+  for (const record of records) {
+    if (record.changes.length > 0) return null;
+    if (!record.compactReviewProjection) continue;
+    if (compactRecord) return null;
+    compactRecord = record as PendingSemanticMutation & {
+      readonly compactReviewProjection: NonNullable<
+        PendingSemanticMutation['compactReviewProjection']
+      >;
+    };
+  }
+  return compactRecord;
+}
+
 function shouldDeferEmptySemanticChangeSetToRustDiff(
   input: VersionMutationCaptureRecordInput,
   lane: ReturnType<typeof classifySemanticMutationCaptureLane>,
@@ -367,6 +516,14 @@ function shouldDeferEmptySemanticChangeSetToRustDiff(
   if (lane !== 'normalLocal') return false;
   if (!isDirectCellValueOperation(input.operation)) return false;
   return hasDirectEditEvidence(input);
+}
+
+function shouldSkipEmptySemanticChangeSet(
+  input: VersionMutationCaptureRecordInput,
+  lane: ReturnType<typeof classifySemanticMutationCaptureLane>,
+): boolean {
+  if (lane !== 'normalLocal') return false;
+  return isIgnorableDirectCellFormatMutation(input);
 }
 
 function shouldCapturePreMutationSemanticState(
@@ -395,4 +552,22 @@ function hasDirectEditEvidence(input: {
   readonly directEditRanges?: readonly DirectEditRange[];
 }): boolean {
   return (input.directEdits?.length ?? 0) > 0 || (input.directEditRanges?.length ?? 0) > 0;
+}
+
+function sheetIdsFromMutationEvidence(input: VersionMutationCapturePreMutationInput): string[] {
+  const sheetIds = new Set<string>();
+  for (const sheetId of input.operationContext?.sheetIds ?? []) {
+    if (isSheetIdString(sheetId)) sheetIds.add(sheetId);
+  }
+  for (const edit of input.directEdits ?? []) {
+    if (isSheetIdString(edit.sheetId)) sheetIds.add(edit.sheetId);
+  }
+  for (const range of input.directEditRanges ?? []) {
+    if (isSheetIdString(range.sheetId)) sheetIds.add(range.sheetId);
+  }
+  return [...sheetIds].sort();
+}
+
+function isSheetIdString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }

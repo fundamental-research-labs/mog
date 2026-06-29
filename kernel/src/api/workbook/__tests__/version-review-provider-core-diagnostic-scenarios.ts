@@ -19,8 +19,10 @@ export function registerReviewProviderCoreDiagnosticScenarios(): void {
     provider.openWorkbookVersionReviewRecordStore = async () => store;
     const version = versionForProvider(provider);
 
-    const read = await version.getReview({ reviewId: REVIEW_ID });
-    const write = await version.createReview(createReviewInput('inaccessible-write-review'));
+    const read = await version.reviews.advanced.getReview({ reviewId: REVIEW_ID });
+    const write = await version.reviews.advanced.createReview(
+      createReviewInput('inaccessible-write-review'),
+    );
     expectDeniedReviewDiagnostic(read, 'getReview', 'version:reviewRead');
     expectDeniedReviewDiagnostic(write, 'createReview', 'version:reviewWrite');
   });

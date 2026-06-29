@@ -82,7 +82,7 @@ function noWriteProposalUpdateFailure<T>(diagnostic: VersionDiagnostic): Version
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: 'workbook.version.acceptProposal',
+      target: 'workbook.version.proposals.advanced.acceptProposal',
       diagnostics: [diagnostic],
     },
   };

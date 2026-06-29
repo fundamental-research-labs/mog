@@ -3,12 +3,14 @@ import type {
   VersionNormalCommitMaterializedCaptureResult,
   VersionNormalCommitMaterializedCaptureSuccess,
 } from './commit-service-types';
-import type { VersionGraphNamespace } from './object-store';
+import { createVersionObjectRecord, type VersionGraphNamespace } from './object-store';
 import { failedStoreResult, versionStoreDiagnostic, type VersionStoreProvider } from './provider';
 import {
   captureWorkbookSnapshotRootRecord,
   type SnapshotRootByteSyncPort,
 } from './snapshot-root-capture';
+
+export const DEFERRED_SNAPSHOT_ROOT_COMPLETENESS_CODE = 'VERSION_SNAPSHOT_ROOT_DEFERRED';
 
 export async function materializeSnapshotRootForNormalCommit(options: {
   readonly provider: VersionStoreProvider;
@@ -34,6 +36,43 @@ export async function materializeSnapshotRootForNormalCommit(options: {
       ],
       'no-write-attempted',
     );
+  }
+
+  const deferred = deferredSnapshotRootForLargeProjection(captured);
+  if (deferred) {
+    const snapshotRootRecord = await createVersionObjectRecord(namespace, {
+      objectType: 'workbook.snapshotRoot.v1',
+      schemaVersion: 1,
+      payloadEncoding: 'mog-canonical-json-v1',
+      dependencies: [],
+      payload: {
+        schemaVersion: 1,
+        kind: 'deferredSnapshotRoot',
+        reason: 'large-semantic-projection',
+        reviewProjectionChangeCount: deferred.reviewProjectionChangeCount,
+      },
+    });
+    return {
+      ...captured,
+      input: {
+        ...captured.input,
+        snapshotRootRecord,
+        completenessDiagnostics: [
+          ...(captured.input.completenessDiagnostics ?? []),
+          {
+            code: DEFERRED_SNAPSHOT_ROOT_COMPLETENESS_CODE,
+            severity: 'error' as const,
+            message:
+              'Snapshot-root materialization was deferred for a large semantic projection commit.',
+            path: 'snapshotRootRecord',
+            details: {
+              reason: 'large-semantic-projection',
+              reviewProjectionChangeCount: deferred.reviewProjectionChangeCount,
+            },
+          },
+        ],
+      },
+    };
   }
 
   try {
@@ -64,4 +103,21 @@ export async function materializeSnapshotRootForNormalCommit(options: {
       true,
     );
   }
+}
+
+function deferredSnapshotRootForLargeProjection(
+  captured: Extract<VersionNormalCommitCaptureResult, { status: 'success' }>,
+): { readonly reviewProjectionChangeCount: number } | null {
+  const payload = captured.input.semanticChangeSetRecord.preimage.payload;
+  if (!isRecord(payload) || !isRecord(payload.source)) return null;
+  if (payload.source.kind !== 'semanticMutationProjection') return null;
+  if (!isRecord(payload.compactReviewProjection)) return null;
+  const count = payload.source.reviewProjectionChangeCount;
+  return Number.isSafeInteger(count) && (count as number) > 0
+    ? { reviewProjectionChangeCount: count as number }
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

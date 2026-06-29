@@ -23,7 +23,7 @@ export type YrsFullStateSnapshotRootPayload = {
   readonly source: typeof YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE;
 };
 
-export type WorkbookSnapshotRootPayload = YrsFullStateSnapshotRootPayload;
+export type WorkbookSnapshotRootPayload = YrsFullStateSnapshotRootPayload | Uint8Array;
 export type WorkbookSnapshotRootRecord = VersionObjectRecord<WorkbookSnapshotRootPayload>;
 export type SnapshotRootByteSyncPort = Pick<DocumentByteSyncPort, 'encodeDiff'>;
 
@@ -55,10 +55,8 @@ export async function captureWorkbookSnapshotRootRecord(
   namespace: VersionGraphNamespace,
   syncPort: SnapshotRootByteSyncPort,
 ): Promise<WorkbookSnapshotRootRecord> {
-  return createWorkbookSnapshotRootRecord(
-    namespace,
-    await captureYrsFullStateSnapshotRootPayload(syncPort),
-  );
+  const bytes = await syncPort.encodeDiff(new Uint8Array([0]));
+  return createWorkbookSnapshotRootBytesRecord(namespace, bytes, 'encodeDiffResult');
 }
 
 export function createYrsFullStateSnapshotRootPayload(
@@ -150,6 +148,20 @@ export async function createWorkbookSnapshotRootRecord(
   });
 }
 
+export async function createWorkbookSnapshotRootBytesRecord(
+  namespace: VersionGraphNamespace,
+  bytes: Uint8Array,
+  path = 'bytes',
+): Promise<WorkbookSnapshotRootRecord> {
+  return createVersionObjectRecord(namespace, {
+    objectType: WORKBOOK_SNAPSHOT_ROOT_OBJECT_TYPE,
+    schemaVersion: VERSION_OBJECT_SCHEMA_VERSION,
+    payloadEncoding: 'bytes',
+    dependencies: [],
+    payload: cloneNonEmptyBytes(bytes, path),
+  });
+}
+
 export function validateWorkbookSnapshotRootRecord(
   record: VersionObjectRecord<unknown>,
 ): WorkbookSnapshotRootRecord {
@@ -169,7 +181,10 @@ export function validateWorkbookSnapshotRootRecord(
       'record.preimage.schemaVersion',
     );
   }
-  if (record.preimage.payloadEncoding !== 'mog-canonical-json-v1') {
+  if (
+    record.preimage.payloadEncoding !== 'mog-canonical-json-v1' &&
+    record.preimage.payloadEncoding !== 'bytes'
+  ) {
     throw invalidRecord(
       'Snapshot root record payload encoding is not supported.',
       'record.preimage.payloadEncoding',
@@ -182,15 +197,23 @@ export function validateWorkbookSnapshotRootRecord(
     );
   }
 
-  validateYrsFullStateSnapshotRootPayload(record.preimage.payload, 'record.preimage.payload');
+  if (record.preimage.payloadEncoding === 'bytes') {
+    cloneNonEmptyBytes(record.preimage.payload as Uint8Array, 'record.preimage.payload');
+  } else {
+    validateYrsFullStateSnapshotRootPayload(record.preimage.payload, 'record.preimage.payload');
+  }
   return record as WorkbookSnapshotRootRecord;
 }
 
 export function decodeWorkbookSnapshotRootRecord(record: VersionObjectRecord<unknown>): Uint8Array {
   const validated = validateWorkbookSnapshotRootRecord(record);
+  if (validated.preimage.payloadEncoding === 'bytes') {
+    return cloneNonEmptyBytes(validated.preimage.payload as Uint8Array, 'record.preimage.payload');
+  }
+  const payload = validated.preimage.payload as YrsFullStateSnapshotRootPayload;
   return decodeCanonicalBase64Bytes(
-    validated.preimage.payload.bytes,
-    validated.preimage.payload.byteLength,
+    payload.bytes,
+    payload.byteLength,
     'record.preimage.payload.bytes',
   );
 }

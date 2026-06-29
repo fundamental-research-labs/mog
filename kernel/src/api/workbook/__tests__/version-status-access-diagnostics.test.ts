@@ -25,7 +25,7 @@ describe('WorkbookVersion status access diagnostics', () => {
       }),
     });
 
-    const result = await wb.version.readRef('refs/heads/private-review.lock');
+    const result = await wb.version.refs.readRef('refs/heads/private-review.lock');
     expect(result).toMatchObject({
       ok: false,
       error: { code: 'target_unavailable' },
@@ -55,7 +55,9 @@ describe('WorkbookVersion status access diagnostics', () => {
       }),
     });
 
-    await expect(wb.version.readRef('refs/heads/review/private-review')).resolves.toMatchObject({
+    await expect(
+      wb.version.refs.readRef('refs/heads/review/private-review'),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

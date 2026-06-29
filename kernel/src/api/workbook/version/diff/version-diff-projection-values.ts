@@ -1,6 +1,7 @@
 import type {
   VersionDiffDisplay,
   VersionDiffDisplayValue,
+  VersionDiffHistoricalMetadata,
   VersionDiffStructuralMetadata,
   VersionDiffValue,
   VersionRedactedValue,
@@ -142,11 +143,60 @@ export function mapDiffDisplay(value: unknown): VersionDiffDisplay | null {
   return display;
 }
 
+export function mapDiffHistoricalMetadata(value: unknown): VersionDiffHistoricalMetadata | null {
+  if (!isRecord(value)) return null;
+  const historical: VersionDiffHistoricalMetadata = {
+    ...(value.cell === undefined ? {} : { cell: mapCellCoordinate(value.cell) }),
+    ...(value.range === undefined ? {} : { range: mapRangeCoordinate(value.range) }),
+  };
+  if (value.cell !== undefined && !historical.cell) return null;
+  if (value.range !== undefined && !historical.range) return null;
+  return historical.cell || historical.range ? historical : null;
+}
+
+function mapCellCoordinate(value: unknown): VersionDiffHistoricalMetadata['cell'] | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.sheetId !== 'string' ||
+    !isSafeCoordinate(value.row) ||
+    !isSafeCoordinate(value.column)
+  ) {
+    return undefined;
+  }
+  return { sheetId: value.sheetId, row: value.row, column: value.column };
+}
+
+function mapRangeCoordinate(value: unknown): VersionDiffHistoricalMetadata['range'] | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.sheetId !== 'string' ||
+    !isSafeCoordinate(value.rowStart) ||
+    !isSafeCoordinate(value.rowEnd) ||
+    !isSafeCoordinate(value.columnStart) ||
+    !isSafeCoordinate(value.columnEnd) ||
+    value.rowEnd < value.rowStart ||
+    value.columnEnd < value.columnStart
+  ) {
+    return undefined;
+  }
+  return {
+    sheetId: value.sheetId,
+    rowStart: value.rowStart,
+    rowEnd: value.rowEnd,
+    columnStart: value.columnStart,
+    columnEnd: value.columnEnd,
+  };
+}
+
 function mapDiffDisplayValue(value: unknown): VersionDiffDisplayValue | null {
   const redacted = mapRedactedValue(value);
   if (redacted) return redacted;
   if (!isRecord(value) || value.kind !== 'value' || typeof value.value !== 'string') return null;
   return { kind: 'value', value: value.value };
+}
+
+function isSafeCoordinate(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function mapRedactedValue(value: unknown): VersionRedactedValue | null {

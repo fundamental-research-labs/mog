@@ -11,7 +11,7 @@ export function registerSavedResolutionReviewOnlyApplyScenarios(): void {
       'review-only-apply-denial',
       async ({ version, preview, target }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

@@ -20,6 +20,8 @@ import type { SerializedCellData } from '@mog-sdk/contracts/store';
 
 import type { CellValue } from '@mog-sdk/contracts/core';
 import type { DocumentContext } from '../context/types';
+import { createCellWriteVersionMutationOptions } from '../api/internal/cell-write-version-options';
+import { withDirectEditRange } from '../bridges/compute';
 
 // =============================================================================
 // Internal Helpers
@@ -204,7 +206,23 @@ export function setCellFromMaps(
 ): void {
   // Build input string for Rust's position-based method
   const input = data.f ? `=${data.f}` : String(data.r ?? '');
-  void ctx.computeBridge.setCellValueParsed(sheetId, row, col, input);
+  void ctx.computeBridge.setCellValueParsed(
+    sheetId,
+    row,
+    col,
+    input,
+    withDirectEditRange(
+      createCellWriteVersionMutationOptions(ctx, {
+        operationIdPrefix: 'grid.setCellFromMaps',
+        sheetIds: [sheetId],
+      }),
+      sheetId,
+      row,
+      col,
+      row,
+      col,
+    ),
+  );
 }
 
 /**

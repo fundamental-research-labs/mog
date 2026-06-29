@@ -23,7 +23,7 @@ describe('version action availability status gates', () => {
       'Version status is unavailable.',
     );
     expectDisabled(
-      getBranchAvailability(undefined, false, false, 'scenario/review', TARGET_COMMIT_ID),
+      getBranchAvailability(undefined, false, false, 'review', TARGET_COMMIT_ID),
       'Version status is unavailable.',
     );
     expectDisabled(
@@ -85,7 +85,7 @@ describe('version action availability status gates', () => {
       'Version surface status is unavailable.',
     );
     expectDisabled(
-      getBranchAvailability({}, false, false, 'scenario/review', TARGET_COMMIT_ID),
+      getBranchAvailability({}, false, false, 'review', TARGET_COMMIT_ID),
       'Version surface status is unavailable.',
     );
     expectDisabled(

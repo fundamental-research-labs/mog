@@ -125,7 +125,7 @@ export function targetUnavailable<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: 'workbook.version.acceptProposal',
+      target: 'workbook.version.proposals.advanced.acceptProposal',
       diagnostics: [diagnostic(code, severity, message)],
     },
   };
@@ -136,7 +136,7 @@ export function graphFailure<T>(diagnostics: readonly unknown[]): VersionResult<
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: 'workbook.version.acceptProposal',
+      target: 'workbook.version.proposals.advanced.acceptProposal',
       diagnostics: diagnostics.length
         ? diagnostics.map(graphDiagnostic)
         : [

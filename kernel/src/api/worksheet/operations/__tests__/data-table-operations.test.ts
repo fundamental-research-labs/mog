@@ -240,7 +240,12 @@ describe('data table operations', () => {
           { row: 3, col: 2, input: { kind: 'value', value: 30 } },
           { row: 3, col: 3, input: { kind: 'value', value: 40 } },
         ],
-        options,
+        {
+          ...options,
+          directEditRanges: [
+            { sheetId: 'sheet-1', startRow: 2, startCol: 2, endRow: 3, endCol: 3 },
+          ],
+        },
       );
       expect(result).toMatchObject({
         kind: 'dataTable.writeStaticValues',

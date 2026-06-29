@@ -5,7 +5,7 @@ export function registerReviewProviderApprovalStatusScenario(): void {
   it('approves commit-range reviews with diff-backed evidence and idempotent retry', async () => {
     const { graph, review, version } = await createCellA1ApprovalReview('approval-review-1');
 
-    const approved = await version.updateReviewStatus({
+    const approved = await version.reviews.advanced.updateReviewStatus({
       reviewId: review.id,
       expectedRevision: 1,
       clientRequestId: 'approve-status-1',
@@ -43,7 +43,7 @@ export function registerReviewProviderApprovalStatusScenario(): void {
     if (!approved.ok) throw new Error(`expected approval success: ${approved.error.code}`);
     expect(approved.value.approval?.approvedAt).toBe(approved.value.updatedAt);
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 1,
         clientRequestId: 'approve-status-1',

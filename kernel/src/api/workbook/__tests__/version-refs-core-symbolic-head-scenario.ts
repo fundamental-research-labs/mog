@@ -9,9 +9,9 @@ import {
 export function registerPublicRefSymbolicHeadScenario(): void {
   it('reports symbolic HEAD from the attached branch service target', async () => {
     const { version } = createWorkbookVersionWithBranchService('scenario/attached');
-    await version.createBranch({ name: 'scenario/attached' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({ name: 'scenario/attached' as any, targetCommitId: COMMIT_A });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',

@@ -11,8 +11,10 @@ import type {
   VersionRefReadResult,
   VersionResult,
   VersionCheckoutResult,
+  VersionDiffOverview,
   VersionSemanticDiffPage,
   VersionStoreDiagnostic,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitRef,
   WorkbookCommitSummary,
   WorkbookDiffPage,
@@ -24,16 +26,20 @@ import {
   VERSION_CAPABILITY_KEYS,
   type VersionMergePublicOperation,
 } from './version/merge/version-merge-capability';
+import type { WorkbookVersionWorkingTreeDiffPage } from '../../document/version-store/working-tree-diff-service';
 import {
   projectVersionHistoryDiagnosticsForAccess,
   projectVersionStoreDiagnosticsForPublicResult,
 } from './version/history-diagnostics/version-history-diagnostic-projection';
 
 type VersionResultOperation =
+  | 'getCurrent'
   | 'getHead'
   | 'listCommits'
+  | 'commitCurrent'
   | 'commit'
   | 'appendReviewDecision'
+  | 'createBranchFromCurrent'
   | 'createBranch'
   | 'createReview'
   | 'deleteBranch'
@@ -43,10 +49,22 @@ type VersionResultOperation =
   | 'getReviewDiff'
   | 'getRef'
   | 'listReviews'
+  | 'listBranches'
   | 'listRefs'
   | 'checkout'
+  | 'checkoutBranch'
+  | 'checkoutCommit'
   | 'diff'
+  | 'diffOverview'
+  | 'diffGroupDetail'
+  | 'diffCurrent'
+  | 'diffCurrentOverview'
+  | 'diffBranch'
+  | 'diffBranchOverview'
+  | 'diffWorkingTree'
   | 'merge'
+  | 'previewMerge'
+  | 'getMergeReview'
   | 'revert'
   | 'promotePendingRemote'
   | 'getMergeConflictDetail'
@@ -96,9 +114,10 @@ export function versionResultFromCommitPage(
 export function versionResultFromRefList(
   result: VersionRefListResult,
   limit: number,
+  operation: Extract<VersionResultOperation, 'listRefs' | 'listBranches'> = 'listRefs',
 ): VersionResult<Paged<VersionRef>> {
   if (result.status === 'degraded') {
-    return versionFailureFromStoreDiagnostics('listRefs', result.diagnostics);
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
   }
   return {
     ok: true,
@@ -112,7 +131,12 @@ export function versionResultFromRefList(
 export function versionResultFromRefMutation(
   operation: Extract<
     VersionResultOperation,
-    'createBranch' | 'deleteBranch' | 'deleteRef' | 'fastForwardBranch' | 'updateBranch'
+    | 'createBranch'
+    | 'createBranchFromCurrent'
+    | 'deleteBranch'
+    | 'deleteRef'
+    | 'fastForwardBranch'
+    | 'updateBranch'
   >,
   result: VersionRefMutationResult,
 ): VersionResult<VersionRef> {
@@ -134,9 +158,13 @@ export function versionResultFromRefRead(
 
 export function versionResultFromCheckout(
   result: VersionCheckoutResult,
+  operation: Extract<
+    VersionResultOperation,
+    'checkout' | 'checkoutBranch' | 'checkoutCommit'
+  > = 'checkout',
 ): VersionResult<CheckoutVersionResult> {
   if (result.status === 'degraded') {
-    return versionFailureFromStoreDiagnostics('checkout', result.diagnostics);
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
   }
   return { ok: true, value: result };
 }
@@ -162,9 +190,13 @@ export function versionResultFromApplyMerge(
 export function versionResultFromDiffPage(
   result: WorkbookDiffPage,
   limit: number,
+  operation: Extract<
+    VersionResultOperation,
+    'diff' | 'diffCurrent' | 'diffBranch' | 'diffGroupDetail'
+  > = 'diff',
 ): VersionResult<VersionSemanticDiffPage> {
   if (result.status === 'degraded') {
-    return versionFailureFromStoreDiagnostics('diff', result.diagnostics);
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
   }
 
   return {
@@ -176,6 +208,50 @@ export function versionResultFromDiffPage(
       readRevision: result.readRevision,
       order: result.order,
       ...(result.resourceLimits ? { resourceLimits: result.resourceLimits } : {}),
+    },
+  };
+}
+
+export function versionResultFromDiffOverview(
+  result: VersionDiffOverview | WorkbookDiffPage,
+  operation: Extract<
+    VersionResultOperation,
+    'diffOverview' | 'diffCurrentOverview' | 'diffBranchOverview'
+  > = 'diffOverview',
+): VersionResult<VersionDiffOverview> {
+  if ('status' in result && result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics(operation, result.diagnostics);
+  }
+  return { ok: true, value: result as VersionDiffOverview };
+}
+
+export function versionResultFromWorkingTreeDiffPage(
+  result: WorkbookVersionWorkingTreeDiffPage,
+  limit: number,
+): VersionResult<VersionWorkingTreeDiffPage> {
+  if (result.status === 'degraded') {
+    return versionFailureFromStoreDiagnostics('diffWorkingTree', result.diagnostics);
+  }
+
+  return {
+    ok: true,
+    value: {
+      kind: 'workingTree',
+      workingTreeDiffId: result.workingTreeDiffId,
+      baseCommitId: result.baseCommitId,
+      ...(result.targetRef ? { targetRef: result.targetRef } : {}),
+      captureRevision: result.captureRevision,
+      dirtyStatusRevision: result.dirtyStatusRevision,
+      checkoutPreflightToken: result.checkoutPreflightToken,
+      baseSemanticStateDigest: result.baseSemanticStateDigest,
+      currentSemanticStateDigest: result.currentSemanticStateDigest,
+      items: result.items,
+      ...(result.nextPageToken ? { nextCursor: result.nextPageToken as PageCursor } : {}),
+      limit,
+      readRevision: result.readRevision,
+      order: result.order,
+      ...(result.resourceLimits ? { resourceLimits: result.resourceLimits } : {}),
+      ...(result.overview ? { overview: result.overview } : {}),
     },
   };
 }
@@ -235,11 +311,87 @@ export function versionFailureFromStoreDiagnostics<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: publicVersionTargetForOperation(operation),
       diagnostics: projectVersionStoreDiagnosticsForPublicResult(diagnostics),
     },
   };
 }
+
+function publicVersionTargetForOperation(operation: VersionResultOperation): string {
+  if (DIRECT_VERSION_OPERATIONS.has(operation)) return `workbook.version.${operation}`;
+  if (REFS_OPERATIONS.has(operation)) return `workbook.version.refs.${operation}`;
+  if (REVIEW_ADVANCED_OPERATIONS.has(operation)) {
+    return `workbook.version.reviews.advanced.${operation}`;
+  }
+  if (MERGE_ARTIFACT_ADVANCED_OPERATIONS.has(operation)) {
+    return `workbook.version.artifacts.advanced.${operation}`;
+  }
+  if (PROPOSAL_ADVANCED_OPERATIONS.has(operation)) {
+    return `workbook.version.proposals.advanced.${operation}`;
+  }
+  return `workbook.version.${operation}`;
+}
+
+const DIRECT_VERSION_OPERATIONS = new Set<VersionResultOperation>([
+  'getHead',
+  'listCommits',
+  'commit',
+  'checkout',
+  'merge',
+  'applyMerge',
+  'revert',
+  'diff',
+  'diffOverview',
+  'diffGroupDetail',
+  'diffCurrent',
+  'diffCurrentOverview',
+  'diffBranch',
+  'diffBranchOverview',
+  'diffWorkingTree',
+]);
+
+const REFS_OPERATIONS = new Set<VersionResultOperation>([
+  'promotePendingRemote',
+  'readRef',
+  'getRef',
+  'listRefs',
+  'createBranch',
+  'fastForwardBranch',
+  'updateBranch',
+  'deleteBranch',
+  'deleteRef',
+]);
+
+const REVIEW_ADVANCED_OPERATIONS = new Set<VersionResultOperation>([
+  'appendReviewDecision',
+  'createReview',
+  'getReview',
+  'getReviewDiff',
+  'listReviews',
+  'updateReviewStatus',
+]);
+
+const MERGE_ARTIFACT_ADVANCED_OPERATIONS = new Set<VersionResultOperation>([
+  'getMergeConflictDetail',
+  'putMergeResolutionPayload',
+  'saveMergeResolutions',
+]);
+
+const PROPOSAL_ADVANCED_OPERATIONS = new Set<VersionResultOperation>([
+  'acceptProposal',
+  'commitProposalWorkspace',
+  'createProposal',
+  'disposeProposalWorkspace',
+  'failProposal',
+  'getProposal',
+  'getProposalWorkspace',
+  'listProposals',
+  'markProposalVerified',
+  'openProposalReview',
+  'rejectProposal',
+  'startProposalWorkspace',
+  'supersedeProposal',
+]);
 
 function versionFailureFromOperationDiagnostics<T>(
   operation: VersionMergePublicOperation,
@@ -281,6 +433,8 @@ function capabilityDependency(
 
 function capabilityForMergeOperation(operation: VersionMergePublicOperation): VersionCapability {
   switch (operation) {
+    case 'previewMerge':
+    case 'getMergeReview':
     case 'merge':
     case 'getMergeConflictDetail':
       return 'version:mergePreview';

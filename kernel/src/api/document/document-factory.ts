@@ -28,6 +28,7 @@ import type {
   DocumentSource,
 } from '@mog-sdk/contracts/document';
 import type { CheckpointResult, CloseResult } from '@mog-sdk/types-document/storage/lifecycle';
+import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { DocumentByteSyncPort, Provider } from '../../document/providers/provider';
 import type { DocumentContext, KernelClock } from '../../context';
 
@@ -889,6 +890,10 @@ function createDocumentHandle(
               ...config.versioning,
               snapshotRootByteSyncPort: rootCapturePorts.snapshotRootByteSyncPort,
               semanticStateReader: rootCapturePorts.semanticStateReader,
+              readSheetName:
+                config.versioning.readSheetName ??
+                ((sheetId: string) =>
+                  (context as DocumentContext).computeBridge.getSheetName(toSheetId(sheetId))),
             }
           : undefined;
         const versioningWithInitialRoot = versioningWithDefaultPorts

@@ -16,7 +16,7 @@ export function registerMergeReviewEndpointResolutionScenarios(): void {
         const conflict = preview.conflicts[0];
         const resolution = resolutionFor(conflict, 'acceptTheirs');
 
-        const saved = await sourceWb.version.saveMergeResolutions({
+        const saved = await sourceWb.version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

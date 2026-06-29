@@ -81,6 +81,22 @@ export function createMissingSemanticReaderSurfaceVersion() {
         mutationCapture: { recordMutationResult: jest.fn() },
         captureNormalCommit: jest.fn(),
         capturePendingRemoteSegment: jest.fn(),
+        readWorkingTreeBasis: jest.fn(() => ({
+          revision: 0,
+          pendingCapturedNormalMutationCount: 0,
+          pendingUncapturedNormalMutationCount: 0,
+          hasPendingNormalMutations: false,
+          hasUncapturedNormalMutations: false,
+          pendingUncapturedNormalMutationSummaries: [],
+        })),
+        readNormalCommitCaptureState: jest.fn(() => ({
+          revision: 0,
+          pendingCapturedNormalMutationCount: 0,
+          pendingUncapturedNormalMutationCount: 0,
+          hasPendingNormalMutations: false,
+          hasUncapturedNormalMutations: false,
+        })),
+        resetNormalCaptureForCheckout: jest.fn(),
       },
     },
   );

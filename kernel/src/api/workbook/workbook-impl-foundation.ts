@@ -78,13 +78,11 @@ import type {
   MutationResultWithSheetLifecycleRuntimeHint,
   SheetRuntimeAdapterContext,
 } from '../../bridges/mutation-result-handler';
-
+import { mutationSourceToStructureEventSource } from '../../bridges/mutation-source';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import type { IKernelServices } from '@mog-sdk/contracts/services';
-
 import type { IFloatingObjectManager } from '@mog-sdk/contracts/kernel';
 import type { AccessPrincipal } from '@mog-sdk/contracts/security';
-
 import type { DocumentContext } from '../../context';
 import { FormControlManager } from '../../domain/form-controls';
 import { getName, getOrder } from '../../domain/sheets/sheet-meta';
@@ -133,6 +131,7 @@ import {
 import { assertWorkbookXlsxExportDomainSupportManifest } from './export-errors';
 import { removeMogVersionMetadataPackageInventoryFromXlsx } from './xlsx-clean-export-package';
 import { maybeAddMogVersionMetadataToXlsx } from './version/xlsx-metadata/xlsx-version-metadata';
+import { createWorkbookVersionCommitStatusCoordinator } from './workbook-version-commit-status';
 export type { CreateWorkbookOptions, WorkbookConfig } from './types';
 
 // Event mapping — extracted to `event-mapping.ts` so `sheets.ts` can import it
@@ -191,8 +190,11 @@ import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
-import { createWorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
-import type { VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
+import {
+  createWorkbookVersionSurfaceStatusService,
+  type VersionSurfaceActiveCheckoutStateChanged,
+} from './version/surface-status/version-surface-status-service';
+import { readVersionSurfaceSemanticDirtyState } from './version/surface-status/version-surface-status-semantic-dirty';
 import { shouldTrackEventAsWorkbookDirty } from './workbook-dirty-event-filter';
 import {
   applyWorkbookReadOnlyMode,
@@ -207,7 +209,6 @@ import {
   withDefaultWorkbookCheckoutMaterializer,
   withPreviouslySavedVersioningInitialization,
 } from './workbook-versioning-assembly';
-
 import { DEFAULT_CHROME_THEME } from '@mog-sdk/contracts/rendering';
 import { NO_HOST_OPERATION_GATE, OperationDeniedError } from '../../document/host-operation-gate';
 import type {
@@ -245,24 +246,29 @@ export abstract class WorkbookImplFoundation {
     new Set<SnapshotRootFreshLifecycleMaterialization>();
   protected _dirty = false;
   protected _dirtyStatusSequence = 0;
+  private _dirtyRefreshQueued = false;
   protected readonly checkoutTransactions = createWorkbookCheckoutTransactionCoordinator({
     readContext: () => this.ctx,
-    isDirty: () => this._dirty,
+    readDirtyState: () => this.readVersionDirtyTrackingState(),
+  });
+  protected readonly versionCommitStatus = createWorkbookVersionCommitStatusCoordinator({
+    notifyStatusChanged: () => this.emitVersionDirtyStatusChanged(this._dirty, this._dirty),
   });
   private readonly versionSurfaceStatusService = createWorkbookVersionSurfaceStatusService({
     readDirtyState: () => ({
       hasUncommittedLocalChanges: this._dirty,
       calculationState: this._calculationState,
       checkoutInProgress: this.checkoutTransactions.checkoutInProgress,
+      commitInProgress: this.versionCommitStatus.commitInProgress,
       revision: this._dirtyStatusSequence,
       contextGeneration: this.contextBinding.generation,
     }),
+    readSemanticDirtyState: (state) => readVersionSurfaceSemanticDirtyState(this.ctx, state),
     readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
     readLiveCollaborationStatus: () => readVersionLiveCollaborationStatus(this.ctx),
     notifyActiveCheckoutStateChanged: (change) =>
       this.emitVersionActiveCheckoutStateChanged(change),
   });
-
   protected get _floatingObjectManager(): SpreadsheetObjectManager {
     return this.ctx.floatingObjectManager as SpreadsheetObjectManager;
   }
@@ -270,7 +276,6 @@ export abstract class WorkbookImplFoundation {
   // Instance cache for getSheetById() — returns the same WorksheetImpl for the same sheetId
   // to provide referential stability (prevents infinite re-render loops when used in React deps)
   protected _worksheetInstances: Map<SheetId, WorksheetImpl> = new Map();
-
   // Cached sheet metadata — populated by refreshSheetMetadata(), kept in sync on mutations
   protected _cachedSheetIds: SheetId[] = [];
   protected _cachedSheetNames: string[] = [];
@@ -278,7 +283,6 @@ export abstract class WorkbookImplFoundation {
 
   private _sheetRuntimeAdapterRegistration: CallableDisposable | null = null;
   private _sheetRuntimeAdapterHandler: unknown = null;
-
   protected _calcSuspended = false;
   protected _calculationState: 'done' | 'calculating' | 'pending' = 'done';
   protected _cachedCalcMode: 'auto' | 'autoNoTable' | 'manual' | null = null;
@@ -544,7 +548,7 @@ export abstract class WorkbookImplFoundation {
   private markDirty(): void {
     if (this._dirty) {
       this._dirtyStatusSequence += 1;
-      this.emitVersionDirtyStatusChanged(true, true);
+      this.queueVersionDirtyRefresh();
       return;
     }
     this.setDirtyState(true);
@@ -556,6 +560,16 @@ export abstract class WorkbookImplFoundation {
     this._dirty = next;
     this._dirtyStatusSequence += 1;
     this.emitVersionDirtyStatusChanged(next, previous);
+  }
+
+  private queueVersionDirtyRefresh(): void {
+    if (this._dirtyRefreshQueued) return;
+    this._dirtyRefreshQueued = true;
+    queueMicrotask(() => {
+      this._dirtyRefreshQueued = false;
+      if (!this._dirty) return;
+      this.emitVersionDirtyStatusChanged(true, true);
+    });
   }
 
   private emitVersionDirtyStatusChanged(
@@ -927,7 +941,7 @@ export abstract class WorkbookImplFoundation {
       timestamp: Date.now(),
       sheetId: nextActive,
       name: this.ctx.mirror.getSheetMeta(nextActive).name ?? '',
-      source: context.source === 'user' ? 'user' : 'remote',
+      source: mutationSourceToStructureEventSource(context.source),
     });
   }
 

@@ -13,7 +13,7 @@ export function registerSavedResolutionResolvedAttemptReviewTests(): void {
   it('rejects targetRef and expectedHead drift on resolved-attempt reads without leaking refs', async () => {
     await withReviewFixture('resolved-attempt-drift', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
-      const saved = await version.saveMergeResolutions({
+      const saved = await version.artifacts.advanced.saveMergeResolutions({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -25,12 +25,12 @@ export function registerSavedResolutionResolvedAttemptReviewTests(): void {
         throw new Error('expected saved resolution artifact digests');
       }
 
-      const targetRefDrift = await version.getMergeConflictDetail({
+      const targetRefDrift = await version.artifacts.advanced.getMergeConflictDetail({
         ...resolvedDetailInput(preview, conflict, saved.value),
         targetRef: DRIFTED_TARGET_REF as any,
         expectedTargetHead: target,
       });
-      const expectedHeadDrift = await version.getMergeConflictDetail({
+      const expectedHeadDrift = await version.artifacts.advanced.getMergeConflictDetail({
         ...resolvedDetailInput(preview, conflict, saved.value),
         targetRef: TARGET_REF,
         expectedTargetHead: driftExpectedHead(target),
@@ -55,7 +55,7 @@ export function registerSavedResolutionResolvedAttemptReviewTests(): void {
       'resolved-attempt-missing-target',
       async ({ version, preview, target }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -67,7 +67,7 @@ export function registerSavedResolutionResolvedAttemptReviewTests(): void {
           throw new Error('expected saved resolution artifact digests');
         }
 
-        const result = await version.getMergeConflictDetail(
+        const result = await version.artifacts.advanced.getMergeConflictDetail(
           resolvedDetailInput(preview, conflict, saved.value),
         );
 

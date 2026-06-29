@@ -19,7 +19,7 @@ export function registerMergeReviewEndpointContractsNormalizationTargetDigestSce
         const malformedDetailDigest = 'sha256:not-a-digest-sk_live_detail_secret';
         const malformedResolutionDigest = 'sha256:not-a-digest-sk_live_resolution_secret';
 
-        const partialTarget = await version.getMergeConflictDetail({
+        const partialTarget = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -29,7 +29,7 @@ export function registerMergeReviewEndpointContractsNormalizationTargetDigestSce
           purpose: 'review',
           targetRef: TARGET_REF,
         });
-        const malformedDetail = await version.getMergeConflictDetail({
+        const malformedDetail = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -38,7 +38,7 @@ export function registerMergeReviewEndpointContractsNormalizationTargetDigestSce
           valueRole: 'theirs',
           purpose: 'review',
         });
-        const malformedSave = await version.saveMergeResolutions({
+        const malformedSave = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -51,7 +51,7 @@ export function registerMergeReviewEndpointContractsNormalizationTargetDigestSce
             },
           ],
         });
-        const malformedPayload = await version.putMergeResolutionPayload({
+        const malformedPayload = await version.artifacts.advanced.putMergeResolutionPayload({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

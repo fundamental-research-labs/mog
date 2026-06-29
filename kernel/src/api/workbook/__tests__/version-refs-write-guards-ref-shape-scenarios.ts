@@ -18,7 +18,7 @@ export function registerWriteGuardRefShapeScenarios(): void {
     const branchWrites = spyOnBranchWrites(branchService);
 
     await expect(
-      version.createBranch({ name: 'refs/tags/v1.0.0' as any, targetCommitId: COMMIT_A }),
+      version.refs.createBranch({ name: 'refs/tags/v1.0.0' as any, targetCommitId: COMMIT_A }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -34,7 +34,7 @@ export function registerWriteGuardRefShapeScenarios(): void {
       },
     });
     await expect(
-      version.fastForwardBranch({
+      version.refs.fastForwardBranch({
         name: 'refs/tags/v1.0.0' as any,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
@@ -52,7 +52,7 @@ export function registerWriteGuardRefShapeScenarios(): void {
       },
     });
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'refs/tags/v1.0.0' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),

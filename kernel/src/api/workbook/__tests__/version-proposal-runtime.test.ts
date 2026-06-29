@@ -30,7 +30,7 @@ describe('WorkbookVersion proposal runtime facade', () => {
       redactionPolicy: REDACTION_POLICY,
     };
 
-    const result = await version.createProposal(input as any);
+    const result = await version.proposals.advanced.createProposal(input as any);
 
     expect(result).toMatchObject({ ok: true, value: { status: 'draft' } });
     expect(proposalService.createProposal).toHaveBeenCalledWith(input);
@@ -39,13 +39,13 @@ describe('WorkbookVersion proposal runtime facade', () => {
   it('returns target_unavailable when no proposal service is attached', async () => {
     const version = createProposalRuntimeVersion();
 
-    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
+    const result = await version.proposals.advanced.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getProposal',
+        target: 'workbook.version.proposals.advanced.getProposal',
       },
     });
   });

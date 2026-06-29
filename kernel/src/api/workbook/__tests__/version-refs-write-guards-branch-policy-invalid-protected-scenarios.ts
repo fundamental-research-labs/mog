@@ -13,7 +13,7 @@ export function registerWriteGuardBranchPolicyInvalidProtectedScenarios(): void 
     const { branchService, version } = createWorkbookVersionWithBranchService();
     const branchWrites = spyOnBranchWrites(branchService);
 
-    const invalidName = await version.createBranch({
+    const invalidName = await version.refs.createBranch({
       name: 'Scenario/Budget' as any,
       targetCommitId: COMMIT_A,
     });
@@ -39,7 +39,7 @@ export function registerWriteGuardBranchPolicyInvalidProtectedScenarios(): void 
     expect(branchWrites.createBranch).not.toHaveBeenCalled();
 
     await expect(
-      version.createBranch({ name: 'main' as any, targetCommitId: COMMIT_A }),
+      version.refs.createBranch({ name: 'main' as any, targetCommitId: COMMIT_A }),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -54,7 +54,7 @@ export function registerWriteGuardBranchPolicyInvalidProtectedScenarios(): void 
     expect(branchWrites.createBranch).not.toHaveBeenCalled();
 
     await expect(
-      version.fastForwardBranch({
+      version.refs.fastForwardBranch({
         name: 'refs/heads/main' as any,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
@@ -70,7 +70,7 @@ export function registerWriteGuardBranchPolicyInvalidProtectedScenarios(): void 
     expect(branchWrites.fastForwardBranch).not.toHaveBeenCalled();
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'refs/heads/main' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),

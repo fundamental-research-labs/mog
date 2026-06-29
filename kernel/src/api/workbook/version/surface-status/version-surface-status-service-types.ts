@@ -32,8 +32,15 @@ export type WorkbookVersionSurfaceDirtyState = {
   readonly hasUncommittedLocalChanges: boolean;
   readonly calculationState: 'done' | 'calculating' | 'pending';
   readonly checkoutInProgress: boolean;
+  readonly commitInProgress: boolean;
   readonly revision: number;
   readonly contextGeneration: number;
+};
+
+export type WorkbookVersionSurfaceSemanticDirtyState = {
+  readonly hasUncommittedLocalChanges: boolean;
+  readonly statusRevision: string;
+  readonly diagnostics?: readonly VersionDiagnostic[];
 };
 
 export type VersionSurfaceCheckoutSession = {
@@ -87,6 +94,9 @@ export type AttachedVersionSurfaceStatusService = {
 
 export type CreateWorkbookVersionSurfaceStatusServiceInput = {
   readonly readDirtyState: () => WorkbookVersionSurfaceDirtyState;
+  readonly readSemanticDirtyState?: (
+    state: WorkbookVersionSurfaceDirtyState,
+  ) => MaybePromise<WorkbookVersionSurfaceSemanticDirtyState | null>;
   readonly readPendingProviderWrites?: () => MaybePromise<VersionPendingProviderWritesStatus>;
   readonly readLiveCollaborationStatus?: () => MaybePromise<VersionLiveCollaborationDirtyStatus>;
   readonly notifyActiveCheckoutStateChanged?: (

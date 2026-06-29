@@ -37,13 +37,17 @@ import type { PendingRemotePromotionService } from '../../document/version-store
 import type { ProposalWorkspaceLifecycleService } from '../../document/version-store/proposals/proposal-workspace-lifecycle-service';
 import type { WorkbookVersionRevertService } from '../../document/version-store/revert-service';
 import type { WorkbookVersionReviewService } from '../../document/version-store/review-service';
+import type { WorkbookVersionWorkingTreeDiffService } from '../../document/version-store/working-tree-diff-service';
 import type { VersionProviderWriteActivityTracker } from '../../document/version-store/provider-write-activity';
 import type {
   CheckoutSnapshotApplyInput,
   CheckoutSnapshotMaterializer,
 } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
-import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
+import type {
+  SemanticMutationCaptureServices,
+  SemanticMutationSheetNameReader,
+} from '../../document/version-store/semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
 import type {
   VersionStoreDiagnostic,
@@ -84,6 +88,7 @@ export interface WorkbookVersioningConfig {
   readonly mergeService?: Pick<WorkbookVersionMergeService, 'merge'>;
   readonly revertService?: Pick<WorkbookVersionRevertService, 'revert'>;
   readonly reviewService?: WorkbookVersionReviewService;
+  readonly workingTreeDiffService?: Pick<WorkbookVersionWorkingTreeDiffService, 'diffWorkingTree'>;
   readonly proposalService?: unknown;
   readonly proposalWorkspaceService?: ProposalWorkspaceLifecycleService;
   readonly pendingRemotePromotionService?: Pick<
@@ -96,6 +101,7 @@ export interface WorkbookVersioningConfig {
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly readSheetName?: SemanticMutationSheetNameReader;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly ensureProviderInitialized?: () => MaybePromise<readonly VersionStoreDiagnostic[]>;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;

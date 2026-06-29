@@ -41,7 +41,7 @@ describe('WorkbookVersion active checkout read selectors', () => {
       );
       wb.markClean();
 
-      const created = await wb.version.createBranch({
+      const created = await wb.version.refs.createBranch({
         name: ACTIVE_BRANCH_NAME as any,
         targetCommitId: baseCommit.id,
       });
@@ -88,7 +88,7 @@ describe('WorkbookVersion active checkout read selectors', () => {
         resolvedFrom: ACTIVE_BRANCH_REF,
         refRevision: branchRefRevision,
       });
-      await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(wb.version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -99,7 +99,7 @@ describe('WorkbookVersion active checkout read selectors', () => {
           },
         },
       });
-      await expect(wb.version.getRef('HEAD')).resolves.toMatchObject({
+      await expect(wb.version.refs.getRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -196,11 +196,11 @@ describe('WorkbookVersion active checkout read selectors', () => {
         ok: true,
         value: { id: alphaCommit.id },
       });
-      await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(wb.version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.readRef',
+          target: 'workbook.version.refs.readRef',
           diagnostics: [
             expect.objectContaining({
               code: 'VERSION_PROVIDER_ERROR',
@@ -213,11 +213,11 @@ describe('WorkbookVersion active checkout read selectors', () => {
           ],
         },
       });
-      await expect(wb.version.getRef('HEAD')).resolves.toMatchObject({
+      await expect(wb.version.refs.getRef('HEAD')).resolves.toMatchObject({
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getRef',
+          target: 'workbook.version.refs.getRef',
           diagnostics: [
             expect.objectContaining({
               code: 'VERSION_PROVIDER_ERROR',

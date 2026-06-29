@@ -362,7 +362,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.addCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 718,
+    "line": 706,
     "interface": "Workbook",
     "method": "addCustomList",
     "signature": "addCustomList(input:WorkbookCustomListInput):Promise<CustomList>;",
@@ -374,7 +374,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.addressToIndex",
     "file": "types/api/src/api/workbook.ts",
-    "line": 652,
+    "line": 640,
     "interface": "Workbook",
     "method": "addressToIndex",
     "signature": "addressToIndex(address:string):{row:number;col:number};",
@@ -386,7 +386,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.copyRangeFrom",
     "file": "types/api/src/api/workbook.ts",
-    "line": 637,
+    "line": 625,
     "interface": "Workbook",
     "method": "copyRangeFrom",
     "signature": "copyRangeFrom(source:Workbook,fromRange:string,toRange:string,options?:{fromSheet?:string|Worksheet;toSheet?:string|Worksheet},):Promise<void>;",
@@ -398,7 +398,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.createCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 457,
+    "line": 445,
     "interface": "Workbook",
     "method": "createCheckpoint",
     "signature": "createCheckpoint(label?:string):string;",
@@ -410,7 +410,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.deleteCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 732,
+    "line": 720,
     "interface": "Workbook",
     "method": "deleteCustomList",
     "signature": "deleteCustomList(id:string):Promise<boolean>;",
@@ -422,7 +422,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.deleteCustomSetting",
     "file": "types/api/src/api/workbook.ts",
-    "line": 750,
+    "line": 738,
     "interface": "Workbook",
     "method": "deleteCustomSetting",
     "signature": "deleteCustomSetting(key:string):Promise<void>;",
@@ -434,7 +434,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.executeCode",
     "file": "types/api/src/api/workbook.ts",
-    "line": 559,
+    "line": 547,
     "interface": "Workbook",
     "method": "executeCode",
     "signature": "executeCode(code:string,options?:ExecuteOptions):Promise<CodeResult>;",
@@ -446,7 +446,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.insertWorksheets",
     "file": "types/api/src/api/workbook.ts",
-    "line": 601,
+    "line": 589,
     "interface": "Workbook",
     "method": "insertWorksheets",
     "signature": "insertWorksheets(data:string|Uint8Array,options?:InsertWorksheetOptions):Promise<string[]>;",
@@ -458,7 +458,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.replaceSettings",
     "file": "types/api/src/api/workbook.ts",
-    "line": 707,
+    "line": 695,
     "interface": "Workbook",
     "method": "replaceSettings",
     "signature": "replaceSettings(settings:WorkbookSettings):Promise<void>;",
@@ -470,7 +470,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.restoreCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 460,
+    "line": 448,
     "interface": "Workbook",
     "method": "restoreCheckpoint",
     "signature": "restoreCheckpoint(id:string):Promise<void>;",
@@ -482,7 +482,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setActivePrincipal",
     "file": "types/api/src/api/workbook.ts",
-    "line": 865,
+    "line": 853,
     "interface": "Workbook",
     "method": "setActivePrincipal",
     "signature": "setActivePrincipal(principal:string[]|AccessPrincipal|null):Promise<void>;",
@@ -494,7 +494,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCalculationMode",
     "file": "types/api/src/api/workbook.ts",
-    "line": 514,
+    "line": 502,
     "interface": "Workbook",
     "method": "setCalculationMode",
     "signature": "setCalculationMode(mode:'auto'|'autoNoTable'|'manual'):Promise<void>;",
@@ -506,7 +506,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setChartDataPointTrack",
     "file": "types/api/src/api/workbook.ts",
-    "line": 697,
+    "line": 685,
     "interface": "Workbook",
     "method": "setChartDataPointTrack",
     "signature": "setChartDataPointTrack(value:boolean):Promise<void>;",
@@ -518,7 +518,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCustomLists",
     "file": "types/api/src/api/workbook.ts",
-    "line": 739,
+    "line": 727,
     "interface": "Workbook",
     "method": "setCustomLists",
     "signature": "setCustomLists(lists:readonly WorkbookCustomListInput[]):Promise<void>;",
@@ -530,7 +530,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setCustomSetting",
     "file": "types/api/src/api/workbook.ts",
-    "line": 748,
+    "line": 736,
     "interface": "Workbook",
     "method": "setCustomSetting",
     "signature": "setCustomSetting(key:string,value:string):Promise<void>;",
@@ -542,7 +542,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setSettings",
     "file": "types/api/src/api/workbook.ts",
-    "line": 706,
+    "line": 694,
     "interface": "Workbook",
     "method": "setSettings",
     "signature": "setSettings(updates:WorkbookSettingsPatch):Promise<void>;",
@@ -554,7 +554,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.setUsePrecisionAsDisplayed",
     "file": "types/api/src/api/workbook.ts",
-    "line": 532,
+    "line": 520,
     "interface": "Workbook",
     "method": "setUsePrecisionAsDisplayed",
     "signature": "setUsePrecisionAsDisplayed(value:boolean):Promise<void>;",
@@ -566,7 +566,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.undoGroup",
     "file": "types/api/src/api/workbook.ts",
-    "line": 445,
+    "line": 433,
     "interface": "Workbook",
     "method": "undoGroup",
     "signature": "undoGroup<T=void>(fn:(wb:Workbook)=>Promise<T>):Promise<T>;",
@@ -578,7 +578,7 @@
   {
     "key": "types/api/src/api/workbook.ts#Workbook.updateCustomList",
     "file": "types/api/src/api/workbook.ts",
-    "line": 725,
+    "line": 713,
     "interface": "Workbook",
     "method": "updateCustomList",
     "signature": "updateCustomList(id:string,updates:WorkbookCustomListUpdate):Promise<boolean>;",
@@ -590,7 +590,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.createCalculatorContext",
     "file": "types/api/src/api/workbook.ts",
-    "line": 950,
+    "line": 938,
     "interface": "WorkbookInternal",
     "method": "createCalculatorContext",
     "signature": "createCalculatorContext(sheetId:SheetId):unknown;",
@@ -602,7 +602,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.refreshSheetMetadata",
     "file": "types/api/src/api/workbook.ts",
-    "line": 971,
+    "line": 959,
     "interface": "WorkbookInternal",
     "method": "refreshSheetMetadata",
     "signature": "refreshSheetMetadata():Promise<void>;",
@@ -614,7 +614,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setActiveSheetId",
     "file": "types/api/src/api/workbook.ts",
-    "line": 977,
+    "line": 965,
     "interface": "WorkbookInternal",
     "method": "setActiveSheetId",
     "signature": "setActiveSheetId(id:SheetId):void;",
@@ -626,7 +626,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setCodeExecutorFactory",
     "file": "types/api/src/api/workbook.ts",
-    "line": 1005,
+    "line": 993,
     "interface": "WorkbookInternal",
     "method": "setCodeExecutorFactory",
     "signature": "setCodeExecutorFactory(factory:(config:{ctx:unknown;eventBus:unknown;getActiveSheetId:()=>SheetId})=>{execute(code:string,options?:CodeExecutionOptions):Promise<CodeExecutionResult>;cancelExecution?(executionId:string):void;dispose():void;},):void;",
@@ -638,7 +638,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setConvergenceThreshold",
     "file": "types/api/src/api/workbook.ts",
-    "line": 965,
+    "line": 953,
     "interface": "WorkbookInternal",
     "method": "setConvergenceThreshold",
     "signature": "setConvergenceThreshold(threshold:number):Promise<void>;",
@@ -650,7 +650,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setIterativeCalculation",
     "file": "types/api/src/api/workbook.ts",
-    "line": 959,
+    "line": 947,
     "interface": "WorkbookInternal",
     "method": "setIterativeCalculation",
     "signature": "setIterativeCalculation(enabled:boolean):Promise<void>;",
@@ -662,7 +662,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setMaxIterations",
     "file": "types/api/src/api/workbook.ts",
-    "line": 962,
+    "line": 950,
     "interface": "WorkbookInternal",
     "method": "setMaxIterations",
     "signature": "setMaxIterations(n:number):Promise<void>;",
@@ -674,7 +674,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setPendingSelectionCheckpoint",
     "file": "types/api/src/api/workbook.ts",
-    "line": 938,
+    "line": 926,
     "interface": "WorkbookInternal",
     "method": "setPendingSelectionCheckpoint",
     "signature": "setPendingSelectionCheckpoint(checkpoint:SelectionCheckpoint):void;",
@@ -686,7 +686,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookInternal.setPendingUndoDescription",
     "file": "types/api/src/api/workbook.ts",
-    "line": 935,
+    "line": 923,
     "interface": "WorkbookInternal",
     "method": "setPendingUndoDescription",
     "signature": "setPendingUndoDescription(description:string):void;",
@@ -696,9 +696,21 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
+    "key": "types/api/src/api/workbook.ts#WorkbookInternal.setRuntimeCustomSetting",
+    "file": "types/api/src/api/workbook.ts",
+    "line": 966,
+    "interface": "WorkbookInternal",
+    "method": "setRuntimeCustomSetting",
+    "signature": "setRuntimeCustomSetting(key:string,value:string|null):Promise<void>;",
+    "returnType": "Promise<void>",
+    "returnCategory": "void",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.add",
     "file": "types/api/src/api/workbook.ts",
-    "line": 342,
+    "line": 330,
     "interface": "WorkbookLinks",
     "method": "add",
     "signature": "add(input:CreateWorkbookLinkInput):WorkbookLinkView;",
@@ -710,7 +722,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.copySource",
     "file": "types/api/src/api/workbook.ts",
-    "line": 353,
+    "line": 341,
     "interface": "WorkbookLinks",
     "method": "copySource",
     "signature": "copySource(linkId:LinkId):Promise<CopyWorkbookLinkSourceResult>;",
@@ -722,7 +734,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.create",
     "file": "types/api/src/api/workbook.ts",
-    "line": 343,
+    "line": 331,
     "interface": "WorkbookLinks",
     "method": "create",
     "signature": "create(input:CreateWorkbookLinkInput):WorkbookLinkView;",
@@ -734,7 +746,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.delete",
     "file": "types/api/src/api/workbook.ts",
-    "line": 347,
+    "line": 335,
     "interface": "WorkbookLinks",
     "method": "delete",
     "signature": "delete(linkId:LinkId):boolean;",
@@ -746,7 +758,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.refresh",
     "file": "types/api/src/api/workbook.ts",
-    "line": 349,
+    "line": 337,
     "interface": "WorkbookLinks",
     "method": "refresh",
     "signature": "refresh(linkId:LinkId):Promise<LinkStatusView>;",
@@ -758,7 +770,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.refreshAll",
     "file": "types/api/src/api/workbook.ts",
-    "line": 350,
+    "line": 338,
     "interface": "WorkbookLinks",
     "method": "refreshAll",
     "signature": "refreshAll(options?:{readonly concurrency?:number}):Promise<readonly LinkStatusView[]>;",
@@ -770,7 +782,7 @@
   {
     "key": "types/api/src/api/workbook.ts#WorkbookLinks.update",
     "file": "types/api/src/api/workbook.ts",
-    "line": 345,
+    "line": 333,
     "interface": "WorkbookLinks",
     "method": "update",
     "signature": "update(linkId:LinkId,input:UpdateWorkbookLinkInput):WorkbookLinkView;",
@@ -1416,9 +1428,21 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
+    "key": "types/api/src/api/workbook/version-merge-review.ts#VersionMergeReview.apply",
+    "file": "types/api/src/api/workbook/version-merge-review.ts",
+    "line": 124,
+    "interface": "VersionMergeReview",
+    "method": "apply",
+    "signature": "apply(options?:VersionMergeReviewApplyOptions):Promise<VersionResult<VersionApplyMergeResult>>;",
+    "returnType": "Promise<VersionResult<VersionApplyMergeResult>>",
+    "returnCategory": "other",
+    "disposition": "lifecycleReceiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
     "key": "types/api/src/api/workbook/version-proposal.ts#VersionProposalApi.commitProposalWorkspace",
     "file": "types/api/src/api/workbook/version-proposal.ts",
-    "line": 238,
+    "line": 239,
     "interface": "VersionProposalApi",
     "method": "commitProposalWorkspace",
     "signature": "commitProposalWorkspace(input:CommitProposalWorkspaceInput,):Promise<VersionResult<AgentProposal>>;",
@@ -1430,11 +1454,47 @@
   {
     "key": "types/api/src/api/workbook/version-proposal.ts#VersionProposalApi.createProposal",
     "file": "types/api/src/api/workbook/version-proposal.ts",
-    "line": 228,
+    "line": 229,
     "interface": "VersionProposalApi",
     "method": "createProposal",
     "signature": "createProposal(input:CreateAgentProposalInput):Promise<VersionResult<AgentProposal>>;",
     "returnType": "Promise<VersionResult<AgentProposal>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-proposal.ts#VersionProposalHandle.refresh",
+    "file": "types/api/src/api/workbook/version-proposal.ts",
+    "line": 321,
+    "interface": "VersionProposalHandle",
+    "method": "refresh",
+    "signature": "refresh():Promise<VersionResult<VersionProposalHandle>>;",
+    "returnType": "Promise<VersionResult<VersionProposalHandle>>",
+    "returnCategory": "other",
+    "disposition": "lifecycleReceiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-proposal.ts#VersionProposalPorcelainApi.create",
+    "file": "types/api/src/api/workbook/version-proposal.ts",
+    "line": 340,
+    "interface": "VersionProposalPorcelainApi",
+    "method": "create",
+    "signature": "create(input:VersionCreateProposalPorcelainInput):Promise<VersionResult<VersionProposalHandle>>;",
+    "returnType": "Promise<VersionResult<VersionProposalHandle>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-proposal.ts#VersionProposalWorkspaceHandle.commit",
+    "file": "types/api/src/api/workbook/version-proposal.ts",
+    "line": 290,
+    "interface": "VersionProposalWorkspaceHandle",
+    "method": "commit",
+    "signature": "commit(options:VersionProposalWorkspaceCommitOptions,):Promise<VersionResult<VersionProposalHandle>>;",
+    "returnType": "Promise<VersionResult<VersionProposalHandle>>",
     "returnCategory": "other",
     "disposition": "receiptRequired",
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
@@ -1476,10 +1536,34 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.applyMerge",
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.commitCurrent",
     "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 150,
+    "line": 119,
     "interface": "ExpectedWorkbookVersionCoreMethods",
+    "method": "commitCurrent",
+    "signature": "commitCurrent(options?:VersionCommitCurrentOptions,):Promise<VersionResult<WorkbookCommitSummary>>;",
+    "returnType": "Promise<VersionResult<WorkbookCommitSummary>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.createBranchFromCurrent",
+    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
+    "line": 122,
+    "interface": "ExpectedWorkbookVersionCoreMethods",
+    "method": "createBranchFromCurrent",
+    "signature": "createBranchFromCurrent(name:VersionBranchNameInput,options?:VersionCreateBranchFromCurrentOptions,):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionDirectMethods.applyMerge",
+    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
+    "line": 175,
+    "interface": "ExpectedWorkbookVersionDirectMethods",
     "method": "applyMerge",
     "signature": "applyMerge(input:VersionApplyMergeInput,options?:VersionApplyMergeOptions,):Promise<VersionResult<VersionApplyMergeResult>>;",
     "returnType": "Promise<VersionResult<VersionApplyMergeResult>>",
@@ -1488,10 +1572,10 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.commit",
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionDirectMethods.commit",
     "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 138,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
+    "line": 166,
+    "interface": "ExpectedWorkbookVersionDirectMethods",
     "method": "commit",
     "signature": "commit(options?:VersionCommitOptions):Promise<VersionResult<WorkbookCommitSummary>>;",
     "returnType": "Promise<VersionResult<WorkbookCommitSummary>>",
@@ -1500,46 +1584,10 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.createBranch",
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionDirectMethods.merge",
     "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 187,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
-    "method": "createBranch",
-    "signature": "createBranch(options:VersionCreateBranchOptions):Promise<VersionResult<VersionRef>>;",
-    "returnType": "Promise<VersionResult<VersionRef>>",
-    "returnCategory": "other",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
-  },
-  {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.deleteBranch",
-    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 190,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
-    "method": "deleteBranch",
-    "signature": "deleteBranch(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
-    "returnType": "Promise<VersionResult<VersionRef>>",
-    "returnCategory": "other",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
-  },
-  {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.deleteRef",
-    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 191,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
-    "method": "deleteRef",
-    "signature": "deleteRef(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
-    "returnType": "Promise<VersionResult<VersionRef>>",
-    "returnCategory": "other",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
-  },
-  {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.merge",
-    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 146,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
+    "line": 171,
+    "interface": "ExpectedWorkbookVersionDirectMethods",
     "method": "merge",
     "signature": "merge(input:VersionMergeInput,options?:VersionMergeOptions,):Promise<VersionResult<VersionMergeResult>>;",
     "returnType": "Promise<VersionResult<VersionMergeResult>>",
@@ -1548,10 +1596,46 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionCoreMethods.updateBranch",
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionRefsMethods.createBranch",
     "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
-    "line": 189,
-    "interface": "ExpectedWorkbookVersionCoreMethods",
+    "line": 222,
+    "interface": "ExpectedWorkbookVersionRefsMethods",
+    "method": "createBranch",
+    "signature": "createBranch(options:VersionCreateBranchOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionRefsMethods.deleteBranch",
+    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
+    "line": 225,
+    "interface": "ExpectedWorkbookVersionRefsMethods",
+    "method": "deleteBranch",
+    "signature": "deleteBranch(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionRefsMethods.deleteRef",
+    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
+    "line": 226,
+    "interface": "ExpectedWorkbookVersionRefsMethods",
+    "method": "deleteRef",
+    "signature": "deleteRef(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts#ExpectedWorkbookVersionRefsMethods.updateBranch",
+    "file": "types/api/src/api/workbook/version-workbook-contract-fixtures.ts",
+    "line": 224,
+    "interface": "ExpectedWorkbookVersionRefsMethods",
     "method": "updateBranch",
     "signature": "updateBranch(options:VersionUpdateBranchOptions):Promise<VersionResult<VersionRef>>;",
     "returnType": "Promise<VersionResult<VersionRef>>",
@@ -1562,7 +1646,7 @@
   {
     "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.applyMerge",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 75,
+    "line": 97,
     "interface": "WorkbookVersion",
     "method": "applyMerge",
     "signature": "applyMerge(input:VersionApplyMergeInput,options?:VersionApplyMergeOptions,):Promise<VersionResult<VersionApplyMergeResult>>;",
@@ -1574,7 +1658,7 @@
   {
     "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.commit",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 63,
+    "line": 88,
     "interface": "WorkbookVersion",
     "method": "commit",
     "signature": "commit(options?:VersionCommitOptions):Promise<VersionResult<WorkbookCommitSummary>>;",
@@ -1584,36 +1668,24 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.createBranch",
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.commitCurrent",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 112,
+    "line": 123,
     "interface": "WorkbookVersion",
-    "method": "createBranch",
-    "signature": "createBranch(options:VersionCreateBranchOptions):Promise<VersionResult<VersionRef>>;",
-    "returnType": "Promise<VersionResult<VersionRef>>",
+    "method": "commitCurrent",
+    "signature": "commitCurrent(options?:VersionCommitCurrentOptions,):Promise<VersionResult<WorkbookCommitSummary>>;",
+    "returnType": "Promise<VersionResult<WorkbookCommitSummary>>",
     "returnCategory": "other",
     "disposition": "receiptRequired",
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.deleteBranch",
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.createBranchFromCurrent",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 115,
+    "line": 126,
     "interface": "WorkbookVersion",
-    "method": "deleteBranch",
-    "signature": "deleteBranch(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
-    "returnType": "Promise<VersionResult<VersionRef>>",
-    "returnCategory": "other",
-    "disposition": "receiptRequired",
-    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
-  },
-  {
-    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.deleteRef",
-    "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 116,
-    "interface": "WorkbookVersion",
-    "method": "deleteRef",
-    "signature": "deleteRef(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
+    "method": "createBranchFromCurrent",
+    "signature": "createBranchFromCurrent(name:VersionBranchNameInput,options?:VersionCreateBranchFromCurrentOptions,):Promise<VersionResult<VersionRef>>;",
     "returnType": "Promise<VersionResult<VersionRef>>",
     "returnCategory": "other",
     "disposition": "receiptRequired",
@@ -1622,7 +1694,7 @@
   {
     "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.merge",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 71,
+    "line": 93,
     "interface": "WorkbookVersion",
     "method": "merge",
     "signature": "merge(input:VersionMergeInput,options?:VersionMergeOptions,):Promise<VersionResult<VersionMergeResult>>;",
@@ -1632,10 +1704,46 @@
     "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
   },
   {
-    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersion.updateBranch",
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersionRefsNamespace.createBranch",
     "file": "types/api/src/api/workbook/version-workbook.ts",
-    "line": 114,
-    "interface": "WorkbookVersion",
+    "line": 183,
+    "interface": "WorkbookVersionRefsNamespace",
+    "method": "createBranch",
+    "signature": "createBranch(options:VersionCreateBranchOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersionRefsNamespace.deleteBranch",
+    "file": "types/api/src/api/workbook/version-workbook.ts",
+    "line": 186,
+    "interface": "WorkbookVersionRefsNamespace",
+    "method": "deleteBranch",
+    "signature": "deleteBranch(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersionRefsNamespace.deleteRef",
+    "file": "types/api/src/api/workbook/version-workbook.ts",
+    "line": 187,
+    "interface": "WorkbookVersionRefsNamespace",
+    "method": "deleteRef",
+    "signature": "deleteRef(options:VersionDeleteRefOptions):Promise<VersionResult<VersionRef>>;",
+    "returnType": "Promise<VersionResult<VersionRef>>",
+    "returnCategory": "other",
+    "disposition": "receiptRequired",
+    "rationale": "Generated initial disposition; refine as receipt waves migrate this API."
+  },
+  {
+    "key": "types/api/src/api/workbook/version-workbook.ts#WorkbookVersionRefsNamespace.updateBranch",
+    "file": "types/api/src/api/workbook/version-workbook.ts",
+    "line": 185,
+    "interface": "WorkbookVersionRefsNamespace",
     "method": "updateBranch",
     "signature": "updateBranch(options:VersionUpdateBranchOptions):Promise<VersionResult<VersionRef>>;",
     "returnType": "Promise<VersionResult<VersionRef>>",

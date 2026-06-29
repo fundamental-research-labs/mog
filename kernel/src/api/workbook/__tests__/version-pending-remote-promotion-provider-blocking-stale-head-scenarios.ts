@@ -22,7 +22,7 @@ export function registerPendingRemotePromotionProviderStaleHeadBlockingScenarios
       provider: providerWithStaleHeadCommit(provider, namespace),
     });
 
-    const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+    const result = await wb.version.refs.promotePendingRemote({ includeDiagnostics: true });
 
     expect(result).toMatchObject({
       ok: true,

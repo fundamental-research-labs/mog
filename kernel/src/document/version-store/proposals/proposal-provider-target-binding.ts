@@ -128,7 +128,7 @@ function targetBindingUnavailable<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.proposals.advanced.${operation}`,
       diagnostics: [diagnostic],
     },
   };

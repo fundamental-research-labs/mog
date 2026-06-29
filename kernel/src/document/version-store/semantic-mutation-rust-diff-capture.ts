@@ -1,6 +1,11 @@
 import type { VersionNormalCommitCaptureInput } from './commit-service';
 import type { VersionStoreFailure } from './provider';
 import { missingNormalSemanticChangeSetFailure } from './semantic-mutation-capture-diagnostics';
+import {
+  COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
+  compactPlainCellValueReviewChanges,
+  type CompactCellValueReviewProjection,
+} from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SemanticWorkbookStateEnvelope } from '../../bridges/compute/compute-types.gen';
 
@@ -38,6 +43,37 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
     );
   }
 
+  const reviewChanges = input.reviewChanges;
+
+  if (canUseReviewProjectionOnlyPayload(reviewChanges)) {
+    if (sameDigest(input.beforeSemanticState.stateDigest, afterSemanticState.stateDigest)) {
+      return failedSemanticCapture(
+        input,
+        'Normal version commits require a semantic state change.',
+      );
+    }
+    const compactReviewProjection = compactPlainCellValueReviewChanges(reviewChanges);
+    return {
+      status: 'success',
+      payload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticStateReviewProjection',
+          beforeStateDigest: input.beforeSemanticState.stateDigest,
+          afterStateDigest: afterSemanticState.stateDigest,
+          reviewProjectionChangeCount: reviewChanges.length,
+        },
+        changes: [],
+        semanticDiff: {
+          beforeDigest: input.beforeSemanticState.stateDigest,
+          afterDigest: afterSemanticState.stateDigest,
+          changes: [],
+        },
+        ...(compactReviewProjection ? { compactReviewProjection } : { reviewChanges }),
+      },
+    };
+  }
+
   try {
     const semanticDiff = await input.semanticStateReader.diffSemanticStates(
       input.beforeSemanticState.state,
@@ -61,7 +97,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
         },
         changes: semanticDiff.changes,
         semanticDiff,
-        reviewChanges: input.reviewChanges,
+        reviewChanges,
       },
     };
   } catch (error) {
@@ -70,6 +106,63 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
       error instanceof Error ? error.message : 'Rust semantic diff failed.',
     );
   }
+}
+
+export function buildReviewProjectionOnlySemanticChangeSetPayload(
+  reviewChanges: readonly unknown[],
+): { readonly status: 'success'; readonly payload: unknown } {
+  const compactReviewProjection = compactPlainCellValueReviewChanges(reviewChanges);
+  return {
+    status: 'success',
+    payload: {
+      schemaVersion: 1,
+      source: {
+        kind: 'semanticMutationProjection',
+        reviewProjectionChangeCount: reviewChanges.length,
+      },
+      changes: [],
+      ...(compactReviewProjection ? { compactReviewProjection } : { reviewChanges }),
+    },
+  };
+}
+
+export function buildCompactReviewProjectionOnlySemanticChangeSetPayload(
+  compactReviewProjection: CompactCellValueReviewProjection,
+): { readonly status: 'success'; readonly payload: unknown } {
+  return {
+    status: 'success',
+    payload: {
+      schemaVersion: 1,
+      source: {
+        kind: 'semanticMutationProjection',
+        reviewProjectionChangeCount: compactReviewProjection.changeCount,
+      },
+      changes: [],
+      compactReviewProjection,
+    },
+  };
+}
+
+export function canUseReviewProjectionOnlyPayload(reviewChanges: readonly unknown[]): boolean {
+  return (
+    reviewChanges.length >= COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT &&
+    compactPlainCellValueReviewChanges(reviewChanges) !== null
+  );
+}
+
+function sameDigest(left: unknown, right: unknown): boolean {
+  return (
+    isRecord(left) &&
+    isRecord(right) &&
+    left.algorithm === 'sha256' &&
+    right.algorithm === 'sha256' &&
+    typeof left.digest === 'string' &&
+    left.digest === right.digest
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function failedSemanticCapture(

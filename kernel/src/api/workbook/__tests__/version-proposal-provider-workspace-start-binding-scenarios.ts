@@ -16,13 +16,13 @@ export function registerProposalProviderWorkspaceStartBindingScenarios(): void {
       proposalWorkspaceService: workspaceService,
     });
 
-    const created = await version.createProposal(
+    const created = await version.proposals.advanced.createProposal(
       createProposalInput('proposal-create-misbound-start'),
     );
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
 
     await expect(
-      version.startProposalWorkspace({
+      version.proposals.advanced.startProposalWorkspace({
         clientRequestId: 'workspace-open-misbound',
         proposalId: created.value.id,
         expectedRevision: 1,
@@ -36,7 +36,7 @@ export function registerProposalProviderWorkspaceStartBindingScenarios(): void {
         allowed: ['matching_proposal_workspace'],
       },
     });
-    const stored = await version.getProposal({ proposalId: created.value.id });
+    const stored = await version.proposals.advanced.getProposal({ proposalId: created.value.id });
     expect(stored).toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },

@@ -123,31 +123,15 @@ describe('VersionActionStatus', () => {
     expect(status.detail).not.toContain('alice@example.com');
   });
 
-  it('redacts disabled reasons and remote backlog detail while rendering version actions', () => {
+  it('redacts disabled reasons while rendering version actions', () => {
     render(
       <VersionActions
         commitMessage=""
-        branchName=""
-        rollbackReason=""
         actionState={{ status: 'idle' }}
         commitEnabled={false}
-        branchEnabled
-        rollbackEnabled
-        remotePromoteEnabled={false}
         commitDisabledReason={`Commit blocked for ${RAW_REF} ${RAW_PRINCIPAL}.`}
-        remotePromoteDisabledReason={`Remote promotion blocked for ${RAW_REF} principalTag=sync-admin.`}
-        remotePromotionStatus={{
-          state: 'pending',
-          label: 'Pending',
-          detail: `Backlog is pending for ${RAW_REF} ${RAW_PRINCIPAL}.`,
-        }}
         onCommitMessageChange={noop}
-        onBranchNameChange={noop}
-        onRollbackReasonChange={noop}
         onCommit={noop}
-        onCreateBranch={noop}
-        onStageRollback={noop}
-        onPromotePendingRemote={noop}
       />,
     );
 
@@ -156,13 +140,12 @@ describe('VersionActionStatus', () => {
     expect(actions).toHaveTextContent('principal [principal]');
     expect(actions).not.toHaveTextContent(RAW_REF);
     expect(actions).not.toHaveTextContent('alice@example.com');
-    expect(actions).not.toHaveTextContent('sync-admin');
     expect(screen.getByRole('button', { name: 'Commit' })).toHaveAccessibleDescription(
       /Commit blocked/,
     );
-    expect(screen.getByRole('button', { name: 'Promote remote' })).toHaveAccessibleDescription(
-      /Remote promotion blocked/,
-    );
+    expect(screen.queryByTestId('version-history-rollback-reason-input')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('version-history-remote-promote-status')).not.toBeInTheDocument();
+    expect(screen.queryByText('More actions')).not.toBeInTheDocument();
   });
 });
 

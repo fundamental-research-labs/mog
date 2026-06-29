@@ -8,9 +8,9 @@ import type {
 export const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
 
 const VERSION_MAIN_REF = 'refs/heads/main' satisfies VersionMainRefName;
-const VERSION_BRANCH_NAMESPACES = Object.freeze(['scenario', 'agent', 'import', 'review'] as const);
 const VERSION_BRANCH_NAME_PATTERN =
-  /^(?:main|(?:scenario|agent|import|review)\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*)$/;
+  /^(?:main|[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?)*)$/;
+const VERSION_BRANCH_CREATION_NAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
 const VERSION_BRANCH_MAX_BYTES = 128;
 const RESERVED_REF_PREFIXES = Object.freeze(['refs/system', 'refs/imports', 'refs/hidden']);
 
@@ -28,6 +28,11 @@ export function displayBranchName(name: string): string {
   return name.startsWith(VERSION_BRANCH_REF_PREFIX)
     ? name.slice(VERSION_BRANCH_REF_PREFIX.length)
     : name;
+}
+
+export function publicBranchLabel(name: string): string | undefined {
+  const normalized = normalizeVersionBranchNameInput(name);
+  return normalized.ok ? normalized.branch.displayName : undefined;
 }
 
 export function normalizeVersionBranchNameInput(value: string): VersionBranchNameValidationResult {
@@ -71,12 +76,20 @@ export function validateVersionBranchCreationName(
   value: string,
   existingRefs: readonly Pick<VersionRef, 'name'>[],
 ): VersionBranchNameValidationResult {
+  const trimmed = value.trim();
+  if (trimmed === 'refs' || trimmed.startsWith('refs/')) {
+    return invalidBranchName('Enter a branch name without ref prefixes.');
+  }
+
   const normalized = normalizeVersionBranchNameInput(value);
   if (!normalized.ok) return normalized;
 
   if (normalized.branch.branchName === 'main') {
     return invalidBranchName('main is protected and cannot be created from the version panel.');
   }
+
+  const creationReason = invalidCreationBranchNameReason(normalized.branch.branchName);
+  if (creationReason) return invalidBranchName(creationReason);
 
   if (existingRefNames(existingRefs).has(normalized.branch.refName)) {
     return invalidBranchName(`Branch ${normalized.branch.displayName} already exists.`);
@@ -121,14 +134,18 @@ function invalidPublicBranchNameReason(branchName: string): string | undefined {
     return 'Branch name segments must not end with .lock.';
   }
 
-  if (branchName !== 'main' && !startsWithPublicNamespace(branchName)) {
-    return 'Branch names must start with scenario/, agent/, import/, or review/.';
-  }
-
   if (!VERSION_BRANCH_NAME_PATTERN.test(branchName)) {
     return 'Branch names may contain lowercase letters, numbers, dots, underscores, hyphens, and slashes.';
   }
 
+  return undefined;
+}
+
+function invalidCreationBranchNameReason(branchName: string): string | undefined {
+  if (branchName.includes('/')) return 'Branch names must not contain /.';
+  if (!VERSION_BRANCH_CREATION_NAME_PATTERN.test(branchName)) {
+    return 'Branch names may contain lowercase letters, numbers, dots, underscores, and hyphens.';
+  }
   return undefined;
 }
 
@@ -140,10 +157,6 @@ function existingRefNames(refs: readonly Pick<VersionRef, 'name'>[]): ReadonlySe
     if (normalized.ok) names.add(normalized.branch.refName);
   }
   return names;
-}
-
-function startsWithPublicNamespace(branchName: string): boolean {
-  return VERSION_BRANCH_NAMESPACES.some((namespace) => branchName.startsWith(`${namespace}/`));
 }
 
 function isReservedRefName(branchName: string): boolean {

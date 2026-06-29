@@ -1,6 +1,8 @@
 import type { VersionCapability } from '@mog-sdk/contracts/api';
 
 export type VersionMergePublicOperation =
+  | 'previewMerge'
+  | 'getMergeReview'
   | 'merge'
   | 'applyMerge'
   | 'saveMergeResolutions'
@@ -12,6 +14,8 @@ export type VersionMergePublicCapability = Extract<
 >;
 
 export const VERSION_MERGE_OPERATION_CAPABILITIES = {
+  previewMerge: 'version:mergePreview',
+  getMergeReview: 'version:mergePreview',
   merge: 'version:mergePreview',
   applyMerge: 'version:mergeApply',
   saveMergeResolutions: 'version:mergeApply',

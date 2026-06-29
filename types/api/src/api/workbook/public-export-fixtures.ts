@@ -59,6 +59,11 @@ import type {
   VersionSymbolicRefReadResult as ApiRootSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as ApiRootSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as ApiRootUpdateBranchOptions,
+  VersionWorkingTreeDiffId as ApiRootWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as ApiRootWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as ApiRootWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as ApiRootWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as ApiRootWorkingTreeDiffPage,
   WorkbookDiffPage as ApiRootDiffPage,
   WorkbookVersion as ApiRootWorkbookVersion,
   WorkbookVersionDiagnosticCode as ApiRootWorkbookVersionDiagnosticCode,
@@ -125,6 +130,11 @@ import type {
   VersionSymbolicRefReadResult as PackageApiSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as PackageApiSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as PackageApiUpdateBranchOptions,
+  VersionWorkingTreeDiffId as PackageApiWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as PackageApiWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as PackageApiWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as PackageApiWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as PackageApiWorkingTreeDiffPage,
   WorkbookDiffPage as PackageApiDiffPage,
   WorkbookVersion as PackageApiWorkbookVersion,
   WorkbookVersionDiagnosticCode as PackageApiWorkbookVersionDiagnosticCode,
@@ -191,6 +201,11 @@ import type {
   VersionSymbolicRefReadResult as PackageWorkbookSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as PackageWorkbookSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as PackageWorkbookUpdateBranchOptions,
+  VersionWorkingTreeDiffId as PackageWorkbookWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as PackageWorkbookWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as PackageWorkbookWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as PackageWorkbookWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as PackageWorkbookWorkingTreeDiffPage,
   WorkbookDiffPage as PackageWorkbookDiffPage,
   WorkbookVersion as PackageWorkbookVersion,
   WorkbookVersionDiagnosticCode as PackageWorkbookVersionDiagnosticCode,
@@ -257,6 +272,11 @@ import type {
   VersionSymbolicRefReadResult as WorkbookNamespaceSymbolicRefReadResult,
   VersionSurfaceDiagnosticCode as WorkbookNamespaceSurfaceDiagnosticCode,
   VersionUpdateBranchOptions as WorkbookNamespaceUpdateBranchOptions,
+  VersionWorkingTreeDiffId as WorkbookNamespaceWorkingTreeDiffId,
+  VersionWorkingTreeDiffOptions as WorkbookNamespaceWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as WorkbookNamespaceWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as WorkbookNamespaceWorkingTreeDiffOverviewOptions,
+  VersionWorkingTreeDiffPage as WorkbookNamespaceWorkingTreeDiffPage,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
   WorkbookVersion as WorkbookNamespaceVersion,
   WorkbookVersionDiagnosticCode as WorkbookNamespaceVersionDiagnosticCode,
@@ -583,6 +603,24 @@ type _WorkbookNamespaceExportsVersionHead = Assert<
 type _WorkbookNamespaceExportsSemanticDiffPage = Assert<
   IsEqual<WorkbookNamespaceSemanticDiffPage, PackageWorkbookSemanticDiffPage>
 >;
+type _WorkbookNamespaceExportsWorkingTreeDiffPage = Assert<
+  IsEqual<WorkbookNamespaceWorkingTreeDiffPage, PackageWorkbookWorkingTreeDiffPage>
+>;
+type _WorkbookNamespaceExportsWorkingTreeDiffOptions = Assert<
+  IsEqual<WorkbookNamespaceWorkingTreeDiffOptions, PackageWorkbookWorkingTreeDiffOptions>
+>;
+type _WorkbookNamespaceExportsWorkingTreeDiffOverview = Assert<
+  IsEqual<WorkbookNamespaceWorkingTreeDiffOverview, PackageWorkbookWorkingTreeDiffOverview>
+>;
+type _WorkbookNamespaceExportsWorkingTreeDiffOverviewOptions = Assert<
+  IsEqual<
+    WorkbookNamespaceWorkingTreeDiffOverviewOptions,
+    PackageWorkbookWorkingTreeDiffOverviewOptions
+  >
+>;
+type _WorkbookNamespaceExportsWorkingTreeDiffId = Assert<
+  IsEqual<WorkbookNamespaceWorkingTreeDiffId, PackageWorkbookWorkingTreeDiffId>
+>;
 type _WorkbookNamespaceExportsPaged = Assert<
   IsEqual<WorkbookNamespacePaged<string>, PackageWorkbookPaged<string>>
 >;
@@ -685,6 +723,21 @@ type _ApiRootExportsVersionResult = Assert<
 type _ApiRootExportsVersionHead = Assert<IsEqual<ApiRootVersionHead, PackageApiVersionHead>>;
 type _ApiRootExportsSemanticDiffPage = Assert<
   IsEqual<ApiRootSemanticDiffPage, PackageApiSemanticDiffPage>
+>;
+type _ApiRootExportsWorkingTreeDiffPage = Assert<
+  IsEqual<ApiRootWorkingTreeDiffPage, PackageApiWorkingTreeDiffPage>
+>;
+type _ApiRootExportsWorkingTreeDiffOptions = Assert<
+  IsEqual<ApiRootWorkingTreeDiffOptions, PackageApiWorkingTreeDiffOptions>
+>;
+type _ApiRootExportsWorkingTreeDiffOverview = Assert<
+  IsEqual<ApiRootWorkingTreeDiffOverview, PackageApiWorkingTreeDiffOverview>
+>;
+type _ApiRootExportsWorkingTreeDiffOverviewOptions = Assert<
+  IsEqual<ApiRootWorkingTreeDiffOverviewOptions, PackageApiWorkingTreeDiffOverviewOptions>
+>;
+type _ApiRootExportsWorkingTreeDiffId = Assert<
+  IsEqual<ApiRootWorkingTreeDiffId, PackageApiWorkingTreeDiffId>
 >;
 type _ApiRootExportsPaged = Assert<IsEqual<ApiRootPaged<string>, PackageApiPaged<string>>>;
 type _ApiRootExportsDiffPage = Assert<IsEqual<ApiRootDiffPage, PackageApiDiffPage>>;

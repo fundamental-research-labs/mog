@@ -34,7 +34,7 @@ export function publicDiagnostic(
     severity,
     recoverability,
     messageTemplateId:
-      `version.promotePendingRemote.${issueCode}` as VersionStoreDiagnostic['messageTemplateId'],
+      `version.refs.promotePendingRemote.${issueCode}` as VersionStoreDiagnostic['messageTemplateId'],
     safeMessage,
     payload,
     redacted: true,

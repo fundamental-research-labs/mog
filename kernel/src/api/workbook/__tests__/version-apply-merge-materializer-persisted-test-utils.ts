@@ -138,7 +138,7 @@ export async function createPersistedFastForwardTheirsCommit(
     readonly editWorkbook?: Workbook;
   },
 ): Promise<WorkbookCommitSummary> {
-  const branch = await sourceWb.version.createBranch({
+  const branch = await sourceWb.version.refs.createBranch({
     name: input.branchName as any,
     targetCommitId: input.oursCommit.id,
     expectedAbsent: true,

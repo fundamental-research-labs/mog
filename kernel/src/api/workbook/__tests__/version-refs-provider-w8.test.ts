@@ -33,14 +33,14 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 listing and HEAD', ()
       'import/xlsx',
     ]) {
       await expect(
-        wb.version.createBranch({
+        wb.version.refs.createBranch({
           name: name as any,
           targetCommitId: initialized.rootCommit.id,
         }),
       ).resolves.toMatchObject({ ok: true });
     }
 
-    const allRefs = await wb.version.listRefs();
+    const allRefs = await wb.version.refs.listRefs();
     expect(allRefs.ok).toBe(true);
     if (!allRefs.ok) throw new Error(`expected listRefs success: ${allRefs.error.code}`);
     expect(allRefs.value.limit).toBe(50);
@@ -53,7 +53,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 listing and HEAD', ()
       'refs/heads/scenario/zeta',
     ]);
 
-    const scenarioRefs = await wb.version.listRefs({ prefix: 'refs/heads/scenario' as any });
+    const scenarioRefs = await wb.version.refs.listRefs({ prefix: 'refs/heads/scenario' as any });
     expect(scenarioRefs.ok).toBe(true);
     if (!scenarioRefs.ok) {
       throw new Error(`expected scenario listRefs success: ${scenarioRefs.error.code}`);
@@ -90,7 +90,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 listing and HEAD', ()
     const mainHeadVersion = new WorkbookVersionImpl({
       versioning: { branchService: createInMemoryBranchService({ refStore }) },
     } as any);
-    await expect(mainHeadVersion.getRef('HEAD')).resolves.toEqual({
+    await expect(mainHeadVersion.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -111,7 +111,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 listing and HEAD', ()
         }),
       },
     } as any);
-    await expect(reboundHeadVersion.getRef('HEAD')).resolves.toEqual({
+    await expect(reboundHeadVersion.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -124,7 +124,7 @@ describe('WorkbookVersion provider-backed ref lifecycle W8 listing and HEAD', ()
       },
     });
 
-    const activeDelete = await reboundHeadVersion.deleteRef({
+    const activeDelete = await reboundHeadVersion.refs.deleteRef({
       name: 'scenario/head-rebound' as any,
       expectedHead: AUX_COMMIT_ID as any,
       expectedRefRevision: { kind: 'counter', value: '0' },

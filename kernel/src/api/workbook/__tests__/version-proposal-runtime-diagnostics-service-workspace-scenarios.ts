@@ -30,7 +30,7 @@ export function registerProposalRuntimeDiagnosticsServiceWorkspaceScenarios(): v
       versioning: { proposalService },
     });
 
-    const result = await version.startProposalWorkspace({
+    const result = await version.proposals.advanced.startProposalWorkspace({
       clientRequestId: 'workspace-missing-provider',
       proposalId: PROPOSAL_ID,
       expectedRevision: 1,
@@ -40,7 +40,7 @@ export function registerProposalRuntimeDiagnosticsServiceWorkspaceScenarios(): v
     expect(result).toMatchObject({
       ok: false,
       error: {
-        target: 'workbook.version.startProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.startProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_PROPOSAL_WORKSPACE_UNAVAILABLE',

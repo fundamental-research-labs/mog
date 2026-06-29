@@ -4,11 +4,8 @@ import type { SemanticWorkbookStateEnvelope } from '../../../bridges/compute/com
 import type { VersionGraphNamespace } from '../object-store';
 import type { VersionSemanticStateReaderPort } from '../semantic-state-reader';
 import {
+  decodeWorkbookSnapshotRootRecord,
   WORKBOOK_SNAPSHOT_ROOT_OBJECT_TYPE,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_ENCODING,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_SCHEMA_VERSION,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
 } from '../snapshot-root-capture';
 import { buildXlsxVersionImportRootWrite } from '../xlsx-import-root';
 
@@ -72,14 +69,10 @@ describe('xlsx import root', () => {
       expect(rootWrite.snapshotRootRecord.preimage.objectType).toBe(
         WORKBOOK_SNAPSHOT_ROOT_OBJECT_TYPE,
       );
-      expect(rootWrite.snapshotRootRecord.preimage.payload).toEqual({
-        schemaVersion: YRS_FULL_STATE_SNAPSHOT_ROOT_SCHEMA_VERSION,
-        kind: YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
-        encoding: YRS_FULL_STATE_SNAPSHOT_ROOT_ENCODING,
-        bytes: 'AAECAw==',
-        byteLength: 4,
-        source: YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
-      });
+      expect(rootWrite.snapshotRootRecord.preimage.payloadEncoding).toBe('bytes');
+      expect(Array.from(decodeWorkbookSnapshotRootRecord(rootWrite.snapshotRootRecord))).toEqual([
+        0, 1, 2, 3,
+      ]);
       expect(rootWrite.semanticChangeSetRecord.preimage.payload).toMatchObject({
         source: {
           kind: 'xlsxImportRoot',

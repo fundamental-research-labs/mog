@@ -26,7 +26,7 @@ export async function readSyntheticConflictDetail(
   let detail: ConflictDetailSuccess | undefined;
   await withSyntheticConflictPreview(graphId, conflict, async ({ sourceWb, preview }) => {
     const previewConflict = preview.conflicts[0];
-    const result = await sourceWb.version.getMergeConflictDetail({
+    const result = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
       resultId: preview.resultId,
       resultDigest: preview.resultDigest,
       redactionPolicyDigest: preview.resultDigest,

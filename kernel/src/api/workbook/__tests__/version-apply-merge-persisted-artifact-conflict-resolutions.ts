@@ -30,7 +30,7 @@ export async function sealAcceptTheirsResolution(input: {
   const option = conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs');
   if (!option) throw new Error('expected acceptTheirs option');
 
-  const payload = await workbook.version.putMergeResolutionPayload({
+  const payload = await workbook.version.artifacts.advanced.putMergeResolutionPayload({
     resultId: preview.resultId,
     resultDigest: preview.resultDigest,
     redactionPolicyDigest: preview.resultDigest,

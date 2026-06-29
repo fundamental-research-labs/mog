@@ -24,13 +24,13 @@ export function registerProtectedRefProviderGuardScenarios(): void {
     const openGraph = jest.spyOn(provider, 'openGraph');
     const tagRef = 'refs/tags/release-secret' as any;
 
-    const protectedHeadCreate = await wb.version.createBranch({
+    const protectedHeadCreate = await wb.version.refs.createBranch({
       name: 'HEAD' as any,
       targetCommitId: initialized.rootCommit.id,
     });
     expectNoWriteFailure(protectedHeadCreate, 'VERSION_PERMISSION_DENIED');
 
-    const protectedHeadAdvance = await wb.version.fastForwardBranch({
+    const protectedHeadAdvance = await wb.version.refs.fastForwardBranch({
       name: 'HEAD' as any,
       nextCommitId: child.commit.id,
       expectedHead: initialized.rootCommit.id,
@@ -38,14 +38,14 @@ export function registerProtectedRefProviderGuardScenarios(): void {
     });
     expectNoWriteFailure(protectedHeadAdvance, 'VERSION_PERMISSION_DENIED');
 
-    const protectedHeadDelete = await wb.version.deleteBranch({
+    const protectedHeadDelete = await wb.version.refs.deleteBranch({
       name: 'HEAD' as any,
       expectedHead: initialized.rootCommit.id,
       expectedRefRevision: initialized.initialHead.revision,
     });
     expectNoWriteFailure(protectedHeadDelete, 'VERSION_PERMISSION_DENIED');
 
-    const protectedCreate = await wb.version.createBranch({
+    const protectedCreate = await wb.version.refs.createBranch({
       name: 'refs/heads/main' as any,
       targetCommitId: initialized.rootCommit.id,
     });
@@ -53,7 +53,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
       payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
-    const protectedAdvance = await wb.version.fastForwardBranch({
+    const protectedAdvance = await wb.version.refs.fastForwardBranch({
       name: 'main' as any,
       nextCommitId: child.commit.id,
       expectedHead: initialized.rootCommit.id,
@@ -63,7 +63,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
       payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
-    const protectedDelete = await wb.version.deleteRef({
+    const protectedDelete = await wb.version.refs.deleteRef({
       name: 'refs/heads/main' as any,
       expectedHead: initialized.rootCommit.id,
       expectedRefRevision: initialized.initialHead.revision,
@@ -72,7 +72,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
       payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
-    const protectedDeleteBranch = await wb.version.deleteBranch({
+    const protectedDeleteBranch = await wb.version.refs.deleteBranch({
       name: 'main' as any,
       expectedHead: initialized.rootCommit.id,
       expectedRefRevision: initialized.initialHead.revision,
@@ -81,7 +81,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
       payload: expect.objectContaining({ refName: 'redacted' }),
     });
 
-    const tagCreate = await wb.version.createBranch({
+    const tagCreate = await wb.version.refs.createBranch({
       name: tagRef,
       targetCommitId: initialized.rootCommit.id,
     });
@@ -90,7 +90,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(tagCreate, 'refs/tags/release-secret', 'release-secret');
 
-    const tagAdvance = await wb.version.fastForwardBranch({
+    const tagAdvance = await wb.version.refs.fastForwardBranch({
       name: tagRef,
       nextCommitId: child.commit.id,
       expectedHead: initialized.rootCommit.id,
@@ -101,7 +101,7 @@ export function registerProtectedRefProviderGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(tagAdvance, 'refs/tags/release-secret', 'release-secret');
 
-    const tagDelete = await wb.version.deleteRef({
+    const tagDelete = await wb.version.refs.deleteRef({
       name: tagRef,
       expectedHead: initialized.rootCommit.id,
       expectedRefRevision: initialized.initialHead.revision,

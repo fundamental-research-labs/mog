@@ -1,5 +1,6 @@
 import type { IKernelContext } from '@mog-sdk/contracts/kernel';
 import type { SheetId } from '@mog-sdk/contracts/core';
+import type { SpreadsheetEvent } from '@mog-sdk/contracts/events';
 import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { WriteGate } from '../../document/write-gate';
 import type { MutationResult } from './compute-types.gen';
@@ -82,6 +83,13 @@ interface MutationAdmissionDiagnosticContext {
     | ((diagnostic: MutationAdmissionDiagnostic) => void);
 }
 
+interface MutationAdmissionClockContext {
+  readonly clock?: {
+    readonly dateNow?: () => number;
+    readonly now?: () => number;
+  };
+}
+
 interface VersionMutationCaptureSink {
   recordPreMutation?(input: VersionMutationCapturePreMutationInput): void | Promise<void>;
   recordMutationResult?(input: VersionMutationCaptureRecordInput): void;
@@ -95,8 +103,11 @@ interface VersionMutationCaptureContext {
 
 const REQUIRED_VERSION_CONTEXT_PUBLIC_MUTATION_COMMANDS = new Set([
   'compute_batch_set_cells_by_position',
+  'compute_copy_range',
   'compute_create_sheet_with_default_col_width',
   'compute_delete_sheet',
+  'compute_relocate_cells',
+  'compute_relocate_cells_yrs',
   'compute_rename_compute_sheet',
   'compute_set_date_value',
   'compute_set_time_value',
@@ -114,10 +125,11 @@ export function recordMutationAdmissionDiagnostic(
     sink?.record?.(diagnostic);
     sink?.push?.(diagnostic);
   }
-  (ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined)?.(
-    'versioning:admission-diagnostic',
+  emitVersioningDiagnosticEvent(ctx, {
+    type: 'versioning:admission-diagnostic',
+    timestamp: mutationAdmissionTimestamp(ctx),
     diagnostic,
-  );
+  });
 }
 
 export function recordVersionMutationCapture(
@@ -141,9 +153,12 @@ export function recordVersionMutationCapture(
   try {
     capture.recordMutationResult(normalizedInput);
   } catch {
-    (
-      ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
-    )?.('versioning:mutation-capture-error', { operation: input.operation });
+    emitVersioningDiagnosticEvent(ctx, {
+      type: 'versioning:mutation-capture-error',
+      timestamp: mutationAdmissionTimestamp(ctx),
+      operation: input.operation,
+      phase: 'mutation-result',
+    });
   }
 }
 
@@ -173,11 +188,39 @@ export async function prepareVersionMutationCapture(
   try {
     await capture.recordPreMutation(input);
   } catch {
-    (
-      ctx.eventBus?.emit as unknown as ((eventName: string, payload: unknown) => void) | undefined
-    )?.('versioning:mutation-capture-error', { operation: input.operation, phase: 'pre-mutation' });
+    emitVersioningDiagnosticEvent(ctx, {
+      type: 'versioning:mutation-capture-error',
+      timestamp: mutationAdmissionTimestamp(ctx),
+      operation: input.operation,
+      phase: 'pre-mutation',
+    });
   }
 }
+
+function mutationAdmissionTimestamp(ctx: IKernelContext): number {
+  const clock = (ctx as IKernelContext & MutationAdmissionClockContext).clock;
+  for (const read of [clock?.dateNow, clock?.now]) {
+    try {
+      const value = read?.();
+      if (value !== undefined && Number.isFinite(value)) return value;
+    } catch {
+      // Try the next clock source.
+    }
+  }
+  return 0;
+}
+
+function emitVersioningDiagnosticEvent(
+  ctx: IKernelContext,
+  event: VersioningDiagnosticEvent,
+): void {
+  ctx.eventBus?.emit?.(event);
+}
+
+type VersioningDiagnosticEvent = Extract<
+  SpreadsheetEvent,
+  { readonly type: 'versioning:admission-diagnostic' | 'versioning:mutation-capture-error' }
+>;
 
 function versionMutationCapturePreMutationInput(
   operation: string,

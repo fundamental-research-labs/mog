@@ -31,7 +31,7 @@ describe('WorkbookVersion provider-backed targetRef commit scenarios', () => {
       installVersionDomainDetectorNoopsOnBridgeMock((wb.version as any).ctx?.computeBridge);
 
       await expect(
-        wb.version.createBranch({
+        wb.version.refs.createBranch({
           name: 'scenario/provider-commit' as any,
           targetCommitId: initialized.rootCommit.id,
         }),
@@ -79,7 +79,7 @@ describe('WorkbookVersion provider-backed targetRef commit scenarios', () => {
       expect(committed.value.id).not.toBe(initialized.rootCommit.id);
 
       await expect(
-        wb.version.readRef('refs/heads/scenario/provider-commit' as any),
+        wb.version.refs.readRef('refs/heads/scenario/provider-commit' as any),
       ).resolves.toMatchObject({
         ok: true,
         value: {
@@ -91,7 +91,7 @@ describe('WorkbookVersion provider-backed targetRef commit scenarios', () => {
           },
         },
       });
-      await expect(wb.version.readRef('refs/heads/main')).resolves.toMatchObject({
+      await expect(wb.version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',

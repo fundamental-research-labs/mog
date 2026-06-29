@@ -4,18 +4,16 @@ import userEvent from '@testing-library/user-event';
 import type {
   VersionCapability,
   VersionCapabilityState,
-  VersionApplyMergeResolution,
-  VersionApplyMergeResult,
-  VersionMergeChange,
-  VersionMergeConflict,
-  VersionMergeInput,
-  VersionMergeResult,
+  VersionDiffGroup,
+  VersionDiffGroupId,
+  VersionDiffOverview,
+  VersionMergeReview,
   VersionRecordRevision,
   VersionResult,
   VersionSemanticDiffPage,
   VersionSurfaceStatus,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
-  WorkbookVersion,
 } from '@mog-sdk/contracts/api';
 
 import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../VersionHistoryPanel';
@@ -23,11 +21,13 @@ import { VersionHistoryPanelContent, type VersionHistoryWorkbook } from '../Vers
 export type { VersionHistoryWorkbook } from '../VersionHistoryPanel';
 export { shortCommitId } from '../version-history-format';
 
+type VersionHistoryPanelUser = ReturnType<typeof userEvent.setup>;
+
 export const HEAD_COMMIT_ID = `commit:sha256:${'a'.repeat(64)}` as WorkbookCommitId;
 export const PARENT_COMMIT_ID = `commit:sha256:${'b'.repeat(64)}` as WorkbookCommitId;
 export const LATEST_COMMIT_ID = `commit:sha256:${'c'.repeat(64)}` as WorkbookCommitId;
-export const MERGE_COMMIT_ID = `commit:sha256:${'d'.repeat(64)}` as WorkbookCommitId;
 export const REF_REVISION: VersionRecordRevision = { kind: 'counter', value: '1' };
+export const DIFF_GROUP_ID = 'diff-group:cells:A1' as VersionDiffGroupId;
 
 const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:read',
@@ -45,11 +45,6 @@ const ALL_CAPABILITIES: readonly VersionCapability[] = [
   'version:remotePromote',
 ];
 
-export type DirectMergeVersionHistoryWorkbook = VersionHistoryWorkbook & {
-  readonly version: VersionHistoryWorkbook['version'] &
-    Pick<WorkbookVersion, 'merge' | 'applyMerge'>;
-};
-
 type RenderVersionHistoryPanelOptions = {
   readonly workbook?: VersionHistoryWorkbook;
   readonly onClose?: () => void;
@@ -66,38 +61,34 @@ export function renderVersionHistoryPanel({
   return { user, workbook, onClose, ...rendered };
 }
 
+type VersionHistoryVersion = VersionHistoryWorkbook['version'];
+
+type VersionHistoryWorkbookVersionOverrides = Partial<
+  Omit<VersionHistoryVersion, 'refs' | 'reviews' | 'proposals'>
+> & {
+  readonly refs?: Partial<VersionHistoryVersion['refs']>;
+  readonly reviews?: {
+    readonly advanced?: Partial<VersionHistoryVersion['reviews']['advanced']>;
+  };
+  readonly proposals?: Partial<VersionHistoryVersion['proposals']>;
+};
+
 export function createWorkbook(
-  overrides: Partial<DirectMergeVersionHistoryWorkbook['version']> = {},
-): DirectMergeVersionHistoryWorkbook {
-  const version = {
-    getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
-    getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
+  overrides: VersionHistoryWorkbookVersionOverrides = {},
+): VersionHistoryWorkbook {
+  const {
+    refs: refsOverrides,
+    reviews: reviewsOverrides,
+    proposals: proposalsOverrides,
+    ...topLevelOverrides
+  } = overrides;
+  const directVersionMethods = {
     getHead: jest.fn(async () => ({
       ok: true,
       value: {
         id: HEAD_COMMIT_ID,
         refName: 'refs/heads/main',
         refRevision: REF_REVISION,
-      },
-    })),
-    readRef: jest.fn(async (name: Parameters<VersionHistoryWorkbook['version']['readRef']>[0]) => ({
-      ok: true,
-      value: {
-        status: 'success',
-        ref:
-          name === 'HEAD'
-            ? {
-                name: 'HEAD',
-                target: 'refs/heads/main',
-                revision: REF_REVISION,
-              }
-            : {
-                name,
-                commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
-                revision:
-                  name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
-              },
-        diagnostics: [],
       },
     })),
     listCommits: jest.fn(async () => ({
@@ -122,6 +113,66 @@ export function createWorkbook(
         limit: 20,
       },
     })),
+    revert: jest.fn(async () => ({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        status: 'planned',
+        target: {
+          kind: 'commit',
+          commitId: PARENT_COMMIT_ID,
+        },
+        diagnostics: [],
+        mutationGuarantee: 'no-write-attempted',
+      },
+    })),
+    diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
+    diffOverview: jest.fn(
+      async (
+        baseCommitId: Parameters<VersionHistoryVersion['diffOverview']>[0],
+        targetCommitId: Parameters<VersionHistoryVersion['diffOverview']>[1],
+      ) => ({
+        ok: true,
+        value: versionDiffOverview({
+          baseCommitId: baseCommitId as WorkbookCommitId,
+          targetCommitId: targetCommitId as WorkbookCommitId,
+        }),
+      }),
+    ),
+    diffGroupDetail: jest.fn(async () => ({
+      ok: true,
+      value: semanticDiffPage([diffEntry()]),
+    })),
+    diffWorkingTree: jest.fn(async () => ({
+      ok: true,
+      value: workingTreeDiffPage([diffEntry()]),
+    })),
+    previewMerge: jest.fn(async () => ({
+      ok: true,
+      value: createCleanMergeReview(),
+    })),
+  };
+  const refs = {
+    readRef: jest.fn(async (name: Parameters<VersionHistoryVersion['refs']['readRef']>[0]) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        ref:
+          name === 'HEAD'
+            ? {
+                name: 'HEAD',
+                target: 'refs/heads/main',
+                revision: REF_REVISION,
+              }
+            : {
+                name,
+                commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
+                revision:
+                  name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+              },
+        diagnostics: [],
+      },
+    })),
     listRefs: jest.fn(async () => ({
       ok: true,
       value: {
@@ -132,7 +183,7 @@ export function createWorkbook(
             revision: REF_REVISION,
           },
           {
-            name: 'refs/heads/scenario/budget',
+            name: 'refs/heads/budget',
             commitId: PARENT_COMMIT_ID,
             revision: { kind: 'counter', value: '2' },
           },
@@ -140,32 +191,8 @@ export function createWorkbook(
         limit: 2,
       },
     })),
-    listReviews: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    listProposals: jest.fn(async () => ({
-      ok: true,
-      value: {
-        items: [],
-        limit: 5,
-      },
-    })),
-    commit: jest.fn(async () => ({
-      ok: true,
-      value: {
-        id: HEAD_COMMIT_ID,
-        parents: [PARENT_COMMIT_ID],
-        createdAt: '2026-06-22T10:15:00.000Z',
-        author: { redacted: false, displayName: 'Reviewer' },
-        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
-      },
-    })),
     createBranch: jest.fn(
-      async (options: Parameters<VersionHistoryWorkbook['version']['createBranch']>[0]) => ({
+      async (options: Parameters<VersionHistoryVersion['refs']['createBranch']>[0]) => ({
         ok: true,
         value: {
           name: options.name,
@@ -184,7 +211,53 @@ export function createWorkbook(
         diagnostics: [],
       },
     })),
-    checkout: jest.fn(async () => ({
+    ...refsOverrides,
+  };
+  const reviews = {
+    advanced: {
+      listReviews: jest.fn(async () => ({
+        ok: true,
+        value: {
+          items: [],
+          limit: 5,
+        },
+      })),
+      ...reviewsOverrides?.advanced,
+    },
+  };
+  const proposals = {
+    list: jest.fn(async () => ({
+      ok: true,
+      value: {
+        items: [],
+        limit: 5,
+      },
+    })),
+    ...proposalsOverrides,
+  };
+  const version = {
+    getSurfaceStatus: jest.fn(async () => createSurfaceStatus()),
+    getStatus: jest.fn(async () => ({ schemaVersion: 1, rolloutStage: 'headless-local' })),
+    ...directVersionMethods,
+    commitCurrent: jest.fn(async () => ({
+      ok: true,
+      value: {
+        id: HEAD_COMMIT_ID,
+        parents: [PARENT_COMMIT_ID],
+        createdAt: '2026-06-22T10:15:00.000Z',
+        author: { redacted: false, displayName: 'Reviewer' },
+        annotation: { title: { kind: 'text', value: 'Snapshot before review' } },
+      },
+    })),
+    createBranchFromCurrent: jest.fn(async (name) => ({
+      ok: true,
+      value: {
+        name: `refs/heads/${name}`,
+        commitId: HEAD_COMMIT_ID,
+        revision: { kind: 'counter', value: '3' },
+      },
+    })),
+    checkoutBranch: jest.fn(async (name) => ({
       ok: true,
       value: {
         status: 'success',
@@ -193,7 +266,7 @@ export function createWorkbook(
           strategy: 'fullSnapshot',
           target: {
             kind: 'ref',
-            refName: 'refs/heads/scenario/budget',
+            refName: name === 'budget' ? 'refs/heads/budget' : `refs/heads/${name}`,
             commitId: PARENT_COMMIT_ID,
             refRevision: { kind: 'counter', value: '2' },
           },
@@ -206,35 +279,228 @@ export function createWorkbook(
         mutationGuarantee: 'no-workbook-mutation',
       },
     })),
-    diff: jest.fn(async () => ({ ok: true, value: semanticDiffPage([diffEntry()]) })),
-    merge: jest.fn(
-      async (input: Parameters<DirectMergeVersionHistoryWorkbook['version']['merge']>[0]) => ({
-        ok: true,
-        value: cleanMergeResult(input.base, input.ours, input.theirs),
-      }),
-    ),
-    applyMerge: jest.fn(
-      async (input: Parameters<DirectMergeVersionHistoryWorkbook['version']['applyMerge']>[0]) => {
-        const mergeInput = directMergeInput(input);
-        return {
-          ok: true,
-          value: appliedMergeResult(mergeInput.base, mergeInput.ours, mergeInput.theirs),
-        };
+    checkoutCommit: jest.fn(async (commitId) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        materialization: 'planned',
+        plan: {
+          strategy: 'fullSnapshot',
+          target: {
+            kind: 'commit',
+            commitId,
+          },
+          commitId,
+          parentCommitIds: [],
+          requiredDependencies: [],
+          requiredDependencyCount: 0,
+        },
+        diagnostics: [],
+        mutationGuarantee: 'no-workbook-mutation',
       },
-    ),
-    ...overrides,
+    })),
+    refs,
+    reviews,
+    proposals,
+    ...topLevelOverrides,
   };
 
-  return { version } as unknown as DirectMergeVersionHistoryWorkbook;
+  return { version } as unknown as VersionHistoryWorkbook;
 }
 
-export function semanticDiffPage(items: VersionSemanticDiffPage['items']): VersionSemanticDiffPage {
+export function semanticDiffPage(
+  items: VersionSemanticDiffPage['items'],
+  options: { readonly nextCursor?: VersionSemanticDiffPage['nextCursor'] } = {},
+): VersionSemanticDiffPage {
   return {
     items,
+    ...(options.nextCursor ? { nextCursor: options.nextCursor } : {}),
     limit: 50,
     readRevision: { kind: 'counter', value: '4' },
     order: 'semantic-change-order',
   };
+}
+
+export function workingTreeDiffPage(
+  items: VersionSemanticDiffPage['items'],
+  options: { readonly nextCursor?: VersionSemanticDiffPage['nextCursor'] } = {},
+): VersionWorkingTreeDiffPage {
+  const workingTreeDiffId =
+    `working-tree-diff:sha256:${'d'.repeat(64)}` as VersionWorkingTreeDiffPage['workingTreeDiffId'];
+  const targetRef = 'refs/heads/main' as const;
+  const captureRevision = 1;
+  const dirtyStatusRevision = '1';
+  const checkoutPreflightToken = 'token-1';
+  const baseSemanticStateDigest = {
+    algorithm: 'sha256' as const,
+    digest: 'base-semantic-state',
+  };
+  const currentSemanticStateDigest = {
+    algorithm: 'sha256' as const,
+    digest: 'current-semantic-state',
+  };
+  const overview = versionDiffOverview({
+    baseCommitId: HEAD_COMMIT_ID,
+    exactTotalChanges: items.length,
+  });
+  delete (overview as { targetCommitId?: WorkbookCommitId }).targetCommitId;
+  return {
+    ...semanticDiffPage(items, options),
+    kind: 'workingTree',
+    workingTreeDiffId,
+    baseCommitId: HEAD_COMMIT_ID,
+    targetRef,
+    captureRevision,
+    dirtyStatusRevision,
+    checkoutPreflightToken,
+    baseSemanticStateDigest,
+    currentSemanticStateDigest,
+    overview: {
+      ...overview,
+      kind: 'workingTree',
+      workingTreeDiffId,
+      targetRef,
+      captureRevision,
+      dirtyStatusRevision,
+      checkoutPreflightToken,
+      baseSemanticStateDigest,
+      currentSemanticStateDigest,
+    },
+  };
+}
+
+export function versionDiffOverview({
+  baseCommitId = PARENT_COMMIT_ID,
+  targetCommitId = HEAD_COMMIT_ID,
+  exactTotalChanges = 1,
+  summary: summaryOverrides = {},
+  groups,
+}: {
+  readonly baseCommitId?: WorkbookCommitId;
+  readonly targetCommitId?: WorkbookCommitId;
+  readonly exactTotalChanges?: number | null;
+  readonly summary?: Partial<VersionDiffOverview['summary']>;
+  readonly groups?: readonly VersionDiffGroup[];
+} = {}): VersionDiffOverview {
+  const hasExactTotalChanges = exactTotalChanges !== null;
+  const groupChangeCount = hasExactTotalChanges
+    ? exactTotalChanges
+    : (summaryOverrides.minimumChangeCount ?? 1);
+
+  return {
+    baseCommitId,
+    targetCommitId,
+    readRevision: { kind: 'counter', value: '4' },
+    order: 'semantic-change-order',
+    summary: {
+      ...(hasExactTotalChanges ? { exactTotalChanges } : {}),
+      countPrecision: 'exact',
+      domainCounts: hasExactTotalChanges
+        ? [
+            {
+              domain: 'cells',
+              exactCount: exactTotalChanges,
+              countPrecision: 'exact',
+            },
+          ]
+        : [],
+      operationCounts: hasExactTotalChanges
+        ? [
+            {
+              operation: 'changed',
+              exactCount: exactTotalChanges,
+              countPrecision: 'exact',
+            },
+          ]
+        : [],
+      incomplete: false,
+      diagnostics: [],
+      ...summaryOverrides,
+    },
+    groups: {
+      items:
+        groups ??
+        (groupChangeCount > 0
+          ? [
+              {
+                groupId: DIFF_GROUP_ID,
+                key: {
+                  kind: 'cellRange',
+                  sheetId: 'sheet-1',
+                  domain: 'cells',
+                  operation: 'changed',
+                  rowStart: 1,
+                  rowEnd: 1,
+                  columnStart: 1,
+                  columnEnd: 1,
+                },
+                kind: 'cellRange',
+                domain: 'cells',
+                sheetId: 'sheet-1',
+                sheetName: { kind: 'value', value: 'Sheet1' },
+                address: { kind: 'value', value: 'A1' },
+                operation: 'changed',
+                changeCount: groupChangeCount,
+                countPrecision: 'exact',
+                sampleChangeIds: ['change-1'],
+                hasDetail: true,
+                diagnostics: [],
+              },
+            ]
+          : []),
+      limit: 50,
+    },
+    unsupportedFilters: [],
+    diagnostics: [],
+  };
+}
+
+export function createCleanMergeReview(
+  overrides: Partial<VersionMergeReview> = {},
+): VersionMergeReview {
+  const review = {
+    schemaVersion: 1,
+    status: 'clean',
+    from: {
+      kind: 'branch',
+      name: 'budget',
+      refName: 'refs/heads/budget',
+      commitId: PARENT_COMMIT_ID,
+    },
+    into: {
+      kind: 'current',
+      commitId: HEAD_COMMIT_ID,
+      refName: 'refs/heads/main',
+      detached: false,
+    },
+    changes: [],
+    conflicts: [],
+    selectedResolutions: [],
+    diagnostics: [],
+    choose: jest.fn(),
+    chooseAll: jest.fn(),
+    save: jest.fn(),
+    toApplyInput: jest.fn(),
+    apply: jest.fn(async () => ({
+      ok: true,
+      value: {
+        status: 'applied',
+        commitRef: {
+          id: LATEST_COMMIT_ID,
+          refName: 'refs/heads/main',
+          refRevision: REF_REVISION,
+        },
+        diagnostics: [],
+      },
+    })),
+    ...overrides,
+  } as unknown as VersionMergeReview;
+  return {
+    ...review,
+    choose: jest.fn(() => review),
+    chooseAll: jest.fn(() => review),
+    ...overrides,
+  } as VersionMergeReview;
 }
 
 export function diffEntry({
@@ -254,6 +520,11 @@ export function diffEntry({
     },
     before: { kind: 'value', value: { kind: 'blank' } },
     after: { kind: 'value', value: '42' },
+    display: {
+      sheetName: { kind: 'value', value: 'Sheet1' },
+      address: { kind: 'value', value: 'A1' },
+      entityLabel: { kind: 'value', value: 'Cell' },
+    },
     ...(diagnostics ? { diagnostics } : {}),
   };
 }
@@ -266,105 +537,6 @@ export function diffDiagnostic(issueCode: string, recoverability: 'retry' | 'uns
     messageTemplateId: `version.diff.${issueCode}`,
     safeMessage: issueCode,
     redacted: true,
-  };
-}
-
-export function cleanMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  changes: readonly VersionMergeChange[] = [mergeChange()],
-): VersionMergeResult {
-  return {
-    status: 'clean',
-    base,
-    ours,
-    theirs,
-    changes,
-    conflicts: [],
-    diagnostics: [],
-    mutationGuarantee: 'preview-only',
-  };
-}
-
-export function conflictedMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  conflict: VersionMergeConflict = sameCellMergeConflict(),
-): VersionMergeResult {
-  return {
-    status: 'conflicted',
-    base,
-    ours,
-    theirs,
-    changes: [],
-    conflicts: [conflict],
-    diagnostics: [],
-    mutationGuarantee: 'preview-only',
-  };
-}
-
-export function appliedMergeResult(
-  base: WorkbookCommitId,
-  ours: WorkbookCommitId,
-  theirs: WorkbookCommitId,
-  changes: readonly VersionMergeChange[] = [mergeChange()],
-): VersionApplyMergeResult {
-  return {
-    status: 'applied',
-    base,
-    ours,
-    theirs,
-    commitRef: {
-      id: MERGE_COMMIT_ID,
-      refName: 'refs/heads/main',
-      refRevision: { kind: 'counter', value: '5' },
-    },
-    changes,
-    conflicts: [],
-    diagnostics: [],
-    resolutionCount: 0,
-    mutationGuarantee: 'merge-commit-created',
-  };
-}
-
-export function sameCellMergeConflict(): VersionMergeConflict {
-  const conflictId = 'conflict:sha256:same-cell-a1';
-  return {
-    conflictId,
-    conflictDigest: 'sha256:same-cell-a1',
-    conflictKind: 'same-property',
-    structural: {
-      kind: 'metadata',
-      changeId: 'merge-conflict-a1',
-      domain: 'cells.values',
-      entityId: 'sheet-1!A1',
-      propertyPath: ['value'],
-    },
-    base: { kind: 'value', value: 'base' },
-    ours: { kind: 'value', value: 'ours' },
-    theirs: { kind: 'value', value: 'theirs' },
-    resolutionOptions: [
-      mergeResolutionOption(conflictId, 'acceptOurs', 'ours'),
-      mergeResolutionOption(conflictId, 'acceptTheirs', 'theirs'),
-      mergeResolutionOption(conflictId, 'acceptBase', 'base'),
-    ],
-  };
-}
-
-export function mergeResolutionFor(
-  conflict: VersionMergeConflict,
-  kind: VersionApplyMergeResolution['kind'],
-): VersionApplyMergeResolution {
-  const option = conflict.resolutionOptions.find((candidate) => candidate.kind === kind);
-  if (!option) throw new Error(`Missing merge resolution option ${kind}`);
-
-  return {
-    conflictId: conflict.conflictId,
-    expectedConflictDigest: conflict.conflictDigest,
-    optionId: option.optionId,
-    kind,
   };
 }
 
@@ -486,7 +658,7 @@ export function expectReasonById(id: string, reason: string): void {
 export function expectDisabledButtonReason(button: HTMLElement, reason: string): void {
   expect(button).toBeDisabled();
   expect(button).toHaveAccessibleDescription(reason);
-  expect(screen.getAllByText(reason)[0]).toBeVisible();
+  expect(screen.getAllByText(reason).length).toBeGreaterThan(0);
 }
 
 export function failedInvalidState<T = never>(reason: string): VersionResult<T> {
@@ -507,71 +679,48 @@ export function failedNotFound<T = never>(target: string, reason: string): Versi
   return { ok: false, error: { code: 'not_found', target, reason } };
 }
 
-export function branchTargetTestId(commitId: string): string {
-  return `version-history-branch-target-${safeDomId(commitId)}`;
+export function commitRowTestId(commitId: string): string {
+  return `version-history-commit-row-${safeDomId(commitId)}`;
+}
+
+export function commitMenuButtonTestId(commitId: string): string {
+  return `version-history-commit-menu-button-${safeDomId(commitId)}`;
+}
+
+export function checkoutCommitTestId(commitId: string): string {
+  return `version-history-checkout-commit-${safeDomId(commitId)}`;
+}
+
+export function createBranchFromCommitTestId(commitId: string): string {
+  return `version-history-create-branch-from-commit-${safeDomId(commitId)}`;
+}
+
+export function commitBranchNameInputTestId(commitId: string): string {
+  return `version-history-commit-branch-name-input-${safeDomId(commitId)}`;
+}
+
+export function createBranchFromCommitSubmitTestId(commitId: string): string {
+  return `version-history-create-branch-from-commit-submit-${safeDomId(commitId)}`;
 }
 
 export function checkoutBranchTestId(refName: string): string {
   return `version-history-checkout-branch-${safeDomId(refName)}`;
 }
 
+export async function openCurrentBranchMenu(user: VersionHistoryPanelUser): Promise<HTMLElement> {
+  const menu = screen.getByTestId('version-history-current-branch-menu');
+  if (menu.getAttribute('data-state') !== 'open') {
+    await user.click(screen.getByTestId('version-history-current-branch-trigger'));
+    await waitFor(() => expect(menu).toHaveAttribute('data-state', 'open'));
+    await screen.findByTestId('version-history-branch-name-input');
+  }
+  return menu;
+}
+
 export function parentDiffButtonTestId(commitId: string): string {
   return `version-history-parent-diff-button-${safeDomId(commitId)}`;
 }
 
-export function mergeSourceRefSelectTestId(): string {
-  return 'version-merge-source-ref-select';
-}
-
-export function mergePreviewButtonTestId(): string {
-  return 'version-merge-preview-button';
-}
-
-export function mergeApplyButtonTestId(): string {
-  return 'version-merge-apply-button';
-}
-
 export function safeDomId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, '-');
-}
-
-function mergeChange(): VersionMergeChange {
-  return {
-    structural: {
-      kind: 'metadata',
-      changeId: 'merge-change-a1',
-      domain: 'cells.values',
-      entityId: 'sheet-1!A1',
-      propertyPath: ['value'],
-    },
-    base: { kind: 'value', value: 'base' },
-    ours: { kind: 'value', value: 'ours' },
-    theirs: { kind: 'value', value: 'theirs' },
-    merged: { kind: 'value', value: 'theirs' },
-    display: { address: { kind: 'value', value: 'A1' } },
-  };
-}
-
-function mergeResolutionOption(
-  conflictId: string,
-  kind: VersionApplyMergeResolution['kind'],
-  value: string,
-) {
-  return {
-    optionId: `option:${kind}`,
-    conflictId,
-    kind,
-    value: { kind: 'value' as const, value },
-    recalcRequired: true,
-  };
-}
-
-function directMergeInput(input: VersionMergeInput | Parameters<WorkbookVersion['applyMerge']>[0]) {
-  if ('base' in input) return input;
-
-  return {
-    base: PARENT_COMMIT_ID,
-    ours: HEAD_COMMIT_ID,
-    theirs: LATEST_COMMIT_ID,
-  };
 }

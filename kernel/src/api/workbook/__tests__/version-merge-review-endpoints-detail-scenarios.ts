@@ -16,7 +16,7 @@ export function registerMergeReviewEndpointDetailScenarios(): void {
   it('reads conflict detail from a persisted merge preview artifact', async () => {
     await withPersistedConflictPreview('detail-readback', async ({ sourceWb, preview }) => {
       const conflict = preview.conflicts[0];
-      const detail = await sourceWb.version.getMergeConflictDetail({
+      const detail = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -51,7 +51,7 @@ export function registerMergeReviewEndpointDetailScenarios(): void {
       'detail-identity-redaction',
       async ({ sourceWb, preview }) => {
         const conflict = preview.conflicts[0];
-        const detail = await sourceWb.version.getMergeConflictDetail({
+        const detail = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -71,7 +71,7 @@ export function registerMergeReviewEndpointDetailScenarios(): void {
         const unsafePackagePath = 'xl/worksheets/sheet1.xml';
         const unsafeCellPath = 'cells/A1';
         const unsafeValue = 'sk_live_merge_secret';
-        const invalid = await sourceWb.version.getMergeConflictDetail({
+        const invalid = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -109,8 +109,8 @@ export function registerMergeReviewEndpointDetailScenarios(): void {
       const conflict = preview.conflicts[0];
       const staleHead = { ...expectedTargetHead, commitId: `commit:sha256:${'9'.repeat(64)}` as any };
       const target = { targetRef: 'refs/heads/main' as any, expectedTargetHead: staleHead };
-      const detail = await sourceWb.version.getMergeConflictDetail({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, conflictId: conflict.conflictId, expectedConflictDigest: conflictDigestObject(conflict.conflictDigest), valueRole: 'theirs', purpose: 'review', ...target });
-      const saved = await sourceWb.version.saveMergeResolutions({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, resolutions: [], ...target });
+      const detail = await sourceWb.version.artifacts.advanced.getMergeConflictDetail({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, conflictId: conflict.conflictId, expectedConflictDigest: conflictDigestObject(conflict.conflictDigest), valueRole: 'theirs', purpose: 'review', ...target });
+      const saved = await sourceWb.version.artifacts.advanced.saveMergeResolutions({ resultId: preview.resultId, resultDigest: preview.resultDigest, redactionPolicyDigest: preview.resultDigest, resolutions: [], ...target });
       expectPublicDiagnostic(detail, 'getMergeConflictDetail', 'VERSION_MERGE_RESOLUTION_MISMATCH');
       expectPublicDiagnostic(saved, 'saveMergeResolutions', 'VERSION_MERGE_RESOLUTION_MISMATCH');
       for (const result of [detail, saved]) expectNoDiagnosticLeaks(result, [preview.base, preview.ours, preview.theirs, staleHead.commitId, preview.resultDigest.digest]);

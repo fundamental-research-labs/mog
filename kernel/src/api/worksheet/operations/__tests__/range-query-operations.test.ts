@@ -145,7 +145,7 @@ describe('clearWithMode', () => {
     expect(ctx.computeBridge.clearHyperlinksInRange).not.toHaveBeenCalled();
   });
 
-  it('passes direct edit range metadata only to value-clearing bridge calls', async () => {
+  it('passes direct edit range metadata to every clear bridge call', async () => {
     const ctx = createMockCtx();
     const options = {
       operationContext: {
@@ -177,7 +177,7 @@ describe('clearWithMode', () => {
     expect(ctx.computeBridge.clearFormatForRanges).toHaveBeenCalledWith(
       SHEET_ID,
       [[0, 0, 1, 1]],
-      options,
+      captureOptions,
     );
     expect(ctx.computeBridge.clearHyperlinksInRange).toHaveBeenCalledWith(
       SHEET_ID,
@@ -185,7 +185,7 @@ describe('clearWithMode', () => {
       0,
       1,
       1,
-      options,
+      captureOptions,
     );
   });
 

@@ -1,4 +1,6 @@
 import type {
+  VersionDiffGroupDetailOptions,
+  VersionDiffOverviewOptions,
   VersionPageToken,
   VersionRefSelector,
   VersionStoreDiagnostic,
@@ -43,6 +45,16 @@ export type AttachedVersionDiffService = {
     base: NormalizedDiffCommitish,
     target: NormalizedDiffCommitish,
     options?: NormalizedDiffOptions,
+  ) => MaybePromise<unknown>;
+  diffOverview?: (
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+    options?: VersionDiffOverviewOptions,
+  ) => MaybePromise<unknown>;
+  diffGroupDetail?: (
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+    options: VersionDiffGroupDetailOptions,
   ) => MaybePromise<unknown>;
 };
 

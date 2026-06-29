@@ -105,11 +105,11 @@ export async function createMergePreviewArtifactRecord(
     objectType: MERGE_PREVIEW_OBJECT_TYPE,
     schemaVersion: 1,
     payloadEncoding: 'mog-canonical-json-v1',
-    dependencies: [
+    dependencies: uniqueCommitDependencies([
       commitDependency(input.base),
       commitDependency(input.ours),
       commitDependency(input.theirs),
-    ],
+    ]),
     payload: {
       schemaVersion: 1,
       recordKind: 'mergePreview',
@@ -249,6 +249,23 @@ function commitDependency(commitId: PublicWorkbookCommitId): VersionDependencyRe
     commitId: parsed,
     digest: objectDigestFromWorkbookCommitId(parsed),
   };
+}
+
+function uniqueCommitDependencies(
+  dependencies: readonly VersionDependencyRef[],
+): readonly VersionDependencyRef[] {
+  const seen = new Set<string>();
+  const unique: VersionDependencyRef[] = [];
+  for (const dependency of dependencies) {
+    const key =
+      dependency.kind === 'commit'
+        ? `commit:${dependency.commitId}`
+        : `object:${dependency.objectType}:${dependency.digest.digest}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(dependency);
+  }
+  return unique;
 }
 
 function sortedMergeChanges(changes: readonly VersionMergeChange[]): readonly VersionMergeChange[] {

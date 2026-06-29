@@ -10,11 +10,13 @@ export function registerVersionReviewDiagnosticsScenarios(): void {
       }),
     });
 
-    await expect(version.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReview',
+        target: 'workbook.version.reviews.advanced.getReview',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_PROVIDER_ERROR',
@@ -34,7 +36,7 @@ export function registerVersionReviewDiagnosticsScenarios(): void {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getReview',
+          target: 'workbook.version.reviews.advanced.getReview',
           diagnostics: [
             {
               code: 'VERSION_REVIEW_ACCESS_DENIED',
@@ -54,7 +56,7 @@ export function registerVersionReviewDiagnosticsScenarios(): void {
       })),
     });
 
-    const result = await version.getReview({ reviewId: REVIEW_ID });
+    const result = await version.reviews.advanced.getReview({ reviewId: REVIEW_ID });
 
     expect(result).toMatchObject({
       ok: false,

@@ -11,7 +11,7 @@ export function registerRedactedDetailValueScenarios(): void {
         'redacted-option-values',
         async ({ version, preview }) => {
           const conflict = preview.conflicts[0];
-          const detail = await version.getMergeConflictDetail({
+          const detail = await version.artifacts.advanced.getMergeConflictDetail({
             resultId: preview.resultId,
             resultDigest: preview.resultDigest,
             redactionPolicyDigest: preview.resultDigest,

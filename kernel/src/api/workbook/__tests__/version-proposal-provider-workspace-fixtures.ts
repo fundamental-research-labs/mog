@@ -66,7 +66,7 @@ export function graphCommittingWorkspaceService(
           ok: false,
           error: {
             code: 'target_unavailable',
-            target: 'workbook.version.commitProposalWorkspace',
+            target: 'workbook.version.proposals.advanced.commitProposalWorkspace',
             diagnostics: [
               {
                 code: 'TEST_WORKSPACE_COMMIT_FAILED',

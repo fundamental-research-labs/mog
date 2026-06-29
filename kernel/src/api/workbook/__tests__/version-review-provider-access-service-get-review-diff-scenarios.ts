@@ -88,7 +88,7 @@ export function registerReviewProviderAccessServiceGetReviewDiffScenarios(): voi
       },
     } as any);
 
-    const result = await version.getReviewDiff({
+    const result = await version.reviews.advanced.getReviewDiff({
       baseCommitId: BASE_COMMIT_ID,
       headCommitId: HEAD_COMMIT_ID,
     });
@@ -97,7 +97,7 @@ export function registerReviewProviderAccessServiceGetReviewDiffScenarios(): voi
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
         diagnostics: [
           expect.objectContaining({
             code: 'indexKeyedVisibility',

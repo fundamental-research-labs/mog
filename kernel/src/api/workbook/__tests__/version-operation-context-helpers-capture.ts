@@ -10,6 +10,14 @@ type DirectEditExpectation = {
   readonly col: number;
 };
 
+type DirectEditRangeExpectation = {
+  readonly sheetId: string;
+  readonly startRow: number;
+  readonly startCol: number;
+  readonly endRow: number;
+  readonly endCol: number;
+};
+
 type MutationCapture = {
   recordPreMutation: jest.Mock;
   recordMutationResult: jest.Mock;
@@ -28,6 +36,7 @@ export function expectCapturedContext(
     domainIds: readonly string[];
     sheetIds?: readonly string[];
     directEdits?: readonly DirectEditExpectation[];
+    directEditRanges?: readonly DirectEditRangeExpectation[];
   },
 ): void {
   const operationContext = expect.objectContaining({
@@ -49,6 +58,7 @@ export function expectCapturedContext(
     operation: expected.operation,
     operationContext,
     ...(expected.directEdits ? { directEdits: [...expected.directEdits] } : {}),
+    ...(expected.directEditRanges ? { directEditRanges: [...expected.directEditRanges] } : {}),
   });
   expect(capture.recordPreMutation).toHaveBeenCalledWith(captureInput);
   expect(capture.recordMutationResult).toHaveBeenCalledWith(
@@ -56,6 +66,7 @@ export function expectCapturedContext(
       operation: expected.operation,
       operationContext,
       ...(expected.directEdits ? { directEdits: [...expected.directEdits] } : {}),
+      ...(expected.directEditRanges ? { directEditRanges: [...expected.directEditRanges] } : {}),
     }),
   );
 }

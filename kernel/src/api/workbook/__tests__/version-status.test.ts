@@ -49,7 +49,8 @@ describe('WorkbookVersion status slice', () => {
     );
 
     expect('listCommits' in wb.version).toBe(true);
-    expect('readRef' in wb.version).toBe(true);
+    expect('refs' in wb.version).toBe(true);
+    expect('readRef' in wb.version.refs).toBe(true);
     expect('commit' in wb.version).toBe(true);
     expect('merge' in wb.version).toBe(true);
     expect('diff' in wb.version).toBe(true);
@@ -61,10 +62,11 @@ describe('WorkbookVersion status slice', () => {
     expect('checkout' in wb.version).toBe(true);
     expect('merge' in wb.version).toBe(true);
     expect('diff' in wb.version).toBe(true);
-    expect('createBranch' in wb.version).toBe(true);
-    expect('listRefs' in wb.version).toBe(true);
-    expect('fastForwardBranch' in wb.version).toBe(true);
-    expect('updateBranch' in wb.version).toBe(true);
-    expect('deleteBranch' in wb.version).toBe(true);
+    expect('refs' in wb.version).toBe(true);
+    expect('createBranch' in wb.version.refs).toBe(true);
+    expect('listRefs' in wb.version.refs).toBe(true);
+    expect('fastForwardBranch' in wb.version.refs).toBe(true);
+    expect('updateBranch' in wb.version.refs).toBe(true);
+    expect('deleteBranch' in wb.version.refs).toBe(true);
   });
 });

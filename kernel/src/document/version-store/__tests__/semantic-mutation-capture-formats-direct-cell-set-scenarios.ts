@@ -7,6 +7,40 @@ import {
 } from './semantic-mutation-capture-formats-helpers';
 
 export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): void {
+  it('treats default General direct format writes as semantic no-ops', () => {
+    const capture = createFormatSemanticMutationCapture();
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_format_for_ranges',
+      operationContext: operationContext(),
+      result: mutationResult({
+        propertyChanges: [
+          {
+            sheetId: 'sheet-1',
+            cellId: 'cell-a1',
+            position: { row: 0, col: 0 },
+            kind: 'Set',
+            format: { numberFormat: 'General' },
+          },
+          {
+            sheetId: 'sheet-1',
+            cellId: 'cell-b1',
+            position: { row: 0, col: 1 },
+            kind: 'Set',
+            format: {},
+          },
+        ],
+      }),
+    });
+
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 0,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: false,
+      hasUncapturedNormalMutations: false,
+    });
+  });
+
   it('captures a single-cell direct format property change as cells.formats.direct', async () => {
     const capture = createFormatSemanticMutationCapture();
 
@@ -54,6 +88,13 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
             },
           },
           display: { address: { kind: 'value', value: 'A1' } },
+          historical: {
+            cell: {
+              sheetId: 'sheet-1',
+              row: 0,
+              column: 0,
+            },
+          },
         },
       ],
     });
@@ -104,6 +145,7 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
       structural: { changeId: string; entityId: string };
       after: { value: unknown };
       display: { address: { value: string } };
+      historical: { cell: { sheetId: string; row: number; column: number } };
     }>;
 
     expect(changes).toHaveLength(2);
@@ -124,6 +166,10 @@ export function registerSemanticMutationCaptureDirectCellSetFormatScenarios(): v
       },
     ]);
     expect(changes.map((change) => change.display.address.value)).toEqual(['A1', 'B1']);
+    expect(changes.map((change) => change.historical.cell)).toEqual([
+      { sheetId: 'sheet-1', row: 0, column: 0 },
+      { sheetId: 'sheet-1', row: 0, column: 1 },
+    ]);
     expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
       changeIds: ['mutation-1:cell-format:0', 'mutation-1:cell-format:1'],
     });

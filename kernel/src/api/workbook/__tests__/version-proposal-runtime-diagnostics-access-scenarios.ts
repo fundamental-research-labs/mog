@@ -13,7 +13,7 @@ export function registerProposalRuntimeDiagnosticsAccessScenarios(): void {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getProposal',
+          target: 'workbook.version.proposals.advanced.getProposal',
           diagnostics: [
             {
               code: 'VERSION_PROPOSAL_ACCESS_DENIED',
@@ -36,7 +36,7 @@ export function registerProposalRuntimeDiagnosticsAccessScenarios(): void {
       versioning: { proposalService },
     });
 
-    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
+    const result = await version.proposals.advanced.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: false,
@@ -68,7 +68,7 @@ export function registerProposalRuntimeDiagnosticsAccessScenarios(): void {
         ok: false,
         error: {
           code: 'target_unavailable',
-          target: 'workbook.version.getProposal',
+          target: 'workbook.version.proposals.advanced.getProposal',
           diagnostics: [
             {
               code: 'VERSION_PROPOSAL_ACCESS_DENIED',
@@ -105,7 +105,7 @@ export function registerProposalRuntimeDiagnosticsAccessScenarios(): void {
       versioning: { proposalService },
     });
 
-    const result = await version.getProposal({ proposalId: PROPOSAL_ID } as any);
+    const result = await version.proposals.advanced.getProposal({ proposalId: PROPOSAL_ID } as any);
 
     expect(result).toMatchObject({
       ok: false,

@@ -27,6 +27,9 @@ import type {
 
 import type { StoreCellData } from '@mog-sdk/contracts/store';
 import type { DocumentContext } from '../../context/types';
+import { withDirectEditRange } from '../../bridges/compute';
+import { createCellWriteVersionMutationOptions } from '../../api/internal/cell-write-version-options';
+import { createVersionOperationContext } from '../../api/internal/version-operation-context';
 
 // =============================================================================
 // Internal Helpers
@@ -106,7 +109,20 @@ export function clearRange(
     }
 
     if (cellIds.length > 0) {
-      void ctx.computeBridge.batchClearCells(cellIds);
+      void ctx.computeBridge.batchClearCells(
+        cellIds,
+        withDirectEditRange(
+          createCellWriteVersionMutationOptions(ctx, {
+            operationIdPrefix: 'cells.clearRange',
+            sheetIds: [sheetId],
+          }),
+          sheetId,
+          startRow,
+          startCol,
+          endRow,
+          endCol,
+        ),
+      );
     }
   })();
 }
@@ -153,7 +169,20 @@ export async function clearRangeAndReturnIds(
   }
 
   if (cellIds.length > 0) {
-    void ctx.computeBridge.batchClearCells(cellIds);
+    void ctx.computeBridge.batchClearCells(
+      cellIds,
+      withDirectEditRange(
+        createCellWriteVersionMutationOptions(ctx, {
+          operationIdPrefix: 'cells.clearRangeAndReturnIds',
+          sheetIds: [sheetId],
+        }),
+        sheetId,
+        range.startRow,
+        range.startCol,
+        range.endRow,
+        range.endCol,
+      ),
+    );
   }
 
   return cellIds;
@@ -211,6 +240,29 @@ export async function relocateCells(
   _options: { clearTarget?: boolean } = { clearTarget: true },
 ): Promise<RelocationResult> {
   try {
+    const rowCount = sourceRange.endRow - sourceRange.startRow + 1;
+    const colCount = sourceRange.endCol - sourceRange.startCol + 1;
+    const admissionOptions = withDirectEditRange(
+      withDirectEditRange(
+        {
+          operationContext: createVersionOperationContext(ctx, {
+            operationIdPrefix: 'cells.relocateCells',
+            sheetIds: uniqueSheetIds([sourceSheetId, targetSheetId]),
+            domainIds: ['cells', 'cells.formats.direct'],
+          }),
+        },
+        sourceSheetId,
+        sourceRange.startRow,
+        sourceRange.startCol,
+        sourceRange.endRow,
+        sourceRange.endCol,
+      ),
+      targetSheetId,
+      targetStart.row,
+      targetStart.col,
+      targetStart.row + rowCount - 1,
+      targetStart.col + colCount - 1,
+    );
     await ctx.computeBridge.relocateCellsYrs(
       sourceSheetId,
       sourceRange.startRow,
@@ -220,6 +272,7 @@ export async function relocateCells(
       targetSheetId,
       targetStart.row,
       targetStart.col,
+      admissionOptions,
     );
 
     return {
@@ -235,6 +288,10 @@ export async function relocateCells(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+function uniqueSheetIds(sheetIds: readonly SheetId[]): SheetId[] {
+  return Array.from(new Set(sheetIds));
 }
 
 // =============================================================================

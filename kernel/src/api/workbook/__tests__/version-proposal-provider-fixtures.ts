@@ -68,16 +68,18 @@ export async function createReadyReviewedProposal(
   suffix: string,
   options: { readonly approveReview?: boolean } = {},
 ) {
-  const created = await version.createProposal(createProposalInput(`proposal-create-${suffix}`));
+  const created = await version.proposals.advanced.createProposal(
+    createProposalInput(`proposal-create-${suffix}`),
+  );
   if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
-  const opened = await version.startProposalWorkspace({
+  const opened = await version.proposals.advanced.startProposalWorkspace({
     clientRequestId: `workspace-open-${suffix}`,
     proposalId: created.value.id,
     expectedRevision: 1,
     actor: ACTOR,
   });
   if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
-  const committed = await version.commitProposalWorkspace({
+  const committed = await version.proposals.advanced.commitProposalWorkspace({
     clientRequestId: `workspace-commit-${suffix}`,
     proposalId: created.value.id,
     workspaceId: opened.value.workspaceId,
@@ -86,7 +88,7 @@ export async function createReadyReviewedProposal(
     message: 'Agent proposal commit',
   });
   if (!committed.ok) throw new Error(`expected proposal commit success: ${committed.error.code}`);
-  const verified = await version.markProposalVerified({
+  const verified = await version.proposals.advanced.markProposalVerified({
     clientRequestId: `proposal-verify-${suffix}`,
     proposalId: created.value.id,
     expectedRevision: 3,
@@ -94,7 +96,7 @@ export async function createReadyReviewedProposal(
     verification: PASSED_VERIFICATION,
   });
   if (!verified.ok) throw new Error(`expected proposal verify success: ${verified.error.code}`);
-  const review = await version.openProposalReview({
+  const review = await version.proposals.advanced.openProposalReview({
     clientRequestId: `proposal-review-${suffix}`,
     proposalId: created.value.id,
     expectedRevision: 4,
@@ -125,7 +127,7 @@ export function approveReview(
   expectedRevision: number,
   clientRequestId: string,
 ) {
-  return version.updateReviewStatus({
+  return version.reviews.advanced.updateReviewStatus({
     reviewId,
     expectedRevision,
     clientRequestId,

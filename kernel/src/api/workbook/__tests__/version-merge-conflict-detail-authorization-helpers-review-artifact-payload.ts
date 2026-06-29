@@ -20,7 +20,7 @@ export async function putResolutionPayload(input: {
   readonly purpose: 'chooseValue' | 'custom';
   readonly domainPayloadSchema?: string;
 }) {
-  const result = await input.version.putMergeResolutionPayload({
+  const result = await input.version.artifacts.advanced.putMergeResolutionPayload({
     resultId: input.preview.resultId,
     resultDigest: input.preview.resultDigest,
     redactionPolicyDigest: input.redactionPolicyDigest,

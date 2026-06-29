@@ -1,5 +1,6 @@
 import type {
   VersionDiffOptions,
+  ObjectDigest,
   VersionPageToken,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
@@ -20,6 +21,8 @@ import {
 } from './diff-service-order-key';
 
 const VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX = 'vc04diff';
+const VERSION_DIFF_INTERNAL_GROUP_PAGE_TOKEN_PREFIX = 'vc04diffo';
+const VERSION_DIFF_INTERNAL_GROUP_DETAIL_TOKEN_PREFIX = 'vc04diffd';
 const VERSION_DIFF_CURSOR_CACHE_MAX_ENTRIES = 512;
 
 type PublicCursorCacheEntry = {
@@ -35,6 +38,16 @@ export type ParsedPageToken =
   | {
       readonly ok: true;
       readonly cursor: SemanticDiffPageCursor;
+    }
+  | {
+      readonly ok: false;
+      readonly diagnostics: readonly DiffServiceDiagnostic[];
+    };
+
+export type ParsedOffsetPageToken =
+  | {
+      readonly ok: true;
+      readonly offset: number;
     }
   | {
       readonly ok: false;
@@ -163,12 +176,120 @@ export function internalPageTokenForOrderKey(
   return `${VERSION_DIFF_INTERNAL_PAGE_TOKEN_PREFIX}k:${baseCommitId}:${targetCommitId}:${encodeURIComponent(JSON.stringify(orderKey))}` as VersionPageToken;
 }
 
+export function internalGroupPageTokenForOffset(input: {
+  readonly baseCommitId: WorkbookCommitId;
+  readonly targetCommitId: WorkbookCommitId;
+  readonly changeSetDigest: ObjectDigest;
+  readonly projectionDigest: ObjectDigest;
+  readonly offset: number;
+}): VersionPageToken {
+  return internalJsonPageToken(VERSION_DIFF_INTERNAL_GROUP_PAGE_TOKEN_PREFIX, input);
+}
+
+export function internalGroupDetailPageTokenForOffset(input: {
+  readonly baseCommitId: WorkbookCommitId;
+  readonly targetCommitId: WorkbookCommitId;
+  readonly changeSetDigest: ObjectDigest;
+  readonly projectionDigest: ObjectDigest;
+  readonly groupId: string;
+  readonly offset: number;
+}): VersionPageToken {
+  return internalJsonPageToken(VERSION_DIFF_INTERNAL_GROUP_DETAIL_TOKEN_PREFIX, input);
+}
+
+export function parseGroupPageToken(
+  token: VersionPageToken | string | undefined,
+  expected: {
+    readonly baseCommitId: WorkbookCommitId;
+    readonly targetCommitId: WorkbookCommitId;
+    readonly changeSetDigest: ObjectDigest;
+    readonly projectionDigest: ObjectDigest;
+  },
+): ParsedOffsetPageToken {
+  return parseJsonOffsetPageToken(token, VERSION_DIFF_INTERNAL_GROUP_PAGE_TOKEN_PREFIX, expected);
+}
+
+export function parseGroupDetailPageToken(
+  token: VersionPageToken | string | undefined,
+  expected: {
+    readonly baseCommitId: WorkbookCommitId;
+    readonly targetCommitId: WorkbookCommitId;
+    readonly changeSetDigest: ObjectDigest;
+    readonly projectionDigest: ObjectDigest;
+    readonly groupId: string;
+  },
+): ParsedOffsetPageToken {
+  return parseJsonOffsetPageToken(token, VERSION_DIFF_INTERNAL_GROUP_DETAIL_TOKEN_PREFIX, expected);
+}
+
 export function publicPageTokenFor(internalToken: VersionPageToken): VersionPageToken {
   evictPublicDiffCursorCache();
   const publicToken =
     `${VERSION_DIFF_PUBLIC_CURSOR_PREFIX}${nextPublicCursorHandle()}` as VersionPageToken;
   PUBLIC_DIFF_CURSOR_CACHE.set(publicToken, { internalToken });
   return publicToken;
+}
+
+function internalJsonPageToken(
+  prefix: string,
+  payload: Readonly<Record<string, unknown>>,
+): VersionPageToken {
+  return `${prefix}:${encodeURIComponent(JSON.stringify(payload))}` as VersionPageToken;
+}
+
+function parseJsonOffsetPageToken(
+  token: VersionPageToken | string | undefined,
+  prefix: string,
+  expected: Readonly<Record<string, unknown>>,
+): ParsedOffsetPageToken {
+  if (token === undefined) return { ok: true, offset: 0 };
+  const publicCursor = resolvePublicPageToken(token);
+  if (!publicCursor.ok) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('VERSION_STALE_PAGE_CURSOR', publicCursor.safeMessage, {
+          recoverability: 'retry',
+          details: publicCursor.details,
+        }),
+      ],
+    };
+  }
+  const encoded = publicCursor.internalToken.startsWith(`${prefix}:`)
+    ? publicCursor.internalToken.slice(prefix.length + 1)
+    : null;
+  if (!encoded) {
+    return {
+      ok: false,
+      diagnostics: [
+        diagnostic('VERSION_STALE_PAGE_CURSOR', 'diff pageToken does not match this diff request.'),
+      ],
+    };
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(decodeURIComponent(encoded));
+  } catch {
+    return staleJsonPageToken('diff pageToken carries an invalid projection cursor.');
+  }
+  const payloadRecord = isRecord(payload) ? payload : undefined;
+  const offset = payloadRecord?.offset;
+  if (!payloadRecord || typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0) {
+    return staleJsonPageToken('diff pageToken carries an invalid page offset.');
+  }
+  for (const [key, value] of Object.entries(expected)) {
+    if (!jsonValuesEqual(payloadRecord[key], value)) {
+      return staleJsonPageToken('diff pageToken does not match this diff request.');
+    }
+  }
+  return { ok: true, offset };
+}
+
+function staleJsonPageToken(safeMessage: string): ParsedOffsetPageToken {
+  return {
+    ok: false,
+    diagnostics: [diagnostic('VERSION_STALE_PAGE_CURSOR', safeMessage)],
+  };
 }
 
 function parsePageOffset(value: string): number | null {
@@ -258,4 +379,29 @@ function evictPublicDiffCursorCache(): void {
     if (!oldest) return;
     PUBLIC_DIFF_CURSOR_CACHE.delete(oldest);
   }
+}
+
+function jsonValuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((entry, index) => jsonValuesEqual(entry, right[index]))
+    );
+  }
+  if (!isRecord(left) || !isRecord(right)) return false;
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) => key === rightKeys[index] && jsonValuesEqual(left[key], right[key]),
+    )
+  );
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null;
 }

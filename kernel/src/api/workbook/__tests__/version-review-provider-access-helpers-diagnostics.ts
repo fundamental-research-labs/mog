@@ -8,7 +8,7 @@ export function expectMergeReviewDiagnostic(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.artifacts.advanced.${operation}`,
       diagnostics: [
         expect.objectContaining({
           code,

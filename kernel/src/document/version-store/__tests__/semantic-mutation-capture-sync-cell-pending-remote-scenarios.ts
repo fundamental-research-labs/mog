@@ -60,7 +60,13 @@ export function describePendingRemoteSyncCellScenarios(): void {
           after: { kind: 'value', value: { kind: 'formula', formula: '=A3*2', result: 8 } },
           display: {
             address: { kind: 'value', value: 'B3' },
-            entityLabel: { kind: 'value', value: 'sheet-remote-1!B3' },
+          },
+          historical: {
+            cell: {
+              sheetId: 'sheet-remote-1',
+              row: 2,
+              column: 1,
+            },
           },
         },
       ],

@@ -20,10 +20,14 @@ import type { VersionStoreProviderKind } from './provider-registry';
 import type { VersionProviderWriteActivityTracker } from './provider-write-activity';
 import type { WorkbookVersionRevertService } from './revert-service';
 import type { WorkbookVersionReviewService } from './review-service';
-import type { SemanticMutationCaptureServices } from './semantic-mutation-capture';
+import type {
+  SemanticMutationCaptureServices,
+  SemanticMutationSheetNameReader,
+} from './semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import type { VersionHistoryRootKind } from './version-history-root-policy';
+import type { WorkbookVersionWorkingTreeDiffService } from './working-tree-diff-service';
 import type { XlsxVersionExistingGraphImportInput } from './xlsx-import-root';
 
 type MaybePromise<T> = T | Promise<T>;
@@ -54,12 +58,14 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly readSheetName?: SemanticMutationSheetNameReader;
   readonly pendingRemotePromotionService?: Pick<
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'
   >;
   readonly revertService?: Pick<WorkbookVersionRevertService, 'revert'>;
   readonly reviewService?: WorkbookVersionReviewService;
+  readonly workingTreeDiffService?: Pick<WorkbookVersionWorkingTreeDiffService, 'diffWorkingTree'>;
   readonly providerWriteActivityTracker?: VersionProviderWriteActivityTracker;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;

@@ -22,13 +22,13 @@ export function registerProviderW8CasTombstoneReloadScenarios(): void {
     const wb = createProviderWorkbook(backend);
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/reload-tombstone' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
     ).resolves.toMatchObject({ ok: true });
     await expect(
-      wb.version.deleteRef({
+      wb.version.refs.deleteRef({
         name: 'scenario/reload-tombstone' as any,
         expectedHead: initialized.rootCommit.id,
         expectedRefRevision: { kind: 'counter', value: '0' },
@@ -47,7 +47,7 @@ export function registerProviderW8CasTombstoneReloadScenarios(): void {
     const reloadedWb = createProviderWorkbook(reloadedBackend);
 
     await expect(
-      reloadedWb.version.readRef('refs/heads/scenario/reload-tombstone' as any),
+      reloadedWb.version.refs.readRef('refs/heads/scenario/reload-tombstone' as any),
     ).resolves.toMatchObject({
       ok: false,
       error: {
@@ -59,14 +59,14 @@ export function registerProviderW8CasTombstoneReloadScenarios(): void {
         ],
       },
     });
-    const listed = await reloadedWb.version.listRefs({ prefix: 'scenario' as any });
+    const listed = await reloadedWb.version.refs.listRefs({ prefix: 'scenario' as any });
     expect(listed.ok).toBe(true);
     if (!listed.ok) throw new Error(`expected reloaded listRefs success: ${listed.error.code}`);
     expect(listed.value.items.map((ref) => ref.name)).not.toContain(
       'refs/heads/scenario/reload-tombstone',
     );
 
-    const recreated = await reloadedWb.version.createBranch({
+    const recreated = await reloadedWb.version.refs.createBranch({
       name: 'scenario/reload-tombstone' as any,
       targetCommitId: initialized.rootCommit.id,
     });

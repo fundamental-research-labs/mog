@@ -44,6 +44,13 @@ export function registerSemanticMutationCaptureDirectCellClearFormatScenarios():
         },
         after: { kind: 'value', value: null },
         display: { address: { kind: 'value', value: 'A1' } },
+        historical: {
+          cell: {
+            sheetId: 'sheet-1',
+            row: 0,
+            column: 0,
+          },
+        },
       },
     ]);
   });

@@ -282,22 +282,16 @@ provider selection through `versionStore`; version operations then live under
 The basic public flow is:
 
 1. Pass `documentId` plus a supported `versionStore` to `createWorkbook(...)`.
-2. Before each commit, read the current head and pass `expectedHead` with the
-   head commit ID and ref revision.
-3. Create branches with `wb.version.createBranch(...)`, then checkout the
-   branch through `wb.version.checkout(...)` after the workbook is clean.
-4. Preview merges with `wb.version.merge(...)`. Preview is read-only.
-5. If the preview is conflicted, choose a resolution for every conflict and pass
-   those conflict IDs, digests, option IDs, and option kinds to
-   `wb.version.applyMerge(...)`.
-6. Apply the accepted merge preview with the same `targetRef` and
-   `expectedTargetHead`. If the target moved, handle `staleTargetHead` by
-   re-reading the target and previewing again. Non-materializing direct applies
-   from an attached active checkout branch may omit `targetRef`; the SDK targets
-   the active branch and uses its current head when `expectedTargetHead` is also
-   omitted.
-7. Revert with a concrete `targetRef` plus a freshly read `expectedTargetHead`
-   so stale target refs fail closed.
+2. Use porcelain methods for common user workflows: `commitCurrent`,
+   `createBranchFromCurrent`, `checkoutBranch`, `checkoutCommit`,
+   `listBranches`, `diffCurrent`, `diffBranch`, `previewMerge`, and
+   `getMergeReview`.
+3. Apply a merge review with `review.apply(...)` after choosing conflict
+   resolutions on the review object.
+4. Use direct lower-level history methods such as `getHead`, `commit`,
+   `checkout`, `merge`, `applyMerge`, and `revert` only when you need explicit
+   CAS, target refs, or custom mutation contracts. Raw ref plumbing such as
+   `readRef` and `createBranch` lives under `wb.version.refs`.
 
 Supported public `versionStore.kind` values are `memory`, `in-memory`,
 `memory-durable-snapshot`, `indexeddb`, and `browser`. Scope durable public
@@ -307,9 +301,6 @@ stores with `workspaceId` and `principalScope`; pass workbook import sources to
 ```javascript
 import { createWorkbook } from '@mog-sdk/sdk';
 
-const mainRef = 'refs/heads/main';
-const budgetRef = 'refs/heads/budget-q1';
-
 function failFromDiagnostics(diagnostics) {
   return diagnostics.map((diagnostic) => diagnostic.safeMessage ?? 'Version diagnostic').join('\n');
 }
@@ -318,12 +309,6 @@ async function valueOf(resultPromise) {
   const result = await resultPromise;
   if (!result.ok) throw new Error(result.error.reason);
   return result.value;
-}
-
-async function readRef(wb, refName) {
-  const result = await valueOf(wb.version.readRef(refName));
-  if (result.status !== 'success') throw new Error(failFromDiagnostics(result.diagnostics));
-  return result.ref;
 }
 
 const wb = await createWorkbook({
@@ -337,83 +322,33 @@ const wb = await createWorkbook({
 });
 
 try {
-  const rootHead = await valueOf(wb.version.getHead());
-  if (!rootHead.refRevision) throw new Error('Main version head is missing its ref revision');
-
   await wb.activeSheet.setCell('A1', 'Base forecast');
-  const baseCommit = await valueOf(
-    wb.version.commit({
-      message: 'Initial budget model',
-      expectedHead: { commitId: rootHead.id, revision: rootHead.refRevision },
-    }),
-  );
-  wb.markClean();
+  const baseCommit = await valueOf(wb.version.commitCurrent({ message: 'Initial budget model' }));
 
-  await valueOf(
-    wb.version.createBranch({
-      name: budgetRef,
-      targetCommitId: baseCommit.id,
-      expectedAbsent: true,
-    }),
-  );
-
-  const checkout = await valueOf(
-    wb.version.checkout({ kind: 'ref', name: budgetRef }, { requireClean: true }),
-  );
+  await valueOf(wb.version.createBranchFromCurrent('budget-q1', { expectedAbsent: true }));
+  const checkout = await valueOf(wb.version.checkoutBranch('budget-q1', { requireClean: true }));
   if (checkout.materialization !== 'applied') {
     throw new Error('Checkout did not materialize workbook state');
   }
 
   await wb.activeSheet.setCell('B2', 1200);
-  const branchHead = await valueOf(wb.version.getHead());
-  if (!branchHead.refRevision) throw new Error('Scenario branch head is missing its revision');
   const branchCommit = await valueOf(
-    wb.version.commit({
-      message: 'Scenario revenue upside',
-      expectedHead: { commitId: branchHead.id, revision: branchHead.refRevision },
-    }),
+    wb.version.commitCurrent({ message: 'Scenario revenue upside' }),
   );
-  wb.markClean();
 
-  await valueOf(wb.version.checkout({ kind: 'ref', name: mainRef }, { requireClean: true }));
-  const mainHead = await readRef(wb, mainRef);
-  const expectedTargetHead = { commitId: mainHead.commitId, revision: mainHead.revision };
+  await valueOf(wb.version.checkoutBranch('main', { requireClean: true }));
+  const diff = await valueOf(wb.version.diffBranch('budget-q1'));
+  console.log(`Branch diff has ${diff.items.length} semantic changes`);
 
-  const preview = await valueOf(
-    wb.version.merge(
-      { base: baseCommit.id, ours: expectedTargetHead.commitId, theirs: branchCommit.id },
-      { mode: 'preview', targetRef: mainRef, expectedTargetHead },
-    ),
+  const review = await valueOf(
+    wb.version.previewMerge({ from: 'budget-q1', into: 'main' }, { persistReviewRecord: true }),
   );
-  if (preview.status === 'blocked') throw new Error(failFromDiagnostics(preview.diagnostics));
+  if (review.status === 'blocked') throw new Error(failFromDiagnostics(review.diagnostics));
 
-  const resolutions =
-    preview.status === 'conflicted'
-      ? preview.conflicts.map((conflict) => {
-          const option =
-            conflict.resolutionOptions.find((candidate) => candidate.kind === 'acceptTheirs') ??
-            conflict.resolutionOptions[0];
-          if (!option) throw new Error(`No resolution option for ${conflict.conflictId}`);
-          return {
-            conflictId: conflict.conflictId,
-            expectedConflictDigest: conflict.conflictDigest,
-            optionId: option.optionId,
-            kind: option.kind,
-          };
-        })
-      : [];
+  const acceptedReview =
+    review.status === 'conflicted' ? review.chooseAll('acceptTheirs') : review;
 
-  const applied = await valueOf(
-    wb.version.applyMerge(
-      {
-        base: baseCommit.id,
-        ours: expectedTargetHead.commitId,
-        theirs: branchCommit.id,
-        resolutions,
-      },
-      { mode: 'apply', targetRef: mainRef, expectedTargetHead },
-    ),
-  );
+  const applied = await valueOf(acceptedReview.apply({ materializeActiveCheckout: true }));
   if (applied.status === 'blocked' || applied.status === 'staleTargetHead') {
     throw new Error(failFromDiagnostics(applied.diagnostics));
   }
@@ -425,56 +360,22 @@ try {
   }
   if (!applied.commitRef.refRevision) throw new Error('Merged target ref is missing its revision');
 
-  const reverted = await valueOf(
-    wb.version.revert(
-      {
-        target: { kind: 'commit', commitId: branchCommit.id },
-        targetRef: mainRef,
-        expectedTargetHead: {
-          commitId: applied.commitRef.id,
-          revision: applied.commitRef.refRevision,
-        },
-        preflight: {
-          cas: { refName: mainRef, expectedRevision: applied.commitRef.refRevision },
-        },
-        reason: 'Back out scenario commit',
-      },
-      { includeDiagnostics: true },
-    ),
-  );
-  if (reverted.status === 'rejected' || reverted.status === 'requires-review') {
-    throw new Error(failFromDiagnostics(reverted.diagnostics));
-  }
-  if (reverted.status === 'planned') {
-    throw new Error('revert planned the change but did not mutate the target ref');
-  }
-
   console.log({
     baseCommit: baseCommit.id,
     branchCommit: branchCommit.id,
     mergedHead: applied.commitRef.id,
-    revertCommit: reverted.commitRef?.id,
   });
 } finally {
   await wb.dispose();
 }
 ```
 
-For merge, read the target ref immediately before preview and carry that exact
-commit/revision through `applyMerge` as `expectedTargetHead`. A conflicted merge
-preview is not applyable until every conflict has a resolution containing the
-previewed `conflictId`, `conflictDigest`, `optionId`, and option `kind`. For
-revert, read the target ref immediately before mutation and pass its
-commit/revision as `expectedTargetHead`. Use `{ dryRun: true }` for revert when
-the host wants to inspect diagnostics before moving the target ref.
-
-Direct `applyMerge` calls against an attached active checkout are branch writes;
-they move the target ref but do not reload the live workbook contents by
-default. Pass `{ mode: 'apply', targetRef, expectedTargetHead,
-materializeActiveCheckout: true }` when the target is the active checkout branch
-and the workbook should immediately materialize the merged branch state. The
-option is valid only in apply mode, and `targetRef`, `expectedTargetHead`, and
-`input.ours` must all match the attached active checkout head.
+`previewMerge(...)` returns a review object. A conflicted review is not
+applyable until every conflict has a selected resolution; use `choose(...)`,
+`chooseAll(...)`, or persist and reload the review with `getMergeReview(...)`.
+For advanced direct merge or revert calls, read the target ref immediately
+before mutation and pass its commit/revision as `expectedTargetHead` so stale
+target refs fail closed.
 
 ## Error Handling
 

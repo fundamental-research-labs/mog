@@ -86,6 +86,7 @@ export async function resolveDocumentWorkbookVersioningLifecycle(input: {
       captureMergeCommit: config.captureMergeCommit,
       semanticMutationCapture: config.semanticMutationCapture,
       semanticStateReader: config.semanticStateReader,
+      readSheetName: config.readSheetName,
       pendingRemotePromotionService: config.pendingRemotePromotionService,
       revertService: config.revertService,
       reviewService: config.reviewService,

@@ -1,5 +1,8 @@
 import type {
   VersionDiffOptions,
+  VersionDiffGroupDetailOptions,
+  VersionDiffOverview,
+  VersionDiffOverviewOptions,
   ObjectDigest,
   VersionStoreDiagnostic as PublicVersionStoreDiagnostic,
   WorkbookCommitId,
@@ -22,6 +25,11 @@ import {
   parsePageToken,
   publicPageTokenFor,
 } from './diff-service-pagination';
+import {
+  buildDiffGroupDetail,
+  buildDiffOverview,
+  type DiffSemanticContext,
+} from './diff-service-overview';
 import { readSemanticChangeSet } from './diff-service-object-diagnostics';
 import { resolveCommitish } from './diff-service-commit-resolution';
 import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
@@ -44,6 +52,7 @@ type DiffServiceSuccessResult = Extract<WorkbookDiffPage, { readonly status: 'su
 };
 
 type DiffServiceResult = DiffServiceSuccessResult | DiffServiceDegradedResult;
+type DiffOverviewResult = VersionDiffOverview | DiffServiceDegradedResult;
 
 type MaterializedMergeDiffRole = 'base' | 'ours' | 'theirs';
 
@@ -93,6 +102,75 @@ export class WorkbookVersionDiffService {
       return degradedDiffPage(parsedOptions.diagnostics);
     }
 
+    const context = await this.semanticContext(base, target);
+    if (isDegradedDiffResult(context)) return context;
+
+    const pageToken = parsePageToken(
+      parsedOptions.options.pageToken,
+      context.baseCommitId,
+      context.targetCommitId,
+    );
+    if (!pageToken.ok) return degradedDiffPage(pageToken.diagnostics);
+
+    const entries = mapSemanticChangeSet(context.semanticPayload);
+    if (!entries.ok) return degradedDiffPage(entries.diagnostics);
+
+    const offset = pageStartOffset(entries.items, pageToken.cursor);
+    const pageEntries = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
+    const pageItems = pageEntries.map((item) => item.entry);
+    const nextOffset = offset + pageEntries.length;
+    const shouldUseOrderKeyCursor = entries.items.some((entry) => entry.hasExplicitOrderKey);
+    const internalNextPageToken =
+      nextOffset < entries.items.length
+        ? shouldUseOrderKeyCursor && pageEntries.length > 0
+          ? internalPageTokenForOrderKey(
+              context.baseCommitId,
+              context.targetCommitId,
+              pageEntries[pageEntries.length - 1]!.orderKey,
+            )
+          : internalPageTokenForOffset(context.baseCommitId, context.targetCommitId, nextOffset)
+        : undefined;
+    const nextPageToken = internalNextPageToken
+      ? publicPageTokenFor(internalNextPageToken)
+      : undefined;
+
+    return {
+      status: 'success',
+      items: pageItems,
+      ...(nextPageToken ? { nextPageToken } : {}),
+      readRevision: context.readRevision,
+      order: VERSION_DIFF_PAGE_ORDER,
+      diagnostics: [],
+      baseCommitId: context.baseCommitId,
+      targetCommitId: context.targetCommitId,
+      changeSetDigest: context.changeSetDigest,
+    };
+  }
+
+  async diffOverview(
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+    options: VersionDiffOverviewOptions = {},
+  ): Promise<DiffOverviewResult> {
+    const context = await this.semanticContext(base, target);
+    if (isDegradedDiffResult(context)) return context;
+    return buildDiffOverview(context, options);
+  }
+
+  async diffGroupDetail(
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+    options: VersionDiffGroupDetailOptions,
+  ): Promise<DiffServiceResult> {
+    const context = await this.semanticContext(base, target);
+    if (isDegradedDiffResult(context)) return context;
+    return buildDiffGroupDetail(context, options);
+  }
+
+  private async semanticContext(
+    base: NormalizedDiffCommitish,
+    target: NormalizedDiffCommitish,
+  ): Promise<DiffSemanticContext | DiffServiceDegradedResult> {
     const opened = await openVisibleDiffGraph(this.provider);
     if (!opened.ok) return degradedDiffPage(opened.diagnostics);
 
@@ -100,13 +178,6 @@ export class WorkbookVersionDiffService {
     if (!resolvedBase.ok) return degradedDiffPage(resolvedBase.diagnostics);
     const resolvedTarget = await resolveCommitish(opened.graph, target, 'target');
     if (!resolvedTarget.ok) return degradedDiffPage(resolvedTarget.diagnostics);
-
-    const pageToken = parsePageToken(
-      parsedOptions.options.pageToken,
-      resolvedBase.commitId,
-      resolvedTarget.commitId,
-    );
-    if (!pageToken.ok) return degradedDiffPage(pageToken.diagnostics);
 
     const closure = await opened.graph.readCommitClosure(resolvedTarget.commitId);
     if (closure.status !== 'success') {
@@ -181,38 +252,12 @@ export class WorkbookVersionDiffService {
       semanticPayload = semanticRecord.payload;
     }
 
-    const entries = mapSemanticChangeSet(semanticPayload);
-    if (!entries.ok) return degradedDiffPage(entries.diagnostics);
-
-    const offset = pageStartOffset(entries.items, pageToken.cursor);
-    const pageEntries = entries.items.slice(offset, offset + parsedOptions.options.pageSize);
-    const pageItems = pageEntries.map((item) => item.entry);
-    const nextOffset = offset + pageEntries.length;
-    const shouldUseOrderKeyCursor = entries.items.some((entry) => entry.hasExplicitOrderKey);
-    const internalNextPageToken =
-      nextOffset < entries.items.length
-        ? shouldUseOrderKeyCursor && pageEntries.length > 0
-          ? internalPageTokenForOrderKey(
-              resolvedBase.commitId,
-              resolvedTarget.commitId,
-              pageEntries[pageEntries.length - 1]!.orderKey,
-            )
-          : internalPageTokenForOffset(resolvedBase.commitId, resolvedTarget.commitId, nextOffset)
-        : undefined;
-    const nextPageToken = internalNextPageToken
-      ? publicPageTokenFor(internalNextPageToken)
-      : undefined;
-
     return {
-      status: 'success',
-      items: pageItems,
-      ...(nextPageToken ? { nextPageToken } : {}),
-      readRevision: resolvedTarget.readRevision,
-      order: VERSION_DIFF_PAGE_ORDER,
-      diagnostics: [],
       baseCommitId: resolvedBase.commitId,
       targetCommitId: resolvedTarget.commitId,
+      readRevision: resolvedTarget.readRevision,
       changeSetDigest: targetCommit.payload.semanticChangeSetDigest,
+      semanticPayload,
     };
   }
 }
@@ -348,4 +393,10 @@ export function createWorkbookVersionDiffService(
   options: WorkbookVersionDiffServiceOptions,
 ): WorkbookVersionDiffService {
   return new WorkbookVersionDiffService(options);
+}
+
+function isDegradedDiffResult(
+  value: DiffSemanticContext | DiffServiceDegradedResult,
+): value is DiffServiceDegradedResult {
+  return 'status' in value && value.status === 'degraded';
 }

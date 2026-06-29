@@ -47,7 +47,9 @@ describe('WorkbookVersion proposal runtime capabilities', () => {
       versioning: { proposalService },
     });
 
-    const result = await version.acceptProposal(acceptInput('accept-default-disabled') as any);
+    const result = await version.proposals.advanced.acceptProposal(
+      acceptInput('accept-default-disabled') as any,
+    );
 
     expect(result).toMatchObject({
       ok: false,
@@ -71,7 +73,9 @@ describe('WorkbookVersion proposal runtime capabilities', () => {
       },
     });
 
-    const result = await version.acceptProposal(acceptInput('accept-no-ref-admin-leak') as any);
+    const result = await version.proposals.advanced.acceptProposal(
+      acceptInput('accept-no-ref-admin-leak') as any,
+    );
 
     expect(result).toMatchObject({
       ok: false,
@@ -104,7 +108,7 @@ describe('WorkbookVersion proposal runtime capabilities', () => {
     });
     const input = acceptInput('accept-dispatch');
 
-    const result = await version.acceptProposal(input as any);
+    const result = await version.proposals.advanced.acceptProposal(input as any);
 
     expect(result).toEqual({ ok: true, value: acceptResult });
     expect(proposalService.acceptProposal).toHaveBeenCalledWith(input);

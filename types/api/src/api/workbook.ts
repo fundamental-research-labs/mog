@@ -3,7 +3,6 @@
  * THE definitive API for all workbook-level operations.
  * Every consumer -- headless agents, LLM code, OS apps, browser app -- uses this.
  * No exceptions, no bypasses.
- *
  * ## Sub-API namespaces
  *
  * Domain-specific operations are grouped into readonly sub-API accessors:
@@ -79,7 +78,6 @@ import type { AccessPrincipal } from '@mog-sdk/types-document/security';
 import type { Worksheet, WorksheetWithInternals } from './worksheet';
 import type { IFloatingObjectManager } from '../kernel/floating-object-manager';
 import type { CodeExecutionResult, CodeExecutionOptions } from '@mog/types-commands/execution';
-
 export type { CustomList } from '@mog/types-editor/fill/custom-lists';
 export type { WorkbookId, WorkbookSessionId, DocumentId, LinkId, ActorId } from './types';
 export type { LinkStatus, LinkStatusReason, LinkStatusView } from './receipt-payloads';
@@ -90,7 +88,7 @@ export type {
   JsonValue, ObjectDigest, PageCursor, Paged,
   ListVersionCommitsInput, ListVersionRefsInput,
   RedactionPolicy, RedactionSummary, RedactedVersionAuthor,
-  VerificationSummary, VersionAnnotationText, VersionAuthor, VersionBranchName,
+  VerificationSummary, VersionAnnotationText, VersionAuthor, VersionBranchName, VersionBranchNameInput,
   VersionBranchRefReadResult, VersionBranchSelector,
   VersionCheckoutDependencyRole, VersionCheckoutDependencySummary,
   VersionCheckoutMutationGuarantee, VersionCheckoutOptions, VersionCheckoutPlan,
@@ -99,7 +97,7 @@ export type {
   VersionCommitPage, VersionCreateBranchOptions, VersionCounterRecordRevision, VersionDegradedHeadResult, VersionDeleteRefOptions,
   VersionDiffDisplay, VersionDiffDisplayValue, VersionDiffCursor, VersionDiffEntry, VersionDiffInput, VersionDiffOptions, VersionDiffResourceLimit, VersionDiffResourceLimitKind, VersionDiffResourceLimitSummary, VersionDiffResourceLimitUnit, VersionDiffStructuralMetadata, VersionDiffValue, VersionDiagnosticCode,
   VersionDiagnosticMessageId, VersionDiagnosticPublicPayload,
-  VersionFastForwardBranchOptions, VersionGetMergeConflictDetailRequest,
+  VersionFastForwardBranchOptions, VersionGetMergeConflictDetailRequest, VersionGetMergeReviewInput,
   VersionGetHeadOptions, VersionHead, VersionListCommitsOptions, VersionListRefsOptions,
   VersionLiveCollaborationState, VersionMainRefName,
   VersionApplyMergeInput, VersionApplyMergeMutationGuarantee, VersionApplyMergeOptions,
@@ -109,16 +107,16 @@ export type {
   VersionMergeConflictDetailBase, VersionMergeConflictDetailPurpose,
   VersionMergeConflictDetailResolutionOption, VersionMergeConflictDetailResult,
   VersionMergeConflictValuePageRef, VersionMergeConflictValueRole,
-  VersionMergeConflictResolutionOption, VersionMergeConflictResolutionOptionKind, VersionMergeInput,
-  VersionMergeEndpointDeniedStatus, VersionMergeResolutionPayloadPurpose,
-  VersionMergeMutationGuarantee, VersionMergeOptions, VersionMergeResult, VersionMergeResultId,
+  VersionMergeConflictResolutionOption, VersionMergeConflictResolutionOptionKind, VersionMergeEndpoint, VersionMergeInput,
+  VersionMergeEndpointDeniedStatus, VersionMergeResolutionPayloadPurpose, VersionMergeReview, VersionMergeReviewApplyOptions, VersionMergeReviewArtifactApi, VersionMergeReviewArtifactNamespace, VersionMergeReviewConflictDetailOptions, VersionMergeReviewStatus,
+  VersionMergeMutationGuarantee, VersionMergeOptions, VersionMergeResult, VersionMergeResultId, VersionPreviewMergeInput, VersionPreviewMergeOptions,
   VersionCapability, VersionCapabilityDependency, VersionCapabilityError, VersionCapabilityState,
   VersionPage, VersionPageOrder, VersionPageToken,
   VersionPendingRemoteSegmentId, VersionPromotePendingRemoteDiagnostic, VersionPromotePendingRemoteDiagnosticCode,
   VersionPromotePendingRemoteOptions, VersionPromotePendingRemoteResult, VersionPromotePendingRemoteSkippedSegment, VersionPromotePendingRemoteSkipReason, VersionPromotePendingRemoteStatus,
   VersionRecordRevision, VersionRedactedValue, VersionRedactionClass,
-  VersionRef, VersionRefListResult, VersionRefMutationResult, VersionRefName,
-  VersionRefReadResult, VersionRefSelector, VersionDiagnostic, VersionDiagnosticSeverity, VersionError,
+  VersionRef, VersionRefListResult, VersionRefMutationResult, VersionRefName, VersionRefNameInput,
+  VersionRefReadResult, VersionRefSelector, VersionResolvedMergeEndpoint, VersionDiagnostic, VersionDiagnosticSeverity, VersionError,
   VersionPutMergeResolutionPayloadRequest, VersionPutMergeResolutionPayloadResult,
   VersionSaveMergeResolutionsRequest, VersionSaveMergeResolutionsResult,
   VersionStoreDiagnostic,
@@ -127,30 +125,20 @@ export type {
   VersionResult, VersionSurfaceDiagnosticCode, VersionSurfaceDiagnosticSeverity,
   VersionSurfaceLiveCollaborationStatus, VersionSurfaceStage, VersionSurfaceStatus, VersionSurfaceStorageBackend,
   VersionSymbolicRef, VersionSymbolicRefReadResult, VersionUpdateBranchOptions,
-  WorkbookCommitAnnotationSummary, WorkbookCommitId, WorkbookCommitRef, WorkbookCommitSummary,
-  WorkbookDiffPage, WorkbookVersion,
+  WorkbookCommitAnnotationSummary, WorkbookCommitId, WorkbookCommitIdInput, WorkbookCommitRef, WorkbookCommitSummary,
+  WorkbookDiffPage, WorkbookVersion, WorkbookVersionRefsNamespace, WorkbookVersionReviewNamespace,
   WorkbookVersionCapabilityStage, WorkbookVersionCapabilityStatus, WorkbookVersionDependency,
   WorkbookVersionDiagnostic, WorkbookVersionDiagnosticCode, WorkbookVersionDiagnosticSeverity,
   WorkbookVersionHead, WorkbookVersionHeadStatus, WorkbookVersionRolloutStage, WorkbookVersionStatus,
 } from './workbook/version';
+export type * from './workbook/version-porcelain';
+export type * from './workbook/version-diff';
+export type * from './workbook/version-diff-metadata';
+export type * from './workbook/version-working-tree-diff';
 export type * from './workbook/version-proposal';
-export type {
-  VersionRevertCasAdmission,
-  VersionRevertDomainAdmission,
-  VersionRevertHistoryGapAdmission,
-  VersionRevertInput,
-  VersionRevertMutationGuarantee,
-  VersionRevertOptions,
-  VersionRevertPreflightAdmission,
-  VersionRevertResult,
-  VersionRevertReviewInvalidationAdmission,
-  VersionRevertStaleHeadAdmission,
-  VersionRevertTarget,
-} from './workbook/version-revert';
 export type * from './workbook/version-revert';
 export type * from './workbook/version-review';
 export type * from './workbook/xlsx-export';
-
 /** Options for wb.calculate() — all optional, backward compatible. */
 export interface CalculateOptions {
   /**
@@ -975,7 +963,7 @@ export interface WorkbookInternal extends Workbook {
 
   /** Set the active sheet ID. Infrastructure-only. */
   setActiveSheetId(id: SheetId): void;
-
+  setRuntimeCustomSetting(key: string, value: string | null): Promise<void>;
   /** Floating object manager — full CRUD + spatial queries. Infrastructure-only. */
   readonly floatingObjects: IFloatingObjectManager;
 

@@ -12,6 +12,6 @@ export type PersistedConflictPreview = VersionMergeResult & {
 };
 
 export type ConflictDetailSuccess = Extract<
-  Awaited<ReturnType<Workbook['version']['getMergeConflictDetail']>>,
+  Awaited<ReturnType<Workbook['version']['artifacts']['advanced']['getMergeConflictDetail']>>,
   { ok: true }
 >;

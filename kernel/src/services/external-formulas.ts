@@ -9,6 +9,7 @@ import { sheetId as toSheetId, type SheetId } from '@mog-sdk/contracts/core';
 import { quoteSheetName } from '@mog/spreadsheet-utils/a1';
 import { asFormulaA1 } from '@mog/spreadsheet-utils/cells/formula-string';
 import { KernelError } from '../errors';
+import { ensureCellWriteVersionMutationOptions } from '../api/internal/cell-write-version-options';
 
 export interface ExternalFormulaCell {
   readonly sheetId: SheetId;
@@ -39,6 +40,15 @@ const formulasByContext = new WeakMap<object, Map<string, ExternalFormulaCell>>(
 
 function formulaTrackerKey(ctx: DocumentContext): object {
   return ctx.computeBridge as unknown as object;
+}
+
+export function isExternalFormulaWritePromise(value: unknown): value is Promise<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in value &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
 }
 
 export function trackExternalFormulaWrite(
@@ -73,13 +83,13 @@ export function getTrackedExternalFormulas(ctx: DocumentContext): readonly Exter
   return [...(formulasByContext.get(formulaTrackerKey(ctx))?.values() ?? [])];
 }
 
-export async function prepareExternalFormulaWrite(
+export function prepareExternalFormulaWrite(
   ctx: DocumentContext,
   sheetId: SheetId,
   row: number,
   col: number,
   value: unknown,
-): Promise<unknown> {
+): unknown | Promise<unknown> {
   if (typeof value !== 'string' || !value.startsWith('=')) {
     trackExternalFormulaWrite(ctx, sheetId, row, col, value);
     return value;
@@ -91,6 +101,17 @@ export async function prepareExternalFormulaWrite(
     return value;
   }
 
+  return prepareExternalFormulaWriteAsync(ctx, sheetId, row, col, value, refs);
+}
+
+async function prepareExternalFormulaWriteAsync(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  row: number,
+  col: number,
+  value: string,
+  refs: readonly ParsedExternalRef[],
+): Promise<unknown> {
   await assertExternalFormulaWriteAllowed(ctx, value, refs);
   trackExternalFormulaWrite(ctx, sheetId, row, col, value);
   return materializeFormula(ctx, value);
@@ -223,11 +244,14 @@ export async function materializeExternalFormulas(
     materialized += 1;
   }
   for (const [sheetId, edits] of editsBySheet) {
-    if (options) {
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
-    } else {
-      await ctx.computeBridge.setCellsByPosition(sheetId, edits);
-    }
+    await ctx.computeBridge.setCellsByPosition(
+      sheetId,
+      edits,
+      ensureCellWriteVersionMutationOptions(ctx, options, {
+        operationIdPrefix: 'externalFormulas.materialize',
+        sheetIds: [sheetId],
+      }),
+    );
   }
   return materialized;
 }

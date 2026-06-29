@@ -54,13 +54,13 @@ export function registerReviewProviderAccessMergeResolutionScenarios(): void {
     };
     const version = new WorkbookVersionImpl({ versioning: { provider: deniedProvider } } as any);
 
-    const saved = await version.saveMergeResolutions({
+    const saved = await version.artifacts.advanced.saveMergeResolutions({
       resultId,
       resultDigest,
       redactionPolicyDigest: resultDigest,
       resolutions: [],
     });
-    const payload = await version.putMergeResolutionPayload({
+    const payload = await version.artifacts.advanced.putMergeResolutionPayload({
       resultId,
       resultDigest,
       redactionPolicyDigest: resultDigest,

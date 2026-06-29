@@ -33,7 +33,7 @@ export function registerBranchCheckoutEditAfterCheckoutScenario(): void {
         errorLabel: 'base',
       });
 
-      const created = await sourceWb.version.createBranch({
+      const created = await sourceWb.version.refs.createBranch({
         name: 'scenario/edit-after-checkout' as any,
         targetCommitId: baseCommit.id,
         expectedAbsent: true,

@@ -18,13 +18,13 @@ describe('WorkbookVersion provider-backed review persistence', () => {
     try {
       provider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const version = versionForProvider(provider);
-      const created = await version.createReview({
+      const created = await version.reviews.advanced.createReview({
         ...createReviewInput('indexed-projection-review-1'),
         createdBy: SENSITIVE_ACTOR,
       });
       if (!created.ok) throw new Error(`expected create success: ${created.error.code}`);
 
-      const decision = await version.appendReviewDecision({
+      const decision = await version.reviews.advanced.appendReviewDecision({
         reviewId: created.value.id,
         expectedRevision: 1,
         clientRequestId: 'indexed-projection-decision-1',
@@ -38,7 +38,7 @@ describe('WorkbookVersion provider-backed review persistence', () => {
       });
       if (!decision.ok) throw new Error(`expected decision success: ${decision.error.code}`);
 
-      const status = await version.updateReviewStatus({
+      const status = await version.reviews.advanced.updateReviewStatus({
         reviewId: created.value.id,
         expectedRevision: 2,
         clientRequestId: 'indexed-projection-status-1',
@@ -51,7 +51,9 @@ describe('WorkbookVersion provider-backed review persistence', () => {
       await provider.close();
       reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const reloadedVersion = versionForProvider(reloadedProvider);
-      const fetched = await reloadedVersion.getReview({ reviewId: created.value.id });
+      const fetched = await reloadedVersion.reviews.advanced.getReview({
+        reviewId: created.value.id,
+      });
       if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
 
       expect(fetched.value).toMatchObject({

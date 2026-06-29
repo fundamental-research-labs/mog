@@ -39,7 +39,7 @@ export function registerArtifactProviderRedactionScenarios(): void {
       };
       const version = new WorkbookVersionImpl({ versioning: { provider: wrappedProvider } } as any);
       const conflict = preview.conflicts[0];
-      const result = await version.getMergeConflictDetail({
+      const result = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,

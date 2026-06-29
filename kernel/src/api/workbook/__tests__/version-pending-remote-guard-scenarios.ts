@@ -11,7 +11,7 @@ export function registerPendingRemoteGuardScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.promotePendingRemote',
+        target: 'workbook.version.refs.promotePendingRemote',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_PENDING_REMOTE_PROMOTION_SERVICE_UNAVAILABLE',
@@ -52,7 +52,7 @@ export function registerPendingRemoteGuardScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.promotePendingRemote',
+        target: 'workbook.version.refs.promotePendingRemote',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_INVALID_COMMIT_PAYLOAD',
@@ -77,7 +77,7 @@ export function registerPendingRemoteGuardScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.promotePendingRemote',
+        target: 'workbook.version.refs.promotePendingRemote',
         diagnostics: [
           expect.objectContaining({
             code: 'VERSION_CAPABILITY_DISABLED',

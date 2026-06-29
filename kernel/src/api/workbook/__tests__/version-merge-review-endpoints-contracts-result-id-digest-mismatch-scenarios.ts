@@ -21,20 +21,20 @@ export function registerMergeReviewEndpointContractsResultIdDigestMismatchScenar
         redactionPolicyDigest: preview.resultDigest,
       };
 
-      const detail = await version.getMergeConflictDetail({
+      const detail = await version.artifacts.advanced.getMergeConflictDetail({
         ...base,
         conflictId: conflict.conflictId,
         expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),
         valueRole: 'theirs',
         purpose: 'review',
       });
-      const saved = await version.saveMergeResolutions({
+      const saved = await version.artifacts.advanced.saveMergeResolutions({
         ...base,
         targetRef: TARGET_REF,
         expectedTargetHead: target,
         resolutions: [resolutionFor(conflict, 'acceptTheirs')],
       });
-      const payload = await version.putMergeResolutionPayload({
+      const payload = await version.artifacts.advanced.putMergeResolutionPayload({
         ...base,
         conflictId: conflict.conflictId,
         expectedConflictDigest: conflictDigestObject(conflict.conflictDigest),

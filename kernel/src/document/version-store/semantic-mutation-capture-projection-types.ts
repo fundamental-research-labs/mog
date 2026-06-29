@@ -3,6 +3,7 @@ import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 
 import type { MutationResult } from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
+import type { CompactCellValueReviewProjection } from './semantic-review-projection';
 
 export interface SemanticMutationCaptureProjectionInput {
   readonly operation: string;
@@ -10,6 +11,7 @@ export interface SemanticMutationCaptureProjectionInput {
   readonly directEdits?: readonly DirectEditPosition[];
   readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
+  readonly sheetNamesBySheetId?: ReadonlyMap<string, string>;
 }
 
 export type VersionSemanticChangeRecord = {
@@ -29,8 +31,23 @@ export type VersionSemanticChangeRecord = {
     readonly value: VersionSemanticValue;
   };
   readonly display?: {
+    readonly sheetName?: { readonly kind: 'value'; readonly value: string };
     readonly address?: { readonly kind: 'value'; readonly value: string };
     readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
+  };
+  readonly historical?: {
+    readonly cell?: {
+      readonly sheetId: string;
+      readonly row: number;
+      readonly column: number;
+    };
+    readonly range?: {
+      readonly sheetId: string;
+      readonly rowStart: number;
+      readonly rowEnd: number;
+      readonly columnStart: number;
+      readonly columnEnd: number;
+    };
   };
 };
 
@@ -42,4 +59,5 @@ export type PendingSemanticMutation = {
   readonly directEdits: readonly DirectEditPosition[];
   readonly directEditRanges: readonly DirectEditRange[];
   readonly changes: readonly VersionSemanticChangeRecord[];
+  readonly compactReviewProjection?: CompactCellValueReviewProjection;
 };

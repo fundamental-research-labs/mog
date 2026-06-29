@@ -11,7 +11,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
     const { branchService, version } = createWorkbookVersionWithBranchService();
 
     await expect(
-      version.createBranch({
+      version.refs.createBranch({
         name: 'scenario/budget' as any,
         targetCommitId: COMMIT_A,
       }),
@@ -25,7 +25,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
 
-    await expect(version.readRef('refs/heads/scenario/budget' as any)).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/scenario/budget' as any)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -37,7 +37,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
 
-    await expect(version.getRef('scenario/budget' as any)).resolves.toMatchObject({
+    await expect(version.refs.getRef('scenario/budget' as any)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
@@ -48,7 +48,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -61,7 +61,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
 
-    await expect(version.listRefs()).resolves.toMatchObject({
+    await expect(version.refs.listRefs()).resolves.toMatchObject({
       ok: true,
       value: {
         items: [
@@ -84,13 +84,13 @@ export function registerPublicBranchRefLifecycleScenario(): void {
     const { branchService, version } = createWorkbookVersionWithBranchService('scenario/current');
 
     await expect(
-      version.createBranch({
+      version.refs.createBranch({
         name: 'scenario/current' as any,
         targetCommitId: COMMIT_A,
       }),
     ).resolves.toMatchObject({ ok: true });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -104,7 +104,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
     });
 
     await expect(
-      version.createBranch({
+      version.refs.createBranch({
         name: 'scenario/sibling' as any,
         targetCommitId: COMMIT_A,
       }),
@@ -118,7 +118,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
       },
     });
 
-    await expect(version.getRef('HEAD')).resolves.toEqual({
+    await expect(version.refs.getRef('HEAD')).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',
@@ -130,7 +130,7 @@ export function registerPublicBranchRefLifecycleScenario(): void {
         diagnostics: [],
       },
     });
-    await expect(version.getRef('scenario/current' as any)).resolves.toMatchObject({
+    await expect(version.refs.getRef('scenario/current' as any)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

@@ -38,7 +38,7 @@ export function registerProviderW8CasDeleteGuardScenarios(): void {
     };
     const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
 
-    const currentHeadDelete = await version.deleteRef({
+    const currentHeadDelete = await version.refs.deleteRef({
       name: branchName as any,
       expectedHead: AUX_COMMIT_ID as any,
       expectedRefRevision: { kind: 'counter', value: '0' },
@@ -69,13 +69,13 @@ export function registerProviderW8CasDeleteGuardScenarios(): void {
     const wb = createWorkbook({ versioning: { provider } });
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/stale-delete-head' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
     ).resolves.toMatchObject({ ok: true });
     await expect(
-      wb.version.fastForwardBranch({
+      wb.version.refs.fastForwardBranch({
         name: 'scenario/stale-delete-head' as any,
         nextCommitId: child.commit.id,
         expectedHead: initialized.rootCommit.id,
@@ -84,7 +84,7 @@ export function registerProviderW8CasDeleteGuardScenarios(): void {
     ).resolves.toMatchObject({ ok: true });
 
     const deleteBranch = jest.spyOn(graph, 'deleteBranch');
-    const stale = await wb.version.deleteRef({
+    const stale = await wb.version.refs.deleteRef({
       name: 'scenario/stale-delete-head' as any,
       expectedHead: initialized.rootCommit.id,
       expectedRefRevision: { kind: 'counter', value: '1' },

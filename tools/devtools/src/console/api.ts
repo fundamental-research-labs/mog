@@ -735,8 +735,8 @@ export function createConsoleAPI(
 
     async listRefs(options) {
       const version = await getActiveWorkbookVersionReadFacade();
-      if (typeof version?.listRefs !== 'function') return null;
-      return await version.listRefs(options);
+      if (typeof version?.refs?.listRefs !== 'function') return null;
+      return await version.refs.listRefs(options);
     },
   };
 

@@ -66,6 +66,91 @@ export function registerDefaultRootPublicCellEditDiffScenario(): void {
       await handle.dispose();
     }
   });
+
+  it('persists committed same-address cell edits with sheet-qualified display names', async () => {
+    const documentId = `${DOCUMENT_ID}-default-root-multi-sheet`;
+    const handle = await DocumentFactory.create({
+      documentId,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({
+        versioning: withVersionManifest({
+          providerSelection: {
+            kind: INDEXEDDB_VERSION_STORE_PROVIDER_KIND,
+            requireDurablePersistence: true,
+          },
+        }),
+      });
+      const rootHeadResult = await wb.version.getHead();
+      if (!rootHeadResult.ok) {
+        throw new Error(`expected initialized blank root head: ${rootHeadResult.error.code}`);
+      }
+      const rootHead = rootHeadResult.value;
+
+      await wb.activeSheet.setCell('B3', 'Same');
+      const sheet2 = await wb.sheets.add('Sheet2');
+      await sheet2.setCell('B3', 'Same');
+
+      const committedResult = await wb.version.commit({
+        expectedHead: {
+          commitId: rootHead.id,
+          revision: rootHead.refRevision,
+        },
+      });
+      if (!committedResult.ok) {
+        throw new Error(`expected default-root multi-sheet commit: ${committedResult.error.code}`);
+      }
+
+      const overview = await wb.version.diffOverview(rootHead.id, committedResult.value.id, {
+        groupLimit: 10,
+      });
+      if (!overview.ok) {
+        throw new Error(`expected multi-sheet diff overview: ${JSON.stringify(overview.error)}`);
+      }
+      const detailPages = await Promise.all(
+        overview.value.groups.items.map((group) =>
+          wb!.version.diffGroupDetail(rootHead.id, committedResult.value.id, {
+            groupId: group.groupId,
+            pageSize: 10,
+          }),
+        ),
+      );
+      const detailItems = detailPages.flatMap((page) => {
+        if (!page.ok) {
+          throw new Error(`expected multi-sheet diff detail: ${JSON.stringify(page.error)}`);
+        }
+        return page.value.items;
+      });
+
+      expect(detailItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'cell', propertyPath: ['value'] }),
+            after: { kind: 'value', value: 'Same' },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet1' },
+              address: { kind: 'value', value: 'B3' },
+            },
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({ domain: 'cell', propertyPath: ['value'] }),
+            after: { kind: 'value', value: 'Same' },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet2' },
+              address: { kind: 'value', value: 'B3' },
+            },
+          }),
+        ]),
+      );
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
 }
 
 async function expectSettledCleanSurface(wb: Workbook): Promise<void> {

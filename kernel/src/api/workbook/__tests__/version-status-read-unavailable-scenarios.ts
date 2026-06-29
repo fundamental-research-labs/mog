@@ -16,7 +16,7 @@ export function registerVersionStatusReadUnavailableScenarios(): void {
       ...versionUnavailable('listCommits', 'VERSION_GRAPH_UNINITIALIZED'),
     });
 
-    await expect(wb.version.readRef('HEAD')).resolves.toMatchObject({
+    await expect(wb.version.refs.readRef('HEAD')).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

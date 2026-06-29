@@ -182,7 +182,7 @@ export function registerPersistedConflictArtifactScenario(): void {
 
       const expectedTargetHead = await readFreshExpectedTargetHead(reopenedWb);
       expect(expectedTargetHead.commitId).toBe(oursCommit.id);
-      await expect(reopenedWb.version.readRef('HEAD')).resolves.toMatchObject({
+      await expect(reopenedWb.version.refs.readRef('HEAD')).resolves.toMatchObject({
         ok: true,
         value: {
           status: 'success',
@@ -247,7 +247,7 @@ export function registerPersistedConflictArtifactScenario(): void {
 }
 
 async function readFreshExpectedTargetHead(wb: Workbook): Promise<VersionCommitExpectedHead> {
-  const targetRead = await wb.version.readRef(PERSISTED_ARTIFACT_TARGET_REF);
+  const targetRead = await wb.version.refs.readRef(PERSISTED_ARTIFACT_TARGET_REF);
   if (!targetRead.ok) {
     throw new Error(`expected target ref read success: ${targetRead.error.code}`);
   }

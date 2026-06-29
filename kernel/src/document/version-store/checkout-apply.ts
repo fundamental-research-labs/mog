@@ -74,7 +74,9 @@ export async function applyCheckoutMaterializationPlan(input: {
   const dependency = snapshotDependency(input.plan);
   let snapshotRoot: unknown;
   try {
-    snapshotRoot = snapshotPayload(await input.snapshotReader.readSnapshotRoot(dependency));
+    snapshotRoot = snapshotMaterializerInput(
+      await input.snapshotReader.readSnapshotRoot(dependency),
+    );
   } catch (error) {
     return failure('checkoutSnapshotReadFailed', 'Snapshot root read failed.', [
       diagnostic('VERSION_CHECKOUT_SNAPSHOT_READ_FAILED', 'Snapshot root read failed.', {
@@ -170,11 +172,11 @@ function snapshotDependency(plan: CheckoutMaterializationPlan): VersionDependenc
   });
 }
 
-function snapshotPayload(value: VersionObjectRecord<unknown> | unknown): unknown {
+function snapshotMaterializerInput(value: VersionObjectRecord<unknown> | unknown): unknown {
   if (!isRecord(value)) return value;
   const preimage = value.preimage;
   if (!isRecord(preimage) || preimage.objectType !== 'workbook.snapshotRoot.v1') return value;
-  return preimage.payload;
+  return preimage.payloadEncoding === 'bytes' ? value : preimage.payload;
 }
 
 function failure(

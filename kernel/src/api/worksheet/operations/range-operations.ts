@@ -21,7 +21,10 @@ import { KernelError } from '../../../errors';
 import { normalizeRange, rangeToA1, toA1 } from '../../internal/utils';
 
 import { classifyRangeValueType, normalizeCellValue } from '../../internal/value-conversions';
-import { prepareExternalFormulaWrite } from '../../../services/external-formulas';
+import {
+  isExternalFormulaWritePromise,
+  prepareExternalFormulaWrite,
+} from '../../../services/external-formulas';
 import type { CellData, CellRange, CellValue, CellValuePrimitive, DocumentContext } from './shared';
 import { invalidRange, isValidAddress, isValidRange } from './shared';
 import { toCellInput } from './cell-input';
@@ -30,6 +33,7 @@ import {
   withDirectEditRange,
   type MutationAdmissionOptions,
 } from '../../../bridges/compute/mutation-admission';
+import { ensureCellWriteVersionMutationOptions } from '../../internal/cell-write-version-options';
 
 // Re-export validation utilities from types for convenience
 export { isValidAddress, isValidRange } from './shared';
@@ -311,6 +315,17 @@ export async function setRange(
     return;
   }
 
+  const mutationOptions = withDirectEditRange(
+    ensureCellWriteVersionMutationOptions(ctx, options, {
+      operationIdPrefix: 'worksheet.setRange',
+      sheetIds: [sheetId],
+    }),
+    sheetId,
+    startRow,
+    startCol,
+    startRow + values.length - 1,
+    startCol + values[0].length - 1,
+  );
   const edits: Parameters<typeof ctx.computeBridge.setCellsByPosition>[1] = [];
   const dateWrites: Array<{ row: number; col: number; date: Date }> = [];
 
@@ -320,12 +335,14 @@ export async function setRange(
       const col = startCol + c;
       const value = values[r][c];
       if (value instanceof Date) {
-        await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+        const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+        if (isExternalFormulaWritePromise(prepared)) await prepared;
         dateWrites.push({ row, col, date: value });
         continue;
       }
 
-      const preparedValue = await prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      const prepared = prepareExternalFormulaWrite(ctx, sheetId, row, col, value);
+      const preparedValue = isExternalFormulaWritePromise(prepared) ? await prepared : prepared;
       // Route every SDK value through the shared helper so the
       // Literal/Parse/Clear distinction is preserved structurally — no
       // in-band \x00 sentinels.
@@ -334,33 +351,20 @@ export async function setRange(
   }
 
   await ctx.awaitMaterialized?.('allSheets');
-  if (edits.length > 0 && options) {
-    await ctx.computeBridge.setCellsByPosition(sheetId, edits, options);
-  } else if (edits.length > 0) {
-    await ctx.computeBridge.setCellsByPosition(sheetId, edits);
+  if (edits.length > 0) {
+    await ctx.computeBridge.setCellsByPosition(sheetId, edits, mutationOptions);
   }
   for (const dateWrite of dateWrites) {
     const parts = calendarPartsInTz(dateWrite.date, ctx.userTimezone);
-    if (options) {
-      await ctx.computeBridge.setDateValue(
-        sheetId,
-        dateWrite.row,
-        dateWrite.col,
-        parts.year,
-        parts.month,
-        parts.day,
-        options,
-      );
-    } else {
-      await ctx.computeBridge.setDateValue(
-        sheetId,
-        dateWrite.row,
-        dateWrite.col,
-        parts.year,
-        parts.month,
-        parts.day,
-      );
-    }
+    await ctx.computeBridge.setDateValue(
+      sheetId,
+      dateWrite.row,
+      dateWrite.col,
+      parts.year,
+      parts.month,
+      parts.day,
+      mutationOptions,
+    );
   }
 }
 
@@ -384,36 +388,27 @@ export async function clearRange(
   }
 
   const normalized = normalizeRange(range);
-  const captureOptions = options
-    ? withDirectEditRange(
-        options,
-        sheetId,
-        normalized.startRow,
-        normalized.startCol,
-        normalized.endRow,
-        normalized.endCol,
-      )
-    : undefined;
+  const captureOptions = withDirectEditRange(
+    ensureCellWriteVersionMutationOptions(ctx, options, {
+      operationIdPrefix: 'worksheet.clearRange',
+      sheetIds: [sheetId],
+    }),
+    sheetId,
+    normalized.startRow,
+    normalized.startCol,
+    normalized.endRow,
+    normalized.endCol,
+  );
 
   await ctx.awaitMaterialized?.('allSheets');
-  if (captureOptions) {
-    await ctx.computeBridge.clearRangeByPosition(
-      sheetId,
-      normalized.startRow,
-      normalized.startCol,
-      normalized.endRow,
-      normalized.endCol,
-      captureOptions,
-    );
-  } else {
-    await ctx.computeBridge.clearRangeByPosition(
-      sheetId,
-      normalized.startRow,
-      normalized.startCol,
-      normalized.endRow,
-      normalized.endCol,
-    );
-  }
+  await ctx.computeBridge.clearRangeByPosition(
+    sheetId,
+    normalized.startRow,
+    normalized.startCol,
+    normalized.endRow,
+    normalized.endCol,
+    captureOptions,
+  );
 
   const cellCount =
     (normalized.endRow - normalized.startRow + 1) * (normalized.endCol - normalized.startCol + 1);

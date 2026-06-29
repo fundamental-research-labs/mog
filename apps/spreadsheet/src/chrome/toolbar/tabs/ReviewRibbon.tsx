@@ -2,10 +2,9 @@
  * ReviewRibbon
  *
  * Review tab content matching Excel 365 group order:
- * 1. Proofing - Spelling, Thesaurus, Workbook Statistics
- * 2. Accessibility - Check Accessibility
- * 3. Comments - New Comment, Delete, Previous, Next, Show/Hide Comment, Show All Comments
- * 4. Protect - Protect Sheet, Protect Workbook, Always Open Read-Only
+ * 1. Comments - New Comment, Delete, Previous, Next, Show/Hide Comment, Show All Comments
+ * 2. Version - Version History
+ * 3. Protect - Protect Sheet, Protect Workbook, Always Open Read-Only
  *
  * Note: We use Comments only (no separate Notes). Excel 365 separates Notes from Comments,
  *
@@ -18,10 +17,8 @@ import { History as VersionHistoryIcon } from 'lucide-react';
 import { dispatch, useFeatureGate, useUIStore } from '../../../internal-api';
 
 import {
-  ACCESSIBILITY_COLLAPSE_CONFIG,
   COMMENTS_COLLAPSE_CONFIG,
   DEFAULT_COLLAPSE_CONFIG,
-  PROOFING_COLLAPSE_CONFIG,
   PROTECT_COLLAPSE_CONFIG,
 } from '@mog-sdk/contracts/ribbon';
 import { useComments } from '../../../hooks/comments/use-comments';
@@ -31,12 +28,7 @@ import { useActionDependencies } from '../../../hooks/toolbar/use-action-depende
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
-import {
-  CommentIcon,
-  ProtectSheetIcon,
-  ProtectWorkbookIcon,
-  SpellCheckIcon,
-} from '../primitives/ToolbarIcons';
+import { CommentIcon, ProtectSheetIcon, ProtectWorkbookIcon } from '../primitives/ToolbarIcons';
 // =============================================================================
 // Inline Icons for Review Tab (stubs - not yet in ToolbarIcons.tsx)
 // =============================================================================
@@ -77,55 +69,6 @@ function NextCommentIcon() {
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path
         d="M6 12l4-4-4-4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** Thesaurus icon (book with magnifying glass) */
-function ThesaurusIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d="M2 2h9a1 1 0 011 1v10a1 1 0 01-1 1H2V2z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M5 2v12" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="11" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M13 12l1.5 1.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Workbook Statistics icon (chart/stats) */
-function WorkbookStatisticsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M5 10V7M8 10V5M11 10V8"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** Accessibility check icon */
-function AccessibilityIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="8" cy="3" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M8 5v3M8 8l-2.5 4M8 8l2.5 4M4 6.5h8"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeLinecap="round"
@@ -257,30 +200,6 @@ export function ReviewRibbon() {
     dispatch('TOGGLE_SHOW_ALL_COMMENTS', deps);
   }, [deps]);
 
-  // ==========================================================================
-  // Proofing action handlers
-  // ==========================================================================
-
-  /** Open Spelling dialog (uses existing DataAnalysisDialogActionType) */
-  const handleSpelling = useCallback(() => {
-    dispatch('OPEN_SPELLING_DIALOG', deps);
-  }, [deps]);
-
-  /** Open Thesaurus dialog */
-  const handleThesaurus = useCallback(() => {
-    dispatch('OPEN_THESAURUS_DIALOG', deps);
-  }, [deps]);
-
-  /** Show Workbook Statistics */
-  const handleWorkbookStatistics = useCallback(() => {
-    dispatch('SHOW_WORKBOOK_STATISTICS', deps);
-  }, [deps]);
-
-  /** Check Accessibility */
-  const handleCheckAccessibility = useCallback(() => {
-    dispatch('CHECK_ACCESSIBILITY', deps);
-  }, [deps]);
-
   const handleOpenVersionHistory = useCallback(() => {
     if (!versionControlEnabled) return;
     setSidePanelContent('version-history');
@@ -328,65 +247,7 @@ export function ReviewRibbon() {
 
   return (
     <>
-      {/* 1. Proofing Group */}
-      <ToolbarGroup
-        label="Proofing"
-        collapseConfig={PROOFING_COLLAPSE_CONFIG}
-        dropdownIcon={<SpellCheckIcon />}
-      >
-        <div className="flex items-center gap-0.5">
-          <RibbonButton
-            id="review-spelling"
-            layout="vertical"
-            height="full"
-            icon={<SpellCheckIcon />}
-            label="Spelling"
-            onClick={handleSpelling}
-            title="Spelling (F7)"
-            aria-label="Spelling"
-          />
-          <RibbonButton
-            id="review-thesaurus"
-            layout="vertical"
-            height="full"
-            icon={<ThesaurusIcon />}
-            label="Thesaurus"
-            onClick={handleThesaurus}
-            title="Thesaurus (Shift+F7)"
-            aria-label="Thesaurus"
-          />
-          <RibbonButton
-            id="review-workbook-stats"
-            layout="vertical"
-            height="full"
-            icon={<WorkbookStatisticsIcon />}
-            label={'Workbook\nStatistics'}
-            onClick={handleWorkbookStatistics}
-            title="Workbook Statistics"
-            aria-label="Workbook Statistics"
-          />
-        </div>
-      </ToolbarGroup>
-
-      {/* 2. Accessibility Group */}
-      <ToolbarGroup
-        label="Accessibility"
-        collapseConfig={ACCESSIBILITY_COLLAPSE_CONFIG}
-        dropdownIcon={<AccessibilityIcon />}
-      >
-        <RibbonButton
-          id="review-check-accessibility"
-          layout="vertical"
-          height="full"
-          icon={<AccessibilityIcon />}
-          label={'Check\nAccessibility'}
-          onClick={handleCheckAccessibility}
-          title="Check Accessibility"
-          aria-label="Check Accessibility"
-        />
-      </ToolbarGroup>
-
-      {/* 3. Comments Group - R2: Expanded with navigation buttons */}
+      {/* 1. Comments Group - R2: Expanded with navigation buttons */}
       <ToolbarGroup
         label="Comments"
         collapseConfig={COMMENTS_COLLAPSE_CONFIG}
@@ -484,7 +345,7 @@ export function ReviewRibbon() {
         </ToolbarGroup>
       ) : null}
 
-      {/* 5. Protect Group - R1: Renamed from "Changes" to "Protect" (Excel terminology) */}
+      {/* 3. Protect Group - R1: Renamed from "Changes" to "Protect" (Excel terminology) */}
       {/* Excel shows Protect Sheet and Protect Workbook as large buttons side by side */}
       <ToolbarGroup
         label="Protect"

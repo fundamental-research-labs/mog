@@ -80,7 +80,7 @@ export async function createPersistedMergeScenario(
     );
     const baseHead = await expectHead(sourceWb);
 
-    const branch = await sourceWb.version.createBranch({
+    const branch = await sourceWb.version.refs.createBranch({
       name: options.branchName as any,
       targetCommitId: baseCommit.id,
       expectedAbsent: true,

@@ -23,7 +23,7 @@ export function registerTargetHeadStaleScenarios(): void {
       graph.rootCommitId,
     );
 
-    const accepted = await version.acceptProposal({
+    const accepted = await version.proposals.advanced.acceptProposal({
       clientRequestId: 'proposal-accept-target-stale',
       proposalId: ready.proposalId,
       expectedRevision: 5,
@@ -41,14 +41,16 @@ export function registerTargetHeadStaleScenarios(): void {
         actualTargetHeadId: movedMainCommitId,
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',
         ref: { commitId: movedMainCommitId },
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -87,11 +89,13 @@ export function registerTargetHeadStaleScenarios(): void {
       resolutionPolicy: 'fastForwardOnly',
     } as const;
 
-    const accepted = await version.acceptProposal(acceptInput);
-    const retry = await version.acceptProposal(acceptInput);
+    const accepted = await version.proposals.advanced.acceptProposal(acceptInput);
+    const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toEqual(accepted);
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -108,7 +112,7 @@ export function registerTargetHeadStaleScenarios(): void {
         ]),
       },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

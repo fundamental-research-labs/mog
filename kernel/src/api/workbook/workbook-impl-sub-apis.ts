@@ -311,6 +311,8 @@ export abstract class WorkbookImplSubApis extends WorkbookImplFileLifecycle {
       checkoutTransactionGuard: this.checkoutTransactions.guard,
       readState: () => this.readVersionDirtyTrackingState(),
       markCleanIfRevisionUnchanged: (revision) => this.markCleanIfDirtyRevisionUnchanged(revision),
+      beginCommit: this.versionCommitStatus.guard.beginCommit,
+      endCommit: this.versionCommitStatus.guard.endCommit,
     }));
   }
 

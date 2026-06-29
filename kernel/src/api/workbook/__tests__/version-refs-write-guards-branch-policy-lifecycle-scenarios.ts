@@ -23,7 +23,7 @@ export function registerWriteGuardBranchPolicyLifecycleScenarios(): void {
       throw new Error(`expected protected branch: ${protectedBranch.error.code}`);
 
     await expect(
-      version.fastForwardBranch({
+      version.refs.fastForwardBranch({
         name: 'scenario/protected' as any,
         nextCommitId: COMMIT_B,
         expectedHead: COMMIT_A,
@@ -45,7 +45,7 @@ export function registerWriteGuardBranchPolicyLifecycleScenarios(): void {
     });
 
     await expect(
-      version.deleteRef({
+      version.refs.deleteRef({
         name: 'scenario/protected' as any,
         expectedHead: COMMIT_A,
         expectedRefRevision: refVersion('0'),
@@ -66,7 +66,7 @@ export function registerWriteGuardBranchPolicyLifecycleScenarios(): void {
     });
 
     await expect(
-      version.createBranch({
+      version.refs.createBranch({
         name: 'scenario/public-protected' as any,
         targetCommitId: COMMIT_A,
         protected: true,

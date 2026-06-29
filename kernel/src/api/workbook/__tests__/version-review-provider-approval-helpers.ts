@@ -22,7 +22,7 @@ export async function createCellA1AndSheetOrderApprovalReview(clientRequestId: s
 async function createApprovalReview(clientRequestId: string, changes: readonly unknown[]) {
   const graph = await graphWithRootAndChild(changes);
   const version = versionForProvider(graph.provider);
-  const review = await version.createReview({
+  const review = await version.reviews.advanced.createReview({
     ...createReviewInput(clientRequestId),
     subject: {
       kind: 'commitRange',

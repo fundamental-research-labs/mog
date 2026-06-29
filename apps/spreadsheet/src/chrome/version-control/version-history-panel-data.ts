@@ -8,6 +8,7 @@ import type {
   VersionResult,
   VersionRevertResult,
   VersionSurfaceStatus,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
   WorkbookCommitSummary,
   WorkbookVersion,
@@ -38,20 +39,27 @@ export type VersionHistoryWorkbook = {
     | 'getSurfaceStatus'
     | 'getStatus'
     | 'getHead'
-    | 'readRef'
     | 'listCommits'
-    | 'commit'
-    | 'listRefs'
-    | 'createBranch'
-    | 'checkout'
-    | 'promotePendingRemote'
-    | 'merge'
-    | 'applyMerge'
     | 'revert'
     | 'diff'
-    | 'listReviews'
-    | 'listProposals'
-  >;
+    | 'diffOverview'
+    | 'diffGroupDetail'
+    | 'diffWorkingTree'
+    | 'previewMerge'
+    | 'commitCurrent'
+    | 'createBranchFromCurrent'
+    | 'checkoutBranch'
+    | 'checkoutCommit'
+  > & {
+    readonly refs: Pick<
+      WorkbookVersion['refs'],
+      'readRef' | 'listRefs' | 'createBranch' | 'promotePendingRemote'
+    >;
+    readonly reviews: {
+      readonly advanced: Pick<WorkbookVersion['reviews']['advanced'], 'listReviews'>;
+    };
+    readonly proposals: Pick<WorkbookVersion['proposals'], 'list'>;
+  };
   readonly on?: (
     event: VersionHistoryWorkbookRefreshEvent,
     handler: (event: unknown) => void,
@@ -73,8 +81,19 @@ export type VersionHistoryData = {
   readonly proposals: readonly AgentProposalSummary[];
   readonly reviewDiagnostic?: VersionPanelDiagnostic;
   readonly proposalDiagnostic?: VersionPanelDiagnostic;
+  readonly workingTreeDiff?: VersionHistoryWorkingTreeDiff;
   readonly diagnostics: readonly VersionPanelDiagnostic[];
 };
+
+export type VersionHistoryWorkingTreeDiff =
+  | {
+      readonly status: 'loaded';
+      readonly page: VersionWorkingTreeDiffPage;
+    }
+  | {
+      readonly status: 'blocked';
+      readonly diagnostic: VersionPanelDiagnostic;
+    };
 
 export type CommitDirtySnapshot = {
   readonly statusRevision: string;
@@ -150,19 +169,22 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
       readValue('VERSION_UI_STATUS_FAILED', () => workbook.version.getStatus()),
       readVersionResult('VERSION_UI_HEAD_FAILED', () => workbook.version.getHead()),
       readVersionResult('VERSION_UI_COMMITS_FAILED', () =>
-        workbook.version.listCommits({ pageSize: COMMIT_PAGE_SIZE, includeDiagnostics: true }),
+        workbook.version.listCommits({
+          pageSize: COMMIT_PAGE_SIZE,
+          includeDiagnostics: true,
+        }),
       ),
       readVersionResult('VERSION_UI_REFS_FAILED', () =>
-        workbook.version.listRefs({ includeDiagnostics: true }),
+        workbook.version.refs.listRefs({ includeDiagnostics: true }),
       ),
       readReviews
         ? readVersionResult('VERSION_UI_REVIEWS_FAILED', () =>
-            workbook.version.listReviews({ limit: REVIEW_PAGE_SIZE }),
+            workbook.version.reviews.advanced.listReviews({ limit: REVIEW_PAGE_SIZE }),
           )
         : Promise.resolve(emptyPagedRead<WorkbookVersionReviewRecordSummary>(REVIEW_PAGE_SIZE)),
       readProposals
         ? readVersionResult('VERSION_UI_PROPOSALS_FAILED', () =>
-            workbook.version.listProposals({ limit: PROPOSAL_PAGE_SIZE }),
+            workbook.version.proposals.list({ limit: PROPOSAL_PAGE_SIZE }),
           )
         : Promise.resolve(emptyPagedRead<AgentProposalSummary>(PROPOSAL_PAGE_SIZE)),
     ]);
@@ -175,14 +197,25 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
     if (!reviews.ok) diagnostics.push(reviews.diagnostic);
     if (!proposals.ok) diagnostics.push(proposals.diagnostic);
 
-    const surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
+    let surfaceValue = surface.ok ? projectVersionHistorySurface(surface.value) : undefined;
     const headValue = head.ok ? head.value : undefined;
+    const workingTreeDiffRead = surfaceValue?.dirty.hasUncommittedLocalChanges
+      ? await readVersionHistoryWorkingTreeDiffForSurface(workbook, surfaceValue)
+      : undefined;
+    if (workingTreeDiffRead?.surface) {
+      surfaceValue = workingTreeDiffRead.surface;
+    }
+    if (workingTreeDiffRead?.diagnostic) {
+      diagnostics.push(workingTreeDiffRead.diagnostic);
+    }
+    const workingTreeDiff = workingTreeDiffRead?.workingTreeDiff;
     const projectedHead = projectVersionHistoryHead(headValue, surfaceValue);
 
     const data: VersionHistoryData = {
       ...(surfaceValue ? { surface: surfaceValue } : {}),
       ...(rollout.ok ? { rollout: rollout.value } : {}),
       ...(projectedHead ? { head: projectedHead } : {}),
+      ...(workingTreeDiff ? { workingTreeDiff } : {}),
       commits: commits.ok ? commits.value.items : [],
       refs: refs.ok ? refs.value.items : [],
       reviews: reviews.ok ? reviews.value.items : [],
@@ -290,10 +323,84 @@ export function useVersionHistoryData(workbook: VersionHistoryWorkbook): {
   };
 }
 
+async function readVersionHistoryWorkingTreeDiff(
+  workbook: VersionHistoryWorkbook,
+): Promise<VersionHistoryWorkingTreeDiff> {
+  const result = await readVersionResult('VERSION_UI_WORKING_TREE_DIFF_FAILED', () =>
+    workbook.version.diffWorkingTree({
+      pageSize: 50,
+      includeDiagnostics: true,
+      includeOverview: true,
+      overview: {
+        groupLimit: 50,
+        includeDiagnostics: true,
+      },
+    }),
+  );
+  return result.ok
+    ? { status: 'loaded', page: result.value }
+    : { status: 'blocked', diagnostic: result.diagnostic };
+}
+
+async function readVersionHistoryWorkingTreeDiffForSurface(
+  workbook: VersionHistoryWorkbook,
+  surface: VersionSurfaceStatus,
+): Promise<{
+  readonly surface: VersionSurfaceStatus;
+  readonly workingTreeDiff?: VersionHistoryWorkingTreeDiff;
+  readonly diagnostic?: VersionPanelDiagnostic;
+}> {
+  let currentSurface = surface;
+  let currentSnapshot = dirtySnapshotFromSurface(currentSurface);
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const workingTreeDiff = await readVersionHistoryWorkingTreeDiff(workbook);
+    if (!workingTreeDiffNeedsSurfaceFence(workingTreeDiff, currentSnapshot)) {
+      return { surface: currentSurface, workingTreeDiff };
+    }
+
+    const refreshedSurfaceRead = await readValue('VERSION_UI_SURFACE_STATUS_FAILED', () =>
+      workbook.version.getSurfaceStatus(),
+    );
+
+    if (!refreshedSurfaceRead.ok) {
+      return {
+        surface: currentSurface,
+        workingTreeDiff,
+        diagnostic: refreshedSurfaceRead.diagnostic,
+      };
+    }
+
+    const refreshedSurface =
+      projectVersionHistorySurface(refreshedSurfaceRead.value) ?? refreshedSurfaceRead.value;
+    const refreshedSnapshot = dirtySnapshotFromSurface(refreshedSurface);
+    if (!refreshedSurface.dirty.hasUncommittedLocalChanges) {
+      return { surface: refreshedSurface };
+    }
+    if (sameDirtySnapshot(currentSnapshot, refreshedSnapshot)) {
+      return { surface: currentSurface, workingTreeDiff };
+    }
+    if (!workingTreeDiffNeedsSurfaceFence(workingTreeDiff, refreshedSnapshot)) {
+      return { surface: refreshedSurface, workingTreeDiff };
+    }
+
+    currentSurface = refreshedSurface;
+    currentSnapshot = refreshedSnapshot;
+  }
+
+  return { surface: currentSurface };
+}
+
 function commitDirtySnapshot(
   data: VersionHistoryData | undefined,
 ): CommitDirtySnapshot | undefined {
-  const dirty = data?.surface?.dirty;
+  return dirtySnapshotFromSurface(data?.surface);
+}
+
+function dirtySnapshotFromSurface(
+  surface: VersionSurfaceStatus | undefined,
+): CommitDirtySnapshot | undefined {
+  const dirty = surface?.dirty;
   if (!dirty) return undefined;
   if (
     dirty.source !== 'VC-05' ||
@@ -307,6 +414,32 @@ function commitDirtySnapshot(
     checkoutPreflightToken: dirty.checkoutPreflightToken,
     hasUncommittedLocalChanges: dirty.hasUncommittedLocalChanges,
   };
+}
+
+function sameDirtySnapshot(
+  left: CommitDirtySnapshot | undefined,
+  right: CommitDirtySnapshot | undefined,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.statusRevision === right.statusRevision &&
+    left.checkoutPreflightToken === right.checkoutPreflightToken &&
+    left.hasUncommittedLocalChanges === right.hasUncommittedLocalChanges
+  );
+}
+
+function workingTreeDiffNeedsSurfaceFence(
+  diff: VersionHistoryWorkingTreeDiff,
+  surfaceSnapshot: CommitDirtySnapshot | undefined,
+): boolean {
+  if (diff.status === 'blocked') return true;
+  if (diff.page.items.length > 0) return false;
+  if (!surfaceSnapshot) return true;
+  return (
+    diff.page.dirtyStatusRevision !== surfaceSnapshot.statusRevision ||
+    diff.page.checkoutPreflightToken !== surfaceSnapshot.checkoutPreflightToken
+  );
 }
 
 async function readValue<T>(
@@ -358,11 +491,11 @@ function emptyPagedRead<T>(limit: number): { readonly ok: true; readonly value: 
   return { ok: true, value: { items: [], limit } };
 }
 
-export function resolveSelectedOrHeadCommitId(
+export function resolvePreferredOrHeadCommitId(
   data: VersionHistoryData,
-  selectedCommitId: WorkbookCommitId | undefined,
+  preferredCommitId: WorkbookCommitId | undefined,
 ): WorkbookCommitId | undefined {
-  if (selectedCommitId) return selectedCommitId;
+  if (preferredCommitId) return preferredCommitId;
   return currentCheckoutCommitId(data.surface?.current) ?? data.head?.id;
 }
 

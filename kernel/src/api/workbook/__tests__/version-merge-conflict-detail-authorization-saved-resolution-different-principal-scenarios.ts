@@ -16,7 +16,7 @@ export function registerSavedResolutionDifferentPrincipalScenarios(): void {
       'saved-resolution-different-principal',
       async ({ provider, version, preview, target }) => {
         const conflict = preview.conflicts[0];
-        const saved = await version.saveMergeResolutions({
+        const saved = await version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -50,7 +50,7 @@ export function registerSavedResolutionDifferentPrincipalScenarios(): void {
           },
         } as any);
 
-        const detail = await readerVersion.getMergeConflictDetail({
+        const detail = await readerVersion.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

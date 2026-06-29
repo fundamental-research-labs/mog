@@ -176,6 +176,7 @@ export function shouldTrackWorkbookDirtyEvent(
   },
 ): boolean {
   if (!isWorkbookMutationEvent(event)) return false;
+  if ((event as { readonly source?: unknown }).source === 'system') return false;
   // Browser XLSX opens use a fast first-paint import, then complete durable
   // workbook materialization in the background. Public workbook mutations are
   // admitted only after that durability barrier, so mutation events observed

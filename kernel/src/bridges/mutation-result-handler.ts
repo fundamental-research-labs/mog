@@ -238,7 +238,7 @@ export interface SheetRuntimeAdapter {
 // lives in the leaf module to avoid the mutation-result-handler ↔
 // change-accumulator cycle.
 export type { MutationSource } from './mutation-source';
-import type { MutationSource } from './mutation-source';
+import { mutationSourceToStructureEventSource, type MutationSource } from './mutation-source';
 
 /** Error info from a failed mutation. */
 export interface MutationError {
@@ -1244,7 +1244,7 @@ export class MutationResultHandler {
 
   private handleSheetChanges(changes: SheetChange[], source: MutationSource): void {
     const timestamp = Date.now();
-    const eventSource = source === 'user' ? 'user' : 'remote';
+    const eventSource = mutationSourceToStructureEventSource(source);
 
     for (const change of changes) {
       switch (change.field) {
@@ -1349,6 +1349,7 @@ export class MutationResultHandler {
 
   private handleSettingsChanges(changes: SheetSettingsChange[], source: MutationSource): void {
     const timestamp = Date.now();
+    const eventSource = mutationSourceToStructureEventSource(source);
     for (const change of changes) {
       const changedKey = normalizeSheetSettingsChangedKey(change.changedKey);
       const settings = change.settings as SheetSettings;
@@ -1358,7 +1359,7 @@ export class MutationResultHandler {
         sheetId: change.sheetId,
         settings,
         changedKey: changedKey as keyof SheetSettings,
-        source,
+        source: eventSource,
       });
       // Semantic re-emission: the Rust SheetSettings payload covers both
       // view-shape keys (gridlines/headers/RTL/formula-display/zero-display/
@@ -1375,7 +1376,7 @@ export class MutationResultHandler {
           showGridlines: settings.showGridlines,
           showRowHeaders: settings.showRowHeaders,
           showColumnHeaders: settings.showColumnHeaders,
-          source,
+          source: eventSource,
         });
       }
     }
@@ -1532,6 +1533,7 @@ export class MutationResultHandler {
     source: MutationSource,
   ): void {
     const timestamp = Date.now();
+    const eventSource = mutationSourceToStructureEventSource(source);
     for (const change of changes) {
       const settings = change.settings as WorkbookSettings;
       // Rust ships one WorkbookSettingsChange with N changedKeys; emit one
@@ -1543,7 +1545,7 @@ export class MutationResultHandler {
           timestamp,
           settings,
           changedKey: key as keyof WorkbookSettings,
-          source: source === 'user' ? 'user' : 'remote',
+          source: eventSource,
         });
       }
     }

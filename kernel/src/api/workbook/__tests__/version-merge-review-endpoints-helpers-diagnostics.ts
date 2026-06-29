@@ -28,6 +28,6 @@ export async function accessDeniedPreviewArtifactResult() {
     throw Object.assign(new Error(rawCommitId), { diagnostics: [{ issueCode: 'VERSION_PERMISSION_DENIED', safeMessage: `Cannot read ${rawCommitId} or sha256:${digest.digest}.` }] });
   } }) };
   const version = new WorkbookVersionImpl({ versioning: { provider } } as any);
-  const result = await version.getMergeConflictDetail({ resultId: mergeResultIdForPreviewDigest(digest), resultDigest: digest, redactionPolicyDigest: digest, conflictId: 'conflict:legacy:access-denied', expectedConflictDigest: { algorithm: 'sha256', digest: '9'.repeat(64) }, valueRole: 'base', purpose: 'review' });
+  const result = await version.artifacts.advanced.getMergeConflictDetail({ resultId: mergeResultIdForPreviewDigest(digest), resultDigest: digest, redactionPolicyDigest: digest, conflictId: 'conflict:legacy:access-denied', expectedConflictDigest: { algorithm: 'sha256', digest: '9'.repeat(64) }, valueRole: 'base', purpose: 'review' });
   return { result, canaries: [rawCommitId, digest.digest, `sha256:${digest.digest}`, `merge-result:${digest.digest}`] };
 }

@@ -110,6 +110,7 @@ export function useSheetTabActions(
       'sheet:visibilityChanged',
       'sheet:colorChanged',
       'sheet:copied',
+      'workbook:version-checkout-materialized',
     ] as const;
     const unsubscribes = events.map((event) => wb.on(event, forceUpdate));
 
@@ -130,9 +131,9 @@ export function useSheetTabActions(
    * BEFORE the structure events fire, so a re-render triggered by
    * `updateCounter` always sees post-mutation state.
    *
-   * `updateCounter` is the dependency: any `sheet:created/deleted/renamed/
-   * moved/visibilityChanged/colorChanged/copied` event flips the counter,
-   * causing this `useMemo` to re-run and re-read from the mirror.
+   * `updateCounter` is the dependency: any sheet structure event or version
+   * checkout materialization flips the counter, causing this `useMemo` to
+   * re-run and re-read from the current mirror.
    */
   const allSheets = useMemo<SheetInfo[]>(() => {
     const ids = wb.mirror.getSheetIds();

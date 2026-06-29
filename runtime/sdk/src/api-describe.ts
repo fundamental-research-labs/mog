@@ -10,12 +10,15 @@ export interface ApiSpecFunctionEntry {
   signature: string;
   docstring: string;
   usedTypes: string[];
+  kind?: 'method' | 'property' | 'subApiAccessor';
+  canonicalPath?: string;
   compatibility?: ApiCompatibilityReference[];
   targetInterface?: string;
 }
 
 export interface ApiSpecInterfaceEntry {
   docstring: string;
+  members: Record<string, ApiSpecFunctionEntry>;
   functions: Record<string, ApiSpecFunctionEntry>;
 }
 
@@ -87,9 +90,6 @@ export type DescribeResult = OverviewResult | InterfaceResult | MethodResult | T
 
 // ─── Index built at module load ──────────────────────────────────────────────
 
-// Path map: 'wb.sheets' → 'WorkbookSheets', 'ws.charts' → 'WorksheetCharts'
-const pathMap: Record<string, string> = {};
-
 // Sub-API accessor names per root: { wb: Set('sheets','history'), ws: Set('charts','formats') }
 const subApiAccessors: Record<string, Set<string>> = { wb: new Set(), ws: new Set() };
 
@@ -100,7 +100,6 @@ function getSubApisForRoot(root: 'wb' | 'ws'): Record<string, ApiSpecFunctionEnt
 for (const root of ['wb', 'ws'] as const) {
   for (const [accessor, entry] of Object.entries(getSubApisForRoot(root))) {
     if (!entry.targetInterface) continue;
-    pathMap[`${root}.${accessor}`] = entry.targetInterface;
     subApiAccessors[root].add(accessor);
   }
 }
@@ -227,6 +226,47 @@ function buildMethodSummaries(ifaceName: string, excludeAccessors?: Set<string>)
       docstring: fn.docstring,
       compatibility: fn.compatibility ?? [],
     }));
+}
+
+function getInterfaceEntry(ifaceName: string):
+  | {
+      docstring: string;
+      members: Record<string, ApiSpecFunctionEntry>;
+      functions: Record<string, ApiSpecFunctionEntry>;
+    }
+  | undefined {
+  return spec.interfaces[ifaceName as keyof typeof spec.interfaces] as
+    | {
+        docstring: string;
+        members: Record<string, ApiSpecFunctionEntry>;
+        functions: Record<string, ApiSpecFunctionEntry>;
+      }
+    | undefined;
+}
+
+function getInterfaceMember(ifaceName: string, memberName: string): ApiSpecFunctionEntry | null {
+  const iface = getInterfaceEntry(ifaceName);
+  return iface?.members[memberName] ?? iface?.functions[memberName] ?? null;
+}
+
+function nestedAccessorsForInterface(ifaceName: string): Set<string> {
+  const iface = getInterfaceEntry(ifaceName);
+  if (!iface) return new Set();
+  return new Set(
+    Object.entries(iface.members)
+      .filter(([, entry]) => Boolean(entry.targetInterface))
+      .map(([name]) => name),
+  );
+}
+
+function buildInterfaceResult(ifaceName: string, fullPath: string): InterfaceResult {
+  const nestedAccessors = nestedAccessorsForInterface(ifaceName);
+  return {
+    name: ifaceName,
+    path: fullPath,
+    docstring: getInterfaceEntry(ifaceName)?.docstring ?? '',
+    methods: buildMethodSummaries(ifaceName, nestedAccessors),
+  };
 }
 
 function compatibilityReferencesForPath(path: string): ApiCompatibilityReference[] {
@@ -366,35 +406,26 @@ function describe(path?: string): DescribeResult {
     };
   }
 
-  const second = parts[1];
+  let currentIfaceName = rootIfaceName;
+  let currentPath = root;
 
-  if (parts.length === 2) {
-    // Could be a sub-API: describe('ws.charts')
-    const subIfaceName = pathMap[`${root}.${second}`];
-    if (subIfaceName) {
-      return {
-        name: subIfaceName,
-        path: `${root}.${second}`,
-        docstring:
-          (
-            spec.interfaces[subIfaceName as keyof typeof spec.interfaces] as
-              | { docstring: string }
-              | undefined
-          )?.docstring ?? '',
-        methods: buildMethodSummaries(subIfaceName),
-      };
+  for (let index = 1; index < parts.length; index++) {
+    const part = parts[index];
+    const fullPath = `${currentPath}.${part}`;
+    const entry = getInterfaceMember(currentIfaceName, part);
+    if (!entry) return null;
+
+    const isLast = index === parts.length - 1;
+    if (isLast) {
+      if (entry.targetInterface) {
+        return buildInterfaceResult(entry.targetInterface, fullPath);
+      }
+      return resolveMethod(currentIfaceName, part, fullPath);
     }
 
-    // Otherwise a direct method on the root interface: describe('ws.setCell')
-    return resolveMethod(rootIfaceName, second, `${root}.${second}`);
-  }
-
-  if (parts.length === 3) {
-    // describe('ws.charts.add') → method on a sub-API
-    const subIfaceName = pathMap[`${root}.${second}`];
-    if (!subIfaceName) return null;
-    const methodName = parts[2];
-    return resolveMethod(subIfaceName, methodName, path);
+    if (!entry.targetInterface) return null;
+    currentIfaceName = entry.targetInterface;
+    currentPath = fullPath;
   }
 
   return null;
@@ -513,26 +544,36 @@ const RESERVED_PROPS = new Set([
   'signature',
 ]);
 
-function buildSubApiNode(ifaceName: string, root: string, accessor: string): SubApiNode {
-  const iface = spec.interfaces[ifaceName as keyof typeof spec.interfaces] as
-    | { docstring: string; functions: Record<string, unknown> }
-    | undefined;
-
-  const fullPath = `${root}.${accessor}`;
+function buildSubApiNode(ifaceName: string, fullPath: string): SubApiNode {
+  const iface = getInterfaceEntry(ifaceName);
+  const nestedAccessors = nestedAccessorsForInterface(ifaceName);
   const node: Record<string, unknown> = {
     name: ifaceName,
     path: fullPath,
     docstring: iface?.docstring ?? '',
-    methods: buildMethodSummaries(ifaceName),
+    methods: buildMethodSummaries(ifaceName, nestedAccessors),
   };
 
-  // Add lazy getters for each method on this sub-API
+  // Add lazy getters for each member on this sub-API.
   if (iface) {
-    for (const methodName of Object.keys(iface.functions)) {
+    for (const [methodName, entry] of Object.entries(iface.members)) {
       if (RESERVED_PROPS.has(methodName)) continue;
+      const memberPath = `${fullPath}.${methodName}`;
+      if (entry.targetInterface) {
+        let cached: SubApiNode | undefined;
+        Object.defineProperty(node, methodName, {
+          get() {
+            if (!cached) cached = buildSubApiNode(entry.targetInterface as string, memberPath);
+            return cached;
+          },
+          enumerable: true,
+          configurable: true,
+        });
+        continue;
+      }
       Object.defineProperty(node, methodName, {
         get() {
-          return cachedResolveMethod(ifaceName, methodName, `${fullPath}.${methodName}`);
+          return cachedResolveMethod(ifaceName, methodName, memberPath);
         },
         enumerable: true,
         configurable: true,
@@ -562,7 +603,7 @@ function buildRootNode(root: 'wb' | 'ws'): RootNode {
     let cached: SubApiNode | undefined;
     Object.defineProperty(node, accessor, {
       get() {
-        if (!cached) cached = buildSubApiNode(subIfaceName as string, root, accessor);
+        if (!cached) cached = buildSubApiNode(subIfaceName as string, `${root}.${accessor}`);
         return cached;
       },
       enumerable: true,

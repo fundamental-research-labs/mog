@@ -15,6 +15,8 @@
 import type { SheetId } from '@mog-sdk/contracts/core';
 
 import type { DocumentContext } from '../../context/types';
+import { createCellWriteVersionMutationOptions } from '../../api/internal/cell-write-version-options';
+import { withDirectEditRange } from '../../bridges/compute';
 
 // =============================================================================
 // Range Operations
@@ -34,5 +36,22 @@ export async function clearRange(
   endRow: number,
   endCol: number,
 ): Promise<void> {
-  await ctx.computeBridge.clearRangeByPosition(sheetId, startRow, startCol, endRow, endCol);
+  await ctx.computeBridge.clearRangeByPosition(
+    sheetId,
+    startRow,
+    startCol,
+    endRow,
+    endCol,
+    withDirectEditRange(
+      createCellWriteVersionMutationOptions(ctx, {
+        operationIdPrefix: 'cells.clearRangeByViewport',
+        sheetIds: [sheetId],
+      }),
+      sheetId,
+      startRow,
+      startCol,
+      endRow,
+      endCol,
+    ),
+  );
 }

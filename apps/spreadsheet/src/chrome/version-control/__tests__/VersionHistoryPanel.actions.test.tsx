@@ -1,81 +1,81 @@
 import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
-import { act, screen, waitFor, within } from '@testing-library/react';
-import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { VersionDiffOverview } from '@mog-sdk/contracts/api';
 
 import {
+  DIFF_GROUP_ID,
   HEAD_COMMIT_ID,
   PARENT_COMMIT_ID,
   REF_REVISION,
-  branchTargetTestId,
   checkoutBranchTestId,
+  checkoutCommitTestId,
+  commitBranchNameInputTestId,
+  commitMenuButtonTestId,
+  commitRowTestId,
   createDeferred,
+  createBranchFromCommitSubmitTestId,
+  createBranchFromCommitTestId,
   createSurfaceStatus,
   createWorkbook,
-  diffDiagnostic,
-  diffEntry,
   expectActionResult,
   expectDisabledButtonReason,
   failedInvalidBranchName,
   failedInvalidState,
   failedNotFound,
-  mergePreviewButtonTestId,
+  openCurrentBranchMenu,
   parentDiffButtonTestId,
   renderVersionHistoryPanel,
-  semanticDiffPage,
   shortCommitId,
+  versionDiffOverview,
   type VersionHistoryWorkbook,
 } from './VersionHistoryPanel.test-utils';
 
 type ParentDiffPreviewCase = readonly [
   label: string,
-  page: VersionSemanticDiffPage,
+  overview: VersionDiffOverview,
   state: string,
   title: string,
   statusLabel: string,
 ];
 
 const parentDiffPreviewCases: readonly ParentDiffPreviewCase[] = [
-  ['empty', semanticDiffPage([]), 'empty', 'Diff returned no entries', 'Empty preview'],
   [
-    'unsupported',
-    semanticDiffPage([
-      diffEntry({ diagnostics: [diffDiagnostic('unsupportedDomain', 'unsupported')] }),
-    ]),
-    'unsupported',
-    'Unsupported semantic state',
-    'Unsupported state',
+    'empty',
+    versionDiffOverview({ exactTotalChanges: 0 }),
+    'empty',
+    'No grouped changes',
+    '0 changes',
   ],
+  ['changes', versionDiffOverview(), 'changes', 'Changes', '1 change'],
   [
-    'stale',
-    semanticDiffPage([
-      diffEntry({ diagnostics: [diffDiagnostic('VERSION_REF_CONFLICT', 'retry')] }),
-    ]),
-    'stale',
-    'Stale diff reference',
-    'Stale reference',
-  ],
-  [
-    'conflict-only',
-    semanticDiffPage([diffEntry({ changeId: 'merge-conflict:sha256:1' })]),
-    'conflict-only',
-    'Conflicts only',
-    'Conflicts only',
-  ],
-  [
-    'redacted',
-    semanticDiffPage([
-      {
-        structural: { kind: 'redacted', reason: 'permission-denied' },
-        before: { kind: 'redacted', reason: 'redaction-policy' },
-        after: { kind: 'redacted', reason: 'historical-acl-unavailable' },
-        diagnostics: [diffDiagnostic('VERSION_PERMISSION_DENIED', 'unsupported')],
+    'incomplete',
+    versionDiffOverview({
+      exactTotalChanges: null,
+      summary: {
+        minimumChangeCount: 1,
+        countPrecision: 'lowerBound',
+        domainCounts: [
+          {
+            domain: 'cells',
+            minimumCount: 1,
+            countPrecision: 'lowerBound',
+          },
+        ],
+        operationCounts: [
+          {
+            operation: 'changed',
+            minimumCount: 1,
+            countPrecision: 'lowerBound',
+          },
+        ],
+        incomplete: true,
       },
-    ]),
-    'redacted',
-    'Restricted diff entries',
-    'Restricted entries',
+    }),
+    'incomplete',
+    'Incomplete',
+    '1+ changes',
   ],
 ];
 
@@ -85,6 +85,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
+    await openCurrentBranchMenu(user);
 
     const branchInput = screen.getByTestId('version-history-branch-name-input');
     const createBranchButton = screen.getByTestId('version-history-create-branch-button');
@@ -95,39 +96,37 @@ describe('VersionHistoryPanelContent action flows', () => {
       'main is protected and cannot be created from the version panel.',
     );
     await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
+    expect(workbook.version.createBranchFromCurrent).not.toHaveBeenCalled();
 
     await user.clear(branchInput);
     await user.type(branchInput, 'refs/tags/review');
-    expectDisabledButtonReason(createBranchButton, 'Branch refs must use refs/heads/<branch>.');
+    expectDisabledButtonReason(createBranchButton, 'Enter a branch name without ref prefixes.');
     await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
+    expect(workbook.version.createBranchFromCurrent).not.toHaveBeenCalled();
 
     await user.clear(branchInput);
-    await user.type(branchInput, 'scenario/budget');
-    expectDisabledButtonReason(createBranchButton, 'Branch scenario/budget already exists.');
+    await user.type(branchInput, 'budget');
+    expectDisabledButtonReason(createBranchButton, 'Branch budget already exists.');
     await user.click(createBranchButton);
-    expect(workbook.version.createBranch).not.toHaveBeenCalled();
+    expect(workbook.version.createBranchFromCurrent).not.toHaveBeenCalled();
 
     await user.clear(branchInput);
-    await user.type(branchInput, 'refs/heads/review/version-panel');
+    await user.type(branchInput, 'version-panel');
     expect(createBranchButton).toBeEnabled();
     await user.click(createBranchButton);
     await waitFor(() =>
-      expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
-        targetCommitId: HEAD_COMMIT_ID,
+      expect(workbook.version.createBranchFromCurrent).toHaveBeenCalledWith('version-panel', {
         expectedAbsent: true,
       }),
     );
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
   });
 
   it('announces running and successful action states through a status live region', async () => {
     const commitResult =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>>();
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commitCurrent']>>>();
     const workbook = createWorkbook({
-      commit: jest.fn(async () => commitResult.promise),
+      commitCurrent: jest.fn(async () => commitResult.promise),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -161,7 +160,7 @@ describe('VersionHistoryPanelContent action flows', () => {
 
   it('does not announce commit success until the post-commit history refresh resolves', async () => {
     const commitResult =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commit']>>>();
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['commitCurrent']>>>();
     const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
     const getSurfaceStatus = jest
       .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
@@ -169,7 +168,7 @@ describe('VersionHistoryPanelContent action flows', () => {
       .mockImplementationOnce(async () => refreshedSurface.promise);
     const workbook = createWorkbook({
       getSurfaceStatus,
-      commit: jest.fn(async () => commitResult.promise),
+      commitCurrent: jest.fn(async () => commitResult.promise),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -201,7 +200,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await expectActionResult('Committed changes', 'success');
   });
 
-  it('does not announce checkout success until the post-checkout history refresh resolves', async () => {
+  it('clears checkout status after the refreshed checkout state loads', async () => {
     const refreshedSurface = createDeferred<ReturnType<typeof createSurfaceStatus>>();
     const getSurfaceStatus = jest
       .fn<VersionHistoryWorkbook['version']['getSurfaceStatus']>()
@@ -211,47 +210,56 @@ describe('VersionHistoryPanelContent action flows', () => {
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await openCurrentBranchMenu(user);
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
 
-    await waitFor(() => expect(workbook.version.checkout).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(workbook.version.checkoutBranch).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
         'Refreshing version history',
       ),
     );
     expect(screen.getByTestId('version-history-action-result')).not.toHaveTextContent(
-      'Checked out scenario/budget',
+      'Checked out budget',
     );
 
     refreshedSurface.resolve(
       createSurfaceStatus({
         current: {
           headCommitId: PARENT_COMMIT_ID,
-          branchName: 'refs/heads/scenario/budget',
+          branchName: 'refs/heads/budget',
         },
       }),
     );
-    await expectActionResult('Checked out scenario/budget', 'success');
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
+      'budget',
+    );
   });
 
   it('does not announce branch creation until refreshed refs include the new checkout action', async () => {
-    const branchName = 'refs/heads/review/version-panel';
+    const branchName = 'refs/heads/version-panel';
     const branchResult =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
+      createDeferred<
+        Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranchFromCurrent']>>
+      >();
     const refreshedRefs =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['listRefs']>>>();
+      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['refs']['listRefs']>>>();
     const listRefs = jest
-      .fn<VersionHistoryWorkbook['version']['listRefs']>()
-      .mockImplementationOnce(() => createWorkbook().version.listRefs())
+      .fn<VersionHistoryWorkbook['version']['refs']['listRefs']>()
+      .mockImplementationOnce(() => createWorkbook().version.refs.listRefs())
       .mockImplementationOnce(async () => refreshedRefs.promise);
     const workbook = createWorkbook({
-      listRefs,
-      createBranch: jest.fn(async () => branchResult.promise),
+      createBranchFromCurrent: jest.fn(async () => branchResult.promise),
+      refs: { listRefs },
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
-    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await openCurrentBranchMenu(user);
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'version-panel');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
     branchResult.resolve({
@@ -288,37 +296,36 @@ describe('VersionHistoryPanelContent action flows', () => {
         limit: 2,
       },
     });
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
     expect(await screen.findByTestId(checkoutBranchTestId(branchName))).toBeEnabled();
   });
 
-  it('keeps checkout and merge controls disabled while branch creation is in flight', async () => {
-    const branchName = 'refs/heads/review/action-busy';
+  it('keeps checkout controls disabled while branch creation is in flight', async () => {
+    const branchName = 'refs/heads/action-busy';
     const branchResult =
-      createDeferred<Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranch']>>>();
+      createDeferred<
+        Awaited<ReturnType<VersionHistoryWorkbook['version']['createBranchFromCurrent']>>
+      >();
     const workbook = createWorkbook({
-      createBranch: jest.fn(() => branchResult.promise),
+      createBranchFromCurrent: jest.fn(() => branchResult.promise),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
     await screen.findByText('Calculated forecast');
-    await user.type(screen.getByTestId('version-history-branch-name-input'), branchName);
+    await openCurrentBranchMenu(user);
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'action-busy');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
-    await waitFor(() => expect(workbook.version.createBranch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(workbook.version.createBranchFromCurrent).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
       'Creating branch',
     );
 
     const runningReason = 'Wait for the current version action to finish.';
     expectDisabledButtonReason(
-      screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')),
+      screen.getByTestId(checkoutBranchTestId('refs/heads/budget')),
       runningReason,
     );
-    expectDisabledButtonReason(screen.getByTestId(mergePreviewButtonTestId()), runningReason);
-
-    await user.click(screen.getByTestId(mergePreviewButtonTestId()));
-    expect(workbook.version.merge).not.toHaveBeenCalled();
 
     branchResult.resolve({
       ok: true,
@@ -328,7 +335,7 @@ describe('VersionHistoryPanelContent action flows', () => {
         revision: { kind: 'counter', value: '3' },
       },
     });
-    await expectActionResult('Created review/action-busy', 'success');
+    await expectActionResult('Created action-busy', 'success');
   });
 
   it('refreshes commit availability when workbook edits dirty an open panel', async () => {
@@ -401,13 +408,13 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.type(commitInput, 'Checkpoint');
     await user.click(commitButton);
 
-    await waitFor(() => expect(workbook.version.commit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(workbook.version.commitCurrent).toHaveBeenCalledTimes(1));
     await expectActionResult('Committed changes', 'success');
 
     await user.type(commitInput, 'Second checkpoint');
     expectDisabledButtonReason(commitButton, 'Version status is refreshing.');
     await user.click(commitButton);
-    expect(workbook.version.commit).toHaveBeenCalledTimes(1);
+    expect(workbook.version.commitCurrent).toHaveBeenCalledTimes(1);
   });
 
   it('keeps commit disabled when a post-checkout refresh returns the same dirty snapshot', async () => {
@@ -433,12 +440,16 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.type(screen.getByTestId('version-history-commit-message-input'), 'Checkpoint');
     expect(commitButton).toBeEnabled();
 
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await openCurrentBranchMenu(user);
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
 
-    await expectActionResult('Checked out scenario/budget', 'success');
+    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument(),
+    );
     expectDisabledButtonReason(commitButton, 'Version status is refreshing.');
     await user.click(commitButton);
-    expect(workbook.version.commit).not.toHaveBeenCalled();
+    expect(workbook.version.commitCurrent).not.toHaveBeenCalled();
   });
 
   it('calls commit, createBranch, checkout, and parent diff through workbook.version', async () => {
@@ -453,101 +464,247 @@ describe('VersionHistoryPanelContent action flows', () => {
     );
     await user.click(screen.getByTestId('version-history-commit-button'));
     await waitFor(() =>
-      expect(workbook.version.commit).toHaveBeenCalledWith({
+      expect(workbook.version.commitCurrent).toHaveBeenCalledWith({
         message: 'Snapshot before review',
-        expectedHead: {
-          commitId: HEAD_COMMIT_ID,
-          revision: REF_REVISION,
-        },
       }),
     );
     await expectActionResult('Committed changes', 'success');
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(2));
 
-    await user.click(screen.getByTestId(branchTargetTestId(PARENT_COMMIT_ID)));
-    expect(screen.getByTestId('version-history-branch-target-summary')).toHaveAttribute(
-      'data-version-commit-id',
-      PARENT_COMMIT_ID,
-    );
+    await user.click(screen.getByTestId(commitMenuButtonTestId(PARENT_COMMIT_ID)));
+    await user.click(screen.getByTestId(createBranchFromCommitTestId(PARENT_COMMIT_ID)));
     await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/version-panel',
+      screen.getByTestId(commitBranchNameInputTestId(PARENT_COMMIT_ID)),
+      'version-panel',
     );
-    await user.click(screen.getByTestId('version-history-create-branch-button'));
+    await user.click(screen.getByTestId(createBranchFromCommitSubmitTestId(PARENT_COMMIT_ID)));
     await waitFor(() =>
-      expect(workbook.version.createBranch).toHaveBeenCalledWith({
-        name: 'refs/heads/review/version-panel',
+      expect(workbook.version.refs.createBranch).toHaveBeenCalledWith({
+        name: 'refs/heads/version-panel',
         targetCommitId: PARENT_COMMIT_ID,
         expectedAbsent: true,
       }),
     );
-    await expectActionResult('Created review/version-panel', 'success');
+    await expectActionResult('Created version-panel', 'success');
     await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(3));
 
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    fireEvent.contextMenu(screen.getByTestId(commitRowTestId(PARENT_COMMIT_ID)), {
+      clientX: 42,
+      clientY: 96,
+    });
+    await user.click(screen.getByTestId(checkoutCommitTestId(PARENT_COMMIT_ID)));
     await waitFor(() =>
-      expect(workbook.version.checkout).toHaveBeenCalledWith(
-        {
-          kind: 'ref',
-          name: 'refs/heads/scenario/budget',
-        },
-        { includeDiagnostics: true },
-      ),
-    );
-    await expectActionResult('Checked out scenario/budget', 'success');
-    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(4));
-
-    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-    await waitFor(() =>
-      expect(workbook.version.diff).toHaveBeenCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-        pageSize: 50,
+      expect(workbook.version.checkoutCommit).toHaveBeenCalledWith(PARENT_COMMIT_ID, {
         includeDiagnostics: true,
       }),
     );
-    await expectActionResult('Loaded parent diff', 'success');
-    const parentDiff = await screen.findByTestId('version-history-parent-diff');
-    expect(parentDiff).toHaveTextContent('cells value');
-    const diffStatus = within(parentDiff).getByRole('status');
+    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(4));
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument(),
+    );
+
+    await openCurrentBranchMenu(user);
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
+    await waitFor(() =>
+      expect(workbook.version.checkoutBranch).toHaveBeenCalledWith('budget', {
+        includeDiagnostics: true,
+      }),
+    );
+    await waitFor(() => expect(workbook.version.getSurfaceStatus).toHaveBeenCalledTimes(5));
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    await waitFor(() =>
+      expect(workbook.version.diffOverview).toHaveBeenCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
+        groupLimit: 50,
+        includeDiagnostics: true,
+      }),
+    );
+    const diffViewer = await screen.findByTestId('version-history-diff-viewer');
+    expect(screen.queryByTestId('version-history-action-result')).not.toBeInTheDocument();
+    expect(diffViewer).toHaveAttribute('data-state', 'changes');
+    expect(diffViewer).toHaveTextContent('Changes');
+    expect(screen.queryByTestId('version-history-diff-overview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('version-history-diff-total-count')).toHaveTextContent('1 change');
+    expect(screen.queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
+    const inlineDetail = await screen.findByTestId('version-history-diff-inline-detail');
+    expect(inlineDetail).toHaveTextContent('Sheet1!A1');
+    expect(inlineDetail).not.toHaveTextContent('sheet-1!A1');
+    expect(diffViewer).not.toHaveTextContent('cells value');
+    const diffStatus = within(diffViewer).getByRole('status');
     expect(diffStatus).toHaveAttribute('aria-live', 'polite');
     expect(diffStatus).toHaveAttribute('aria-atomic', 'true');
     expect(diffStatus).toHaveTextContent(
-      `Parent Diff Base ${shortCommitId(PARENT_COMMIT_ID)} Target ${shortCommitId(
+      `Diff base ${shortCommitId(PARENT_COMMIT_ID)} target ${shortCommitId(
         HEAD_COMMIT_ID,
-      )} State Changes. Change count 1`,
+      )}. 1 change.`,
+    );
+    await waitFor(() =>
+      expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
+        PARENT_COMMIT_ID,
+        HEAD_COMMIT_ID,
+        {
+          groupId: DIFF_GROUP_ID,
+          pageSize: 200,
+          includeDiagnostics: true,
+        },
+      ),
+    );
+    expect(diffViewer).toHaveTextContent('Blank');
+    expect(diffViewer).toHaveTextContent('42');
+  });
+
+  it('toggles the active parent diff closed from the same commit Diff button', async () => {
+    const workbook = createWorkbook();
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+
+    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    expect(await screen.findByTestId('version-history-parent-diff')).toBeInTheDocument();
+    await waitFor(() => expect(workbook.version.diffGroupDetail).toHaveBeenCalledTimes(1));
+
+    const activeDiffButton = screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID));
+    await waitFor(() => expect(activeDiffButton).toBeEnabled());
+    expect(activeDiffButton).toHaveAccessibleName(
+      `Hide diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
+    );
+    expect(activeDiffButton).toHaveTextContent('Hide');
+
+    await user.click(activeDiffButton);
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('version-history-parent-diff')).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId('version-history-diff-viewer')).not.toBeInTheDocument();
+    expect(workbook.version.diffOverview).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID))).toHaveAccessibleName(
+      `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
+    );
+  });
+
+  it('applies sheet, domain, and operation filters through the public diff overview APIs', async () => {
+    const workbook = createWorkbook();
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    await screen.findByText('Calculated forecast');
+    await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
+    await screen.findByTestId('version-history-diff-viewer');
+
+    expect(screen.queryByTestId('version-history-diff-filters')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('version-history-diff-filter-button'));
+    expect(await screen.findByTestId('version-history-diff-filter-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('version-history-diff-filter-address')).toBeDisabled();
+    expect(screen.getByTestId('version-history-diff-filter-address')).toHaveAccessibleDescription(
+      'Address filters require a historical range index.',
+    );
+    expect(screen.getByTestId('version-history-diff-filter-search')).toBeDisabled();
+    expect(screen.getByTestId('version-history-diff-filter-search')).toHaveAccessibleDescription(
+      'Formula and text search requires a redaction-aware search index.',
+    );
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-domain'), {
+      target: { value: 'cells' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(2));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: { domains: ['cells'] },
+      },
+    );
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-sheet'), {
+      target: { value: 'sheet-1' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(3));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: { sheetIds: ['sheet-1'], domains: ['cells'] },
+      },
+    );
+
+    fireEvent.change(screen.getByTestId('version-history-diff-filter-operation'), {
+      target: { value: 'changed' },
+    });
+    await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(4));
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: {
+          sheetIds: ['sheet-1'],
+          domains: ['cells'],
+          operations: ['changed'],
+        },
+      },
+    );
+
+    await waitFor(() =>
+      expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
+        PARENT_COMMIT_ID,
+        HEAD_COMMIT_ID,
+        {
+          groupId: DIFF_GROUP_ID,
+          pageSize: 200,
+          includeDiagnostics: true,
+          filters: {
+            sheetIds: ['sheet-1'],
+            domains: ['cells'],
+            operations: ['changed'],
+          },
+        },
+      ),
     );
   });
 
   it.each(parentDiffPreviewCases)(
     'renders a distinct %s parent diff preview state',
-    async (_, page, state, title, label) => {
-      const workbook = createWorkbook({ diff: jest.fn(async () => ({ ok: true, value: page })) });
+    async (_, overview, state, title, label) => {
+      const workbook = createWorkbook({
+        diffOverview: jest.fn(async () => ({ ok: true, value: overview })),
+      });
 
       const { user } = renderVersionHistoryPanel({ workbook });
 
       await screen.findByText('Calculated forecast');
       await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));
-      const parentDiff = await screen.findByTestId('version-history-parent-diff');
-      expect(parentDiff).toHaveAttribute('data-state', state);
-      expect(parentDiff).toHaveTextContent(title);
-      expect(within(parentDiff).getByRole('status')).toHaveTextContent(`State ${label}`);
-      if (state === 'redacted') {
-        expect(parentDiff).toHaveTextContent('Redacted change');
-      }
-      expect(parentDiff).not.toHaveTextContent('No semantic changes');
+      const diffViewer = await screen.findByTestId('version-history-diff-viewer');
+      expect(diffViewer).toHaveAttribute('data-state', state);
+      expect(diffViewer).toHaveTextContent(title);
+      expect(within(diffViewer).getByRole('status')).toHaveTextContent(label);
+      expect(diffViewer).not.toHaveTextContent('No semantic changes');
     },
   );
 
   it('surfaces commit, branch, checkout, and parent diff errors in the action result region', async () => {
     const workbook = createWorkbook({
-      commit: jest.fn(async () => failedInvalidState('Commit rejected by version provider.')),
-      createBranch: jest.fn(async () =>
+      commitCurrent: jest.fn(async () =>
+        failedInvalidState('Commit rejected by version provider.'),
+      ),
+      createBranchFromCurrent: jest.fn(async () =>
         failedInvalidBranchName(
-          'refs/heads/review/provider-rejected',
+          'refs/heads/provider-rejected',
           'Branch rejected by version provider.',
         ),
       ),
-      checkout: jest.fn(async () => failedInvalidState('Checkout rejected by version provider.')),
-      diff: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
+      checkoutBranch: jest.fn(async () =>
+        failedInvalidState('Checkout rejected by version provider.'),
+      ),
+      diffOverview: jest.fn(async () =>
+        failedNotFound('version diff', 'Diff target is unavailable.'),
+      ),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 
@@ -557,14 +714,13 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.click(screen.getByTestId('version-history-commit-button'));
     await expectActionResult('Commit rejected by version provider.', 'error');
 
-    await user.type(
-      screen.getByTestId('version-history-branch-name-input'),
-      'review/provider-rejected',
-    );
+    await openCurrentBranchMenu(user);
+    await user.type(screen.getByTestId('version-history-branch-name-input'), 'provider-rejected');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
     await expectActionResult('Branch rejected by version provider.', 'error');
 
-    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/scenario/budget')));
+    await openCurrentBranchMenu(user);
+    await user.click(screen.getByTestId(checkoutBranchTestId('refs/heads/budget')));
     await expectActionResult('Checkout rejected by version provider.', 'error');
 
     await user.click(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID)));

@@ -125,6 +125,8 @@ function capabilityForOperation(
   operation: VersionMergePublicOperation,
 ): VersionMergePublicCapability {
   switch (operation) {
+    case 'previewMerge':
+    case 'getMergeReview':
     case 'merge':
     case 'getMergeConflictDetail':
       return 'version:mergePreview';

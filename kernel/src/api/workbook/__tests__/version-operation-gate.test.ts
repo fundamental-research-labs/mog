@@ -83,13 +83,13 @@ describe('WorkbookVersion public operation feature gates', () => {
       error: blockedEditingError('checkout'),
     });
     await expect(
-      version.createBranch({ name: 'scenario/blocked' as any, targetCommitId: COMMIT_ID }),
+      version.refs.createBranch({ name: 'scenario/blocked' as any, targetCommitId: COMMIT_ID }),
     ).resolves.toMatchObject({
       ok: false,
-      error: blockedEditingError('createBranch'),
+      error: blockedEditingError('createBranch', 'workbook.version.refs.createBranch'),
     });
     await expect(
-      version.createReview({
+      version.reviews.advanced.createReview({
         clientRequestId: 'review-1',
         subject: { kind: 'commit', commitId: COMMIT_ID },
         createdBy: REVIEW_AUTHOR,
@@ -97,7 +97,7 @@ describe('WorkbookVersion public operation feature gates', () => {
       }),
     ).resolves.toMatchObject({
       ok: false,
-      error: blockedEditingError('createReview'),
+      error: blockedEditingError('createReview', 'workbook.version.reviews.advanced.createReview'),
     });
 
     expect(commit).not.toHaveBeenCalled();
@@ -107,10 +107,10 @@ describe('WorkbookVersion public operation feature gates', () => {
   });
 });
 
-function blockedEditingError(operation: string) {
+function blockedEditingError(operation: string, target = `workbook.version.${operation}`) {
   return {
     code: 'target_unavailable',
-    target: `workbook.version.${operation}`,
+    target,
     diagnostics: [
       expect.objectContaining({
         code: 'VERSION_CAPABILITY_DISABLED',

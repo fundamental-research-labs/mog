@@ -928,6 +928,131 @@
           "docstring": "Set chrome theme with partial merge semantics.\nMerges the partial input with the **current** theme (not defaults).\nTriggers canvas layer re-render and CSS variable update.\n\nTo reset to defaults, pass `DEFAULT_CHROME_THEME` explicitly.",
           "usedTypes": []
         },
+        "version.artifacts.advanced.saveMergeResolutions": {
+          "signature": "version.artifacts.advanced.saveMergeResolutions(input: VersionSaveMergeResolutionsRequest): Promise<VersionResult<VersionSaveMergeResolutionsResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.artifacts.advanced.getMergeConflictDetail": {
+          "signature": "version.artifacts.advanced.getMergeConflictDetail(input: VersionGetMergeConflictDetailRequest): Promise<VersionResult<VersionMergeConflictDetailResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.artifacts.advanced.putMergeResolutionPayload": {
+          "signature": "version.artifacts.advanced.putMergeResolutionPayload(input: VersionPutMergeResolutionPayloadRequest): Promise<VersionResult<VersionSealedResolutionPayloadRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.createProposal": {
+          "signature": "version.proposals.advanced.createProposal(input: CreateAgentProposalInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.startProposalWorkspace": {
+          "signature": "version.proposals.advanced.startProposalWorkspace(input: StartProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.getProposalWorkspace": {
+          "signature": "version.proposals.advanced.getProposalWorkspace(input: GetProposalWorkspaceInput): Promise<VersionResult<AgentProposalWorkspaceHandle>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.disposeProposalWorkspace": {
+          "signature": "version.proposals.advanced.disposeProposalWorkspace(input: DisposeProposalWorkspaceInput): Promise<VersionResult<{ readonly disposed: true; }>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.commitProposalWorkspace": {
+          "signature": "version.proposals.advanced.commitProposalWorkspace(input: CommitProposalWorkspaceInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.failProposal": {
+          "signature": "version.proposals.advanced.failProposal(input: FailAgentProposalInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.getProposal": {
+          "signature": "version.proposals.advanced.getProposal(input: GetAgentProposalInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.listProposals": {
+          "signature": "version.proposals.advanced.listProposals(input: ListAgentProposalsInput): Promise<VersionResult<Paged<AgentProposalSummary>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.markProposalVerified": {
+          "signature": "version.proposals.advanced.markProposalVerified(input: MarkAgentProposalVerifiedInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.openProposalReview": {
+          "signature": "version.proposals.advanced.openProposalReview(input: OpenProposalReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.acceptProposal": {
+          "signature": "version.proposals.advanced.acceptProposal(input: AcceptAgentProposalInput): Promise<VersionResult<AgentProposalAcceptResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.rejectProposal": {
+          "signature": "version.proposals.advanced.rejectProposal(input: RejectAgentProposalInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.advanced.supersedeProposal": {
+          "signature": "version.proposals.advanced.supersedeProposal(input: SupersedeAgentProposalInput): Promise<VersionResult<AgentProposal>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.create": {
+          "signature": "version.proposals.create(input: VersionCreateProposalPorcelainInput): Promise<VersionResult<VersionProposalHandle>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.get": {
+          "signature": "version.proposals.get(id: AgentProposalId): Promise<VersionResult<VersionProposalHandle>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.proposals.list": {
+          "signature": "version.proposals.list(options?: VersionListProposalPorcelainOptions | undefined): Promise<VersionResult<Paged<AgentProposalSummary>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.listReviews": {
+          "signature": "version.reviews.advanced.listReviews(input?: VersionListReviewsInput | undefined): Promise<VersionResult<Paged<WorkbookVersionReviewRecordSummary>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.getReview": {
+          "signature": "version.reviews.advanced.getReview(input: VersionGetReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.createReview": {
+          "signature": "version.reviews.advanced.createReview(input: VersionCreateReviewInput): Promise<VersionResult<WorkbookVersionReviewRecord>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.appendReviewDecision": {
+          "signature": "version.reviews.advanced.appendReviewDecision(input: VersionAppendReviewDecisionInput): Promise<VersionResult<WorkbookVersionReviewRecord>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.updateReviewStatus": {
+          "signature": "version.reviews.advanced.updateReviewStatus(input: VersionUpdateReviewStatusInput): Promise<VersionResult<WorkbookVersionReviewRecord>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.reviews.advanced.getReviewDiff": {
+          "signature": "version.reviews.advanced.getReviewDiff(input: VersionGetReviewDiffInput): Promise<VersionResult<WorkbookVersionReviewDiffPage>>",
+          "docstring": null,
+          "usedTypes": []
+        },
         "version.getStatus": {
           "signature": "version.getStatus(): Promise<WorkbookVersionStatus>",
           "docstring": null,
@@ -935,6 +1060,11 @@
         },
         "version.getSurfaceStatus": {
           "signature": "version.getSurfaceStatus(): Promise<VersionSurfaceStatus>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.getCurrent": {
+          "signature": "version.getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -950,11 +1080,6 @@
         },
         "version.commit": {
           "signature": "version.commit(options?: VersionCommitOptions | undefined): Promise<VersionResult<WorkbookCommitSummary>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.promotePendingRemote": {
-          "signature": "version.promotePendingRemote(options?: VersionPromotePendingRemoteOptions | undefined): Promise<VersionResult<VersionPromotePendingRemoteResult>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -978,63 +1103,123 @@
           "docstring": null,
           "usedTypes": []
         },
-        "version.saveMergeResolutions": {
-          "signature": "version.saveMergeResolutions(input: VersionSaveMergeResolutionsRequest): Promise<VersionResult<VersionSaveMergeResolutionsResult>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.getMergeConflictDetail": {
-          "signature": "version.getMergeConflictDetail(input: VersionGetMergeConflictDetailRequest): Promise<VersionResult<VersionMergeConflictDetailResult>>",
-          "docstring": null,
-          "usedTypes": []
-        },
-        "version.putMergeResolutionPayload": {
-          "signature": "version.putMergeResolutionPayload(input: VersionPutMergeResolutionPayloadRequest): Promise<VersionResult<VersionSealedResolutionPayloadRef>>",
-          "docstring": null,
-          "usedTypes": []
-        },
         "version.diff": {
           "signature": "version.diff(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOptions | undefined): Promise<VersionResult<VersionSemanticDiffPage>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.readRef": {
-          "signature": "version.readRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
+        "version.diffOverview": {
+          "signature": "version.diffOverview(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.getRef": {
-          "signature": "version.getRef(name: VersionRefSelector | VersionBranchName): Promise<VersionResult<VersionRefReadResult>>",
+        "version.diffGroupDetail": {
+          "signature": "version.diffGroupDetail(base: VersionCommitish, target: VersionCommitish, options: VersionDiffGroupDetailOptions): Promise<VersionResult<VersionSemanticDiffPage>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.listRefs": {
-          "signature": "version.listRefs(options?: VersionListRefsOptions | undefined): Promise<VersionResult<Paged<VersionRef>>>",
+        "version.diffWorkingTree": {
+          "signature": "version.diffWorkingTree(options?: VersionWorkingTreeDiffOptions | undefined): Promise<VersionResult<VersionWorkingTreeDiffPage>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.createBranch": {
-          "signature": "version.createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>",
+        "version.commitCurrent": {
+          "signature": "version.commitCurrent(options?: VersionCommitCurrentOptions | undefined): Promise<VersionResult<WorkbookCommitSummary>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.fastForwardBranch": {
-          "signature": "version.fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
+        "version.createBranchFromCurrent": {
+          "signature": "version.createBranchFromCurrent(name: VersionBranchNameInput, options?: VersionCreateBranchFromCurrentOptions | undefined): Promise<VersionResult<VersionRef>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.updateBranch": {
-          "signature": "version.updateBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
+        "version.checkoutBranch": {
+          "signature": "version.checkoutBranch(name: VersionBranchNameInput, options?: VersionCheckoutOptions | undefined): Promise<VersionResult<CheckoutVersionResult>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.deleteBranch": {
-          "signature": "version.deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
+        "version.checkoutCommit": {
+          "signature": "version.checkoutCommit(commit: WorkbookCommitIdInput, options?: VersionCheckoutOptions | undefined): Promise<VersionResult<CheckoutVersionResult>>",
           "docstring": null,
           "usedTypes": []
         },
-        "version.deleteRef": {
-          "signature": "version.deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
+        "version.listBranches": {
+          "signature": "version.listBranches(options?: VersionListBranchesOptions | undefined): Promise<VersionResult<Paged<VersionBranchSummary>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.diffCurrent": {
+          "signature": "version.diffCurrent(target?: VersionDiffPorcelainTarget | undefined, options?: VersionDiffOptions | undefined): Promise<VersionResult<VersionSemanticDiffPage>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.diffCurrentOverview": {
+          "signature": "version.diffCurrentOverview(target?: VersionDiffPorcelainTarget | undefined, options?: VersionDiffOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.diffBranch": {
+          "signature": "version.diffBranch(branch: VersionBranchNameInput, options?: VersionDiffBranchOptions | undefined): Promise<VersionResult<VersionSemanticDiffPage>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.diffBranchOverview": {
+          "signature": "version.diffBranchOverview(branch: VersionBranchNameInput, options?: VersionDiffBranchOverviewOptions | undefined): Promise<VersionResult<VersionDiffOverview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.previewMerge": {
+          "signature": "version.previewMerge(input: VersionPreviewMergeInput, options?: VersionPreviewMergeOptions | undefined): Promise<VersionResult<VersionMergeReview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.getMergeReview": {
+          "signature": "version.getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.promotePendingRemote": {
+          "signature": "version.refs.promotePendingRemote(options?: VersionPromotePendingRemoteOptions | undefined): Promise<VersionResult<VersionPromotePendingRemoteResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.readRef": {
+          "signature": "version.refs.readRef(name: VersionBranchName | VersionRefSelector): Promise<VersionResult<VersionRefReadResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.getRef": {
+          "signature": "version.refs.getRef(name: VersionBranchName | VersionRefSelector): Promise<VersionResult<VersionRefReadResult>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.listRefs": {
+          "signature": "version.refs.listRefs(options?: VersionListRefsOptions | undefined): Promise<VersionResult<Paged<VersionRef>>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.createBranch": {
+          "signature": "version.refs.createBranch(options: VersionCreateBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.fastForwardBranch": {
+          "signature": "version.refs.fastForwardBranch(options: VersionFastForwardBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.updateBranch": {
+          "signature": "version.refs.updateBranch(options: VersionUpdateBranchOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.deleteBranch": {
+          "signature": "version.refs.deleteBranch(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
+          "docstring": null,
+          "usedTypes": []
+        },
+        "version.refs.deleteRef": {
+          "signature": "version.refs.deleteRef(options: VersionDeleteRefOptions): Promise<VersionResult<VersionRef>>",
           "docstring": null,
           "usedTypes": []
         },
@@ -4441,7 +4626,7 @@
       "docstring": "A single item in a slicer's value list."
     }
   },
-  "generated": "2026-06-24T10:06:26.161Z",
+  "generated": "2026-06-28T05:34:07.481Z",
   "formatPresets": {
     "general": {
       "default": {

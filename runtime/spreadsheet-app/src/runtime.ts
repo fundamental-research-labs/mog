@@ -971,7 +971,7 @@ class SpreadsheetRuntimeController
       workbookSessionId,
       documentId,
       input.workbookId,
-      this.nextEpochFor(workbookSessionId),
+      this.nextEpochFor(input.workbookId),
       input.displayName ??
         (source.kind === 'xlsx-bytes' ? source.fileName : undefined) ??
         'Embedded Mog workbook',
@@ -1120,9 +1120,9 @@ class SpreadsheetRuntimeController
     store.setActiveAppId('spreadsheet');
   }
 
-  private nextEpochFor(workbookId: string): number {
-    const epoch = (this.workbookEpochs.get(workbookId) ?? 0) + 1;
-    this.workbookEpochs.set(workbookId, epoch);
+  private nextEpochFor(publicWorkbookId: string): number {
+    const epoch = (this.workbookEpochs.get(publicWorkbookId) ?? 0) + 1;
+    this.workbookEpochs.set(publicWorkbookId, epoch);
     return epoch;
   }
 

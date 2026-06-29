@@ -25,7 +25,7 @@ export function registerProposalWorkspaceCommitScenarios(): void {
       'redacted-principal',
     );
 
-    const committed = await version.commitProposalWorkspace({
+    const committed = await version.proposals.advanced.commitProposalWorkspace({
       clientRequestId: 'workspace-commit-stale-head',
       proposalId: opened.proposalId,
       workspaceId: opened.workspaceId,
@@ -37,7 +37,7 @@ export function registerProposalWorkspaceCommitScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.commitProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.commitProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'stale_proposal_workspace_head',
@@ -55,7 +55,9 @@ export function registerProposalWorkspaceCommitScenarios(): void {
     expect(committed.error.diagnostics[0]?.data).not.toHaveProperty('workspaceId');
     expect(JSON.stringify(committed)).not.toContain('agent-run-1');
     expect(JSON.stringify(committed)).not.toContain(opened.workspaceId);
-    await expect(version.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: opened.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });
@@ -73,7 +75,7 @@ export function registerProposalWorkspaceCommitScenarios(): void {
     );
 
     await expect(
-      version.commitProposalWorkspace({
+      version.proposals.advanced.commitProposalWorkspace({
         clientRequestId: 'workspace-commit-stale-target',
         proposalId: opened.proposalId,
         workspaceId: opened.workspaceId,
@@ -87,7 +89,7 @@ export function registerProposalWorkspaceCommitScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.commitProposalWorkspace',
+        target: 'workbook.version.proposals.advanced.commitProposalWorkspace',
         diagnostics: [
           expect.objectContaining({
             code: 'stale_proposal_target_head',
@@ -100,7 +102,9 @@ export function registerProposalWorkspaceCommitScenarios(): void {
         ],
       },
     });
-    await expect(version.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: opened.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });

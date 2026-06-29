@@ -77,7 +77,7 @@ export async function createMaterializerMergeFixture(
     );
     const baseHead = await expectHead(sourceWb);
 
-    const branch = await sourceWb.version.createBranch({
+    const branch = await sourceWb.version.refs.createBranch({
       name: input.branchName as any,
       targetCommitId: baseCommit.id,
       expectedAbsent: true,

@@ -6,7 +6,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
     const { review, version } = await createCellA1ApprovalReview('approval-request-change-1');
     const target = await firstReviewDiffTarget(version, review.id);
 
-    const requested = await version.appendReviewDecision({
+    const requested = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 1,
       clientRequestId: 'request-change-1',
@@ -16,7 +16,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
     const requestDecisionId = requested.value.decisions[0].id;
 
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 2,
         clientRequestId: 'approve-with-unresolved-request',
@@ -28,7 +28,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
       error: { code: 'invalid_state', state: 'unresolved_request_change' },
     });
 
-    const unresolvedApprove = await version.appendReviewDecision({
+    const unresolvedApprove = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 2,
       clientRequestId: 'approve-decision-missing-supersede',
@@ -36,7 +36,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
     });
     expect(unresolvedApprove).toMatchObject({ ok: true, value: { revision: 3 } });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 3,
         clientRequestId: 'approve-with-missing-supersede',
@@ -48,7 +48,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
       error: { code: 'invalid_state', state: 'unresolved_request_change' },
     });
 
-    const resolved = await version.appendReviewDecision({
+    const resolved = await version.reviews.advanced.appendReviewDecision({
       reviewId: review.id,
       expectedRevision: 3,
       clientRequestId: 'approve-decision-with-supersede',
@@ -61,7 +61,7 @@ export function registerReviewProviderRequestChangeScenario(): void {
     });
     expect(resolved).toMatchObject({ ok: true, value: { revision: 4 } });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: review.id,
         expectedRevision: 4,
         clientRequestId: 'approve-after-request-resolved',

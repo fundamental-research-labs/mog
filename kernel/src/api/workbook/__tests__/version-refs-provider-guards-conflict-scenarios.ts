@@ -18,7 +18,7 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/duplicate' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
@@ -31,7 +31,7 @@ export function registerProviderRefConflictGuardScenarios(): void {
       },
     });
 
-    const duplicate = await wb.version.createBranch({
+    const duplicate = await wb.version.refs.createBranch({
       name: 'refs/heads/scenario/duplicate' as any,
       targetCommitId: initialized.rootCommit.id,
     });
@@ -44,20 +44,20 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(duplicate, 'scenario/duplicate');
 
-    await expect(wb.version.readRef('refs/heads/scenario/duplicate' as any)).resolves.toMatchObject(
-      {
-        ok: true,
-        value: {
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/duplicate',
-            commitId: initialized.rootCommit.id,
-            revision: { kind: 'counter', value: '0' },
-          },
+    await expect(
+      wb.version.refs.readRef('refs/heads/scenario/duplicate' as any),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/duplicate',
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
         },
       },
-    );
-    await expect(wb.version.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
+    });
+    await expect(wb.version.refs.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
       value: {
         items: [
@@ -86,7 +86,7 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
 
     await expect(
-      wb.version.createBranch({
+      wb.version.refs.createBranch({
         name: 'scenario/stale-cas' as any,
         targetCommitId: initialized.rootCommit.id,
       }),
@@ -100,7 +100,7 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
 
     await expect(
-      wb.version.fastForwardBranch({
+      wb.version.refs.fastForwardBranch({
         name: 'scenario/stale-cas' as any,
         nextCommitId: child.commit.id,
         expectedHead: initialized.rootCommit.id,
@@ -115,7 +115,7 @@ export function registerProviderRefConflictGuardScenarios(): void {
       },
     });
 
-    const stale = await wb.version.fastForwardBranch({
+    const stale = await wb.version.refs.fastForwardBranch({
       name: 'refs/heads/scenario/stale-cas' as any,
       nextCommitId: next.commit.id,
       expectedHead: initialized.rootCommit.id,
@@ -131,18 +131,18 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(stale, 'scenario/stale-cas');
 
-    await expect(wb.version.readRef('refs/heads/scenario/stale-cas' as any)).resolves.toMatchObject(
-      {
-        ok: true,
-        value: {
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/stale-cas',
-            commitId: child.commit.id,
-            revision: { kind: 'counter', value: '1' },
-          },
+    await expect(
+      wb.version.refs.readRef('refs/heads/scenario/stale-cas' as any),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/stale-cas',
+          commitId: child.commit.id,
+          revision: { kind: 'counter', value: '1' },
         },
       },
-    );
+    });
   });
 }

@@ -30,7 +30,7 @@ describe('WorkbookVersion sealed payload review-only saves', () => {
           sealedPayloadRef: payload,
         };
 
-        const reviewOnlySaved = await sourceWb.version.saveMergeResolutions({
+        const reviewOnlySaved = await sourceWb.version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -40,7 +40,7 @@ describe('WorkbookVersion sealed payload review-only saves', () => {
           ok: false,
           error: {
             code: 'target_unavailable',
-            target: 'workbook.version.saveMergeResolutions',
+            target: 'workbook.version.artifacts.advanced.saveMergeResolutions',
           },
         });
         if (reviewOnlySaved.ok) throw new Error('expected review-only sealed save rejection');
@@ -51,7 +51,7 @@ describe('WorkbookVersion sealed payload review-only saves', () => {
           leakCanaries: [conflict.conflictId, conflict.conflictDigest, option.optionId, 'theirs'],
         });
 
-        const saved = await sourceWb.version.saveMergeResolutions({
+        const saved = await sourceWb.version.artifacts.advanced.saveMergeResolutions({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,
@@ -63,7 +63,7 @@ describe('WorkbookVersion sealed payload review-only saves', () => {
           ok: false,
           error: {
             code: 'target_unavailable',
-            target: 'workbook.version.saveMergeResolutions',
+            target: 'workbook.version.artifacts.advanced.saveMergeResolutions',
           },
         });
         if (saved.ok) throw new Error('expected sealed resolution save to be rejected');

@@ -244,3 +244,7 @@ export interface WorkbookVersionReviewApi {
     input: VersionGetReviewDiffInput,
   ): Promise<VersionResult<WorkbookVersionReviewDiffPage>>;
 }
+
+export interface WorkbookVersionReviewNamespace {
+  readonly advanced: WorkbookVersionReviewApi;
+}

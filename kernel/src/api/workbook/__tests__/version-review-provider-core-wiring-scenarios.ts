@@ -15,7 +15,7 @@ export function registerReviewProviderCoreWiringScenarios(): void {
     attachWorkbookVersioning(ctx, { provider });
     const version = new WorkbookVersionImpl(ctx);
 
-    const created = await version.createReview(createReviewInput('create-1'));
+    const created = await version.reviews.advanced.createReview(createReviewInput('create-1'));
     expect(created).toMatchObject({
       ok: true,
       value: {
@@ -27,16 +27,18 @@ export function registerReviewProviderCoreWiringScenarios(): void {
     if (!created.ok) throw new Error(`expected create success: ${created.error.code}`);
     const reviewId = created.value.id;
 
-    await expect(version.getReview({ reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReview({ reviewId })).resolves.toMatchObject({
       ok: true,
       value: { id: reviewId, revision: 1 },
     });
-    await expect(version.listReviews({ commitId: HEAD_COMMIT_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.listReviews({ commitId: HEAD_COMMIT_ID }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { items: [{ id: reviewId }], totalEstimate: 1 },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId,
         expectedRevision: 1,
         clientRequestId: 'status-stale-flow-owned',
@@ -46,12 +48,12 @@ export function registerReviewProviderCoreWiringScenarios(): void {
     ).resolves.toMatchObject({
       ok: false,
       error: {
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_INVALID_OPTIONS' })],
       },
     });
     await expect(
-      version.appendReviewDecision({
+      version.reviews.advanced.appendReviewDecision({
         reviewId,
         expectedRevision: 1,
         clientRequestId: 'decision-1',
@@ -66,7 +68,7 @@ export function registerReviewProviderCoreWiringScenarios(): void {
       value: { revision: 2, decisions: [{ decision: 'comment' }] },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId,
         expectedRevision: 2,
         clientRequestId: 'status-1',
@@ -78,7 +80,7 @@ export function registerReviewProviderCoreWiringScenarios(): void {
       value: { revision: 3, status: 'changes_requested' },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId,
         expectedRevision: 2,
         clientRequestId: 'status-stale-revision',
@@ -90,7 +92,7 @@ export function registerReviewProviderCoreWiringScenarios(): void {
       error: { code: 'stale_revision', expectedRevision: 2, actualRevision: 3 },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId,
         expectedRevision: 3,
         clientRequestId: 'status-approve-unavailable',
@@ -101,15 +103,15 @@ export function registerReviewProviderCoreWiringScenarios(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
       },
     });
-    await expect(version.getReviewDiff({ reviewId })).resolves.toMatchObject({
+    await expect(version.reviews.advanced.getReviewDiff({ reviewId })).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
         diagnostics: [expect.objectContaining({ code: 'VERSION_GRAPH_UNINITIALIZED' })],
       },
     });

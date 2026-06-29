@@ -298,7 +298,7 @@ type _CapabilityStateUnionIsNotCapturePolicyUnion = Assert<
 
 const digest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
-  value: 'sha256:vc02-batch-a-public-contract-spine',
+  digest: 'sha256:vc02-batch-a-public-contract-spine',
 });
 
 const versionCapabilityGate: VersionCapabilityGate = Object.freeze({
@@ -311,7 +311,7 @@ const versionCapabilityGate: VersionCapabilityGate = Object.freeze({
   }),
   preflightDigest: Object.freeze({
     algorithm: 'sha256',
-    value: digest.value,
+    value: digest.digest,
   }),
   casToken: Object.freeze({
     token: 'vc02-fixture-token',
@@ -671,7 +671,7 @@ const mergePreviewRecord: VersionMergePreviewRecord = Object.freeze({
 
 const vc11ReleaseArtifactDigest: ObjectDigest = Object.freeze({
   algorithm: 'sha256',
-  value: 'sha256:vc11-public-release-artifact-fixture',
+  digest: 'sha256:vc11-public-release-artifact-fixture',
 });
 
 const releaseArtifactManifest: ReleaseArtifactManifest = Object.freeze({

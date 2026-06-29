@@ -123,8 +123,9 @@ export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation |
   for (const entry of apiGuidanceCatalog) {
     for (const replacement of entry.mogReplacements) {
       if (normalizeMogApiPath(replacement.path) !== target.path) continue;
-      if (replacement.snippet && !examples.includes(replacement.snippet)) {
-        examples.push(replacement.snippet);
+      const snippet = 'snippet' in replacement ? replacement.snippet : undefined;
+      if (snippet && !examples.includes(snippet)) {
+        examples.push(snippet);
       }
       if (!recommendedBy.includes(entry.id)) recommendedBy.push(entry.id);
     }

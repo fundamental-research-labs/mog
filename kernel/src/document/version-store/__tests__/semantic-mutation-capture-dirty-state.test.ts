@@ -125,6 +125,77 @@ describe('semantic mutation capture dirty state', () => {
     });
   });
 
+  it('captures parsed bulk cell writes with edit evidence', async () => {
+    const { capture, readCurrentSemanticState } = createCaptureWithReader();
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.setCells:parsed',
+      domainIds: ['cells.values'],
+    });
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 },
+    ];
+
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_set_cell_values_parsed',
+      operationContext,
+      directEditRanges,
+    });
+
+    expect(readCurrentSemanticState).toHaveBeenCalledTimes(1);
+
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_set_cell_values_parsed',
+      operationContext,
+      directEditRanges,
+      result: mutationResult(),
+    });
+
+    expect(capture.readNormalCommitCaptureState()).toMatchObject({
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: true,
+      hasUncapturedNormalMutations: false,
+    });
+  });
+
+  it('reads a working-tree basis without draining pending normal capture', async () => {
+    const { capture } = createCaptureWithReader();
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.setCell:working-tree-basis',
+      domainIds: ['cells.values'],
+    });
+    const directEdits = [{ sheetId: 'sheet-1', row: 0, col: 0 }];
+
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+    });
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+      result: mutationResult(),
+    });
+
+    const before = capture.readNormalCommitCaptureState();
+    const basis = capture.readWorkingTreeBasis();
+    const after = capture.readNormalCommitCaptureState();
+
+    expect(basis).toMatchObject({
+      revision: before.revision,
+      pendingCapturedNormalMutationCount: 1,
+      pendingUncapturedNormalMutationCount: 0,
+      hasPendingNormalMutations: true,
+      hasUncapturedNormalMutations: false,
+      beforeSemanticState: expect.objectContaining({
+        stateDigest: expect.objectContaining({ digest: 'semantic-state-digest' }),
+      }),
+      pendingUncapturedNormalMutationSummaries: [],
+    });
+    expect(after).toEqual(before);
+  });
+
   it('keeps uncaptured normal mutations in the capture state after successful finalization', async () => {
     const capture = createRustBackedTestSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
 
@@ -213,6 +284,76 @@ describe('semantic mutation capture dirty state', () => {
       hasUncapturedNormalMutations: false,
     });
   });
+
+  it('captures large fully projected plain cell writes with sheet names without a Rust semantic reader', async () => {
+    const capture = createSemanticMutationCapture({
+      author: AUTHOR,
+      now: () => NOW,
+      readSheetName: async (sheetId) => (sheetId === 'sheet-1' ? 'Sheet1' : null),
+    });
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.paste:large-plain-values',
+      domainIds: ['cells.values'],
+    });
+    const directEdits = cellDirectEdits(100, 100);
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 },
+    ];
+
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+      directEditRanges,
+    });
+    capture.mutationCapture.recordMutationResult({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+      directEditRanges,
+      result: mutationResult({
+        recalc: { ...mutationResult().recalc, changedCells: cellChanges(100, 100) },
+      }),
+    });
+
+    const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
+
+    expect(captured.input.semanticChangeSetRecord.preimage.payload).toMatchObject({
+      schemaVersion: 1,
+      source: {
+        kind: 'semanticMutationProjection',
+        reviewProjectionChangeCount: 10_000,
+      },
+      changes: [],
+      compactReviewProjection: {
+        schemaVersion: 1,
+        kind: 'rectangularCellValueProjection',
+        sheetId: 'sheet-1',
+        sheetName: 'Sheet1',
+        rowStart: 0,
+        rowEnd: 99,
+        columnStart: 0,
+        columnEnd: 99,
+        changeCount: 10_000,
+        before: { kind: 'constant', value: { kind: 'blank' } },
+        after: { kind: 'constant', value: 1 },
+      },
+    });
+    expect(
+      (captured.input.semanticChangeSetRecord.preimage.payload as any).reviewChanges,
+    ).toBeUndefined();
+    expect(captured.input.mutationSegmentRecords?.[0]?.preimage.payload).toMatchObject({
+      segmentId: 'mutation-1',
+      operation: 'compute_batch_set_cells_by_position',
+      changeIds: [],
+      changeIdCount: 10_000,
+      omittedChangeIds: { reason: 'large-change-set', count: 10_000 },
+      directEdits: [],
+      directEditCount: 10_000,
+      omittedDirectEdits: { reason: 'covered-by-direct-edit-ranges', count: 10_000 },
+      directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
+    });
+  });
 });
 
 function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult {
@@ -226,6 +367,34 @@ function mutationResult(overrides: Partial<MutationResult> = {}): MutationResult
     },
     ...overrides,
   } as MutationResult;
+}
+
+function cellChanges(rows: number, columns: number): MutationResult['recalc']['changedCells'] {
+  const out: MutationResult['recalc']['changedCells'] = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      out.push({
+        sheetId: 'sheet-1',
+        position: { row, col },
+        oldValue: undefined,
+        value: 1,
+      } as MutationResult['recalc']['changedCells'][number]);
+    }
+  }
+  return out;
+}
+
+function cellDirectEdits(
+  rows: number,
+  columns: number,
+): Array<{ sheetId: string; row: number; col: number }> {
+  const out: Array<{ sheetId: string; row: number; col: number }> = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < columns; col++) {
+      out.push({ sheetId: 'sheet-1', row, col });
+    }
+  }
+  return out;
 }
 
 function captureInput(): VersionNormalCommitCaptureInput {

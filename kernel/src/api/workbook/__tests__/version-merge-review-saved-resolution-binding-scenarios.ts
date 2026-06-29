@@ -25,7 +25,7 @@ export function registerSavedResolutionBindingReviewTests(): void {
         });
         expect(await graph.putObjects([resolutionSet])).toMatchObject({ status: 'success' });
 
-        const result = await version.getMergeConflictDetail({
+        const result = await version.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

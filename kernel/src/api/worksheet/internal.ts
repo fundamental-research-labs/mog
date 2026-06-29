@@ -26,11 +26,13 @@ import {
   wireTableToTableConfig,
 } from '../../bridges/compute/compute-bridge';
 import type { DocumentContext } from '../../context';
+import { withDirectEditRange, type MutationAdmissionOptions } from '../../bridges/compute';
 import { getOrCreateCellId as getOrCreateCellIdDomain } from '../../domain/cells/cell-identity';
 import { getData as getCellStoreDataDomain } from '../../domain/cells/cell-values';
 import { orderChartsForList } from '../../domain/charts/chart-list-ordering';
 import { serializedChartToChart } from '../../domain/charts/chart-public-api-converters';
 import * as CellOps from './operations/cell-operations';
+import { createVersionMutationAdmissionOptions } from '../workbook/version-operation-context';
 import {
   getWorksheetValidationCache,
   invalidateWorksheetValidationCache,
@@ -324,10 +326,16 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       sourceRange.endRow - sourceRange.startRow + 1,
       sourceRange.endCol - sourceRange.startCol + 1,
     );
-    await CellOps.relocateCells(this.ctx, this.sheetId, sourceRange, {
-      row: targetRow,
-      col: targetCol,
-    });
+    await CellOps.relocateCells(
+      this.ctx,
+      this.sheetId,
+      sourceRange,
+      {
+        row: targetRow,
+        col: targetCol,
+      },
+      this.createVersionAdmissionOptions('worksheet.relocateCells', this.sheetId),
+    );
   }
 
   async relocateCellsToSheet(
@@ -357,6 +365,13 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       targetSheetId,
       targetRow,
       targetCol,
+      this.relocateAdmissionOptions(
+        'worksheet.relocateCellsToSheet',
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+      ),
     );
     invalidateWorksheetValidationCache(this.ctx, this.sheetId);
     invalidateWorksheetValidationCache(this.ctx, targetSheetId);
@@ -451,6 +466,14 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       copyType,
       skipBlanks,
       transpose,
+      this.copyRangeAdmissionOptions(
+        'worksheet.copyRangeToSheet',
+        sourceRange,
+        targetSheetId,
+        targetRow,
+        targetCol,
+        transpose,
+      ),
     );
 
     if (copyType === 'formats') {
@@ -468,6 +491,65 @@ export class WorksheetInternalImpl implements WorksheetInternal {
     }
   }
 
+  private createVersionAdmissionOptions(
+    operationIdPrefix: string,
+    ...sheetIds: readonly SheetId[]
+  ): MutationAdmissionOptions {
+    return createVersionMutationAdmissionOptions(this.ctx, {
+      operationIdPrefix,
+      sheetIds: uniqueSheetIds(sheetIds),
+      domainIds: ['cells', 'cells.formats.direct'],
+    });
+  }
+
+  private relocateAdmissionOptions(
+    operationIdPrefix: string,
+    sourceRange: CellRange,
+    targetSheetId: SheetId,
+    targetRow: number,
+    targetCol: number,
+  ): MutationAdmissionOptions {
+    const rowCount = sourceRange.endRow - sourceRange.startRow + 1;
+    const colCount = sourceRange.endCol - sourceRange.startCol + 1;
+    return withDirectEditRange(
+      withDirectEditRange(
+        this.createVersionAdmissionOptions(operationIdPrefix, this.sheetId, targetSheetId),
+        this.sheetId,
+        sourceRange.startRow,
+        sourceRange.startCol,
+        sourceRange.endRow,
+        sourceRange.endCol,
+      ),
+      targetSheetId,
+      targetRow,
+      targetCol,
+      targetRow + rowCount - 1,
+      targetCol + colCount - 1,
+    );
+  }
+
+  private copyRangeAdmissionOptions(
+    operationIdPrefix: string,
+    sourceRange: CellRange,
+    targetSheetId: SheetId,
+    targetRow: number,
+    targetCol: number,
+    transpose: boolean,
+  ): MutationAdmissionOptions {
+    const sourceRowCount = sourceRange.endRow - sourceRange.startRow + 1;
+    const sourceColCount = sourceRange.endCol - sourceRange.startCol + 1;
+    const targetRowCount = transpose ? sourceColCount : sourceRowCount;
+    const targetColCount = transpose ? sourceRowCount : sourceColCount;
+    return withDirectEditRange(
+      this.createVersionAdmissionOptions(operationIdPrefix, this.sheetId, targetSheetId),
+      targetSheetId,
+      targetRow,
+      targetCol,
+      targetRow + targetRowCount - 1,
+      targetCol + targetColCount - 1,
+    );
+  }
+
   /** Tear down the CF cache if it was created. Called by WorksheetImpl.dispose(). */
   dispose(): void {
     if (this._cfCache) {
@@ -475,4 +557,8 @@ export class WorksheetInternalImpl implements WorksheetInternal {
       this._cfCache = null;
     }
   }
+}
+
+function uniqueSheetIds(sheetIds: readonly SheetId[]): SheetId[] {
+  return Array.from(new Set(sheetIds));
 }

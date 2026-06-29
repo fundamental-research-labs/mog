@@ -30,6 +30,13 @@ export function expectDirectCellEditCapture(captured: CapturedNormalCommit): voi
         before: { kind: 'value', value: { kind: 'formula', formula: '=1', result: 1 } },
         after: { kind: 'value', value: { kind: 'formula', formula: '=1+1', result: 2 } },
         display: { address: { kind: 'value', value: 'A1' } },
+        historical: {
+          cell: {
+            sheetId: 'sheet-1',
+            row: 0,
+            column: 0,
+          },
+        },
       },
     ],
   });

@@ -158,6 +158,11 @@
       "types": "./dist/api/workbook/version.d.ts",
       "import": "./dist/api/workbook/version.js"
     },
+    "./api/workbook/version-porcelain": {
+      "development": "./src/api/workbook/version-porcelain.ts",
+      "types": "./dist/api/workbook/version-porcelain.d.ts",
+      "import": "./dist/api/workbook/version-porcelain.js"
+    },
     "./api/workbook/viewport": {
       "development": "./src/api/workbook/viewport.ts",
       "types": "./dist/api/workbook/viewport.d.ts",

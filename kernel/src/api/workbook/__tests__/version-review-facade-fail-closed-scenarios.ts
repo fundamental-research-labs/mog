@@ -13,24 +13,26 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
   it('fails closed for review methods when no review service is attached', async () => {
     const version = createVersion();
 
-    await expect(version.listReviews()).resolves.toMatchObject({
+    await expect(version.reviews.advanced.listReviews()).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.listReviews',
-        diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
-      },
-    });
-    await expect(version.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
-      ok: false,
-      error: {
-        code: 'target_unavailable',
-        target: 'workbook.version.getReview',
+        target: 'workbook.version.reviews.advanced.listReviews',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
     await expect(
-      version.createReview({
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'target_unavailable',
+        target: 'workbook.version.reviews.advanced.getReview',
+        diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
+      },
+    });
+    await expect(
+      version.reviews.advanced.createReview({
         clientRequestId: 'create-1',
         subject: {
           kind: 'commitRange',
@@ -44,12 +46,12 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.createReview',
+        target: 'workbook.version.reviews.advanced.createReview',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
     await expect(
-      version.appendReviewDecision({
+      version.reviews.advanced.appendReviewDecision({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'decision-1',
@@ -63,12 +65,12 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.appendReviewDecision',
+        target: 'workbook.version.reviews.advanced.appendReviewDecision',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
     await expect(
-      version.updateReviewStatus({
+      version.reviews.advanced.updateReviewStatus({
         reviewId: REVIEW_ID,
         expectedRevision: 1,
         clientRequestId: 'status-1',
@@ -79,15 +81,17 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.updateReviewStatus',
+        target: 'workbook.version.reviews.advanced.updateReviewStatus',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
-    await expect(version.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReviewDiff',
+        target: 'workbook.version.reviews.advanced.getReviewDiff',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
@@ -100,15 +104,17 @@ export function registerVersionReviewFacadePartialServiceScenario(): void {
       listReviews: jest.fn(async () => ({ ok: true, value: { items: [], limit: 50 } })),
     });
 
-    await expect(version.listReviews()).resolves.toEqual({
+    await expect(version.reviews.advanced.listReviews()).resolves.toEqual({
       ok: true,
       value: { items: [], limit: 50 },
     });
-    await expect(version.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.getReview',
+        target: 'workbook.version.reviews.advanced.getReview',
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_METHOD_UNAVAILABLE' })],
       },
     });

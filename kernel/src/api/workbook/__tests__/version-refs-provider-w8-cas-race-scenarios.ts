@@ -42,11 +42,11 @@ export function registerProviderW8CasRaceScenarios(): void {
 
     const createRace = expectOneSuccessOneFailure(
       await Promise.all([
-        wbA.version.createBranch({
+        wbA.version.refs.createBranch({
           name: 'scenario/cas-race' as any,
           targetCommitId: initialized.rootCommit.id,
         }),
-        wbB.version.createBranch({
+        wbB.version.refs.createBranch({
           name: 'scenario/cas-race' as any,
           targetCommitId: initialized.rootCommit.id,
         }),
@@ -67,13 +67,13 @@ export function registerProviderW8CasRaceScenarios(): void {
 
     const advanceRace = expectOneSuccessOneFailure(
       await Promise.all([
-        wbA.version.fastForwardBranch({
+        wbA.version.refs.fastForwardBranch({
           name: 'scenario/cas-race' as any,
           nextCommitId: childA.commit.id,
           expectedHead: initialized.rootCommit.id,
           expectedRefRevision: { kind: 'counter', value: '0' },
         }),
-        wbB.version.fastForwardBranch({
+        wbB.version.refs.fastForwardBranch({
           name: 'refs/heads/scenario/cas-race' as any,
           nextCommitId: childB.commit.id,
           expectedHead: initialized.rootCommit.id,
@@ -95,12 +95,12 @@ export function registerProviderW8CasRaceScenarios(): void {
 
     const deleteRace = expectOneSuccessOneFailure(
       await Promise.all([
-        wbA.version.deleteRef({
+        wbA.version.refs.deleteRef({
           name: 'scenario/cas-race' as any,
           expectedHead: advanceRace.success.value.commitId,
           expectedRefRevision: { kind: 'counter', value: '1' },
         }),
-        wbB.version.deleteBranch({
+        wbB.version.refs.deleteBranch({
           name: 'refs/heads/scenario/cas-race' as any,
           expectedHead: advanceRace.success.value.commitId,
           expectedRefRevision: { kind: 'counter', value: '1' },
@@ -123,18 +123,18 @@ export function registerProviderW8CasRaceScenarios(): void {
     expectNoDiagnosticLeak(advanceRace.failure, 'scenario/cas-race');
     expectNoDiagnosticLeak(deleteRace.failure, 'scenario/cas-race');
 
-    await expect(wbA.version.readRef('refs/heads/scenario/cas-race' as any)).resolves.toMatchObject(
-      {
-        ok: false,
-        error: {
-          diagnostics: [
-            expect.objectContaining({
-              code: 'VERSION_DANGLING_REF',
-              data: expect.objectContaining({ redacted: true }),
-            }),
-          ],
-        },
+    await expect(
+      wbA.version.refs.readRef('refs/heads/scenario/cas-race' as any),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DANGLING_REF',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
       },
-    );
+    });
   });
 }

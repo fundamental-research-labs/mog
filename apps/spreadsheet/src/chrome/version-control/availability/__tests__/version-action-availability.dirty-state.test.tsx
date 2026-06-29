@@ -48,9 +48,9 @@ describe('version action availability dirty state contract', () => {
       ),
       'Wait for provider writes to settle before staging rollback.',
     );
-    expect(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
-    ).toEqual({ enabled: true });
+    expect(getBranchAvailability({ surface }, false, false, 'review', TARGET_COMMIT_ID)).toEqual({
+      enabled: true,
+    });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
     expect(getRemotePromoteAvailability({ surface }, false, false)).toEqual({ enabled: true });
   });
@@ -311,9 +311,9 @@ describe('version action availability dirty state contract', () => {
       'main is stale because the branch head moved. Refresh before exporting version metadata.',
       'version-head-stale',
     );
-    expect(
-      getBranchAvailability({ surface }, false, false, 'scenario/review', TARGET_COMMIT_ID),
-    ).toEqual({ enabled: true });
+    expect(getBranchAvailability({ surface }, false, false, 'review', TARGET_COMMIT_ID)).toEqual({
+      enabled: true,
+    });
     expect(getDiffAvailability({ surface }, false, false)).toEqual({ enabled: true });
     expectDisabled(
       getRemotePromoteAvailability({ surface }, false, false),

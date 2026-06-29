@@ -39,7 +39,7 @@ export async function putResolutionPayload(input: {
   readonly value: any;
   readonly purpose: 'chooseValue' | 'custom';
 }): Promise<VersionSealedResolutionPayloadRef> {
-  const result = await input.sourceWb.version.putMergeResolutionPayload({
+  const result = await input.sourceWb.version.artifacts.advanced.putMergeResolutionPayload({
     resultId: input.preview.resultId,
     resultDigest: input.preview.resultDigest,
     redactionPolicyDigest: input.redactionPolicyDigest,

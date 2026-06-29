@@ -44,8 +44,16 @@ function toDiffService(value: unknown): AttachedVersionDiffService | null {
     bindMethod(value, 'diffVersions') ??
     bindMethod(value, 'diffCommits');
   if (!diff) return null;
+  const diffOverview = bindMethod(value, 'diffOverview');
+  const diffGroupDetail = bindMethod(value, 'diffGroupDetail');
   return {
     diff: (base, target, options) => diff(base, target, options),
+    ...(diffOverview
+      ? { diffOverview: (base, target, options) => diffOverview(base, target, options) }
+      : {}),
+    ...(diffGroupDetail
+      ? { diffGroupDetail: (base, target, options) => diffGroupDetail(base, target, options) }
+      : {}),
   };
 }
 

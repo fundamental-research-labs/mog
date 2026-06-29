@@ -160,12 +160,11 @@ function isVersionCapability(capability: SpreadsheetCapability): capability is V
 }
 
 function isVersionResultFacadeMethod(
-  interfaceName: string,
   methodName: string,
   entry: SpreadsheetFacadeMatrixEntry,
 ): boolean {
-  if (interfaceName !== 'WorkbookVersion') return false;
   if (methodName === 'getSurfaceStatus' || methodName === 'getStatus') return false;
+  if (entry.returnsVersionResult !== true) return false;
   const capabilities = [
     ...entryCapabilities(entry),
     ...(entry.conditionalCapabilities ?? []).flatMap((conditional) => conditional.capabilities),
@@ -326,11 +325,12 @@ function subApiInterfaceFor(interfaceName: string, prop: string): string | undef
     Record<string, string | { targetInterface?: string }>
   >;
   const group =
-    interfaceName === 'Workbook'
+    subApis[interfaceName] ??
+    (interfaceName === 'Workbook'
       ? (subApis.workbook ?? subApis.wb)
       : interfaceName === 'Worksheet'
         ? (subApis.worksheet ?? subApis.ws)
-        : null;
+        : null);
   const entry = group?.[prop];
   return typeof entry === 'string' ? entry : entry?.targetInterface;
 }
@@ -451,6 +451,17 @@ function createCapabilityFacade(
         }
 
         const entry = matrixEntry(interfaceName, methodName);
+        if (methodName === 'activeSheet') {
+          assertFacadeAllowed(
+            record,
+            binding,
+            { decision: 'allow', capability: 'workbook:read' },
+            'Workbook.activeSheet',
+          );
+          const activeSheet = Reflect.get(currentTarget, prop, currentTarget);
+          return wrapFacadeReturn(activeSheet, record, binding, ['Worksheet']);
+        }
+
         // Use `currentTarget` as the receiver for Reflect.get so that getters
         // (e.g. `activeSheet`) execute with `this === realObject`, not the proxy.
         // This prevents internal helper calls like `_ensureNotDisposed()` from
@@ -465,7 +476,7 @@ function createCapabilityFacade(
             const operation = `${interfaceName}.${methodName}`;
             const denial = facadeCapabilityDenial(record, binding, entry, operation, args);
             if (denial) {
-              if (isVersionResultFacadeMethod(interfaceName, methodName, entry)) {
+              if (isVersionResultFacadeMethod(methodName, entry)) {
                 return versionCapabilityDeniedResult(operation, denial);
               }
               throw facadeCapabilityDeniedError(record, binding, operation, denial);
@@ -495,16 +506,6 @@ function createCapabilityFacade(
               },
             );
           };
-        }
-
-        if (methodName === 'activeSheet') {
-          assertFacadeAllowed(
-            record,
-            binding,
-            { decision: 'allow', capability: 'workbook:read' },
-            'Workbook.activeSheet',
-          );
-          return wrapFacadeReturn(value, record, binding, ['Worksheet']);
         }
       }
 

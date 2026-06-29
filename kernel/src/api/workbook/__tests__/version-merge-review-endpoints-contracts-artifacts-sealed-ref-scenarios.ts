@@ -10,7 +10,7 @@ export function registerSealedRefArtifactScenarios(): void {
   it('rejects non-replayable sealed payload refs without leaking binding values', async () => {
     await withReviewArtifact('sealed-ref-contract', async ({ version, preview, target }) => {
       const conflict = preview.conflicts[0];
-      const canonical = await version.getMergeConflictDetail({
+      const canonical = await version.artifacts.advanced.getMergeConflictDetail({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,
@@ -37,7 +37,7 @@ export function registerSealedRefArtifactScenarios(): void {
         resolutionKind: option.kind,
       } as const;
 
-      const saved = await version.saveMergeResolutions({
+      const saved = await version.artifacts.advanced.saveMergeResolutions({
         resultId: preview.resultId,
         resultDigest: preview.resultDigest,
         redactionPolicyDigest: preview.resultDigest,

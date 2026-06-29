@@ -99,7 +99,7 @@ export const ACTION_CASES: readonly ActionCase[] = [
         data,
         options.actionBusy ?? false,
         options.loading ?? false,
-        options.branchName ?? 'scenario/review',
+        options.branchName ?? 'review',
         options.targetCommitId ?? TARGET_COMMIT_ID,
       );
     },

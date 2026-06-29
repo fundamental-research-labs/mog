@@ -18,7 +18,7 @@ export function registerReviewProviderDiffPaginationScenarios(): void {
       reviewSheetOrderChange(),
     ]);
     const version = versionForProvider(graph.provider);
-    const review = await version.createReview({
+    const review = await version.reviews.advanced.createReview({
       ...createReviewInput('diff-review-1'),
       subject: {
         kind: 'commitRange',
@@ -28,7 +28,10 @@ export function registerReviewProviderDiffPaginationScenarios(): void {
     });
     if (!review.ok) throw new Error(`expected review create success: ${review.error.code}`);
 
-    const firstPage = await version.getReviewDiff({ reviewId: review.value.id, limit: 1 });
+    const firstPage = await version.reviews.advanced.getReviewDiff({
+      reviewId: review.value.id,
+      limit: 1,
+    });
     expect(firstPage).toMatchObject({
       ok: true,
       value: {
@@ -75,7 +78,7 @@ export function registerReviewProviderDiffPaginationScenarios(): void {
     expect(firstPage.value).not.toHaveProperty('upstreamDiff');
 
     await expect(
-      version.getReviewDiff({
+      version.reviews.advanced.getReviewDiff({
         baseCommitId: graph.rootCommitId,
         headCommitId: graph.childCommitId,
         limit: 1,
@@ -85,7 +88,7 @@ export function registerReviewProviderDiffPaginationScenarios(): void {
       value: { changes: [{ target: { changeId: 'change-cell-a1' } }], limit: 1 },
     });
     await expect(
-      version.getReviewDiff({
+      version.reviews.advanced.getReviewDiff({
         baseCommitId: graph.rootCommitId,
         headCommitId: graph.childCommitId,
         limit: 1,
@@ -104,11 +107,11 @@ export function registerReviewProviderDiffPaginationScenarios(): void {
       },
     });
     await expect(
-      version.getReviewDiff({
-        baseCommitId: graph.childCommitId,
-        headCommitId: graph.rootCommitId,
+      version.reviews.advanced.getReviewDiff({
+        baseCommitId: graph.rootCommitId,
+        headCommitId: graph.childCommitId,
         limit: 1,
-        cursor: firstPage.value.nextCursor,
+        cursor: 'mog-vdiff-v1.semantic-change-order.stale-review-diff-cursor',
       }),
     ).resolves.toMatchObject({
       ok: false,

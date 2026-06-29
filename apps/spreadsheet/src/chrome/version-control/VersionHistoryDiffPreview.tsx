@@ -1,87 +1,929 @@
-import { GitCompare } from 'lucide-react';
-import type { VersionSemanticDiffPage, WorkbookCommitId } from '@mog-sdk/contracts/api';
+import { Filter, GitCompare } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import type {
+  VersionDiffEntry,
+  VersionDiffDisplayValue,
+  VersionDiffFilters,
+  VersionDiffGroup,
+  VersionDiffGroupId,
+  VersionDiffOverview,
+  VersionDiffOperation,
+  VersionDiffValue,
+  VersionSemanticDiffPage,
+  VersionSemanticValue,
+  WorkbookCommitId,
+} from '@mog-sdk/contracts/api';
 
 import {
+  formatVersionRowColumnDiffValue,
+  semanticObjectFields,
   shortCommitId,
   versionDiffEntryLabel,
-  versionDiffPreviewState,
+  versionRowColumnDiffSummary,
+  versionRowColumnDiffTitle,
 } from './version-history-format';
+import { safeDomId } from './availability/version-action-availability';
 
 export type VersionDiffPreview = {
   readonly base: WorkbookCommitId;
   readonly target: WorkbookCommitId;
-  readonly page: VersionSemanticDiffPage;
+  readonly targetLabel?: string;
+  readonly overview: VersionDiffOverview;
+  readonly activeGroupId?: VersionDiffGroupId;
+  readonly detailPages: readonly VersionSemanticDiffPage[];
+  readonly detailItems: readonly VersionDiffEntry[];
+  readonly detailNextCursor?: VersionSemanticDiffPage['nextCursor'];
+  readonly loadedDetailCount: number;
+  readonly loadedDetailPageCount: number;
+  readonly hasMoreDetail: boolean;
+  readonly loadingGroups: boolean;
+  readonly loadingDetail: boolean;
+  readonly inlineDetailMode: boolean;
+  readonly inlineDetailItems: readonly VersionDiffEntry[];
+  readonly loadingInlineDetail: boolean;
+  readonly inlineDetailHasMore: boolean;
+  readonly filters?: VersionDiffFilterSelection;
 };
+
+export type VersionDiffFilterOperation = Exclude<VersionDiffOperation, 'mixed'>;
+
+export type VersionDiffFilterSelection = {
+  readonly sheetId?: string;
+  readonly domain?: string;
+  readonly operation?: VersionDiffFilterOperation;
+};
+
+const DIFF_DETAIL_ROW_HEIGHT = 76;
+const UNRESOLVED_SHEET_LABEL = 'Sheet name unavailable';
 
 export function VersionHistoryDiffPreview({
   diffPreview,
+  diffEnabled = true,
+  diffDisabledReason,
+  onLoadMoreGroups,
+  onSelectGroup,
+  onLoadMoreDetail,
+  onFiltersChange,
 }: {
   readonly diffPreview?: VersionDiffPreview;
+  readonly diffEnabled?: boolean;
+  readonly diffDisabledReason?: string;
+  readonly onLoadMoreGroups: () => void;
+  readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
+  readonly onLoadMoreDetail: () => void;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
 }): React.JSX.Element | null {
-  if (!diffPreview) return null;
-  const count = diffPreview.page.items.length;
-  const state = versionDiffPreviewState(diffPreview.page);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  if (!diffPreview) {
+    if (diffEnabled) {
+      return null;
+    }
+
+    return (
+      <section
+        className="flex min-h-[132px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
+        aria-label="Diff viewer"
+        data-testid="version-history-diff-viewer"
+        data-state="unavailable"
+      >
+        <DiffViewerHeader stateLabel="Unavailable" />
+        <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-ss-border bg-ss-surface px-3 py-4 text-[11px] text-ss-text-secondary">
+          Diff unavailable
+        </div>
+        {diffDisabledReason ? (
+          <div
+            id="version-diff-unavailable-reason"
+            className="text-[11px] leading-snug text-ss-text-secondary"
+            data-testid="version-diff-unavailable-reason"
+          >
+            {diffDisabledReason}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  const summary = diffPreview.overview.summary;
+  const state =
+    summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
+  const stateLabel = state === 'incomplete' ? 'Incomplete' : 'Changes';
   const summaryId = 'version-history-parent-diff-summary';
-  const summary = `Parent Diff Base ${shortCommitId(diffPreview.base)} Target ${shortCommitId(
-    diffPreview.target,
-  )} State ${state.label}. Change count ${count}`;
+  const targetLabel = diffPreview.targetLabel ?? shortCommitId(diffPreview.target);
+  const summaryText = `Diff base ${shortCommitId(diffPreview.base)} target ${targetLabel}. ${formatSummaryCount(summary)}.`;
 
   return (
     <section
-      className="flex flex-col gap-2 border border-ss-border rounded-sm p-2 bg-ss-surface-secondary"
-      aria-label="Parent diff"
+      className="flex min-h-[160px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
+      aria-label="Diff viewer"
       aria-describedby={summaryId}
-      data-testid="version-history-parent-diff"
-      data-state={state.kind}
+      data-testid="version-history-diff-viewer"
+      data-loaded="true"
+      data-state={state}
     >
-      <div className="flex items-center gap-2 text-body-sm font-semibold text-ss-text">
-        <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" />
-        <span>Parent Diff</span>
-      </div>
-      <p
-        id={summaryId}
-        className="sr-only"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        data-testid="version-history-parent-diff-status"
-      >
-        {summary}
-      </p>
-      <div className="grid grid-cols-[52px_1fr] gap-x-2 gap-y-1 text-[11px]">
-        <span className="text-ss-text-secondary">Base</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.base)}</span>
-        <span className="text-ss-text-secondary">Target</span>
-        <span className="font-mono text-ss-text truncate">{shortCommitId(diffPreview.target)}</span>
-        <span className="text-ss-text-secondary">Changes</span>
-        <span className="text-ss-text">{count}</span>
-      </div>
-      {state.kind === 'changes' ? (
-        <ol className="flex flex-col gap-1 m-0 p-0 list-none">
-          {diffPreview.page.items.map((entry, index) => (
-            <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-              {versionDiffEntryLabel(entry)}
-            </li>
-          ))}
-        </ol>
-      ) : (
-        <div
-          className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2 py-1.5 text-body-sm"
-          data-testid="version-history-parent-diff-state"
-        >
-          <div className="font-medium text-ss-text">{state.title}</div>
-          <div className="text-ss-text-secondary">{state.message}</div>
-          {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
-            <ol className="mt-1 flex flex-col gap-1 m-0 p-0 list-none">
-              {diffPreview.page.items.map((entry, index) => (
-                <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-                  {versionDiffEntryLabel(entry)}
-                </li>
-              ))}
-            </ol>
-          ) : null}
+      <div data-testid="version-history-parent-diff" data-state={state} className="contents">
+        <div className="flex items-center justify-between gap-2">
+          <DiffViewerHeader stateLabel={stateLabel} />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <DiffFilterMenu
+              preview={diffPreview}
+              open={filtersOpen}
+              onOpenChange={setFiltersOpen}
+              onFiltersChange={onFiltersChange}
+            />
+            <span
+              className="rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary"
+              data-testid="version-history-diff-total-count"
+              data-count-precision={summary.countPrecision}
+            >
+              {formatSummaryCount(summary)}
+            </span>
+          </div>
         </div>
-      )}
+        <p
+          id={summaryId}
+          className="sr-only"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="version-history-parent-diff-status"
+        >
+          {summaryText}
+        </p>
+        <CommitRange
+          base={diffPreview.base}
+          target={diffPreview.target}
+          targetLabel={diffPreview.targetLabel}
+        />
+        {diffPreview.inlineDetailMode ? (
+          <InlineDiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
+        ) : (
+          <>
+            <DiffGroupList
+              preview={diffPreview}
+              onLoadMoreGroups={onLoadMoreGroups}
+              onSelectGroup={onSelectGroup}
+            />
+            <DiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
+          </>
+        )}
+      </div>
     </section>
   );
+}
+
+function DiffFilterMenu({
+  preview,
+  open,
+  onOpenChange,
+  onFiltersChange,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
+}): React.JSX.Element {
+  const activeCount = activeFilterCount(preview.filters);
+  const disabled = !onFiltersChange || (!hasFilterOptions(preview) && activeCount === 0);
+  const label = activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        data-testid="version-history-diff-filter-button"
+        aria-label={label}
+        aria-expanded={open && !disabled}
+        disabled={disabled}
+        onClick={() => onOpenChange(!open)}
+        className="inline-flex h-6 items-center justify-center gap-1 rounded-sm border border-ss-border bg-ss-surface px-1.5 text-[10px] font-medium text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text disabled:opacity-50 disabled:hover:bg-ss-surface"
+      >
+        <Filter size={12} strokeWidth={1.75} aria-hidden="true" />
+        <span>Filter</span>
+        {activeCount > 0 ? (
+          <span
+            className="ml-0.5 rounded-sm bg-ss-primary px-1 text-[9px] leading-4 text-white"
+            aria-hidden="true"
+          >
+            {activeCount}
+          </span>
+        ) : null}
+      </button>
+      {open && !disabled ? (
+        <div
+          role="dialog"
+          aria-label="Diff filters"
+          data-testid="version-history-diff-filter-menu"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') onOpenChange(false);
+          }}
+          className="absolute right-0 top-full z-ss-popover mt-1 w-[284px] rounded-sm border border-ss-border bg-ss-surface p-2 shadow-ss-dropdown"
+        >
+          <DiffFilterControls preview={preview} onFiltersChange={onFiltersChange} layout="menu" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function activeFilterCount(filters: VersionDiffFilterSelection | undefined): number {
+  if (!filters) return 0;
+  return (
+    Number(Boolean(filters.sheetId)) +
+    Number(Boolean(filters.domain)) +
+    Number(Boolean(filters.operation))
+  );
+}
+
+function hasFilterOptions(preview: VersionDiffPreview): boolean {
+  const options = diffFilterOptions(preview);
+  return options.sheets.length > 0 || options.domains.length > 0 || options.operations.length > 0;
+}
+
+export function versionDiffFiltersFromSelection(
+  selection: VersionDiffFilterSelection,
+): VersionDiffFilters | undefined {
+  const filters: VersionDiffFilters = {
+    ...(selection.sheetId ? { sheetIds: [selection.sheetId] } : {}),
+    ...(selection.domain ? { domains: [selection.domain] } : {}),
+    ...(selection.operation ? { operations: [selection.operation] } : {}),
+  };
+  return Object.keys(filters).length === 0 ? undefined : filters;
+}
+
+function DiffFilterControls({
+  preview,
+  onFiltersChange,
+  layout = 'inline',
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
+  readonly layout?: 'inline' | 'menu';
+}): React.JSX.Element {
+  const options = diffFilterOptions(preview);
+  const filters = preview.filters ?? {};
+  const addressReason = unsupportedFilterReason(preview.overview, 'address');
+  const searchReason = unsupportedFilterReason(preview.overview, 'search');
+  const controlsDisabled = !onFiltersChange || preview.loadingGroups || preview.loadingDetail;
+
+  const update = (patch: VersionDiffFilterSelection) => {
+    if (!onFiltersChange) return;
+    onFiltersChange(cleanFilterSelection({ ...filters, ...patch }));
+  };
+
+  return (
+    <div
+      className={
+        layout === 'menu'
+          ? 'grid grid-cols-1 gap-2 text-[11px]'
+          : 'grid grid-cols-3 gap-1.5 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-[11px]'
+      }
+      data-testid="version-history-diff-filters"
+    >
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Sheet</span>
+        <select
+          data-testid="version-history-diff-filter-sheet"
+          value={filters.sheetId ?? ''}
+          onChange={(event) => update({ sheetId: event.currentTarget.value || undefined })}
+          disabled={controlsDisabled || options.sheets.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All sheets</option>
+          {options.sheets.map((sheet) => (
+            <option key={sheet.value} value={sheet.value}>
+              {sheet.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Domain</span>
+        <select
+          data-testid="version-history-diff-filter-domain"
+          value={filters.domain ?? ''}
+          onChange={(event) => update({ domain: event.currentTarget.value || undefined })}
+          disabled={controlsDisabled || options.domains.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All domains</option>
+          {options.domains.map((domain) => (
+            <option key={domain} value={domain}>
+              {domain}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[10px] font-medium text-ss-text-secondary">Operation</span>
+        <select
+          data-testid="version-history-diff-filter-operation"
+          value={filters.operation ?? ''}
+          onChange={(event) =>
+            update({
+              operation: (event.currentTarget.value || undefined) as VersionDiffFilterOperation,
+            })
+          }
+          disabled={controlsDisabled || options.operations.length === 0}
+          className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+        >
+          <option value="">All operations</option>
+          {options.operations.map((operation) => (
+            <option key={operation} value={operation}>
+              {operation}
+            </option>
+          ))}
+        </select>
+      </label>
+      <DisabledFilterControl
+        label="Address"
+        testId="version-history-diff-filter-address"
+        reason={addressReason}
+        layout={layout}
+      />
+      <DisabledFilterControl
+        label="Search"
+        testId="version-history-diff-filter-search"
+        reason={searchReason}
+        layout={layout}
+      />
+    </div>
+  );
+}
+
+function DisabledFilterControl({
+  label,
+  testId,
+  reason,
+  layout = 'inline',
+}: {
+  readonly label: string;
+  readonly testId: string;
+  readonly reason: string;
+  readonly layout?: 'inline' | 'menu';
+}): React.JSX.Element {
+  const reasonId = `${testId}-reason`;
+  return (
+    <label
+      className={
+        layout === 'menu'
+          ? 'flex min-w-0 flex-col gap-0.5'
+          : 'col-span-3 flex min-w-0 flex-col gap-0.5 sm:col-span-1'
+      }
+    >
+      <span className="text-[10px] font-medium text-ss-text-secondary">{label}</span>
+      <input
+        data-testid={testId}
+        aria-describedby={reasonId}
+        value=""
+        readOnly
+        disabled
+        placeholder="Unavailable"
+        className="h-7 min-w-0 rounded-sm border border-ss-border bg-ss-surface-secondary px-1.5 text-[11px] text-ss-text disabled:opacity-50"
+      />
+      <span id={reasonId} className="truncate text-[10px] text-ss-text-secondary">
+        {reason}
+      </span>
+    </label>
+  );
+}
+
+function diffFilterOptions(preview: VersionDiffPreview): {
+  readonly sheets: readonly { readonly value: string; readonly label: string }[];
+  readonly domains: readonly string[];
+  readonly operations: readonly VersionDiffFilterOperation[];
+} {
+  const sheets = new Map<string, string>();
+  const domains = new Set<string>();
+  const operations = new Set<VersionDiffFilterOperation>();
+
+  for (const group of preview.overview.groups.items) {
+    if (group.sheetId) {
+      sheets.set(group.sheetId, formatSheetLabel(group.sheetName) ?? UNRESOLVED_SHEET_LABEL);
+    }
+    domains.add(group.domain);
+    if (group.operation !== 'mixed') operations.add(group.operation);
+  }
+  for (const count of preview.overview.summary.domainCounts) {
+    domains.add(count.domain);
+  }
+  for (const count of preview.overview.summary.operationCounts) {
+    operations.add(count.operation);
+  }
+
+  const filters = preview.filters ?? {};
+  if (filters.sheetId && !sheets.has(filters.sheetId)) {
+    sheets.set(filters.sheetId, UNRESOLVED_SHEET_LABEL);
+  }
+  if (filters.domain) domains.add(filters.domain);
+  if (filters.operation) operations.add(filters.operation);
+
+  return {
+    sheets: [...sheets.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort(
+        (left, right) =>
+          left.label.localeCompare(right.label) || left.value.localeCompare(right.value),
+      ),
+    domains: [...domains].sort(),
+    operations: [...operations].sort(),
+  };
+}
+
+function unsupportedFilterReason(
+  overview: VersionDiffOverview,
+  filter: 'address' | 'search',
+): string {
+  return (
+    overview.unsupportedFilters.find((item) => item.filter === filter)?.reason ??
+    (filter === 'address'
+      ? 'Address filters require a historical range index.'
+      : 'Formula and text search requires a redaction-aware search index.')
+  );
+}
+
+function cleanFilterSelection(selection: VersionDiffFilterSelection): VersionDiffFilterSelection {
+  return {
+    ...(selection.sheetId ? { sheetId: selection.sheetId } : {}),
+    ...(selection.domain ? { domain: selection.domain } : {}),
+    ...(selection.operation ? { operation: selection.operation } : {}),
+  };
+}
+
+function DiffGroupList({
+  preview,
+  onLoadMoreGroups,
+  onSelectGroup,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onLoadMoreGroups: () => void;
+  readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
+}): React.JSX.Element {
+  const groups = preview.overview.groups.items;
+  if (groups.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-empty-groups"
+      >
+        No grouped changes
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5">
+      <ol
+        className="m-0 flex max-h-[220px] flex-col gap-1 overflow-y-auto p-0 list-none"
+        data-testid="version-history-diff-group-list"
+      >
+        {groups.map((group) => (
+          <li key={group.groupId}>
+            <button
+              type="button"
+              data-testid={`version-history-diff-group-row-${safeDomId(group.groupId)}`}
+              data-group-kind={group.kind}
+              data-change-count={group.changeCount ?? group.minimumChangeCount ?? ''}
+              aria-pressed={preview.activeGroupId === group.groupId}
+              onClick={() => onSelectGroup(group.groupId)}
+              className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-sm border border-ss-border bg-ss-surface px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-ss-surface-hover aria-pressed:border-ss-primary aria-pressed:bg-ss-primary/10"
+            >
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-ss-text">
+                  {formatGroupTitle(group)}
+                </span>
+                <span className="block truncate text-ss-text-secondary">
+                  {group.domain} - {group.operation} - historical metadata
+                </span>
+              </span>
+              <span className="shrink-0 text-ss-text-secondary">{formatGroupCount(group)}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+      {preview.overview.groups.nextCursor ? (
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-groups"
+          onClick={onLoadMoreGroups}
+          disabled={preview.loadingGroups}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingGroups ? 'Loading groups' : 'Load more groups'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DiffDetail({
+  preview,
+  onLoadMoreDetail,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onLoadMoreDetail: () => void;
+}): React.JSX.Element | null {
+  if (!preview.activeGroupId) return null;
+  if (preview.loadingDetail && preview.detailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-detail"
+      >
+        Loading detail
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="version-history-diff-detail">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-ss-text-secondary">
+        <span>
+          {preview.loadedDetailCount} loaded across {preview.loadedDetailPageCount} pages
+        </span>
+        {preview.hasMoreDetail ? <span>More available</span> : null}
+      </div>
+      <VirtualDetailList items={preview.detailItems} />
+      {preview.hasMoreDetail ? (
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-detail"
+          onClick={onLoadMoreDetail}
+          disabled={preview.loadingDetail}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingDetail ? 'Loading detail' : 'Load more'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function InlineDiffDetail({
+  preview,
+  onLoadMoreDetail,
+}: {
+  readonly preview: VersionDiffPreview;
+  readonly onLoadMoreDetail: () => void;
+}): React.JSX.Element {
+  if (preview.loadingInlineDetail && preview.inlineDetailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-inline-detail"
+      >
+        Loading changes
+      </div>
+    );
+  }
+
+  if (preview.inlineDetailItems.length === 0) {
+    return (
+      <div
+        className="rounded-sm border border-dashed border-ss-border bg-ss-surface px-2 py-3 text-center text-[11px] text-ss-text-secondary"
+        data-testid="version-history-diff-inline-detail"
+      >
+        No detail rows
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="version-history-diff-inline-detail">
+      <VirtualDetailList items={preview.inlineDetailItems} />
+      {preview.inlineDetailHasMore ? (
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-inline-detail"
+          onClick={onLoadMoreDetail}
+          disabled={preview.loadingInlineDetail}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingInlineDetail ? 'Loading changes' : 'Load more'}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VirtualDetailList({
+  items,
+}: {
+  readonly items: readonly VersionDiffEntry[];
+}): React.JSX.Element {
+  const rowHeight = DIFF_DETAIL_ROW_HEIGHT;
+  const viewportHeight = Math.max(rowHeight, Math.min(276, Math.max(1, items.length) * rowHeight));
+  const [scrollTop, setScrollTop] = useState(0);
+  const visible = useMemo(() => {
+    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - 2);
+    const count = Math.ceil(viewportHeight / rowHeight) + 4;
+    return {
+      start,
+      end: Math.min(items.length, start + count),
+    };
+  }, [items.length, scrollTop]);
+  const visibleItems = items.slice(visible.start, visible.end);
+
+  return (
+    <div
+      className="relative overflow-y-auto rounded-sm border border-ss-border bg-ss-surface"
+      style={{ height: viewportHeight }}
+      onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
+      data-testid="version-history-diff-detail-viewport"
+      data-visible-count={visibleItems.length}
+      data-total-loaded={items.length}
+    >
+      <div className="m-0 p-0" style={{ height: items.length * rowHeight, position: 'relative' }}>
+        {visibleItems.map((entry, index) => (
+          <div
+            key={diffEntryKey(entry, visible.start + index)}
+            style={{
+              position: 'absolute',
+              top: (visible.start + index) * rowHeight,
+              left: 0,
+              right: 0,
+              height: rowHeight,
+              padding: 4,
+            }}
+          >
+            <DiffChangeRow entry={entry} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DiffViewerHeader({ stateLabel }: { readonly stateLabel: string }): React.JSX.Element {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-semibold text-ss-text">
+      <GitCompare size={15} strokeWidth={1.75} aria-hidden="true" className="shrink-0" />
+      <span className="truncate">{stateLabel}</span>
+    </div>
+  );
+}
+
+function CommitRange({
+  base,
+  target,
+  targetLabel,
+}: {
+  readonly base: WorkbookCommitId;
+  readonly target: WorkbookCommitId;
+  readonly targetLabel?: string;
+}): React.JSX.Element {
+  const visibleTarget = targetLabel ?? shortCommitId(target);
+  return (
+    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-0.5 text-[10px] text-ss-text-secondary">
+      <span className="sr-only">
+        Base {shortCommitId(base)} target {visibleTarget}
+      </span>
+      <div className="truncate font-mono" aria-hidden="true">
+        {shortCommitId(base)}...{visibleTarget}
+      </div>
+    </div>
+  );
+}
+
+function DiffChangeRow({ entry }: { readonly entry: VersionDiffEntry }): React.JSX.Element {
+  return (
+    <article className="overflow-hidden rounded-sm border border-ss-border bg-ss-surface">
+      <div className="flex min-w-0 items-center justify-between gap-2 border-b border-ss-border-light bg-ss-surface-secondary px-2 py-1">
+        <div className="min-w-0 truncate text-[11px] font-medium text-ss-text">
+          {diffEntryTitle(entry)}
+        </div>
+        {entry.diagnostics?.length ? (
+          <span className="shrink-0 rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-ss-text-secondary">
+            Diagnostic
+          </span>
+        ) : null}
+      </div>
+      <div className="font-mono text-[10px] leading-4">
+        <DiffLine label="Before" marker="-" tone="removed" side="before" entry={entry} />
+        <DiffLine label="After" marker="+" tone="added" side="after" entry={entry} />
+      </div>
+    </article>
+  );
+}
+
+function DiffLine({
+  label,
+  marker,
+  tone,
+  side,
+  entry,
+}: {
+  readonly label: string;
+  readonly marker: '-' | '+';
+  readonly tone: 'removed' | 'added';
+  readonly side: 'before' | 'after';
+  readonly entry: VersionDiffEntry;
+}): React.JSX.Element {
+  const formattedValue = formatDiffValue(entry, side);
+  const toneClass =
+    tone === 'removed'
+      ? 'border-l-ss-error bg-ss-error-bg text-ss-error-text'
+      : 'border-l-ss-success bg-ss-success-bg text-ss-success-text';
+
+  return (
+    <div
+      className={`grid grid-cols-[1.25rem_minmax(0,1fr)] border-l-2 ${toneClass}`}
+      aria-label={`${label}: ${formattedValue}`}
+    >
+      <span
+        className="select-none border-r border-current/15 text-center font-semibold"
+        aria-hidden="true"
+      >
+        {marker}
+      </span>
+      <span className="min-w-0 break-words px-1.5 py-0.5">
+        <span className="sr-only">{label}: </span>
+        {formattedValue}
+      </span>
+    </div>
+  );
+}
+
+function diffEntryTitle(entry: VersionDiffEntry): string {
+  const rowColumnSummary = versionRowColumnDiffSummary(entry);
+  if (rowColumnSummary)
+    return formatSheetQualifiedDescription(entry, versionRowColumnDiffTitle(rowColumnSummary));
+
+  const address = formatDisplayValue(entry.display?.address);
+  const entityLabel = formatDisplayValue(entry.display?.entityLabel);
+  const qualifiedAddress = address ? formatSheetQualifiedAddress(entry, address) : undefined;
+  if (qualifiedAddress && entityLabel) {
+    if (entityLabel === qualifiedAddress || entityLabel.endsWith(`!${address}`)) return entityLabel;
+    return `${entityLabel} ${qualifiedAddress}`;
+  }
+  if (qualifiedAddress) return qualifiedAddress;
+  const sheetLabel = entrySheetLabel(entry);
+  if (sheetLabel && entityLabel) return `${sheetLabel} - ${entityLabel}`;
+  if (entityLabel) return entityLabel;
+  if (entry.structural.kind === 'metadata') return versionDiffEntryLabel(entry);
+  return 'Restricted change';
+}
+
+function formatSheetQualifiedAddress(entry: VersionDiffEntry, address: string): string {
+  const sheetLabel = entrySheetLabel(entry);
+  return sheetLabel ? `${sheetLabel}!${address}` : address;
+}
+
+function formatSheetQualifiedDescription(entry: VersionDiffEntry, description: string): string {
+  const sheetLabel = entrySheetLabel(entry);
+  return sheetLabel ? `${sheetLabel} - ${description}` : description;
+}
+
+function entrySheetLabel(entry: VersionDiffEntry): string | undefined {
+  const displaySheetName = entry.display?.sheetName;
+  if (displaySheetName?.kind === 'redacted') return 'Restricted sheet';
+  return formatDisplayValue(displaySheetName);
+}
+
+function formatDisplayValue(value: VersionDiffDisplayValue | undefined): string | undefined {
+  if (!value || value.kind === 'redacted') return undefined;
+  return value.value.trim().length > 0 ? value.value : undefined;
+}
+
+function formatDiffValue(entry: VersionDiffEntry, side: 'before' | 'after'): string {
+  const value = side === 'before' ? entry.before : entry.after;
+  if (value.kind === 'redacted') return 'Redacted';
+  const rowColumnSummary = versionRowColumnDiffSummary(entry);
+  if (rowColumnSummary) {
+    const rowColumnValue = formatVersionRowColumnDiffValue(rowColumnSummary, value, side);
+    if (rowColumnValue) return rowColumnValue;
+  }
+  const directFormatValue = formatDirectCellFormatDiffValue(entry, value);
+  if (directFormatValue) return truncateValue(directFormatValue, 96);
+  return truncateValue(formatSemanticValue(value.value), 96);
+}
+
+function formatDirectCellFormatDiffValue(
+  entry: VersionDiffEntry,
+  value: VersionDiffValue,
+): string | undefined {
+  if (
+    entry.structural.kind !== 'metadata' ||
+    entry.structural.domain !== 'cells.formats.direct' ||
+    entry.structural.propertyPath.length !== 1 ||
+    entry.structural.propertyPath[0] !== 'format' ||
+    value.kind !== 'value'
+  ) {
+    return undefined;
+  }
+  if (value.value === null) return 'No direct format';
+
+  const fields = semanticObjectFields(value.value);
+  if (!fields) return undefined;
+  const formattedFields = fields.flatMap((field) => {
+    const formatted = formatDirectCellFormatField(field.key, field.value);
+    return formatted ? [formatted] : [];
+  });
+  if (formattedFields.length === 0) return 'Direct format';
+  return formattedFields.join(', ');
+}
+
+function formatDirectCellFormatField(key: string, value: VersionSemanticValue): string | undefined {
+  if (key === 'kind' && value === 'Removed') return 'Direct format removed';
+  if (key === 'numberFormat' && typeof value === 'string') {
+    return `Number format: ${formatNumberFormatLabel(value)}`;
+  }
+  return `${formatFormatPropertyName(key)}: ${formatSemanticValue(value)}`;
+}
+
+const NUMBER_FORMAT_LABELS: Readonly<Record<string, string>> = {
+  General: 'General',
+  '@': 'Text',
+  '0': 'Number',
+  '0.00': 'Number (2 decimals)',
+  '#,##0': 'Number (thousands)',
+  '#,##0.00': 'Number (thousands, 2 decimals)',
+  '$#,##0': 'Currency (USD)',
+  '$#,##0.00': 'Currency (USD, 2 decimals)',
+  '0%': 'Percentage',
+  '0.00%': 'Percentage (2 decimals)',
+  '0.00E+00': 'Scientific',
+};
+
+const ACCOUNTING_FORMAT_LABELS: Readonly<Record<string, string>> = {
+  '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)': 'Accounting (USD)',
+  '_(€* #,##0.00_);_(€* (#,##0.00);_(€* "-"??_);_(@_)': 'Accounting (EUR)',
+  '_(£* #,##0.00_);_(£* (#,##0.00);_(£* "-"??_);_(@_)': 'Accounting (GBP)',
+};
+
+function formatNumberFormatLabel(formatCode: string): string {
+  const known = NUMBER_FORMAT_LABELS[formatCode];
+  if (known) return known;
+
+  const accounting = ACCOUNTING_FORMAT_LABELS[formatCode];
+  if (accounting) return accounting;
+  if (formatCode.includes('_(') && formatCode.includes('*')) return 'Accounting (custom)';
+  return formatCode;
+}
+
+function formatFormatPropertyName(key: string): string {
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (first) => first.toUpperCase());
+}
+
+function formatSemanticValue(value: VersionSemanticValue, depth = 0): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value.length === 0 ? 'Empty text' : value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value.kind === 'blank') return 'Blank';
+  if (value.kind === 'dateTime') return value.iso;
+  if (value.kind === 'duration') return value.iso;
+  if (value.kind === 'error') return value.message ? `${value.code}: ${value.message}` : value.code;
+  if (value.kind === 'formula') return value.formula;
+  if (value.kind === 'richText') return value.runs.map((run) => run.text).join('');
+  if (value.kind === 'array') return `Array (${value.values.length})`;
+  return formatSemanticObjectValue(value, depth);
+}
+
+function formatSemanticObjectValue(value: VersionSemanticValue, depth: number): string {
+  const fields = semanticObjectFields(value);
+  if (!fields) return 'Object';
+  if (fields.length === 0) return 'Object';
+  if (depth >= 2) return `Object (${fields.length})`;
+  return fields
+    .map((field) => `${field.key}: ${formatSemanticValue(field.value, depth + 1)}`)
+    .join(', ');
+}
+
+function truncateValue(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function formatSummaryCount(summary: VersionDiffOverview['summary']): string {
+  if (summary.exactTotalChanges !== undefined) {
+    return `${summary.exactTotalChanges} ${summary.exactTotalChanges === 1 ? 'change' : 'changes'}`;
+  }
+  if (summary.minimumChangeCount !== undefined) return `${summary.minimumChangeCount}+ changes`;
+  if (summary.totalEstimate !== undefined) return `About ${summary.totalEstimate} changes`;
+  return 'Change count unavailable';
+}
+
+function formatGroupTitle(group: VersionDiffGroup): string {
+  const address = formatDisplayValue(group.address);
+  const sheetName = formatSheetLabel(group.sheetName);
+  if (sheetName && address) return `${sheetName}!${address}`;
+  if (!sheetName && group.sheetId && address) return `${UNRESOLVED_SHEET_LABEL}!${address}`;
+  if (address) return address;
+  if (sheetName) return `${sheetName} ${group.kind}`;
+  if (group.sheetId) return `${UNRESOLVED_SHEET_LABEL} ${group.kind}`;
+  return `${group.domain} ${group.kind}`;
+}
+
+function formatSheetLabel(sheetName: VersionDiffDisplayValue | undefined): string | undefined {
+  if (sheetName?.kind === 'redacted') return 'Restricted sheet';
+  return formatDisplayValue(sheetName);
+}
+
+function formatGroupCount(group: VersionDiffGroup): string {
+  if (group.changeCount !== undefined) return String(group.changeCount);
+  if (group.minimumChangeCount !== undefined) return `${group.minimumChangeCount}+`;
+  if (group.totalEstimate !== undefined) return `~${group.totalEstimate}`;
+  return '?';
+}
+
+function diffEntryKey(entry: VersionDiffEntry, index: number): string {
+  if (entry.structural.kind === 'metadata') return entry.structural.changeId;
+  return `${versionDiffEntryLabel(entry)}-${index}`;
 }

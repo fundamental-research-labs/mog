@@ -35,13 +35,13 @@ export function registerTargetHeadNoWriteScenarios(): void {
       resolutionPolicy: 'fastForwardOnly',
     } as const;
 
-    const noWriteAttempt = await version.acceptProposal(acceptInput);
+    const noWriteAttempt = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(noWriteAttempt).toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
-        target: 'workbook.version.acceptProposal',
+        target: 'workbook.version.proposals.advanced.acceptProposal',
         diagnostics: [
           expect.objectContaining({
             code: 'proposal_accept_stale_update_no_write',
@@ -54,16 +54,18 @@ export function registerTargetHeadNoWriteScenarios(): void {
         ],
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
 
-    const approvedReview = await version.getReview({ reviewId: ready.reviewId });
+    const approvedReview = await version.reviews.advanced.getReview({ reviewId: ready.reviewId });
     if (!approvedReview.ok) {
       throw new Error(`expected approved review before retry: ${approvedReview.error.code}`);
     }
-    const rejectedReview = await version.updateReviewStatus({
+    const rejectedReview = await version.reviews.advanced.updateReviewStatus({
       reviewId: ready.reviewId,
       expectedRevision: approvedReview.value.revision,
       clientRequestId: 'proposal-review-reject-after-stale-no-write',
@@ -73,7 +75,7 @@ export function registerTargetHeadNoWriteScenarios(): void {
     });
     expect(rejectedReview).toMatchObject({ ok: true, value: { status: 'rejected' } });
 
-    const retry = await version.acceptProposal(acceptInput);
+    const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toMatchObject({
       ok: false,
@@ -83,15 +85,19 @@ export function registerTargetHeadNoWriteScenarios(): void {
         allowed: ['approved'],
       },
     });
-    await expect(version.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
-    await expect(version.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'rejected' },
     });
-    await expect(version.readRef('refs/heads/main')).resolves.toMatchObject({
+    await expect(version.refs.readRef('refs/heads/main')).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

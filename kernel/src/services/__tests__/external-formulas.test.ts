@@ -132,9 +132,18 @@ describe('external formula materialization', () => {
     sourceValues.Inputs.A1 = 200;
     await expect(materializeExternalFormulas(ctx)).resolves.toBe(1);
 
-    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(sheetId, [
-      { row: 0, col: 0, input: { kind: 'parse', text: '=200' } },
-    ]);
+    expect(ctx.computeBridge.setCellsByPosition).toHaveBeenCalledWith(
+      sheetId,
+      [{ row: 0, col: 0, input: { kind: 'parse', text: '=200' } }],
+      expect.objectContaining({
+        operationContext: expect.objectContaining({
+          capturePolicy: 'commitEligible',
+          domainIds: ['cells'],
+          sheetIds: [sheetId],
+          writeAdmissionMode: 'capture',
+        }),
+      }),
+    );
   });
 
   it('forwards admission options while batching materialized writes by sheet', async () => {

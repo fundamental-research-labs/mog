@@ -16,11 +16,11 @@ export function registerProposalProviderWorkspaceIdGuardScenarios(): void {
       proposalWorkspaceService: workspaceService,
     });
 
-    const created = await version.createProposal(
+    const created = await version.proposals.advanced.createProposal(
       createProposalInput('proposal-create-workspace-id'),
     );
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
-    const opened = await version.startProposalWorkspace({
+    const opened = await version.proposals.advanced.startProposalWorkspace({
       clientRequestId: 'workspace-open-id-check',
       proposalId: created.value.id,
       expectedRevision: 1,
@@ -29,7 +29,7 @@ export function registerProposalProviderWorkspaceIdGuardScenarios(): void {
     if (!opened.ok) throw new Error(`expected workspace open success: ${opened.error.code}`);
 
     await expect(
-      version.commitProposalWorkspace({
+      version.proposals.advanced.commitProposalWorkspace({
         clientRequestId: 'workspace-commit-id-mismatch',
         proposalId: created.value.id,
         workspaceId: `${opened.value.workspaceId}:stale`,
@@ -45,11 +45,13 @@ export function registerProposalProviderWorkspaceIdGuardScenarios(): void {
         allowed: ['matching_workspace_id'],
       },
     });
-    await expect(version.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });
-    await expect(version.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
+    await expect(version.refs.getRef(created.value.proposalBranchName)).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'success',

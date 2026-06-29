@@ -112,6 +112,7 @@ export async function acceptProviderBackedProposal(
       input,
       openStore: context.openStore,
       ...(context.graphProvider ? { graphProvider: context.graphProvider } : {}),
+      ...(context.mergeReviewService ? { mergeReviewService: context.mergeReviewService } : {}),
       ensureCommitExists: (commitId) => context.ensureCommitExists(commitId, 'acceptProposal'),
       resolveTargetHead: (targetRef) => context.resolveTargetHead(targetRef, 'acceptProposal'),
       ...(context.reviewService

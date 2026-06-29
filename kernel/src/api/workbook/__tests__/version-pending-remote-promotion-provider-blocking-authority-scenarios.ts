@@ -27,7 +27,7 @@ export function registerPendingRemotePromotionProviderAuthorityBlockingScenarios
     const headBefore = await expectReadHeadSuccess(graph);
     const wb = createPromotionAuthorizedWorkbook({ provider });
 
-    const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+    const result = await wb.version.refs.promotePendingRemote({ includeDiagnostics: true });
 
     expect(result).toMatchObject({
       ok: true,
@@ -88,7 +88,7 @@ export function registerPendingRemotePromotionProviderAuthorityBlockingScenarios
       'provider-authority-unknown',
     ],
   ] as const)(
-    'blocks %s through wb.version.promotePendingRemote without promoting',
+    'blocks %s through wb.version.refs.promotePendingRemote without promoting',
     async (_label, graphId, collaboration, reason) => {
       const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const namespace = await initializeProvider(provider, graphId);
@@ -99,7 +99,7 @@ export function registerPendingRemotePromotionProviderAuthorityBlockingScenarios
       const headBefore = await expectReadHeadSuccess(graph);
       const wb = createPromotionAuthorizedWorkbook({ provider });
 
-      const result = await wb.version.promotePendingRemote({ includeDiagnostics: true });
+      const result = await wb.version.refs.promotePendingRemote({ includeDiagnostics: true });
 
       await expectBlockedPromotion(result, graph, store, fixture, headBefore, reason);
     },

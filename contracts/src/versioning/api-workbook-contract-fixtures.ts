@@ -1,8 +1,4 @@
 import type {
-  AgentProposal,
-  AgentProposalAcceptResult,
-  AgentProposalSummary,
-  AgentProposalWorkspaceHandle,
   CheckoutVersionResult,
   GetVersionHeadInput,
   ListVersionCommitsInput,
@@ -15,23 +11,38 @@ import type {
   VersionApplyMergeResolution,
   VersionApplyMergeResult,
   VersionBranchName,
+  VersionBranchNameInput,
   VersionBranchRefReadResult,
+  VersionBranchSummary,
+  VersionCheckoutBranchOptions,
+  VersionCheckoutCommitOptions,
   VersionCheckoutOptions,
   VersionCheckoutTarget,
+  VersionCommitCurrentOptions,
   VersionCommitExpectedHead,
   VersionCommitish,
   VersionCommitOptions,
   VersionCounterRecordRevision,
+  VersionCreateBranchFromCurrentOptions,
   VersionCreateBranchOptions,
+  VersionCurrentCheckout,
   VersionDeleteRefOptions,
+  VersionDiffBranchOverviewOptions,
+  VersionDiffBranchOptions,
   VersionDiagnostic,
   VersionDiagnosticCode,
   VersionDiagnosticPublicPayload,
+  VersionDiffGroupDetailOptions,
   VersionDiffOptions,
+  VersionDiffOverview,
+  VersionDiffOverviewOptions,
+  VersionDiffPorcelainTarget,
   VersionError,
   VersionFastForwardBranchOptions,
   VersionGetMergeConflictDetailRequest,
+  VersionGetMergeReviewInput,
   VersionHead,
+  VersionListBranchesOptions,
   VersionMainRefName,
   VersionMergeConflictDetailResult,
   VersionMergeEndpointDeniedStatus,
@@ -39,11 +50,16 @@ import type {
   VersionMergeConflict,
   VersionMergeInput,
   VersionMergeOptions,
+  VersionMergeReview,
+  VersionMergeReviewArtifactApi,
+  VersionMergeReviewArtifactNamespace,
   VersionMergeResult,
   VersionMergeResultId,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
-  VersionProposalApi,
+  VersionProposalPorcelainApi,
   VersionPutMergeResolutionPayloadRequest,
   VersionPutMergeResolutionPayloadResult,
   VersionRef,
@@ -62,13 +78,18 @@ import type {
   VersionSurfaceStatus,
   VersionSymbolicRefReadResult,
   VersionUpdateBranchOptions,
+  VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
+  WorkbookCommitIdInput,
   WorkbookCommitRef,
   WorkbookCommitSummary,
   WorkbookVersion,
   WorkbookVersionDiagnostic,
+  WorkbookVersionRefsNamespace,
   WorkbookVersionReviewApi,
   WorkbookVersionReviewDiffPage,
+  WorkbookVersionReviewNamespace,
   WorkbookVersionReviewRecord,
   WorkbookVersionReviewRecordSummary,
   WorkbookVersionStatus,
@@ -88,61 +109,65 @@ type KeysOfUnion<T> = T extends unknown ? keyof T : never;
 type MethodReturn<T> = T extends (...args: any[]) => infer R ? R : never;
 type UnwrapVersionResult<T> = T extends VersionResult<infer Value> ? Value : never;
 
-type ExpectedWorkbookVersionMethodName =
-  | 'getStatus'
-  | 'getSurfaceStatus'
-  | 'getHead'
-  | 'listCommits'
-  | 'commit'
-  | 'promotePendingRemote'
-  | 'checkout'
-  | 'merge'
-  | 'applyMerge'
-  | 'revert'
-  | 'saveMergeResolutions'
-  | 'getMergeConflictDetail'
-  | 'putMergeResolutionPayload'
-  | 'listReviews'
-  | 'getReview'
-  | 'createReview'
-  | 'appendReviewDecision'
-  | 'updateReviewStatus'
-  | 'getReviewDiff'
-  | 'createProposal'
-  | 'startProposalWorkspace'
-  | 'getProposalWorkspace'
-  | 'disposeProposalWorkspace'
-  | 'commitProposalWorkspace'
-  | 'failProposal'
-  | 'getProposal'
-  | 'listProposals'
-  | 'markProposalVerified'
-  | 'openProposalReview'
-  | 'acceptProposal'
-  | 'rejectProposal'
-  | 'supersedeProposal'
-  | 'diff'
-  | 'readRef'
-  | 'getRef'
-  | 'listRefs'
-  | 'createBranch'
-  | 'fastForwardBranch'
-  | 'updateBranch'
-  | 'deleteBranch'
-  | 'deleteRef';
+type ExpectedWorkbookVersionMemberName =
+  | keyof ExpectedWorkbookVersionCoreMethods
+  | 'refs'
+  | 'reviews'
+  | 'artifacts'
+  | 'proposals';
 
-interface ExpectedWorkbookVersionCoreMethods {
+interface ExpectedWorkbookVersionCoreMethods extends ExpectedWorkbookVersionDirectMethods {
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
+  getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
+  commitCurrent(
+    options?: VersionCommitCurrentOptions,
+  ): Promise<VersionResult<WorkbookCommitSummary>>;
+  createBranchFromCurrent(
+    name: VersionBranchNameInput,
+    options?: VersionCreateBranchFromCurrentOptions,
+  ): Promise<VersionResult<VersionRef>>;
+  checkoutBranch(
+    name: VersionBranchNameInput,
+    options?: VersionCheckoutBranchOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
+  checkoutCommit(
+    commit: WorkbookCommitIdInput,
+    options?: VersionCheckoutCommitOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
+  listBranches(
+    options?: VersionListBranchesOptions,
+  ): Promise<VersionResult<Paged<VersionBranchSummary>>>;
+  diffCurrent(
+    target?: VersionDiffPorcelainTarget,
+    options?: VersionDiffOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffCurrentOverview(
+    target?: VersionDiffPorcelainTarget,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  diffBranch(
+    branch: VersionBranchNameInput,
+    options?: VersionDiffBranchOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffBranchOverview(
+    branch: VersionBranchNameInput,
+    options?: VersionDiffBranchOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  previewMerge(
+    input: VersionPreviewMergeInput,
+    options?: VersionPreviewMergeOptions,
+  ): Promise<VersionResult<VersionMergeReview>>;
+  getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
+}
+
+interface ExpectedWorkbookVersionDirectMethods {
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
   listCommits(
     options?: ListVersionCommitsInput,
   ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
-  promotePendingRemote(
-    options?: VersionPromotePendingRemoteOptions,
-  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   checkout(
     target: VersionCheckoutTarget,
     options?: VersionCheckoutOptions,
@@ -159,20 +184,30 @@ interface ExpectedWorkbookVersionCoreMethods {
     input: VersionRevertInput,
     options?: VersionRevertOptions,
   ): Promise<VersionResult<VersionRevertResult>>;
-  saveMergeResolutions(
-    input: VersionSaveMergeResolutionsRequest,
-  ): Promise<VersionResult<VersionSaveMergeResolutionsResult>>;
-  getMergeConflictDetail(
-    input: VersionGetMergeConflictDetailRequest,
-  ): Promise<VersionResult<VersionMergeConflictDetailResult>>;
-  putMergeResolutionPayload(
-    input: VersionPutMergeResolutionPayloadRequest,
-  ): Promise<VersionResult<VersionPutMergeResolutionPayloadResult>>;
   diff(
     base: VersionCommitish,
     target: VersionCommitish,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffOverview(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  diffGroupDetail(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffGroupDetailOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffWorkingTree(
+    options?: VersionWorkingTreeDiffOptions,
+  ): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
+}
+
+interface ExpectedWorkbookVersionRefsMethods {
+  promotePendingRemote(
+    options?: VersionPromotePendingRemoteOptions,
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
   readRef(
     name: VersionMainRefName | VersionRefName | VersionBranchName,
@@ -196,50 +231,26 @@ interface ExpectedWorkbookVersionCoreMethods {
 }
 
 type ExpectedWorkbookVersionResultByMethod = {
-  readonly getHead: VersionResult<VersionHead>;
-  readonly listCommits: VersionResult<Paged<WorkbookCommitSummary>>;
-  readonly commit: VersionResult<WorkbookCommitSummary>;
-  readonly promotePendingRemote: VersionResult<VersionPromotePendingRemoteResult>;
-  readonly checkout: VersionResult<CheckoutVersionResult>;
-  readonly merge: VersionResult<VersionMergeResult>;
-  readonly applyMerge: VersionResult<VersionApplyMergeResult>;
-  readonly revert: VersionResult<VersionRevertResult>;
-  readonly saveMergeResolutions: VersionResult<VersionSaveMergeResolutionsResult>;
-  readonly getMergeConflictDetail: VersionResult<VersionMergeConflictDetailResult>;
-  readonly putMergeResolutionPayload: VersionResult<VersionPutMergeResolutionPayloadResult>;
-  readonly listReviews: VersionResult<Paged<WorkbookVersionReviewRecordSummary>>;
-  readonly getReview: VersionResult<WorkbookVersionReviewRecord>;
-  readonly createReview: VersionResult<WorkbookVersionReviewRecord>;
-  readonly appendReviewDecision: VersionResult<WorkbookVersionReviewRecord>;
-  readonly updateReviewStatus: VersionResult<WorkbookVersionReviewRecord>;
-  readonly getReviewDiff: VersionResult<WorkbookVersionReviewDiffPage>;
-  readonly createProposal: VersionResult<AgentProposal>;
-  readonly startProposalWorkspace: VersionResult<AgentProposalWorkspaceHandle>;
-  readonly getProposalWorkspace: VersionResult<AgentProposalWorkspaceHandle>;
-  readonly disposeProposalWorkspace: VersionResult<{ readonly disposed: true }>;
-  readonly commitProposalWorkspace: VersionResult<AgentProposal>;
-  readonly failProposal: VersionResult<AgentProposal>;
-  readonly getProposal: VersionResult<AgentProposal>;
-  readonly listProposals: VersionResult<Paged<AgentProposalSummary>>;
-  readonly markProposalVerified: VersionResult<AgentProposal>;
-  readonly openProposalReview: VersionResult<WorkbookVersionReviewRecord>;
-  readonly acceptProposal: VersionResult<AgentProposalAcceptResult>;
-  readonly rejectProposal: VersionResult<AgentProposal>;
-  readonly supersedeProposal: VersionResult<AgentProposal>;
-  readonly diff: VersionResult<VersionSemanticDiffPage>;
-  readonly readRef: VersionResult<VersionRefReadResult>;
-  readonly getRef: VersionResult<VersionRefReadResult>;
-  readonly listRefs: VersionResult<Paged<VersionRef>>;
-  readonly createBranch: VersionResult<VersionRef>;
-  readonly fastForwardBranch: VersionResult<VersionRef>;
-  readonly updateBranch: VersionResult<VersionRef>;
-  readonly deleteBranch: VersionResult<VersionRef>;
-  readonly deleteRef: VersionResult<VersionRef>;
+  readonly [Method in keyof ExpectedWorkbookVersionCoreMethods]: Awaited<
+    MethodReturn<ExpectedWorkbookVersionCoreMethods[Method]>
+  >;
+};
+
+type ExpectedWorkbookVersionRefsResultByMethod = {
+  readonly [Method in keyof ExpectedWorkbookVersionRefsMethods]: Awaited<
+    MethodReturn<ExpectedWorkbookVersionRefsMethods[Method]>
+  >;
 };
 
 type WorkbookVersionReturnByMethod = {
-  readonly [Method in ExpectedWorkbookVersionMethodName]: Awaited<
+  readonly [Method in keyof ExpectedWorkbookVersionCoreMethods]: Awaited<
     MethodReturn<WorkbookVersion[Method]>
+  >;
+};
+
+type WorkbookVersionRefsReturnByMethod = {
+  readonly [Method in keyof ExpectedWorkbookVersionRefsMethods]: Awaited<
+    MethodReturn<WorkbookVersionRefsNamespace[Method]>
   >;
 };
 
@@ -901,7 +912,7 @@ type _ContractsApiWorkbookEntryMatchesRoot = Assert<
   IsEqual<WorkbookVersion, WorkbookEntryWorkbookVersion>
 >;
 type _ContractsWorkbookVersionPublishesExpectedW8W9MethodSet = Assert<
-  IsEqual<keyof WorkbookVersion, ExpectedWorkbookVersionMethodName>
+  IsEqual<keyof WorkbookVersion, ExpectedWorkbookVersionMemberName>
 >;
 type _ContractsWorkbookVersionCoreMethodsKeepPublicContracts = Assert<
   IsMutuallyAssignable<
@@ -909,17 +920,41 @@ type _ContractsWorkbookVersionCoreMethodsKeepPublicContracts = Assert<
     ExpectedWorkbookVersionCoreMethods
   >
 >;
-type _ContractsWorkbookVersionEmbedsReviewApiContract = Assert<
+type _ContractsWorkbookVersionExposesReviewNamespace = Assert<
+  IsEqual<WorkbookVersion['reviews'], WorkbookVersionReviewNamespace>
+>;
+type _ContractsWorkbookVersionExposesRefsNamespace = Assert<
+  IsEqual<WorkbookVersion['refs'], WorkbookVersionRefsNamespace>
+>;
+type _ContractsWorkbookVersionRefsNamespaceKeepsPublicContracts = Assert<
   IsMutuallyAssignable<
-    Pick<WorkbookVersion, keyof WorkbookVersionReviewApi>,
+    Pick<WorkbookVersionRefsNamespace, keyof ExpectedWorkbookVersionRefsMethods>,
+    ExpectedWorkbookVersionRefsMethods
+  >
+>;
+type _ContractsWorkbookVersionReviewNamespaceEmbedsAdvancedContract = Assert<
+  IsMutuallyAssignable<
+    Pick<WorkbookVersionReviewNamespace['advanced'], keyof WorkbookVersionReviewApi>,
     WorkbookVersionReviewApi
   >
 >;
-type _ContractsWorkbookVersionEmbedsProposalApiContract = Assert<
-  IsMutuallyAssignable<Pick<WorkbookVersion, keyof VersionProposalApi>, VersionProposalApi>
+type _ContractsWorkbookVersionExposesArtifactNamespace = Assert<
+  IsEqual<WorkbookVersion['artifacts'], VersionMergeReviewArtifactNamespace>
+>;
+type _ContractsWorkbookVersionArtifactNamespaceEmbedsAdvancedContract = Assert<
+  IsMutuallyAssignable<
+    Pick<VersionMergeReviewArtifactNamespace['advanced'], keyof VersionMergeReviewArtifactApi>,
+    VersionMergeReviewArtifactApi
+  >
+>;
+type _ContractsWorkbookVersionEmbedsProposalPorcelainContract = Assert<
+  IsEqual<WorkbookVersion['proposals'], VersionProposalPorcelainApi>
 >;
 type _ContractsWorkbookVersionMethodReturnEnvelopesArePublic = Assert<
   IsMutuallyAssignable<WorkbookVersionReturnByMethod, ExpectedWorkbookVersionReturnByMethod>
+>;
+type _ContractsWorkbookVersionRefsMethodReturnEnvelopesArePublic = Assert<
+  IsMutuallyAssignable<WorkbookVersionRefsReturnByMethod, ExpectedWorkbookVersionRefsResultByMethod>
 >;
 type _ContractsVersionTargetUnavailableUsesPublicDiagnostics = Assert<
   IsEqual<VersionTargetUnavailableError['diagnostics'], readonly VersionDiagnostic[]>
@@ -990,7 +1025,8 @@ type _ContractsWorkbookVersionResultValuesHaveNoTopLevelPrivateFields = Assert<
     Extract<
       KeysOfUnion<
         UnwrapVersionResult<
-          ExpectedWorkbookVersionResultByMethod[keyof ExpectedWorkbookVersionResultByMethod]
+          | ExpectedWorkbookVersionResultByMethod[keyof ExpectedWorkbookVersionResultByMethod]
+          | ExpectedWorkbookVersionRefsResultByMethod[keyof ExpectedWorkbookVersionRefsResultByMethod]
         >
       >,
       PublicVersionPrivateDiagnosticFieldName

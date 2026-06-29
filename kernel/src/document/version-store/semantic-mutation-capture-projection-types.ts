@@ -11,6 +11,7 @@ export interface SemanticMutationCaptureProjectionInput {
   readonly directEdits?: readonly DirectEditPosition[];
   readonly directEditRanges?: readonly DirectEditRange[];
   readonly operationContext?: VersionOperationContext;
+  readonly sheetNamesBySheetId?: ReadonlyMap<string, string>;
 }
 
 export type VersionSemanticChangeRecord = {

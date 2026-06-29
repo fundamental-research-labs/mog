@@ -20,6 +20,7 @@ type SyncSemanticChangeRecord = {
     readonly value: VersionSemanticValue;
   };
   readonly display?: {
+    readonly sheetName?: { readonly kind: 'value'; readonly value: string };
     readonly address?: { readonly kind: 'value'; readonly value: string };
   };
   readonly historical?: {
@@ -34,11 +35,13 @@ type SyncSemanticChangeRecord = {
 export function mapSyncAuthoredCellChanges(
   authoredCellChanges: readonly CellChange[],
   sequence: number,
+  sheetNamesBySheetId?: ReadonlyMap<string, string>,
 ): readonly SyncSemanticChangeRecord[] {
   const changes: SyncSemanticChangeRecord[] = [];
   for (const cell of authoredCellChanges) {
     if (!cell.position) continue;
     const address = toA1(cell.position.row, cell.position.col);
+    const sheetName = sheetNamesBySheetId?.get(cell.sheetId);
     changes.push({
       structural: {
         kind: 'metadata',
@@ -50,6 +53,7 @@ export function mapSyncAuthoredCellChanges(
       before: { kind: 'value', value: semanticCellEditValue(cell.oldFormula, cell.oldValue) },
       after: { kind: 'value', value: semanticCellEditValue(cell.newFormula, cell.value) },
       display: {
+        ...(sheetName ? { sheetName: { kind: 'value' as const, value: sheetName } } : {}),
         address: { kind: 'value', value: address },
       },
       historical: {

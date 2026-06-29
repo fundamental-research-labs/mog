@@ -59,6 +59,7 @@ export function compactCellWriteReviewProjectionForMutation(
     changedCells: input.result.recalc?.changedCells ?? [],
     directEdits: input.directEdits,
     directEditRanges: input.directEditRanges,
+    sheetNamesBySheetId: input.sheetNamesBySheetId,
     minimumChangeCount: COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
   });
 }
@@ -69,7 +70,13 @@ export function mapMutationResultToSemanticChanges(
 ): readonly VersionSemanticChangeRecord[] {
   const changes: VersionSemanticChangeRecord[] = [];
   if (input.operation === 'compute_apply_sync_update')
-    changes.push(...mapSyncAuthoredCellChanges(input.result.authoredCellChanges ?? [], sequence));
+    changes.push(
+      ...mapSyncAuthoredCellChanges(
+        input.result.authoredCellChanges ?? [],
+        sequence,
+        input.sheetNamesBySheetId,
+      ),
+    );
   if (isDirectCellValueOperation(input.operation)) {
     changes.push(
       ...mapCellWriteChanges(
@@ -77,6 +84,7 @@ export function mapMutationResultToSemanticChanges(
         input.directEdits ?? [],
         input.directEditRanges ?? [],
         sequence,
+        input.sheetNamesBySheetId,
       ),
     );
   }

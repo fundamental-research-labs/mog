@@ -285,18 +285,35 @@ describe('semantic mutation capture dirty state', () => {
     });
   });
 
-  it('captures large fully projected plain cell writes without a Rust semantic reader', async () => {
-    const capture = createSemanticMutationCapture({ author: AUTHOR, now: () => NOW });
+  it('captures large fully projected plain cell writes with sheet names without a Rust semantic reader', async () => {
+    const capture = createSemanticMutationCapture({
+      author: AUTHOR,
+      now: () => NOW,
+      readSheetName: async (sheetId) => (sheetId === 'sheet-1' ? 'Sheet1' : null),
+    });
+    const operationContext = normalLocalOperationContext({
+      operationId: 'worksheet.paste:large-plain-values',
+      domainIds: ['cells.values'],
+    });
+    const directEdits = cellDirectEdits(100, 100);
+    const directEditRanges = [
+      { sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 },
+    ];
 
+    await capture.mutationCapture.recordPreMutation?.({
+      operation: 'compute_batch_set_cells_by_position',
+      operationContext,
+      directEdits,
+      directEditRanges,
+    });
     capture.mutationCapture.recordMutationResult({
       operation: 'compute_batch_set_cells_by_position',
-      operationContext: normalLocalOperationContext({
-        operationId: 'worksheet.paste:large-plain-values',
-        domainIds: ['cells.values'],
+      operationContext,
+      directEdits,
+      directEditRanges,
+      result: mutationResult({
+        recalc: { ...mutationResult().recalc, changedCells: cellChanges(100, 100) },
       }),
-      directEdits: cellDirectEdits(100, 100),
-      directEditRanges: [{ sheetId: 'sheet-1', startRow: 0, startCol: 0, endRow: 99, endCol: 99 }],
-      result: mutationResult({ recalc: { ...mutationResult().recalc, changedCells: cellChanges(100, 100) } }),
     });
 
     const captured = expectCaptureSuccess(await capture.captureNormalCommit(captureInput()));
@@ -312,6 +329,7 @@ describe('semantic mutation capture dirty state', () => {
         schemaVersion: 1,
         kind: 'rectangularCellValueProjection',
         sheetId: 'sheet-1',
+        sheetName: 'Sheet1',
         rowStart: 0,
         rowEnd: 99,
         columnStart: 0,
@@ -366,7 +384,10 @@ function cellChanges(rows: number, columns: number): MutationResult['recalc']['c
   return out;
 }
 
-function cellDirectEdits(rows: number, columns: number): Array<{ sheetId: string; row: number; col: number }> {
+function cellDirectEdits(
+  rows: number,
+  columns: number,
+): Array<{ sheetId: string; row: number; col: number }> {
   const out: Array<{ sheetId: string; row: number; col: number }> = [];
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < columns; col++) {

@@ -4,7 +4,6 @@ import { missingNormalSemanticChangeSetFailure } from './semantic-mutation-captu
 import {
   COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
   compactPlainCellValueReviewChanges,
-  reviewChangesWithSheetDisplayNames,
   type CompactCellValueReviewProjection,
 } from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
@@ -44,11 +43,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
     );
   }
 
-  const reviewChanges = reviewChangesWithSheetDisplayNames({
-    reviewChanges: input.reviewChanges,
-    beforeState: input.beforeSemanticState.state,
-    afterState: afterSemanticState.state,
-  });
+  const reviewChanges = input.reviewChanges;
 
   if (canUseReviewProjectionOnlyPayload(reviewChanges)) {
     if (sameDigest(input.beforeSemanticState.stateDigest, afterSemanticState.stateDigest)) {
@@ -74,9 +69,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
           afterDigest: afterSemanticState.stateDigest,
           changes: [],
         },
-        ...(compactReviewProjection
-          ? { compactReviewProjection }
-          : { reviewChanges }),
+        ...(compactReviewProjection ? { compactReviewProjection } : { reviewChanges }),
       },
     };
   }
@@ -128,9 +121,7 @@ export function buildReviewProjectionOnlySemanticChangeSetPayload(
         reviewProjectionChangeCount: reviewChanges.length,
       },
       changes: [],
-      ...(compactReviewProjection
-        ? { compactReviewProjection }
-        : { reviewChanges }),
+      ...(compactReviewProjection ? { compactReviewProjection } : { reviewChanges }),
     },
   };
 }

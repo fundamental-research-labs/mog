@@ -34,6 +34,7 @@ export function resolveSemanticMutationCapture(
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
       ? createSemanticMutationCapture({
           semanticStateReader: config.semanticStateReader,
+          readSheetName: config.readSheetName,
           requireOperationContext: true,
         })
       : undefined);

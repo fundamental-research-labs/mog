@@ -20,7 +20,10 @@ import type { VersionStoreProviderKind } from './provider-registry';
 import type { VersionProviderWriteActivityTracker } from './provider-write-activity';
 import type { WorkbookVersionRevertService } from './revert-service';
 import type { WorkbookVersionReviewService } from './review-service';
-import type { SemanticMutationCaptureServices } from './semantic-mutation-capture';
+import type {
+  SemanticMutationCaptureServices,
+  SemanticMutationSheetNameReader,
+} from './semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
 import type { SnapshotRootByteSyncPort } from './snapshot-root-capture';
 import type { VersionHistoryRootKind } from './version-history-root-policy';
@@ -55,6 +58,7 @@ export type ResolvedWorkbookVersioningConfig = {
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly readSheetName?: SemanticMutationSheetNameReader;
   readonly pendingRemotePromotionService?: Pick<
     PendingRemotePromotionService,
     'promotePendingRemoteSegments'

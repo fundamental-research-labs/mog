@@ -87,9 +87,9 @@ export function registerPublicPlainTextEditScenario(): void {
 
     try {
       wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
-      await wb.activeSheet.setCell('B3', 'North');
+      await wb.activeSheet.setCell('B3', 'Same');
       const sheet2 = await wb.sheets.add('Sheet2');
-      await sheet2.setCell('B3', 'South');
+      await sheet2.setCell('B3', 'Same');
 
       const commitResult = await wb.version.commit({
         expectedHead: {
@@ -135,7 +135,7 @@ export function registerPublicPlainTextEditScenario(): void {
               domain: 'cell',
               propertyPath: ['value'],
             }),
-            after: { kind: 'value', value: 'North' },
+            after: { kind: 'value', value: 'Same' },
             display: {
               sheetName: { kind: 'value', value: 'Sheet1' },
               address: { kind: 'value', value: 'B3' },
@@ -146,7 +146,7 @@ export function registerPublicPlainTextEditScenario(): void {
               domain: 'cell',
               propertyPath: ['value'],
             }),
-            after: { kind: 'value', value: 'South' },
+            after: { kind: 'value', value: 'Same' },
             display: {
               sheetName: { kind: 'value', value: 'Sheet2' },
               address: { kind: 'value', value: 'B3' },
@@ -208,9 +208,7 @@ export function registerPublicPlainTextEditScenario(): void {
       expect(surfaceAfterRevert.dirty.statusRevision).toEqual(
         expect.stringContaining('semantic:basis:'),
       );
-      expect(surfaceAfterRevert.dirty.statusRevision).toEqual(
-        expect.stringContaining('dirty:no'),
-      );
+      expect(surfaceAfterRevert.dirty.statusRevision).toEqual(expect.stringContaining('dirty:no'));
       expect(surfaceAfterRevert.dirty.unsafeReasons).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({ code: 'version.surfaceStatus.dirtyWorkingState' }),

@@ -1,9 +1,6 @@
 import { toA1 } from '@mog/spreadsheet-utils/a1';
 
-import type {
-  CellChange,
-  SemanticWorkbookState,
-} from '../../bridges/compute/compute-types.gen';
+import type { CellChange } from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
 import { semanticCellEditValue } from './semantic-mutation-capture-projection-helpers';
 
@@ -79,12 +76,7 @@ export function compactPlainCellValueReviewChanges(
 
   const rowCount = rowEnd - rowStart + 1;
   const columnCount = columnEnd - columnStart + 1;
-  if (
-    !sheetId ||
-    rowCount < 1 ||
-    columnCount < 1 ||
-    rowCount * columnCount !== parsed.length
-  ) {
+  if (!sheetId || rowCount < 1 || columnCount < 1 || rowCount * columnCount !== parsed.length) {
     return null;
   }
 
@@ -111,6 +103,7 @@ export function compactPlainCellValueReviewProjectionFromCellChanges(input: {
   readonly changedCells: readonly CellChange[];
   readonly directEdits?: readonly DirectEditPosition[];
   readonly directEditRanges?: readonly DirectEditRange[];
+  readonly sheetNamesBySheetId?: ReadonlyMap<string, string>;
   readonly minimumChangeCount?: number;
 }): CompactCellValueReviewProjection | null {
   const target = directCellProjectionTarget(input);
@@ -153,10 +146,12 @@ export function compactPlainCellValueReviewProjectionFromCellChanges(input: {
 
   if (seenCount !== changeCount) return null;
 
+  const sheetName = input.sheetNamesBySheetId?.get(target.sheetId);
   return {
     schemaVersion: 1,
     kind: 'rectangularCellValueProjection',
     sheetId: target.sheetId,
+    ...(sheetName ? { sheetName } : {}),
     rowStart: target.rowStart,
     rowEnd: target.rowEnd,
     columnStart: target.columnStart,
@@ -165,20 +160,6 @@ export function compactPlainCellValueReviewProjectionFromCellChanges(input: {
     before: compactSeries(beforeValues),
     after: compactSeries(afterValues),
   };
-}
-
-export function reviewChangesWithSheetDisplayNames(input: {
-  readonly reviewChanges: readonly unknown[];
-  readonly beforeState: SemanticWorkbookState;
-  readonly afterState: SemanticWorkbookState;
-}): readonly unknown[] {
-  let changed = false;
-  const reviewChanges = input.reviewChanges.map((change) => {
-    const enriched = reviewChangeWithSheetDisplayName(change, input.beforeState, input.afterState);
-    if (enriched !== change) changed = true;
-    return enriched;
-  });
-  return changed ? reviewChanges : input.reviewChanges;
 }
 
 export function semanticReviewChangesFromPayload(payload: unknown): readonly unknown[] | null {
@@ -273,9 +254,7 @@ function cellValueEndpoint(
   value: unknown,
 ): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
   if (!isRecord(value) || value.kind !== 'value') return { ok: false };
-  return isPlainCellReviewValue(value.value)
-    ? { ok: true, value: value.value }
-    : { ok: false };
+  return isPlainCellReviewValue(value.value) ? { ok: true, value: value.value } : { ok: false };
 }
 
 function isPlainCellReviewValue(value: unknown): boolean {
@@ -353,61 +332,7 @@ function seriesValueAt(series: CompactCellValueSeries, index: number): unknown {
   return series.kind === 'constant' ? series.value : series.values[index];
 }
 
-function reviewChangeWithSheetDisplayName(
-  change: unknown,
-  beforeState: SemanticWorkbookState,
-  afterState: SemanticWorkbookState,
-): unknown {
-  if (!isRecord(change)) return change;
-  const sheetId = sheetIdFromCellReviewChange(change);
-  if (!sheetId) return change;
-  const display = isRecord(change.display) ? change.display : {};
-  if (displaySheetName(display)) return change;
-  const sheetName = sheetNameForSheetId(afterState, sheetId) ?? sheetNameForSheetId(beforeState, sheetId);
-  if (!sheetName) return change;
-  return {
-    ...change,
-    display: {
-      ...display,
-      sheetName: { kind: 'value', value: sheetName },
-    },
-  };
-}
-
-function sheetIdFromCellReviewChange(
-  value: Readonly<Record<string, unknown>>,
-): string | undefined {
-  const structural = isRecord(value.structural) ? value.structural : undefined;
-  if (!isCellDomain(structural?.domain)) return undefined;
-
-  const historical = isRecord(value.historical) ? value.historical : undefined;
-  const cell = isRecord(historical?.cell) ? historical.cell : undefined;
-  if (typeof cell?.sheetId === 'string' && cell.sheetId.length > 0) return cell.sheetId;
-
-  if (typeof structural?.entityId !== 'string') return undefined;
-  const separator = structural.entityId.lastIndexOf('!');
-  return separator > 0 ? structural.entityId.slice(0, separator) : undefined;
-}
-
-function isCellDomain(value: unknown): boolean {
-  return value === 'cell' || value === 'cells' || value === 'cells.values';
-}
-
-function sheetNameForSheetId(
-  state: SemanticWorkbookState,
-  sheetId: string,
-): string | undefined {
-  for (const sheet of Object.values(state.sheets)) {
-    if (sheet.sheetId === sheetId && typeof sheet.name === 'string' && sheet.name.length > 0) {
-      return sheet.name;
-    }
-  }
-  return undefined;
-}
-
-function displaySheetName(
-  value: unknown,
-): string | undefined {
+function displaySheetName(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined;
   const sheetName = value.sheetName;
   return isRecord(sheetName) && sheetName.kind === 'value' && typeof sheetName.value === 'string'
@@ -423,15 +348,13 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 function directCellProjectionTarget(input: {
   readonly directEdits?: readonly DirectEditPosition[];
   readonly directEditRanges?: readonly DirectEditRange[];
-}):
-  | {
-      readonly sheetId: string;
-      readonly rowStart: number;
-      readonly rowEnd: number;
-      readonly columnStart: number;
-      readonly columnEnd: number;
-    }
-  | null {
+}): {
+  readonly sheetId: string;
+  readonly rowStart: number;
+  readonly rowEnd: number;
+  readonly columnStart: number;
+  readonly columnEnd: number;
+} | null {
   if (input.directEditRanges?.length === 1) {
     const range = input.directEditRanges[0];
     return {

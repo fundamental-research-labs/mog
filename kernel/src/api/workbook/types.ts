@@ -44,7 +44,10 @@ import type {
   CheckoutSnapshotMaterializer,
 } from '../../document/version-store/checkout-apply';
 import type { SnapshotRootByteSyncPort } from '../../document/version-store/snapshot-root-capture';
-import type { SemanticMutationCaptureServices } from '../../document/version-store/semantic-mutation-capture';
+import type {
+  SemanticMutationCaptureServices,
+  SemanticMutationSheetNameReader,
+} from '../../document/version-store/semantic-mutation-capture';
 import type { VersionSemanticStateReaderPort } from '../../document/version-store/semantic-state-reader';
 import type {
   VersionStoreDiagnostic,
@@ -98,6 +101,7 @@ export interface WorkbookVersioningConfig {
   readonly captureMergeCommit?: VersionMergeCommitCapture;
   readonly semanticMutationCapture?: SemanticMutationCaptureServices;
   readonly semanticStateReader?: VersionSemanticStateReaderPort;
+  readonly readSheetName?: SemanticMutationSheetNameReader;
   readonly snapshotRootByteSyncPort?: SnapshotRootByteSyncPort;
   readonly ensureProviderInitialized?: () => MaybePromise<readonly VersionStoreDiagnostic[]>;
   readonly checkoutSnapshotMaterializer?: CheckoutSnapshotMaterializer;

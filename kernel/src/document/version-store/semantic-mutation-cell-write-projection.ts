@@ -31,6 +31,7 @@ export function mapCellWriteChanges(
   directEdits: readonly DirectEditPosition[],
   directEditRanges: readonly DirectEditRange[],
   sequence: number,
+  sheetNamesBySheetId?: ReadonlyMap<string, string>,
 ): readonly VersionSemanticChangeRecord[] {
   const directEditKeys = new Set(directEdits.map((edit) => directEditKey(edit)));
   if (directEditKeys.size === 0 && directEditRanges.length === 0) return [];
@@ -51,6 +52,7 @@ export function mapCellWriteChanges(
       continue;
 
     const address = toA1(cell.position.row, cell.position.col);
+    const sheetName = sheetNamesBySheetId?.get(cell.sheetId);
     changes.push({
       structural: {
         kind: 'metadata',
@@ -68,6 +70,7 @@ export function mapCellWriteChanges(
         value: semanticCellEditValue(cell.newFormula, cell.value),
       },
       display: {
+        ...(sheetName ? { sheetName: { kind: 'value' as const, value: sheetName } } : {}),
         address: { kind: 'value', value: address },
       },
       historical: {

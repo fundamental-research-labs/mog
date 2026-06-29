@@ -1,4 +1,5 @@
 import type { DocumentContext } from '../../context';
+import { sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { VersionPreviewMergeInput, VersionPreviewMergeOptions } from '@mog-sdk/contracts/api';
 import { createProviderBackedBranchLifecycleService } from '../../document/version-store/branch-provider-service';
 import type { CheckoutSnapshotMaterializer } from '../../document/version-store/checkout-apply';
@@ -79,6 +80,9 @@ export function attachWorkbookVersioning(
     (!config.captureNormalCommit && config.provider && config.snapshotRootByteSyncPort
       ? createSemanticMutationCapture({
           semanticStateReader,
+          readSheetName:
+            config.readSheetName ??
+            ((sheetId) => ctx.computeBridge.getSheetName(toSheetId(sheetId))),
           requireOperationContext: true,
         })
       : undefined);
@@ -242,10 +246,7 @@ export function attachWorkbookVersioning(
           ...(branchService ? { branchService } : {}),
           graphProvider: config.provider,
           mergeReviewService: {
-            previewMerge: (
-              input: VersionPreviewMergeInput,
-              options?: VersionPreviewMergeOptions,
-            ) =>
+            previewMerge: (input: VersionPreviewMergeInput, options?: VersionPreviewMergeOptions) =>
               previewMergeWorkbookVersionFacade(
                 ctx,
                 input,

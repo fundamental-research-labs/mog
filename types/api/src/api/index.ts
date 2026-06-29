@@ -160,6 +160,8 @@ export type {
   VersionSemanticValue,
   VersionWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage,
   VersionRef,
   VersionRefListResult,

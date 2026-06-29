@@ -2,6 +2,7 @@ import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
 import { screen, waitFor, within } from '@testing-library/react';
+import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
 
 import {
   createSurfaceStatus,
@@ -32,16 +33,70 @@ describe('VersionHistoryPanelContent working-tree diff', () => {
 
     renderVersionHistoryPanel({ workbook });
 
-    const viewer = await screen.findByTestId('version-history-working-tree-diff-viewer');
-    expect(diffWorkingTree).toHaveBeenCalledWith({ pageSize: 50, includeDiagnostics: true });
-    expect(viewer).toHaveAccessibleName('Working tree diff viewer');
+    const region = await screen.findByTestId('version-history-working-tree-diff-viewer');
+    expect(diffWorkingTree).toHaveBeenCalledWith({
+      pageSize: 50,
+      includeDiagnostics: true,
+      includeOverview: true,
+      overview: {
+        groupLimit: 50,
+        includeDiagnostics: true,
+      },
+    });
+    const viewer = within(region).getByTestId('version-history-diff-viewer');
+    expect(region).toHaveAccessibleName('Working tree diff');
+    expect(viewer).toHaveAccessibleName('Diff viewer');
     expect(viewer).toHaveAttribute('data-state', 'changes');
-    expect(viewer).toHaveTextContent('Uncommitted changes');
+    expect(viewer).toHaveTextContent('Changes');
     expect(viewer).toHaveTextContent('working tree');
-    expect(within(viewer).getByTestId('version-history-working-tree-diff-change-list')).toHaveTextContent(
-      '42',
+    expect(within(viewer).getByTestId('version-history-diff-total-count')).toHaveTextContent(
+      '1 change',
     );
+    expect(within(viewer).getByTestId('version-history-diff-inline-detail')).toHaveTextContent('42');
+    expect(within(viewer).queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
     expect(within(viewer).queryByRole('button', { name: /stage/i })).not.toBeInTheDocument();
+  });
+
+  it('loads additional working-tree pages through the shared diff detail list', async () => {
+    const nextCursor = 'working-tree-page-2' as NonNullable<
+      VersionSemanticDiffPage['nextCursor']
+    >;
+    const firstPage = workingTreeDiffPage([diffEntry({ changeId: 'change-1' })], {
+      nextCursor,
+    });
+    const secondPage = workingTreeDiffPage([diffEntry({ changeId: 'change-2' })]);
+    const diffWorkingTree = jest.fn(async (options?: { readonly pageToken?: string }) => ({
+      ok: true as const,
+      value: options?.pageToken ? secondPage : firstPage,
+    }));
+    const workbook = createWorkbook({
+      getSurfaceStatus: jest.fn(async () =>
+        createSurfaceStatus({
+          dirty: {
+            hasUncommittedLocalChanges: true,
+            commitEligibleChanges: true,
+          },
+        }),
+      ),
+      diffWorkingTree,
+    });
+
+    const { user } = renderVersionHistoryPanel({ workbook });
+
+    const region = await screen.findByTestId('version-history-working-tree-diff-viewer');
+    const loadMore = within(region).getByTestId('version-history-diff-load-more-inline-detail');
+    await user.click(loadMore);
+
+    await waitFor(() => expect(diffWorkingTree).toHaveBeenCalledTimes(2));
+    expect(diffWorkingTree).toHaveBeenLastCalledWith({
+      pageSize: 50,
+      pageToken: nextCursor,
+      includeDiagnostics: true,
+    });
+    expect(within(region).getByTestId('version-history-diff-detail-viewport')).toHaveAttribute(
+      'data-total-loaded',
+      '2',
+    );
   });
 
   it('does not call diffWorkingTree for a clean workbook', async () => {

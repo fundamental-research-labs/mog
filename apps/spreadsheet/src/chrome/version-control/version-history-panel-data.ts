@@ -327,7 +327,15 @@ async function readVersionHistoryWorkingTreeDiff(
   workbook: VersionHistoryWorkbook,
 ): Promise<VersionHistoryWorkingTreeDiff> {
   const result = await readVersionResult('VERSION_UI_WORKING_TREE_DIFF_FAILED', () =>
-    workbook.version.diffWorkingTree({ pageSize: 50, includeDiagnostics: true }),
+    workbook.version.diffWorkingTree({
+      pageSize: 50,
+      includeDiagnostics: true,
+      includeOverview: true,
+      overview: {
+        groupLimit: 50,
+        includeDiagnostics: true,
+      },
+    }),
   );
   return result.ok
     ? { status: 'loaded', page: result.value }

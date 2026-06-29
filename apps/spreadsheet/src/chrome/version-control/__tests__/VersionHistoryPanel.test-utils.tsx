@@ -310,9 +310,13 @@ export function createWorkbook(
   return { version } as unknown as VersionHistoryWorkbook;
 }
 
-export function semanticDiffPage(items: VersionSemanticDiffPage['items']): VersionSemanticDiffPage {
+export function semanticDiffPage(
+  items: VersionSemanticDiffPage['items'],
+  options: { readonly nextCursor?: VersionSemanticDiffPage['nextCursor'] } = {},
+): VersionSemanticDiffPage {
   return {
     items,
+    ...(options.nextCursor ? { nextCursor: options.nextCursor } : {}),
     limit: 50,
     readRevision: { kind: 'counter', value: '4' },
     order: 'semantic-change-order',
@@ -321,23 +325,47 @@ export function semanticDiffPage(items: VersionSemanticDiffPage['items']): Versi
 
 export function workingTreeDiffPage(
   items: VersionSemanticDiffPage['items'],
+  options: { readonly nextCursor?: VersionSemanticDiffPage['nextCursor'] } = {},
 ): VersionWorkingTreeDiffPage {
-  return {
-    ...semanticDiffPage(items),
-    kind: 'workingTree',
-    workingTreeDiffId: `working-tree-diff:sha256:${'d'.repeat(64)}`,
+  const workingTreeDiffId = `working-tree-diff:sha256:${'d'.repeat(64)}` as VersionWorkingTreeDiffPage['workingTreeDiffId'];
+  const targetRef = 'refs/heads/main' as const;
+  const captureRevision = 1;
+  const dirtyStatusRevision = '1';
+  const checkoutPreflightToken = 'token-1';
+  const baseSemanticStateDigest = {
+    algorithm: 'sha256' as const,
+    digest: 'base-semantic-state',
+  };
+  const currentSemanticStateDigest = {
+    algorithm: 'sha256' as const,
+    digest: 'current-semantic-state',
+  };
+  const overview = versionDiffOverview({
     baseCommitId: HEAD_COMMIT_ID,
-    targetRef: 'refs/heads/main',
-    captureRevision: 1,
-    dirtyStatusRevision: '1',
-    checkoutPreflightToken: 'token-1',
-    baseSemanticStateDigest: {
-      algorithm: 'sha256',
-      digest: 'base-semantic-state',
-    },
-    currentSemanticStateDigest: {
-      algorithm: 'sha256',
-      digest: 'current-semantic-state',
+    exactTotalChanges: items.length,
+  });
+  delete (overview as { targetCommitId?: WorkbookCommitId }).targetCommitId;
+  return {
+    ...semanticDiffPage(items, options),
+    kind: 'workingTree',
+    workingTreeDiffId,
+    baseCommitId: HEAD_COMMIT_ID,
+    targetRef,
+    captureRevision,
+    dirtyStatusRevision,
+    checkoutPreflightToken,
+    baseSemanticStateDigest,
+    currentSemanticStateDigest,
+    overview: {
+      ...overview,
+      kind: 'workingTree',
+      workingTreeDiffId,
+      targetRef,
+      captureRevision,
+      dirtyStatusRevision,
+      checkoutPreflightToken,
+      baseSemanticStateDigest,
+      currentSemanticStateDigest,
     },
   };
 }

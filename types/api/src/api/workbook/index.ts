@@ -206,6 +206,8 @@ export type {
   VersionUpdateReviewStatusInput,
   VersionWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage,
   RejectAgentProposalInput,
   StartProposalWorkspaceInput,

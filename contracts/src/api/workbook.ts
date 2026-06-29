@@ -198,6 +198,8 @@ export type {
   VersionUpdateBranchOptions,
   VersionWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage,
   WorkbookCommitAnnotationSummary,
   WorkbookCommitId,

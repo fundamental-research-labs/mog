@@ -11,7 +11,6 @@ import type {
   VersionDiffValue,
   VersionSemanticDiffPage,
   VersionSemanticValue,
-  VersionWorkingTreeDiffPage,
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
@@ -20,7 +19,6 @@ import {
   semanticObjectFields,
   shortCommitId,
   versionDiffEntryLabel,
-  versionDiffPreviewState,
   versionRowColumnDiffSummary,
   versionRowColumnDiffTitle,
 } from './version-history-format';
@@ -29,6 +27,7 @@ import { safeDomId } from './availability/version-action-availability';
 export type VersionDiffPreview = {
   readonly base: WorkbookCommitId;
   readonly target: WorkbookCommitId;
+  readonly targetLabel?: string;
   readonly overview: VersionDiffOverview;
   readonly activeGroupId?: VersionDiffGroupId;
   readonly detailPages: readonly VersionSemanticDiffPage[];
@@ -102,9 +101,8 @@ export function VersionHistoryDiffPreview({
   const state = summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
   const stateLabel = state === 'incomplete' ? 'Incomplete' : 'Changes';
   const summaryId = 'version-history-parent-diff-summary';
-  const summaryText = `Diff base ${shortCommitId(diffPreview.base)} target ${shortCommitId(
-    diffPreview.target,
-  )}. ${formatSummaryCount(summary)}.`;
+  const targetLabel = diffPreview.targetLabel ?? shortCommitId(diffPreview.target);
+  const summaryText = `Diff base ${shortCommitId(diffPreview.base)} target ${targetLabel}. ${formatSummaryCount(summary)}.`;
 
   return (
     <section
@@ -144,9 +142,13 @@ export function VersionHistoryDiffPreview({
         >
           {summaryText}
         </p>
-        <CommitRange base={diffPreview.base} target={diffPreview.target} />
+        <CommitRange
+          base={diffPreview.base}
+          target={diffPreview.target}
+          targetLabel={diffPreview.targetLabel}
+        />
         {diffPreview.inlineDetailMode ? (
-          <InlineDiffDetail preview={diffPreview} />
+          <InlineDiffDetail preview={diffPreview} onLoadMoreDetail={onLoadMoreDetail} />
         ) : (
           <>
             <DiffGroupList
@@ -243,77 +245,6 @@ export function versionDiffFiltersFromSelection(
     ...(selection.operation ? { operations: [selection.operation] } : {}),
   };
   return Object.keys(filters).length === 0 ? undefined : filters;
-}
-
-export function VersionHistoryWorkingTreeDiffPreview({
-  page,
-}: {
-  readonly page: VersionWorkingTreeDiffPage;
-}): React.JSX.Element {
-  const count = page.items.length;
-  const state = versionDiffPreviewState(page);
-  const summaryId = 'version-history-working-tree-diff-summary';
-  const summary = `Uncommitted changes. Working tree diff base ${shortCommitId(page.baseCommitId)} State ${
-    state.label
-  }. Change count ${count}`;
-
-  return (
-    <section
-      className="flex min-h-[160px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
-      aria-label="Working tree diff viewer"
-      aria-describedby={summaryId}
-      data-testid="version-history-working-tree-diff-viewer"
-      data-loaded="true"
-      data-state={state.kind}
-    >
-      <div data-testid="version-history-working-tree-diff" data-state={state.kind} className="contents">
-        <div className="flex items-center justify-between gap-2">
-          <DiffViewerHeader stateLabel="Uncommitted changes" />
-          <span className="shrink-0 rounded-sm border border-ss-border bg-ss-surface px-1.5 py-0.5 text-[10px] font-medium text-ss-text-secondary">
-            {count} {count === 1 ? 'change' : 'changes'}
-          </span>
-        </div>
-        <p
-          id={summaryId}
-          className="sr-only"
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-          data-testid="version-history-working-tree-diff-status"
-        >
-          {summary}
-        </p>
-        <WorkingTreeRange page={page} />
-        {state.kind === 'changes' ? (
-          <div
-            className="m-0 flex max-h-[300px] flex-col gap-1.5 overflow-y-auto p-0 list-none"
-            data-testid="version-history-working-tree-diff-change-list"
-          >
-            {page.items.map((entry, index) => (
-              <DiffChangeRow key={index} entry={entry} />
-            ))}
-          </div>
-        ) : (
-          <div
-            className="rounded-sm border border-ss-warning/40 bg-ss-warning/10 px-2.5 py-2 text-[11px]"
-            data-testid="version-history-working-tree-diff-state"
-          >
-            <div className="font-medium text-ss-text">{state.title}</div>
-            <div className="text-ss-text-secondary">{state.message}</div>
-            {state.kind === 'conflict-only' || state.kind === 'redacted' ? (
-              <ol className="m-0 mt-2 flex flex-col gap-1 p-0 list-none">
-                {page.items.map((entry, index) => (
-                  <li key={index} className="text-[11px] text-ss-text-secondary truncate">
-                    {versionDiffEntryLabel(entry)}
-                  </li>
-                ))}
-              </ol>
-            ) : null}
-          </div>
-        )}
-      </div>
-    </section>
-  );
 }
 
 function DiffFilterControls({
@@ -626,8 +557,10 @@ function DiffDetail({
 
 function InlineDiffDetail({
   preview,
+  onLoadMoreDetail,
 }: {
   readonly preview: VersionDiffPreview;
+  readonly onLoadMoreDetail: () => void;
 }): React.JSX.Element {
   if (preview.loadingInlineDetail && preview.inlineDetailItems.length === 0) {
     return (
@@ -655,9 +588,15 @@ function InlineDiffDetail({
     <div className="flex flex-col gap-1.5" data-testid="version-history-diff-inline-detail">
       <VirtualDetailList items={preview.inlineDetailItems} />
       {preview.inlineDetailHasMore ? (
-        <div className="text-[11px] text-ss-text-secondary">
-          More changes are available in grouped detail.
-        </div>
+        <button
+          type="button"
+          data-testid="version-history-diff-load-more-inline-detail"
+          onClick={onLoadMoreDetail}
+          disabled={preview.loadingInlineDetail}
+          className="h-8 rounded-sm border border-ss-border bg-ss-surface px-2 text-[11px] font-medium text-ss-text hover:bg-ss-surface-hover disabled:opacity-50"
+        >
+          {preview.loadingInlineDetail ? 'Loading changes' : 'Load more'}
+        </button>
       ) : null}
     </div>
   );
@@ -723,35 +662,20 @@ function DiffViewerHeader({ stateLabel }: { readonly stateLabel: string }): Reac
 function CommitRange({
   base,
   target,
+  targetLabel,
 }: {
   readonly base: WorkbookCommitId;
   readonly target: WorkbookCommitId;
+  readonly targetLabel?: string;
 }): React.JSX.Element {
+  const visibleTarget = targetLabel ?? shortCommitId(target);
   return (
     <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-0.5 text-[10px] text-ss-text-secondary">
       <span className="sr-only">
-        Base {shortCommitId(base)} target {shortCommitId(target)}
+        Base {shortCommitId(base)} target {visibleTarget}
       </span>
       <div className="truncate font-mono" aria-hidden="true">
-        {shortCommitId(base)}...{shortCommitId(target)}
-      </div>
-    </div>
-  );
-}
-
-function WorkingTreeRange({
-  page,
-}: {
-  readonly page: VersionWorkingTreeDiffPage;
-}): React.JSX.Element {
-  return (
-    <div className="min-w-0 rounded-sm border border-ss-border bg-ss-surface px-2 py-0.5 text-[10px] text-ss-text-secondary">
-      <span className="sr-only">
-        Working tree base {shortCommitId(page.baseCommitId)} current semantic state{' '}
-        {page.currentSemanticStateDigest.digest}
-      </span>
-      <div className="truncate font-mono" aria-hidden="true">
-        {shortCommitId(page.baseCommitId)}...working tree
+        {shortCommitId(base)}...{visibleTarget}
       </div>
     </div>
   );

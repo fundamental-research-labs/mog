@@ -32,11 +32,12 @@ import {
 } from './availability/version-action-availability';
 import type { VersionPanelDiagnostic } from './VersionActionStatus';
 import { VersionCurrentStaleStatus } from './VersionCurrentStaleStatus';
-import { VersionHistoryWorkingTreeDiffPreview } from './VersionHistoryDiffPreview';
+import { VersionHistoryWorkingTreeDiffPreview } from './VersionHistoryWorkingTreeDiffPreview';
 import { displayBranchName, publicBranchLabel } from './version-branch-name';
 import { formatRelativeCommitTime, shortCommitId } from './version-history-format';
 import type {
   VersionHistoryData,
+  VersionHistoryWorkbook,
   VersionHistoryWorkingTreeDiff,
 } from './version-history-panel-data';
 
@@ -363,12 +364,14 @@ export function VersionStatusAlerts({
 
 export function WorkingTreeDiffSection({
   diff,
+  workbook,
 }: {
   readonly diff?: VersionHistoryWorkingTreeDiff;
+  readonly workbook: VersionHistoryWorkbook;
 }): React.JSX.Element | null {
   if (!diff) return null;
   if (diff.status === 'loaded') {
-    return <VersionHistoryWorkingTreeDiffPreview page={diff.page} />;
+    return <VersionHistoryWorkingTreeDiffPreview page={diff.page} workbook={workbook} />;
   }
 
   return (

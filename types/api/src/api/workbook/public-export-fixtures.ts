@@ -61,6 +61,8 @@ import type {
   VersionUpdateBranchOptions as ApiRootUpdateBranchOptions,
   VersionWorkingTreeDiffId as ApiRootWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions as ApiRootWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as ApiRootWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as ApiRootWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage as ApiRootWorkingTreeDiffPage,
   WorkbookDiffPage as ApiRootDiffPage,
   WorkbookVersion as ApiRootWorkbookVersion,
@@ -130,6 +132,8 @@ import type {
   VersionUpdateBranchOptions as PackageApiUpdateBranchOptions,
   VersionWorkingTreeDiffId as PackageApiWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions as PackageApiWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as PackageApiWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as PackageApiWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage as PackageApiWorkingTreeDiffPage,
   WorkbookDiffPage as PackageApiDiffPage,
   WorkbookVersion as PackageApiWorkbookVersion,
@@ -199,6 +203,8 @@ import type {
   VersionUpdateBranchOptions as PackageWorkbookUpdateBranchOptions,
   VersionWorkingTreeDiffId as PackageWorkbookWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions as PackageWorkbookWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as PackageWorkbookWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as PackageWorkbookWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage as PackageWorkbookWorkingTreeDiffPage,
   WorkbookDiffPage as PackageWorkbookDiffPage,
   WorkbookVersion as PackageWorkbookVersion,
@@ -268,6 +274,8 @@ import type {
   VersionUpdateBranchOptions as WorkbookNamespaceUpdateBranchOptions,
   VersionWorkingTreeDiffId as WorkbookNamespaceWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions as WorkbookNamespaceWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview as WorkbookNamespaceWorkingTreeDiffOverview,
+  VersionWorkingTreeDiffOverviewOptions as WorkbookNamespaceWorkingTreeDiffOverviewOptions,
   VersionWorkingTreeDiffPage as WorkbookNamespaceWorkingTreeDiffPage,
   WorkbookDiffPage as WorkbookNamespaceDiffPage,
   WorkbookVersion as WorkbookNamespaceVersion,
@@ -601,6 +609,15 @@ type _WorkbookNamespaceExportsWorkingTreeDiffPage = Assert<
 type _WorkbookNamespaceExportsWorkingTreeDiffOptions = Assert<
   IsEqual<WorkbookNamespaceWorkingTreeDiffOptions, PackageWorkbookWorkingTreeDiffOptions>
 >;
+type _WorkbookNamespaceExportsWorkingTreeDiffOverview = Assert<
+  IsEqual<WorkbookNamespaceWorkingTreeDiffOverview, PackageWorkbookWorkingTreeDiffOverview>
+>;
+type _WorkbookNamespaceExportsWorkingTreeDiffOverviewOptions = Assert<
+  IsEqual<
+    WorkbookNamespaceWorkingTreeDiffOverviewOptions,
+    PackageWorkbookWorkingTreeDiffOverviewOptions
+  >
+>;
 type _WorkbookNamespaceExportsWorkingTreeDiffId = Assert<
   IsEqual<WorkbookNamespaceWorkingTreeDiffId, PackageWorkbookWorkingTreeDiffId>
 >;
@@ -712,6 +729,12 @@ type _ApiRootExportsWorkingTreeDiffPage = Assert<
 >;
 type _ApiRootExportsWorkingTreeDiffOptions = Assert<
   IsEqual<ApiRootWorkingTreeDiffOptions, PackageApiWorkingTreeDiffOptions>
+>;
+type _ApiRootExportsWorkingTreeDiffOverview = Assert<
+  IsEqual<ApiRootWorkingTreeDiffOverview, PackageApiWorkingTreeDiffOverview>
+>;
+type _ApiRootExportsWorkingTreeDiffOverviewOptions = Assert<
+  IsEqual<ApiRootWorkingTreeDiffOverviewOptions, PackageApiWorkingTreeDiffOverviewOptions>
 >;
 type _ApiRootExportsWorkingTreeDiffId = Assert<
   IsEqual<ApiRootWorkingTreeDiffId, PackageApiWorkingTreeDiffId>

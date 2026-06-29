@@ -10,6 +10,7 @@ import type {
   VersionSurfaceStatus,
   VersionWorkingTreeDiffId,
   VersionWorkingTreeDiffOptions,
+  VersionWorkingTreeDiffOverview,
   WorkbookCommitId,
   WorkbookCommitRef,
 } from '@mog-sdk/contracts/api';
@@ -38,6 +39,12 @@ import {
 import { pageStartOffset, type MappedSemanticDiffEntry } from './diff-service-order-key';
 import { parseDiffOptions } from './diff-service-pagination';
 import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
+import {
+  buildWorkingTreeDiffOverview,
+  isDiffServiceDegradedResult,
+  workingTreeSemanticPayload,
+  workingTreeSemanticPayloadDigest,
+} from './working-tree-diff-overview';
 
 const VERSION_WORKING_TREE_CURSOR_CACHE_MAX_ENTRIES = 512;
 const VERSION_BRANCH_REF_PREFIX = 'refs/heads/';
@@ -91,6 +98,7 @@ type WorkingTreeDiffSuccessPage = {
   readonly order: VersionSemanticDiffPage['order'];
   readonly diagnostics: readonly (PublicVersionStoreDiagnostic | DiffServiceDiagnostic)[];
   readonly resourceLimits?: VersionSemanticDiffPage['resourceLimits'];
+  readonly overview?: VersionWorkingTreeDiffOverview;
 };
 
 export type WorkbookVersionWorkingTreeDiffPage =
@@ -122,6 +130,8 @@ type WorkingTreeCursorCacheEntry = {
 
 type WorkingTreeMappedEntries = {
   readonly items: readonly MappedSemanticDiffEntry[];
+  readonly semanticPayload: unknown;
+  readonly changeSetDigest: ObjectDigest;
   readonly baseSemanticStateDigest?: ObjectDigest;
   readonly currentSemanticStateDigest?: ObjectDigest;
 };
@@ -175,6 +185,11 @@ export class WorkbookVersionWorkingTreeDiffService {
 
     const identityObservation = applyEntryDigests(observation.observation, entries);
     const identity = await this.workingTreeIdentity(identityObservation);
+    const overview = options.includeOverview
+      ? await buildWorkingTreeDiffOverview(identityObservation, entries, identity, options.overview)
+      : undefined;
+    if (isDiffServiceDegradedResult(overview)) return overview;
+
     const pageToken = parseWorkingTreePageToken(
       parsedOptions.options.pageToken,
       identity.workingTreeDiffId,
@@ -229,6 +244,7 @@ export class WorkbookVersionWorkingTreeDiffService {
       },
       order: VERSION_DIFF_PAGE_ORDER,
       diagnostics: [],
+      ...(overview ? { overview } : {}),
     };
   }
 
@@ -312,7 +328,19 @@ export class WorkbookVersionWorkingTreeDiffService {
     | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] }
   > {
     if (!observation.surface.dirty.hasUncommittedLocalChanges) {
-      return { ok: true, items: [] };
+      const semanticPayload = workingTreeSemanticPayload({
+        source: {
+          kind: 'workingTreeClean',
+          stateDigest: observation.currentSemanticState.stateDigest,
+        },
+        changes: [],
+      });
+      return {
+        ok: true,
+        items: [],
+        semanticPayload,
+        changeSetDigest: await workingTreeSemanticPayloadDigest(semanticPayload),
+      };
     }
 
     const beforeSemanticState = observation.basis.beforeSemanticState;
@@ -374,7 +402,7 @@ export class WorkbookVersionWorkingTreeDiffService {
       };
     }
 
-    const entries = mapSemanticChangeSet({
+    const rawSemanticPayload = workingTreeSemanticPayload({
       schemaVersion: 1,
       source: {
         kind: 'rustSemanticDiff',
@@ -384,14 +412,26 @@ export class WorkbookVersionWorkingTreeDiffService {
       changes: semanticDiff.changes,
       semanticDiff,
     });
-    return entries.ok
-      ? {
-          ok: true,
-          items: entries.items,
-          baseSemanticStateDigest: pageDigests.baseSemanticStateDigest,
-          currentSemanticStateDigest: pageDigests.currentSemanticStateDigest,
-        }
-      : { ok: false, diagnostics: entries.diagnostics };
+    const entries = mapSemanticChangeSet(rawSemanticPayload);
+    if (!entries.ok) return { ok: false, diagnostics: entries.diagnostics };
+
+    const semanticPayload = workingTreeSemanticPayload({
+      schemaVersion: 1,
+      source: {
+        kind: 'workingTreePublicDiffEntries',
+        beforeStateDigest: semanticDiff.beforeDigest,
+        afterStateDigest: semanticDiff.afterDigest,
+      },
+      changes: entries.items.map((item) => item.entry),
+    });
+    return {
+      ok: true,
+      items: entries.items,
+      semanticPayload,
+      changeSetDigest: await workingTreeSemanticPayloadDigest(semanticPayload),
+      baseSemanticStateDigest: pageDigests.baseSemanticStateDigest,
+      currentSemanticStateDigest: pageDigests.currentSemanticStateDigest,
+    };
   }
 
   private async workingTreeIdentity(

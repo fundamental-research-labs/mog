@@ -75,6 +75,50 @@ describe('WorkbookVersionWorkingTreeDiffService', () => {
     expect(result.currentSemanticStateDigest).toMatchObject({ digest: 'after' });
   });
 
+  it('builds a grouped overview for dirty working-tree cell ranges without loading all details', async () => {
+    const before = semanticEnvelope('before');
+    const after = semanticEnvelope('after');
+    const services = createHarness({
+      surface: surfaceStatus({ dirty: true }),
+      basis: basisState({ revision: 3, beforeSemanticState: before, pendingCaptured: 1 }),
+      currentStates: [after, after],
+      semanticDiff: {
+        beforeDigest: before.stateDigest,
+        afterDigest: after.stateDigest,
+        changes: [
+          semanticChange('change-A1', '1', { row: 0, column: 0 }),
+          semanticChange('change-B1', '2', { row: 0, column: 1 }),
+          semanticChange('change-A2', '3', { row: 1, column: 0 }),
+          semanticChange('change-B2', '4', { row: 1, column: 1 }),
+        ],
+      },
+    });
+
+    const result = await services.service.diffWorkingTree({
+      pageSize: 1,
+      includeOverview: true,
+      overview: { groupLimit: 10 },
+    });
+
+    expect(result.status).toBe('success');
+    if (result.status !== 'success') return;
+    expect(result.items).toHaveLength(1);
+    expect(result.nextPageToken).toBeDefined();
+    expect(result.overview?.summary).toMatchObject({
+      exactTotalChanges: 4,
+      countPrecision: 'exact',
+      incomplete: false,
+    });
+    expect(result.overview?.groups.items).toHaveLength(1);
+    expect(result.overview?.groups.items[0]).toMatchObject({
+      kind: 'cellRange',
+      domain: 'cells.values',
+      address: { kind: 'value', value: 'A1:B2' },
+      changeCount: 4,
+    });
+    expect(result.overview).not.toHaveProperty('targetCommitId');
+  });
+
   it('projects a dirty cell value edit once when Rust emits cell aggregate and value child changes', async () => {
     const before = semanticEnvelope('before');
     const after = semanticEnvelope('after');
@@ -836,8 +880,15 @@ function semanticEnvelope(digest: string): SemanticWorkbookStateEnvelope {
   };
 }
 
-function semanticChange(changeId: string, after: string) {
-  const objectId = 'cell:sheet-1:r0:c0';
+function semanticChange(
+  changeId: string,
+  after: string,
+  cell: { readonly sheetId?: string; readonly row?: number; readonly column?: number } = {},
+) {
+  const sheetId = cell.sheetId ?? 'sheet-1';
+  const row = cell.row ?? 0;
+  const column = cell.column ?? 0;
+  const objectId = `cell:${sheetId}:r${row}:c${column}`;
   return {
     changeId,
     kind: 'added',
@@ -850,9 +901,9 @@ function semanticChange(changeId: string, after: string) {
       domainId: 'cells.values',
       record: {
         objectId,
-        sheetId: 'sheet-1',
-        row: 0,
-        column: 0,
+        sheetId,
+        row,
+        column,
         value: {
           valueKind: 'string',
           canonicalValue: after,

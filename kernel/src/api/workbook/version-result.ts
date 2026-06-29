@@ -251,6 +251,7 @@ export function versionResultFromWorkingTreeDiffPage(
       readRevision: result.readRevision,
       order: result.order,
       ...(result.resourceLimits ? { resourceLimits: result.resourceLimits } : {}),
+      ...(result.overview ? { overview: result.overview } : {}),
     },
   };
 }

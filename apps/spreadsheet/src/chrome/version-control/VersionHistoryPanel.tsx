@@ -118,7 +118,7 @@ export function VersionHistoryPanelContent({
               onCommitMessageChange={actions.setCommitMessage}
               onCommit={actions.handleCommit}
             />
-            <WorkingTreeDiffSection diff={data.workingTreeDiff} />
+            <WorkingTreeDiffSection diff={data.workingTreeDiff} workbook={workbook} />
             <VersionHistoryDiffPreview
               diffPreview={actions.diffPreview}
               diffEnabled={actions.canDiff}

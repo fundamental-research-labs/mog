@@ -74,7 +74,7 @@ export function persistActiveSheetId(workbook: WorkbookInternal, activeSheetId: 
   if (!isVisibleSheet(workbook, activeSheetId)) return;
 
   void workbook
-    .setCustomSetting(ACTIVE_SHEET_CUSTOM_SETTING_KEY, String(activeSheetId))
+    .setRuntimeCustomSetting(ACTIVE_SHEET_CUSTOM_SETTING_KEY, String(activeSheetId))
     .catch((error) => {
       console.warn('[SpreadsheetApp] Failed to persist active sheet:', error);
     });

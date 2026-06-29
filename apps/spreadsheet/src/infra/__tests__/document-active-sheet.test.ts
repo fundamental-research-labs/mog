@@ -42,9 +42,9 @@ function createWorkbook(sheetIds: SheetId[]) {
         tabColor: null,
       }),
     },
-    setCustomSetting: jest.fn(async () => undefined),
+    setRuntimeCustomSetting: jest.fn(async () => undefined),
   } as unknown as WorkbookInternal & {
-    setCustomSetting: jest.Mock<Promise<void>, [string, string]>;
+    setRuntimeCustomSetting: jest.Mock<Promise<void>, [string, string | null]>;
   };
 }
 
@@ -59,7 +59,10 @@ describe('subscribeActiveSheetPersistence', () => {
     store.setActiveSheet(second);
     unsubscribe();
 
-    expect(workbook.setCustomSetting).toHaveBeenCalledWith(ACTIVE_SHEET_CUSTOM_SETTING_KEY, second);
+    expect(workbook.setRuntimeCustomSetting).toHaveBeenCalledWith(
+      ACTIVE_SHEET_CUSTOM_SETTING_KEY,
+      second,
+    );
   });
 
   it('waits for scheduled background hydration and then persists only the latest active sheet', async () => {
@@ -89,7 +92,7 @@ describe('subscribeActiveSheetPersistence', () => {
     store.setActiveSheet(second);
     store.setActiveSheet(third);
 
-    expect(workbook.setCustomSetting).not.toHaveBeenCalled();
+    expect(workbook.setRuntimeCustomSetting).not.toHaveBeenCalled();
     expect(importDurability.scheduleDeferredHydration).toHaveBeenCalledTimes(1);
     expect(importDurability.awaitImportDurability).not.toHaveBeenCalled();
 
@@ -99,8 +102,11 @@ describe('subscribeActiveSheetPersistence', () => {
     await Promise.resolve();
     unsubscribe();
 
-    expect(workbook.setCustomSetting).toHaveBeenCalledTimes(1);
-    expect(workbook.setCustomSetting).toHaveBeenCalledWith(ACTIVE_SHEET_CUSTOM_SETTING_KEY, third);
+    expect(workbook.setRuntimeCustomSetting).toHaveBeenCalledTimes(1);
+    expect(workbook.setRuntimeCustomSetting).toHaveBeenCalledWith(
+      ACTIVE_SHEET_CUSTOM_SETTING_KEY,
+      third,
+    );
   });
 
   it('does not persist a deferred active sheet after unsubscribe', async () => {
@@ -130,6 +136,6 @@ describe('subscribeActiveSheetPersistence', () => {
     await durabilityPromise;
     await Promise.resolve();
 
-    expect(workbook.setCustomSetting).not.toHaveBeenCalled();
+    expect(workbook.setRuntimeCustomSetting).not.toHaveBeenCalled();
   });
 });

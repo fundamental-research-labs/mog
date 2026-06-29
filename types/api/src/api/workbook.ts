@@ -963,7 +963,7 @@ export interface WorkbookInternal extends Workbook {
 
   /** Set the active sheet ID. Infrastructure-only. */
   setActiveSheetId(id: SheetId): void;
-
+  setRuntimeCustomSetting(key: string, value: string | null): Promise<void>;
   /** Floating object manager — full CRUD + spatial queries. Infrastructure-only. */
   readonly floatingObjects: IFloatingObjectManager;
 

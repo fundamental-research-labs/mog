@@ -59,6 +59,10 @@ import {
   runSystemMutation,
 } from './mutation-admission';
 import {
+  mutationSourceForSystemOperation,
+  type MutationSource,
+} from '../mutation-source';
+import {
   createAdmittedSyncApplyContext,
   toSyncApplyOperationContextWire,
   type AdmittedSyncApplyContext,
@@ -874,6 +878,7 @@ export class ComputeCore {
     operation = 'mutateCore',
     options?: MutationAdmissionOptions,
     captureMutation = false,
+    source: MutationSource = 'user',
   ): Promise<MutationResult> {
     // Write gate check: if a gate is installed, verify the mutation is
     // allowed before executing. The gate throws WriteGateRejectionError
@@ -941,7 +946,7 @@ export class ComputeCore {
     }
 
     // Delegate state updates + event emission to handler
-    this.mutationHandler?.applyAndNotify(result, 'user', directEdits);
+    this.mutationHandler?.applyAndNotify(result, source, directEdits);
 
     // Handle validation annotations from recalc (not covered by MutationResultHandler)
     if (result.recalc) {
@@ -1024,8 +1029,16 @@ export class ComputeCore {
     operation = 'mutate',
     options?: MutationAdmissionOptions,
     captureMutation = false,
+    source: MutationSource = 'user',
   ): Promise<MutationResult> {
-    const result = await this.mutateCore(promise, directEdits, operation, options, captureMutation);
+    const result = await this.mutateCore(
+      promise,
+      directEdits,
+      operation,
+      options,
+      captureMutation,
+      source,
+    );
     if (this.undoGroupDepth === 0) {
       await this.ctx.services?.undo.notifyForwardMutation();
     }
@@ -1068,7 +1081,7 @@ export class ComputeCore {
     this.ensureInitialized();
     this._writeGate?.assertWritable(operation);
     await prepareVersionMutationCapture(this.ctx, operation, directEdits, options);
-    return this.mutate(call(), directEdits, operation, options, true);
+    return this.mutate(call(), directEdits, operation, options, true, 'system');
   }
 
   /**
@@ -1107,7 +1120,8 @@ export class ComputeCore {
     options?: MutationAdmissionOptions,
     captureMutation = false,
   ): Promise<MutationResult> {
-    const run = () => this.mutate(call(), directEdits, operation, options, captureMutation);
+    const source = mutationSourceForSystemOperation(operation);
+    const run = () => this.mutate(call(), directEdits, operation, options, captureMutation, source);
     return runSystemMutation(this.ctx, this._writeGate, operation, run, options);
   }
 
@@ -1128,6 +1142,8 @@ export class ComputeCore {
         directEdits,
         operation,
         options,
+        false,
+        mutationSourceForSystemOperation(operation),
       );
       return { raw, mutation };
     };

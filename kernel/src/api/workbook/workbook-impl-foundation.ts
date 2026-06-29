@@ -78,6 +78,7 @@ import type {
   MutationResultWithSheetLifecycleRuntimeHint,
   SheetRuntimeAdapterContext,
 } from '../../bridges/mutation-result-handler';
+import { mutationSourceToStructureEventSource } from '../../bridges/mutation-source';
 import type { SelectionCheckpoint } from '@mog-sdk/contracts/selection';
 import type { IKernelServices } from '@mog-sdk/contracts/services';
 import type { IFloatingObjectManager } from '@mog-sdk/contracts/kernel';
@@ -936,7 +937,7 @@ export abstract class WorkbookImplFoundation {
       timestamp: Date.now(),
       sheetId: nextActive,
       name: this.ctx.mirror.getSheetMeta(nextActive).name ?? '',
-      source: context.source === 'user' ? 'user' : 'remote',
+      source: mutationSourceToStructureEventSource(context.source),
     });
   }
 

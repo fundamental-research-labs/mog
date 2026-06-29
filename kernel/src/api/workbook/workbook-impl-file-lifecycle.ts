@@ -644,6 +644,14 @@ export abstract class WorkbookImplFileLifecycle extends WorkbookImplOperations {
     await this.ctx.computeBridge.setCustomSetting(key, value);
   }
 
+  async setRuntimeCustomSetting(key: string, value: string | null): Promise<void> {
+    this._ensureWritable('workbook.setRuntimeCustomSetting');
+    const { setSystemCustomSetting } = await import(
+      '../../bridges/compute/system-custom-setting'
+    );
+    await setSystemCustomSetting(this.ctx.computeBridge, key, value);
+  }
+
   async deleteCustomSetting(key: string): Promise<void> {
     this._ensureWritable('workbook.deleteCustomSetting');
     await this.ctx.computeBridge.setCustomSetting(key, null);

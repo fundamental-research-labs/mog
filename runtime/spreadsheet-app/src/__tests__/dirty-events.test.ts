@@ -63,6 +63,16 @@ test('dirty tracker ignores deferred import materialization for clean workbooks'
   );
 });
 
+test('dirty tracker ignores system-origin runtime state mutations', () => {
+  assert.equal(
+    shouldTrackWorkbookDirtyEvent(
+      { type: 'workbook:settings-changed', changedKey: 'customSettings', source: 'system' },
+      { workbookAlreadyDirty: false, importDurabilityPending: false },
+    ),
+    false,
+  );
+});
+
 test('dirty tracker still tracks normal and already-dirty mutations', () => {
   assert.equal(
     shouldTrackWorkbookDirtyEvent(

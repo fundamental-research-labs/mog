@@ -38,7 +38,20 @@ export interface WorkbookVersionActiveCheckoutStateChangedEvent extends BaseEven
   readonly reason: WorkbookVersionActiveCheckoutStateChangeReason;
 }
 
+export interface VersioningAdmissionDiagnosticEvent extends BaseEvent {
+  readonly type: 'versioning:admission-diagnostic';
+  readonly diagnostic: unknown;
+}
+
+export interface VersioningMutationCaptureErrorEvent extends BaseEvent {
+  readonly type: 'versioning:mutation-capture-error';
+  readonly operation: string;
+  readonly phase?: 'pre-mutation' | 'mutation-result';
+}
+
 export type VersionEvent =
   | WorkbookVersionCheckoutMaterializedEvent
   | WorkbookVersionDirtyStatusChangedEvent
-  | WorkbookVersionActiveCheckoutStateChangedEvent;
+  | WorkbookVersionActiveCheckoutStateChangedEvent
+  | VersioningAdmissionDiagnosticEvent
+  | VersioningMutationCaptureErrorEvent;

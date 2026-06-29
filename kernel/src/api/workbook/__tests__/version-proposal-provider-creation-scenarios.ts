@@ -13,7 +13,9 @@ export function registerProposalProviderCreationScenarios(): void {
     const graph = await graphWithRoot();
     const version = versionForProvider(graph.provider);
 
-    const created = await version.proposals.advanced.createProposal(createProposalInput('proposal-create-1'));
+    const created = await version.proposals.advanced.createProposal(
+      createProposalInput('proposal-create-1'),
+    );
     expect(created).toMatchObject({
       ok: true,
       value: {
@@ -28,11 +30,15 @@ export function registerProposalProviderCreationScenarios(): void {
     });
     if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
 
-    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { id: created.value.id, status: 'draft' },
     });
-    await expect(version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { items: [{ id: created.value.id }], totalEstimate: 1 },
     });
@@ -87,7 +93,9 @@ export function registerProposalProviderCreationScenarios(): void {
         allowed: ['current_target_head'],
       },
     });
-    await expect(version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.listProposals({ targetRef: 'refs/heads/main' }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { items: [], totalEstimate: 0 },
     });
@@ -137,7 +145,9 @@ export function registerProposalProviderCreationScenarios(): void {
         ],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },
     });

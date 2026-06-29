@@ -178,9 +178,7 @@ export function unwrapVersionResult<T>(result: VersionResult<T>): T {
   throw new VersionResultError(result.error);
 }
 
-export function formatVersionDiagnostics(
-  diagnostics: readonly VersionStoreDiagnostic[],
-): string {
+export function formatVersionDiagnostics(diagnostics: readonly VersionStoreDiagnostic[]): string {
   return diagnostics
     .map(
       (diagnostic) =>
@@ -204,10 +202,7 @@ export function isVersionBlocked(result: unknown): boolean {
 export function isVersionStaleTarget(result: unknown): boolean {
   const payload = versionResultPayload(result);
   if (isRecordWithStatus(payload, 'staleTargetHead')) return true;
-  if (
-    isVersionErrorCode(payload, 'stale_head') ||
-    isVersionErrorCode(payload, 'stale_revision')
-  ) {
+  if (isVersionErrorCode(payload, 'stale_head') || isVersionErrorCode(payload, 'stale_revision')) {
     return true;
   }
   return diagnosticsFrom(payload).some((diagnostic) =>

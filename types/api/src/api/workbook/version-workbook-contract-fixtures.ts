@@ -39,7 +39,8 @@ import type {
   VersionDiffPorcelainTarget,
   VersionError,
   VersionFastForwardBranchOptions,
-  VersionGetMergeConflictDetailRequest, VersionGetMergeReviewInput,
+  VersionGetMergeConflictDetailRequest,
+  VersionGetMergeReviewInput,
   VersionHead,
   VersionListBranchesOptions,
   VersionListReviewsInput,
@@ -55,7 +56,8 @@ import type {
   VersionMergeReviewArtifactNamespace,
   VersionMergeResult,
   VersionMergeResultId,
-  VersionPreviewMergeInput, VersionPreviewMergeOptions,
+  VersionPreviewMergeInput,
+  VersionPreviewMergeOptions,
   VersionPromotePendingRemoteOptions,
   VersionPromotePendingRemoteResult,
   VersionProposalPorcelainApi,
@@ -114,7 +116,9 @@ interface ExpectedWorkbookVersionCoreMethods extends ExpectedWorkbookVersionDire
   getStatus(): Promise<WorkbookVersionStatus>;
   getSurfaceStatus(): Promise<VersionSurfaceStatus>;
   getCurrent(): Promise<VersionResult<VersionCurrentCheckout>>;
-  commitCurrent(options?: VersionCommitCurrentOptions): Promise<VersionResult<WorkbookCommitSummary>>;
+  commitCurrent(
+    options?: VersionCommitCurrentOptions,
+  ): Promise<VersionResult<WorkbookCommitSummary>>;
   createBranchFromCurrent(
     name: VersionBranchNameInput,
     options?: VersionCreateBranchFromCurrentOptions,
@@ -134,22 +138,36 @@ interface ExpectedWorkbookVersionCoreMethods extends ExpectedWorkbookVersionDire
     target?: VersionDiffPorcelainTarget,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
-  diffCurrentOverview(target?: VersionDiffPorcelainTarget, options?: VersionDiffOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
+  diffCurrentOverview(
+    target?: VersionDiffPorcelainTarget,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
   diffBranch(
     branch: VersionBranchNameInput,
     options?: VersionDiffBranchOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
-  diffBranchOverview(branch: VersionBranchNameInput, options?: VersionDiffBranchOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
-  previewMerge(input: VersionPreviewMergeInput, options?: VersionPreviewMergeOptions): Promise<VersionResult<VersionMergeReview>>;
+  diffBranchOverview(
+    branch: VersionBranchNameInput,
+    options?: VersionDiffBranchOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  previewMerge(
+    input: VersionPreviewMergeInput,
+    options?: VersionPreviewMergeOptions,
+  ): Promise<VersionResult<VersionMergeReview>>;
   getMergeReview(input: VersionGetMergeReviewInput): Promise<VersionResult<VersionMergeReview>>;
 }
 
 interface ExpectedWorkbookVersionDirectMethods {
   getHead(): Promise<VersionResult<VersionHead>>;
   getHead(options: GetVersionHeadInput): Promise<VersionResult<VersionHead>>;
-  listCommits(options?: ListVersionCommitsInput): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
+  listCommits(
+    options?: ListVersionCommitsInput,
+  ): Promise<VersionResult<Paged<WorkbookCommitSummary>>>;
   commit(options?: VersionCommitOptions): Promise<VersionResult<WorkbookCommitSummary>>;
-  checkout(target: VersionCheckoutTarget, options?: VersionCheckoutOptions): Promise<VersionResult<CheckoutVersionResult>>;
+  checkout(
+    target: VersionCheckoutTarget,
+    options?: VersionCheckoutOptions,
+  ): Promise<VersionResult<CheckoutVersionResult>>;
   merge(
     input: VersionMergeInput,
     options?: VersionMergeOptions,
@@ -167,13 +185,25 @@ interface ExpectedWorkbookVersionDirectMethods {
     target: VersionCommitish,
     options?: VersionDiffOptions,
   ): Promise<VersionResult<VersionSemanticDiffPage>>;
-  diffOverview(base: VersionCommitish, target: VersionCommitish, options?: VersionDiffOverviewOptions): Promise<VersionResult<VersionDiffOverview>>;
-  diffGroupDetail(base: VersionCommitish, target: VersionCommitish, options: VersionDiffGroupDetailOptions): Promise<VersionResult<VersionSemanticDiffPage>>;
-  diffWorkingTree(options?: VersionWorkingTreeDiffOptions): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
+  diffOverview(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options?: VersionDiffOverviewOptions,
+  ): Promise<VersionResult<VersionDiffOverview>>;
+  diffGroupDetail(
+    base: VersionCommitish,
+    target: VersionCommitish,
+    options: VersionDiffGroupDetailOptions,
+  ): Promise<VersionResult<VersionSemanticDiffPage>>;
+  diffWorkingTree(
+    options?: VersionWorkingTreeDiffOptions,
+  ): Promise<VersionResult<VersionWorkingTreeDiffPage>>;
 }
 
 interface ExpectedWorkbookVersionRefsMethods {
-  promotePendingRemote(options?: VersionPromotePendingRemoteOptions): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
+  promotePendingRemote(
+    options?: VersionPromotePendingRemoteOptions,
+  ): Promise<VersionResult<VersionPromotePendingRemoteResult>>;
   readRef(name: 'HEAD'): Promise<VersionResult<VersionSymbolicRefReadResult>>;
   readRef(
     name: VersionMainRefName | VersionRefName | VersionBranchName,

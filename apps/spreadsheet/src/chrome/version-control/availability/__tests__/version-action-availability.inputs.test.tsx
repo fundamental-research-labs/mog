@@ -75,13 +75,7 @@ describe('version action availability input validation', () => {
     );
 
     expect(
-      getBranchAvailability(
-        { surface, refs },
-        false,
-        false,
-        'forecast-q1',
-        TARGET_COMMIT_ID,
-      ),
+      getBranchAvailability({ surface, refs }, false, false, 'forecast-q1', TARGET_COMMIT_ID),
     ).toEqual({ enabled: true });
   });
 });

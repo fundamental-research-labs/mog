@@ -30,22 +30,26 @@ export function expectCanonicalFormulaIdentityPayload(
       expect.objectContaining({
         domainId: 'cells.values',
         objectId: 'cell:sheet#0:r1:c0',
-        afterRecord: {
+        afterRecord: expect.objectContaining({
           objectId: 'cell:sheet#0:r1:c0',
           objectKind: 'cell',
           domainId: 'cells.values',
+          sheetId: 'sheet#0',
+          sheetName: 'Sheet1',
           record: expect.objectContaining({
             value: { valueKind: 'number', canonicalValue: 43 },
           }),
-        },
+        }),
       }),
       expect.objectContaining({
         domainId: 'cells.formulas',
         objectId: 'formula:cell:sheet#0:r1:c0',
-        afterRecord: {
+        afterRecord: expect.objectContaining({
           objectId: 'formula:cell:sheet#0:r1:c0',
           objectKind: 'cell-formula',
           domainId: 'cells.formulas',
+          sheetId: 'sheet#0',
+          sheetName: 'Sheet1',
           record: expect.objectContaining({
             normalizedFormula: '{0}+1',
             dependencyObjectIds: ['cell:sheet#0:r0:c0'],
@@ -59,7 +63,7 @@ export function expectCanonicalFormulaIdentityPayload(
               }),
             ],
           }),
-        },
+        }),
       }),
     ],
     reviewChanges: [

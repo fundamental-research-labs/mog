@@ -123,18 +123,18 @@ export function registerProviderW8CasRaceScenarios(): void {
     expectNoDiagnosticLeak(advanceRace.failure, 'scenario/cas-race');
     expectNoDiagnosticLeak(deleteRace.failure, 'scenario/cas-race');
 
-    await expect(wbA.version.refs.readRef('refs/heads/scenario/cas-race' as any)).resolves.toMatchObject(
-      {
-        ok: false,
-        error: {
-          diagnostics: [
-            expect.objectContaining({
-              code: 'VERSION_DANGLING_REF',
-              data: expect.objectContaining({ redacted: true }),
-            }),
-          ],
-        },
+    await expect(
+      wbA.version.refs.readRef('refs/heads/scenario/cas-race' as any),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: {
+        diagnostics: [
+          expect.objectContaining({
+            code: 'VERSION_DANGLING_REF',
+            data: expect.objectContaining({ redacted: true }),
+          }),
+        ],
       },
-    );
+    });
   });
 }

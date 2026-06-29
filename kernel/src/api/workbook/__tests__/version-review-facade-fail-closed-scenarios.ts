@@ -21,7 +21,9 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
@@ -83,7 +85,9 @@ export function registerVersionReviewFacadeMissingServiceScenario(): void {
         diagnostics: [expect.objectContaining({ code: 'VERSION_REVIEW_SERVICE_UNAVAILABLE' })],
       },
     });
-    await expect(version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',
@@ -104,7 +108,9 @@ export function registerVersionReviewFacadePartialServiceScenario(): void {
       ok: true,
       value: { items: [], limit: 50 },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

@@ -298,13 +298,11 @@ async function buildProjection(
         ...(exact ? { exactCount: count } : { minimumCount: count }),
         countPrecision: exact ? 'exact' : 'lowerBound',
       })),
-      operationCounts: countBy(changes, (change) => change.operation).map(
-        ([operation, count]) => ({
-          operation,
-          ...(exact ? { exactCount: count } : { minimumCount: count }),
-          countPrecision: exact ? 'exact' : 'lowerBound',
-        }),
-      ),
+      operationCounts: countBy(changes, (change) => change.operation).map(([operation, count]) => ({
+        operation,
+        ...(exact ? { exactCount: count } : { minimumCount: count }),
+        countPrecision: exact ? 'exact' : 'lowerBound',
+      })),
       redactedChangeCount: changes.filter((change) => change.redacted).length,
       unsupportedChangeCount: changes.filter((change) => change.unsupported).length,
       incomplete: !exact || diagnostics.length > 0,
@@ -407,14 +405,7 @@ async function cellGroupsForBucket(
           change.row <= key.rowEnd &&
           change.column >= key.columnStart &&
           change.column <= key.columnEnd,
-        sort: [
-          key.sheetId,
-          key.domain,
-          key.operation,
-          key.rowStart,
-          key.columnStart,
-          address,
-        ],
+        sort: [key.sheetId, key.domain, key.operation, key.rowStart, key.columnStart, address],
       }),
     );
   }
@@ -536,7 +527,9 @@ function compactCellRectangles(changes: readonly SemanticChange[]): readonly {
     columnEnd: number;
     changes: SemanticChange[];
   }[] = [];
-  for (const [rowIndex, rowChanges] of [...rows.entries()].sort(([left], [right]) => left - right)) {
+  for (const [rowIndex, rowChanges] of [...rows.entries()].sort(
+    ([left], [right]) => left - right,
+  )) {
     const runs = columnRuns(rowChanges);
     for (const run of runs) {
       const previous = rectangles.at(-1);
@@ -785,10 +778,7 @@ async function diffProjectionDigest(
   });
 }
 
-function diffOperation(
-  before: unknown,
-  after: unknown,
-): Exclude<VersionDiffOperation, 'mixed'> {
+function diffOperation(before: unknown, after: unknown): Exclude<VersionDiffOperation, 'mixed'> {
   const beforeEmpty = isEmptyDiffValue(before);
   const afterEmpty = isEmptyDiffValue(after);
   if (beforeEmpty && !afterEmpty) return 'added';
@@ -919,7 +909,9 @@ function compareCellChanges(left: SemanticChange, right: SemanticChange): number
   );
 }
 
-function isDisplayValue(value: unknown): value is { readonly kind: 'value'; readonly value: string } {
+function isDisplayValue(
+  value: unknown,
+): value is { readonly kind: 'value'; readonly value: string } {
   return isRecord(value) && value.kind === 'value' && typeof value.value === 'string';
 }
 
@@ -934,9 +926,7 @@ function safeString(value: unknown): string | undefined {
 }
 
 function safeCoordinate(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : undefined;
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function stripObjectPrefix(value: string, prefix: string): string {

@@ -54,7 +54,9 @@ export function registerTargetHeadNoWriteScenarios(): void {
         ],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
@@ -83,11 +85,15 @@ export function registerTargetHeadNoWriteScenarios(): void {
         allowed: ['approved'],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, diagnostics: [] },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'rejected' },
     });

@@ -37,7 +37,9 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
         reason: expect.stringContaining(ready.reviewId),
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5, reviewId: ready.reviewId },
     });
@@ -78,7 +80,9 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
         actualTargetHeadId: movedMainCommitId,
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -103,7 +107,9 @@ export function registerProposalWorkspaceAcceptanceScenarios(): void {
         ]),
       },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

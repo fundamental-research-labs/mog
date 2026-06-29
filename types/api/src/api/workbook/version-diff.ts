@@ -47,11 +47,7 @@ export interface VersionDiffOverviewOptions {
   readonly filters?: VersionDiffFilters;
 }
 
-export type VersionDiffCountPrecision =
-  | 'exact'
-  | 'estimated'
-  | 'lowerBound'
-  | 'unavailable';
+export type VersionDiffCountPrecision = 'exact' | 'estimated' | 'lowerBound' | 'unavailable';
 
 export interface VersionDiffDomainCount {
   readonly domain: string;

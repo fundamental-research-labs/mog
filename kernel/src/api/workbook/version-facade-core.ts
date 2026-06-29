@@ -175,7 +175,9 @@ export async function commitCurrentWorkbookVersionFacade(
   if (invalidAdvancedKeys.length > 0) {
     return versionFailureFromStoreDiagnostics(
       'commitCurrent',
-      invalidAdvancedKeys.map((option) => porcelainInvalidOptionDiagnostic('commitCurrent', option)),
+      invalidAdvancedKeys.map((option) =>
+        porcelainInvalidOptionDiagnostic('commitCurrent', option),
+      ),
     );
   }
   return commitWorkbookVersionFacade(ctx, options, 'commitCurrent');
@@ -280,7 +282,8 @@ export async function diffGroupDetailWorkbookVersionFacade(
   options: VersionDiffGroupDetailOptions,
 ): Promise<VersionResult<VersionSemanticDiffPage>> {
   const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'diff', 'version:diff');
-  if (gateDiagnostics) return versionFailureFromStoreDiagnostics('diffGroupDetail', gateDiagnostics);
+  if (gateDiagnostics)
+    return versionFailureFromStoreDiagnostics('diffGroupDetail', gateDiagnostics);
   const activeCheckoutSelectors = await diffCommitishForActiveCheckout(ctx, base, target);
   if (!activeCheckoutSelectors.ok) {
     return versionFailureFromStoreDiagnostics(
@@ -362,11 +365,7 @@ export async function diffWorkingTreeWorkbookVersionFacade(
   ctx: DocumentContext,
   options: VersionWorkingTreeDiffOptions = {},
 ): Promise<VersionResult<VersionWorkingTreeDiffPage>> {
-  const gateDiagnostics = readWorkbookVersionFacadeGate(
-    ctx,
-    'diffWorkingTree',
-    'version:diff',
-  );
+  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'diffWorkingTree', 'version:diff');
   if (gateDiagnostics) {
     return versionFailureFromStoreDiagnostics('diffWorkingTree', gateDiagnostics);
   }
@@ -384,9 +383,7 @@ export async function diffWorkingTreeWorkbookVersionFacade(
       options.pageSize ?? VERSION_DIFF_DEFAULT_PAGE_LIMIT,
     );
   } catch {
-    return versionFailureFromStoreDiagnostics('diffWorkingTree', [
-      diffProviderErrorDiagnostic(),
-    ]);
+    return versionFailureFromStoreDiagnostics('diffWorkingTree', [diffProviderErrorDiagnostic()]);
   }
 }
 
@@ -432,7 +429,8 @@ function currentCheckoutFromSurface(
         !current.stale &&
         !current.detached &&
         surface.dirty.commitEligibleChanges,
-      canCreateBranch: capabilityEnabled(surface, 'version:branch') && Boolean(current.headCommitId),
+      canCreateBranch:
+        capabilityEnabled(surface, 'version:branch') && Boolean(current.headCommitId),
       canCheckout:
         capabilityEnabled(surface, 'version:checkout') &&
         surface.dirty.checkoutSafe &&
@@ -540,7 +538,10 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null;
 }
 
-function porcelainInvalidOptionDiagnostic(operation: string, option: string): VersionStoreDiagnostic {
+function porcelainInvalidOptionDiagnostic(
+  operation: string,
+  option: string,
+): VersionStoreDiagnostic {
   return commitPublicDiagnostic(
     'VERSION_INVALID_OPTIONS',
     `workbook.version.${operation} does not accept advanced commit option "${option}".`,

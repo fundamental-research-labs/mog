@@ -48,7 +48,9 @@ export function registerProposalBranchStaleScenarios(): void {
         ref: { commitId: graph.rootCommitId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -64,7 +66,9 @@ export function registerProposalBranchStaleScenarios(): void {
         ],
       },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });
@@ -95,7 +99,9 @@ export function registerProposalBranchStaleScenarios(): void {
     const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toEqual(accepted);
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',

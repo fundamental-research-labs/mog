@@ -129,9 +129,9 @@ describe('api spec interface serialization', () => {
         targetInterface: 'WorkbookVersionReviewApi',
       }),
     );
-    expect(apiSpec.interfaces.WorkbookVersionReviewApi?.functions.getReviewDiff.signature).toContain(
-      'Promise<VersionResult<WorkbookVersionReviewDiffPage>>',
-    );
+    expect(
+      apiSpec.interfaces.WorkbookVersionReviewApi?.functions.getReviewDiff.signature,
+    ).toContain('Promise<VersionResult<WorkbookVersionReviewDiffPage>>');
 
     const artifactNamespace = apiSpec.interfaces.VersionMergeReviewArtifactNamespace;
     expect(artifactNamespace?.members.advanced).toEqual(

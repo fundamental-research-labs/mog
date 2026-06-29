@@ -6,14 +6,8 @@ import type {
   WorkbookCommitId,
 } from '@mog-sdk/contracts/api';
 
-import {
-  VersionHistoryDiffPreview,
-  type VersionDiffPreview,
-} from './VersionHistoryDiffPreview';
-import {
-  readVersionResult,
-  type VersionHistoryWorkbook,
-} from './version-history-panel-data';
+import { VersionHistoryDiffPreview, type VersionDiffPreview } from './VersionHistoryDiffPreview';
+import { readVersionResult, type VersionHistoryWorkbook } from './version-history-panel-data';
 
 const WORKING_TREE_DIFF_PAGE_SIZE = 50;
 

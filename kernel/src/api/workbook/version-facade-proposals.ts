@@ -160,8 +160,7 @@ class WorkbookVersionProposalPorcelainApiImpl implements VersionProposalPorcelai
       createProposal: (input) => createWorkbookVersionProposalFacade(this.ctx, input),
       startProposalWorkspace: (input) =>
         startWorkbookVersionProposalWorkspaceFacade(this.ctx, input),
-      getProposalWorkspace: (input) =>
-        getWorkbookVersionProposalWorkspaceFacade(this.ctx, input),
+      getProposalWorkspace: (input) => getWorkbookVersionProposalWorkspaceFacade(this.ctx, input),
       disposeProposalWorkspace: (input) =>
         disposeWorkbookVersionProposalWorkspaceFacade(this.ctx, input),
       commitProposalWorkspace: (input) =>
@@ -169,8 +168,7 @@ class WorkbookVersionProposalPorcelainApiImpl implements VersionProposalPorcelai
       failProposal: (input) => failWorkbookVersionProposalFacade(this.ctx, input),
       getProposal: (input) => getWorkbookVersionProposalFacade(this.ctx, input),
       listProposals: (input) => listWorkbookVersionProposalsFacade(this.ctx, input),
-      markProposalVerified: (input) =>
-        markWorkbookVersionProposalVerifiedFacade(this.ctx, input),
+      markProposalVerified: (input) => markWorkbookVersionProposalVerifiedFacade(this.ctx, input),
       openProposalReview: (input) => openWorkbookVersionProposalReviewFacade(this.ctx, input),
       acceptProposal: (input) => acceptWorkbookVersionProposalFacade(this.ctx, input),
       rejectProposal: (input) => rejectWorkbookVersionProposalFacade(this.ctx, input),
@@ -201,9 +199,12 @@ class WorkbookVersionProposalPorcelainApiImpl implements VersionProposalPorcelai
   }
 
   async get(id: AgentProposalId): Promise<VersionResult<VersionProposalHandle>> {
-    return proposalHandleResult(this.ctx, await getWorkbookVersionProposalFacade(this.ctx, {
-      proposalId: id,
-    }));
+    return proposalHandleResult(
+      this.ctx,
+      await getWorkbookVersionProposalFacade(this.ctx, {
+        proposalId: id,
+      }),
+    );
   }
 
   async list(
@@ -232,9 +233,12 @@ class WorkbookVersionProposalHandleImpl implements VersionProposalHandle {
   }
 
   async refresh(): Promise<VersionResult<VersionProposalHandle>> {
-    return proposalHandleResult(this.ctx, await getWorkbookVersionProposalFacade(this.ctx, {
-      proposalId: this.id,
-    }));
+    return proposalHandleResult(
+      this.ctx,
+      await getWorkbookVersionProposalFacade(this.ctx, {
+        proposalId: this.id,
+      }),
+    );
   }
 
   async openWorkspace(
@@ -249,7 +253,7 @@ class WorkbookVersionProposalHandleImpl implements VersionProposalHandle {
       ...(options.expectedTargetHeadId
         ? { expectedTargetHeadId: options.expectedTargetHeadId }
         : { expectedTargetHeadId: this.proposal.targetHeadIdAtCreation }),
-      ...(options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation
+      ...((options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation)
         ? {
             expectedTargetRefRevision:
               options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation,
@@ -308,7 +312,7 @@ class WorkbookVersionProposalHandleImpl implements VersionProposalHandle {
       proposalId: this.id,
       expectedRevision: options.expectedRevision ?? this.revision,
       expectedTargetHeadId: options.expectedTargetHeadId ?? this.proposal.targetHeadIdAtCreation,
-      ...(options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation
+      ...((options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation)
         ? {
             expectedTargetRefRevision:
               options.expectedTargetRefRevision ?? this.proposal.targetRefRevisionAtCreation,
@@ -377,15 +381,15 @@ class WorkbookVersionProposalWorkspaceHandleImpl implements VersionProposalWorks
     const actor = options.actor ?? defaultAuthor(this.ctx, 'user');
     if (!actor) return missingTrustedAuthorFailure('commitProposalWorkspace', 'actor');
     const result = await commitWorkbookVersionProposalWorkspaceFacade(this.ctx, {
-      clientRequestId: options.clientRequestId ?? defaultClientRequestId('proposal-workspace-commit'),
+      clientRequestId:
+        options.clientRequestId ?? defaultClientRequestId('proposal-workspace-commit'),
       proposalId: this.proposal.id,
       workspaceId: this.workspace.workspaceId,
       expectedRevision: options.expectedRevision ?? this.expectedProposalRevision,
       ...(options.expectedTargetHeadId
         ? { expectedTargetHeadId: options.expectedTargetHeadId }
         : expectedWorkspaceTargetHead(this.workspace)),
-      ...(options.expectedTargetRefRevision ??
-      this.workspace.targetRefRevisionAtCreation
+      ...((options.expectedTargetRefRevision ?? this.workspace.targetRefRevisionAtCreation)
         ? {
             expectedTargetRefRevision:
               options.expectedTargetRefRevision ?? this.workspace.targetRefRevisionAtCreation,
@@ -404,13 +408,13 @@ class WorkbookVersionProposalWorkspaceHandleImpl implements VersionProposalWorks
     const actor = options.actor ?? defaultAuthor(this.ctx, 'user');
     if (!actor) return missingTrustedAuthorFailure('disposeProposalWorkspace', 'actor');
     return disposeWorkbookVersionProposalWorkspaceFacade(this.ctx, {
-      clientRequestId: options.clientRequestId ?? defaultClientRequestId('proposal-workspace-dispose'),
+      clientRequestId:
+        options.clientRequestId ?? defaultClientRequestId('proposal-workspace-dispose'),
       workspaceId: this.workspace.workspaceId,
       ...(options.expectedTargetHeadId
         ? { expectedTargetHeadId: options.expectedTargetHeadId }
         : expectedWorkspaceTargetHead(this.workspace)),
-      ...(options.expectedTargetRefRevision ??
-      this.workspace.targetRefRevisionAtCreation
+      ...((options.expectedTargetRefRevision ?? this.workspace.targetRefRevisionAtCreation)
         ? {
             expectedTargetRefRevision:
               options.expectedTargetRefRevision ?? this.workspace.targetRefRevisionAtCreation,
@@ -484,7 +488,19 @@ function missingTrustedAuthorFailure<T>(
 function defaultClientRequestId(prefix: string): string {
   const uuid = globalThis.crypto?.randomUUID?.();
   if (uuid) return `${prefix}:${uuid}`;
-  return `${prefix}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+  const bytes = new Uint8Array(16);
+  globalThis.crypto?.getRandomValues?.(bytes);
+  const entropy = bytes.some((byte) => byte !== 0)
+    ? Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+    : nextFallbackClientRequestSegment();
+  return `${prefix}:${entropy}`;
+}
+
+let fallbackClientRequestSequence = 0;
+
+function nextFallbackClientRequestSegment(): string {
+  fallbackClientRequestSequence = (fallbackClientRequestSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `fallback-${fallbackClientRequestSequence.toString(36)}`;
 }
 
 function stringValue(value: unknown): string | undefined {

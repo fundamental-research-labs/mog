@@ -468,14 +468,8 @@ function publicDiagnosticFromUnknown(
   fallbackMessage: string,
 ): VersionDiagnostic {
   if (!isRecord(value)) return acceptDiagnostic(fallbackCode, 'error', fallbackMessage);
-  const code =
-    stringValue(value.issueCode) ??
-    stringValue(value.code) ??
-    fallbackCode;
-  const message =
-    stringValue(value.safeMessage) ??
-    stringValue(value.message) ??
-    fallbackMessage;
+  const code = stringValue(value.issueCode) ?? stringValue(value.code) ?? fallbackCode;
+  const message = stringValue(value.safeMessage) ?? stringValue(value.message) ?? fallbackMessage;
   return acceptDiagnostic(code, diagnosticSeverity(value.severity), message);
 }
 

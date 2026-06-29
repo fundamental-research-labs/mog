@@ -48,7 +48,9 @@ export function registerProposalProviderWorkspaceBranchHeadGuardScenarios(): voi
         allowed: ['proposal_branch_head_commit'],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });

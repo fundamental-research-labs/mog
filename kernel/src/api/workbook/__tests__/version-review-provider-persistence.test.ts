@@ -51,7 +51,9 @@ describe('WorkbookVersion provider-backed review persistence', () => {
       await provider.close();
       reloadedProvider = createIndexedDbVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
       const reloadedVersion = versionForProvider(reloadedProvider);
-      const fetched = await reloadedVersion.getReview({ reviewId: created.value.id });
+      const fetched = await reloadedVersion.reviews.advanced.getReview({
+        reviewId: created.value.id,
+      });
       if (!fetched.ok) throw new Error(`expected get success: ${fetched.error.code}`);
 
       expect(fetched.value).toMatchObject({

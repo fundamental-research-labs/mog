@@ -219,11 +219,7 @@ export function parseGroupDetailPageToken(
     readonly groupId: string;
   },
 ): ParsedOffsetPageToken {
-  return parseJsonOffsetPageToken(
-    token,
-    VERSION_DIFF_INTERNAL_GROUP_DETAIL_TOKEN_PREFIX,
-    expected,
-  );
+  return parseJsonOffsetPageToken(token, VERSION_DIFF_INTERNAL_GROUP_DETAIL_TOKEN_PREFIX, expected);
 }
 
 export function publicPageTokenFor(internalToken: VersionPageToken): VersionPageToken {

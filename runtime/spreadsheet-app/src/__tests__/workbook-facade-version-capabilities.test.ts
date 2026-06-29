@@ -23,7 +23,11 @@ type VersionReviewAdvancedFacade = VersionFacade['reviews']['advanced'];
 type VersionArtifactAdvancedFacade = VersionFacade['artifacts']['advanced'];
 type VersionSurfaceCapability = Extract<SpreadsheetCapability, `version:${string}`>;
 type VersionSurfaceStatus = Awaited<ReturnType<VersionFacade['getSurfaceStatus']>>;
-type VersionMatrixInterface = 'WorkbookVersion' | 'WorkbookVersionRefsNamespace' | 'WorkbookVersionReviewApi' | 'VersionMergeReviewArtifactApi';
+type VersionMatrixInterface =
+  | 'WorkbookVersion'
+  | 'WorkbookVersionRefsNamespace'
+  | 'WorkbookVersionReviewApi'
+  | 'VersionMergeReviewArtifactApi';
 
 type VersionFacadeOperationKind = 'version-result' | 'throws-on-denied' | 'capability-free-status';
 
@@ -37,10 +41,12 @@ type VersionFacadeResultCase = {
   readonly invoke: (version: VersionFacade) => unknown | Promise<unknown>;
 };
 
-const REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY = [{
-  when: { argumentIndex: 0, path: ['reviewId'], presence: 'present' },
-  capabilities: ['version:reviewRead'],
-}] as const satisfies SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
+const REVIEW_ID_SUPPLIED_CONDITIONAL_CAPABILITY = [
+  {
+    when: { argumentIndex: 0, path: ['reviewId'], presence: 'present' },
+    capabilities: ['version:reviewRead'],
+  },
+] as const satisfies SpreadsheetFacadeMatrixEntry['conditionalCapabilities'];
 
 const COMMIT_A = `commit:sha256:${'a'.repeat(64)}` as const;
 const COMMIT_B = `commit:sha256:${'b'.repeat(64)}` as const;
@@ -50,12 +56,24 @@ const TEST_BRANCH = 'refs/heads/scenario/facade-matrix' as const;
 const TEST_REVISION = { kind: 'counter', value: '1' } as const;
 const TEST_DIGEST = { algorithm: 'sha256', digest: 'd'.repeat(64) } as const;
 const TEST_AUTHOR = { kind: 'user', trust: 'trusted', displayName: 'Runtime test' } as const;
-const TEST_REDACTION_POLICY = { mode: 'default', redactSecrets: true, redactExternalLinks: true, redactAgentTrace: true } as const;
+const TEST_REDACTION_POLICY = {
+  mode: 'default',
+  redactSecrets: true,
+  redactExternalLinks: true,
+  redactAgentTrace: true,
+} as const;
 
-const VERSION_MATRIX_INTERFACES = ['WorkbookVersion', 'WorkbookVersionRefsNamespace', 'WorkbookVersionReviewApi', 'VersionMergeReviewArtifactApi'] as const satisfies readonly VersionMatrixInterface[];
+const VERSION_MATRIX_INTERFACES = [
+  'WorkbookVersion',
+  'WorkbookVersionRefsNamespace',
+  'WorkbookVersionReviewApi',
+  'VersionMergeReviewArtifactApi',
+] as const satisfies readonly VersionMatrixInterface[];
 
 function operationMethods(interfaceName: VersionMatrixInterface): readonly string[] {
-  return VERSION_FACADE_OPERATION_CASES.filter((testCase) => testCase.interfaceName === interfaceName).map((testCase) => testCase.methodName);
+  return VERSION_FACADE_OPERATION_CASES.filter(
+    (testCase) => testCase.interfaceName === interfaceName,
+  ).map((testCase) => testCase.methodName);
 }
 
 const VERSION_FACADE_OPERATION_CASES: readonly VersionFacadeResultCase[] = [
@@ -701,7 +719,10 @@ function assertVersionResultEnvelope(result: unknown, testCase: VersionFacadeRes
   }
 
   const error = (result as { readonly error?: { readonly code?: unknown } }).error;
-  assert.ok(error && typeof error === 'object', `${operationName(testCase)} result must have error`);
+  assert.ok(
+    error && typeof error === 'object',
+    `${operationName(testCase)} result must have error`,
+  );
   assert.equal(typeof error.code, 'string', `${operationName(testCase)} error must have a code`);
 }
 
@@ -758,10 +779,7 @@ test('workbook version facade sub-api matrix exposes advanced namespaces', () =>
 
   assert.equal(subApis.WorkbookVersion?.graph, undefined);
   assert.equal(subApis.WorkbookVersion?.refs?.targetInterface, 'WorkbookVersionRefsNamespace');
-  assert.equal(
-    subApis.WorkbookVersion?.reviews?.targetInterface,
-    'WorkbookVersionReviewNamespace',
-  );
+  assert.equal(subApis.WorkbookVersion?.reviews?.targetInterface, 'WorkbookVersionReviewNamespace');
   assert.equal(
     subApis.WorkbookVersionReviewNamespace?.advanced?.targetInterface,
     'WorkbookVersionReviewApi',
@@ -775,7 +793,10 @@ test('workbook version facade sub-api matrix exposes advanced namespaces', () =>
     'VersionMergeReviewArtifactApi',
   );
 
-  assert.deepEqual(Object.keys(WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewNamespace), []);
+  assert.deepEqual(
+    Object.keys(WORKBOOK_FACADE_CAPABILITY_MATRIX.WorkbookVersionReviewNamespace),
+    [],
+  );
   assert.deepEqual(
     Object.keys(WORKBOOK_FACADE_CAPABILITY_MATRIX.VersionMergeReviewArtifactNamespace),
     [],

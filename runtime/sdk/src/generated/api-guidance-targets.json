@@ -5314,7 +5314,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "listBranches(options?: VersionListBranchesOptions): Promise<VersionResult<Paged<VersionBranchSummary>>>;",
+      "signature": "listBranches(\n    options?: VersionListBranchesOptions,\n  ): Promise<VersionResult<Paged<VersionBranchSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<VersionBranchSummary>>>",
       "compatibility": [],
       "source": {
@@ -5677,7 +5677,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "create(\n    input: VersionCreateProposalPorcelainInput,\n  ): Promise<VersionResult<VersionProposalHandle>>;",
+      "signature": "create(input: VersionCreateProposalPorcelainInput): Promise<VersionResult<VersionProposalHandle>>;",
       "typeText": "Promise<VersionResult<VersionProposalHandle>>",
       "compatibility": [],
       "source": {
@@ -5715,7 +5715,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "list(options?: VersionListProposalPorcelainOptions): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
+      "signature": "list(\n    options?: VersionListProposalPorcelainOptions,\n  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
       "compatibility": [],
       "source": {
@@ -25145,7 +25145,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "listBranches(options?: VersionListBranchesOptions): Promise<VersionResult<Paged<VersionBranchSummary>>>;",
+      "signature": "listBranches(\n    options?: VersionListBranchesOptions,\n  ): Promise<VersionResult<Paged<VersionBranchSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<VersionBranchSummary>>>",
       "compatibility": [],
       "source": {
@@ -25508,7 +25508,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "create(\n    input: VersionCreateProposalPorcelainInput,\n  ): Promise<VersionResult<VersionProposalHandle>>;",
+      "signature": "create(input: VersionCreateProposalPorcelainInput): Promise<VersionResult<VersionProposalHandle>>;",
       "typeText": "Promise<VersionResult<VersionProposalHandle>>",
       "compatibility": [],
       "source": {
@@ -25546,7 +25546,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "list(options?: VersionListProposalPorcelainOptions): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
+      "signature": "list(\n    options?: VersionListProposalPorcelainOptions,\n  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;",
       "typeText": "Promise<VersionResult<Paged<AgentProposalSummary>>>",
       "compatibility": [],
       "source": {

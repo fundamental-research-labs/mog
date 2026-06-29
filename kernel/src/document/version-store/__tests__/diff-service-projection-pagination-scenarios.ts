@@ -51,10 +51,7 @@ export function registerDiffServiceProjectionPaginationScenarios(): void {
     );
     expect(firstDetail).toMatchObject({
       status: 'success',
-      items: [
-        { structural: { changeId: 'change-1' } },
-        { structural: { changeId: 'change-2' } },
-      ],
+      items: [{ structural: { changeId: 'change-1' } }, { structural: { changeId: 'change-2' } }],
     });
     expect(firstDetail.nextPageToken).toEqual(
       expect.stringMatching(new RegExp(`^${escapeRegExp(VERSION_DIFF_PUBLIC_CURSOR_PREFIX)}`)),
@@ -70,10 +67,7 @@ export function registerDiffServiceProjectionPaginationScenarios(): void {
     );
     expect(secondDetail).toMatchObject({
       status: 'success',
-      items: [
-        { structural: { changeId: 'change-3' } },
-        { structural: { changeId: 'change-4' } },
-      ],
+      items: [{ structural: { changeId: 'change-3' } }, { structural: { changeId: 'change-4' } }],
     });
   });
 

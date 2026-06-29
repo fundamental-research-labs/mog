@@ -65,7 +65,9 @@ export async function openProposalWorkspace(
   version: WorkbookVersionImpl,
   suffix: string,
 ): Promise<AgentProposalWorkspaceHandle> {
-  const created = await version.proposals.advanced.createProposal(createProposalInput(`proposal-create-${suffix}`));
+  const created = await version.proposals.advanced.createProposal(
+    createProposalInput(`proposal-create-${suffix}`),
+  );
   if (!created.ok) throw new Error(`expected proposal create success: ${created.error.code}`);
   const opened = await version.proposals.advanced.startProposalWorkspace({
     clientRequestId: `workspace-open-${suffix}`,

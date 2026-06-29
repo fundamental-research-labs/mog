@@ -12,7 +12,10 @@ export function registerWriteGuardRevisionScenarios(): void {
   it('rejects public delete without ref revision before service calls', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
     const deleteBranch = jest.spyOn(branchService, 'deleteBranch');
-    await version.refs.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({
+      name: 'scenario/delete-me' as any,
+      targetCommitId: COMMIT_A,
+    });
 
     await expect(
       version.refs.deleteRef({
@@ -95,7 +98,9 @@ export function registerWriteGuardRevisionScenarios(): void {
     };
     const version = new WorkbookVersionImpl({ versioning: { branchService } } as any);
 
-    await expect(version.refs.readRef('scenario/inconsistent-revision' as any)).resolves.toMatchObject({
+    await expect(
+      version.refs.readRef('scenario/inconsistent-revision' as any),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         diagnostics: [

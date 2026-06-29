@@ -55,7 +55,9 @@ describe('WorkbookVersion status access diagnostics', () => {
       }),
     });
 
-    await expect(wb.version.refs.readRef('refs/heads/review/private-review')).resolves.toMatchObject({
+    await expect(
+      wb.version.refs.readRef('refs/heads/review/private-review'),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

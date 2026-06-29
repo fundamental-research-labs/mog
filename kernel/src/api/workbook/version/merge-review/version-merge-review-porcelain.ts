@@ -33,7 +33,10 @@ import type { DocumentContext } from '../../../../context';
 import { computePublicMergeBase } from '../../version-merge-base-gate';
 import { mergeWorkbookVersion } from '../../version-merge';
 import { readWorkbookVersionFacadeGate } from '../../version-facade-gate';
-import { versionFailureFromStoreDiagnostics, versionResultFromMergeEndpointDiagnostics } from '../../version-result';
+import {
+  versionFailureFromStoreDiagnostics,
+  versionResultFromMergeEndpointDiagnostics,
+} from '../../version-result';
 import {
   expectedHeadFromActiveCheckout,
   readActiveCheckoutWriteContext,
@@ -111,12 +114,21 @@ export async function previewMergeWorkbookVersionPorcelain(
 
   const mergeBase =
     base ??
-    (await computePublicMergeBase(getAttachedVersionServices(ctx), into.value.commitId, from.value.commitId));
+    (await computePublicMergeBase(
+      getAttachedVersionServices(ctx),
+      into.value.commitId,
+      from.value.commitId,
+    ));
   if (typeof mergeBase !== 'string' && !mergeBase.ok) {
     return {
       ok: true,
       value: buildMergeReview({
-        result: blockedReviewMergeResult(null, into.value.commitId, from.value.commitId, mergeBase.diagnostics),
+        result: blockedReviewMergeResult(
+          null,
+          into.value.commitId,
+          from.value.commitId,
+          mergeBase.diagnostics,
+        ),
         from: from.value.endpoint,
         into: into.value.endpoint,
         targetRef: into.value.targetRef,
@@ -175,9 +187,14 @@ export async function getMergeReviewWorkbookVersionPorcelain(
   }
 
   const opened = await openMergeReviewGraph(ctx, 'getMergeReview');
-  if (!opened.ok) return versionResultFromMergeEndpointDiagnostics('getMergeReview', opened.diagnostics);
+  if (!opened.ok)
+    return versionResultFromMergeEndpointDiagnostics('getMergeReview', opened.diagnostics);
 
-  const artifact = await readMergePreviewArtifact(opened.graph, 'getMergeReview', input.resultDigest);
+  const artifact = await readMergePreviewArtifact(
+    opened.graph,
+    'getMergeReview',
+    input.resultDigest,
+  );
   if (!artifact.ok) {
     return versionResultFromMergeEndpointDiagnostics('getMergeReview', artifact.diagnostics);
   }
@@ -332,8 +349,12 @@ class VersionMergeReviewHandle implements VersionMergeReview {
       return {
         resultId: this.resultId,
         resultDigest: this.resultDigest,
-        ...(this.previewArtifactDigest ? { previewArtifactDigest: this.previewArtifactDigest } : {}),
-        ...(this.resolutionSetDigestValue ? { resolutionSetDigest: this.resolutionSetDigestValue } : {}),
+        ...(this.previewArtifactDigest
+          ? { previewArtifactDigest: this.previewArtifactDigest }
+          : {}),
+        ...(this.resolutionSetDigestValue
+          ? { resolutionSetDigest: this.resolutionSetDigestValue }
+          : {}),
         ...(this.resolvedAttemptDigestValue
           ? { resolvedAttemptDigest: this.resolvedAttemptDigestValue }
           : {}),
@@ -417,7 +438,9 @@ class VersionMergeReviewHandle implements VersionMergeReview {
       ...(options.maxBytes === undefined ? {} : { maxBytes: options.maxBytes }),
       ...(options.optionId ? { optionId: options.optionId } : {}),
       ...(options.kind ? { kind: options.kind } : {}),
-      ...(this.resolutionSetDigestValue ? { resolutionSetDigest: this.resolutionSetDigestValue } : {}),
+      ...(this.resolutionSetDigestValue
+        ? { resolutionSetDigest: this.resolutionSetDigestValue }
+        : {}),
       ...(this.resolvedAttemptDigestValue
         ? { resolvedAttemptDigest: this.resolvedAttemptDigestValue }
         : {}),
@@ -457,9 +480,7 @@ class VersionMergeReviewHandle implements VersionMergeReview {
     };
   }
 
-  private previewTarget(
-    operation: 'applyMerge' | 'saveMergeResolutions',
-  ):
+  private previewTarget(operation: 'applyMerge' | 'saveMergeResolutions'):
     | {
         readonly ok: true;
         readonly targetRef: VersionMainRefName | VersionRefName;
@@ -687,7 +708,9 @@ function branchRefName(value: VersionBranchNameInput): VersionMainRefName | Vers
     : (`${VERSION_BRANCH_REF_PREFIX}${text}` as VersionRefName);
 }
 
-function branchNameFromRefName(refName: VersionMainRefName | VersionRefName): VersionBranchNameInput {
+function branchNameFromRefName(
+  refName: VersionMainRefName | VersionRefName,
+): VersionBranchNameInput {
   return refName === VERSION_MAIN_REF ? 'main' : refName.slice(VERSION_BRANCH_REF_PREFIX.length);
 }
 
@@ -715,7 +738,10 @@ function blockedReviewMergeResult(
   };
 }
 
-function invalidPreviewMergeDiagnostic(option: string, safeMessage: string): VersionStoreDiagnostic {
+function invalidPreviewMergeDiagnostic(
+  option: string,
+  safeMessage: string,
+): VersionStoreDiagnostic {
   return mergeReviewDiagnostic('previewMerge', 'VERSION_INVALID_OPTIONS', safeMessage, {
     payload: { option },
   });

@@ -34,7 +34,9 @@ export function registerProposalRuntimeDiagnosticsServiceAcceptScenarios(): void
       },
     });
 
-    const result = await version.proposals.advanced.acceptProposal(acceptInput('accept-unsupported-domain') as any);
+    const result = await version.proposals.advanced.acceptProposal(
+      acceptInput('accept-unsupported-domain') as any,
+    );
 
     expect(result).toMatchObject({
       ok: false,

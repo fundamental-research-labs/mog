@@ -55,7 +55,9 @@ export function registerProposalWorkspaceCommitScenarios(): void {
     expect(committed.error.diagnostics[0]?.data).not.toHaveProperty('workspaceId');
     expect(JSON.stringify(committed)).not.toContain('agent-run-1');
     expect(JSON.stringify(committed)).not.toContain(opened.workspaceId);
-    await expect(version.proposals.advanced.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: opened.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });
@@ -100,7 +102,9 @@ export function registerProposalWorkspaceCommitScenarios(): void {
         ],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: opened.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: opened.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });

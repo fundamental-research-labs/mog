@@ -611,12 +611,7 @@ export function useVersionHistoryPanelActions({
 
   const handleLoadMoreDiffDetail = useCallback(async () => {
     const current = diffPreview;
-    if (
-      !current ||
-      !current.activeGroupId ||
-      !current.detailNextCursor ||
-      current.loadingDetail
-    ) {
+    if (!current || !current.activeGroupId || !current.detailNextCursor || current.loadingDetail) {
       return;
     }
     const generation = diffGenerationRef.current;
@@ -710,8 +705,9 @@ export function useVersionHistoryPanelActions({
       if (!action) return;
 
       const normalizedBranch = normalizeVersionBranchNameInput(sourceRef.name);
-      const source =
-        normalizedBranch.ok ? normalizedBranch.branch.branchName : displayBranchName(sourceRef.name);
+      const source = normalizedBranch.ok
+        ? normalizedBranch.branch.branchName
+        : displayBranchName(sourceRef.name);
 
       if (!setRunningAction(action, 'Previewing merge')) return;
       const result = await readVersionResult('VERSION_UI_MERGE_PREVIEW_FAILED', () =>
@@ -732,14 +728,7 @@ export function useVersionHistoryPanelActions({
         message: mergeReviewStatusMessage(result.value),
       });
     },
-    [
-      beginAction,
-      canPreviewMerge,
-      completeAction,
-      isActionCurrent,
-      setRunningAction,
-      workbook,
-    ],
+    [beginAction, canPreviewMerge, completeAction, isActionCurrent, setRunningAction, workbook],
   );
 
   const handleChooseMergeResolution = useCallback(
@@ -982,9 +971,9 @@ function isDefined<T>(value: T | undefined): value is T {
   return value !== undefined;
 }
 
-function diffFilterOptionsInput(
-  filters: VersionDiffFilterSelection,
-): { readonly filters?: ReturnType<typeof versionDiffFiltersFromSelection> } {
+function diffFilterOptionsInput(filters: VersionDiffFilterSelection): {
+  readonly filters?: ReturnType<typeof versionDiffFiltersFromSelection>;
+} {
   const options = versionDiffFiltersFromSelection(filters);
   return options ? { filters: options } : {};
 }

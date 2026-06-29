@@ -28,11 +28,7 @@ import { useActionDependencies } from '../../../hooks/toolbar/use-action-depende
 import { keyTipRegistry } from '../keytips';
 import { RibbonButton } from '../primitives/RibbonButton';
 import { ToolbarGroup } from '../primitives/ToolbarGroup';
-import {
-  CommentIcon,
-  ProtectSheetIcon,
-  ProtectWorkbookIcon,
-} from '../primitives/ToolbarIcons';
+import { CommentIcon, ProtectSheetIcon, ProtectWorkbookIcon } from '../primitives/ToolbarIcons';
 // =============================================================================
 // Inline Icons for Review Tab (stubs - not yet in ToolbarIcons.tsx)
 // =============================================================================

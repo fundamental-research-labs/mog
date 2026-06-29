@@ -478,9 +478,7 @@ export function registerBranchCheckoutSessionStatusScenario(): void {
         name: created.value.name,
       });
       if (!branchCheckout.ok) {
-        throw new Error(
-          `expected sheet-add branch checkout success: ${branchCheckout.error.code}`,
-        );
+        throw new Error(`expected sheet-add branch checkout success: ${branchCheckout.error.code}`);
       }
 
       await wb.sheets.add('Branch Only Sheet');

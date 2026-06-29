@@ -32,7 +32,9 @@ export function registerVersionReviewDiffScenarios(): void {
       })),
     });
 
-    await expect(version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReviewDiff({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

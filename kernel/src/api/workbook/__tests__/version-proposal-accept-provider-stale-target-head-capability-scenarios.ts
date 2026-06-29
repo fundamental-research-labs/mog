@@ -48,7 +48,9 @@ export function registerTargetHeadCapabilityScenarios(): void {
         ref: { commitId: movedMainCommitId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'ready_for_review', revision: 5 },
     });

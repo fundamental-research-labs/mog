@@ -45,7 +45,9 @@ export function registerProposalProviderWorkspaceCommitResultGuardScenarios(): v
         allowed: ['matching_workspace_id'],
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'workspace_open', revision: 2 },
     });

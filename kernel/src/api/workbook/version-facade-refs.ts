@@ -184,7 +184,11 @@ export async function createWorkbookVersionFacadeBranchFromCurrent(
   name: VersionBranchNameInput,
   options: VersionCreateBranchFromCurrentOptions = {},
 ): Promise<VersionResult<VersionRef>> {
-  const gateDiagnostics = readWorkbookVersionFacadeGate(ctx, 'createBranchFromCurrent', 'version:read');
+  const gateDiagnostics = readWorkbookVersionFacadeGate(
+    ctx,
+    'createBranchFromCurrent',
+    'version:read',
+  );
   if (gateDiagnostics) {
     return versionFailureFromStoreDiagnostics('createBranchFromCurrent', gateDiagnostics);
   }
@@ -338,7 +342,9 @@ function branchSummaryFromRef(ref: VersionRef): VersionBranchSummary {
 }
 
 function branchNameFromRefName(refName: VersionMainRefName | VersionRefName): VersionBranchName {
-  return (refName === VERSION_MAIN_REF ? 'main' : refName.slice('refs/heads/'.length)) as VersionBranchName;
+  return (
+    refName === VERSION_MAIN_REF ? 'main' : refName.slice('refs/heads/'.length)
+  ) as VersionBranchName;
 }
 
 async function readCurrentBranchTarget(

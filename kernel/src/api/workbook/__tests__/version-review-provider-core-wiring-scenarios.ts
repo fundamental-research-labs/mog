@@ -31,7 +31,9 @@ export function registerReviewProviderCoreWiringScenarios(): void {
       ok: true,
       value: { id: reviewId, revision: 1 },
     });
-    await expect(version.reviews.advanced.listReviews({ commitId: HEAD_COMMIT_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.listReviews({ commitId: HEAD_COMMIT_ID }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { items: [{ id: reviewId }], totalEstimate: 1 },
     });

@@ -9,7 +9,10 @@ import { expectRedactedExpectedHeadConflict } from './version-refs-write-cas-hel
 export function registerWriteCasPublicDeleteScenarios(): void {
   it('deletes public branch refs through the attached service', async () => {
     const { branchService, version } = createWorkbookVersionWithBranchService();
-    await version.refs.createBranch({ name: 'scenario/delete-me' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({
+      name: 'scenario/delete-me' as any,
+      targetCommitId: COMMIT_A,
+    });
 
     const staleDelete = await version.refs.deleteRef({
       name: 'scenario/delete-me' as any,
@@ -43,7 +46,10 @@ export function registerWriteCasPublicDeleteScenarios(): void {
       },
     });
 
-    await version.refs.createBranch({ name: 'scenario/delete-ref' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({
+      name: 'scenario/delete-ref' as any,
+      targetCommitId: COMMIT_A,
+    });
 
     await expect(
       version.refs.deleteRef({

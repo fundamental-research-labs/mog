@@ -757,8 +757,16 @@ export async function setTimeValue(
   await reapplyActiveFiltersAfterWrite(ctx, sheetId);
 }
 
-function cellMutationOptions(ctx: DocumentContext, sheetId: SheetId, operationIdPrefix: string, options?: MutationAdmissionOptions): MutationAdmissionOptions {
-  return ensureCellWriteVersionMutationOptions(ctx, options, { operationIdPrefix, sheetIds: [sheetId] });
+function cellMutationOptions(
+  ctx: DocumentContext,
+  sheetId: SheetId,
+  operationIdPrefix: string,
+  options?: MutationAdmissionOptions,
+): MutationAdmissionOptions {
+  return ensureCellWriteVersionMutationOptions(ctx, options, {
+    operationIdPrefix,
+    sheetIds: [sheetId],
+  });
 }
 
 // =============================================================================

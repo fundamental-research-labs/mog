@@ -44,11 +44,15 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         ref: { commitId: ready.proposalCommitId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied' },
     });
@@ -88,11 +92,15 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
           ref: { commitId: ready.proposalCommitId },
         },
       });
-      await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+      await expect(
+        version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+      ).resolves.toMatchObject({
         ok: true,
         value: { status: 'applied', revision: 6 },
       });
-      await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+      await expect(
+        version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+      ).resolves.toMatchObject({
         ok: true,
         value: { status: 'applied' },
       });
@@ -123,7 +131,8 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       resolutionPolicy: 'allowCleanMerge',
     });
 
-    if (!accepted.ok) throw new Error(`expected clean merge accept: ${JSON.stringify(accepted.error)}`);
+    if (!accepted.ok)
+      throw new Error(`expected clean merge accept: ${JSON.stringify(accepted.error)}`);
     expect(accepted).toMatchObject({
       ok: true,
       value: {
@@ -143,11 +152,15 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         ref: { commitId: accepted.value.newHeadId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied', revision: 6 },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'applied' },
     });
@@ -176,7 +189,8 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
       resolutionPolicy: 'allowCleanMerge',
     });
 
-    if (!accepted.ok) throw new Error(`expected conflict accept result: ${JSON.stringify(accepted.error)}`);
+    if (!accepted.ok)
+      throw new Error(`expected conflict accept result: ${JSON.stringify(accepted.error)}`);
     expect(accepted).toMatchObject({
       ok: true,
       value: {
@@ -193,11 +207,15 @@ describe('WorkbookVersion provider-backed proposal accept policy', () => {
         ref: { commitId: movedMainCommitId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'merge_conflicted', revision: 6 },
     });
-    await expect(version.reviews.advanced.getReview({ reviewId: ready.reviewId })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: ready.reviewId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'approved' },
     });

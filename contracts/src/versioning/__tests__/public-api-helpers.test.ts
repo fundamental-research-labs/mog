@@ -77,9 +77,7 @@ describe('public version API helpers', () => {
     expect(isWorkbookCommitId(COMMIT_A)).toBe(true);
     expect(isWorkbookCommitId(`commit:sha256:${'A'.repeat(64)}`)).toBe(false);
     expect(isWorkbookCommitId('commit:sha256:not-hex')).toBe(false);
-    expect(() => parseWorkbookCommitId(COMMIT_A.slice(0, -1))).toThrow(
-      VersionPublicApiValueError,
-    );
+    expect(() => parseWorkbookCommitId(COMMIT_A.slice(0, -1))).toThrow(VersionPublicApiValueError);
   });
 
   it('parses and guards sha256 object digests', () => {
@@ -112,9 +110,7 @@ describe('public version API helpers', () => {
     expect(isVersionBranchName('HEAD')).toBe(false);
 
     expect(parseVersionRefName('refs/heads/main')).toBe('refs/heads/main');
-    expect(parseVersionRefName('refs/heads/team/q2-forecast')).toBe(
-      'refs/heads/team/q2-forecast',
-    );
+    expect(parseVersionRefName('refs/heads/team/q2-forecast')).toBe('refs/heads/team/q2-forecast');
     expect(isVersionRefName('main')).toBe(false);
     expect(isVersionRefName('refs/tags/v1')).toBe(false);
   });

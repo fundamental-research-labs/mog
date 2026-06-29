@@ -141,15 +141,12 @@ describe('useSheetTabActions', () => {
       sheetNames.clear();
       sheetNames.set('sheet-1' as SheetId, 'Sheet1');
       const checkoutHandlers =
-        workbookEventHandlers.get('workbook:version-checkout-materialized') ??
-        [];
+        workbookEventHandlers.get('workbook:version-checkout-materialized') ?? [];
       expect(checkoutHandlers).toHaveLength(1);
       checkoutHandlers.forEach((handler) => handler());
     });
 
-    expect(result.current.sheets.map((sheet) => sheet.name)).toEqual([
-      'Sheet1',
-    ]);
+    expect(result.current.sheets.map((sheet) => sheet.name)).toEqual(['Sheet1']);
   });
 });
 

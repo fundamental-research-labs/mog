@@ -153,28 +153,26 @@ export function createWorkbook(
     })),
   };
   const refs = {
-    readRef: jest.fn(
-      async (name: Parameters<VersionHistoryVersion['refs']['readRef']>[0]) => ({
-        ok: true,
-        value: {
-          status: 'success',
-          ref:
-            name === 'HEAD'
-              ? {
-                  name: 'HEAD',
-                  target: 'refs/heads/main',
-                  revision: REF_REVISION,
-                }
-              : {
-                  name,
-                  commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
-                  revision:
-                    name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
-                },
-          diagnostics: [],
-        },
-      }),
-    ),
+    readRef: jest.fn(async (name: Parameters<VersionHistoryVersion['refs']['readRef']>[0]) => ({
+      ok: true,
+      value: {
+        status: 'success',
+        ref:
+          name === 'HEAD'
+            ? {
+                name: 'HEAD',
+                target: 'refs/heads/main',
+                revision: REF_REVISION,
+              }
+            : {
+                name,
+                commitId: name === 'refs/heads/main' ? HEAD_COMMIT_ID : PARENT_COMMIT_ID,
+                revision:
+                  name === 'refs/heads/main' ? REF_REVISION : { kind: 'counter', value: '2' },
+              },
+        diagnostics: [],
+      },
+    })),
     listRefs: jest.fn(async () => ({
       ok: true,
       value: {
@@ -327,7 +325,8 @@ export function workingTreeDiffPage(
   items: VersionSemanticDiffPage['items'],
   options: { readonly nextCursor?: VersionSemanticDiffPage['nextCursor'] } = {},
 ): VersionWorkingTreeDiffPage {
-  const workingTreeDiffId = `working-tree-diff:sha256:${'d'.repeat(64)}` as VersionWorkingTreeDiffPage['workingTreeDiffId'];
+  const workingTreeDiffId =
+    `working-tree-diff:sha256:${'d'.repeat(64)}` as VersionWorkingTreeDiffPage['workingTreeDiffId'];
   const targetRef = 'refs/heads/main' as const;
   const captureRevision = 1;
   const dirtyStatusRevision = '1';
@@ -386,7 +385,7 @@ export function versionDiffOverview({
   const hasExactTotalChanges = exactTotalChanges !== null;
   const groupChangeCount = hasExactTotalChanges
     ? exactTotalChanges
-    : summaryOverrides.minimumChangeCount ?? 1;
+    : (summaryOverrides.minimumChangeCount ?? 1);
 
   return {
     baseCommitId,

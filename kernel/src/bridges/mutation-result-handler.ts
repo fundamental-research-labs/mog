@@ -238,10 +238,7 @@ export interface SheetRuntimeAdapter {
 // lives in the leaf module to avoid the mutation-result-handler ↔
 // change-accumulator cycle.
 export type { MutationSource } from './mutation-source';
-import {
-  mutationSourceToStructureEventSource,
-  type MutationSource,
-} from './mutation-source';
+import { mutationSourceToStructureEventSource, type MutationSource } from './mutation-source';
 
 /** Error info from a failed mutation. */
 export interface MutationError {

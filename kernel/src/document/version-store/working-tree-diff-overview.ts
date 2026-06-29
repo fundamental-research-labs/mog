@@ -105,9 +105,7 @@ export async function workingTreeSemanticPayloadDigest(payload: unknown): Promis
   );
 }
 
-export function isDiffServiceDegradedResult(
-  value: unknown,
-): value is DiffServiceDegradedResult {
+export function isDiffServiceDegradedResult(value: unknown): value is DiffServiceDegradedResult {
   return isRecord(value) && value.status === 'degraded';
 }
 

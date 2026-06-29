@@ -4,11 +4,7 @@ import {
   createInMemoryVersionStoreProvider,
   namespaceForDocumentScope,
 } from '../../../document/version-store/provider';
-import {
-  decodeWorkbookSnapshotRootRecord,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
-  YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
-} from '../../../document/version-store/snapshot-root-capture';
+import { decodeWorkbookSnapshotRootRecord } from '../../../document/version-store/snapshot-root-capture';
 import {
   CREATED_AT,
   DOCUMENT_SCOPE,
@@ -58,14 +54,15 @@ export function registerSnapshotRootMaterializationScenarios(): void {
       objectType: 'workbook.snapshotRoot.v1',
       digest: read.commit.payload.snapshotRootDigest,
     });
-    expect(snapshotRootRecord.preimage.payload).toMatchObject({
+    expect(snapshotRootRecord.preimage).toMatchObject({
+      objectType: 'workbook.snapshotRoot.v1',
       schemaVersion: 1,
-      kind: YRS_FULL_STATE_SNAPSHOT_ROOT_KIND,
-      encoding: 'base64',
-      byteLength: fullStateBytes.byteLength,
-      source: YRS_FULL_STATE_SNAPSHOT_ROOT_SOURCE,
+      payloadEncoding: 'bytes',
+      dependencies: [],
     });
-    expect(snapshotRootRecord.preimage.payload).not.toHaveProperty('sheets');
+    expect(Array.from(snapshotRootRecord.preimage.payload as Uint8Array)).toEqual(
+      Array.from(fullStateBytes),
+    );
     expect(Array.from(decodeWorkbookSnapshotRootRecord(snapshotRootRecord))).toEqual(
       Array.from(fullStateBytes),
     );

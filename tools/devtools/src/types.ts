@@ -124,11 +124,17 @@ export type DevToolsVersionFacadePayload = unknown;
  */
 export interface DevToolsWorkbookVersionReadFacade {
   getSurfaceStatus(): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  getHead(options?: DevToolsVersionGetHeadOptions): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  getHead(
+    options?: DevToolsVersionGetHeadOptions,
+  ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
   listCommits(
     options?: DevToolsVersionListCommitsOptions,
   ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
-  refs?: { listRefs(options?: DevToolsVersionListRefsOptions): DevToolsMaybePromise<DevToolsVersionFacadePayload> };
+  refs?: {
+    listRefs(
+      options?: DevToolsVersionListRefsOptions,
+    ): DevToolsMaybePromise<DevToolsVersionFacadePayload>;
+  };
 }
 
 export interface DevToolsVersionControlReadbacks {

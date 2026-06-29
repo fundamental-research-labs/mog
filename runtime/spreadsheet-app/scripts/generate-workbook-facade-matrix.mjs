@@ -707,9 +707,7 @@ assertVersionCapabilityMatrix();
 function assertVersionSubApiInterfaces(subApiInterfaces) {
   const versionReviews = subApiInterfaces.WorkbookVersion?.reviews;
   if (versionReviews?.targetInterface !== 'WorkbookVersionReviewNamespace') {
-    throw new Error(
-      'workbook facade sub-api interfaces must expose WorkbookVersion.reviews',
-    );
+    throw new Error('workbook facade sub-api interfaces must expose WorkbookVersion.reviews');
   }
 
   const versionReviewAdvanced = subApiInterfaces.WorkbookVersionReviewNamespace?.advanced;
@@ -721,9 +719,7 @@ function assertVersionSubApiInterfaces(subApiInterfaces) {
 
   const versionArtifacts = subApiInterfaces.WorkbookVersion?.artifacts;
   if (versionArtifacts?.targetInterface !== 'VersionMergeReviewArtifactNamespace') {
-    throw new Error(
-      'workbook facade sub-api interfaces must expose WorkbookVersion.artifacts',
-    );
+    throw new Error('workbook facade sub-api interfaces must expose WorkbookVersion.artifacts');
   }
 
   const versionArtifactAdvanced = subApiInterfaces.VersionMergeReviewArtifactNamespace?.advanced;
@@ -735,16 +731,12 @@ function assertVersionSubApiInterfaces(subApiInterfaces) {
 
   const versionRefs = subApiInterfaces.WorkbookVersion?.refs;
   if (versionRefs?.targetInterface !== 'WorkbookVersionRefsNamespace') {
-    throw new Error(
-      'workbook facade sub-api interfaces must expose WorkbookVersion.refs',
-    );
+    throw new Error('workbook facade sub-api interfaces must expose WorkbookVersion.refs');
   }
 
   const versionProposals = subApiInterfaces.WorkbookVersion?.proposals;
   if (versionProposals?.targetInterface !== 'VersionProposalPorcelainApi') {
-    throw new Error(
-      'workbook facade sub-api interfaces must expose WorkbookVersion.proposals',
-    );
+    throw new Error('workbook facade sub-api interfaces must expose WorkbookVersion.proposals');
   }
 
   const proposalAdvanced = subApiInterfaces.VersionProposalPorcelainApi?.advanced;
@@ -763,15 +755,14 @@ function assertVersionInterfaceRequirements(interfaceName, requirements) {
   const interfaceSpec = spec.interfaces[interfaceName]?.functions ?? {};
   for (const [methodName, requirement] of Object.entries(requirements)) {
     const specEntry = interfaceSpec[methodName];
-    if (
-      spec.interfaces[interfaceName] &&
-      (!specEntry || specEntry.targetInterface)
-    ) {
+    if (spec.interfaces[interfaceName] && (!specEntry || specEntry.targetInterface)) {
       throw new Error(`api spec is missing ${interfaceName}.${methodName}`);
     }
     const entry = entries[methodName];
     if (!entry) {
-      throw new Error(`workbook facade capability matrix is missing ${interfaceName}.${methodName}`);
+      throw new Error(
+        `workbook facade capability matrix is missing ${interfaceName}.${methodName}`,
+      );
     }
     const expected = capabilityEntry(requirement);
     if (entry.capability !== undefined) {
@@ -806,7 +797,10 @@ assertVersionInterfaceRequirements(
   'VersionProposalPorcelainApi',
   VERSION_PROPOSAL_PORCELAIN_METHOD_REQUIREMENTS,
 );
-assertVersionInterfaceRequirements('VersionProposalApi', VERSION_PROPOSAL_ADVANCED_METHOD_REQUIREMENTS);
+assertVersionInterfaceRequirements(
+  'VersionProposalApi',
+  VERSION_PROPOSAL_ADVANCED_METHOD_REQUIREMENTS,
+);
 assertVersionInterfaceRequirements(
   'VersionProposalHandle',
   VERSION_PROPOSAL_HANDLE_METHOD_REQUIREMENTS,

@@ -7,7 +7,10 @@ export function registerPublicRefListFilterScenario(): void {
     const { version } = createWorkbookVersionWithBranchService();
 
     await version.refs.createBranch({ name: 'budget' as any, targetCommitId: COMMIT_A });
-    await version.refs.createBranch({ name: 'budget/forecast/q1' as any, targetCommitId: COMMIT_A });
+    await version.refs.createBranch({
+      name: 'budget/forecast/q1' as any,
+      targetCommitId: COMMIT_A,
+    });
     await version.refs.createBranch({ name: 'analysis/run-1' as any, targetCommitId: COMMIT_A });
 
     const budgetRefs = await version.refs.listRefs({ prefix: 'budget' as any });
@@ -21,7 +24,9 @@ export function registerPublicRefListFilterScenario(): void {
     );
     expect(budgetRefs.value.items).toHaveLength(2);
 
-    const fullPrefixRefs = await version.refs.listRefs({ prefix: 'refs/heads/budget/forecast' as any });
+    const fullPrefixRefs = await version.refs.listRefs({
+      prefix: 'refs/heads/budget/forecast' as any,
+    });
     expect(fullPrefixRefs).toMatchObject({
       ok: true,
       value: {

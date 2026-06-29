@@ -62,7 +62,9 @@ export function registerPendingRemotePromotionProviderPromotionScenarios(): void
     const headAfterPromotion = await expectReadHeadSuccess(graph);
     expect(headAfterPromotion.commitId).toBe(commitId);
 
-    await expect(wb.version.refs.promotePendingRemote({ includeDiagnostics: true })).resolves.toEqual({
+    await expect(
+      wb.version.refs.promotePendingRemote({ includeDiagnostics: true }),
+    ).resolves.toEqual({
       ok: true,
       value: {
         status: 'success',

@@ -63,17 +63,13 @@ export function registerVersionOperationContextCellWriteFallbackScenarios(): voi
           { sheetId: SHEET_ID, row: 2, col: 3 },
           { sheetId: SHEET_ID, row: 2, col: 4 },
         ],
-        directEditRanges: [
-          { sheetId: SHEET_ID, startRow: 2, startCol: 3, endRow: 2, endCol: 4 },
-        ],
+        directEditRanges: [{ sheetId: SHEET_ID, startRow: 2, startCol: 3, endRow: 2, endCol: 4 }],
       });
     });
   });
 }
 
-async function waitForCapture(
-  capture: { readonly recordPreMutation: unknown },
-): Promise<void> {
+async function waitForCapture(capture: { readonly recordPreMutation: unknown }): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {

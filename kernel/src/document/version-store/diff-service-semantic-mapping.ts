@@ -187,8 +187,7 @@ function mapSemanticChange(
 ): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
   return (
-    mapReviewSemanticChange(value, displayContext) ??
-    mapRustSemanticChange(value, displayContext)
+    mapReviewSemanticChange(value, displayContext) ?? mapRustSemanticChange(value, displayContext)
   );
 }
 
@@ -364,9 +363,7 @@ function rustSheetProjection(value: Readonly<Record<string, unknown>>): RustShee
   return sameRustSheetRecord(before, after) ? { kind: 'unchanged' } : { kind: 'unsupported' };
 }
 
-function isRustSheetChangeRecord(
-  value: unknown,
-): value is Readonly<Record<string, unknown>> & {
+function isRustSheetChangeRecord(value: unknown): value is Readonly<Record<string, unknown>> & {
   readonly domainId: 'sheets';
   readonly objectKind: 'sheet';
 } {

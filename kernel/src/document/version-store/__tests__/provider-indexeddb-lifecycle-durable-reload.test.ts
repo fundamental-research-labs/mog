@@ -11,9 +11,7 @@ import {
 } from '../provider-indexeddb/backend';
 import { OBJECTS_STORE } from '../provider-indexeddb-schema';
 import { namespaceForDocumentScope, type VersionDocumentScope } from '../provider';
-import {
-  decodeWorkbookSnapshotRootRecord,
-} from '../snapshot-root-capture';
+import { decodeWorkbookSnapshotRootRecord } from '../snapshot-root-capture';
 
 describe('IndexedDB version provider document/workbook lifecycle durable reload', () => {
   it('requires explicit IndexedDB selection and reloads committed state through a fresh provider instance', async () => {

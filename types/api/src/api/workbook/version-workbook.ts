@@ -135,7 +135,9 @@ export interface WorkbookVersion {
     commit: WorkbookCommitIdInput,
     options?: VersionCheckoutCommitOptions,
   ): Promise<VersionResult<CheckoutVersionResult>>;
-  listBranches(options?: VersionListBranchesOptions): Promise<VersionResult<Paged<VersionBranchSummary>>>;
+  listBranches(
+    options?: VersionListBranchesOptions,
+  ): Promise<VersionResult<Paged<VersionBranchSummary>>>;
   diffCurrent(
     target?: VersionDiffPorcelainTarget,
     options?: VersionDiffOptions,

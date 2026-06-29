@@ -96,10 +96,7 @@ function assertVersionDeniedResult(
   assert.equal(error?.code, 'version_capability_unavailable');
   assert.equal(error?.capability, expectedCapability);
   assert.equal(error?.dependency, 'hostCapability');
-  assert.equal(
-    error?.reason,
-    `Capability "${expectedCapability}" is denied for ${operation}`,
-  );
+  assert.equal(error?.reason, `Capability "${expectedCapability}" is denied for ${operation}`);
   assert.equal(error?.retryable, false);
   if (expectedDeniedCapabilities.length > 1) {
     assert.deepEqual(error?.diagnostics?.[0]?.data?.deniedCapabilities, expectedDeniedCapabilities);
@@ -135,10 +132,7 @@ test('workbook version proposal sub-api matrix is pinned to porcelain and advanc
     Record<string, { readonly targetInterface?: string }>
   >;
 
-  assert.equal(
-    subApis.WorkbookVersion?.proposals?.targetInterface,
-    'VersionProposalPorcelainApi',
-  );
+  assert.equal(subApis.WorkbookVersion?.proposals?.targetInterface, 'VersionProposalPorcelainApi');
   assert.equal(
     subApis.VersionProposalPorcelainApi?.advanced?.targetInterface,
     'VersionProposalApi',

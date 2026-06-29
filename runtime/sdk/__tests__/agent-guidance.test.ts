@@ -195,13 +195,14 @@ describe('SDK agent API guidance', () => {
 
     const create = api.describe('wb.version.proposals.create');
     expect(create && 'signature' in create ? create.signature : '').toContain('create(');
-    expect(create && 'types' in create ? create.types.VersionCreateProposalPorcelainInput : null)
-      .toEqual(expect.objectContaining({ name: 'VersionCreateProposalPorcelainInput' }));
+    expect(
+      create && 'types' in create ? create.types.VersionCreateProposalPorcelainInput : null,
+    ).toEqual(expect.objectContaining({ name: 'VersionCreateProposalPorcelainInput' }));
 
     const advancedAccept = api.describe('wb.version.proposals.advanced.acceptProposal');
-    expect(advancedAccept && 'signature' in advancedAccept ? advancedAccept.signature : '').toContain(
-      'acceptProposal(',
-    );
+    expect(
+      advancedAccept && 'signature' in advancedAccept ? advancedAccept.signature : '',
+    ).toContain('acceptProposal(');
 
     const versionNode = api.wb.version as { proposals?: { create?: { signature?: string } } };
     expect(versionNode.proposals?.create?.signature).toContain('create(');

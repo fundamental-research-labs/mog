@@ -44,19 +44,19 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(duplicate, 'scenario/duplicate');
 
-    await expect(wb.version.refs.readRef('refs/heads/scenario/duplicate' as any)).resolves.toMatchObject(
-      {
-        ok: true,
-        value: {
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/duplicate',
-            commitId: initialized.rootCommit.id,
-            revision: { kind: 'counter', value: '0' },
-          },
+    await expect(
+      wb.version.refs.readRef('refs/heads/scenario/duplicate' as any),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/duplicate',
+          commitId: initialized.rootCommit.id,
+          revision: { kind: 'counter', value: '0' },
         },
       },
-    );
+    });
     await expect(wb.version.refs.listRefs({ prefix: 'scenario' as any })).resolves.toMatchObject({
       ok: true,
       value: {
@@ -131,18 +131,18 @@ export function registerProviderRefConflictGuardScenarios(): void {
     });
     expectNoDiagnosticLeak(stale, 'scenario/stale-cas');
 
-    await expect(wb.version.refs.readRef('refs/heads/scenario/stale-cas' as any)).resolves.toMatchObject(
-      {
-        ok: true,
-        value: {
-          status: 'success',
-          ref: {
-            name: 'refs/heads/scenario/stale-cas',
-            commitId: child.commit.id,
-            revision: { kind: 'counter', value: '1' },
-          },
+    await expect(
+      wb.version.refs.readRef('refs/heads/scenario/stale-cas' as any),
+    ).resolves.toMatchObject({
+      ok: true,
+      value: {
+        status: 'success',
+        ref: {
+          name: 'refs/heads/scenario/stale-cas',
+          commitId: child.commit.id,
+          revision: { kind: 'counter', value: '1' },
         },
       },
-    );
+    });
   });
 }

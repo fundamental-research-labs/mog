@@ -185,9 +185,7 @@ describe('createComputeBridgeSemanticStateReader', () => {
   });
 });
 
-function semanticState(
-  sheets: SemanticWorkbookState['sheets'] = {},
-): SemanticWorkbookState {
+function semanticState(sheets: SemanticWorkbookState['sheets'] = {}): SemanticWorkbookState {
   return {
     schemaVersion: '1',
     domains: {},

@@ -20,7 +20,9 @@ export function registerReviewProviderCoreDiagnosticScenarios(): void {
     const version = versionForProvider(provider);
 
     const read = await version.reviews.advanced.getReview({ reviewId: REVIEW_ID });
-    const write = await version.reviews.advanced.createReview(createReviewInput('inaccessible-write-review'));
+    const write = await version.reviews.advanced.createReview(
+      createReviewInput('inaccessible-write-review'),
+    );
     expectDeniedReviewDiagnostic(read, 'getReview', 'version:reviewRead');
     expectDeniedReviewDiagnostic(write, 'createReview', 'version:reviewWrite');
   });

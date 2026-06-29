@@ -50,7 +50,7 @@ export function registerSavedResolutionDifferentPrincipalScenarios(): void {
           },
         } as any);
 
-        const detail = await readerVersion.getMergeConflictDetail({
+        const detail = await readerVersion.artifacts.advanced.getMergeConflictDetail({
           resultId: preview.resultId,
           resultDigest: preview.resultDigest,
           redactionPolicyDigest: preview.resultDigest,

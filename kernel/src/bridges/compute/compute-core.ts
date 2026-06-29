@@ -58,10 +58,7 @@ import {
   type MutationTuple,
   runSystemMutation,
 } from './mutation-admission';
-import {
-  mutationSourceForSystemOperation,
-  type MutationSource,
-} from '../mutation-source';
+import { mutationSourceForSystemOperation, type MutationSource } from '../mutation-source';
 import {
   createAdmittedSyncApplyContext,
   toSyncApplyOperationContextWire,

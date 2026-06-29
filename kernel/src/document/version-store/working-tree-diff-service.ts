@@ -911,22 +911,20 @@ function publicWorkingTreePageTokenFor(entry: WorkingTreeCursorCacheEntry): Vers
 
 function nextPublicWorkingTreeCursorHandle(): string {
   publicWorkingTreeCursorSequence = (publicWorkingTreeCursorSequence + 1) % Number.MAX_SAFE_INTEGER;
-  return `wt.${randomCursorSegment()}.${Date.now().toString(36)}.${publicWorkingTreeCursorSequence.toString(36)}`;
+  const sequence = publicWorkingTreeCursorSequence;
+  return `wt.${randomCursorSegment(sequence)}.${sequence.toString(36)}`;
 }
 
-function randomCursorSegment(): string {
+function randomCursorSegment(sequence: number): string {
   const bytes = new Uint8Array(16);
   const cryptoLike = (
     globalThis as { readonly crypto?: { getRandomValues?: <T extends Uint8Array>(array: T) => T } }
   ).crypto;
   if (cryptoLike?.getRandomValues) {
     cryptoLike.getRandomValues(bytes);
-  } else {
-    for (let index = 0; index < bytes.length; index++) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
   }
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `fallback-${sequence.toString(36)}`;
 }
 
 function evictPublicWorkingTreeCursorCache(): void {

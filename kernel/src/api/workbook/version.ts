@@ -115,9 +115,7 @@ import {
   revertWorkbookVersionFacade,
   saveMergeResolutionsWorkbookVersionFacade,
 } from './version-facade-merge';
-import {
-  createWorkbookVersionProposalPorcelainFacade,
-} from './version-facade-proposals';
+import { createWorkbookVersionProposalPorcelainFacade } from './version-facade-proposals';
 import {
   createWorkbookVersionFacadeBranch,
   createWorkbookVersionFacadeBranchFromCurrent,

@@ -718,13 +718,12 @@ function CommitContextMenu({
   const parentDiffActive = activeParentDiffCommitId === state.commit.id;
   const commitDiffEnabled = (diffEnabled || parentDiffActive) && !rootDiffReason;
   const contextDiffReasonId = `version-context-diff-disabled-${commitTestId}`;
-  const diffStatus =
-    parentDiffActive
-      ? 'Hide diff'
-      : (sanitizeVersionStatusText(
-          !diffEnabled ? diffDisabledReason : rootDiffReason,
-          'Diff is unavailable.',
-        ) ?? 'Diff is unavailable.');
+  const diffStatus = parentDiffActive
+    ? 'Hide diff'
+    : (sanitizeVersionStatusText(
+        !diffEnabled ? diffDisabledReason : rootDiffReason,
+        'Diff is unavailable.',
+      ) ?? 'Diff is unavailable.');
   const branchReasonId = `version-commit-branch-disabled-${commitTestId}`;
 
   const handleOpenChange = (open: boolean) => {

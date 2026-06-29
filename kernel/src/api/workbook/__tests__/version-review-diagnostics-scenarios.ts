@@ -10,7 +10,9 @@ export function registerVersionReviewDiagnosticsScenarios(): void {
       }),
     });
 
-    await expect(version.reviews.advanced.getReview({ reviewId: REVIEW_ID })).resolves.toMatchObject({
+    await expect(
+      version.reviews.advanced.getReview({ reviewId: REVIEW_ID }),
+    ).resolves.toMatchObject({
       ok: false,
       error: {
         code: 'target_unavailable',

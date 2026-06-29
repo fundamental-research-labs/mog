@@ -52,15 +52,15 @@ describe('VersionHistoryPanelContent working-tree diff', () => {
     expect(within(viewer).getByTestId('version-history-diff-total-count')).toHaveTextContent(
       '1 change',
     );
-    expect(within(viewer).getByTestId('version-history-diff-inline-detail')).toHaveTextContent('42');
+    expect(within(viewer).getByTestId('version-history-diff-inline-detail')).toHaveTextContent(
+      '42',
+    );
     expect(within(viewer).queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
     expect(within(viewer).queryByRole('button', { name: /stage/i })).not.toBeInTheDocument();
   });
 
   it('loads additional working-tree pages through the shared diff detail list', async () => {
-    const nextCursor = 'working-tree-page-2' as NonNullable<
-      VersionSemanticDiffPage['nextCursor']
-    >;
+    const nextCursor = 'working-tree-page-2' as NonNullable<VersionSemanticDiffPage['nextCursor']>;
     const firstPage = workingTreeDiffPage([diffEntry({ changeId: 'change-1' })], {
       nextCursor,
     });
@@ -110,7 +110,9 @@ describe('VersionHistoryPanelContent working-tree diff', () => {
 
     await screen.findByText('Calculated forecast');
     expect(diffWorkingTree).not.toHaveBeenCalled();
-    expect(screen.queryByTestId('version-history-working-tree-diff-viewer')).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('version-history-working-tree-diff-viewer'),
+    ).not.toBeInTheDocument();
   });
 
   it('renders blocked working-tree diagnostics without staging controls', async () => {

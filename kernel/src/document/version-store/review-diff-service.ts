@@ -231,7 +231,7 @@ function targetUnavailable<T>(
     ok: false,
     error: {
       code: 'target_unavailable',
-      target: `workbook.version.${operation}`,
+      target: `workbook.version.reviews.advanced.${operation}`,
       diagnostics: mapVersionDiagnostics(diagnostics),
     },
   };

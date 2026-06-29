@@ -5,6 +5,8 @@
 export class CollaborativeEngine { private readonly _inner; private readonly _coordinator; private readonly _participantId; private readonly _syncMode; private readonly _batchSize; private _pendingMut ...
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export class VersionPublicApiValueError extends TypeError { readonly helper: string; readonly expected: string; readonly value: unknown; constructor(helper: string, expected: string, value: unknown);  ...
+export class VersionResultError extends Error { readonly error: VersionError; constructor(error: VersionError); }
 export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
@@ -33,17 +35,32 @@ export const rangeAddress: (row1: number, col1: number, row2: number, col2: numb
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
+export function branchName(ref: VersionMainRefName | VersionRefName): VersionBranchName
+export function branchRef(name: VersionBranchNameInput): VersionMainRefName | VersionRefName
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
 export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
+export function expectedHeadFromRef(ref: VersionRef): VersionCommitExpectedHead
 export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
+export function formatVersionDiagnostics(diagnostics: readonly VersionStoreDiagnostic[]): string
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function isVersionBlocked(result: unknown): boolean
+export function isVersionBranchName(value: unknown): value is VersionBranchName
+export function isVersionObjectDigest(value: unknown): value is ObjectDigest
+export function isVersionRefName(value: unknown): value is VersionMainRefName | VersionRefName
+export function isVersionStaleTarget(result: unknown): boolean
+export function isWorkbookCommitId(value: unknown): value is WorkbookCommitId
 export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
+export function parseVersionBranchName(value: unknown): VersionBranchName
+export function parseVersionObjectDigest(value: unknown): ObjectDigest
+export function parseVersionRefName(value: unknown): VersionMainRefName | VersionRefName
+export function parseWorkbookCommitId(value: unknown): WorkbookCommitId
 export function preflightMogCode(code: string): ApiGuidancePreflightResult
 export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
+export function unwrapVersionResult<T>(result: VersionResult<T>): T
 export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
 export interface AccessExplanation { /** The resolved access level */ readonly level: AccessLevel; /** The policy that determined the level (null = default, no policy matched) */ readonly matchedPolic ...
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
@@ -63,8 +80,8 @@ export interface ApiGuidanceSourceLocation { readonly file: string; readonly lin
 export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
 export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
 export interface ApiSpec { compatibility?: ApiCompatibilityIndex; subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<stri ...
-export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; compatibility?: ApiCompatibilityReference[]; targetInterface?: string; }
-export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
+export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; kind?: 'method' | 'property' | 'subApiAccessor'; canonicalPath?: string; compatibility?: ApiCompatibi ...
+export interface ApiSpecInterfaceEntry { docstring: string; members: Record<string, ApiSpecFunctionEntry>; functions: Record<string, ApiSpecFunctionEntry>; }
 export interface ApiSpecTypeEntry { name: string; definition?: string; isEnum?: boolean; values?: Record<string, string>; docstring?: string; }
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
 export interface ChartRasterBackend { readonly id: string; readonly runtime: ChartRasterBackendRuntime; readonly supportedFormats: readonly ChartRasterImageExportFormat[]; render(request: ChartRasterR ...
@@ -227,6 +244,8 @@ export type { SheetId }
 export class CollaborativeEngine { private readonly _inner; private readonly _coordinator; private readonly _participantId; private readonly _syncMode; private readonly _batchSize; private _pendingMut ...
 export class HeadlessEngine { private readonly lifecycle; /** Cached unified Workbook instance (owns sheet cache, create once) */ private _workbook; private _unregisterExternalSession; /** @internal * ...
 export class MogSdkVersionStoreConfigError extends Error { readonly diagnostic: MogSdkVersionStoreDiagnostic; readonly diagnostics: readonly MogSdkVersionStoreDiagnostic[]; constructor(diagnostic: Mog ...
+export class VersionPublicApiValueError extends TypeError { readonly helper: string; readonly expected: string; readonly value: unknown; constructor(helper: string, expected: string, value: unknown);  ...
+export class VersionResultError extends Error { readonly error: VersionError; constructor(error: VersionError); }
 export const CONTROL_PLANE_ENTRYPOINT_IDS: readonly ["control-plane.capability-gates.read", "control-plane.capability-gates.dry-run", "control-plane.capability-gates.compare-and-swap", "control-plane. ...
 export const MOG_SDK_SUPPORTED_VERSION_STORE_KINDS: readonly ["memory", "in-memory", "memory-durable-snapshot", "indexeddb", "browser"]
 export const MOG_SDK_UNSUPPORTED_VERSION_STORE_KINDS: readonly ["node-file", "nodeFile", "filesystem", "file-system", "node-filesystem", "nodeFileSystem", "node:fs", "fs"]
@@ -255,17 +274,32 @@ export const rangeAddress: (row1: number, col1: number, row2: number, col2: numb
 export const rangeToA1: (range: CellRange, includeSheet?: boolean, sheetName?: string) => string
 export const toA1: (row: number, col: number) => string
 export function analyzeMogCode(code: string): ApiGuidanceDiagnostic[]
+export function branchName(ref: VersionMainRefName | VersionRefName): VersionBranchName
+export function branchRef(name: VersionBranchNameInput): VersionMainRefName | VersionRefName
 export function createCollaborativeGroup(addon: NapiAddonModule, count: number, options?: { syncMode?: SyncMode; xlsxSource?: Buffer; userTimezone?: string; }): Promise<{ engines: CollaborativeEngine[ ...
 export function createHeadlessEngine(options: HeadlessOptions): Promise<HeadlessEngine>
 export function createHeadlessEngineFromYrsState(addon: NapiAddonModule, yrsState: Uint8Array, options?: Partial<HeadlessOptions>): Promise<HeadlessEngine>
 export function createInertControlPlane(): ControlPlaneClient
 export function createSdkVersionStoreLifecycleConfig(versionStore: MogSdkVersionStoreConfig | undefined, options: MogSdkVersionStoreLifecycleOptions): MogSdkVersionStoreLifecycleConfig | undefined
 export function createWorkbook(): Promise<Workbook>
+export function expectedHeadFromRef(ref: VersionRef): VersionCommitExpectedHead
 export function explainApiSymbol(symbolOrPath: string): ApiGuidanceExplanation | null
+export function formatVersionDiagnostics(diagnostics: readonly VersionStoreDiagnostic[]): string
 export function isMogSdkVersionStoreConfigError(value: unknown): value is MogSdkVersionStoreConfigError
+export function isVersionBlocked(result: unknown): boolean
+export function isVersionBranchName(value: unknown): value is VersionBranchName
+export function isVersionObjectDigest(value: unknown): value is ObjectDigest
+export function isVersionRefName(value: unknown): value is VersionMainRefName | VersionRefName
+export function isVersionStaleTarget(result: unknown): boolean
+export function isWorkbookCommitId(value: unknown): value is WorkbookCommitId
 export function observeControlPlaneShadow(_hook: ControlPlaneShadowObservationHook, _options?: ControlPlaneShadowObservationOptions): typeof disposable
+export function parseVersionBranchName(value: unknown): VersionBranchName
+export function parseVersionObjectDigest(value: unknown): ObjectDigest
+export function parseVersionRefName(value: unknown): VersionMainRefName | VersionRefName
+export function parseWorkbookCommitId(value: unknown): WorkbookCommitId
 export function preflightMogCode(code: string): ApiGuidancePreflightResult
 export function resolveGuidanceTarget(path: string): ApiGuidanceTarget | null
+export function unwrapVersionResult<T>(result: VersionResult<T>): T
 export function validateApiGuidanceCatalog(): ApiGuidanceCatalogValidation
 export interface AccessExplanation { /** The resolved access level */ readonly level: AccessLevel; /** The policy that determined the level (null = default, no policy matched) */ readonly matchedPolic ...
 export interface AccessPolicy { readonly id: PolicyId; /** Glob-matched against principal's tags */ readonly principalTag: TagMatcher; /** Target pattern to match */ readonly target: TargetMatcher; /* ...
@@ -285,8 +319,8 @@ export interface ApiGuidanceSourceLocation { readonly file: string; readonly lin
 export interface ApiGuidanceSymbolMatcher extends ApiGuidanceBaseMatcher { readonly kind: Exclude<ApiGuidanceMatcherKind, 'compound'>; readonly symbol: string; }
 export interface ApiGuidanceTarget { readonly schemaVersion?: '1'; readonly path: string; readonly stableId?: string; readonly root: ApiGuidanceTargetRoot; readonly parentRoot?: 'workbook' | 'workshee ...
 export interface ApiSpec { compatibility?: ApiCompatibilityIndex; subApis: { workbook: Record<string, ApiSpecFunctionEntry>; worksheet: Record<string, ApiSpecFunctionEntry>; }; interfaces: Record<stri ...
-export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; compatibility?: ApiCompatibilityReference[]; targetInterface?: string; }
-export interface ApiSpecInterfaceEntry { docstring: string; functions: Record<string, ApiSpecFunctionEntry>; }
+export interface ApiSpecFunctionEntry { signature: string; docstring: string; usedTypes: string[]; kind?: 'method' | 'property' | 'subApiAccessor'; canonicalPath?: string; compatibility?: ApiCompatibi ...
+export interface ApiSpecInterfaceEntry { docstring: string; members: Record<string, ApiSpecFunctionEntry>; functions: Record<string, ApiSpecFunctionEntry>; }
 export interface ApiSpecTypeEntry { name: string; definition?: string; isEnum?: boolean; values?: Record<string, string>; docstring?: string; }
 export interface ChartImageFrame { readonly exportWidth: number; readonly exportHeight: number; readonly sourceWidth?: number; readonly sourceHeight?: number; readonly contentX: number; readonly conte ...
 export interface ChartRasterBackend { readonly id: string; readonly runtime: ChartRasterBackendRuntime; readonly supportedFormats: readonly ChartRasterImageExportFormat[]; render(request: ChartRasterR ...

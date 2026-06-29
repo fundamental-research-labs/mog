@@ -175,7 +175,10 @@ describe('WorkbookVersion merge review porcelain', () => {
 
   it('chooses conflicted preview resolutions and applies through the merge write service', async () => {
     const conflict = formulaConflict({ result: 2, conflictIdDigit: '5' });
-    const fixture = await createMergeReviewWorkbook({ status: 'conflicted', conflicts: [conflict] });
+    const fixture = await createMergeReviewWorkbook({
+      status: 'conflicted',
+      conflicts: [conflict],
+    });
 
     const review = await fixture.wb.version.previewMerge({ from: BRANCH_NAME, into: 'main' });
     if (!review.ok) throw new Error(`expected preview: ${JSON.stringify(review.error)}`);
@@ -362,7 +365,11 @@ async function createMergeReviewWorkbook(input: {
     })),
     readRef: jest.fn(async (name: string) => {
       if (name === 'HEAD') {
-        return { status: 'success', ref: { name: 'HEAD', target: MAIN_REF, revision: MAIN_REVISION }, diagnostics: [] };
+        return {
+          status: 'success',
+          ref: { name: 'HEAD', target: MAIN_REF, revision: MAIN_REVISION },
+          diagnostics: [],
+        };
       }
       return {
         status: 'success',
@@ -473,7 +480,10 @@ async function createMergeReviewWorkbook(input: {
     mergeCommit,
     fastForwardMerge,
     branchService,
-    setMainRef(commitId: WorkbookCommitId, revision: typeof MAIN_REVISION | typeof STALE_MAIN_REVISION) {
+    setMainRef(
+      commitId: WorkbookCommitId,
+      revision: typeof MAIN_REVISION | typeof STALE_MAIN_REVISION,
+    ) {
       mainCommitId = commitId;
       mainRevision = revision;
     },
@@ -599,7 +609,10 @@ function commitClosure(
   parents: Readonly<Record<string, readonly WorkbookCommitId[]>>,
 ) {
   const seen = new Set<WorkbookCommitId>();
-  const commits: { readonly id: WorkbookCommitId; readonly payload: { readonly parentCommitIds: readonly WorkbookCommitId[] } }[] = [];
+  const commits: {
+    readonly id: WorkbookCommitId;
+    readonly payload: { readonly parentCommitIds: readonly WorkbookCommitId[] };
+  }[] = [];
   const visit = (id: WorkbookCommitId) => {
     if (seen.has(id)) return;
     seen.add(id);

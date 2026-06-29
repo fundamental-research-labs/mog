@@ -652,7 +652,9 @@ test('version surface status remains available without version read grant', asyn
         ]);
       }
     }
-    const getReviewDenied = await facade.version.reviews.advanced.getReview({ reviewId: 'review-1' });
+    const getReviewDenied = await facade.version.reviews.advanced.getReview({
+      reviewId: 'review-1',
+    });
     assert.deepEqual(getReviewDenied, {
       ok: false,
       error: {
@@ -672,7 +674,8 @@ test('version surface status remains available without version read grant', asyn
         code: 'version_capability_unavailable',
         capability: 'version:reviewWrite',
         dependency: 'hostCapability',
-        reason: 'Capability "version:reviewWrite" is denied for WorkbookVersionReviewApi.createReview',
+        reason:
+          'Capability "version:reviewWrite" is denied for WorkbookVersionReviewApi.createReview',
         retryable: false,
       },
     });
@@ -724,7 +727,9 @@ test('version review diff conditionally requires review read only for review-id 
       assert.notEqual(commitRangeDiff.error.code, 'version_capability_unavailable');
     }
 
-    const reviewDiff = await facade.version.reviews.advanced.getReviewDiff({ reviewId: 'review-1' });
+    const reviewDiff = await facade.version.reviews.advanced.getReviewDiff({
+      reviewId: 'review-1',
+    });
     assert.equal(reviewDiff.ok, false);
     if (!reviewDiff.ok) {
       assert.equal(reviewDiff.error.code, 'version_capability_unavailable');

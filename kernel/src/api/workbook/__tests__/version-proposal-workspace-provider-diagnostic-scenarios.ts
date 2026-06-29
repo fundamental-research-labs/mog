@@ -66,7 +66,9 @@ export function registerProposalWorkspaceDiagnosticScenarios(): void {
     expect(serialized).not.toContain('principalId');
     expect(serialized).not.toContain('agentRunId');
     expect(serialized).not.toContain('providerId');
-    await expect(version.proposals.advanced.getProposal({ proposalId: created.value.id })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: created.value.id }),
+    ).resolves.toMatchObject({
       ok: true,
       value: { status: 'draft', revision: 1 },
     });

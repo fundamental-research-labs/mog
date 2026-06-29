@@ -48,7 +48,9 @@ export function registerTargetHeadStaleScenarios(): void {
         ref: { commitId: movedMainCommitId },
       },
     });
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',
@@ -91,7 +93,9 @@ export function registerTargetHeadStaleScenarios(): void {
     const retry = await version.proposals.advanced.acceptProposal(acceptInput);
 
     expect(retry).toEqual(accepted);
-    await expect(version.proposals.advanced.getProposal({ proposalId: ready.proposalId })).resolves.toMatchObject({
+    await expect(
+      version.proposals.advanced.getProposal({ proposalId: ready.proposalId }),
+    ).resolves.toMatchObject({
       ok: true,
       value: {
         status: 'stale',

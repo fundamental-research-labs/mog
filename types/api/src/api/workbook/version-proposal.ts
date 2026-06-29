@@ -290,7 +290,9 @@ export interface VersionProposalWorkspaceHandle {
   commit(
     options: VersionProposalWorkspaceCommitOptions,
   ): Promise<VersionResult<VersionProposalHandle>>;
-  dispose(options?: VersionProposalHandleOptions): Promise<VersionResult<{ readonly disposed: true }>>;
+  dispose(
+    options?: VersionProposalHandleOptions,
+  ): Promise<VersionResult<{ readonly disposed: true }>>;
 }
 
 export interface VersionProposalAcceptOptions extends VersionProposalHandleOptions {
@@ -335,9 +337,9 @@ export interface VersionProposalHandle {
 
 export interface VersionProposalPorcelainApi {
   readonly advanced: VersionProposalApi;
-  create(
-    input: VersionCreateProposalPorcelainInput,
-  ): Promise<VersionResult<VersionProposalHandle>>;
+  create(input: VersionCreateProposalPorcelainInput): Promise<VersionResult<VersionProposalHandle>>;
   get(id: AgentProposalId): Promise<VersionResult<VersionProposalHandle>>;
-  list(options?: VersionListProposalPorcelainOptions): Promise<VersionResult<Paged<AgentProposalSummary>>>;
+  list(
+    options?: VersionListProposalPorcelainOptions,
+  ): Promise<VersionResult<Paged<AgentProposalSummary>>>;
 }

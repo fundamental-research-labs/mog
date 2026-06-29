@@ -5,6 +5,7 @@ import type {
   VersionSemanticDiffPage,
   VersionSemanticValue,
 } from '@mog-sdk/contracts/api';
+import { wallClockNow } from '@mog/platform';
 
 export { displayBranchName } from './version-branch-name';
 
@@ -73,7 +74,7 @@ const RELATIVE_COMMIT_TIME_UNITS = [
   { singular: 'minute', plural: 'minutes', ms: MINUTE_MS },
 ] as const;
 
-export function formatRelativeCommitTime(value: string, nowMs = Date.now()): string {
+export function formatRelativeCommitTime(value: string, nowMs = wallClockNow()): string {
   const timestampMs = Date.parse(value);
   if (Number.isNaN(timestampMs)) return value;
 

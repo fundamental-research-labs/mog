@@ -14,8 +14,10 @@ export type VersionWorkingTreeDiffId = string & {
 
 export type VersionWorkingTreeDiffOverviewOptions = VersionDiffOverviewOptions;
 
-export interface VersionWorkingTreeDiffOverview
-  extends Omit<VersionDiffOverview, 'targetCommitId'> {
+export interface VersionWorkingTreeDiffOverview extends Omit<
+  VersionDiffOverview,
+  'targetCommitId'
+> {
   readonly kind: 'workingTree';
   readonly workingTreeDiffId: VersionWorkingTreeDiffId;
   readonly targetRef?: VersionMainRefName | VersionRefName;

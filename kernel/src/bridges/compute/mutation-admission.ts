@@ -83,6 +83,13 @@ interface MutationAdmissionDiagnosticContext {
     | ((diagnostic: MutationAdmissionDiagnostic) => void);
 }
 
+interface MutationAdmissionClockContext {
+  readonly clock?: {
+    readonly dateNow?: () => number;
+    readonly now?: () => number;
+  };
+}
+
 interface VersionMutationCaptureSink {
   recordPreMutation?(input: VersionMutationCapturePreMutationInput): void | Promise<void>;
   recordMutationResult?(input: VersionMutationCaptureRecordInput): void;
@@ -120,7 +127,7 @@ export function recordMutationAdmissionDiagnostic(
   }
   emitVersioningDiagnosticEvent(ctx, {
     type: 'versioning:admission-diagnostic',
-    timestamp: Date.now(),
+    timestamp: mutationAdmissionTimestamp(ctx),
     diagnostic,
   });
 }
@@ -148,7 +155,7 @@ export function recordVersionMutationCapture(
   } catch {
     emitVersioningDiagnosticEvent(ctx, {
       type: 'versioning:mutation-capture-error',
-      timestamp: Date.now(),
+      timestamp: mutationAdmissionTimestamp(ctx),
       operation: input.operation,
       phase: 'mutation-result',
     });
@@ -183,11 +190,24 @@ export async function prepareVersionMutationCapture(
   } catch {
     emitVersioningDiagnosticEvent(ctx, {
       type: 'versioning:mutation-capture-error',
-      timestamp: Date.now(),
+      timestamp: mutationAdmissionTimestamp(ctx),
       operation: input.operation,
       phase: 'pre-mutation',
     });
   }
+}
+
+function mutationAdmissionTimestamp(ctx: IKernelContext): number {
+  const clock = (ctx as IKernelContext & MutationAdmissionClockContext).clock;
+  for (const read of [clock?.dateNow, clock?.now]) {
+    try {
+      const value = read?.();
+      if (value !== undefined && Number.isFinite(value)) return value;
+    } catch {
+      // Try the next clock source.
+    }
+  }
+  return 0;
 }
 
 function emitVersioningDiagnosticEvent(

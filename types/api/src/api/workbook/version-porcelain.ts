@@ -70,10 +70,7 @@ export interface VersionDiffBranchOverviewOptions extends VersionDiffOverviewOpt
   readonly against?: VersionDiffPorcelainTarget;
 }
 
-export type VersionCommitCurrentOptions = Omit<
-  VersionCommitOptions,
-  'targetRef' | 'expectedHead'
->;
+export type VersionCommitCurrentOptions = Omit<VersionCommitOptions, 'targetRef' | 'expectedHead'>;
 
 export interface VersionCreateBranchFromCurrentOptions {
   readonly baseCommitId?: WorkbookCommitIdInput;
@@ -93,10 +90,7 @@ export interface VersionBranchSummary {
   readonly updatedAt?: string;
 }
 
-export type VersionPorcelainBlockedResultStatus =
-  | 'blocked'
-  | 'staleTargetHead'
-  | 'conflicted';
+export type VersionPorcelainBlockedResultStatus = 'blocked' | 'staleTargetHead' | 'conflicted';
 
 export interface VersionPorcelainStatusResult {
   readonly status?: string;

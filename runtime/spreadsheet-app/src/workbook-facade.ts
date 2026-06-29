@@ -507,7 +507,6 @@ function createCapabilityFacade(
             );
           };
         }
-
       }
 
       const value = Reflect.get(currentTarget, prop, currentTarget);

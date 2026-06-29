@@ -190,7 +190,10 @@ import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
-import { createWorkbookVersionSurfaceStatusService, type VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
+import {
+  createWorkbookVersionSurfaceStatusService,
+  type VersionSurfaceActiveCheckoutStateChanged,
+} from './version/surface-status/version-surface-status-service';
 import { readVersionSurfaceSemanticDirtyState } from './version/surface-status/version-surface-status-semantic-dirty';
 import { shouldTrackEventAsWorkbookDirty } from './workbook-dirty-event-filter';
 import {

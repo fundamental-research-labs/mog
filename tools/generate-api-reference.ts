@@ -352,11 +352,7 @@ function applySignatureTypeOverrides(
   return result;
 }
 
-function formatSignature(
-  method: MethodSignature,
-  prefix?: string,
-  interfaceName?: string,
-): string {
+function formatSignature(method: MethodSignature, prefix?: string, interfaceName?: string): string {
   const name = prefix ? `${prefix}.${method.getName()}` : method.getName();
   const params = method
     .getParameters()

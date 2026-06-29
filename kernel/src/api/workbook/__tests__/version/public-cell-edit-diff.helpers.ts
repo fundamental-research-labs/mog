@@ -61,7 +61,7 @@ export function expectedCellDiff(address: string, value: unknown) {
       propertyPath: ['value'],
     }),
     after: { kind: 'value', value },
-    display: { address: { kind: 'value', value: address } },
+    display: expect.objectContaining({ address: { kind: 'value', value: address } }),
   });
 }
 

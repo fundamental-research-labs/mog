@@ -521,6 +521,11 @@ export function diffEntry({
     },
     before: { kind: 'value', value: { kind: 'blank' } },
     after: { kind: 'value', value: '42' },
+    display: {
+      sheetName: { kind: 'value', value: 'Sheet1' },
+      address: { kind: 'value', value: 'A1' },
+      entityLabel: { kind: 'value', value: 'Cell' },
+    },
     ...(diagnostics ? { diagnostics } : {}),
   };
 }

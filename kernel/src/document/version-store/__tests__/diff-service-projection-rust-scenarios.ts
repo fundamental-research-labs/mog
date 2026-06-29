@@ -1,3 +1,5 @@
+import { toA1 } from '@mog/spreadsheet-utils/a1';
+
 import { createWorkbookVersionDiffService } from '../diff-service';
 import { graphWithRootAndChild } from './diff-service-fixtures';
 
@@ -74,6 +76,208 @@ export function registerDiffServiceProjectionRustScenarios(): void {
       ],
       diagnostics: [],
     });
+  });
+
+  it('projects raw Rust semantic cell sheet names into diff rows and overview groups', async () => {
+    const rustChanges = [
+      rawCellValueChange({
+        changeId: 'north-a1',
+        sheetId: 'sheet-north',
+        sheetName: 'North',
+        row: 0,
+        column: 0,
+        value: 10,
+      }),
+      rawCellValueChange({
+        changeId: 'south-a1',
+        sheetId: 'sheet-south',
+        sheetName: 'South',
+        row: 0,
+        column: 0,
+        value: 20,
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: 'before-digest',
+          afterStateDigest: 'after-digest',
+        },
+        changes: rustChanges,
+        semanticDiff: {
+          beforeDigest: 'before-digest',
+          afterDigest: 'after-digest',
+          changes: rustChanges,
+          diagnostics: [],
+        },
+        reviewChanges: [],
+      },
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    const page = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+    );
+
+    expect(page.status).toBe('success');
+    if (page.status !== 'success') return;
+    expect(page.items).toMatchObject([
+      {
+        structural: { changeId: 'north-a1', entityId: 'sheet-north!A1' },
+        display: {
+          sheetName: { kind: 'value', value: 'North' },
+          address: { kind: 'value', value: 'A1' },
+        },
+      },
+      {
+        structural: { changeId: 'south-a1', entityId: 'sheet-south!A1' },
+        display: {
+          sheetName: { kind: 'value', value: 'South' },
+          address: { kind: 'value', value: 'A1' },
+        },
+      },
+    ]);
+
+    const overview = await service.diffOverview(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { groupLimit: 10 },
+    );
+
+    if ('status' in overview) throw new Error('expected overview success');
+    expect(overview.groups.items).toMatchObject([
+      {
+        sheetId: 'sheet-north',
+        sheetName: { kind: 'value', value: 'North' },
+        address: { kind: 'value', value: 'A1:A1' },
+      },
+      {
+        sheetId: 'sheet-south',
+        sheetName: { kind: 'value', value: 'South' },
+        address: { kind: 'value', value: 'A1:A1' },
+      },
+    ]);
+  });
+
+  it('hydrates committed review-change cell sheet names from the paired Rust semantic payload', async () => {
+    const rustChanges = [
+      rawCellValueChange({
+        changeId: 'rust-north-a1',
+        sheetId: 'sheet-north',
+        sheetName: 'North',
+        row: 0,
+        column: 0,
+        value: 10,
+      }),
+      rawCellValueChange({
+        changeId: 'rust-south-a1',
+        sheetId: 'sheet-south',
+        sheetName: 'South',
+        row: 0,
+        column: 0,
+        value: 20,
+      }),
+    ];
+    const reviewChanges = [
+      reviewCellValueChange({
+        changeId: 'review-north-a1',
+        sheetId: 'sheet-north',
+        row: 0,
+        column: 0,
+        value: 10,
+      }),
+      reviewCellValueChange({
+        changeId: 'review-south-a1',
+        sheetId: 'sheet-south',
+        row: 0,
+        column: 0,
+        value: 20,
+      }),
+    ];
+    const { provider, rootCommitId, childCommitId } = await graphWithRootAndChild({
+      semanticPayload: {
+        schemaVersion: 1,
+        source: {
+          kind: 'rustSemanticDiff',
+          beforeStateDigest: 'before-digest',
+          afterStateDigest: 'after-digest',
+        },
+        changes: rustChanges,
+        semanticDiff: {
+          beforeDigest: 'before-digest',
+          afterDigest: 'after-digest',
+          changes: rustChanges,
+          diagnostics: [],
+        },
+        reviewChanges,
+      },
+    });
+    const service = createWorkbookVersionDiffService({ provider });
+
+    const page = await service.diff(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+    );
+
+    expect(page.status).toBe('success');
+    if (page.status !== 'success') return;
+    expect(page.items).toMatchObject([
+      {
+        structural: { changeId: 'review-north-a1', entityId: 'sheet-north!A1' },
+        display: {
+          sheetName: { kind: 'value', value: 'North' },
+          address: { kind: 'value', value: 'A1' },
+        },
+      },
+      {
+        structural: { changeId: 'review-south-a1', entityId: 'sheet-south!A1' },
+        display: {
+          sheetName: { kind: 'value', value: 'South' },
+          address: { kind: 'value', value: 'A1' },
+        },
+      },
+    ]);
+
+    const overview = await service.diffOverview(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { groupLimit: 10 },
+    );
+
+    if ('status' in overview) throw new Error('expected overview success');
+    expect(overview.groups.items).toMatchObject([
+      {
+        sheetId: 'sheet-north',
+        sheetName: { kind: 'value', value: 'North' },
+        address: { kind: 'value', value: 'A1:A1' },
+      },
+      {
+        sheetId: 'sheet-south',
+        sheetName: { kind: 'value', value: 'South' },
+        address: { kind: 'value', value: 'A1:A1' },
+      },
+    ]);
+
+    const firstDetail = await service.diffGroupDetail(
+      { kind: 'commit', id: rootCommitId },
+      { kind: 'commit', id: childCommitId },
+      { groupId: overview.groups.items[0]!.groupId, pageSize: 10 },
+    );
+
+    expect(firstDetail.status).toBe('success');
+    if (firstDetail.status !== 'success') return;
+    expect(firstDetail.items).toMatchObject([
+      {
+        structural: { changeId: 'review-north-a1', entityId: 'sheet-north!A1' },
+        display: {
+          sheetName: { kind: 'value', value: 'North' },
+          address: { kind: 'value', value: 'A1' },
+        },
+      },
+    ]);
   });
 
   it('projects raw Rust semantic direct-format changes', async () => {
@@ -301,6 +505,7 @@ export function registerDiffServiceProjectionRustScenarios(): void {
 function rawCellValueChange(input: {
   readonly changeId: string;
   readonly sheetId: string;
+  readonly sheetName?: string;
   readonly row: number;
   readonly column: number;
   readonly value: unknown;
@@ -316,6 +521,7 @@ function rawCellValueChange(input: {
       objectId,
       objectKind: 'cell',
       domainId: 'cells.values',
+      ...(input.sheetName ? { sheetId: input.sheetId, sheetName: input.sheetName } : {}),
       record: {
         objectId,
         sheetId: input.sheetId,
@@ -325,6 +531,37 @@ function rawCellValueChange(input: {
           valueKind: typeof input.value,
           canonicalValue: input.value,
         },
+      },
+    },
+  };
+}
+
+function reviewCellValueChange(input: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly row: number;
+  readonly column: number;
+  readonly value: unknown;
+}) {
+  const address = toA1(input.row, input.column);
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId: input.changeId,
+      domain: 'cell',
+      entityId: `${input.sheetId}!${address}`,
+      propertyPath: ['value'],
+    },
+    before: { kind: 'value', value: { kind: 'blank' } },
+    after: { kind: 'value', value: input.value },
+    display: {
+      address: { kind: 'value', value: address },
+    },
+    historical: {
+      cell: {
+        sheetId: input.sheetId,
+        row: input.row,
+        column: input.column,
       },
     },
   };

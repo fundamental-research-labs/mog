@@ -30,6 +30,7 @@ export type VersionSemanticChangeRecord = {
     readonly value: VersionSemanticValue;
   };
   readonly display?: {
+    readonly sheetName?: { readonly kind: 'value'; readonly value: string };
     readonly address?: { readonly kind: 'value'; readonly value: string };
     readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
   };

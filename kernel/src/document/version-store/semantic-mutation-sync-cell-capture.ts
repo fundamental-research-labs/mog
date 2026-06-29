@@ -21,7 +21,6 @@ type SyncSemanticChangeRecord = {
   };
   readonly display?: {
     readonly address?: { readonly kind: 'value'; readonly value: string };
-    readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
   };
   readonly historical?: {
     readonly cell?: {
@@ -52,7 +51,6 @@ export function mapSyncAuthoredCellChanges(
       after: { kind: 'value', value: semanticCellEditValue(cell.newFormula, cell.value) },
       display: {
         address: { kind: 'value', value: address },
-        entityLabel: { kind: 'value', value: `${cell.sheetId}!${address}` },
       },
       historical: {
         cell: {

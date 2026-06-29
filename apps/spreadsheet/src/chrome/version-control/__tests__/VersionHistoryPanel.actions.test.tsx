@@ -529,9 +529,9 @@ describe('VersionHistoryPanelContent action flows', () => {
     expect(screen.queryByTestId('version-history-diff-overview')).not.toBeInTheDocument();
     expect(screen.getByTestId('version-history-diff-total-count')).toHaveTextContent('1 change');
     expect(screen.queryByTestId('version-history-diff-group-list')).not.toBeInTheDocument();
-    expect(await screen.findByTestId('version-history-diff-inline-detail')).toHaveTextContent(
-      'sheet-1!A1',
-    );
+    const inlineDetail = await screen.findByTestId('version-history-diff-inline-detail');
+    expect(inlineDetail).toHaveTextContent('Sheet1!A1');
+    expect(inlineDetail).not.toHaveTextContent('sheet-1!A1');
     expect(diffViewer).not.toHaveTextContent('cells value');
     const diffStatus = within(diffViewer).getByRole('status');
     expect(diffStatus).toHaveAttribute('aria-live', 'polite');

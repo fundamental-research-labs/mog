@@ -49,6 +49,8 @@ describe('createComputeBridgeSemanticStateReader', () => {
       objectId,
       objectKind: 'sheet',
       domainId: 'sheets',
+      sheetId: 'sheet-2',
+      sheetName: 'Sheet 2',
       record: {
         sheetId: 'sheet-2',
         name: 'Sheet 2',
@@ -115,6 +117,8 @@ describe('createComputeBridgeSemanticStateReader', () => {
       objectId,
       objectKind: 'direct-format',
       domainId: 'cells.formats.direct',
+      sheetId: 'sheet#0',
+      sheetName: 'Sheet 1',
       record: {
         properties: {
           numberFormat: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)',
@@ -122,6 +126,62 @@ describe('createComputeBridgeSemanticStateReader', () => {
       },
     });
     expect(result.changes[0]?.beforeRecord).toBeUndefined();
+  });
+
+  it('attaches sheet display metadata to Rust cell-value semantic changes', async () => {
+    const after = semanticState({
+      'sheet-north': sheetState({
+        sheetId: 'sheet-north',
+        name: 'North',
+        cells: {
+          'cell:sheet-north:r0:c0': {
+            objectId: 'cell:sheet-north:r0:c0',
+            sheetId: 'sheet-north',
+            row: 0,
+            column: 0,
+            value: {
+              valueKind: 'number',
+              canonicalValue: 10,
+            },
+          },
+        },
+      }),
+    });
+    const objectId = 'value:cell:sheet-north:r0:c0';
+    const diff: SemanticWorkbookDiff = {
+      beforeDigest: digest('before'),
+      afterDigest: digest('after'),
+      changes: [
+        {
+          changeId: 'added:value:cell:sheet-north:r0:c0',
+          kind: 'added',
+          domainId: 'cells.values',
+          objectId,
+          objectKind: 'cell-value',
+        },
+      ],
+    };
+    const reader = createComputeBridgeSemanticStateReader({
+      semanticWorkbookStateEnvelope: jest.fn(async () => ({
+        state: after,
+        stateDigest: digest('after'),
+      })),
+      diffSemanticWorkbookStates: jest.fn(async () => diff),
+    });
+
+    const result = await reader.diffSemanticStates(semanticState(), after);
+
+    expect(result.changes[0]?.afterRecord).toMatchObject({
+      objectId,
+      objectKind: 'cell-value',
+      domainId: 'cells.values',
+      sheetId: 'sheet-north',
+      sheetName: 'North',
+      record: {
+        valueKind: 'number',
+        canonicalValue: 10,
+      },
+    });
   });
 });
 

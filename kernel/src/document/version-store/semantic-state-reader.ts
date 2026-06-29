@@ -24,6 +24,8 @@ export type VersionSemanticObjectRecordEvidence = {
   readonly objectId: string;
   readonly objectKind: SemanticObjectKind;
   readonly domainId: string;
+  readonly sheetId?: string;
+  readonly sheetName?: string;
   readonly record: unknown;
 };
 
@@ -82,12 +84,14 @@ function semanticObjectRecord(
   change: SemanticChange,
 ): VersionSemanticObjectRecordEvidence | undefined {
   const record = semanticObjectRecordValue(state, change);
+  const sheet = semanticObjectSheet(state, change);
   return record === undefined
     ? undefined
     : {
         objectId: change.objectId,
         objectKind: change.objectKind,
         domainId: change.domainId,
+        ...(sheet ? { sheetId: sheet.sheetId, sheetName: sheet.name } : {}),
         record,
       };
 }
@@ -119,10 +123,38 @@ function semanticObjectRecordValue(state: SemanticWorkbookState, change: Semanti
   return undefined;
 }
 
+function semanticObjectSheet(state: SemanticWorkbookState, change: SemanticChange) {
+  if (change.domainId === 'sheets' && change.objectKind === 'sheet') {
+    return state.sheets[stripObjectPrefix(change.objectId, 'sheet:')];
+  }
+  const cellObjectId = semanticCellObjectId(change);
+  return cellObjectId ? semanticCellRecordWithSheet(state, cellObjectId)?.sheet : undefined;
+}
+
+function semanticCellObjectId(change: SemanticChange): string | undefined {
+  if (change.domainId === 'cells.formulas' && change.objectKind === 'cell-formula') {
+    return stripObjectPrefix(change.objectId, 'formula:');
+  }
+  if (change.domainId === 'cells.values' && change.objectKind === 'cell') {
+    return change.objectId;
+  }
+  if (change.domainId === 'cells.values' && change.objectKind === 'cell-value') {
+    return stripObjectPrefix(change.objectId, 'value:');
+  }
+  if (change.domainId === 'cells.formats.direct' && change.objectKind === 'direct-format') {
+    return stripObjectPrefix(change.objectId, 'direct-format:');
+  }
+  return undefined;
+}
+
 function semanticCellRecord(state: SemanticWorkbookState, cellObjectId: string) {
+  return semanticCellRecordWithSheet(state, cellObjectId)?.cell;
+}
+
+function semanticCellRecordWithSheet(state: SemanticWorkbookState, cellObjectId: string) {
   for (const sheet of Object.values(state.sheets)) {
     const cell = sheet.cells[cellObjectId];
-    if (cell) return cell;
+    if (cell) return { cell, sheet };
   }
   return undefined;
 }

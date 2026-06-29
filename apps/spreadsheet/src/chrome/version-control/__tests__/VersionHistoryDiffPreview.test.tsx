@@ -61,7 +61,8 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).toHaveTextContent('Changes');
     expect(viewer).not.toHaveTextContent('Diff Viewer');
     expect(viewer).toHaveTextContent('aaaaaaaaaaaa...bbbbbbbbbbbb');
-    expect(viewer).toHaveTextContent('Cell sheet-1!A1');
+    expect(viewer).toHaveTextContent('Cell A1');
+    expect(viewer).not.toHaveTextContent('Cell sheet-1!A1');
     expect(viewer).not.toHaveTextContent('cells value');
 
     const viewport = within(viewer).getByTestId('version-history-diff-detail-viewport');
@@ -124,7 +125,7 @@ describe('VersionHistoryDiffPreview', () => {
     expect(within(viewport).queryByText('Cell A1')).not.toBeInTheDocument();
   });
 
-  it('qualifies grouped address labels with the typed sheet id when no sheet name is available', () => {
+  it('does not expose typed sheet ids in grouped address labels when no sheet name is available', () => {
     const page = semanticDiffPage();
     render(
       <VersionHistoryDiffPreview
@@ -162,7 +163,8 @@ describe('VersionHistoryDiffPreview', () => {
     );
 
     const groupList = screen.getByTestId('version-history-diff-group-list');
-    expect(groupList).toHaveTextContent('sheet-north!A1');
+    expect(groupList).toHaveTextContent('Sheet name unavailable!A1');
+    expect(groupList).not.toHaveTextContent('sheet-north!A1');
     expect(groupList).not.toHaveTextContent('Sheet1!A1');
   });
 

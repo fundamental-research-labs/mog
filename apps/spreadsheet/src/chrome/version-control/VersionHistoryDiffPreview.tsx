@@ -54,6 +54,7 @@ export type VersionDiffFilterSelection = {
 };
 
 const DIFF_DETAIL_ROW_HEIGHT = 76;
+const UNRESOLVED_SHEET_LABEL = 'Sheet name unavailable';
 
 export function VersionHistoryDiffPreview({
   diffPreview,
@@ -398,7 +399,7 @@ function diffFilterOptions(preview: VersionDiffPreview): {
 
   for (const group of preview.overview.groups.items) {
     if (group.sheetId) {
-      sheets.set(group.sheetId, formatDisplayValue(group.sheetName) ?? group.sheetId);
+      sheets.set(group.sheetId, formatSheetLabel(group.sheetName) ?? UNRESOLVED_SHEET_LABEL);
     }
     domains.add(group.domain);
     if (group.operation !== 'mixed') operations.add(group.operation);
@@ -412,7 +413,7 @@ function diffFilterOptions(preview: VersionDiffPreview): {
 
   const filters = preview.filters ?? {};
   if (filters.sheetId && !sheets.has(filters.sheetId)) {
-    sheets.set(filters.sheetId, filters.sheetId);
+    sheets.set(filters.sheetId, UNRESOLVED_SHEET_LABEL);
   }
   if (filters.domain) domains.add(filters.domain);
   if (filters.operation) operations.add(filters.operation);
@@ -757,7 +758,7 @@ function diffEntryTitle(entry: VersionDiffEntry): string {
   const sheetLabel = entrySheetLabel(entry);
   if (sheetLabel && entityLabel) return `${sheetLabel} - ${entityLabel}`;
   if (entityLabel) return entityLabel;
-  if (entry.structural.kind === 'metadata') return entry.structural.entityId;
+  if (entry.structural.kind === 'metadata') return versionDiffEntryLabel(entry);
   return 'Restricted change';
 }
 
@@ -774,31 +775,7 @@ function formatSheetQualifiedDescription(entry: VersionDiffEntry, description: s
 function entrySheetLabel(entry: VersionDiffEntry): string | undefined {
   const displaySheetName = entry.display?.sheetName;
   if (displaySheetName?.kind === 'redacted') return 'Restricted sheet';
-  return (
-    formatDisplayValue(displaySheetName) ??
-    entry.historical?.cell?.sheetId ??
-    entry.historical?.range?.sheetId ??
-    sheetIdFromSemanticValues(entry) ??
-    sheetIdFromStructuralMetadata(entry)
-  );
-}
-
-function sheetIdFromSemanticValues(entry: VersionDiffEntry): string | undefined {
-  for (const value of [entry.after, entry.before]) {
-    if (value.kind !== 'value') continue;
-    const fields = semanticObjectFields(value.value);
-    const sheetId = fields?.find((field) => field.key === 'sheetId')?.value;
-    if (typeof sheetId === 'string' && sheetId.trim().length > 0) return sheetId;
-  }
-  return undefined;
-}
-
-function sheetIdFromStructuralMetadata(entry: VersionDiffEntry): string | undefined {
-  if (entry.structural.kind !== 'metadata') return undefined;
-  const separator = entry.structural.entityId.lastIndexOf('!');
-  if (separator <= 0) return undefined;
-  const sheetId = entry.structural.entityId.slice(0, separator);
-  return sheetId.trim().length > 0 ? sheetId : undefined;
+  return formatDisplayValue(displaySheetName);
 }
 
 function formatDisplayValue(value: VersionDiffDisplayValue | undefined): string | undefined {
@@ -925,19 +902,18 @@ function formatSummaryCount(summary: VersionDiffOverview['summary']): string {
 
 function formatGroupTitle(group: VersionDiffGroup): string {
   const address = formatDisplayValue(group.address);
-  const sheetName = formatSheetLabel(group.sheetName, group.sheetId);
+  const sheetName = formatSheetLabel(group.sheetName);
   if (sheetName && address) return `${sheetName}!${address}`;
+  if (!sheetName && group.sheetId && address) return `${UNRESOLVED_SHEET_LABEL}!${address}`;
   if (address) return address;
   if (sheetName) return `${sheetName} ${group.kind}`;
+  if (group.sheetId) return `${UNRESOLVED_SHEET_LABEL} ${group.kind}`;
   return `${group.domain} ${group.kind}`;
 }
 
-function formatSheetLabel(
-  sheetName: VersionDiffDisplayValue | undefined,
-  fallbackSheetId: string | undefined,
-): string | undefined {
+function formatSheetLabel(sheetName: VersionDiffDisplayValue | undefined): string | undefined {
   if (sheetName?.kind === 'redacted') return 'Restricted sheet';
-  return formatDisplayValue(sheetName) ?? fallbackSheetId;
+  return formatDisplayValue(sheetName);
 }
 
 function formatGroupCount(group: VersionDiffGroup): string {

@@ -30,6 +30,12 @@ import {
 } from './diff-service-diagnostics';
 import { mapSemanticChangeSet } from './diff-service-semantic-mapping';
 import {
+  semanticDiffDisplayContextFromPayload,
+  sheetIdForCellSemanticChange,
+  sheetNameForCellSemanticChange,
+  type SemanticDiffDisplayContext,
+} from './diff-service-display-context';
+import {
   internalGroupDetailPageTokenForOffset,
   internalGroupPageTokenForOffset,
   parseGroupDetailPageToken,
@@ -189,7 +195,10 @@ export async function buildDiffGroupDetail(
     matchedIndex++;
   }
 
-  const mapped = mapSemanticChangeSet({ schemaVersion: 1, changes: rawPage });
+  const mapped = mapSemanticChangeSet(
+    { schemaVersion: 1, changes: rawPage },
+    { displayContext: semanticDiffDisplayContextFromPayload(context.semanticPayload) },
+  );
   if (!mapped.ok) return degradedDiffPage(mapped.diagnostics);
   const nextOffset = detailCursor.offset + rawPage.length;
   const nextPageToken =
@@ -248,10 +257,11 @@ async function buildProjection(
   }
 
   const unsupportedFilters = unsupportedFilterAvailability(filters);
+  const displayContext = semanticDiffDisplayContextFromPayload(context.semanticPayload);
   const changes: SemanticChange[] = [];
   const scanLimit = Math.min(rawChanges.length, EXACT_OVERVIEW_SCAN_CHANGE_LIMIT);
   for (let index = 0; index < scanLimit; index++) {
-    const change = projectSemanticChange(rawChanges[index], index);
+    const change = projectSemanticChange(rawChanges[index], index, displayContext);
     if (!change || !changeMatchesFilters(change, filters)) continue;
     changes.push(change);
   }
@@ -589,7 +599,11 @@ function columnRuns(rowChanges: readonly SemanticChange[]): readonly {
   return runs;
 }
 
-function projectSemanticChange(value: unknown, sourceIndex: number): SemanticChange | null {
+function projectSemanticChange(
+  value: unknown,
+  sourceIndex: number,
+  displayContext: SemanticDiffDisplayContext,
+): SemanticChange | null {
   if (!isRecord(value)) return null;
   const structural = isRecord(value.structural) ? value.structural : value;
   const domain = typeof structural.domain === 'string' ? structural.domain : 'unsupported';
@@ -615,10 +629,16 @@ function projectSemanticChange(value: unknown, sourceIndex: number): SemanticCha
   const historical = isRecord(value.historical) ? value.historical : undefined;
   const cell = isRecord(historical?.cell) ? historical.cell : undefined;
   const range = isRecord(historical?.range) ? historical.range : undefined;
+  const evidenceCell = cellCoordinateFromRecordEvidence(value);
   const sheetId =
-    safeString(cell?.sheetId) ?? safeString(range?.sheetId) ?? sheetIdFromSemanticValue(value);
-  const row = safeCoordinate(cell?.row);
-  const column = safeCoordinate(cell?.column);
+    safeString(cell?.sheetId) ??
+    safeString(range?.sheetId) ??
+    evidenceCell?.sheetId ??
+    sheetIdForCellSemanticChange(value) ??
+    sheetIdFromSemanticValue(value);
+  const row = safeCoordinate(cell?.row) ?? evidenceCell?.row;
+  const column = safeCoordinate(cell?.column) ?? evidenceCell?.column;
+  const display = semanticChangeDisplay(value, displayContext);
   return {
     raw: value,
     sourceIndex,
@@ -628,7 +648,7 @@ function projectSemanticChange(value: unknown, sourceIndex: number): SemanticCha
     operation: diffOperation(value.before, value.after),
     ...(row === undefined ? {} : { row }),
     ...(column === undefined ? {} : { column }),
-    display: displayMetadata(value.display),
+    display,
     unsupported: !RAW_PUBLIC_DIFF_DOMAINS.has(domain),
     redacted,
   };
@@ -782,12 +802,67 @@ function isEmptyDiffValue(value: unknown): boolean {
   return raw === null || (isRecord(raw) && raw.kind === 'blank');
 }
 
+function semanticChangeDisplay(
+  value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
+): SemanticChange['display'] {
+  const display = displayMetadata(value.display);
+  if (display.sheetName) return display;
+
+  const sheetName = sheetNameForCellSemanticChange(value, displayContext);
+  return sheetName ? { ...display, sheetName } : display;
+}
+
 function displayMetadata(value: unknown): SemanticChange['display'] {
   if (!isRecord(value)) return {};
   return {
     ...(isDisplayValue(value.sheetName) ? { sheetName: value.sheetName } : {}),
     ...(isDisplayValue(value.address) ? { address: value.address } : {}),
   };
+}
+
+function cellCoordinateFromRecordEvidence(
+  value: Readonly<Record<string, unknown>>,
+): { readonly sheetId: string; readonly row: number; readonly column: number } | undefined {
+  for (const key of ['afterRecord', 'beforeRecord'] as const) {
+    const evidence = value[key];
+    if (!isRecord(evidence)) continue;
+    const fromRecord = isRecord(evidence.record)
+      ? cellCoordinateFromRecord(evidence.record)
+      : undefined;
+    const fromObjectId = cellCoordinateFromObjectId(evidence.objectId);
+    const coordinate = fromRecord ?? fromObjectId;
+    if (coordinate) return coordinate;
+  }
+  return undefined;
+}
+
+function cellCoordinateFromRecord(
+  value: Readonly<Record<string, unknown>>,
+): { readonly sheetId: string; readonly row: number; readonly column: number } | undefined {
+  const sheetId = safeString(value.sheetId);
+  const row = safeCoordinate(value.row);
+  const column = safeCoordinate(value.column);
+  return sheetId && row !== undefined && column !== undefined
+    ? { sheetId, row, column }
+    : undefined;
+}
+
+function cellCoordinateFromObjectId(
+  value: unknown,
+): { readonly sheetId: string; readonly row: number; readonly column: number } | undefined {
+  if (typeof value !== 'string') return undefined;
+  const cellObjectId = stripObjectPrefix(
+    stripObjectPrefix(stripObjectPrefix(value, 'direct-format:'), 'value:'),
+    'formula:',
+  );
+  const match = /^cell:(.+):r([0-9]+):c([0-9]+)$/.exec(cellObjectId);
+  if (!match) return undefined;
+  const row = Number(match[2]);
+  const column = Number(match[3]);
+  return Number.isSafeInteger(row) && Number.isSafeInteger(column)
+    ? { sheetId: match[1]!, row, column }
+    : undefined;
 }
 
 function sheetIdFromSemanticValue(value: Readonly<Record<string, unknown>>): string | undefined {
@@ -862,6 +937,10 @@ function safeCoordinate(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
     ? value
     : undefined;
+}
+
+function stripObjectPrefix(value: string, prefix: string): string {
+  return value.startsWith(prefix) ? value.slice(prefix.length) : value;
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

@@ -4,6 +4,7 @@ import { missingNormalSemanticChangeSetFailure } from './semantic-mutation-captu
 import {
   COMPACT_CELL_VALUE_REVIEW_PROJECTION_MIN_CHANGE_COUNT,
   compactPlainCellValueReviewChanges,
+  reviewChangesWithSheetDisplayNames,
   type CompactCellValueReviewProjection,
 } from './semantic-review-projection';
 import type { VersionSemanticStateReaderPort } from './semantic-state-reader';
@@ -43,14 +44,20 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
     );
   }
 
-  if (canUseReviewProjectionOnlyPayload(input.reviewChanges)) {
+  const reviewChanges = reviewChangesWithSheetDisplayNames({
+    reviewChanges: input.reviewChanges,
+    beforeState: input.beforeSemanticState.state,
+    afterState: afterSemanticState.state,
+  });
+
+  if (canUseReviewProjectionOnlyPayload(reviewChanges)) {
     if (sameDigest(input.beforeSemanticState.stateDigest, afterSemanticState.stateDigest)) {
       return failedSemanticCapture(
         input,
         'Normal version commits require a semantic state change.',
       );
     }
-    const compactReviewProjection = compactPlainCellValueReviewChanges(input.reviewChanges);
+    const compactReviewProjection = compactPlainCellValueReviewChanges(reviewChanges);
     return {
       status: 'success',
       payload: {
@@ -59,7 +66,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
           kind: 'rustSemanticStateReviewProjection',
           beforeStateDigest: input.beforeSemanticState.stateDigest,
           afterStateDigest: afterSemanticState.stateDigest,
-          reviewProjectionChangeCount: input.reviewChanges.length,
+          reviewProjectionChangeCount: reviewChanges.length,
         },
         changes: [],
         semanticDiff: {
@@ -69,7 +76,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
         },
         ...(compactReviewProjection
           ? { compactReviewProjection }
-          : { reviewChanges: input.reviewChanges }),
+          : { reviewChanges }),
       },
     };
   }
@@ -97,7 +104,7 @@ export async function buildRustBackedSemanticChangeSetPayload(input: {
         },
         changes: semanticDiff.changes,
         semanticDiff,
-        reviewChanges: input.reviewChanges,
+        reviewChanges,
       },
     };
   } catch (error) {

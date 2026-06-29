@@ -1,6 +1,9 @@
 import { toA1 } from '@mog/spreadsheet-utils/a1';
 
-import type { CellChange } from '../../bridges/compute/compute-types.gen';
+import type {
+  CellChange,
+  SemanticWorkbookState,
+} from '../../bridges/compute/compute-types.gen';
 import type { DirectEditPosition, DirectEditRange } from '../../bridges/compute/mutation-admission';
 import { semanticCellEditValue } from './semantic-mutation-capture-projection-helpers';
 
@@ -10,6 +13,7 @@ export type CompactCellValueReviewProjection = {
   readonly schemaVersion: 1;
   readonly kind: 'rectangularCellValueProjection';
   readonly sheetId: string;
+  readonly sheetName?: string;
   readonly rowStart: number;
   readonly rowEnd: number;
   readonly columnStart: number;
@@ -31,6 +35,7 @@ export type CompactCellValueSeries =
 
 type ParsedCellValueReviewChange = {
   readonly sheetId: string;
+  readonly sheetName?: string;
   readonly row: number;
   readonly column: number;
   readonly before: unknown;
@@ -44,6 +49,7 @@ export function compactPlainCellValueReviewChanges(
 
   const parsed: ParsedCellValueReviewChange[] = [];
   let sheetId: string | undefined;
+  let sheetName: string | undefined;
   let rowStart = Number.POSITIVE_INFINITY;
   let rowEnd = Number.NEGATIVE_INFINITY;
   let columnStart = Number.POSITIVE_INFINITY;
@@ -55,6 +61,10 @@ export function compactPlainCellValueReviewChanges(
     if (!parsedChange) return null;
     sheetId ??= parsedChange.sheetId;
     if (parsedChange.sheetId !== sheetId) return null;
+    if (parsedChange.sheetName) {
+      sheetName ??= parsedChange.sheetName;
+      if (parsedChange.sheetName !== sheetName) return null;
+    }
 
     const positionKey = `${parsedChange.row}:${parsedChange.column}`;
     if (seenPositions.has(positionKey)) return null;
@@ -86,6 +96,7 @@ export function compactPlainCellValueReviewChanges(
     schemaVersion: 1,
     kind: 'rectangularCellValueProjection',
     sheetId,
+    ...(sheetName ? { sheetName } : {}),
     rowStart,
     rowEnd,
     columnStart,
@@ -156,6 +167,20 @@ export function compactPlainCellValueReviewProjectionFromCellChanges(input: {
   };
 }
 
+export function reviewChangesWithSheetDisplayNames(input: {
+  readonly reviewChanges: readonly unknown[];
+  readonly beforeState: SemanticWorkbookState;
+  readonly afterState: SemanticWorkbookState;
+}): readonly unknown[] {
+  let changed = false;
+  const reviewChanges = input.reviewChanges.map((change) => {
+    const enriched = reviewChangeWithSheetDisplayName(change, input.beforeState, input.afterState);
+    if (enriched !== change) changed = true;
+    return enriched;
+  });
+  return changed ? reviewChanges : input.reviewChanges;
+}
+
 export function semanticReviewChangesFromPayload(payload: unknown): readonly unknown[] | null {
   if (!isRecord(payload) || payload.schemaVersion !== 1) return null;
   if (Array.isArray(payload.reviewChanges) && payload.reviewChanges.length > 0) {
@@ -199,6 +224,9 @@ function materializeCompactReviewChange(
       value: seriesValueAt(projection.after, index),
     },
     display: {
+      ...(projection.sheetName
+        ? { sheetName: { kind: 'value' as const, value: projection.sheetName } }
+        : {}),
       address: { kind: 'value', value: address },
     },
     historical: {
@@ -230,8 +258,10 @@ function parsePlainCellValueReviewChange(value: unknown): ParsedCellValueReviewC
   const after = cellValueEndpoint(value.after);
   if (!before.ok || !after.ok) return null;
 
+  const sheetName = displaySheetName(value.display);
   return {
     sheetId,
+    ...(sheetName ? { sheetName } : {}),
     row,
     column,
     before: before.value,
@@ -261,6 +291,7 @@ function parseCompactCellValueReviewProjection(
   if (!isRecord(value)) return null;
   if (value.schemaVersion !== 1 || value.kind !== 'rectangularCellValueProjection') return null;
   const sheetId = typeof value.sheetId === 'string' ? value.sheetId : null;
+  const sheetName = typeof value.sheetName === 'string' && value.sheetName ? value.sheetName : null;
   const rowStart = safeCoordinate(value.rowStart);
   const rowEnd = safeCoordinate(value.rowEnd);
   const columnStart = safeCoordinate(value.columnStart);
@@ -287,6 +318,7 @@ function parseCompactCellValueReviewProjection(
     schemaVersion: 1,
     kind: 'rectangularCellValueProjection',
     sheetId,
+    ...(sheetName ? { sheetName } : {}),
     rowStart,
     rowEnd,
     columnStart,
@@ -319,6 +351,68 @@ function parseSeries(value: unknown, expectedLength: number | null): CompactCell
 
 function seriesValueAt(series: CompactCellValueSeries, index: number): unknown {
   return series.kind === 'constant' ? series.value : series.values[index];
+}
+
+function reviewChangeWithSheetDisplayName(
+  change: unknown,
+  beforeState: SemanticWorkbookState,
+  afterState: SemanticWorkbookState,
+): unknown {
+  if (!isRecord(change)) return change;
+  const sheetId = sheetIdFromCellReviewChange(change);
+  if (!sheetId) return change;
+  const display = isRecord(change.display) ? change.display : {};
+  if (displaySheetName(display)) return change;
+  const sheetName = sheetNameForSheetId(afterState, sheetId) ?? sheetNameForSheetId(beforeState, sheetId);
+  if (!sheetName) return change;
+  return {
+    ...change,
+    display: {
+      ...display,
+      sheetName: { kind: 'value', value: sheetName },
+    },
+  };
+}
+
+function sheetIdFromCellReviewChange(
+  value: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const structural = isRecord(value.structural) ? value.structural : undefined;
+  if (!isCellDomain(structural?.domain)) return undefined;
+
+  const historical = isRecord(value.historical) ? value.historical : undefined;
+  const cell = isRecord(historical?.cell) ? historical.cell : undefined;
+  if (typeof cell?.sheetId === 'string' && cell.sheetId.length > 0) return cell.sheetId;
+
+  if (typeof structural?.entityId !== 'string') return undefined;
+  const separator = structural.entityId.lastIndexOf('!');
+  return separator > 0 ? structural.entityId.slice(0, separator) : undefined;
+}
+
+function isCellDomain(value: unknown): boolean {
+  return value === 'cell' || value === 'cells' || value === 'cells.values';
+}
+
+function sheetNameForSheetId(
+  state: SemanticWorkbookState,
+  sheetId: string,
+): string | undefined {
+  for (const sheet of Object.values(state.sheets)) {
+    if (sheet.sheetId === sheetId && typeof sheet.name === 'string' && sheet.name.length > 0) {
+      return sheet.name;
+    }
+  }
+  return undefined;
+}
+
+function displaySheetName(
+  value: unknown,
+): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const sheetName = value.sheetName;
+  return isRecord(sheetName) && sheetName.kind === 'value' && typeof sheetName.value === 'string'
+    ? sheetName.value
+    : undefined;
 }
 
 function valuesEqual(left: unknown, right: unknown): boolean {

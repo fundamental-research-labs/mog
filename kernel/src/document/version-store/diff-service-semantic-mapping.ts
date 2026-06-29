@@ -8,9 +8,16 @@ import type {
   VersionRedactedValue,
   VersionSemanticValue,
 } from '@mog-sdk/contracts/api';
+import { toA1 } from '@mog/spreadsheet-utils/a1';
 
 import { diagnostic, type DiffServiceDiagnostic } from './diff-service-diagnostics';
 import { mapEntriesWithOrderKeys, type MappedSemanticDiffEntry } from './diff-service-order-key';
+import {
+  mergeSemanticDiffDisplayContexts,
+  semanticDiffDisplayContextFromPayload,
+  sheetNameForCellSemanticChange,
+  type SemanticDiffDisplayContext,
+} from './diff-service-display-context';
 import { projectReviewAccessDiffValue } from './review-access-projection';
 import { semanticReviewChangesFromPayload } from './semantic-review-projection';
 
@@ -25,8 +32,13 @@ type ProjectableSemanticChange = {
   readonly sourceIndex: number;
 };
 
+type SemanticChangeMappingOptions = {
+  readonly displayContext?: SemanticDiffDisplayContext;
+};
+
 export function mapSemanticChangeSet(
   payload: unknown,
+  options: SemanticChangeMappingOptions = {},
 ):
   | { readonly ok: true; readonly items: readonly MappedSemanticDiffEntry[] }
   | { readonly ok: false; readonly diagnostics: readonly DiffServiceDiagnostic[] } {
@@ -56,10 +68,14 @@ export function mapSemanticChangeSet(
   }
 
   const projectableChanges = projectableSemanticChanges(reviewChanges);
+  const displayContext = mergeSemanticDiffDisplayContexts(
+    semanticDiffDisplayContextFromPayload(payload),
+    options.displayContext,
+  );
   const entries: { readonly entry: VersionDiffEntry; readonly source: unknown }[] = [];
   for (let index = 0; index < projectableChanges.length; index++) {
     const projectableChange = projectableChanges[index]!;
-    const entry = mapSemanticChange(projectableChange.value);
+    const entry = mapSemanticChange(projectableChange.value, displayContext);
     if (!entry) {
       if (isIgnorableRustAggregateChange(projectableChange.value)) continue;
       return {
@@ -165,20 +181,27 @@ function isIgnorableRustAggregateChange(value: unknown): boolean {
   return rustSheetProjection(value).kind === 'unchanged';
 }
 
-function mapSemanticChange(value: unknown): VersionDiffEntry | null {
+function mapSemanticChange(
+  value: unknown,
+  displayContext: SemanticDiffDisplayContext,
+): VersionDiffEntry | null {
   if (!isRecord(value)) return null;
-  return mapReviewSemanticChange(value) ?? mapRustSemanticChange(value);
+  return (
+    mapReviewSemanticChange(value, displayContext) ??
+    mapRustSemanticChange(value, displayContext)
+  );
 }
 
 function mapReviewSemanticChange(
   value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
 ): VersionDiffEntry | null {
   const structural = mapStructuralMetadata(value);
   const before = structural ? mapReviewAccessDiffValue(structural, value.before) : null;
   const after = structural ? mapReviewAccessDiffValue(structural, value.after) : null;
   if (!structural || !before || !after) return null;
 
-  const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
+  const display = reviewDiffDisplay(value, displayContext);
   if (value.display !== undefined && !display) return null;
   const historical =
     value.historical === undefined ? undefined : mapDiffHistoricalMetadata(value.historical);
@@ -193,7 +216,26 @@ function mapReviewSemanticChange(
   };
 }
 
-function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
+function reviewDiffDisplay(
+  value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
+): VersionDiffDisplay | undefined | null {
+  const display = value.display === undefined ? undefined : mapDiffDisplay(value.display);
+  if (value.display !== undefined && !display) return null;
+  if (display?.sheetName) return display;
+
+  const sheetName = sheetNameForCellSemanticChange(value, displayContext);
+  if (!sheetName) return display;
+  return {
+    ...display,
+    sheetName,
+  };
+}
+
+function mapRustSemanticChange(
+  value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
+): VersionDiffEntry | null {
   if (
     typeof value.changeId !== 'string' ||
     typeof value.domainId !== 'string' ||
@@ -204,13 +246,13 @@ function mapRustSemanticChange(value: Readonly<Record<string, unknown>>): Versio
   }
 
   if (value.domainId === 'cells.values') {
-    return mapRustCellValueChange(value);
+    return mapRustCellValueChange(value, displayContext);
   }
   if (value.domainId === 'cells.formulas') {
-    return mapRustCellFormulaChange(value);
+    return mapRustCellFormulaChange(value, displayContext);
   }
   if (value.domainId === 'cells.formats.direct') {
-    return mapRustDirectFormatChange(value);
+    return mapRustDirectFormatChange(value, displayContext);
   }
   if (value.domainId === 'sheets') {
     return mapRustSheetChange(value);
@@ -358,7 +400,10 @@ function sameRustSheetRecord(left: RustSheetRecord, right: RustSheetRecord): boo
   return left.sheetId === right.sheetId && left.name === right.name;
 }
 
-function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): VersionDiffEntry | null {
+function mapRustCellValueChange(
+  value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
+): VersionDiffEntry | null {
   if (value.objectKind !== 'cell' && value.objectKind !== 'cell-value') return null;
 
   const cell = rustCellCoordinates(value);
@@ -371,7 +416,7 @@ function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): Versi
     changeId: value.changeId as string,
     domain: 'cells.values',
     propertyPath: ['value'],
-    cell,
+    cell: rustCellCoordinatesWithDisplayContext(cell, displayContext),
     before,
     after,
   });
@@ -379,6 +424,7 @@ function mapRustCellValueChange(value: Readonly<Record<string, unknown>>): Versi
 
 function mapRustCellFormulaChange(
   value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
 ): VersionDiffEntry | null {
   if (value.objectKind !== 'cell-formula' && value.objectKind !== 'cell') return null;
 
@@ -392,7 +438,7 @@ function mapRustCellFormulaChange(
     changeId: value.changeId as string,
     domain: 'cells.formulas',
     propertyPath: ['formula'],
-    cell,
+    cell: rustCellCoordinatesWithDisplayContext(cell, displayContext),
     before,
     after,
   });
@@ -400,6 +446,7 @@ function mapRustCellFormulaChange(
 
 function mapRustDirectFormatChange(
   value: Readonly<Record<string, unknown>>,
+  displayContext: SemanticDiffDisplayContext,
 ): VersionDiffEntry | null {
   if (value.objectKind !== 'direct-format') return null;
 
@@ -413,7 +460,7 @@ function mapRustDirectFormatChange(
     changeId: value.changeId as string,
     domain: 'cells.formats.direct',
     propertyPath: ['format'],
-    cell,
+    cell: rustCellCoordinatesWithDisplayContext(cell, displayContext),
     before,
     after,
   });
@@ -427,7 +474,7 @@ function rustCellEntry(input: {
   readonly before: VersionDiffValue;
   readonly after: VersionDiffValue;
 }): VersionDiffEntry {
-  const address = a1Address(input.cell.row, input.cell.column);
+  const address = toA1(input.cell.row, input.cell.column);
   return {
     structural: {
       kind: 'metadata',
@@ -438,7 +485,12 @@ function rustCellEntry(input: {
     },
     before: input.before,
     after: input.after,
-    display: { address: { kind: 'value', value: address } },
+    display: {
+      ...(input.cell.sheetName
+        ? { sheetName: { kind: 'value' as const, value: input.cell.sheetName } }
+        : {}),
+      address: { kind: 'value', value: address },
+    },
     historical: {
       cell: {
         sheetId: input.cell.sheetId,
@@ -451,22 +503,47 @@ function rustCellEntry(input: {
 
 type RustCellCoordinates = {
   readonly sheetId: string;
+  readonly sheetName?: string;
   readonly row: number;
   readonly column: number;
 };
 
 function rustCellCoordinates(value: Readonly<Record<string, unknown>>): RustCellCoordinates | null {
+  const afterEvidence = rustRecordEvidence(value.afterRecord);
+  const beforeEvidence = rustRecordEvidence(value.beforeRecord);
   return (
-    rustCellCoordinatesFromEvidence(value.afterRecord) ??
-    rustCellCoordinatesFromEvidence(value.beforeRecord) ??
-    rustCellCoordinatesFromObjectId(value.objectId)
+    rustCellCoordinatesFromEvidenceRecord(afterEvidence) ??
+    rustCellCoordinatesFromEvidenceRecord(beforeEvidence) ??
+    rustCellCoordinatesWithEvidence(
+      rustCellCoordinatesFromObjectId(value.objectId),
+      afterEvidence ?? beforeEvidence,
+    )
   );
 }
 
-function rustCellCoordinatesFromEvidence(value: unknown): RustCellCoordinates | null {
-  const evidence = rustRecordEvidence(value);
-  if (!evidence || !isRecord(evidence.record)) return null;
-  return rustCellCoordinatesFromRecord(evidence.record);
+function rustCellCoordinatesFromEvidenceRecord(
+  evidence: RustRecordEvidence | null,
+): RustCellCoordinates | null {
+  if (!evidence) return null;
+  const coordinates = isRecord(evidence.record)
+    ? rustCellCoordinatesFromRecord(evidence.record)
+    : null;
+  return rustCellCoordinatesWithEvidence(
+    coordinates ?? rustCellCoordinatesFromObjectId(evidence.objectId),
+    evidence,
+  );
+}
+
+function rustCellCoordinatesWithEvidence(
+  coordinates: RustCellCoordinates | null,
+  evidence: RustRecordEvidence | null,
+): RustCellCoordinates | null {
+  if (!coordinates) return null;
+  const sheetName = safeSheetName(evidence?.sheetName);
+  return {
+    ...coordinates,
+    ...(sheetName ? { sheetName } : {}),
+  };
 }
 
 function rustCellCoordinatesFromRecord(
@@ -484,7 +561,10 @@ function rustCellCoordinatesFromRecord(
 
 function rustCellCoordinatesFromObjectId(value: unknown): RustCellCoordinates | null {
   if (typeof value !== 'string') return null;
-  const cellObjectId = stripRustObjectPrefix(stripRustObjectPrefix(value, 'value:'), 'formula:');
+  const cellObjectId = stripRustObjectPrefix(
+    stripRustObjectPrefix(stripRustObjectPrefix(value, 'direct-format:'), 'value:'),
+    'formula:',
+  );
   const match = /^cell:(.+):r([0-9]+):c([0-9]+)$/.exec(cellObjectId);
   if (!match) return null;
   const row = Number(match[2]);
@@ -496,8 +576,25 @@ function rustCellCoordinatesFromObjectId(value: unknown): RustCellCoordinates | 
 function rustDirectFormatCoordinates(
   value: Readonly<Record<string, unknown>>,
 ): RustCellCoordinates | null {
-  if (typeof value.objectId !== 'string') return null;
-  return rustCellCoordinatesFromObjectId(stripRustObjectPrefix(value.objectId, 'direct-format:'));
+  const afterEvidence = rustRecordEvidence(value.afterRecord);
+  const beforeEvidence = rustRecordEvidence(value.beforeRecord);
+  return (
+    rustCellCoordinatesFromEvidenceRecord(afterEvidence) ??
+    rustCellCoordinatesFromEvidenceRecord(beforeEvidence) ??
+    rustCellCoordinatesWithEvidence(
+      rustCellCoordinatesFromObjectId(value.objectId),
+      afterEvidence ?? beforeEvidence,
+    )
+  );
+}
+
+function rustCellCoordinatesWithDisplayContext(
+  coordinates: RustCellCoordinates,
+  displayContext: SemanticDiffDisplayContext,
+): RustCellCoordinates {
+  if (coordinates.sheetName) return coordinates;
+  const sheetName = displayContext.sheetNamesBySheetId.get(coordinates.sheetId);
+  return sheetName ? { ...coordinates, sheetName } : coordinates;
 }
 
 function mapRustCellValueDiffValue(value: unknown): VersionDiffValue | null {
@@ -592,12 +689,16 @@ function mapPlainJsonValue(value: unknown, depth = 0): VersionSemanticValue | un
   return mapPlainJsonObjectValue(value);
 }
 
-function rustRecordEvidence(value: unknown): {
+type RustRecordEvidence = {
   readonly objectId: string;
   readonly objectKind: string;
   readonly domainId: string;
+  readonly sheetId?: string;
+  readonly sheetName?: string;
   readonly record: unknown;
-} | null {
+};
+
+function rustRecordEvidence(value: unknown): RustRecordEvidence | null {
   if (
     !isRecord(value) ||
     typeof value.objectId !== 'string' ||
@@ -611,6 +712,8 @@ function rustRecordEvidence(value: unknown): {
     objectId: value.objectId,
     objectKind: value.objectKind,
     domainId: value.domainId,
+    ...(typeof value.sheetId === 'string' ? { sheetId: value.sheetId } : {}),
+    ...(typeof value.sheetName === 'string' ? { sheetName: value.sheetName } : {}),
     record: value.record,
   };
 }
@@ -623,19 +726,8 @@ function stripRustObjectPrefix(value: string, prefix: string): string {
   return value.startsWith(prefix) ? value.slice(prefix.length) : value;
 }
 
-function a1Address(row: number, column: number): string {
-  return `${columnLabel(column)}${row + 1}`;
-}
-
-function columnLabel(column: number): string {
-  let index = column + 1;
-  let label = '';
-  while (index > 0) {
-    const remainder = (index - 1) % 26;
-    label = String.fromCharCode(65 + remainder) + label;
-    index = Math.floor((index - 1) / 26);
-  }
-  return label;
+function safeSheetName(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
 function mapDiffHistoricalMetadata(value: unknown): VersionDiffHistoricalMetadata | null {

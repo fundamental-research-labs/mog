@@ -73,6 +73,93 @@ export function registerPublicPlainTextEditScenario(): void {
     }
   });
 
+  it('projects committed same-address cell edits with sheet-qualified display names', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const handle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+      await wb.activeSheet.setCell('B3', 'North');
+      const sheet2 = await wb.sheets.add('Sheet2');
+      await sheet2.setCell('B3', 'South');
+
+      const commitResult = await wb.version.commit({
+        expectedHead: {
+          commitId: initialized.rootCommit.id,
+          revision: initialized.initialHead.revision,
+          symbolicHeadRevision: initialized.symbolicHead.revision,
+        },
+      });
+      if (!commitResult.ok) {
+        throw new Error(
+          `expected multi-sheet edit commit success: ${commitResult.error.code}: ${JSON.stringify(
+            commitResult.error,
+          )}`,
+        );
+      }
+
+      const overview = await wb.version.diffOverview(
+        initialized.rootCommit.id,
+        commitResult.value.id,
+        { groupLimit: 10 },
+      );
+      expect(overview.ok).toBe(true);
+      if (!overview.ok) throw new Error(`expected diff overview success: ${overview.error.code}`);
+
+      const detailPages = await Promise.all(
+        overview.value.groups.items.map((group) =>
+          wb!.version.diffGroupDetail(initialized.rootCommit.id, commitResult.value.id, {
+            groupId: group.groupId,
+            pageSize: 10,
+          }),
+        ),
+      );
+      const detailItems = detailPages.flatMap((page) => {
+        expect(page.ok).toBe(true);
+        if (!page.ok) throw new Error(`expected group detail success: ${page.error.code}`);
+        return page.value.items;
+      });
+
+      expect(detailItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            structural: expect.objectContaining({
+              domain: 'cell',
+              propertyPath: ['value'],
+            }),
+            after: { kind: 'value', value: 'North' },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet1' },
+              address: { kind: 'value', value: 'B3' },
+            },
+          }),
+          expect.objectContaining({
+            structural: expect.objectContaining({
+              domain: 'cell',
+              propertyPath: ['value'],
+            }),
+            after: { kind: 'value', value: 'South' },
+            display: {
+              sheetName: { kind: 'value', value: 'Sheet2' },
+              address: { kind: 'value', value: 'B3' },
+            },
+          }),
+        ]),
+      );
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
+
   it('reports a semantically reverted public cell edit as clean in version surface status', async () => {
     const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
     const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));

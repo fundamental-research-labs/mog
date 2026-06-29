@@ -190,8 +190,8 @@ import { WorkbookDiagnosticsImpl } from './diagnostics';
 import { WorkbookLinksImpl } from './links';
 import { createWorkbookContextBinding, type WorkbookContextBinding } from './context-binding';
 import { reconcileCheckoutActiveSheet } from './version/checkout/version-checkout-materializer-active-sheet';
-import { createWorkbookVersionSurfaceStatusService } from './version/surface-status/version-surface-status-service';
-import type { VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
+import { createWorkbookVersionSurfaceStatusService, type VersionSurfaceActiveCheckoutStateChanged } from './version/surface-status/version-surface-status-service';
+import { readVersionSurfaceSemanticDirtyState } from './version/surface-status/version-surface-status-semantic-dirty';
 import { shouldTrackEventAsWorkbookDirty } from './workbook-dirty-event-filter';
 import {
   applyWorkbookReadOnlyMode,
@@ -246,7 +246,7 @@ export abstract class WorkbookImplFoundation {
   private _dirtyRefreshQueued = false;
   protected readonly checkoutTransactions = createWorkbookCheckoutTransactionCoordinator({
     readContext: () => this.ctx,
-    isDirty: () => this._dirty,
+    readDirtyState: () => this.readVersionDirtyTrackingState(),
   });
   protected readonly versionCommitStatus = createWorkbookVersionCommitStatusCoordinator({
     notifyStatusChanged: () => this.emitVersionDirtyStatusChanged(this._dirty, this._dirty),
@@ -260,6 +260,7 @@ export abstract class WorkbookImplFoundation {
       revision: this._dirtyStatusSequence,
       contextGeneration: this.contextBinding.generation,
     }),
+    readSemanticDirtyState: (state) => readVersionSurfaceSemanticDirtyState(this.ctx, state),
     readPendingProviderWrites: () => readVersionPendingProviderWrites(this.ctx),
     readLiveCollaborationStatus: () => readVersionLiveCollaborationStatus(this.ctx),
     notifyActiveCheckoutStateChanged: (change) =>

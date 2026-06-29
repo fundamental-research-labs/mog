@@ -11,6 +11,7 @@ import type {
   VersionSurfaceActiveCheckoutStateChangeReason,
   VersionSurfaceCheckoutSession,
   WorkbookVersionSurfaceDirtyState,
+  WorkbookVersionSurfaceSemanticDirtyState,
   WorkbookVersionSurfaceStatusService,
 } from './version-surface-status-service-types';
 import {
@@ -45,9 +46,11 @@ export function createWorkbookVersionSurfaceStatusService(
   };
 
   return {
-    readDirtyStatus: async () =>
-      dirtyStatusFromState(
-        input.readDirtyState(),
+    readDirtyStatus: async () => {
+      const dirtyState = input.readDirtyState();
+      const semanticDirtyState = await readSemanticDirtyState(input, dirtyState);
+      return dirtyStatusFromState(
+        dirtyState,
         input.readPendingProviderWrites
           ? await readVersionSurfacePendingProviderWritesStatus(
               input.readPendingProviderWrites,
@@ -57,7 +60,9 @@ export function createWorkbookVersionSurfaceStatusService(
         input.readLiveCollaborationStatus
           ? await input.readLiveCollaborationStatus()
           : cleanLiveCollaborationStatus(),
-      ),
+        semanticDirtyState,
+      );
+    },
     readActiveCheckoutSession: () => cloneCheckoutSession(activeCheckoutSession),
     restoreActiveCheckoutMaterialization: (session) => {
       if (activeCheckoutSession) return cloneCheckoutSession(activeCheckoutSession);
@@ -216,11 +221,14 @@ function dirtyStatusFromState(
   state: WorkbookVersionSurfaceDirtyState,
   providerWrites: VersionPendingProviderWritesStatus,
   liveCollaboration: VersionLiveCollaborationDirtyStatus,
+  semanticDirtyState: WorkbookVersionSurfaceSemanticDirtyState | null,
 ): VersionSurfaceStatus['dirty'] {
   const pendingRecalc = state.calculationState !== 'done';
+  const hasUncommittedLocalChanges =
+    semanticDirtyState?.hasUncommittedLocalChanges ?? state.hasUncommittedLocalChanges;
   const unsupportedDirtyDomains: readonly string[] = [];
   const unsafeReasons = [
-    ...(state.hasUncommittedLocalChanges
+    ...(hasUncommittedLocalChanges
       ? [
           diagnostic(
             'version.surfaceStatus.dirtyWorkingState',
@@ -262,8 +270,10 @@ function dirtyStatusFromState(
   const statusRevision = [
     'workbook',
     `generation:${state.contextGeneration}`,
-    `revision:${state.revision}`,
-    `dirty:${state.hasUncommittedLocalChanges ? 'yes' : 'no'}`,
+    `rawRevision:${state.revision}`,
+    `rawDirty:${state.hasUncommittedLocalChanges ? 'yes' : 'no'}`,
+    `semantic:${semanticDirtyState?.statusRevision ?? 'not-evaluated'}`,
+    `dirty:${hasUncommittedLocalChanges ? 'yes' : 'no'}`,
     `calc:${state.calculationState}`,
     `checkout:${state.checkoutInProgress ? 'busy' : 'idle'}`,
     `commit:${state.commitInProgress ? 'busy' : 'idle'}`,
@@ -274,8 +284,8 @@ function dirtyStatusFromState(
   return {
     statusRevision,
     checkoutPreflightToken: `VC-05-checkout-preflight:${statusRevision}`,
-    hasUncommittedLocalChanges: state.hasUncommittedLocalChanges,
-    commitEligibleChanges: state.hasUncommittedLocalChanges,
+    hasUncommittedLocalChanges,
+    commitEligibleChanges: hasUncommittedLocalChanges,
     unsupportedDirtyDomains,
     pendingProviderWrites: providerWrites.pendingProviderWrites,
     pendingRecalc,
@@ -285,10 +295,33 @@ function dirtyStatusFromState(
     source: 'VC-05',
     diagnostics: dedupeDiagnostics([
       ...unsafeReasons,
+      ...(semanticDirtyState?.diagnostics ?? []),
       ...providerWrites.diagnostics,
       ...liveCollaboration.diagnostics,
     ]),
   };
+}
+
+async function readSemanticDirtyState(
+  input: CreateWorkbookVersionSurfaceStatusServiceInput,
+  dirtyState: WorkbookVersionSurfaceDirtyState,
+): Promise<WorkbookVersionSurfaceSemanticDirtyState | null> {
+  if (!dirtyState.hasUncommittedLocalChanges || !input.readSemanticDirtyState) return null;
+  try {
+    return await input.readSemanticDirtyState(dirtyState);
+  } catch {
+    return {
+      hasUncommittedLocalChanges: dirtyState.hasUncommittedLocalChanges,
+      statusRevision: 'semantic:failed',
+      diagnostics: [
+        surfaceDiagnostic(
+          'version.surfaceStatus.semanticDirtyStateFailed',
+          'warning',
+          'Semantic dirty-state reconciliation failed; using conservative workbook dirty state.',
+        ),
+      ],
+    };
+  }
 }
 
 function cleanPendingProviderWrites(): VersionPendingProviderWritesStatus {

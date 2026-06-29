@@ -72,4 +72,66 @@ export function registerPublicPlainTextEditScenario(): void {
       await handle.dispose();
     }
   });
+
+  it('reports a semantically reverted public cell edit as clean in version surface status', async () => {
+    const provider = createInMemoryVersionStoreProvider({ documentScope: DOCUMENT_SCOPE });
+    const initialized = await provider.initializeGraph(await initializeInput('graph-1', 'root'));
+    expectInitializeSuccess(initialized);
+
+    const handle = await DocumentFactory.create({
+      documentId: DOCUMENT_ID,
+      environment: 'headless',
+      userTimezone: 'UTC',
+    });
+    let wb: Workbook | undefined;
+
+    try {
+      wb = await handle.workbook({ versioning: withVersionManifest({ provider }) });
+
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        current: { headCommitId: initialized.rootCommit.id },
+        dirty: {
+          hasUncommittedLocalChanges: false,
+          commitEligibleChanges: false,
+          checkoutSafe: true,
+        },
+      });
+
+      await wb.activeSheet.setCell('A1', 'hello');
+      await expect(wb.version.getSurfaceStatus()).resolves.toMatchObject({
+        dirty: {
+          hasUncommittedLocalChanges: true,
+          commitEligibleChanges: true,
+          checkoutSafe: false,
+        },
+      });
+
+      await wb.activeSheet.clear('A1', 'contents');
+
+      const surfaceAfterRevert = await wb.version.getSurfaceStatus();
+      expect((wb as Workbook & { readonly isDirty: boolean }).isDirty).toBe(true);
+      expect(surfaceAfterRevert.dirty).toMatchObject({
+        hasUncommittedLocalChanges: false,
+        commitEligibleChanges: false,
+        checkoutSafe: true,
+      });
+      expect(surfaceAfterRevert.dirty.statusRevision).toEqual(
+        expect.stringContaining('rawDirty:yes'),
+      );
+      expect(surfaceAfterRevert.dirty.statusRevision).toEqual(
+        expect.stringContaining('semantic:basis:'),
+      );
+      expect(surfaceAfterRevert.dirty.statusRevision).toEqual(
+        expect.stringContaining('dirty:no'),
+      );
+      expect(surfaceAfterRevert.dirty.unsafeReasons).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ code: 'version.surfaceStatus.dirtyWorkingState' }),
+        ]),
+      );
+    } finally {
+      if (wb) await wb.close('skipSave');
+      await handle.dispose();
+    }
+  });
 }

@@ -2,7 +2,6 @@ import type { DocumentContext } from '../../context';
 import type { CheckoutSnapshotApplyInput } from '../../document/version-store/checkout-apply';
 import type { CheckoutMaterializationDiagnostic } from '../../document/version-store/checkout-service';
 import {
-  checkoutDirtyWorkingStateDiagnostic,
   checkoutWriteFenceUnavailableDiagnostic,
   type VersionCheckoutTransactionBeginResult,
   type VersionCheckoutTransactionGuard,
@@ -12,10 +11,10 @@ import {
 type WorkbookCheckoutTransactionToken = VersionCheckoutTransactionToken & {
   readonly id: number;
   readonly mutationWatermark: number | null;
+  readonly dirtyRevision: number;
 };
 
 type CheckoutPublishDiagnosticCode =
-  | 'VERSION_CHECKOUT_DIRTY_WORKING_STATE'
   | 'VERSION_CHECKOUT_WRITE_FENCE_STALE'
   | 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE';
 
@@ -29,7 +28,7 @@ export interface WorkbookCheckoutTransactionCoordinator {
 
 export function createWorkbookCheckoutTransactionCoordinator(options: {
   readonly readContext: () => DocumentContext;
-  readonly isDirty: () => boolean;
+  readonly readDirtyState: () => { readonly revision: number };
 }): WorkbookCheckoutTransactionCoordinator {
   return new WorkbookCheckoutTransactionCoordinatorImpl(options);
 }
@@ -46,7 +45,7 @@ class WorkbookCheckoutTransactionCoordinatorImpl implements WorkbookCheckoutTran
   constructor(
     private readonly options: {
       readonly readContext: () => DocumentContext;
-      readonly isDirty: () => boolean;
+      readonly readDirtyState: () => { readonly revision: number };
     },
   ) {}
 
@@ -61,8 +60,8 @@ class WorkbookCheckoutTransactionCoordinatorImpl implements WorkbookCheckoutTran
     if (!token) {
       return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE')];
     }
-    if (this.options.isDirty()) {
-      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_DIRTY_WORKING_STATE')];
+    if (this.options.readDirtyState().revision !== token.dirtyRevision) {
+      return [this.checkoutPublishDiagnostic(input, 'VERSION_CHECKOUT_WRITE_FENCE_STALE')];
     }
 
     const mutationWatermark = this.captureCheckoutMutationWatermark();
@@ -88,9 +87,7 @@ class WorkbookCheckoutTransactionCoordinatorImpl implements WorkbookCheckoutTran
         ],
       };
     }
-    if (this.options.isDirty()) {
-      return { ok: false, diagnostics: [checkoutDirtyWorkingStateDiagnostic()] };
-    }
+    const dirtyRevision = this.options.readDirtyState().revision;
 
     const mutationWatermark = this.captureCheckoutMutationWatermark();
     if (mutationWatermark === false) {
@@ -103,6 +100,7 @@ class WorkbookCheckoutTransactionCoordinatorImpl implements WorkbookCheckoutTran
     const token = {
       id: ++this.checkoutTransactionSequence,
       mutationWatermark,
+      dirtyRevision,
     } satisfies WorkbookCheckoutTransactionToken;
     this.activeCheckoutTransaction = token;
     return { ok: true, token };
@@ -141,8 +139,6 @@ class WorkbookCheckoutTransactionCoordinatorImpl implements WorkbookCheckoutTran
 
 function checkoutPublishDiagnosticMessage(code: CheckoutPublishDiagnosticCode): string {
   switch (code) {
-    case 'VERSION_CHECKOUT_DIRTY_WORKING_STATE':
-      return 'Checkout requires a clean workbook before publishing materialized state.';
     case 'VERSION_CHECKOUT_WRITE_FENCE_STALE':
       return 'Workbook state changed while checkout materialization was in progress.';
     case 'VERSION_CHECKOUT_WRITE_FENCE_UNAVAILABLE':

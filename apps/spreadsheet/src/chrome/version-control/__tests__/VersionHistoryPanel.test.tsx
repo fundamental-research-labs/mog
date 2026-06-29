@@ -182,7 +182,10 @@ describe('VersionHistoryPanelContent', () => {
     const { user } = renderVersionHistoryPanel();
 
     await screen.findByText('Calculated forecast');
-    expect(screen.getByTestId('version-history-current-branch-menu')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('version-history-current-branch-menu')).toHaveAttribute(
+      'data-state',
+      'closed',
+    );
     expect(screen.getByTestId('version-history-current-branch-trigger')).toHaveTextContent(
       'Current branch',
     );
@@ -252,6 +255,19 @@ describe('VersionHistoryPanelContent', () => {
     expect(screen.queryByTestId('version-history-promote-remote-button')).not.toBeInTheDocument();
     expect(screen.queryByTestId('version-history-merge-controls')).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Merge' })).not.toBeInTheDocument();
+  });
+
+  it('toggles the current branch menu closed from a second trigger click', async () => {
+    const { user } = renderVersionHistoryPanel();
+
+    await screen.findByText('Calculated forecast');
+    const menu = await openCurrentBranchMenu(user);
+    expect(screen.getByTestId('version-history-branch-name-input')).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('version-history-current-branch-trigger'));
+
+    await waitFor(() => expect(menu).toHaveAttribute('data-state', 'closed'));
+    expect(screen.queryByTestId('version-history-branch-name-input')).not.toBeInTheDocument();
   });
 
   it('keeps commit, branch, checkout, and diff controls disabled when capabilities are unavailable', async () => {

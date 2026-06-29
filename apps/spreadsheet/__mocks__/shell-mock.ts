@@ -13,7 +13,15 @@
 // transforms this file with the same `useESM: true` config used for the
 // rest of the codebase, producing real ESM named exports that the
 // linker can bind.
-import { createContext, createElement, Fragment, type ReactNode } from 'react';
+import {
+  cloneElement,
+  createContext,
+  createElement,
+  Fragment,
+  isValidElement,
+  useContext,
+  type ReactNode,
+} from 'react';
 import { setup, assign, type AnyActorRef } from 'xstate';
 
 const MAX_STACK_DEPTH = 10;
@@ -339,6 +347,33 @@ type ChildrenProps = { children?: ReactNode; [key: string]: unknown };
 
 const renderChildren = ({ children }: ChildrenProps) => createElement(Fragment, null, children);
 const renderNull = () => null;
+const MockPopoverContext = createContext<{
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
+}>({});
+
+export const Popover: any = ({
+  children,
+  open,
+  onOpenChange,
+}: ChildrenProps & {
+  readonly open?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
+}) => createElement(MockPopoverContext.Provider, { value: { open, onOpenChange } }, children);
+
+export const PopoverTrigger: any = ({ children }: ChildrenProps) => {
+  const { open, onOpenChange } = useContext(MockPopoverContext);
+  if (!isValidElement(children)) return createElement(Fragment, null, children);
+  const childProps = children.props as {
+    readonly onClick?: (event: { readonly defaultPrevented?: boolean }) => void;
+  };
+  return cloneElement(children, {
+    onClick: (event: { readonly defaultPrevented?: boolean }) => {
+      childProps.onClick?.(event);
+      if (!event.defaultPrevented) onOpenChange?.(!open);
+    },
+  });
+};
 
 export const DocumentManagerProvider: any = renderChildren;
 export const PlatformIdentityProvider: any = renderChildren;
@@ -373,10 +408,8 @@ export const Label: any = renderNull;
 export const Listbox: any = renderNull;
 export const MenuItem: any = renderChildren;
 export const MenuSeparator: any = renderNull;
-export const Popover: any = renderChildren;
 export const PopoverAnchor: any = renderChildren;
 export const PopoverContent: any = renderChildren;
-export const PopoverTrigger: any = renderChildren;
 export const RadioGroup: any = renderNull;
 export const SectionLabel: any = renderNull;
 export const SegmentedControl: any = renderNull;

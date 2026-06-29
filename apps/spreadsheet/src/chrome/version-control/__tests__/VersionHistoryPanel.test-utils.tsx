@@ -677,9 +677,10 @@ export function checkoutBranchTestId(refName: string): string {
 
 export async function openCurrentBranchMenu(user: VersionHistoryPanelUser): Promise<HTMLElement> {
   const menu = screen.getByTestId('version-history-current-branch-menu');
-  if (!menu.hasAttribute('open')) {
+  if (menu.getAttribute('data-state') !== 'open') {
     await user.click(screen.getByTestId('version-history-current-branch-trigger'));
-    await waitFor(() => expect(menu).toHaveAttribute('open'));
+    await waitFor(() => expect(menu).toHaveAttribute('data-state', 'open'));
+    await screen.findByTestId('version-history-branch-name-input');
   }
   return menu;
 }

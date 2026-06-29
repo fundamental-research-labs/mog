@@ -2,7 +2,7 @@
   "name": "mog-xlsx-editor",
   "displayName": "Mog Spreadsheet",
   "description": "Open, inspect, edit, and save XLSX workbooks in VS Code with Mog's spreadsheet runtime.",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "publisher": "FundamentalResearchLabs",
   "icon": "resources/icon.png",
   "license": "Apache-2.0",

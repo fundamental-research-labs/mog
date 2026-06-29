@@ -71,22 +71,26 @@ export function VersionHistoryDiffPreview({
   readonly onSelectGroup: (groupId: VersionDiffGroupId) => void;
   readonly onLoadMoreDetail: () => void;
   readonly onFiltersChange?: (filters: VersionDiffFilterSelection) => void;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   if (!diffPreview) {
+    if (diffEnabled) {
+      return null;
+    }
+
     return (
       <section
         className="flex min-h-[132px] flex-col gap-2 rounded-sm border border-ss-border bg-ss-surface-secondary p-2.5"
         aria-label="Diff viewer"
         data-testid="version-history-diff-viewer"
-        data-state={diffEnabled ? 'idle' : 'unavailable'}
+        data-state="unavailable"
       >
-        <DiffViewerHeader stateLabel={diffEnabled ? 'No diff' : 'Unavailable'} />
+        <DiffViewerHeader stateLabel="Unavailable" />
         <div className="flex flex-1 items-center justify-center rounded-sm border border-dashed border-ss-border bg-ss-surface px-3 py-4 text-[11px] text-ss-text-secondary">
-          {diffEnabled ? 'No diff loaded' : 'Diff unavailable'}
+          Diff unavailable
         </div>
-        {!diffEnabled && diffDisabledReason ? (
+        {diffDisabledReason ? (
           <div
             id="version-diff-unavailable-reason"
             className="text-[11px] leading-snug text-ss-text-secondary"
@@ -100,7 +104,8 @@ export function VersionHistoryDiffPreview({
   }
 
   const summary = diffPreview.overview.summary;
-  const state = summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
+  const state =
+    summary.exactTotalChanges === 0 ? 'empty' : summary.incomplete ? 'incomplete' : 'changes';
   const stateLabel = state === 'incomplete' ? 'Incomplete' : 'Changes';
   const summaryId = 'version-history-parent-diff-summary';
   const targetLabel = diffPreview.targetLabel ?? shortCommitId(diffPreview.target);
@@ -213,11 +218,7 @@ function DiffFilterMenu({
           }}
           className="absolute right-0 top-full z-ss-popover mt-1 w-[284px] rounded-sm border border-ss-border bg-ss-surface p-2 shadow-ss-dropdown"
         >
-          <DiffFilterControls
-            preview={preview}
-            onFiltersChange={onFiltersChange}
-            layout="menu"
-          />
+          <DiffFilterControls preview={preview} onFiltersChange={onFiltersChange} layout="menu" />
         </div>
       ) : null}
     </div>
@@ -493,9 +494,7 @@ function DiffGroupList({
                   {group.domain} - {group.operation} - historical metadata
                 </span>
               </span>
-              <span className="shrink-0 text-ss-text-secondary">
-                {formatGroupCount(group)}
-              </span>
+              <span className="shrink-0 text-ss-text-secondary">{formatGroupCount(group)}</span>
             </button>
           </li>
         ))}
@@ -744,15 +743,62 @@ function DiffLine({
 
 function diffEntryTitle(entry: VersionDiffEntry): string {
   const rowColumnSummary = versionRowColumnDiffSummary(entry);
-  if (rowColumnSummary) return versionRowColumnDiffTitle(rowColumnSummary);
+  if (rowColumnSummary)
+    return formatSheetQualifiedDescription(entry, versionRowColumnDiffTitle(rowColumnSummary));
 
   const address = formatDisplayValue(entry.display?.address);
   const entityLabel = formatDisplayValue(entry.display?.entityLabel);
-  if (address && entityLabel) return `${entityLabel} ${address}`;
-  if (address) return address;
+  const qualifiedAddress = address ? formatSheetQualifiedAddress(entry, address) : undefined;
+  if (qualifiedAddress && entityLabel) {
+    if (entityLabel === qualifiedAddress || entityLabel.endsWith(`!${address}`)) return entityLabel;
+    return `${entityLabel} ${qualifiedAddress}`;
+  }
+  if (qualifiedAddress) return qualifiedAddress;
+  const sheetLabel = entrySheetLabel(entry);
+  if (sheetLabel && entityLabel) return `${sheetLabel} - ${entityLabel}`;
   if (entityLabel) return entityLabel;
   if (entry.structural.kind === 'metadata') return entry.structural.entityId;
   return 'Restricted change';
+}
+
+function formatSheetQualifiedAddress(entry: VersionDiffEntry, address: string): string {
+  const sheetLabel = entrySheetLabel(entry);
+  return sheetLabel ? `${sheetLabel}!${address}` : address;
+}
+
+function formatSheetQualifiedDescription(entry: VersionDiffEntry, description: string): string {
+  const sheetLabel = entrySheetLabel(entry);
+  return sheetLabel ? `${sheetLabel} - ${description}` : description;
+}
+
+function entrySheetLabel(entry: VersionDiffEntry): string | undefined {
+  const displaySheetName = entry.display?.sheetName;
+  if (displaySheetName?.kind === 'redacted') return 'Restricted sheet';
+  return (
+    formatDisplayValue(displaySheetName) ??
+    entry.historical?.cell?.sheetId ??
+    entry.historical?.range?.sheetId ??
+    sheetIdFromSemanticValues(entry) ??
+    sheetIdFromStructuralMetadata(entry)
+  );
+}
+
+function sheetIdFromSemanticValues(entry: VersionDiffEntry): string | undefined {
+  for (const value of [entry.after, entry.before]) {
+    if (value.kind !== 'value') continue;
+    const fields = semanticObjectFields(value.value);
+    const sheetId = fields?.find((field) => field.key === 'sheetId')?.value;
+    if (typeof sheetId === 'string' && sheetId.trim().length > 0) return sheetId;
+  }
+  return undefined;
+}
+
+function sheetIdFromStructuralMetadata(entry: VersionDiffEntry): string | undefined {
+  if (entry.structural.kind !== 'metadata') return undefined;
+  const separator = entry.structural.entityId.lastIndexOf('!');
+  if (separator <= 0) return undefined;
+  const sheetId = entry.structural.entityId.slice(0, separator);
+  return sheetId.trim().length > 0 ? sheetId : undefined;
 }
 
 function formatDisplayValue(value: VersionDiffDisplayValue | undefined): string | undefined {
@@ -837,9 +883,7 @@ function formatNumberFormatLabel(formatCode: string): string {
 }
 
 function formatFormatPropertyName(key: string): string {
-  return key
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/^./, (first) => first.toUpperCase());
+  return key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (first) => first.toUpperCase());
 }
 
 function formatSemanticValue(value: VersionSemanticValue, depth = 0): string {
@@ -872,9 +916,7 @@ function truncateValue(value: string, maxLength: number): string {
 
 function formatSummaryCount(summary: VersionDiffOverview['summary']): string {
   if (summary.exactTotalChanges !== undefined) {
-    return `${summary.exactTotalChanges} ${
-      summary.exactTotalChanges === 1 ? 'change' : 'changes'
-    }`;
+    return `${summary.exactTotalChanges} ${summary.exactTotalChanges === 1 ? 'change' : 'changes'}`;
   }
   if (summary.minimumChangeCount !== undefined) return `${summary.minimumChangeCount}+ changes`;
   if (summary.totalEstimate !== undefined) return `About ${summary.totalEstimate} changes`;
@@ -883,11 +925,19 @@ function formatSummaryCount(summary: VersionDiffOverview['summary']): string {
 
 function formatGroupTitle(group: VersionDiffGroup): string {
   const address = formatDisplayValue(group.address);
-  const sheetName = formatDisplayValue(group.sheetName);
-  if (sheetName && address) return `${sheetName} ${address}`;
+  const sheetName = formatSheetLabel(group.sheetName, group.sheetId);
+  if (sheetName && address) return `${sheetName}!${address}`;
   if (address) return address;
-  if (group.sheetId && group.kind !== 'domain') return `${group.sheetId} ${group.kind}`;
+  if (sheetName) return `${sheetName} ${group.kind}`;
   return `${group.domain} ${group.kind}`;
+}
+
+function formatSheetLabel(
+  sheetName: VersionDiffDisplayValue | undefined,
+  fallbackSheetId: string | undefined,
+): string | undefined {
+  if (sheetName?.kind === 'redacted') return 'Restricted sheet';
+  return formatDisplayValue(sheetName) ?? fallbackSheetId;
 }
 
 function formatGroupCount(group: VersionDiffGroup): string {

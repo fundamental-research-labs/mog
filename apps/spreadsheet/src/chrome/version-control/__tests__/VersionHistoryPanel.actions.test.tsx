@@ -41,14 +41,14 @@ type ParentDiffPreviewCase = readonly [
 ];
 
 const parentDiffPreviewCases: readonly ParentDiffPreviewCase[] = [
-  ['empty', versionDiffOverview({ exactTotalChanges: 0 }), 'empty', 'No grouped changes', '0 changes'],
   [
-    'changes',
-    versionDiffOverview(),
-    'changes',
-    'Changes',
-    '1 change',
+    'empty',
+    versionDiffOverview({ exactTotalChanges: 0 }),
+    'empty',
+    'No grouped changes',
+    '0 changes',
   ],
+  ['changes', versionDiffOverview(), 'changes', 'Changes', '1 change'],
   [
     'incomplete',
     versionDiffOverview({
@@ -316,9 +316,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await user.type(screen.getByTestId('version-history-branch-name-input'), 'action-busy');
     await user.click(screen.getByTestId('version-history-create-branch-button'));
 
-    await waitFor(() =>
-      expect(workbook.version.createBranchFromCurrent).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(workbook.version.createBranchFromCurrent).toHaveBeenCalledTimes(1));
     expect(screen.getByTestId('version-history-action-result')).toHaveTextContent(
       'Creating branch',
     );
@@ -580,8 +578,7 @@ describe('VersionHistoryPanelContent action flows', () => {
     await waitFor(() =>
       expect(screen.queryByTestId('version-history-parent-diff')).not.toBeInTheDocument(),
     );
-    expect(screen.getByTestId('version-history-diff-viewer')).toHaveAttribute('data-state', 'idle');
-    expect(screen.getByTestId('version-history-diff-viewer')).toHaveTextContent('No diff loaded');
+    expect(screen.queryByTestId('version-history-diff-viewer')).not.toBeInTheDocument();
     expect(workbook.version.diffOverview).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId(parentDiffButtonTestId(HEAD_COMMIT_ID))).toHaveAccessibleName(
       `Diff ${shortCommitId(HEAD_COMMIT_ID)} against parent`,
@@ -612,35 +609,47 @@ describe('VersionHistoryPanelContent action flows', () => {
       target: { value: 'cells' },
     });
     await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(2));
-    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-      groupLimit: 50,
-      includeDiagnostics: true,
-      filters: { domains: ['cells'] },
-    });
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: { domains: ['cells'] },
+      },
+    );
 
     fireEvent.change(screen.getByTestId('version-history-diff-filter-sheet'), {
       target: { value: 'sheet-1' },
     });
     await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(3));
-    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-      groupLimit: 50,
-      includeDiagnostics: true,
-      filters: { sheetIds: ['sheet-1'], domains: ['cells'] },
-    });
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: { sheetIds: ['sheet-1'], domains: ['cells'] },
+      },
+    );
 
     fireEvent.change(screen.getByTestId('version-history-diff-filter-operation'), {
       target: { value: 'changed' },
     });
     await waitFor(() => expect(workbook.version.diffOverview).toHaveBeenCalledTimes(4));
-    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(PARENT_COMMIT_ID, HEAD_COMMIT_ID, {
-      groupLimit: 50,
-      includeDiagnostics: true,
-      filters: {
-        sheetIds: ['sheet-1'],
-        domains: ['cells'],
-        operations: ['changed'],
+    expect(workbook.version.diffOverview).toHaveBeenLastCalledWith(
+      PARENT_COMMIT_ID,
+      HEAD_COMMIT_ID,
+      {
+        groupLimit: 50,
+        includeDiagnostics: true,
+        filters: {
+          sheetIds: ['sheet-1'],
+          domains: ['cells'],
+          operations: ['changed'],
+        },
       },
-    });
+    );
 
     await waitFor(() =>
       expect(workbook.version.diffGroupDetail).toHaveBeenCalledWith(
@@ -681,15 +690,21 @@ describe('VersionHistoryPanelContent action flows', () => {
 
   it('surfaces commit, branch, checkout, and parent diff errors in the action result region', async () => {
     const workbook = createWorkbook({
-      commitCurrent: jest.fn(async () => failedInvalidState('Commit rejected by version provider.')),
+      commitCurrent: jest.fn(async () =>
+        failedInvalidState('Commit rejected by version provider.'),
+      ),
       createBranchFromCurrent: jest.fn(async () =>
         failedInvalidBranchName(
           'refs/heads/provider-rejected',
           'Branch rejected by version provider.',
         ),
       ),
-      checkoutBranch: jest.fn(async () => failedInvalidState('Checkout rejected by version provider.')),
-      diffOverview: jest.fn(async () => failedNotFound('version diff', 'Diff target is unavailable.')),
+      checkoutBranch: jest.fn(async () =>
+        failedInvalidState('Checkout rejected by version provider.'),
+      ),
+      diffOverview: jest.fn(async () =>
+        failedNotFound('version diff', 'Diff target is unavailable.'),
+      ),
     });
     const { user } = renderVersionHistoryPanel({ workbook });
 

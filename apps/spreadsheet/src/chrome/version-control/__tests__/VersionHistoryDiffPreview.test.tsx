@@ -2,7 +2,7 @@ import '@testing-library/jest-dom';
 
 import { jest } from '@jest/globals';
 import { render, screen, within } from '@testing-library/react';
-import type { VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
+import type { VersionDiffGroup, VersionSemanticDiffPage } from '@mog-sdk/contracts/api';
 
 import { VersionHistoryDiffPreview } from '../VersionHistoryDiffPreview';
 import { DIFF_GROUP_ID, versionDiffOverview } from './VersionHistoryPanel.test-utils';
@@ -13,6 +13,19 @@ const TARGET_COMMIT_ID =
   'commit:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 describe('VersionHistoryDiffPreview', () => {
+  it('renders no diff viewer while no enabled diff is selected', () => {
+    render(
+      <VersionHistoryDiffPreview
+        onLoadMoreGroups={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onLoadMoreDetail={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('version-history-diff-viewer')).not.toBeInTheDocument();
+    expect(screen.queryByText('No diff loaded')).not.toBeInTheDocument();
+  });
+
   it('renders semantic changes as compact unified diff rows', () => {
     const page = semanticDiffPage();
     render(
@@ -48,13 +61,109 @@ describe('VersionHistoryDiffPreview', () => {
     expect(viewer).toHaveTextContent('Changes');
     expect(viewer).not.toHaveTextContent('Diff Viewer');
     expect(viewer).toHaveTextContent('aaaaaaaaaaaa...bbbbbbbbbbbb');
-    expect(viewer).toHaveTextContent('Cell A1');
+    expect(viewer).toHaveTextContent('Cell sheet-1!A1');
     expect(viewer).not.toHaveTextContent('cells value');
 
     const viewport = within(viewer).getByTestId('version-history-diff-detail-viewport');
     expect(viewport).toHaveStyle('height: 76px');
+    expect(viewer).toHaveTextContent('Sheet1!A1');
     expect(within(viewport).getByLabelText('Before: Blank')).toBeInTheDocument();
     expect(within(viewport).getByLabelText('After: 42')).toBeInTheDocument();
+  });
+
+  it('renders same-address cell changes with distinct sheet labels', () => {
+    const page = semanticDiffPage([
+      cellDiffEntry({
+        changeId: 'north-a1',
+        sheetId: 'sheet-north',
+        sheetName: 'North',
+        address: 'A1',
+        value: '10',
+      }),
+      cellDiffEntry({
+        changeId: 'south-a1',
+        sheetId: 'sheet-south',
+        sheetName: 'South',
+        address: 'A1',
+        value: '20',
+      }),
+    ]);
+
+    render(
+      <VersionHistoryDiffPreview
+        diffPreview={{
+          base: BASE_COMMIT_ID,
+          target: TARGET_COMMIT_ID,
+          overview: versionDiffOverview({
+            baseCommitId: BASE_COMMIT_ID,
+            targetCommitId: TARGET_COMMIT_ID,
+            exactTotalChanges: page.items.length,
+          }),
+          activeGroupId: DIFF_GROUP_ID,
+          detailPages: [page],
+          detailItems: page.items,
+          loadedDetailCount: page.items.length,
+          loadedDetailPageCount: 1,
+          hasMoreDetail: false,
+          loadingGroups: false,
+          loadingDetail: false,
+          inlineDetailMode: false,
+          inlineDetailItems: [],
+          loadingInlineDetail: false,
+          inlineDetailHasMore: false,
+        }}
+        onLoadMoreGroups={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onLoadMoreDetail={jest.fn()}
+      />,
+    );
+
+    const viewport = screen.getByTestId('version-history-diff-detail-viewport');
+    expect(within(viewport).getByText('Cell North!A1')).toBeInTheDocument();
+    expect(within(viewport).getByText('Cell South!A1')).toBeInTheDocument();
+    expect(within(viewport).queryByText('Cell A1')).not.toBeInTheDocument();
+  });
+
+  it('qualifies grouped address labels with the typed sheet id when no sheet name is available', () => {
+    const page = semanticDiffPage();
+    render(
+      <VersionHistoryDiffPreview
+        diffPreview={{
+          base: BASE_COMMIT_ID,
+          target: TARGET_COMMIT_ID,
+          overview: versionDiffOverview({
+            baseCommitId: BASE_COMMIT_ID,
+            targetCommitId: TARGET_COMMIT_ID,
+            groups: [
+              cellRangeGroup({
+                groupId: DIFF_GROUP_ID,
+                sheetId: 'sheet-north',
+                address: 'A1',
+              }),
+            ],
+          }),
+          activeGroupId: DIFF_GROUP_ID,
+          detailPages: [page],
+          detailItems: page.items,
+          loadedDetailCount: page.items.length,
+          loadedDetailPageCount: 1,
+          hasMoreDetail: false,
+          loadingGroups: false,
+          loadingDetail: false,
+          inlineDetailMode: false,
+          inlineDetailItems: [],
+          loadingInlineDetail: false,
+          inlineDetailHasMore: false,
+        }}
+        onLoadMoreGroups={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onLoadMoreDetail={jest.fn()}
+      />,
+    );
+
+    const groupList = screen.getByTestId('version-history-diff-group-list');
+    expect(groupList).toHaveTextContent('sheet-north!A1');
+    expect(groupList).not.toHaveTextContent('Sheet1!A1');
   });
 
   it('renders row and column insertions as spreadsheet structure changes', () => {
@@ -206,6 +315,78 @@ function semanticDiffPage(
     limit: 50,
     readRevision: { kind: 'counter', value: '4' },
     order: 'semantic-change-order',
+  };
+}
+
+function cellDiffEntry({
+  changeId,
+  sheetId,
+  sheetName,
+  address,
+  value,
+}: {
+  readonly changeId: string;
+  readonly sheetId: string;
+  readonly sheetName: string;
+  readonly address: string;
+  readonly value: string;
+}): VersionSemanticDiffPage['items'][number] {
+  return {
+    structural: {
+      kind: 'metadata',
+      changeId,
+      domain: 'cells',
+      entityId: `${sheetId}!${address}`,
+      propertyPath: ['value'],
+    },
+    before: { kind: 'value', value: { kind: 'blank' } },
+    after: { kind: 'value', value },
+    display: {
+      sheetName: { kind: 'value', value: sheetName },
+      address: { kind: 'value', value: address },
+      entityLabel: { kind: 'value', value: 'Cell' },
+    },
+    historical: {
+      cell: {
+        sheetId,
+        row: 0,
+        column: 0,
+      },
+    },
+  };
+}
+
+function cellRangeGroup({
+  groupId,
+  sheetId,
+  address,
+}: {
+  readonly groupId: VersionDiffGroup['groupId'];
+  readonly sheetId: string;
+  readonly address: string;
+}): VersionDiffGroup {
+  return {
+    groupId,
+    key: {
+      kind: 'cellRange',
+      sheetId,
+      domain: 'cells',
+      operation: 'changed',
+      rowStart: 0,
+      rowEnd: 0,
+      columnStart: 0,
+      columnEnd: 0,
+    },
+    kind: 'cellRange',
+    domain: 'cells',
+    sheetId,
+    address: { kind: 'value', value: address },
+    operation: 'changed',
+    changeCount: 1,
+    countPrecision: 'exact',
+    sampleChangeIds: ['change-1'],
+    hasDetail: true,
+    diagnostics: [],
   };
 }
 

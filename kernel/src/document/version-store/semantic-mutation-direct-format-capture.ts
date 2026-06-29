@@ -27,6 +27,13 @@ type DirectCellFormatSemanticChangeRecord = {
   readonly display?: {
     readonly address?: { readonly kind: 'value'; readonly value: string };
   };
+  readonly historical?: {
+    readonly cell?: {
+      readonly sheetId: string;
+      readonly row: number;
+      readonly column: number;
+    };
+  };
 };
 
 export function isDirectCellFormatOperation(
@@ -73,6 +80,13 @@ export function mapDirectCellFormatChanges(
       after: { kind: 'value', value: change.kind === 'Removed' ? null : value },
       display: {
         address: { kind: 'value', value: address },
+      },
+      historical: {
+        cell: {
+          sheetId: change.sheetId,
+          row: change.position.row,
+          column: change.position.col,
+        },
       },
     });
   }

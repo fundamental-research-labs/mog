@@ -23,6 +23,13 @@ type SyncSemanticChangeRecord = {
     readonly address?: { readonly kind: 'value'; readonly value: string };
     readonly entityLabel?: { readonly kind: 'value'; readonly value: string };
   };
+  readonly historical?: {
+    readonly cell?: {
+      readonly sheetId: string;
+      readonly row: number;
+      readonly column: number;
+    };
+  };
 };
 
 export function mapSyncAuthoredCellChanges(
@@ -46,6 +53,13 @@ export function mapSyncAuthoredCellChanges(
       display: {
         address: { kind: 'value', value: address },
         entityLabel: { kind: 'value', value: `${cell.sheetId}!${address}` },
+      },
+      historical: {
+        cell: {
+          sheetId: cell.sheetId,
+          row: cell.position.row,
+          column: cell.position.col,
+        },
       },
     });
   }

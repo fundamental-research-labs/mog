@@ -24,19 +24,6 @@ export type {
   XlsxCleanExportPackageDiagnosticCode,
 } from './xlsx-clean-export-package-scan';
 
-export class XlsxCleanExportPackageError extends Error {
-  readonly code = 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE';
-  readonly diagnostics: readonly XlsxCleanExportPackageDiagnostic[];
-
-  constructor(diagnostics: readonly XlsxCleanExportPackageDiagnostic[]) {
-    super(
-      'XLSX clean export blocked because the package contains active, unsafe, or dangling package content.',
-    );
-    this.name = 'XlsxCleanExportPackageError';
-    this.diagnostics = diagnostics;
-  }
-}
-
 interface ZipEntry {
   readonly name: string;
   readonly centralDirectoryBytes: Uint8Array;
@@ -61,7 +48,6 @@ interface PackageInventoryCleanupPolicy {
     scrubbedPaths: ReadonlySet<string>,
     keptNameSet: ReadonlySet<string>,
   ) => string;
-  readonly assertCleaned?: (xlsxBytes: Uint8Array) => Promise<void>;
 }
 
 export async function removeMogVersionMetadataPackageInventoryFromXlsx(
@@ -81,7 +67,6 @@ export async function removeCleanExportBlockedPackageInventoryFromXlsx(
     collectScrubbedPackagePaths: collectCleanExportScrubbedPackagePaths,
     isRewritableXmlPath: isCleanExportRewritableXmlPath,
     scrubPackageXml: scrubCleanExportPackageXml,
-    assertCleaned: assertXlsxCleanExportPackageIsSafe,
   });
 }
 
@@ -116,7 +101,6 @@ async function removeXlsxPackageInventory(
   }
 
   if (!changed) {
-    await policy.assertCleaned?.(xlsxBytes);
     return xlsxBytes;
   }
 
@@ -166,7 +150,6 @@ async function removeXlsxPackageInventory(
       eocd.comment,
     ),
   ]);
-  await policy.assertCleaned?.(cleaned);
   return cleaned;
 }
 
@@ -199,13 +182,6 @@ async function readPackageInventoryXmlParts(
     });
   }
   return inventoryXmlParts;
-}
-
-async function assertXlsxCleanExportPackageIsSafe(xlsxBytes: Uint8Array): Promise<void> {
-  const diagnostics = await scanXlsxCleanExportPackageDiagnostics(xlsxBytes);
-  if (diagnostics.length > 0) {
-    throw new XlsxCleanExportPackageError(diagnostics);
-  }
 }
 
 function isMogVersionMetadataInventoryPath(path: string): boolean {

@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/cli",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Command-line interface for operating Mog workbooks with the headless SDK",
   "type": "module",
   "bin": {

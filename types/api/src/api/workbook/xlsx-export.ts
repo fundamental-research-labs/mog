@@ -225,7 +225,10 @@ export interface WorkbookXlsxExportOptions {
    * Controls Mog-owned version metadata sidecar export.
    *
    * Default export omits Mog version metadata. `include` writes a redacted
-   * package sidecar containing document identity and the current version head.
+   * package sidecar containing document identity and the current version head
+   * when a readable Mog version head and export authority are available; if
+   * there is no readable Mog version head, export still succeeds and omits the
+   * sidecar.
    */
   readonly versionMetadata?: 'include' | 'omit';
 }

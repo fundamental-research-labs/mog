@@ -6,14 +6,13 @@ import {
   authorizeMetadataSinkWrite,
   createMogWorkbookVersionXlsxMetadata,
   createMogVersionMetadataExportBlockedError,
-  hasVersionHeadFailureDiagnostics,
+  classifyVersionHeadFailureForMetadataExport,
   type MogVersionMetadataExportSink,
   type MogVersionMetadataExportSinkAuthorization,
+  type MogVersionMetadataExportBlockReason,
 } from './version-xlsx-metadata-export-gate';
-import {
-  addMogVersionMetadataToXlsx,
-  removeMogVersionMetadataFromXlsx,
-} from './xlsx-version-metadata-archive';
+import { addMogVersionMetadataToXlsx } from './xlsx-version-metadata-archive';
+import { removeMogVersionMetadataPackageInventoryFromXlsx } from '../../xlsx-clean-export-package';
 
 export async function maybeAddMogVersionMetadataToXlsx(
   ctx: DocumentContext,
@@ -22,9 +21,20 @@ export async function maybeAddMogVersionMetadataToXlsx(
   options: WorkbookXlsxExportOptions | undefined,
   sink: MogVersionMetadataExportSink = MOG_VERSION_METADATA_EXPORT_SINK,
 ): Promise<Uint8Array> {
-  if (options?.versionMetadata !== 'include') return removeMogVersionMetadataFromXlsx(xlsxBytes);
-  const authorization = await authorizeMogVersionMetadataExportSink(ctx, version);
-  return sink.write(xlsxBytes, authorization);
+  const xlsxWithoutImportedMogMetadata =
+    await removeMogVersionMetadataPackageInventoryFromXlsx(xlsxBytes);
+  if (options?.versionMetadata !== 'include') return xlsxWithoutImportedMogMetadata;
+  const authorization = await maybeAuthorizeMogVersionMetadataExportSink(ctx, version);
+  if (!authorization.ok) {
+    if (
+      authorization.reason === 'head-read-failed' ||
+      authorization.reason === 'authority-unavailable'
+    ) {
+      return xlsxWithoutImportedMogMetadata;
+    }
+    throw createMogVersionMetadataExportBlockedError(authorization.reason);
+  }
+  return sink.write(xlsxWithoutImportedMogMetadata, authorization.value);
 }
 
 const MOG_VERSION_METADATA_EXPORT_SINK: MogVersionMetadataExportSink = {
@@ -32,25 +42,25 @@ const MOG_VERSION_METADATA_EXPORT_SINK: MogVersionMetadataExportSink = {
     addMogVersionMetadataToXlsx(xlsxBytes, authorization.metadata),
 };
 
-async function authorizeMogVersionMetadataExportSink(
+async function maybeAuthorizeMogVersionMetadataExportSink(
   ctx: DocumentContext,
   version: Pick<WorkbookVersion, 'getHead'>,
-): Promise<MogVersionMetadataExportSinkAuthorization> {
+): Promise<
+  | { readonly ok: true; readonly value: MogVersionMetadataExportSinkAuthorization }
+  | { readonly ok: false; readonly reason: MogVersionMetadataExportBlockReason }
+> {
   const head = await version.getHead();
   if (!head.ok) {
-    const reason = hasVersionHeadFailureDiagnostics(head.error)
-      ? 'redaction-failed'
-      : 'head-read-failed';
-    throw createMogVersionMetadataExportBlockedError(reason);
+    return { ok: false, reason: classifyVersionHeadFailureForMetadataExport(head.error) };
   }
   const authority = await readCurrentHeadLocalObjectStoreAuthority(ctx, head);
   if (!authority.ok) {
-    throw createMogVersionMetadataExportBlockedError(authority.reason);
+    return { ok: false, reason: authority.reason };
   }
   const metadata = createMogWorkbookVersionXlsxMetadata(ctx, head, authority.value);
   const sinkAuthorization = authorizeMetadataSinkWrite(metadata, authority.value);
   if (!sinkAuthorization.ok) {
-    throw createMogVersionMetadataExportBlockedError(sinkAuthorization.reason);
+    return { ok: false, reason: sinkAuthorization.reason };
   }
-  return sinkAuthorization.value;
+  return sinkAuthorization;
 }

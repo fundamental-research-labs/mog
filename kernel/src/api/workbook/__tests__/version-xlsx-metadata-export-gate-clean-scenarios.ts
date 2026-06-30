@@ -12,9 +12,13 @@ import {
   metadataExportAuthorityProvider,
   metadataExportContext,
   OLD_METADATA_COMMIT_ID,
+  OTHER_METADATA_COMMIT_ID,
   REF_REVISION,
   SEMANTIC_CHANGE_SET_DIGEST,
   SNAPSHOT_ROOT_DIGEST,
+  STALE_IMPORTED_DOCUMENT_ID,
+  STALE_IMPORTED_REF_REVISION,
+  STALE_IMPORTED_WORKSPACE_ID,
   testVersionMetadata,
   versionHead,
 } from './version-xlsx-metadata-export-gate-test-helpers';
@@ -26,6 +30,117 @@ export function registerCleanExportScenarios(): void {
 
   it('omits Mog version metadata when clean XLSX export explicitly requests omit', async () => {
     await expectCleanExportOmitsImportedMetadata({ versionMetadata: 'omit' });
+  });
+
+  it('omits Mog version metadata when opt-in export has no readable version head', async () => {
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: STALE_IMPORTED_DOCUMENT_ID,
+        workspaceId: STALE_IMPORTED_WORKSPACE_ID,
+        commitId: OTHER_METADATA_COMMIT_ID,
+        refRevision: STALE_IMPORTED_REF_REVISION,
+      }),
+    );
+    const sinkWrites = { count: 0 };
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({ documentId: CLEAN_EXPORT_DOCUMENT_ID }),
+      {
+        getHead: async () => ({
+          ok: false,
+          error: { code: 'target_unavailable', target: 'HEAD' },
+        }),
+      } as Parameters<typeof maybeAddMogVersionMetadataToXlsx>[1],
+      xlsxBytes,
+      { versionMetadata: 'include' },
+      blockedMetadataSink(sinkWrites),
+    );
+
+    expect(sinkWrites.count).toBe(0);
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(exported, {
+        expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
+      }),
+    ).toMatchObject({ status: 'absent' });
+    expect(decodeUtf8(exported)).not.toContain(OTHER_METADATA_COMMIT_ID);
+  });
+
+  it('omits Mog version metadata when opt-in export has an uninitialized version graph', async () => {
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: STALE_IMPORTED_DOCUMENT_ID,
+        workspaceId: STALE_IMPORTED_WORKSPACE_ID,
+        commitId: OTHER_METADATA_COMMIT_ID,
+        refRevision: STALE_IMPORTED_REF_REVISION,
+      }),
+    );
+    const sinkWrites = { count: 0 };
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({ documentId: CLEAN_EXPORT_DOCUMENT_ID }),
+      {
+        getHead: async () => ({
+          ok: false,
+          error: {
+            code: 'target_unavailable',
+            target: 'workbook.version.getHead',
+            diagnostics: [
+              {
+                code: 'VERSION_GRAPH_UNINITIALIZED',
+                severity: 'warning',
+                message:
+                  'No document-scoped version graph read service is attached; no commit history is fabricated.',
+              },
+            ],
+          },
+        }),
+      } as Parameters<typeof maybeAddMogVersionMetadataToXlsx>[1],
+      xlsxBytes,
+      { versionMetadata: 'include' },
+      blockedMetadataSink(sinkWrites),
+    );
+
+    expect(sinkWrites.count).toBe(0);
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(exported, {
+        expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
+      }),
+    ).toMatchObject({ status: 'absent' });
+    expect(decodeUtf8(exported)).not.toContain(OTHER_METADATA_COMMIT_ID);
+  });
+
+  it('omits Mog version metadata when opt-in export has no version authority provider', async () => {
+    const currentHead = versionHead({
+      id: OLD_METADATA_COMMIT_ID,
+      refRevision: REF_REVISION,
+    });
+    const xlsxBytes = addMogVersionMetadataToXlsx(
+      await createSourceXlsx(),
+      testVersionMetadata({
+        documentId: STALE_IMPORTED_DOCUMENT_ID,
+        workspaceId: STALE_IMPORTED_WORKSPACE_ID,
+        commitId: OTHER_METADATA_COMMIT_ID,
+        refRevision: STALE_IMPORTED_REF_REVISION,
+      }),
+    );
+    const sinkWrites = { count: 0 };
+    const exported = await maybeAddMogVersionMetadataToXlsx(
+      metadataExportContext({ documentId: CLEAN_EXPORT_DOCUMENT_ID }),
+      { getHead: async () => ({ ok: true, value: currentHead }) } as Parameters<
+        typeof maybeAddMogVersionMetadataToXlsx
+      >[1],
+      xlsxBytes,
+      { versionMetadata: 'include' },
+      blockedMetadataSink(sinkWrites),
+    );
+
+    expect(sinkWrites.count).toBe(0);
+    expect(
+      readAndValidateMogVersionMetadataFromXlsx(exported, {
+        expectedDocumentId: CLEAN_EXPORT_DOCUMENT_ID,
+      }),
+    ).toMatchObject({ status: 'absent' });
+    expect(decodeUtf8(exported)).not.toContain(OTHER_METADATA_COMMIT_ID);
   });
 
   it('strips trusted-looking same-document Mog metadata on clean XLSX export without reading authority', async () => {

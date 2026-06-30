@@ -326,6 +326,56 @@
       ]
     },
     {
+      "id": "mog-api.chart.collection.listCharts.deprecated",
+      "observedPath": "ws.charts.listCharts",
+      "canonicalPath": "ws.charts.list",
+      "status": "deprecated_alias",
+      "appliesTo": "method",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/contracts",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": "0.10.2",
+      "removeAfter": "none",
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+      "runtimeSurfaces": [
+        "typescript",
+        "kernel",
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "deprecated_alias",
+        "kernel": "deprecated_alias",
+        "executeCode-preflight": "deprecated_alias",
+        "api-describe": "deprecated_alias",
+        "agent-guidance": "deprecated_alias",
+        "docs": "deprecated_alias",
+        "python": "structured_diagnostic",
+        "api-eval": "deprecated_alias"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+        "replacements": [
+          "ws.charts.list"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+      ]
+    },
+    {
       "id": "mog-api.chart.imported-short-id.input-alias",
       "observedPath": "chart-import-N",
       "canonicalPath": "ws.charts.*(chartId)",
@@ -414,6 +464,105 @@
       },
       "verification": [
         "pnpm --filter @mog-sdk/kernel test -- api-errors"
+      ]
+    },
+    {
+      "id": "mog-api.chart.record.getAxisItem.unsupported",
+      "observedPath": "chart.getAxisItem",
+      "canonicalPath": "ws.charts.getAxisItem",
+      "status": "structured_diagnostic",
+      "appliesTo": "result",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/sdk",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": null,
+      "removeAfter": null,
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+      "runtimeSurfaces": [
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "structured_diagnostic",
+        "kernel": "structured_diagnostic",
+        "executeCode-preflight": "structured_diagnostic",
+        "api-describe": "structured_diagnostic",
+        "agent-guidance": "structured_diagnostic",
+        "docs": "structured_diagnostic",
+        "python": "structured_diagnostic",
+        "api-eval": "structured_diagnostic"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+        "replacements": [
+          "ws.charts.getAxisItem",
+          "ws.charts.setAxisTitle",
+          "ws.charts.getAppModel"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+      ]
+    },
+    {
+      "id": "mog-api.chart.record.updateRaw.unsupported",
+      "observedPath": "chart.updateRaw",
+      "canonicalPath": "ws.charts.update",
+      "status": "structured_diagnostic",
+      "appliesTo": "result",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/sdk",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": null,
+      "removeAfter": null,
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+      "runtimeSurfaces": [
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "structured_diagnostic",
+        "kernel": "structured_diagnostic",
+        "executeCode-preflight": "structured_diagnostic",
+        "api-describe": "structured_diagnostic",
+        "agent-guidance": "structured_diagnostic",
+        "docs": "structured_diagnostic",
+        "python": "structured_diagnostic",
+        "api-eval": "structured_diagnostic"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+        "replacements": [
+          "ws.charts.setLegendVisible",
+          "ws.charts.setChartTitleVisible",
+          "ws.charts.switchSeriesOrientation",
+          "ws.charts.update"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
       ]
     },
     {
@@ -1816,6 +1965,56 @@
         "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
       ]
     },
+    "mog-api.chart.collection.listCharts.deprecated": {
+      "id": "mog-api.chart.collection.listCharts.deprecated",
+      "observedPath": "ws.charts.listCharts",
+      "canonicalPath": "ws.charts.list",
+      "status": "deprecated_alias",
+      "appliesTo": "method",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/contracts",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": "0.10.2",
+      "removeAfter": "none",
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+      "runtimeSurfaces": [
+        "typescript",
+        "kernel",
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "deprecated_alias",
+        "kernel": "deprecated_alias",
+        "executeCode-preflight": "deprecated_alias",
+        "api-describe": "deprecated_alias",
+        "agent-guidance": "deprecated_alias",
+        "docs": "deprecated_alias",
+        "python": "structured_diagnostic",
+        "api-eval": "deprecated_alias"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+        "replacements": [
+          "ws.charts.list"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+      ]
+    },
     "mog-api.chart.imported-short-id.input-alias": {
       "id": "mog-api.chart.imported-short-id.input-alias",
       "observedPath": "chart-import-N",
@@ -1905,6 +2104,105 @@
       },
       "verification": [
         "pnpm --filter @mog-sdk/kernel test -- api-errors"
+      ]
+    },
+    "mog-api.chart.record.getAxisItem.unsupported": {
+      "id": "mog-api.chart.record.getAxisItem.unsupported",
+      "observedPath": "chart.getAxisItem",
+      "canonicalPath": "ws.charts.getAxisItem",
+      "status": "structured_diagnostic",
+      "appliesTo": "result",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/sdk",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": null,
+      "removeAfter": null,
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+      "runtimeSurfaces": [
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "structured_diagnostic",
+        "kernel": "structured_diagnostic",
+        "executeCode-preflight": "structured_diagnostic",
+        "api-describe": "structured_diagnostic",
+        "agent-guidance": "structured_diagnostic",
+        "docs": "structured_diagnostic",
+        "python": "structured_diagnostic",
+        "api-eval": "structured_diagnostic"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+        "replacements": [
+          "ws.charts.getAxisItem",
+          "ws.charts.setAxisTitle",
+          "ws.charts.getAppModel"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+      ]
+    },
+    "mog-api.chart.record.updateRaw.unsupported": {
+      "id": "mog-api.chart.record.updateRaw.unsupported",
+      "observedPath": "chart.updateRaw",
+      "canonicalPath": "ws.charts.update",
+      "status": "structured_diagnostic",
+      "appliesTo": "result",
+      "ownerTheme": "api-compatibility/chart-api-discoverability",
+      "ownerPackage": "@mog-sdk/sdk",
+      "firstObservedVersion": null,
+      "canonicalSince": null,
+      "deprecatedSince": null,
+      "removeAfter": null,
+      "evidence": [
+        {
+          "source": "trace",
+          "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+        }
+      ],
+      "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+      "runtimeSurfaces": [
+        "executeCode-preflight",
+        "agent-guidance",
+        "docs",
+        "api-eval"
+      ],
+      "surfaceDisposition": {
+        "typescript": "structured_diagnostic",
+        "kernel": "structured_diagnostic",
+        "executeCode-preflight": "structured_diagnostic",
+        "api-describe": "structured_diagnostic",
+        "agent-guidance": "structured_diagnostic",
+        "docs": "structured_diagnostic",
+        "python": "structured_diagnostic",
+        "api-eval": "structured_diagnostic"
+      },
+      "diagnostics": {
+        "code": "MOG002_MOG_API_USAGE",
+        "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+        "replacements": [
+          "ws.charts.setLegendVisible",
+          "ws.charts.setChartTitleVisible",
+          "ws.charts.switchSeriesOrientation",
+          "ws.charts.update"
+        ]
+      },
+      "verification": [
+        "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+        "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
       ]
     },
     "mog-api.chart.root.addChart.unsupported": {
@@ -3075,6 +3373,212 @@
         ]
       }
     ],
+    "chart.getAxisItem": [
+      {
+        "id": "mog-api.chart.record.getAxisItem.unsupported",
+        "observedPath": "chart.getAxisItem",
+        "canonicalPath": "ws.charts.getAxisItem",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+          "replacements": [
+            "ws.charts.getAxisItem",
+            "ws.charts.setAxisTitle",
+            "ws.charts.getAppModel"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
+    "chart.getAxisItem()": [
+      {
+        "id": "mog-api.chart.record.getAxisItem.unsupported",
+        "observedPath": "chart.getAxisItem",
+        "canonicalPath": "ws.charts.getAxisItem",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+          "replacements": [
+            "ws.charts.getAxisItem",
+            "ws.charts.setAxisTitle",
+            "ws.charts.getAppModel"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
+    "chart.updateRaw": [
+      {
+        "id": "mog-api.chart.record.updateRaw.unsupported",
+        "observedPath": "chart.updateRaw",
+        "canonicalPath": "ws.charts.update",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+          "replacements": [
+            "ws.charts.setLegendVisible",
+            "ws.charts.setChartTitleVisible",
+            "ws.charts.switchSeriesOrientation",
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
+    "chart.updateRaw()": [
+      {
+        "id": "mog-api.chart.record.updateRaw.unsupported",
+        "observedPath": "chart.updateRaw",
+        "canonicalPath": "ws.charts.update",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+          "replacements": [
+            "ws.charts.setLegendVisible",
+            "ws.charts.setChartTitleVisible",
+            "ws.charts.switchSeriesOrientation",
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
     "chartNotFound suggestion: getCharts": [
       {
         "id": "mog-api.chart.not-found-guidance",
@@ -3944,6 +4448,110 @@
         },
         "verification": [
           "pnpm --filter @mog-sdk/sdk test -- agent-guidance api-describe"
+        ]
+      }
+    ],
+    "ws.charts.listCharts": [
+      {
+        "id": "mog-api.chart.collection.listCharts.deprecated",
+        "observedPath": "ws.charts.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.10.2",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
+    "ws.charts.listCharts()": [
+      {
+        "id": "mog-api.chart.collection.listCharts.deprecated",
+        "observedPath": "ws.charts.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.10.2",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
         ]
       }
     ],
@@ -7613,7 +8221,159 @@
         ]
       }
     ],
+    "ws.charts.getAxisItem": [
+      {
+        "id": "mog-api.chart.record.getAxisItem.unsupported",
+        "observedPath": "chart.getAxisItem",
+        "canonicalPath": "ws.charts.getAxisItem",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+          "replacements": [
+            "ws.charts.getAxisItem",
+            "ws.charts.setAxisTitle",
+            "ws.charts.getAppModel"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
+    "ws.charts.getAxisItem()": [
+      {
+        "id": "mog-api.chart.record.getAxisItem.unsupported",
+        "observedPath": "chart.getAxisItem",
+        "canonicalPath": "ws.charts.getAxisItem",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; use ws.charts.getAxisItem(chartId, ...) or ws.charts.setAxisTitle(chartId, ...) for axis reads and mutations.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.getAxisItem(...) is a stale chart-record path. Use ws.charts.getAxisItem(chart.id, ...) or ws.charts.setAxisTitle(chart.id, axisRole, title).",
+          "replacements": [
+            "ws.charts.getAxisItem",
+            "ws.charts.setAxisTitle",
+            "ws.charts.getAppModel"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      }
+    ],
     "ws.charts.list": [
+      {
+        "id": "mog-api.chart.collection.listCharts.deprecated",
+        "observedPath": "ws.charts.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.10.2",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      },
       {
         "id": "mog-api.chart.not-found-guidance",
         "observedPath": "chartNotFound suggestion: getCharts()",
@@ -7758,6 +8518,56 @@
       }
     ],
     "ws.charts.list()": [
+      {
+        "id": "mog-api.chart.collection.listCharts.deprecated",
+        "observedPath": "ws.charts.listCharts",
+        "canonicalPath": "ws.charts.list",
+        "status": "deprecated_alias",
+        "appliesTo": "method",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/contracts",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": "0.10.2",
+        "removeAfter": "none",
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Deprecated chart collection listing alias delegates to ws.charts.list(options?).",
+        "runtimeSurfaces": [
+          "typescript",
+          "kernel",
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "deprecated_alias",
+          "kernel": "deprecated_alias",
+          "executeCode-preflight": "deprecated_alias",
+          "api-describe": "deprecated_alias",
+          "agent-guidance": "deprecated_alias",
+          "docs": "deprecated_alias",
+          "python": "structured_diagnostic",
+          "api-eval": "deprecated_alias"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "ws.charts.listCharts() is deprecated. Use ws.charts.list() for canonical chart listing.",
+          "replacements": [
+            "ws.charts.list"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/kernel test -- worksheet-charts",
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      },
       {
         "id": "mog-api.chart.not-found-guidance",
         "observedPath": "chartNotFound suggestion: getCharts()",
@@ -8001,6 +8811,56 @@
     ],
     "ws.charts.update": [
       {
+        "id": "mog-api.chart.record.updateRaw.unsupported",
+        "observedPath": "chart.updateRaw",
+        "canonicalPath": "ws.charts.update",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+          "replacements": [
+            "ws.charts.setLegendVisible",
+            "ws.charts.setChartTitleVisible",
+            "ws.charts.switchSeriesOrientation",
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      },
+      {
         "id": "mog-api.chart.root.updateChart.deprecated",
         "observedPath": "ws.updateChart",
         "canonicalPath": "ws.charts.update",
@@ -8049,6 +8909,56 @@
       }
     ],
     "ws.charts.update()": [
+      {
+        "id": "mog-api.chart.record.updateRaw.unsupported",
+        "observedPath": "chart.updateRaw",
+        "canonicalPath": "ws.charts.update",
+        "status": "structured_diagnostic",
+        "appliesTo": "result",
+        "ownerTheme": "api-compatibility/chart-api-discoverability",
+        "ownerPackage": "@mog-sdk/sdk",
+        "firstObservedVersion": null,
+        "canonicalSince": null,
+        "deprecatedSince": null,
+        "removeAfter": null,
+        "evidence": [
+          {
+            "source": "trace",
+            "reference": "api-compatibility:workbook-api-issues#privateco-imported-chart-learned-paths"
+          }
+        ],
+        "behavior": "Chart records returned by ws.charts.get/list are data records; chart mutations live on ws.charts and should use focused helpers instead of raw patching.",
+        "runtimeSurfaces": [
+          "executeCode-preflight",
+          "agent-guidance",
+          "docs",
+          "api-eval"
+        ],
+        "surfaceDisposition": {
+          "typescript": "structured_diagnostic",
+          "kernel": "structured_diagnostic",
+          "executeCode-preflight": "structured_diagnostic",
+          "api-describe": "structured_diagnostic",
+          "agent-guidance": "structured_diagnostic",
+          "docs": "structured_diagnostic",
+          "python": "structured_diagnostic",
+          "api-eval": "structured_diagnostic"
+        },
+        "diagnostics": {
+          "code": "MOG002_MOG_API_USAGE",
+          "message": "chart.updateRaw(...) is a stale chart-record path. Use focused helpers such as ws.charts.setLegendVisible(chart.id, visible), ws.charts.setChartTitleVisible(chart.id, visible), or ws.charts.switchSeriesOrientation(chart.id).",
+          "replacements": [
+            "ws.charts.setLegendVisible",
+            "ws.charts.setChartTitleVisible",
+            "ws.charts.switchSeriesOrientation",
+            "ws.charts.update"
+          ]
+        },
+        "verification": [
+          "pnpm --filter @mog-sdk/sdk test -- agent-guidance",
+          "dev/api-eval/scenarios/api-compatibility/pv23-imported-chart-learned-paths.ts"
+        ]
+      },
       {
         "id": "mog-api.chart.root.updateChart.deprecated",
         "observedPath": "ws.updateChart",

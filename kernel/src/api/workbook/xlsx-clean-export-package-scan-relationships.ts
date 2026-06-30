@@ -82,6 +82,12 @@ export function scanRelationshipTypeAndTarget(
   }
 }
 
+export function hasCleanExportBlockedRelationship(type: string, target: string): boolean {
+  const counts: XlsxCleanExportPackageDiagnosticCounts = new Map();
+  scanRelationshipTypeAndTarget(type, target, counts);
+  return counts.size > 0;
+}
+
 export function isExternalRelationship(target: string, targetMode: string): boolean {
   const normalizedTarget = stripRelationshipTargetSuffixes(target).replace(/\\/g, '/');
   return (

@@ -575,9 +575,8 @@ export interface Workbook {
   /**
    * Export the workbook as XLSX binary data.
    *
-   * Default export omits Mog-owned version metadata. Pass
-   * `versionMetadata: "include"` to write a redacted Mog sidecar with the
-   * current version head.
+   * Default export omits Mog-owned version metadata. `include` writes a
+   * redacted sidecar when a readable version head and authority are available.
    */
   toXlsx(options?: WorkbookXlsxExportOptions): Promise<Uint8Array>;
 

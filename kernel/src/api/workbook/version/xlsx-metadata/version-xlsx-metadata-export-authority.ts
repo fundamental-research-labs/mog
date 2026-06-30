@@ -55,15 +55,15 @@ export async function readCurrentHeadLocalObjectStoreAuthority(
   if (!hasNoSidecarDiagnostics(head.value)) {
     return { ok: false, reason: 'redaction-failed' };
   }
-  const expectedHead = graphHeadIdentity(head.value);
-  if (!hasAuthoritativeHeadIdentity(expectedHead)) {
+  const provider = versionStoreProviderFromContext(ctx);
+  if (!provider) return { ok: false, reason: 'authority-unavailable' };
+  const providerScope = normalizeProviderDocumentScope(provider);
+  if (!providerScope || !documentScopeMatchesWorkbookContext(ctx, providerScope)) {
     return { ok: false, reason: 'head-unverified' };
   }
 
-  const provider = versionStoreProviderFromContext(ctx);
-  if (!provider) return { ok: false, reason: 'head-unverified' };
-  const providerScope = normalizeProviderDocumentScope(provider);
-  if (!providerScope || !documentScopeMatchesWorkbookContext(ctx, providerScope)) {
+  const expectedHead = graphHeadIdentity(head.value);
+  if (!hasAuthoritativeHeadIdentity(expectedHead)) {
     return { ok: false, reason: 'head-unverified' };
   }
 

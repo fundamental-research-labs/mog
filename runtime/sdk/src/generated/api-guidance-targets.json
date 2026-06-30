@@ -6904,7 +6904,15 @@
       "asyncModel": "promise",
       "signature": "getAxisItem(\n    chartId: string,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
       "typeText": "Promise<SingleAxisConfig|null>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "mog-api.chart.record.getAxisItem.unsupported",
+          "observedPath": "chart.getAxisItem",
+          "canonicalPath": "ws.charts.getAxisItem",
+          "status": "structured_diagnostic",
+          "appliesTo": "result"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
       },
@@ -7305,6 +7313,13 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
+          "id": "mog-api.chart.collection.listCharts.deprecated",
+          "observedPath": "ws.charts.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method"
+        },
+        {
           "id": "mog-api.chart.not-found-guidance",
           "observedPath": "chartNotFound suggestion: getCharts()",
           "canonicalPath": "ws.charts.list",
@@ -7323,6 +7338,33 @@
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
+          "appliesTo": "method"
+        }
+      ],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.charts.listCharts",
+      "stableId": "WorksheetCharts.listCharts",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "listCharts",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "listCharts(options?: ChartReadOptions): Promise<Chart[]>;",
+      "typeText": "Promise<Chart[]>",
+      "compatibility": [
+        {
+          "id": "mog-api.chart.collection.listCharts.deprecated",
+          "observedPath": "ws.charts.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
           "appliesTo": "method"
         }
       ],
@@ -7866,6 +7908,13 @@
       "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
+        {
+          "id": "mog-api.chart.record.updateRaw.unsupported",
+          "observedPath": "chart.updateRaw",
+          "canonicalPath": "ws.charts.update",
+          "status": "structured_diagnostic",
+          "appliesTo": "result"
+        },
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",
@@ -26735,7 +26784,15 @@
       "asyncModel": "promise",
       "signature": "getAxisItem(\n    chartId: string,\n    type: 'category' | 'value' | 'series',\n    group: 'primary' | 'secondary',\n  ): Promise<SingleAxisConfig | null>;",
       "typeText": "Promise<SingleAxisConfig|null>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "mog-api.chart.record.getAxisItem.unsupported",
+          "observedPath": "chart.getAxisItem",
+          "canonicalPath": "ws.charts.getAxisItem",
+          "status": "structured_diagnostic",
+          "appliesTo": "result"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/charts.ts"
       },
@@ -27136,6 +27193,13 @@
       "typeText": "Promise<Chart[]>",
       "compatibility": [
         {
+          "id": "mog-api.chart.collection.listCharts.deprecated",
+          "observedPath": "ws.charts.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
+          "appliesTo": "method"
+        },
+        {
           "id": "mog-api.chart.not-found-guidance",
           "observedPath": "chartNotFound suggestion: getCharts()",
           "canonicalPath": "ws.charts.list",
@@ -27154,6 +27218,33 @@
           "observedPath": "ws.getCharts",
           "canonicalPath": "ws.charts.list",
           "status": "supported_alias",
+          "appliesTo": "method"
+        }
+      ],
+      "source": {
+        "file": "types/api/src/api/worksheet/charts.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.charts.listCharts": {
+      "schemaVersion": "1",
+      "path": "ws.charts.listCharts",
+      "stableId": "WorksheetCharts.listCharts",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCharts",
+      "member": "listCharts",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "listCharts(options?: ChartReadOptions): Promise<Chart[]>;",
+      "typeText": "Promise<Chart[]>",
+      "compatibility": [
+        {
+          "id": "mog-api.chart.collection.listCharts.deprecated",
+          "observedPath": "ws.charts.listCharts",
+          "canonicalPath": "ws.charts.list",
+          "status": "deprecated_alias",
           "appliesTo": "method"
         }
       ],
@@ -27697,6 +27788,13 @@
       "signature": "update(chartId: string, updates: Partial<ChartConfig>): Promise<ChartUpdateReceipt>;",
       "typeText": "Promise<ChartUpdateReceipt>",
       "compatibility": [
+        {
+          "id": "mog-api.chart.record.updateRaw.unsupported",
+          "observedPath": "chart.updateRaw",
+          "canonicalPath": "ws.charts.update",
+          "status": "structured_diagnostic",
+          "appliesTo": "result"
+        },
         {
           "id": "mog-api.chart.root.updateChart.deprecated",
           "observedPath": "ws.updateChart",

@@ -9,9 +9,9 @@ import {
   withVersionManifest,
 } from './version-domain-support-test-utils';
 import {
+  removeCleanExportBlockedPackageInventoryFromXlsx,
   removeMogVersionMetadataPackageInventoryFromXlsx,
   scanXlsxCleanExportPackageDiagnostics,
-  XlsxCleanExportPackageError,
 } from '../xlsx-clean-export-package';
 import { scanXlsxCleanExportPackageInventoryDiagnostics } from '../xlsx-clean-export-package-scan';
 import { readAndValidateMogVersionMetadataFromXlsx } from '../version/xlsx-metadata/xlsx-version-metadata';
@@ -28,9 +28,14 @@ import {
   expectUnsafePackageScanRedacts,
   externalConnectionAndQueryTableVariantFixture,
   inertCustomXmlPackageFixture,
-  redactionCheckPayload,
   scanCleanExportPackage,
 } from './xlsx-clean-export-package-scan-test-utils';
+import {
+  decodeUtf8,
+  encodeUtf8,
+  readZipArchive,
+  writeStoredZip,
+} from './xlsx-clean-export-package-zip-test-utils';
 
 beforeEach(async () => {
   await deleteVersionStoreIndexedDbForTesting();
@@ -98,7 +103,7 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     }
   });
 
-  it('blocks active and unsafe package content with redaction-safe diagnostics', async () => {
+  it('explicitly scrubs active and unsafe package content with redaction-safe diagnostics', async () => {
     const unsafePackage = activeUnsafePackageFixture();
     const diagnostics = await scanXlsxCleanExportPackageDiagnostics(unsafePackage);
     expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
@@ -111,19 +116,33 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     ]);
     expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
 
-    let error: unknown;
-    try {
-      await removeMogVersionMetadataPackageInventoryFromXlsx(unsafePackage);
-    } catch (caught) {
-      error = caught;
-    }
-
-    expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
-    expect(error).toMatchObject({
-      code: 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE',
-      diagnostics,
+    const cleaned = await removeCleanExportBlockedPackageInventoryFromXlsx(unsafePackage);
+    expect(await scanCleanExportPackage(cleaned, [ACTIVE_CONTENT_SECRET])).toEqual({
+      duplicateZipEntries: [],
+      mogCustomXmlMetadataParts: [],
+      mogContentTypeEntries: [],
+      mogRelationshipEntries: [],
+      danglingCustomXmlInventory: [],
+      unsafePackageDiagnostics: [],
+      redactionLeaks: [],
     });
-    expect(redactionCheckPayload(error)).not.toContain(ACTIVE_CONTENT_SECRET);
+  });
+
+  it('does not scrub non-Mog package inventory when removing Mog version metadata', async () => {
+    const packageWithThirdPartyInventory = activePackageVariantFixture();
+    const diagnosticsBefore = await scanXlsxCleanExportPackageDiagnostics(
+      packageWithThirdPartyInventory,
+    );
+
+    const cleaned = await removeMogVersionMetadataPackageInventoryFromXlsx(
+      packageWithThirdPartyInventory,
+    );
+
+    expect(await scanXlsxCleanExportPackageDiagnostics(cleaned)).toEqual(diagnosticsBefore);
+    const entryNames = readZipArchive(cleaned).map((entry) => entry.name);
+    expect(entryNames).toEqual(expect.arrayContaining(['xl/externalLinks/externalLink1.xml']));
+    expect(entryNames).toEqual(expect.arrayContaining(['xl/vbaProjectSignature.bin']));
+    expect(entryNames).toEqual(expect.arrayContaining(['customXml/item1.xml']));
   });
 
   it('scrubs inert customXml package inventory before clean export safety assertion', async () => {
@@ -135,7 +154,7 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
       ),
     ).toEqual(['XLSX_CLEAN_EXPORT_CUSTOM_XML_METADATA_CONTENT']);
 
-    const cleaned = await removeMogVersionMetadataPackageInventoryFromXlsx(customXmlPackage);
+    const cleaned = await removeCleanExportBlockedPackageInventoryFromXlsx(customXmlPackage);
     const cleanExportScan = await scanCleanExportPackage(cleaned, [token]);
 
     expect(cleanExportScan).toEqual({
@@ -174,6 +193,64 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
     expect(diagnostics).toEqual([]);
   });
 
+  it('removes workbook external references when stripping external links', async () => {
+    const externalLinkPackage = writeStoredZip([
+      {
+        name: '[Content_Types].xml',
+        data: encodeUtf8(
+          [
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>',
+            '<Default Extension="xml" ContentType="application/xml"/>',
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>',
+            '<Override PartName="/xl/externalLinks/externalLink1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/>',
+            '</Types>',
+          ].join(''),
+        ),
+      },
+      {
+        name: '_rels/.rels',
+        data: encodeUtf8(
+          [
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+            '<Relationship Id="rIdWorkbook" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>',
+            '</Relationships>',
+          ].join(''),
+        ),
+      },
+      {
+        name: 'xl/workbook.xml',
+        data: encodeUtf8(
+          [
+            '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">',
+            '<externalReferences><externalReference r:id="rIdExternal"/></externalReferences>',
+            '</workbook>',
+          ].join(''),
+        ),
+      },
+      {
+        name: 'xl/_rels/workbook.xml.rels',
+        data: encodeUtf8(
+          [
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">',
+            '<Relationship Id="rIdExternal" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink" Target="externalLinks/externalLink1.xml"/>',
+            '</Relationships>',
+          ].join(''),
+        ),
+      },
+      { name: 'xl/externalLinks/externalLink1.xml', data: encodeUtf8('<externalLink/>') },
+    ]);
+
+    const cleaned = await removeCleanExportBlockedPackageInventoryFromXlsx(externalLinkPackage);
+    const textByPath = new Map(
+      readZipArchive(cleaned).map((entry) => [entry.name, decodeUtf8(entry.data)]),
+    );
+
+    expect(textByPath.has('xl/externalLinks/externalLink1.xml')).toBe(false);
+    expect(textByPath.get('xl/workbook.xml')).not.toContain('externalReferences');
+    expect(await scanXlsxCleanExportPackageDiagnostics(cleaned)).toEqual([]);
+  });
+
   it('detects macro, embedded, external connection, and customXml package variants', async () => {
     await expectUnsafePackageScanRedacts(
       activePackageVariantFixture(),
@@ -187,14 +264,6 @@ describe('WorkbookVersion default XLSX clean export package scan', () => {
         'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
       ],
       [ACTIVE_CONTENT_SECRET],
-      [
-        'XLSX_CLEAN_EXPORT_MACRO_VBA_CONTENT',
-        'XLSX_CLEAN_EXPORT_ACTIVEX_CONTENT',
-        'XLSX_CLEAN_EXPORT_OLE_OR_EMBEDDED_EXECUTABLE_CONTENT',
-        'XLSX_CLEAN_EXPORT_EXTERNAL_DATA_CONNECTION_CONTENT',
-        'XLSX_CLEAN_EXPORT_EXTERNAL_RELATIONSHIP_CONTENT',
-        'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER',
-      ],
     );
   });
 

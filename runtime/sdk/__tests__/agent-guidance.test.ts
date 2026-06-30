@@ -315,6 +315,40 @@ describe('SDK agent API guidance', () => {
       }),
     ]);
 
+    const importedChartLearnedPaths = preflightMogCode(`
+      const charts = await ws.charts?.listCharts();
+      const chart = charts[0];
+      await chart.getAxisItem("valueAxis").setTitle("Revenue");
+      await chart.updateRaw({ legend: { visible: false } });
+    `);
+    const importedChartDiagnostics = new Map(
+      importedChartLearnedPaths.diagnostics.map((diagnostic) => [diagnostic.entryId, diagnostic]),
+    );
+    expect(importedChartLearnedPaths.ok).toBe(false);
+    expect(importedChartDiagnostics.get('mog-api.chart.collection.listCharts.deprecated')).toEqual(
+      expect.objectContaining({
+        blocking: false,
+        compatibilityStatus: 'deprecated_alias',
+        mogReplacements: [expect.objectContaining({ path: 'ws.charts.list' })],
+      }),
+    );
+    expect(importedChartDiagnostics.get('mog-api.chart.record.getAxisItem.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: expect.arrayContaining([
+          expect.objectContaining({ path: 'ws.charts.setAxisTitle' }),
+        ]),
+      }),
+    );
+    expect(importedChartDiagnostics.get('mog-api.chart.record.updateRaw.unsupported')).toEqual(
+      expect.objectContaining({
+        blocking: true,
+        mogReplacements: expect.arrayContaining([
+          expect.objectContaining({ path: 'ws.charts.setLegendVisible' }),
+        ]),
+      }),
+    );
+
     const rejected = preflightMogCode(`
       await ws.addChart({ type: "bar", dataRange: "A1:B2" });
       const handle = await ws.pivots.get("SalesPivot");

@@ -5,10 +5,18 @@ import {
   type XlsxCleanExportPackageDiagnostic,
   type XlsxCleanExportPackageInventoryXmlPart,
 } from './xlsx-clean-export-package-scan';
-import { resolveRelationshipTargetPath } from './xlsx-clean-export-package-scan-relationships';
+import { hasCleanExportBlockedContentType } from './xlsx-clean-export-package-scan-content-types';
+import { isCleanExportBlockedPackagePath } from './xlsx-clean-export-package-scan-paths';
+import {
+  hasCleanExportBlockedRelationship,
+  isExternalRelationship,
+  resolveRelationshipTargetPath,
+} from './xlsx-clean-export-package-scan-relationships';
 import { extractXmlTags, xmlAttribute } from './xlsx-clean-export-package-scan-xml';
 
 const MOG_VERSION_METADATA_PART = 'customXml/mog-version-metadata.xml';
+const XLSX_WORKBOOK_CONTENT_TYPE =
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';
 
 export type {
   XlsxCleanExportPackageDiagnostic,
@@ -39,31 +47,67 @@ interface ZipEntry {
   readonly uncompressedSize: number;
 }
 
+interface PackageInventoryCleanupPolicy {
+  readonly collectScrubbedPackagePaths: (
+    xlsxBytes: Uint8Array,
+    view: DataView,
+    eocd: ReturnType<typeof readEndOfCentralDirectory>,
+    entries: readonly ZipEntry[],
+  ) => Promise<Set<string>>;
+  readonly isRewritableXmlPath: (path: string) => boolean;
+  readonly scrubPackageXml: (
+    path: string,
+    xml: string,
+    scrubbedPaths: ReadonlySet<string>,
+    keptNameSet: ReadonlySet<string>,
+  ) => string;
+  readonly assertCleaned?: (xlsxBytes: Uint8Array) => Promise<void>;
+}
+
 export async function removeMogVersionMetadataPackageInventoryFromXlsx(
   xlsxBytes: Uint8Array,
 ): Promise<Uint8Array> {
-  return removeCleanExportBlockedPackageInventoryFromXlsx(xlsxBytes);
+  return removeXlsxPackageInventory(xlsxBytes, {
+    collectScrubbedPackagePaths: collectMogVersionMetadataScrubbedPackagePaths,
+    isRewritableXmlPath: isPackageInventoryXmlPath,
+    scrubPackageXml: scrubMogVersionMetadataPackageXml,
+  });
 }
 
 export async function removeCleanExportBlockedPackageInventoryFromXlsx(
   xlsxBytes: Uint8Array,
 ): Promise<Uint8Array> {
+  return removeXlsxPackageInventory(xlsxBytes, {
+    collectScrubbedPackagePaths: collectCleanExportScrubbedPackagePaths,
+    isRewritableXmlPath: isCleanExportRewritableXmlPath,
+    scrubPackageXml: scrubCleanExportPackageXml,
+    assertCleaned: assertXlsxCleanExportPackageIsSafe,
+  });
+}
+
+async function removeXlsxPackageInventory(
+  xlsxBytes: Uint8Array,
+  policy: PackageInventoryCleanupPolicy,
+): Promise<Uint8Array> {
   const view = new DataView(xlsxBytes.buffer, xlsxBytes.byteOffset, xlsxBytes.byteLength);
   const eocd = readEndOfCentralDirectory(view);
   const entries = readCentralDirectoryEntries(xlsxBytes, view, eocd);
+  const scrubbedPaths = await policy.collectScrubbedPackagePaths(xlsxBytes, view, eocd, entries);
+  const keptNameSet = new Set(
+    entries
+      .map((entry) => normalizePackagePath(entry.name))
+      .filter((path) => !scrubbedPaths.has(path)),
+  );
   const rewrites = new Map<ZipEntry, Uint8Array>();
-  let changed = false;
+  let changed = scrubbedPaths.size > 0;
 
   for (const entry of entries) {
     const normalizedName = normalizePackagePath(entry.name);
-    if (isCleanExportScrubbedPackagePath(normalizedName)) {
-      changed = true;
-      continue;
-    }
+    if (scrubbedPaths.has(normalizedName)) continue;
 
-    if (isPackageInventoryXmlPath(normalizedName)) {
+    if (policy.isRewritableXmlPath(normalizedName)) {
       const xml = decodeUtf8(await readEntryData(xlsxBytes, view, eocd, entry));
-      const scrubbed = scrubCleanExportPackageInventoryXml(normalizedName, xml);
+      const scrubbed = policy.scrubPackageXml(normalizedName, xml, scrubbedPaths, keptNameSet);
       if (scrubbed !== xml) {
         rewrites.set(entry, encodeUtf8(scrubbed));
         changed = true;
@@ -72,12 +116,12 @@ export async function removeCleanExportBlockedPackageInventoryFromXlsx(
   }
 
   if (!changed) {
-    await assertXlsxCleanExportPackageIsSafe(xlsxBytes);
+    await policy.assertCleaned?.(xlsxBytes);
     return xlsxBytes;
   }
 
   const keptEntries = entries.filter(
-    (entry) => !isCleanExportScrubbedPackagePath(normalizePackagePath(entry.name)),
+    (entry) => !scrubbedPaths.has(normalizePackagePath(entry.name)),
   );
   const localFileParts: Uint8Array[] = [];
   const centralDirectoryParts: Uint8Array[] = [];
@@ -122,7 +166,7 @@ export async function removeCleanExportBlockedPackageInventoryFromXlsx(
       eocd.comment,
     ),
   ]);
-  await assertXlsxCleanExportPackageIsSafe(cleaned);
+  await policy.assertCleaned?.(cleaned);
   return cleaned;
 }
 
@@ -172,42 +216,284 @@ function isMogVersionMetadataInventoryPath(path: string): boolean {
   );
 }
 
-function isCleanExportScrubbedPackagePath(path: string): boolean {
-  return isMogVersionMetadataInventoryPath(path) || isCustomXmlMetadataInventoryPath(path);
+async function collectMogVersionMetadataScrubbedPackagePaths(
+  xlsxBytes: Uint8Array,
+  view: DataView,
+  eocd: ReturnType<typeof readEndOfCentralDirectory>,
+  entries: readonly ZipEntry[],
+): Promise<Set<string>> {
+  const scrubbedPaths = new Set<string>();
+  for (const entry of entries) {
+    const path = normalizePackagePath(entry.name);
+    if (isMogVersionMetadataInventoryPath(path)) scrubbedPaths.add(path);
+  }
+
+  for (const entry of entries) {
+    const path = normalizePackagePath(entry.name);
+    if (!isPackageInventoryXmlPath(path)) continue;
+    const xml = decodeUtf8(await readEntryData(xlsxBytes, view, eocd, entry));
+    if (path === '[Content_Types].xml') {
+      collectMogVersionMetadataContentTypeScrubbedPackagePaths(xml, scrubbedPaths);
+    } else if (path.endsWith('.rels')) {
+      collectMogVersionMetadataRelationshipScrubbedPackagePaths(path, xml, scrubbedPaths);
+    }
+  }
+  return scrubbedPaths;
 }
 
-function isCustomXmlMetadataInventoryPath(path: string): boolean {
-  return path.startsWith('customXml/') || path.includes('/customXml/') || path === 'xl/xmlMaps.xml';
+function collectMogVersionMetadataContentTypeScrubbedPackagePaths(
+  xml: string,
+  scrubbedPaths: Set<string>,
+): void {
+  for (const tag of extractXmlTags(xml, 'Override')) {
+    const partName = normalizePackagePath(xmlAttribute(tag, 'PartName') ?? '');
+    const contentType = xmlAttribute(tag, 'ContentType') ?? '';
+    if (isMogVersionMetadataInventoryPath(partName) || hasMogVersionMetadataMarker(contentType)) {
+      scrubbedPaths.add(partName);
+    }
+  }
 }
 
-function scrubCleanExportPackageInventoryXml(path: string, xml: string): string {
+function collectMogVersionMetadataRelationshipScrubbedPackagePaths(
+  relsPath: string,
+  xml: string,
+  scrubbedPaths: Set<string>,
+): void {
+  for (const tag of extractXmlTags(xml, 'Relationship')) {
+    const type = xmlAttribute(tag, 'Type') ?? '';
+    const target = xmlAttribute(tag, 'Target') ?? '';
+    const targetPath = resolveRelationshipTargetPath(relsPath, target);
+    if (
+      hasMogVersionMetadataMarker(type) ||
+      hasMogVersionMetadataMarker(target) ||
+      (targetPath !== null && isMogVersionMetadataInventoryPath(targetPath))
+    ) {
+      if (targetPath !== null) scrubbedPaths.add(targetPath);
+    }
+  }
+}
+
+function scrubMogVersionMetadataPackageXml(
+  path: string,
+  xml: string,
+  scrubbedPaths: ReadonlySet<string>,
+): string {
   if (path === '[Content_Types].xml') {
-    return removeXmlTags(xml, 'Override', shouldDropCleanExportContentTypeOverride);
+    return removeXmlTags(xml, 'Override', (tag) =>
+      shouldDropMogVersionMetadataContentTypeOverride(tag, scrubbedPaths),
+    );
   }
   if (path.endsWith('.rels')) {
     return removeXmlTags(xml, 'Relationship', (tag) =>
-      shouldDropCleanExportRelationship(path, tag),
+      shouldDropMogVersionMetadataRelationship(path, tag, scrubbedPaths),
     );
   }
   return xml;
 }
 
-function shouldDropCleanExportContentTypeOverride(tag: string): boolean {
+function shouldDropMogVersionMetadataContentTypeOverride(
+  tag: string,
+  scrubbedPaths: ReadonlySet<string>,
+): boolean {
   const partName = normalizePackagePath(xmlAttribute(tag, 'PartName') ?? '');
-  if (partName.length > 0 && isCleanExportScrubbedPackagePath(partName)) return true;
-  return hasCleanExportCustomXmlMetadataMarker(xmlAttribute(tag, 'ContentType') ?? '');
+  const contentType = xmlAttribute(tag, 'ContentType') ?? '';
+  return (
+    scrubbedPaths.has(partName) ||
+    isMogVersionMetadataInventoryPath(partName) ||
+    hasMogVersionMetadataMarker(contentType)
+  );
 }
 
-function shouldDropCleanExportRelationship(relsPath: string, tag: string): boolean {
-  const targetMode = xmlAttribute(tag, 'TargetMode') ?? '';
-  if (targetMode.toLowerCase() === 'external') return false;
-
+function shouldDropMogVersionMetadataRelationship(
+  relsPath: string,
+  tag: string,
+  scrubbedPaths: ReadonlySet<string>,
+): boolean {
   const type = xmlAttribute(tag, 'Type') ?? '';
-  if (hasCleanExportCustomXmlMetadataMarker(type)) return true;
-
   const target = xmlAttribute(tag, 'Target') ?? '';
   const targetPath = resolveRelationshipTargetPath(relsPath, target);
-  return targetPath !== null && isCleanExportScrubbedPackagePath(targetPath);
+  return (
+    hasMogVersionMetadataMarker(type) ||
+    hasMogVersionMetadataMarker(target) ||
+    (targetPath !== null &&
+      (scrubbedPaths.has(targetPath) || isMogVersionMetadataInventoryPath(targetPath)))
+  );
+}
+
+function isCleanExportScrubbedPackagePath(path: string): boolean {
+  return isMogVersionMetadataInventoryPath(path) || isCleanExportBlockedPackagePath(path);
+}
+
+async function collectCleanExportScrubbedPackagePaths(
+  xlsxBytes: Uint8Array,
+  view: DataView,
+  eocd: ReturnType<typeof readEndOfCentralDirectory>,
+  entries: readonly ZipEntry[],
+): Promise<Set<string>> {
+  const scrubbedPaths = new Set<string>();
+  for (const entry of entries) {
+    const path = normalizePackagePath(entry.name);
+    if (isCleanExportScrubbedPackagePath(path)) scrubbedPaths.add(path);
+  }
+
+  for (const entry of entries) {
+    const path = normalizePackagePath(entry.name);
+    if (!isPackageInventoryXmlPath(path)) continue;
+    const xml = decodeUtf8(await readEntryData(xlsxBytes, view, eocd, entry));
+    if (path === '[Content_Types].xml') {
+      collectContentTypeScrubbedPackagePaths(xml, scrubbedPaths);
+    } else if (path.endsWith('.rels')) {
+      collectRelationshipScrubbedPackagePaths(path, xml, scrubbedPaths);
+    }
+  }
+  return scrubbedPaths;
+}
+
+function collectContentTypeScrubbedPackagePaths(xml: string, scrubbedPaths: Set<string>): void {
+  for (const tag of extractXmlTags(xml, 'Override')) {
+    const partName = normalizePackagePath(xmlAttribute(tag, 'PartName') ?? '');
+    if (partName.length === 0) continue;
+    const contentType = xmlAttribute(tag, 'ContentType') ?? '';
+    if (
+      isCleanExportScrubbedPackagePath(partName) ||
+      shouldScrubPackagePartForContentType(partName, contentType)
+    ) {
+      scrubbedPaths.add(partName);
+    }
+  }
+}
+
+function collectRelationshipScrubbedPackagePaths(
+  relsPath: string,
+  xml: string,
+  scrubbedPaths: Set<string>,
+): void {
+  for (const tag of extractXmlTags(xml, 'Relationship')) {
+    const type = xmlAttribute(tag, 'Type') ?? '';
+    const target = xmlAttribute(tag, 'Target') ?? '';
+    if (
+      !hasCleanExportBlockedRelationship(type, target) &&
+      !hasCleanExportCustomXmlMetadataMarker(type)
+    ) {
+      continue;
+    }
+    const targetPath = resolveRelationshipTargetPath(relsPath, target);
+    if (targetPath) scrubbedPaths.add(targetPath);
+  }
+}
+
+function isCleanExportRewritableXmlPath(path: string): boolean {
+  return isPackageInventoryXmlPath(path) || path === 'xl/workbook.xml';
+}
+
+function scrubCleanExportPackageXml(
+  path: string,
+  xml: string,
+  scrubbedPaths: ReadonlySet<string>,
+  keptNameSet: ReadonlySet<string>,
+): string {
+  if (path === '[Content_Types].xml') {
+    const downgraded = rewriteCleanExportWorkbookContentType(xml);
+    const withoutDefaults = removeXmlTags(
+      downgraded,
+      'Default',
+      shouldDropCleanExportContentTypeDefault,
+    );
+    return removeXmlTags(withoutDefaults, 'Override', (tag) =>
+      shouldDropCleanExportContentTypeOverride(tag, scrubbedPaths, keptNameSet),
+    );
+  }
+  if (path.endsWith('.rels')) {
+    return removeXmlTags(xml, 'Relationship', (tag) =>
+      shouldDropCleanExportRelationship(path, tag, scrubbedPaths, keptNameSet),
+    );
+  }
+  if (path === 'xl/workbook.xml') return removeWorkbookExternalReferences(xml);
+  return xml;
+}
+
+function shouldDropCleanExportContentTypeDefault(tag: string): boolean {
+  return shouldDropCleanExportContentTypeValue(xmlAttribute(tag, 'ContentType') ?? '');
+}
+
+function shouldDropCleanExportContentTypeOverride(
+  tag: string,
+  scrubbedPaths: ReadonlySet<string>,
+  keptNameSet: ReadonlySet<string>,
+): boolean {
+  const partName = normalizePackagePath(xmlAttribute(tag, 'PartName') ?? '');
+  if (partName.length === 0) return false;
+  if (scrubbedPaths.has(partName) || !keptNameSet.has(partName)) return true;
+  return shouldScrubPackagePartForContentType(partName, xmlAttribute(tag, 'ContentType') ?? '');
+}
+
+function shouldDropCleanExportRelationship(
+  relsPath: string,
+  tag: string,
+  scrubbedPaths: ReadonlySet<string>,
+  keptNameSet: ReadonlySet<string>,
+): boolean {
+  const targetMode = xmlAttribute(tag, 'TargetMode') ?? '';
+  const type = xmlAttribute(tag, 'Type') ?? '';
+  const target = xmlAttribute(tag, 'Target') ?? '';
+  if (isExternalRelationship(target, targetMode) && !isHyperlinkRelationshipType(type)) {
+    return true;
+  }
+  if (hasCleanExportBlockedRelationship(type, target)) return true;
+  if (hasCleanExportCustomXmlMetadataMarker(type)) return true;
+  if (targetMode.toLowerCase() === 'external') return false;
+
+  const targetPath = resolveRelationshipTargetPath(relsPath, target);
+  return targetPath !== null && (scrubbedPaths.has(targetPath) || !keptNameSet.has(targetPath));
+}
+
+function shouldScrubPackagePartForContentType(partName: string, contentType: string): boolean {
+  if (isRewritableWorkbookContentType(partName, contentType)) return false;
+  return shouldDropCleanExportContentTypeValue(contentType);
+}
+
+function shouldDropCleanExportContentTypeValue(contentType: string): boolean {
+  return (
+    hasCleanExportBlockedContentType(contentType) ||
+    hasCleanExportCustomXmlMetadataMarker(contentType)
+  );
+}
+
+function rewriteCleanExportWorkbookContentType(xml: string): string {
+  let scrubbed = xml;
+  for (const tag of extractXmlTags(xml, 'Override')) {
+    const partName = normalizePackagePath(xmlAttribute(tag, 'PartName') ?? '');
+    const contentType = xmlAttribute(tag, 'ContentType') ?? '';
+    if (!isRewritableWorkbookContentType(partName, contentType)) continue;
+    scrubbed = scrubbed.replace(
+      tag,
+      replaceXmlAttribute(tag, 'ContentType', XLSX_WORKBOOK_CONTENT_TYPE),
+    );
+  }
+  return scrubbed;
+}
+
+function isRewritableWorkbookContentType(partName: string, contentType: string): boolean {
+  const normalized = contentType.toLowerCase();
+  return partName === 'xl/workbook.xml' && normalized.includes('macroenabled.main+xml');
+}
+
+function replaceXmlAttribute(tag: string, name: string, value: string): string {
+  const pattern = new RegExp(`\\b${name}\\s*=\\s*(["'])[^"']*\\1`);
+  return tag.replace(pattern, (_match, quote: string) => `${name}=${quote}${value}${quote}`);
+}
+
+function removeWorkbookExternalReferences(xml: string): string {
+  return xml
+    .replace(/<(?:[\w-]+:)?externalReferences\b[^>]*\/>/g, '')
+    .replace(
+      /<(?:[\w-]+:)?externalReferences\b[^>]*>[\s\S]*?<\/(?:[\w-]+:)?externalReferences>/g,
+      '',
+    );
+}
+
+function isHyperlinkRelationshipType(type: string): boolean {
+  return type.toLowerCase().endsWith('/hyperlink');
 }
 
 function removeXmlTags(xml: string, tagName: string, predicate: (tag: string) => boolean): string {
@@ -227,6 +513,16 @@ function hasCleanExportCustomXmlMetadataMarker(value: string): boolean {
     normalized.includes('customxmlprops') ||
     normalized.includes('datastoreitem') ||
     normalized.includes('xmlmaps') ||
+    normalized.includes('mog-version-metadata') ||
+    normalized.includes('mogversionmetadata') ||
+    normalized.includes('schemas.mog.dev/workbook/version-metadata') ||
+    normalized.includes('schemas.mog.dev/officedocument/relationships/mogversionmetadata')
+  );
+}
+
+function hasMogVersionMetadataMarker(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
     normalized.includes('mog-version-metadata') ||
     normalized.includes('mogversionmetadata') ||
     normalized.includes('schemas.mog.dev/workbook/version-metadata') ||

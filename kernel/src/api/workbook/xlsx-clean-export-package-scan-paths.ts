@@ -38,6 +38,20 @@ export function scanPackagePartPath(
   }
 }
 
+export function isCleanExportBlockedPackagePath(path: string): boolean {
+  const normalized = normalizePackagePath(path).toLowerCase();
+  return (
+    isMacroVbaPath(normalized) ||
+    isMacroAdjacentActiveContentPath(normalized) ||
+    isActiveXPath(normalized) ||
+    isOleOrEmbeddedExecutablePath(normalized) ||
+    isExternalDataConnectionPath(normalized) ||
+    isCustomXmlMetadataPath(normalized) ||
+    isEncryptedPackagePath(normalized) ||
+    isDigitalSignaturePath(normalized)
+  );
+}
+
 export function isMacroAdjacentActiveContentPath(path: string): boolean {
   return (
     path.startsWith('xl/macrosheets/') ||

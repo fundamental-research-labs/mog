@@ -1,36 +1,30 @@
 import {
-  removeMogVersionMetadataPackageInventoryFromXlsx,
+  removeCleanExportBlockedPackageInventoryFromXlsx,
   scanXlsxCleanExportPackageDiagnostics,
-  XlsxCleanExportPackageError,
   type XlsxCleanExportPackageDiagnostic,
 } from '../xlsx-clean-export-package';
+import { scanCleanExportPackage } from './xlsx-clean-export-package-scan-helpers-report';
 
 export async function expectUnsafePackageScanRedacts(
   xlsxBytes: Uint8Array,
   expectedCodes: readonly XlsxCleanExportPackageDiagnostic['code'][],
   redactedTokens: readonly string[],
-  expectedPostScrubCodes: readonly XlsxCleanExportPackageDiagnostic['code'][] = expectedCodes,
 ): Promise<void> {
   const diagnostics = await scanXlsxCleanExportPackageDiagnostics(xlsxBytes);
   expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual(expectedCodes);
   expect(diagnostics.every((diagnostic) => diagnostic.count > 0)).toBe(true);
   expectRedactedPayload({ diagnostics }, redactedTokens);
 
-  let error: unknown;
-  try {
-    await removeMogVersionMetadataPackageInventoryFromXlsx(xlsxBytes);
-  } catch (caught) {
-    error = caught;
-  }
-
-  expect(error).toBeInstanceOf(XlsxCleanExportPackageError);
-  const postScrubDiagnostics = (error as XlsxCleanExportPackageError).diagnostics;
-  expect(postScrubDiagnostics.map((diagnostic) => diagnostic.code)).toEqual(expectedPostScrubCodes);
-  expect(error).toMatchObject({
-    code: 'XLSX_CLEAN_EXPORT_UNSAFE_PACKAGE',
-    diagnostics: postScrubDiagnostics,
+  const cleaned = await removeCleanExportBlockedPackageInventoryFromXlsx(xlsxBytes);
+  expect(await scanCleanExportPackage(cleaned, redactedTokens)).toEqual({
+    duplicateZipEntries: [],
+    mogCustomXmlMetadataParts: [],
+    mogContentTypeEntries: [],
+    mogRelationshipEntries: [],
+    danglingCustomXmlInventory: [],
+    unsafePackageDiagnostics: [],
+    redactionLeaks: [],
   });
-  expectRedactedPayload(error, redactedTokens);
 }
 
 export function redactionCheckPayload(error: unknown): string {

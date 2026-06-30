@@ -97,12 +97,13 @@ function hasLocalDeclaration(stripped: string, name: string): boolean {
 }
 
 function chainPattern(symbol: string): RegExp {
+  const propertySeparator = '\\s*\\??\\.\\s*';
   if (symbol.startsWith('.')) {
     const parts = symbol.slice(1).split('.');
-    return new RegExp(`\\.\\s*${parts.map(escapeRegExp).join('\\s*\\.\\s*')}\\b`, 'g');
+    return new RegExp(`\\.\\s*${parts.map(escapeRegExp).join(propertySeparator)}\\b`, 'g');
   }
   const parts = symbol.split('.');
-  return new RegExp(`\\b${parts.map(escapeRegExp).join('\\s*\\.\\s*')}\\b`, 'g');
+  return new RegExp(`\\b${parts.map(escapeRegExp).join(propertySeparator)}\\b`, 'g');
 }
 
 function callPattern(symbol: string): RegExp {
@@ -124,7 +125,12 @@ function patternFor(matcher: ApiGuidanceSymbolMatcher): RegExp {
 
 function compatibilityPattern(entry: ApiCompatibilityEntry): RegExp | null {
   const path = entry.observedPath.trim();
-  if (!path.startsWith('ws.') && !path.startsWith('wb.') && !path.startsWith('workbook.')) {
+  if (
+    !path.startsWith('ws.') &&
+    !path.startsWith('wb.') &&
+    !path.startsWith('workbook.') &&
+    !path.startsWith('chart.')
+  ) {
     return null;
   }
 
@@ -133,7 +139,7 @@ function compatibilityPattern(entry: ApiCompatibilityEntry): RegExp | null {
   }
 
   const normalized = path.replace(/\(\s*\)$/, '');
-  if (!/^(ws|wb|workbook)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
+  if (!/^(ws|wb|workbook|chart)(?:\.[A-Za-z_$][\w$]*)+$/.test(normalized)) return null;
   return callPattern(normalized);
 }
 

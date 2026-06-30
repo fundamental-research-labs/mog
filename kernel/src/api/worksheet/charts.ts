@@ -1,9 +1,3 @@
-/**
- * WorksheetChartsImpl — Implementation of the WorksheetCharts sub-API.
- *
- * Calls domain modules directly (no intermediate operations layer or unwrap).
- * Validation and multi-step logic is inlined here.
- */
 import type {
   Chart,
   ChartActivateReceipt,
@@ -76,6 +70,7 @@ import {
   buildChartAddReceipt,
   buildChartDuplicateReceipt,
 } from './charts/receipts';
+import { withChartCompatibilityMethods } from './charts/compatibility-methods';
 import {
   bringWorksheetChartForward,
   bringWorksheetChartToFront,
@@ -189,7 +184,7 @@ export class WorksheetChartsImpl implements WorksheetCharts {
       this.sheetId,
       resolvedChartId,
     )) as ChartFloatingObject | null;
-    return raw ? serializedChartToChart(raw) : null;
+    return raw ? withChartCompatibilityMethods(serializedChartToChart(raw), this) : null;
   }
 
   async getAppModel(chartId: string, options?: ChartReadOptions): Promise<ChartAppModel | null> {
@@ -213,7 +208,13 @@ export class WorksheetChartsImpl implements WorksheetCharts {
     const charts = (await this.ctx.computeBridge.getAllCharts(
       this.sheetId,
     )) as ChartFloatingObject[];
-    return orderChartsForList(charts).map(serializedChartToChart);
+    return orderChartsForList(charts).map((chart) =>
+      withChartCompatibilityMethods(serializedChartToChart(chart), this),
+    );
+  }
+
+  async listCharts(options?: ChartReadOptions): Promise<Chart[]> {
+    return this.list(options);
   }
 
   async clear(): Promise<void> {

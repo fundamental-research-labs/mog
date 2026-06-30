@@ -32,6 +32,7 @@ export const REQUIRED_MOG_VERSION_METADATA_REDACTION_OMISSIONS = [
 export type MogVersionMetadataExportBlockReason =
   | 'redaction-failed'
   | 'head-read-failed'
+  | 'authority-unavailable'
   | 'head-unverified'
   | 'stale-head'
   | 'commit-missing';
@@ -96,10 +97,14 @@ export function createMogWorkbookVersionXlsxMetadata(
   };
 }
 
-export function hasVersionHeadFailureDiagnostics(
+export function classifyVersionHeadFailureForMetadataExport(
   error: Extract<VersionResult<VersionHead>, { readonly ok: false }>['error'],
-): boolean {
-  return diagnosticsFromVersionError(error).length > 0;
+): MogVersionMetadataExportBlockReason {
+  const diagnostics = diagnosticsFromVersionError(error);
+  if (diagnostics.length === 0) return 'head-read-failed';
+  return diagnostics.every(isOmittableVersionHeadFailureDiagnostic)
+    ? 'head-read-failed'
+    : 'redaction-failed';
 }
 
 export function createMogVersionMetadataExportBlockedError(
@@ -362,10 +367,22 @@ function diagnosticsFromVersionError(
     : [];
 }
 
+function isOmittableVersionHeadFailureDiagnostic(value: VersionDiagnosticPublicPayload): boolean {
+  return versionDiagnosticCode(value) === 'VERSION_GRAPH_UNINITIALIZED';
+}
+
+function versionDiagnosticCode(value: VersionDiagnosticPublicPayload): string | undefined {
+  for (const key of ['code', 'issueCode']) {
+    const field = value[key];
+    if (typeof field === 'string') return field;
+  }
+  return undefined;
+}
+
 function diagnosticPublicPayload(value: unknown): VersionDiagnosticPublicPayload {
   if (!isRecord(value)) return {};
   const payload: Record<string, string | number | boolean | null> = {};
-  for (const key of ['code', 'severity', 'message', 'dependency']) {
+  for (const key of ['code', 'issueCode', 'severity', 'message', 'dependency']) {
     const field = value[key];
     if (isPublicPrimitive(field)) payload[key] = field;
   }

@@ -53,3 +53,10 @@ export function scanContentType(
     addCleanExportDiagnostic(counts, 'XLSX_CLEAN_EXPORT_DIGITAL_SIGNATURE_MARKER');
   }
 }
+
+export function hasCleanExportBlockedContentType(value: string | undefined): boolean {
+  if (!value) return false;
+  const counts: XlsxCleanExportPackageDiagnosticCounts = new Map();
+  scanContentType(value, counts);
+  return counts.size > 0;
+}

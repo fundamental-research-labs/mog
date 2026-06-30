@@ -161,6 +161,9 @@ export interface WorksheetCharts {
   /** List charts in the sheet. Pass `{ materialization: "available" }` for passive UI reads. */
   list(options?: ChartReadOptions): Promise<Chart[]>;
 
+  /** @deprecated Use `list()` instead. Compatibility alias for learned chart paths. */
+  listCharts(options?: ChartReadOptions): Promise<Chart[]>;
+
   /** Remove all charts from the sheet. */
   clear(): Promise<void>;
 

@@ -68,6 +68,7 @@ import type {
   Workbook,
   WorkbookInternal,
   Worksheet,
+  WorksheetAnnotations,
   WorksheetCellVisitor,
   WorksheetCellsAccessor,
   WorksheetGetCellsFormulasOnlyOptions,
@@ -188,6 +189,7 @@ import {
 // Sub-API impls — imported directly from each module (NOT through `./index`)
 // to keep the impl↔barrel cycle broken. The barrel re-exports `WorksheetImpl`,
 // so importing *from* the barrel here would create `worksheet-impl ↔ index`.
+import { WorksheetAnnotationsImpl } from './annotations';
 import { WorksheetBindingsImpl } from './bindings';
 import { WorksheetChangesImpl } from './changes';
 import { WorksheetChartsImpl } from './charts';
@@ -3269,6 +3271,11 @@ export class WorksheetImpl implements Worksheet {
   private _sparklines?: WorksheetSparklinesImpl;
   get sparklines(): WorksheetSparklines {
     return (this._sparklines ??= new WorksheetSparklinesImpl(this.ctx, this.sheetId));
+  }
+
+  private _annotations?: WorksheetAnnotationsImpl;
+  get annotations(): WorksheetAnnotations {
+    return (this._annotations ??= new WorksheetAnnotationsImpl(this.ctx, this.sheetId));
   }
 
   private _comments?: WorksheetCommentsImpl;

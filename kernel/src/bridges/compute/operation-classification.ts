@@ -48,6 +48,13 @@ const SYNC_EXCLUDED_COMMANDS = new Set([
   'compute_settle_for_mirror',
 ]);
 
+const ANNOTATION_CACHE_EXCLUDED_COMMANDS = new Set([
+  'compute_remove_cell_annotation_by_position',
+  'compute_remove_table_annotation',
+  'compute_set_cell_annotation_by_position',
+  'compute_set_table_annotation',
+]);
+
 const UNDO_REDO_COMMANDS = new Set([
   'compute_begin_undo_group',
   'compute_end_undo_group',
@@ -140,6 +147,18 @@ export function classifyWriteOperation(
       writeAdmissionMode: 'captureDisabledNoHistory',
       rationale:
         'Provider/import replay must remain observable but is not captured as authored history.',
+    });
+  }
+
+  if (ANNOTATION_CACHE_EXCLUDED_COMMANDS.has(command)) {
+    return withCommand(command, {
+      invocation: invocationHint ?? 'public-mutation',
+      operationKind: 'mutation',
+      domainClass: 'transient',
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+      rationale:
+        'Annotation cache writes are non-authoritative sidecar state, not workbook history.',
     });
   }
 

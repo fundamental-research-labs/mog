@@ -4,6 +4,14 @@
  * All worksheet namespace interfaces for the unified spreadsheet API.
  */
 
+export type {
+  WorksheetAnnotationDeleteResult,
+  WorksheetAnnotationFingerprint,
+  WorksheetAnnotationFingerprintProfile,
+  WorksheetAnnotationRecord,
+  WorksheetAnnotations,
+  WorksheetAnnotationStatus,
+} from './annotations';
 export type { WorksheetBindings } from './bindings';
 export type {
   WorksheetCellVisitor,

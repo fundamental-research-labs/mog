@@ -99,6 +99,35 @@ export interface AnchorPosition {
   extentCy?: number;
 }
 
+export interface AnnotationDeleteResult {
+  anchorId: string;
+  removed: boolean;
+  annotation?: AnnotationRecord;
+}
+
+export interface AnnotationFingerprint {
+  profile: AnnotationFingerprintProfile;
+  canonicalizer: string;
+  hash: string;
+}
+
+export type AnnotationFingerprintProfile = "cellFormula" | "cellValue" | "cellText" | "cellBlank" | "tableSchema" | "tableShape";
+
+export interface AnnotationRecord {
+  schemaVersion: number;
+  id: string;
+  anchorId: string;
+  text: string;
+  status: AnnotationStatus;
+  staleReason?: string;
+  fingerprint: AnnotationFingerprint;
+  createdAt: number;
+  updatedAt: number;
+  checkedAt?: number;
+}
+
+export type AnnotationStatus = "fresh" | "stale" | "unchecked";
+
 export interface AutoExpansionResult {
   shouldExpand: boolean;
   newEndRow: number;
@@ -3808,6 +3837,9 @@ export interface PivotTableDef {
   rowFieldIndices: number[];
   colFieldIndices: number[];
   dataOnRows: boolean;
+  style?: PivotTableStyle;
+  showRowGrandTotals?: boolean;
+  showColumnGrandTotals?: boolean;
 }
 
 export interface PivotTableLayout {

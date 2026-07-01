@@ -91,6 +91,7 @@ import type {
 import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
 import type {
+  WorksheetAnnotations,
   WorksheetBindings,
   ChartReadOptions,
   WorksheetChanges,
@@ -1340,6 +1341,8 @@ export interface Worksheet extends WorksheetFill {
   readonly slicers: WorksheetSlicers;
   /** Sparkline CRUD and groups */
   readonly sparklines: WorksheetSparklines;
+  /** Review annotations anchored to cell/table content */
+  readonly annotations: WorksheetAnnotations;
   /** Notes and threaded comments */
   readonly comments: WorksheetComments;
   /** Sheet-level custom properties (key-value store) */

@@ -263,6 +263,14 @@ export type {
   FindCellsValueType,
   FoundCell,
 } from './worksheet';
+export type {
+  WorksheetAnnotationDeleteResult,
+  WorksheetAnnotationFingerprint,
+  WorksheetAnnotationFingerprintProfile,
+  WorksheetAnnotationRecord,
+  WorksheetAnnotations,
+  WorksheetAnnotationStatus,
+} from './worksheet/annotations';
 export type * from './operation-receipt';
 export type * from '@mog/types-api/api';
 export type {

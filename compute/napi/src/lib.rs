@@ -79,6 +79,7 @@ bridge_napi::generate_class!(
     compute_api::__bridge_descriptor_ComputeService_atomics,
     compute_api::__bridge_descriptor_ComputeService_layout,
     compute_api::__bridge_descriptor_ComputeService_objects,
+    compute_api::__bridge_descriptor_ComputeService_objects_annotations,
     compute_api::__bridge_descriptor_ComputeService_objects_comments,
     compute_api::__bridge_descriptor_ComputeService_objects_floating,
     compute_api::__bridge_descriptor_ComputeService_objects_groups,

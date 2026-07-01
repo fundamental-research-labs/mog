@@ -1,5 +1,6 @@
 //! Object bridge methods for YrsComputeEngine.
 
+mod annotations;
 mod charts;
 mod comments;
 mod floating;

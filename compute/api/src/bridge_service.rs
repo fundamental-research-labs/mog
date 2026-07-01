@@ -179,6 +179,7 @@ bridge_delegate::delegate!(
     compute_core::__bridge_descriptor_YrsComputeEngine_atomics,
     compute_core::__bridge_descriptor_YrsComputeEngine_layout,
     compute_core::__bridge_descriptor_YrsComputeEngine_objects,
+    compute_core::__bridge_descriptor_YrsComputeEngine_objects_annotations,
     compute_core::__bridge_descriptor_YrsComputeEngine_objects_comments,
     compute_core::__bridge_descriptor_YrsComputeEngine_objects_floating,
     compute_core::__bridge_descriptor_YrsComputeEngine_objects_groups,

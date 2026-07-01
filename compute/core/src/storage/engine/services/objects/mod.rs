@@ -4,6 +4,7 @@
 //! service functions grouped by object domain while this module preserves the
 //! existing `services::objects::*` call surface.
 
+mod annotations;
 mod charts;
 mod comments;
 mod floating;
@@ -13,6 +14,7 @@ mod pivots;
 mod shared;
 mod z_order;
 
+pub(in crate::storage::engine) use annotations::*;
 pub(in crate::storage::engine) use charts::*;
 pub(in crate::storage::engine) use comments::*;
 pub(in crate::storage::engine) use floating::*;

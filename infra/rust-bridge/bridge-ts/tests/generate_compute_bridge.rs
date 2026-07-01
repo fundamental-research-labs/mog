@@ -30,6 +30,10 @@ fn generate_compute_bridge() {
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
         format!("{}/compute/core/src/storage/engine/features/mod.rs", base),
         format!(
+            "{}/compute/core/src/storage/engine/objects/annotations.rs",
+            base
+        ),
+        format!(
             "{}/compute/core/src/storage/engine/objects/comments.rs",
             base
         ),
@@ -140,6 +144,7 @@ fn build_import_config() -> ImportConfig {
                     ti("A1CellRef"),
                     ti("A1RangeRef"),
                     ti("ActiveCellData"),
+                    ti("AnnotationRecord"),
                     ti("AutoExpansionResult"),
                     ti("BatchCellInput"),
                     ti("BatchRangeRequest"),

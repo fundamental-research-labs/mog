@@ -181,6 +181,7 @@ impl YrsStorage {
                 KEY_COL_FORMATS,
                 KEY_COL_FORMAT_RANGES,
                 KEY_COMMENTS,
+                KEY_CELL_ANNOTATIONS,
                 KEY_FILTERS,
                 KEY_SPARKLINES,
                 KEY_CONDITIONAL_FORMAT,

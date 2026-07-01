@@ -1,3 +1,4 @@
+pub(crate) mod annotations;
 pub mod bindings;
 pub mod cf_store;
 pub(crate) mod comments;

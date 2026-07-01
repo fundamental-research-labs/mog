@@ -691,6 +691,7 @@ fn generate_combined() {
         format!("{manifest_dir}/../../../compute/core/src/diagnostics/formula_references/types.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/search.rs"),
         format!("{manifest_dir}/../../../compute/core/src/storage/engine/mutation.rs"),
+        format!("{manifest_dir}/../../../compute/core/src/engine_types/annotations.rs"),
         format!("{manifest_dir}/../../../compute/core/src/engine_types/ranges.rs"),
         format!("{manifest_dir}/../../../compute/core/src/engine_types/fill.rs"),
         format!("{manifest_dir}/../../../compute/core/src/engine_types/cf.rs"),

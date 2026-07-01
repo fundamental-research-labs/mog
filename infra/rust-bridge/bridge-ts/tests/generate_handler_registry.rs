@@ -138,6 +138,10 @@ fn bridge_source_files() -> Vec<String> {
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
         format!("{}/compute/core/src/storage/engine/features/mod.rs", base),
         format!(
+            "{}/compute/core/src/storage/engine/objects/annotations.rs",
+            base
+        ),
+        format!(
             "{}/compute/core/src/storage/engine/objects/comments.rs",
             base
         ),

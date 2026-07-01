@@ -20,9 +20,9 @@ pub const KEY_SCHEMA_VERSION: &str = "schemaVersion";
 /// Current schema version written by `init_canonical_schema` and the snapshot/
 /// import hydration paths. Readers that encounter a version higher than
 /// `MAX_SUPPORTED_SCHEMA_VERSION` must refuse to load the document.
-pub const CURRENT_SCHEMA_VERSION: u32 = 18;
+pub const CURRENT_SCHEMA_VERSION: u32 = 19;
 /// Maximum schema version this binary can safely operate on.
-pub const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 18;
+pub const MAX_SUPPORTED_SCHEMA_VERSION: u32 = 19;
 
 /// Per-sheet map keys
 pub const KEY_CELLS: &str = "cells";
@@ -58,6 +58,7 @@ pub const KEY_ROW_FORMATS: &str = "rowFormats";
 pub const KEY_COL_FORMATS: &str = "colFormats";
 pub const KEY_COL_FORMAT_RANGES: &str = "colFormatRanges";
 pub const KEY_COMMENTS: &str = "comments";
+pub const KEY_CELL_ANNOTATIONS: &str = "cellAnnotations";
 pub const KEY_FILTERS: &str = "filters";
 pub const KEY_FILTER_METADATA_BINDINGS: &str = "filterMetadataBindings";
 pub const KEY_SPARKLINES: &str = "sparklines";
@@ -100,6 +101,7 @@ pub const KEY_IMPORTED_EXTERNAL_USAGE_PROVENANCE: &str = "importedExternalUsageP
 pub const KEY_IMPORTED_EXTERNAL_PACKAGE_ARTIFACTS: &str = "importedExternalPackageArtifacts";
 pub const KEY_NAMED_RANGES: &str = "namedRanges";
 pub const KEY_TABLES: &str = "tables";
+pub const KEY_TABLE_ANNOTATIONS: &str = "tableAnnotations";
 pub const KEY_CUSTOM_TABLE_STYLES: &str = "customTableStyles";
 pub const KEY_XLSX_TABLE_STYLES: &str = "xlsxTableStyles";
 pub const KEY_DATA_TABLE_REGIONS: &str = "dataTableRegions";
@@ -298,6 +300,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     workbook.insert(&mut txn, KEY_PACKAGE_FIDELITY_METADATA, empty());
     workbook.insert(&mut txn, KEY_NAMED_RANGES, empty());
     workbook.insert(&mut txn, KEY_TABLES, empty());
+    workbook.insert(&mut txn, KEY_TABLE_ANNOTATIONS, empty());
     workbook.insert(&mut txn, KEY_SLICERS, empty());
     workbook.insert(&mut txn, KEY_TIMELINES, empty());
     workbook.insert(&mut txn, KEY_POWER_QUERY, empty());
@@ -392,6 +395,7 @@ pub fn init_canonical_schema(doc: &Doc) -> (MapRef, MapRef, crate::hex::SmallHex
     sheet_map.insert(&mut txn, KEY_COL_FORMATS, empty());
     sheet_map.insert(&mut txn, KEY_COL_FORMAT_RANGES, empty());
     sheet_map.insert(&mut txn, KEY_COMMENTS, empty());
+    sheet_map.insert(&mut txn, KEY_CELL_ANNOTATIONS, empty());
     sheet_map.insert(&mut txn, KEY_FILTERS, empty());
     sheet_map.insert(&mut txn, KEY_FILTER_METADATA_BINDINGS, empty());
     sheet_map.insert(&mut txn, KEY_SPARKLINES, empty());
@@ -504,6 +508,7 @@ mod tests {
             KEY_XLSX_METADATA,
             KEY_NAMED_RANGES,
             KEY_TABLES,
+            KEY_TABLE_ANNOTATIONS,
             KEY_SLICERS,
             KEY_TIMELINES,
             KEY_POWER_QUERY,
@@ -560,6 +565,7 @@ mod tests {
             KEY_COL_FORMATS,
             KEY_COL_FORMAT_RANGES,
             KEY_COMMENTS,
+            KEY_CELL_ANNOTATIONS,
             KEY_FILTERS,
             KEY_FILTER_METADATA_BINDINGS,
             KEY_SPARKLINES,

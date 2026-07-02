@@ -45,7 +45,7 @@ use diagnostics::{count_ooxml_smartart_diagrams, count_ooxml_wordart_text_effect
 use dropped_import_diagnostics::append_dropped_import_diagnostics;
 use dxf_registry::populate_dxf_registry_owners;
 use features::*;
-use media::{build_binary_part_map, build_media_data_url_map};
+use media::build_binary_part_map;
 use package_fidelity::build_package_fidelity_metadata;
 use pivot_cache_sources::build_pivot_cache_sources;
 use sheet::convert_sheet;
@@ -121,7 +121,6 @@ pub fn full_parse_result_to_parse_output(
         .map(|s| s.dxfs.as_slice())
         .unwrap_or(&[]);
     let theme_colors = styles::extract_theme_color_palette(result);
-    let media_data_urls = build_media_data_url_map(result);
     let binary_parts = build_binary_part_map(result);
 
     for (sheet_idx, sheet) in result.sheets.iter().enumerate() {
@@ -132,7 +131,6 @@ pub fn full_parse_result_to_parse_output(
             &result.shared_strings_phonetic_xml,
             dxfs,
             &theme_colors,
-            &media_data_urls,
             &binary_parts,
             result.metadata.as_ref(),
         );

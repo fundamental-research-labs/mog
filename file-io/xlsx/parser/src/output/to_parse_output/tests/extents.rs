@@ -81,7 +81,6 @@ fn full_width_column_style_does_not_inflate_extent_or_dense_col_styles() {
         &[],
         &[],
         &std::collections::HashMap::new(),
-        &std::collections::HashMap::<String, Vec<u8>>::new(),
         None,
     );
 
@@ -117,7 +116,6 @@ fn style_only_cells_convert_to_authored_runs_not_sparse_cells() {
         &[],
         &[],
         &std::collections::HashMap::new(),
-        &std::collections::HashMap::<String, Vec<u8>>::new(),
         None,
     );
 

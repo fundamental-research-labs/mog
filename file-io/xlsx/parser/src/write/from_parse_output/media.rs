@@ -13,3 +13,17 @@ pub(super) fn register_image_blob_parts(
     }
     Ok(())
 }
+
+pub(super) fn resolve_drawing_image_target(
+    drawing_path: &str,
+    image_target: &str,
+) -> Result<String, WriteError> {
+    crate::infra::opc::resolve_relationship_target(Some(drawing_path), image_target).map_err(
+        |err| {
+            WriteError::PackageIntegrity(format!(
+                "invalid drawing image target for {}: {} ({:?})",
+                drawing_path, image_target, err
+            ))
+        },
+    )
+}

@@ -578,6 +578,83 @@ fn drawing_picture_external_link_relationship_is_registered_from_owner_state() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
+#[test]
+fn drawing_picture_without_current_payload_drops_internal_embed_relationship() {
+    let mut picture = imported_picture_with_media("Picture 1", "../media/image1.png");
+    if let domain_types::domain::floating_object::FloatingObjectData::Picture(data) =
+        &mut picture.data
+    {
+        data.src = "../media/image1.png".to_string();
+        data.ooxml.as_mut().unwrap().relationships = vec![ooxml_types::shared::OpcRelationship {
+            id: "rIdImported".to_string(),
+            rel_type: crate::infra::opc::REL_IMAGE.to_string(),
+            target: "../media/image1.png".to_string(),
+            target_mode: None,
+        }];
+    }
+
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![picture],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+
+    assert!(!drawing_xml.contains("r:embed="));
+    assert!(archive.read_file("xl/media/image1.png").is_err());
+    if let Ok(rels_bytes) = archive.read_file("xl/drawings/_rels/drawing1.xml.rels") {
+        let drawing_rels = crate::domain::workbook::read::parse_all_rels(&rels_bytes);
+        assert!(
+            drawing_rels
+                .iter()
+                .all(|rel| rel.rel_type != crate::infra::opc::REL_IMAGE)
+        );
+    }
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn drawing_picture_absolute_media_target_writes_payload_to_resolved_part() {
+    let output = make_parse_output(vec![SheetData {
+        name: "Sheet1".to_string(),
+        floating_objects: vec![imported_picture_with_media(
+            "Picture 1",
+            "/xl/media/image1.png",
+        )],
+        ..Default::default()
+    }]);
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let drawing_xml =
+        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
+    let drawing_rels = crate::domain::workbook::read::parse_all_rels(
+        &archive
+            .read_file("xl/drawings/_rels/drawing1.xml.rels")
+            .unwrap(),
+    );
+    let content_types =
+        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
+
+    assert!(drawing_xml.contains(r#"r:embed="rId1""#));
+    assert_eq!(
+        archive.read_file("xl/media/image1.png").unwrap(),
+        vec![1, 2, 3, 4]
+    );
+    assert!(drawing_rels.iter().any(|rel| {
+        rel.id == "rId1"
+            && rel.rel_type == crate::infra::opc::REL_IMAGE
+            && rel.target == "../media/image1.png"
+            && rel.target_mode.is_none()
+    }));
+    assert!(content_types.contains(r#"Extension="png" ContentType="image/png""#));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
 fn make_formula_cell(row: u32, col: u32, formula: &str, cached: DomainValue) -> DomainCellData {
     DomainCellData {
         row,

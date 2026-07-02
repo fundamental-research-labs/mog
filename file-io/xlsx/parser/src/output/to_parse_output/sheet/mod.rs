@@ -71,8 +71,7 @@ pub(super) fn convert_sheet(
     shared_strings_phonetic_xml: &[Option<Vec<u8>>],
     dxfs: &[crate::domain::styles::types::DxfDef],
     theme_colors: &[String],
-    media_data_urls: &HashMap<String, String>,
-    binary_parts: &HashMap<String, Vec<u8>>,
+    binary_parts: &crate::output::to_parse_output::media::BinaryPartMap,
     metadata: Option<&crate::output::results::MetadataOutput>,
 ) -> SheetData {
     let col_style_ranges = build_col_style_ranges(&sheet.col_widths);
@@ -513,21 +512,23 @@ pub(super) fn convert_sheet(
     let outline_groups = compute_outline_groups(&sheet.row_heights, &sheet.col_widths);
     // Unified floating objects: merge all drawing-based objects, connectors,
     // form controls, OLE objects into a single Vec<FloatingObject>.
-    let mut floating_objects =
-        convert_floating_objects(sheet.parsed_drawing.as_ref(), media_data_urls);
+    let drawing_package = build_sheet_drawing_package_info(sheet);
+    let drawing_owner_part = drawing_package
+        .as_ref()
+        .and_then(|package| package.drawing_path_hint.as_deref());
+    let mut floating_objects = convert_floating_objects(
+        sheet.parsed_drawing.as_ref(),
+        drawing_owner_part,
+        binary_parts,
+    );
     floating_objects.extend(convert_connectors(&sheet.connectors));
     floating_objects.extend(convert_form_controls(&sheet.form_controls));
-    floating_objects.extend(convert_ole_objects(
-        &sheet.ole_objects,
-        binary_parts,
-        media_data_urls,
-    ));
+    floating_objects.extend(convert_ole_objects(&sheet.ole_objects, binary_parts));
 
     // --- Header/footer images ---
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.
     let hf_images = convert_hf_images(sheet);
     let comment_package = build_sheet_comment_package_info(sheet);
-    let drawing_package = build_sheet_drawing_package_info(sheet);
 
     // --- Build SheetData ---
     let mut sheet_properties = sheet.sheet_properties.clone();

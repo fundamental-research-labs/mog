@@ -29,7 +29,6 @@ fn legacy_tc_author_without_threaded_relationship_stays_note() {
         &[],
         &[],
         &std::collections::HashMap::new(),
-        &std::collections::HashMap::<String, Vec<u8>>::new(),
         None,
     );
 

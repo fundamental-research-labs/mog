@@ -240,39 +240,6 @@ fn project_shape_outline(
     })
 }
 
-fn resolve_media_data_url(
-    media_data_urls: &HashMap<String, String>,
-    target: &str,
-) -> Option<String> {
-    if let Some(data_url) = media_data_urls.get(target) {
-        return Some(data_url.clone());
-    }
-
-    let normalized = target.replace('\\', "/");
-    if let Some(data_url) = media_data_urls.get(&normalized) {
-        return Some(data_url.clone());
-    }
-
-    if let Some(stripped) = normalized.strip_prefix("../") {
-        let workbook_relative = format!("xl/{stripped}");
-        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
-            return Some(data_url.clone());
-        }
-    }
-
-    if normalized.starts_with("media/") {
-        let workbook_relative = format!("xl/{normalized}");
-        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
-            return Some(data_url.clone());
-        }
-    }
-
-    normalized
-        .rsplit('/')
-        .next()
-        .and_then(|file_name| media_data_urls.get(file_name).cloned())
-}
-
 /// Convert parsed drawing anchors into unified `FloatingObject` items.
 ///
 /// Extracts pictures and shapes from the parser's structured `Drawing` type.
@@ -280,7 +247,8 @@ fn resolve_media_data_url(
 /// dedicated conversion paths and are skipped here to avoid double-counting.
 pub(crate) fn convert_floating_objects(
     drawing: Option<&Drawing>,
-    media_data_urls: &HashMap<String, String>,
+    drawing_owner_part: Option<&str>,
+    binary_parts: &BinaryPartMap,
 ) -> Vec<FloatingObject> {
     let drawing = match drawing {
         Some(d) => d,
@@ -406,6 +374,18 @@ pub(crate) fn convert_floating_objects(
                         .find(|r| r.id == embed_id)
                         .map(|r| r.target.clone())
                 });
+                let embedded_media = pic
+                    .blip_fill
+                    .embed_id
+                    .as_deref()
+                    .and_then(|embed_id| drawing.opc_rels.iter().find(|rel| rel.id == embed_id))
+                    .and_then(|relationship| {
+                        resolve_picture_embedded_media(
+                            binary_parts,
+                            drawing_owner_part,
+                            relationship,
+                        )
+                    });
                 let relationships = picture_relationships(pic, &drawing.opc_rels);
 
                 // Build typed ooxml props — no more JSON blob!
@@ -419,12 +399,13 @@ pub(crate) fn convert_floating_objects(
                     client_data_prints_with_sheet: cd_prints,
                     mc_alternate_content_raw_xml: mc_alt_raw.clone(),
                     image_path: image_path.clone(),
+                    embedded_media: embedded_media.clone(),
                     relationships,
                 };
 
-                let src = image_path
-                    .as_deref()
-                    .and_then(|path| resolve_media_data_url(media_data_urls, path))
+                let src = embedded_media
+                    .as_ref()
+                    .map(|media| media.src.clone())
                     .unwrap_or_else(|| image_path.clone().unwrap_or_default());
                 let data = FloatingObjectData::Picture(PictureData {
                     src,
@@ -724,6 +705,23 @@ pub(crate) fn convert_floating_objects(
     }
 
     objects
+}
+
+fn resolve_picture_embedded_media(
+    binary_parts: &BinaryPartMap,
+    drawing_owner_part: Option<&str>,
+    relationship: &ooxml_types::shared::OpcRelationship,
+) -> Option<PictureEmbeddedMediaAuthority> {
+    let payload = resolve_relationship_payload(binary_parts, drawing_owner_part, relationship)?;
+    let src = data_url_for_payload(payload.content_type.as_deref(), &payload.bytes);
+
+    Some(PictureEmbeddedMediaAuthority {
+        relationship_id: payload.relationship_id,
+        original_target: payload.original_target,
+        package_path: payload.package_path,
+        content_type: payload.content_type,
+        src,
+    })
 }
 
 fn picture_relationships(

@@ -10,6 +10,8 @@ mod fixtures;
 mod helpers;
 #[path = "roundtrip_parse_output/layout.rs"]
 mod layout;
+#[path = "roundtrip_parse_output/media.rs"]
+mod media;
 #[path = "roundtrip_parse_output/partial_domains.rs"]
 mod partial_domains;
 #[path = "roundtrip_parse_output/shared_strings.rs"]

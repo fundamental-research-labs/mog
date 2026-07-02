@@ -4,7 +4,9 @@ use domain_types::domain::floating_object::{FloatingObject, FloatingObjectData};
 use crate::domain::drawings::write::{ClientData, DrawingAnchor, DrawingObject};
 
 use super::anchors::{anchor_mode_to_edit_as, anchor_to_legacy_position, wrap_in_anchor};
-use super::images::{convert_image, next_available_image_r_id, push_image_blob_if_data_url};
+use super::images::{
+    convert_image, ensure_image_blob_for_current_payload, next_available_image_r_id,
+};
 use super::ooxml_props::get_anchor_ooxml_props;
 use super::shapes::{
     convert_group_fallback, convert_group_from_data, convert_shape, convert_text_box,
@@ -25,15 +27,25 @@ pub(super) fn convert_floating_object(
                 let mut image_props =
                     crate::domain::drawings::write::convert::picture_to_image_props(&ooxml.picture);
                 if let Some(ref image_path) = ooxml.image_path {
-                    let r_id = reusable_image_relationship_id(ooxml, image_path, image_rels)
-                        .unwrap_or_else(|| next_available_image_r_id(image_rels));
-                    image_props.r_id = r_id.clone();
-                    if !image_rels.iter().any(|(existing_id, existing_path)| {
-                        existing_id == &r_id && existing_path == image_path
-                    }) {
-                        image_rels.push((r_id, image_path.clone()));
+                    if ensure_image_blob_for_current_payload(
+                        image_blobs,
+                        image_path,
+                        &pic_data.src,
+                        ooxml,
+                    ) {
+                        let r_id = reusable_image_relationship_id(ooxml, image_path, image_rels)
+                            .unwrap_or_else(|| next_available_image_r_id(image_rels));
+                        image_props.r_id = r_id.clone();
+                        if !image_rels.iter().any(|(existing_id, existing_path)| {
+                            existing_id == &r_id && existing_path == image_path
+                        }) {
+                            image_rels.push((r_id, image_path.clone()));
+                        }
+                    } else {
+                        image_props.r_id.clear();
                     }
-                    push_image_blob_if_data_url(image_blobs, image_path, &pic_data.src);
+                } else {
+                    image_props.r_id.clear();
                 }
                 drawing_rels.extend(
                     ooxml

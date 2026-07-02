@@ -746,12 +746,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                             "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image",
                             &image_path,
                         ));
-                    // Resolve the relative path (e.g. "../media/image1.png") to absolute ZIP path.
-                    let zip_path = if let Some(stripped) = image_path.strip_prefix("../") {
-                        format!("xl/{}", stripped)
-                    } else {
-                        format!("xl/media/{}", image_path)
-                    };
+                    let zip_path = media::resolve_drawing_image_target(&drawing_path, &image_path)?;
                     all_image_blobs.push((zip_path, image_bytes));
                 }
             }

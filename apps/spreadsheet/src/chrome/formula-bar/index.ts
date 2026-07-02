@@ -10,6 +10,7 @@
  * @see NameBoxDropdown - Interactive name box with dropdown for navigation
  */
 
+export { AnnotationBar } from './AnnotationBar';
 export { FormulaBar } from './FormulaBar';
 export { FormulaBarContainer } from './FormulaBarContainer';
 export { FormulaBarContextMenu } from './FormulaBarContextMenu';

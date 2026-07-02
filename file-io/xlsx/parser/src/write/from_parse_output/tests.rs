@@ -32,6 +32,7 @@ mod chart_user_shapes;
 mod charts;
 mod context_removal_gates;
 mod data_tables;
+mod drawing_pictures;
 mod package_graph_ownership;
 mod pivot_package;
 mod smoke_and_formulas;
@@ -432,229 +433,6 @@ fn shared_string_phonetic_hint_does_not_capture_plain_cells_with_same_text() {
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
 }
 
-#[test]
-fn drawing_export_preserves_distinct_image_relationships_to_same_media_part() {
-    use domain_types::domain::floating_object::{
-        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
-        PictureData, PictureOoxmlProps,
-    };
-
-    fn picture(id: &str, anchor_col: u32) -> FloatingObject {
-        let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
-        picture.blip_fill.embed_id = Some("rIdImported".to_string());
-        FloatingObject {
-            common: FloatingObjectCommon {
-                id: id.to_string(),
-                name: id.to_string(),
-                width: 100.0,
-                height: 40.0,
-                anchor: FloatingObjectAnchor {
-                    anchor_col,
-                    end_col: Some(anchor_col + 1),
-                    end_row: Some(1),
-                    anchor_mode: AnchorMode::TwoCell,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            data: FloatingObjectData::Picture(PictureData {
-                src: "data:image/png;base64,AQIDBA==".to_string(),
-                original_width: None,
-                original_height: None,
-                crop: None,
-                adjustments: None,
-                border: None,
-                color_type: None,
-                ooxml: Some(PictureOoxmlProps {
-                    picture,
-                    image_path: Some("../media/image1.png".to_string()),
-                    ..Default::default()
-                }),
-            }),
-        }
-    }
-
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        floating_objects: vec![picture("Picture 1", 0), picture("Picture 2", 2)],
-        ..Default::default()
-    }]);
-
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let drawing_xml =
-        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
-    let drawing_rels = crate::domain::workbook::read::parse_all_rels(
-        &archive
-            .read_file("xl/drawings/_rels/drawing1.xml.rels")
-            .unwrap(),
-    );
-
-    assert!(drawing_xml.contains(r#"r:embed="rId1""#));
-    assert!(drawing_xml.contains(r#"r:embed="rId2""#));
-    let image_rels: Vec<_> = drawing_rels
-        .iter()
-        .filter(|rel| rel.rel_type == crate::infra::opc::REL_IMAGE)
-        .collect();
-    assert_eq!(image_rels.len(), 2);
-    assert!(image_rels.iter().any(|rel| rel.id == "rId1"));
-    assert!(image_rels.iter().any(|rel| rel.id == "rId2"));
-    assert!(
-        image_rels
-            .iter()
-            .all(|rel| rel.target == "../media/image1.png")
-    );
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
-fn drawing_picture_external_link_relationship_is_registered_from_owner_state() {
-    use domain_types::domain::floating_object::{
-        AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
-        PictureData, PictureOoxmlProps,
-    };
-
-    let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
-    picture.blip_fill.embed_id = Some("rIdImported".to_string());
-    picture.blip_fill.link_id = Some("rId2".to_string());
-
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        floating_objects: vec![FloatingObject {
-            common: FloatingObjectCommon {
-                id: "Picture 1".to_string(),
-                name: "Picture 1".to_string(),
-                width: 100.0,
-                height: 40.0,
-                anchor: FloatingObjectAnchor {
-                    end_col: Some(1),
-                    end_row: Some(1),
-                    anchor_mode: AnchorMode::TwoCell,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            data: FloatingObjectData::Picture(PictureData {
-                src: "data:image/png;base64,AQIDBA==".to_string(),
-                original_width: None,
-                original_height: None,
-                crop: None,
-                adjustments: None,
-                border: None,
-                color_type: None,
-                ooxml: Some(PictureOoxmlProps {
-                    picture,
-                    image_path: Some("../media/image1.png".to_string()),
-                    relationships: vec![ooxml_types::shared::OpcRelationship {
-                        id: "rId2".to_string(),
-                        rel_type: crate::infra::opc::REL_IMAGE.to_string(),
-                        target: "cid:linked-image".to_string(),
-                        target_mode: Some("External".to_string()),
-                    }],
-                    ..Default::default()
-                }),
-            }),
-        }],
-        ..Default::default()
-    }]);
-
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let drawing_xml =
-        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
-    let drawing_rels = crate::domain::workbook::read::parse_all_rels(
-        &archive
-            .read_file("xl/drawings/_rels/drawing1.xml.rels")
-            .unwrap(),
-    );
-
-    assert!(drawing_xml.contains(r#"r:link="rId2""#));
-    assert!(drawing_rels.iter().any(|rel| {
-        rel.id == "rId2"
-            && rel.rel_type == crate::infra::opc::REL_IMAGE
-            && rel.target == "cid:linked-image"
-            && rel.target_mode.as_deref() == Some("External")
-    }));
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
-fn drawing_picture_without_current_payload_drops_internal_embed_relationship() {
-    let mut picture = imported_picture_with_media("Picture 1", "../media/image1.png");
-    if let domain_types::domain::floating_object::FloatingObjectData::Picture(data) =
-        &mut picture.data
-    {
-        data.src = "../media/image1.png".to_string();
-        data.ooxml.as_mut().unwrap().relationships = vec![ooxml_types::shared::OpcRelationship {
-            id: "rIdImported".to_string(),
-            rel_type: crate::infra::opc::REL_IMAGE.to_string(),
-            target: "../media/image1.png".to_string(),
-            target_mode: None,
-        }];
-    }
-
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        floating_objects: vec![picture],
-        ..Default::default()
-    }]);
-
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let drawing_xml =
-        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
-
-    assert!(!drawing_xml.contains("r:embed="));
-    assert!(archive.read_file("xl/media/image1.png").is_err());
-    if let Ok(rels_bytes) = archive.read_file("xl/drawings/_rels/drawing1.xml.rels") {
-        let drawing_rels = crate::domain::workbook::read::parse_all_rels(&rels_bytes);
-        assert!(
-            drawing_rels
-                .iter()
-                .all(|rel| rel.rel_type != crate::infra::opc::REL_IMAGE)
-        );
-    }
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
-#[test]
-fn drawing_picture_absolute_media_target_writes_payload_to_resolved_part() {
-    let output = make_parse_output(vec![SheetData {
-        name: "Sheet1".to_string(),
-        floating_objects: vec![imported_picture_with_media(
-            "Picture 1",
-            "/xl/media/image1.png",
-        )],
-        ..Default::default()
-    }]);
-
-    let bytes = write_xlsx_from_parse_output(&output).unwrap();
-    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
-    let drawing_xml =
-        String::from_utf8(archive.read_file("xl/drawings/drawing1.xml").unwrap()).unwrap();
-    let drawing_rels = crate::domain::workbook::read::parse_all_rels(
-        &archive
-            .read_file("xl/drawings/_rels/drawing1.xml.rels")
-            .unwrap(),
-    );
-    let content_types =
-        String::from_utf8(archive.read_file("[Content_Types].xml").unwrap()).unwrap();
-
-    assert!(drawing_xml.contains(r#"r:embed="rId1""#));
-    assert_eq!(
-        archive.read_file("xl/media/image1.png").unwrap(),
-        vec![1, 2, 3, 4]
-    );
-    assert!(drawing_rels.iter().any(|rel| {
-        rel.id == "rId1"
-            && rel.rel_type == crate::infra::opc::REL_IMAGE
-            && rel.target == "../media/image1.png"
-            && rel.target_mode.is_none()
-    }));
-    assert!(content_types.contains(r#"Extension="png" ContentType="image/png""#));
-    validate_archive_package_integrity(&archive).expect("exported package should be valid");
-}
-
 fn make_formula_cell(row: u32, col: u32, formula: &str, cached: DomainValue) -> DomainCellData {
     DomainCellData {
         row,
@@ -845,11 +623,20 @@ fn imported_picture_with_media(
 ) -> domain_types::domain::floating_object::FloatingObject {
     use domain_types::domain::floating_object::{
         AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
-        PictureData, PictureOoxmlProps,
+        PictureData, PictureEmbeddedMediaAuthority, PictureOoxmlProps,
     };
 
     let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
     picture.blip_fill.embed_id = Some("rIdImported".to_string());
+    let package_path = image_path
+        .strip_prefix('/')
+        .map(ToString::to_string)
+        .or_else(|| {
+            image_path
+                .strip_prefix("../media/")
+                .map(|file_name| format!("xl/media/{file_name}"))
+        })
+        .unwrap_or_else(|| image_path.to_string());
 
     FloatingObject {
         common: FloatingObjectCommon {
@@ -876,6 +663,13 @@ fn imported_picture_with_media(
             ooxml: Some(PictureOoxmlProps {
                 picture,
                 image_path: Some(image_path.to_string()),
+                embedded_media: Some(PictureEmbeddedMediaAuthority {
+                    relationship_id: "rIdImported".to_string(),
+                    original_target: image_path.to_string(),
+                    package_path,
+                    content_type: Some("image/png".to_string()),
+                    src: "data:image/png;base64,AQIDBA==".to_string(),
+                }),
                 ..Default::default()
             }),
         }),

@@ -27,12 +27,8 @@ pub(super) fn convert_floating_object(
                 let mut image_props =
                     crate::domain::drawings::write::convert::picture_to_image_props(&ooxml.picture);
                 if let Some(ref image_path) = ooxml.image_path {
-                    if ensure_image_blob_for_current_payload(
-                        image_blobs,
-                        image_path,
-                        &pic_data.src,
-                        ooxml,
-                    ) {
+                    if ensure_image_blob_for_current_payload(image_blobs, image_path, &pic_data.src)
+                    {
                         let r_id = reusable_image_relationship_id(ooxml, image_path, image_rels)
                             .unwrap_or_else(|| next_available_image_r_id(image_rels));
                         image_props.r_id = r_id.clone();

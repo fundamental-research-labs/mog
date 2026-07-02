@@ -1,4 +1,4 @@
-use domain_types::domain::floating_object::{FloatingObjectCommon, PictureOoxmlProps};
+use domain_types::domain::floating_object::FloatingObjectCommon;
 
 use crate::domain::drawings::write::{DrawingLocking, DrawingObject, ImageProps};
 
@@ -85,17 +85,11 @@ pub(super) fn ensure_image_blob_for_current_payload(
     image_blobs: &mut Vec<(String, Vec<u8>)>,
     image_path: &str,
     picture_src: &str,
-    ooxml: &PictureOoxmlProps,
 ) -> bool {
     if image_blobs.iter().any(|(path, _)| path == image_path) {
         return true;
     }
-    let Some(decoded) = ooxml
-        .embedded_media
-        .as_ref()
-        .and_then(|media| parse_data_url(&media.src).map(|(_, bytes)| bytes))
-        .or_else(|| parse_data_url(picture_src).map(|(_, bytes)| bytes))
-    else {
+    let Some((_, decoded)) = parse_data_url(picture_src) else {
         return false;
     };
     image_blobs.push((image_path.to_string(), decoded));

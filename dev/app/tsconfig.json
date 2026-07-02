@@ -10,6 +10,10 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
+      "@mog/app-spreadsheet/chrome/collab": ["../../apps/spreadsheet/src/entries/chrome-collab.ts"],
+      "@mog/app-spreadsheet/dev/testing-panel": [
+        "../../apps/spreadsheet/src/dev/testing-panel-contribution.tsx"
+      ],
       "@mog/devtools": ["../../tools/devtools/src/index.ts"],
       "@mog/devtools/console/api": ["../../tools/devtools/src/console/api.ts"],
       "@mog/devtools/invariants-slot": ["../../tools/devtools/src/invariants-slot.ts"],

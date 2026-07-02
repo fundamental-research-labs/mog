@@ -1,5 +1,5 @@
 import type { ShellBootstrapResult } from '@mog/shell';
-import { Bot, Loader2, PanelRightClose, Send, Square, X } from 'lucide-react';
+import { Bot, Loader2, PanelRightClose, Plus, Send, Square, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   DEV_AGENT_TOOL_DEFINITIONS,
@@ -73,6 +73,7 @@ const DEFAULT_DEV_AGENT_ENDPOINT = '/api/mog-dev-agent/chat/completions';
 const DEV_AGENT_ENDPOINT_KEY = 'mog:dev-agent-endpoint';
 const DEV_AGENT_MODEL_KEY = 'mog:dev-agent-model';
 const DEV_AGENT_PANEL_WIDTH = 'min(100vw, 384px)';
+const WELCOME_MESSAGE_ID = 'welcome';
 
 function useActiveDocumentSnapshot(shell: ShellBootstrapResult): DevAgentActiveDocumentSnapshot {
   const [snapshot, setSnapshot] = useState(() => readDevAgentActiveDocumentSnapshot(shell));
@@ -93,6 +94,16 @@ function useActiveDocumentSnapshot(shell: ShellBootstrapResult): DevAgentActiveD
 
 function nextMessageId(role: AgentMessageRole): string {
   return `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createInitialMessages(): AgentMessage[] {
+  return [
+    {
+      id: WELCOME_MESSAGE_ID,
+      role: 'assistant',
+      content: 'Pivot is ready.',
+    },
+  ];
 }
 
 function trimTrailingSlash(value: string): string {
@@ -400,6 +411,7 @@ function systemPrompt(workbookContext: string): string {
 
 function toPivotHistory(messages: readonly AgentMessage[]): PivotChatMessage[] {
   return messages
+    .filter((message) => message.id !== WELCOME_MESSAGE_ID)
     .filter((message) => message.content.trim().length > 0)
     .map((message) => ({
       role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
@@ -556,17 +568,12 @@ async function runAgentConversation({
 export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX.Element {
   const activeDocument = useActiveDocumentSnapshot(shell);
   const config = useMemo(readDevAgentConfig, []);
-  const [messages, setMessages] = useState<AgentMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: 'Pivot is ready.',
-    },
-  ]);
+  const [messages, setMessages] = useState<AgentMessage[]>(createInitialMessages);
   const [draft, setDraft] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   const canSubmit = draft.trim().length > 0 && !isRunning;
   const statusLabel = useMemo(() => {
@@ -616,8 +623,10 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
       setMessages((current) => [...current, userMessage, assistantMessage]);
       setIsRunning(true);
 
+      const runId = crypto.randomUUID();
       const abortController = new AbortController();
       abortRef.current = abortController;
+      activeRunIdRef.current = runId;
 
       try {
         const workbookContext = await buildDevAgentWorkbookContext(shell);
@@ -634,7 +643,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
         await runAgentConversation({
           shell,
           config,
-          requestId: crypto.randomUUID(),
+          requestId: runId,
           messages: [
             { role: 'system', content: systemPrompt(workbookContext) },
             ...toPivotHistory(history),
@@ -649,12 +658,24 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
           content ? `${content}\n\n${formatError(error)}` : formatError(error),
         );
       } finally {
-        if (abortRef.current === abortController) abortRef.current = null;
-        setIsRunning(false);
+        if (activeRunIdRef.current === runId) {
+          activeRunIdRef.current = null;
+          if (abortRef.current === abortController) abortRef.current = null;
+          setIsRunning(false);
+        }
       }
     },
     [config, isRunning, messages, shell, updateAssistantMessage],
   );
+
+  const startNewConversation = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    activeRunIdRef.current = null;
+    setDraft('');
+    setMessages(createInitialMessages());
+    setIsRunning(false);
+  }, []);
 
   const stopRequest = useCallback(() => {
     abortRef.current?.abort();
@@ -692,7 +713,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
       aria-label="Mog dev agent"
     >
       <header className="flex h-12 flex-shrink-0 items-center gap-2 border-b border-ss-border px-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded bg-ss-accent text-white">
+        <div className="flex h-7 w-7 items-center justify-center rounded bg-ss-primary text-ss-text-inverse">
           <Bot className="h-4 w-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
@@ -701,6 +722,16 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
             {config.model} · {activeDocument.displayName} · {statusLabel}
           </div>
         </div>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text"
+          onClick={startNewConversation}
+          aria-label="Start new dev agent conversation"
+          title="New conversation"
+          data-testid="dev-agent-new-conversation"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+        </button>
         <button
           type="button"
           className="flex h-7 w-7 items-center justify-center rounded text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text"
@@ -721,7 +752,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
             <div
               className={`max-w-[88%] rounded-md px-3 py-2 text-sm leading-5 ${
                 message.role === 'user'
-                  ? 'bg-ss-accent text-white'
+                  ? 'bg-ss-primary text-ss-text-inverse'
                   : 'border border-ss-border bg-ss-surface text-ss-text'
               }`}
             >
@@ -743,7 +774,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
       </div>
 
       <form className="border-t border-ss-border p-3" onSubmit={handleSubmit}>
-        <div className="flex items-end gap-2 rounded-md border border-ss-border bg-ss-surface p-2 focus-within:border-ss-accent">
+        <div className="flex items-end gap-2 rounded-md border border-ss-border bg-ss-surface p-2 focus-within:border-ss-primary">
           <textarea
             className="max-h-28 min-h-11 flex-1 resize-none bg-transparent text-sm leading-5 text-ss-text outline-none placeholder:text-ss-text-tertiary"
             value={draft}
@@ -767,7 +798,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
           {isRunning ? (
             <button
               type="button"
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-ss-accent text-white transition-colors hover:bg-ss-accent-hover"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-ss-primary text-ss-text-inverse transition-colors hover:bg-ss-primary-hover"
               onClick={stopRequest}
               aria-label="Stop dev agent response"
               title="Stop"
@@ -778,7 +809,7 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
           ) : (
             <button
               type="submit"
-              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-ss-accent text-white transition-colors hover:bg-ss-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded bg-ss-primary text-ss-text-inverse transition-colors hover:bg-ss-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canSubmit}
               aria-label="Send dev agent prompt"
               title="Send"

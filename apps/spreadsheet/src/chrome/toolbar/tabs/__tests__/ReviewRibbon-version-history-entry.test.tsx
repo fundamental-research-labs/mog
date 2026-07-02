@@ -5,7 +5,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 
-type SidePanelContent = 'index' | 'formula-references' | 'version-history';
+type SidePanelContent = 'index' | 'formula-references' | 'version-history' | 'cell-annotation';
 
 let versionControlEnabled = true;
 
@@ -36,6 +36,7 @@ jest.unstable_mockModule('../../../../internal-api', () => ({
   useFeatureGate: (_category: string, key: string) =>
     key === 'versionControl' ? versionControlEnabled : true,
   useUIStore: <T,>(selector: (state: typeof uiState) => T) => selector(uiState),
+  useReadOnly: () => false,
   useWorkbook: () => ({
     diagnostics: {
       getFormulaReferences: jest.fn(),
@@ -142,6 +143,16 @@ jest.unstable_mockModule('../../../version-control/VersionHistoryPanel', () => (
   ),
 }));
 
+jest.unstable_mockModule('../../../annotations/CellAnnotationPanel', () => ({
+  CellAnnotationPanel: ({ onClose }: { onClose: () => void }) => (
+    <aside data-testid="panel-cell-annotation">
+      <button type="button" onClick={onClose}>
+        Close
+      </button>
+    </aside>
+  ),
+}));
+
 const { ReviewRibbon } = await import('../ReviewRibbon');
 const { SidePanel } = await import('../../../side-panel/SidePanel');
 
@@ -191,6 +202,25 @@ describe('Review ribbon entry gates', () => {
     expect(uiState.setSidePanelVisible).toHaveBeenCalledWith(true);
   });
 
+  it('exposes the Review ribbon entrypoint for the active cell annotation panel', async () => {
+    const user = userEvent.setup();
+    render(<ReviewRibbon />);
+
+    const entrypoint = screen.getByTestId('review-cell-annotation');
+
+    expect(entrypoint).toBeEnabled();
+    expect(entrypoint).toHaveAttribute('data-action', 'open-cell-annotation');
+    expect(mockKeyTipRegister).toHaveBeenCalledWith({
+      key: 'M',
+      tabId: 'review',
+      elementId: 'review-cell-annotation',
+    });
+
+    await user.click(entrypoint);
+    expect(uiState.setSidePanelContent).toHaveBeenCalledWith('cell-annotation');
+    expect(uiState.setSidePanelVisible).toHaveBeenCalledWith(true);
+  });
+
   it('hides the Review ribbon entrypoint when version control is disabled', () => {
     versionControlEnabled = false;
 
@@ -220,6 +250,23 @@ describe('Review ribbon entry gates', () => {
     entrypoint.focus();
     await user.keyboard('{Enter}');
     expect(uiState.setSidePanelContent).toHaveBeenCalledWith('version-history');
+  });
+
+  it('exposes the side-panel entrypoint for the active cell annotation panel', async () => {
+    const user = userEvent.setup();
+    render(<SidePanel />);
+
+    const entrypoint = screen.getByTestId('panel-side-cell-annotation');
+
+    expect(entrypoint).toBeEnabled();
+    expect(entrypoint).toHaveAttribute('data-action', 'open-cell-annotation');
+
+    await user.click(entrypoint);
+    expect(uiState.setSidePanelContent).toHaveBeenCalledWith('cell-annotation');
+
+    uiState.sidePanelContent = 'cell-annotation';
+    render(<SidePanel />);
+    expect(screen.getByTestId('panel-cell-annotation')).toBeInTheDocument();
   });
 
   it('blocks stale side-panel version history content when version control is disabled', async () => {

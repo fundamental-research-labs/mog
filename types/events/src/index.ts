@@ -72,6 +72,9 @@ export * from './filter-events';
 // Comment events
 export * from './comment-events';
 
+// Annotation events
+export * from './annotation-events';
+
 // File I/O events (import/export progress)
 export * from './file-io-events';
 
@@ -120,6 +123,7 @@ import type {
   RowSortedEvent,
 } from '@mog/types-data/data/sorting';
 import type { CanvasObjectEventUnion } from './canvas-object-events';
+import type { AnnotationEvent } from './annotation-events';
 import type { CellEvent } from './cell-events';
 import type { ChartEvent } from './chart-events';
 import type { CommentEvent } from './comment-events';
@@ -202,6 +206,8 @@ export type SpreadsheetEvent =
   | FilterEvent
   // Comment events
   | CommentEvent
+  // Mog-native annotation cache events
+  | AnnotationEvent
   // File I/O events
   | FileIOEvent
   // Named range events

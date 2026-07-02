@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect } from 'react';
-import { History as VersionHistoryIcon } from 'lucide-react';
+import { History as VersionHistoryIcon, StickyNote as CellAnnotationIcon } from 'lucide-react';
 import { dispatch, useFeatureGate, useUIStore } from '../../../internal-api';
 
 import {
@@ -206,6 +206,11 @@ export function ReviewRibbon() {
     setSidePanelVisible(true);
   }, [setSidePanelContent, setSidePanelVisible, versionControlEnabled]);
 
+  const handleOpenCellAnnotation = useCallback(() => {
+    setSidePanelContent('cell-annotation');
+    setSidePanelVisible(true);
+  }, [setSidePanelContent, setSidePanelVisible]);
+
   // ===========================================================================
   // KeyTip Registration (display-only — keytip overlay reads `key`,
   // `tabId`, `elementId` here; the unified keyboard system fires the action
@@ -230,6 +235,9 @@ export function ReviewRibbon() {
 
     keyTipRegistry.register({ key: 'A', tabId: 'review', elementId: 'review-show-all-comments' });
     cleanups.push(() => keyTipRegistry.unregister('A', 'review'));
+
+    keyTipRegistry.register({ key: 'M', tabId: 'review', elementId: 'review-cell-annotation' });
+    cleanups.push(() => keyTipRegistry.unregister('M', 'review'));
 
     keyTipRegistry.register({ key: 'S', tabId: 'review', elementId: 'review-protect-sheet' });
     cleanups.push(() => keyTipRegistry.unregister('S', 'review'));
@@ -322,6 +330,25 @@ export function ReviewRibbon() {
             />
           </div>
         </div>
+      </ToolbarGroup>
+
+      <ToolbarGroup
+        label="Annotations"
+        collapseConfig={DEFAULT_COLLAPSE_CONFIG}
+        dropdownIcon={<CellAnnotationIcon size={16} strokeWidth={1.75} />}
+      >
+        <RibbonButton
+          id="review-cell-annotation"
+          layout="vertical"
+          height="full"
+          icon={<CellAnnotationIcon size={16} strokeWidth={1.75} />}
+          label={'Cell\nAnnotation'}
+          onClick={handleOpenCellAnnotation}
+          data-testid="review-cell-annotation"
+          data-action="open-cell-annotation"
+          title="Cell Annotation"
+          aria-label="Cell Annotation"
+        />
       </ToolbarGroup>
 
       {versionControlEnabled ? (

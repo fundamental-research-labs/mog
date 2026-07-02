@@ -5,12 +5,26 @@
  */
 
 export type {
+  WorksheetAnnotationDiagnosticReadOptions,
   WorksheetAnnotationDeleteResult,
   WorksheetAnnotationFingerprint,
   WorksheetAnnotationFingerprintProfile,
+  WorksheetAnnotationListOptions,
+  WorksheetAnnotationReadOptions,
+  WorksheetAnnotationReadValidationMode,
   WorksheetAnnotationRecord,
+  WorksheetAnnotationView,
   WorksheetAnnotations,
   WorksheetAnnotationStatus,
+  WorksheetCellAnnotationDeleteResult,
+  WorksheetCellAnnotationDiagnosticListOptions,
+  WorksheetCellAnnotationDiagnostics,
+  WorksheetCellAnnotationListOptions,
+  WorksheetCellAnnotationRecord,
+  WorksheetCellAnnotationRef,
+  WorksheetCellAnnotations,
+  WorksheetCellAnnotationView,
+  WorksheetCellAnnotationWriteEntry,
 } from './annotations';
 export type { WorksheetBindings } from './bindings';
 export type {

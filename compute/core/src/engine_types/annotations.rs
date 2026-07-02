@@ -55,3 +55,27 @@ pub struct AnnotationDeleteResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotation: Option<AnnotationRecord>,
 }
+
+impl compute_security::RedactMaybe for AnnotationFingerprint {
+    fn redact(&mut self, level: compute_security::AccessLevel) {
+        if level < compute_security::AccessLevel::Read {
+            self.hash.clear();
+        }
+    }
+}
+
+impl compute_security::RedactMaybe for AnnotationRecord {
+    fn redact(&mut self, level: compute_security::AccessLevel) {
+        if level < compute_security::AccessLevel::Read {
+            self.text.redact(level);
+            self.stale_reason = None;
+            self.fingerprint.redact(level);
+        }
+    }
+}
+
+impl compute_security::RedactMaybe for AnnotationDeleteResult {
+    fn redact(&mut self, level: compute_security::AccessLevel) {
+        self.annotation.redact(level);
+    }
+}

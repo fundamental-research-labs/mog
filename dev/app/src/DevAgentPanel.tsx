@@ -1,6 +1,23 @@
 import type { ShellBootstrapResult } from '@mog/shell';
 import { Bot, Loader2, PanelRightClose, Send, Square, X } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DEV_AGENT_TOOL_DEFINITIONS,
+  buildDevAgentWorkbookContext,
+  createDevAgentToolSession,
+  executeDevAgentTool,
+  readDevAgentActiveDocumentSnapshot,
+  type DevAgentActiveDocumentSnapshot,
+  type DevAgentToolDefinition,
+  type DevAgentToolExecution,
+} from './dev-agent-tools';
+import {
+  finalizeToolCallAccumulator,
+  ingestToolCallDeltas,
+  parseFallbackToolCalls,
+  type DevAgentPendingToolCall,
+  type DevAgentToolCall,
+} from './dev-agent-tool-protocol';
 
 type AgentMessageRole = 'assistant' | 'user';
 
@@ -8,14 +25,6 @@ interface AgentMessage {
   readonly id: string;
   readonly role: AgentMessageRole;
   readonly content: string;
-}
-
-interface ActiveDocumentSnapshot {
-  readonly activeFileId: string | null;
-  readonly displayName: string;
-  readonly loadingState: string;
-  readonly hasHandle: boolean;
-  readonly modeLabel: string;
 }
 
 interface DevAgentConfig {
@@ -29,16 +38,34 @@ interface DevAgentPanelProps {
 }
 
 interface PivotChatMessage {
-  readonly role: 'assistant' | 'system' | 'user';
+  readonly role: 'assistant' | 'system' | 'tool' | 'user';
+  readonly content: string | null;
+  readonly tool_call_id?: string;
+  readonly name?: string;
+  readonly tool_calls?: readonly PivotToolCallMessage[];
+}
+
+interface PivotToolCallMessage {
+  readonly id: string;
+  readonly type: 'function';
+  readonly function: {
+    readonly name: string;
+    readonly arguments: string;
+  };
+}
+
+interface PivotAssistantResponse {
   readonly content: string;
+  readonly toolCalls: readonly DevAgentToolCall[];
 }
 
 interface PivotRequestOptions {
   readonly config: DevAgentConfig;
   readonly requestId: string;
   readonly messages: readonly PivotChatMessage[];
+  readonly tools?: readonly DevAgentToolDefinition[];
   readonly signal: AbortSignal;
-  readonly onDelta: (delta: string) => void;
+  readonly onDelta?: (delta: string) => void;
 }
 
 const DEFAULT_PIVOT_MODEL = 'pivot';
@@ -47,32 +74,11 @@ const DEV_AGENT_ENDPOINT_KEY = 'mog:dev-agent-endpoint';
 const DEV_AGENT_MODEL_KEY = 'mog:dev-agent-model';
 const DEV_AGENT_PANEL_WIDTH = 'min(100vw, 384px)';
 
-function readActiveDocumentSnapshot(shell: ShellBootstrapResult): ActiveDocumentSnapshot {
-  const state = shell.store.getState();
-  const activeFileId = state.activeFileId;
-  const file = activeFileId ? state.files[activeFileId] : undefined;
-  const handle = activeFileId ? shell.documentManager.getDocument(activeFileId) : null;
-  const mode = activeFileId ? shell.documentManager.getDocumentMode(activeFileId) : null;
-
-  return {
-    activeFileId,
-    displayName: file?.displayName ?? activeFileId ?? 'No active document',
-    loadingState: activeFileId ? shell.documentManager.getLoadingState(activeFileId) : 'idle',
-    hasHandle: handle !== null,
-    modeLabel:
-      mode?.kind === 'collaboration'
-        ? `collab:${mode.roomId}`
-        : mode?.kind === 'normal'
-          ? 'normal'
-          : 'none',
-  };
-}
-
-function useActiveDocumentSnapshot(shell: ShellBootstrapResult): ActiveDocumentSnapshot {
-  const [snapshot, setSnapshot] = useState(() => readActiveDocumentSnapshot(shell));
+function useActiveDocumentSnapshot(shell: ShellBootstrapResult): DevAgentActiveDocumentSnapshot {
+  const [snapshot, setSnapshot] = useState(() => readDevAgentActiveDocumentSnapshot(shell));
 
   useEffect(() => {
-    const update = () => setSnapshot(readActiveDocumentSnapshot(shell));
+    const update = () => setSnapshot(readDevAgentActiveDocumentSnapshot(shell));
     const unsubscribeStore = shell.store.subscribe(update);
     const unsubscribeDocuments = shell.documentManager.subscribe(update);
     update();
@@ -143,6 +149,20 @@ function agentEndpoint(config: DevAgentConfig): string {
   return config.endpoint;
 }
 
+class PivotRequestError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'PivotRequestError';
+    this.status = status;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function parseSseBlock(block: string): { event: string | null; payload: unknown } | null {
   if (!block.trim()) return null;
   let event: string | null = null;
@@ -156,7 +176,13 @@ function parseSseBlock(block: string): { event: string | null; payload: unknown 
     }
   }
 
-  if (!event && dataLines.length === 0) return null;
+  if (!event && dataLines.length === 0) {
+    try {
+      return { event: null, payload: JSON.parse(block) };
+    } catch {
+      return null;
+    }
+  }
   if (dataLines.length === 0) return { event, payload: null };
   const data = dataLines.join('\n');
   if (data === '[DONE]') return { event, payload: '[DONE]' };
@@ -198,22 +224,86 @@ async function throwForErrorResponse(response: Response): Promise<never> {
     parsed = null;
   }
   const message = messageFromErrorPayload(parsed) ?? text.split('\n').slice(0, 3).join('\n');
-  throw new Error(
+  throw new PivotRequestError(
+    response.status,
     message
       ? `LLM stream failed (${response.status}): ${message}`
       : `LLM stream failed (${response.status}).`,
   );
 }
 
+function contentFromMessagePayload(messagePayload: unknown): string | null {
+  if (typeof messagePayload === 'string') return messagePayload;
+  if (!Array.isArray(messagePayload)) return null;
+  return messagePayload
+    .map((part) => {
+      if (typeof part === 'string') return part;
+      if (!isRecord(part)) return '';
+      const text = part.text;
+      return typeof text === 'string' ? text : '';
+    })
+    .join('');
+}
+
+function ingestToolCallsFromMessage(
+  pendingToolCalls: DevAgentPendingToolCall[],
+  messagePayload: unknown,
+): void {
+  if (!isRecord(messagePayload)) return;
+  ingestToolCallDeltas(pendingToolCalls, messagePayload.tool_calls);
+}
+
+function handleChatCompletionPayload(
+  payload: unknown,
+  pendingToolCalls: DevAgentPendingToolCall[],
+  appendContent: (delta: string) => void,
+): void {
+  if (!isRecord(payload)) return;
+
+  const topLevelDelta = payload.delta;
+  if (typeof topLevelDelta === 'string') appendContent(topLevelDelta);
+
+  ingestToolCallDeltas(pendingToolCalls, payload.tool_calls);
+  ingestToolCallsFromMessage(pendingToolCalls, payload.message);
+
+  const choices = payload.choices;
+  if (!Array.isArray(choices)) return;
+
+  for (const choice of choices) {
+    if (!isRecord(choice)) continue;
+
+    const delta = choice.delta;
+    if (isRecord(delta)) {
+      const content = contentFromMessagePayload(delta.content);
+      if (content) appendContent(content);
+      ingestToolCallDeltas(pendingToolCalls, delta.tool_calls);
+    }
+
+    const messagePayload = choice.message;
+    if (isRecord(messagePayload)) {
+      const content = contentFromMessagePayload(messagePayload.content);
+      if (content) appendContent(content);
+      ingestToolCallDeltas(pendingToolCalls, messagePayload.tool_calls);
+    }
+  }
+}
+
 async function readPivotStream(
   response: Response,
-  onDelta: (delta: string) => void,
-): Promise<void> {
+  onDelta: (delta: string) => void = () => {},
+): Promise<PivotAssistantResponse> {
   if (!response.body) throw new Error('LLM stream returned no response body.');
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  let content = '';
+  const pendingToolCalls: DevAgentPendingToolCall[] = [];
+
+  const appendContent = (delta: string) => {
+    content += delta;
+    onDelta(delta);
+  };
 
   const handleBlock = (block: string) => {
     const parsed = parseSseBlock(block);
@@ -224,32 +314,16 @@ async function readPivotStream(
         parsed.payload && typeof parsed.payload === 'object'
           ? (parsed.payload as Record<string, unknown>).delta
           : null;
-      if (typeof delta === 'string') onDelta(delta);
+      if (typeof delta === 'string') appendContent(delta);
       return;
     }
     if (parsed.event === 'error') {
       throw new Error(messageFromErrorPayload(parsed.payload) ?? 'LLM stream failed.');
     }
+    handleChatCompletionPayload(parsed.payload, pendingToolCalls, appendContent);
     if (parsed.payload && typeof parsed.payload === 'object') {
       const message = messageFromErrorPayload(parsed.payload);
       if (message) throw new Error(message);
-
-      const choices = (parsed.payload as Record<string, unknown>).choices;
-      const firstChoice = Array.isArray(choices) ? choices[0] : null;
-      if (firstChoice && typeof firstChoice === 'object') {
-        const choice = firstChoice as Record<string, unknown>;
-        const delta = choice.delta;
-        if (delta && typeof delta === 'object') {
-          const content = (delta as Record<string, unknown>).content;
-          if (typeof content === 'string') onDelta(content);
-          return;
-        }
-        const messagePayload = choice.message;
-        if (messagePayload && typeof messagePayload === 'object') {
-          const content = (messagePayload as Record<string, unknown>).content;
-          if (typeof content === 'string') onDelta(content);
-        }
-      }
     }
   };
 
@@ -264,15 +338,21 @@ async function readPivotStream(
 
   buffer += decoder.decode();
   if (buffer.trim()) handleBlock(buffer);
+
+  return {
+    content,
+    toolCalls: finalizeToolCallAccumulator(pendingToolCalls),
+  };
 }
 
 async function runPivotRequest({
   config,
   requestId,
   messages,
+  tools,
   signal,
   onDelta,
-}: PivotRequestOptions): Promise<void> {
+}: PivotRequestOptions): Promise<PivotAssistantResponse> {
   const headers = new Headers({
     'Content-Type': 'application/json',
     'X-Agent-Runtime': 'mog_dev_app',
@@ -290,45 +370,25 @@ async function runPivotRequest({
       messages,
       model: config.model,
       stream: true,
+      ...(tools && tools.length > 0 ? { tool_choice: 'auto', tools } : {}),
     }),
     signal,
   });
 
   if (!response.ok) await throwForErrorResponse(response);
-  await readPivotStream(response, onDelta);
-}
-
-async function buildWorkbookContext(shell: ShellBootstrapResult): Promise<string> {
-  const snapshot = readActiveDocumentSnapshot(shell);
-  if (!snapshot.activeFileId) return 'No active workbook is open.';
-  if (!snapshot.hasHandle) {
-    return `Active file: ${snapshot.activeFileId}\nDisplay name: ${snapshot.displayName}\nLoading state: ${snapshot.loadingState}`;
-  }
-
-  const handle = shell.documentManager.getDocument(snapshot.activeFileId);
-  if (!handle) {
-    return `Active file: ${snapshot.activeFileId}\nDisplay name: ${snapshot.displayName}\nLoading state: ${snapshot.loadingState}`;
-  }
-
-  const workbook = await handle.workbook();
-  const sheet = workbook.activeSheet;
-  const usedRange = await sheet.getUsedRange();
-  const preview = usedRange ? await sheet.describeRange(usedRange.address, false) : 'empty sheet';
-
-  return [
-    `Active file: ${snapshot.activeFileId}`,
-    `Display name: ${snapshot.displayName}`,
-    `Mode: ${snapshot.modeLabel}`,
-    `Active sheet: ${sheet.name}`,
-    `Sheets: ${workbook.sheetNames.join(', ') || 'none'}`,
-    `Used range: ${usedRange?.address ?? 'empty'}`,
-    `Preview:\n${preview}`,
-  ].join('\n');
+  return readPivotStream(response, onDelta);
 }
 
 function systemPrompt(workbookContext: string): string {
   return [
     'You are a Spreadsheet agent.',
+    'For every user request that needs workbook API use, first call mog_api_search with the current task intent.',
+    'Then call mog_api_describe for the relevant path if the signature or options are not obvious.',
+    'Then call mog_api_execute with JavaScript using only discovered public Mog APIs. The execution environment exposes wb/workbook, ws/worksheet, api, and console.',
+    'Never claim a workbook edit has been made until mog_api_execute confirms it.',
+    'Use A1 addresses when the API expects spreadsheet addresses.',
+    'If this chat provider does not support tool calls, respond with exactly one JSON object command at a time using {"tool":"mog_api_search","arguments":{"query":"..."}} or {"tool":"mog_api_execute","arguments":{"code":"..."}}. Execute code must be based on API paths returned by previous search/describe results, not examples from this prompt. Do not wrap JSON tool commands in prose.',
+    'After tool results are provided, answer briefly with what changed or what you found.',
     'Use the workbook context below when it is relevant.',
     'Do not mention private implementation details.',
     '',
@@ -345,6 +405,152 @@ function toPivotHistory(messages: readonly AgentMessage[]): PivotChatMessage[] {
       role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
       content: message.content,
     }));
+}
+
+function toPivotToolCallMessage(call: DevAgentToolCall): PivotToolCallMessage {
+  return {
+    id: call.id,
+    type: 'function',
+    function: {
+      name: call.name,
+      arguments: call.argumentsJson,
+    },
+  };
+}
+
+function toolResultContent(result: DevAgentToolExecution): string {
+  return JSON.stringify(result);
+}
+
+function shouldRetryWithoutTools(error: unknown): boolean {
+  if (!(error instanceof PivotRequestError)) return false;
+  if (error.status !== 400 && error.status !== 422) return false;
+  return /tool|function|tool_choice/i.test(error.message);
+}
+
+function appendToolResultsForFallback(
+  messages: PivotChatMessage[],
+  results: readonly DevAgentToolExecution[],
+): void {
+  messages.push({
+    role: 'user',
+    content: [
+      'Mog API tool results:',
+      ...results.map((result) => toolResultContent(result)),
+      '',
+      'If more workbook work is required, respond with the next JSON tool command. Otherwise answer normally and briefly.',
+    ].join('\n'),
+  });
+}
+
+function hasVisibleText(content: string): boolean {
+  return content.trim().length > 0;
+}
+
+interface RunAgentConversationOptions {
+  readonly shell: ShellBootstrapResult;
+  readonly config: DevAgentConfig;
+  readonly requestId: string;
+  readonly messages: readonly PivotChatMessage[];
+  readonly signal: AbortSignal;
+  readonly onDelta: (delta: string) => void;
+  readonly ensureTurnSeparator: () => void;
+}
+
+async function runAgentConversation({
+  shell,
+  config,
+  requestId,
+  messages,
+  signal,
+  onDelta,
+  ensureTurnSeparator,
+}: RunAgentConversationOptions): Promise<void> {
+  const llmMessages: PivotChatMessage[] = [...messages];
+  const toolSession = createDevAgentToolSession();
+  let toolMode: 'native' | 'fallback' = 'native';
+
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    const streamToTranscript = toolMode === 'native';
+    let bufferedContent = '';
+    const captureDelta = (delta: string) => {
+      bufferedContent += delta;
+      if (streamToTranscript) onDelta(delta);
+    };
+
+    let response: PivotAssistantResponse;
+    try {
+      response = await runPivotRequest({
+        config,
+        requestId,
+        messages: llmMessages,
+        tools: toolMode === 'native' ? DEV_AGENT_TOOL_DEFINITIONS : undefined,
+        signal,
+        onDelta: captureDelta,
+      });
+    } catch (error) {
+      if (!shouldRetryWithoutTools(error) || toolMode === 'fallback') throw error;
+      toolMode = 'fallback';
+      bufferedContent = '';
+      response = await runPivotRequest({
+        config,
+        requestId,
+        messages: llmMessages,
+        signal,
+        onDelta: (delta) => {
+          bufferedContent += delta;
+        },
+      });
+    }
+
+    const fallbackCalls = response.toolCalls.length
+      ? []
+      : parseFallbackToolCalls(response.content || bufferedContent);
+    const toolCalls = response.toolCalls.length ? response.toolCalls : fallbackCalls;
+
+    if (toolCalls.length === 0) {
+      if (!streamToTranscript && hasVisibleText(response.content || bufferedContent)) {
+        ensureTurnSeparator();
+        onDelta(response.content || bufferedContent);
+      }
+      return;
+    }
+
+    if (toolMode === 'native') {
+      llmMessages.push({
+        role: 'assistant',
+        content: response.content || null,
+        tool_calls: toolCalls.map(toPivotToolCallMessage),
+      });
+    } else {
+      llmMessages.push({
+        role: 'assistant',
+        content: response.content || bufferedContent,
+      });
+    }
+
+    const results: DevAgentToolExecution[] = [];
+    for (const call of toolCalls) {
+      const result = await executeDevAgentTool(shell, call, toolSession);
+      results.push(result);
+      if (toolMode === 'native') {
+        llmMessages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          name: call.name,
+          content: toolResultContent(result),
+        });
+      }
+    }
+
+    if (toolMode === 'fallback') {
+      appendToolResultsForFallback(llmMessages, results);
+    }
+
+    ensureTurnSeparator();
+  }
+
+  throw new Error('Stopped after 6 Mog tool iterations without a final answer.');
 }
 
 export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX.Element {
@@ -414,8 +620,19 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
       abortRef.current = abortController;
 
       try {
-        const workbookContext = await buildWorkbookContext(shell);
-        await runPivotRequest({
+        const workbookContext = await buildDevAgentWorkbookContext(shell);
+        const appendAssistantDelta = (delta: string) => {
+          updateAssistantMessage(assistantMessage.id, (content) => `${content}${delta}`);
+        };
+        const ensureTurnSeparator = () => {
+          updateAssistantMessage(assistantMessage.id, (content) => {
+            if (!content.trim()) return content;
+            return content.endsWith('\n\n') ? content : `${content}\n\n`;
+          });
+        };
+
+        await runAgentConversation({
+          shell,
           config,
           requestId: crypto.randomUUID(),
           messages: [
@@ -423,9 +640,8 @@ export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX
             ...toPivotHistory(history),
           ],
           signal: abortController.signal,
-          onDelta: (delta) => {
-            updateAssistantMessage(assistantMessage.id, (content) => `${content}${delta}`);
-          },
+          onDelta: appendAssistantDelta,
+          ensureTurnSeparator,
         });
         updateAssistantMessage(assistantMessage.id, (content) => content || '(No text returned.)');
       } catch (error) {

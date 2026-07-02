@@ -1,4 +1,4 @@
-import type { CellRange, RangeWriteOptions } from '@mog-sdk/contracts/api';
+import type { CellRange } from '@mog-sdk/contracts/api';
 
 import { KernelError } from '../../errors';
 import { parseCellAddress, parseCellRange } from '../internal/utils';
@@ -7,21 +7,18 @@ export type MatrixWriteArgs<TValues> = {
   startRow: number;
   startCol: number;
   values: TValues;
-  options: RangeWriteOptions | undefined;
 };
 
 export function resolveMatrixWriteArgs<TValues>(
   a: string | number | CellRange,
   b: unknown,
   c?: unknown,
-  d?: RangeWriteOptions,
 ): MatrixWriteArgs<TValues> {
   if (typeof a === 'object') {
     return {
       startRow: a.startRow,
       startCol: a.startCol,
       values: b as TValues,
-      options: c as RangeWriteOptions | undefined,
     };
   }
 
@@ -32,7 +29,6 @@ export function resolveMatrixWriteArgs<TValues>(
         startRow: parsed.startRow,
         startCol: parsed.startCol,
         values: b as TValues,
-        options: c as RangeWriteOptions | undefined,
       };
     }
 
@@ -42,7 +38,6 @@ export function resolveMatrixWriteArgs<TValues>(
       startRow: cell.row,
       startCol: cell.col,
       values: b as TValues,
-      options: c as RangeWriteOptions | undefined,
     };
   }
 
@@ -50,6 +45,5 @@ export function resolveMatrixWriteArgs<TValues>(
     startRow: a,
     startCol: b as number,
     values: c as TValues,
-    options: d,
   };
 }

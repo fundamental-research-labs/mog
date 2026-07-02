@@ -1,24 +1,13 @@
-import type { CellAnnotationWriteOptions, RangeWriteOptions } from '@mog-sdk/contracts/api';
+import type {
+  CellAnnotationWriteOptions,
+  WorksheetRangeFormulaInput,
+  WorksheetRangeValueInput,
+} from '@mog-sdk/contracts/api';
 import { MAX_COLS, MAX_ROWS, type CellValuePrimitive } from '@mog-sdk/contracts/core';
 
 import { KernelError } from '../../errors';
 import { parseCellAddress } from '../internal/utils';
 import { normalizeFormulaGrid, type NormalizedSetCellsEntry } from './formula-api-helpers';
-
-type WorksheetRangeValueInput =
-  | CellValuePrimitive
-  | Date
-  | {
-      readonly value: CellValuePrimitive | Date;
-      readonly annotation?: string | null;
-    };
-
-type WorksheetRangeFormulaInput =
-  | string
-  | {
-      readonly formula: string;
-      readonly annotation?: string | null;
-    };
 
 export type CellAnnotationTarget = {
   readonly row: number;
@@ -33,85 +22,16 @@ export function annotationFromOptions(
   return annotationText(operation, options?.annotation, ['options', 'annotation']);
 }
 
-export function annotationTargetsFromRangeOptions(
-  operation: string,
-  startRow: number,
-  startCol: number,
-  values: readonly (readonly unknown[])[],
-  options: RangeWriteOptions | undefined,
-): CellAnnotationTarget[] {
-  const annotations = options?.annotations;
-  if (annotations === undefined) return [];
-  if (!Array.isArray(annotations)) {
-    throw new KernelError(
-      'API_INVALID_ARGUMENT',
-      `${operation}: options.annotations must be a 2D array matching the written values.`,
-      {
-        path: ['options', 'annotations'],
-        suggestion:
-          'Pass annotations with the same row/column shape as the values or formulas matrix.',
-      },
-    );
-  }
-  if (annotations.length !== values.length) {
-    throw new KernelError(
-      'API_INVALID_ARGUMENT',
-      `${operation}: options.annotations row count must match the written values.`,
-      {
-        path: ['options', 'annotations'],
-        context: {
-          expectedRows: values.length,
-          receivedRows: annotations.length,
-        },
-      },
-    );
-  }
-
-  const targets: CellAnnotationTarget[] = [];
-  for (let r = 0; r < values.length; r++) {
-    const valueRow = values[r];
-    const annotationRow = annotations[r];
-    if (!Array.isArray(annotationRow) || annotationRow.length !== valueRow.length) {
-      throw new KernelError(
-        'API_INVALID_ARGUMENT',
-        `${operation}: each options.annotations row must match the corresponding written row length.`,
-        {
-          path: ['options', 'annotations', String(r)],
-          context: {
-            expectedColumns: valueRow.length,
-            receivedColumns: Array.isArray(annotationRow) ? annotationRow.length : undefined,
-          },
-        },
-      );
-    }
-    for (let c = 0; c < valueRow.length; c++) {
-      const text = annotationText(operation, annotationRow[c], [
-        'options',
-        'annotations',
-        String(r),
-        String(c),
-      ]);
-      if (text !== undefined) {
-        targets.push({ row: startRow + r, col: startCol + c, text });
-      }
-    }
-  }
-  return targets;
-}
-
 export function normalizeRangeWriteValues(
   operation: string,
   startRow: number,
   startCol: number,
   input: readonly (readonly WorksheetRangeValueInput[])[],
-  options: RangeWriteOptions | undefined,
 ): {
   values: Array<Array<CellValuePrimitive | Date>>;
   annotationTargets: CellAnnotationTarget[];
 } {
-  const pending = targetMap(
-    annotationTargetsFromRangeOptions(operation, startRow, startCol, input, options),
-  );
+  const pending = new Map<string, CellAnnotationTarget>();
   const values = input.map((row, rowIndex) =>
     row.map((entry, colIndex) => {
       if (!isAnnotatedValueInput(entry)) return entry;
@@ -137,30 +57,18 @@ export function normalizeRangeFormulaValues(
   startRow: number,
   startCol: number,
   input: unknown,
-  options: RangeWriteOptions | undefined,
 ): {
   values: string[][];
   annotationTargets: CellAnnotationTarget[];
 } {
   if (!containsAnnotatedFormulaInput(input)) {
     const values = normalizeFormulaGrid(input, operation);
-    return {
-      values,
-      annotationTargets: annotationTargetsFromRangeOptions(
-        operation,
-        startRow,
-        startCol,
-        values,
-        options,
-      ),
-    };
+    return { values, annotationTargets: [] };
   }
 
   const extracted = extractFormulaGrid(input) as unknown[][];
   const values = normalizeFormulaGrid(extracted, operation);
-  const pending = targetMap(
-    annotationTargetsFromRangeOptions(operation, startRow, startCol, values, options),
-  );
+  const pending = new Map<string, CellAnnotationTarget>();
 
   for (let rowIndex = 0; rowIndex < extracted.length; rowIndex++) {
     const row = inputRow(input, rowIndex);
@@ -229,10 +137,6 @@ function annotationText(
     );
   }
   return value;
-}
-
-function targetMap(targets: readonly CellAnnotationTarget[]): Map<string, CellAnnotationTarget> {
-  return new Map(targets.map((target) => [`${target.row},${target.col}`, target]));
 }
 
 function isAnnotatedValueInput(

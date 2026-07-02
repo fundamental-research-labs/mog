@@ -402,14 +402,6 @@ export interface Note {
   width?: number;
 }
 
-// =============================================================================
-// Cell Write Options
-// =============================================================================
-
-export type CellWriteAnnotationText = string | null | undefined;
-
-export type CellAnnotationMatrix = readonly (readonly CellWriteAnnotationText[])[];
-
 /** Options for attaching a Mog-native annotation while writing a cell. */
 export interface CellAnnotationWriteOptions {
   /**
@@ -417,16 +409,6 @@ export interface CellAnnotationWriteOptions {
    * succeeds. `null` and `undefined` mean "do not change the annotation".
    */
   annotation?: string | null;
-}
-
-/** Options for attaching Mog-native annotations while writing a rectangular grid. */
-export interface RangeWriteOptions {
-  /**
-   * Optional annotation matrix matching the written value/formula matrix.
-   * String entries set annotations for the corresponding cells; `null` and
-   * `undefined` entries leave annotations unchanged.
-   */
-  annotations?: CellAnnotationMatrix;
 }
 
 /** Options controlling how a cell value is interpreted when written. */

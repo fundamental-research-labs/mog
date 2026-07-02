@@ -13,7 +13,8 @@ import type {
   CellWriteOptions,
   ClearApplyTo,
   ClearResult,
-  RangeWriteOptions,
+  WorksheetRangeFormulaInput,
+  WorksheetRangeValueInput,
 } from '@mog-sdk/contracts/api';
 import type { CellValuePrimitive } from '@mog-sdk/contracts/core';
 
@@ -43,21 +44,6 @@ import * as RangeQueryOps from './operations/range-query-operations';
 import { resolveDateWriteArgs, resolveTimeWriteArgs } from './worksheet-date-time-args';
 import { resolveMatrixWriteArgs } from './worksheet-write-args';
 import { WorksheetImplBase } from './worksheet-impl-base';
-
-type WorksheetRangeValueInput =
-  | CellValuePrimitive
-  | Date
-  | {
-      readonly value: CellValuePrimitive | Date;
-      readonly annotation?: string | null;
-    };
-
-type WorksheetRangeFormulaInput =
-  | string
-  | {
-      readonly formula: string;
-      readonly annotation?: string | null;
-    };
 
 export abstract class WorksheetImplCellWriteApi extends WorksheetImplBase {
   async setCell(
@@ -196,43 +182,27 @@ export abstract class WorksheetImplCellWriteApi extends WorksheetImplBase {
     await this.applyCellAnnotation(row, col, annotation);
   }
 
-  async setFormulas(
-    range: string,
-    formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
-  async setFormulas(
-    range: CellRange,
-    formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  async setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
+  async setFormulas(range: CellRange, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
   async setFormulas(
     startRow: number,
     startCol: number,
     formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
   ): Promise<void>;
   async setFormulas(
     a: string | number | CellRange,
     b: any,
-    c?: WorksheetRangeFormulaInput[][] | RangeWriteOptions,
-    d?: RangeWriteOptions,
+    c?: WorksheetRangeFormulaInput[][],
   ): Promise<void> {
     this._assertLive('worksheet.setFormulas');
     this._ensureWritable('worksheet.setFormulas');
-    const {
-      startRow,
-      startCol,
-      values: formulas,
-      options,
-    } = resolveMatrixWriteArgs<unknown>(a, b, c, d);
+    const { startRow, startCol, values: formulas } = resolveMatrixWriteArgs<unknown>(a, b, c);
 
     const { values, annotationTargets } = normalizeRangeFormulaValues(
       'worksheet.setFormulas',
       startRow,
       startCol,
       formulas,
-      options,
     );
 
     if (!values.length || !values[0]?.length) {
@@ -348,27 +318,17 @@ export abstract class WorksheetImplCellWriteApi extends WorksheetImplBase {
     );
   }
 
-  async setRange(
-    range: string,
-    values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
-  async setRange(
-    range: CellRange,
-    values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  async setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>;
+  async setRange(range: CellRange, values: WorksheetRangeValueInput[][]): Promise<void>;
   async setRange(
     startRow: number,
     startCol: number,
     values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
   ): Promise<void>;
   async setRange(
     a: string | number | CellRange,
     b: any,
-    c?: WorksheetRangeValueInput[][] | RangeWriteOptions,
-    d?: RangeWriteOptions,
+    c?: WorksheetRangeValueInput[][],
   ): Promise<void> {
     this._assertLive('worksheet.setRange');
     this._ensureWritable('worksheet.setRange');
@@ -376,14 +336,12 @@ export abstract class WorksheetImplCellWriteApi extends WorksheetImplBase {
       startRow,
       startCol,
       values: inputValues,
-      options,
-    } = resolveMatrixWriteArgs<WorksheetRangeValueInput[][]>(a, b, c, d);
+    } = resolveMatrixWriteArgs<WorksheetRangeValueInput[][]>(a, b, c);
     const { values, annotationTargets } = normalizeRangeWriteValues(
       'worksheet.setRange',
       startRow,
       startCol,
       inputValues,
-      options,
     );
 
     await this.ensureRangeEditable(

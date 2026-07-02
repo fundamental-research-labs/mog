@@ -58,7 +58,6 @@ import type {
   PivotTableHandle,
   PivotTableInfo,
   RangeValueType,
-  RangeWriteOptions,
   RawCellData,
   FindInRangeOptions,
   SearchOptions,
@@ -194,14 +193,18 @@ export type WorksheetRangeValueInput =
   | CellValuePrimitive
   | Date
   | {
+      /** Cell value to write. */
       readonly value: CellValuePrimitive | Date;
+      /** Optional Mog-native annotation to set after this cell write succeeds. */
       readonly annotation?: string | null;
     };
 
 export type WorksheetRangeFormulaInput =
   | string
   | {
+      /** Formula expression, with or without a leading "=". */
       readonly formula: string;
+      /** Optional Mog-native annotation to set after this formula write succeeds. */
       readonly annotation?: string | null;
     };
 
@@ -516,31 +519,21 @@ export interface Worksheet extends WorksheetFill {
   /**
    * Set a 2D array of values into a range (A1 notation).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(
-    range: string,
-    values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>;
   /**
    * Set a 2D array of values into a range (CellRange object).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(
-    range: CellRange,
-    values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  setRange(range: CellRange, values: WorksheetRangeValueInput[][]): Promise<void>;
   /**
    * Set a 2D array of values into a range (starting at row/col).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(
-    startRow: number,
-    startCol: number,
-    values: WorksheetRangeValueInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  setRange(startRow: number, startCol: number, values: WorksheetRangeValueInput[][]): Promise<void>;
 
   /**
    * Set a formula in one cell. Accepts either "=SUM(A1:A10)" or
@@ -558,22 +551,14 @@ export interface Worksheet extends WorksheetFill {
   /**
    * Set formulas into a range, starting at the top-left cell.
    * Each formula accepts either leading-"=" or bare expression form.
+   * To annotate a cell while writing, pass an entry as `{ formula, annotation }`.
    */
-  setFormulas(
-    range: string,
-    formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
-  setFormulas(
-    range: CellRange,
-    formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
-  ): Promise<void>;
+  setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
+  setFormulas(range: CellRange, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
   setFormulas(
     startRow: number,
     startCol: number,
     formulas: WorksheetRangeFormulaInput[][],
-    options?: RangeWriteOptions,
   ): Promise<void>;
 
   /**

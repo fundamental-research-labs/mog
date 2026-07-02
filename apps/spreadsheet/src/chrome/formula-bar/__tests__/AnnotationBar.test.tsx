@@ -68,22 +68,22 @@ describe('AnnotationBar', () => {
     expect(await screen.findByTestId('annotation-bar')).toBeInTheDocument();
     expect(screen.getByTestId('annotation-bar-text')).toHaveTextContent('Total 2026 revenue');
     expect(screen.getByTestId('annotation-bar-glyph')).toBeInTheDocument();
-    // Fresh needs no attention: no ✓ mark-up-to-date, no ✕/✓ edit signs.
-    expect(screen.queryByTestId('annotation-bar-accept')).not.toBeInTheDocument();
+    // Fresh needs no attention: no ✕/✓ edit signs while idle.
     expect(screen.queryByTestId('annotation-bar-confirm')).not.toBeInTheDocument();
     expect(screen.queryByTestId('annotation-bar-cancel')).not.toBeInTheDocument();
   });
 
-  it('offers a single ✓ "mark up to date" for a stale annotation', async () => {
+  it('re-baselines a stale note via acceptStale when confirmed unchanged', async () => {
     mockDiagGet.mockResolvedValue(makeRecord('Total 2026 revenue', 'stale'));
     mockAcceptStale.mockResolvedValue(makeRecord('Total 2026 revenue', 'fresh'));
     render(<AnnotationBar />);
 
-    const accept = await screen.findByTestId('annotation-bar-accept');
-    await userEvent.click(accept);
+    // No dedicated re-baseline button exists — resolving is folded into confirm.
+    await userEvent.click(await screen.findByTestId('annotation-bar-glyph'));
+    // Confirm without changing the text → acceptStale (mark up to date), not set.
+    await userEvent.click(await screen.findByTestId('annotation-bar-confirm'));
     expect(mockAcceptStale).toHaveBeenCalledWith(2, 3);
-    // Once fresh, the action clears.
-    await waitFor(() => expect(screen.queryByTestId('annotation-bar-accept')).not.toBeInTheDocument());
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it('shows ✕ / ✓ edit signs while editing and confirms via ✓', async () => {
@@ -159,7 +159,7 @@ describe('AnnotationBar', () => {
     const text = await screen.findByTestId('annotation-bar-text');
     await userEvent.click(text);
     expect(screen.queryByTestId('annotation-bar-input')).not.toBeInTheDocument();
-    // No mark-up-to-date action either, even though the record is stale.
-    expect(screen.queryByTestId('annotation-bar-accept')).not.toBeInTheDocument();
+    // No confirm affordance either, even though the record is stale.
+    expect(screen.queryByTestId('annotation-bar-confirm')).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Tag } from 'lucide-react';
+import { Tag, TriangleAlert } from 'lucide-react';
 import { CheckmarkSvg, CloseSvg } from '@mog/icons';
 import { COL_HEADER_HEIGHT } from '@mog-sdk/contracts/rendering/constants';
 import type { WorksheetCellAnnotationRecord } from '@mog-sdk/contracts/api';
@@ -21,11 +21,16 @@ import { useActiveCell, useActiveSheetId, useReadOnly, useWorkbook } from '../..
  * never reflows the cells and covers only a few column headers.
  *
  * The chrome deliberately echoes the formula bar to stay quiet: one leading glyph
- * (the `fx` analog) whose *color* carries freshness — neutral when fresh, amber when
- * stale, muted when unchecked — so no separate status dot or chip is needed; and the
- * same ✕ / ✓ signs for actions. When idle and fresh it is just glyph + text. When a
- * stale/unchecked annotation needs attention, a single ✓ "mark up to date" appears.
- * When editing, ✕ / ✓ cancel and confirm the edit.
+ * (the `fx` analog) whose *color* carries freshness — neutral tag when fresh, an amber
+ * warning when stale, muted when unchecked — so no separate status dot or chip is
+ * needed. When idle and fresh it is just glyph + text.
+ *
+ * There is no separate "accept stale" control — that operation is subtle and reads as
+ * jargon. Instead it is folded into the edit flow: a stale/unchecked note shows the ⚠
+ * glyph, and confirming an edit (✓) always means "this note is correct now". If the
+ * text changed we save it; if it is unchanged but the note was stale, confirming
+ * re-baselines it to the current cell (clearing the warning). So ✓ has one honest
+ * meaning whether or not you retyped anything.
  *
  * Editing here is inline and deliberately separate from formula editing so a user
  * can never confuse "edit the meaning" with "edit the formula". Because this is the
@@ -174,6 +179,10 @@ function AnnotationBarImpl(): React.JSX.Element | null {
     setDraft(record?.text ?? '');
   }, [record]);
 
+  // Confirming an edit has one meaning: "this note is correct now."
+  //  - text changed        → save it (empty removes the note)
+  //  - text unchanged+stale → re-baseline to the current cell (clears the warning)
+  //  - text unchanged+fresh → nothing to do
   const commitEdit = useCallback(async () => {
     if (readOnly) {
       setEditing(false);
@@ -181,35 +190,29 @@ function AnnotationBarImpl(): React.JSX.Element | null {
     }
     setEditing(false);
     const trimmed = draft.trim();
-    if (trimmed === (record?.text ?? '')) return; // no change
-    setState('saving');
+    const current = record?.text ?? '';
     try {
-      if (trimmed.length === 0) {
-        await worksheet.annotations.cells.remove(row, col);
-        setRecord(null);
-      } else {
-        const saved = await worksheet.annotations.cells.set(row, col, draft);
-        setRecord(saved);
+      if (trimmed !== current) {
+        setState('saving');
+        if (trimmed.length === 0) {
+          await worksheet.annotations.cells.remove(row, col);
+          setRecord(null);
+        } else {
+          const saved = await worksheet.annotations.cells.set(row, col, draft);
+          setRecord(saved);
+        }
+        setState('ready');
+      } else if (record && record.status !== 'fresh') {
+        setState('saving');
+        const accepted = await worksheet.annotations.cells.acceptStale(row, col);
+        setRecord(accepted);
+        setState('ready');
       }
-      setState('ready');
     } catch {
       setState('error');
       reload();
     }
   }, [col, draft, readOnly, record, reload, row, worksheet]);
-
-  const acceptStale = useCallback(async () => {
-    if (readOnly || !record) return;
-    setState('saving');
-    try {
-      const accepted = await worksheet.annotations.cells.acceptStale(row, col);
-      setRecord(accepted);
-      setState('ready');
-    } catch {
-      setState('error');
-      reload();
-    }
-  }, [col, readOnly, record, reload, row, worksheet]);
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -230,14 +233,16 @@ function AnnotationBarImpl(): React.JSX.Element | null {
 
   const status = record?.status ?? 'unchecked';
   const isFresh = status === 'fresh';
+  const isStale = status === 'stale';
   const glyphColor = isFresh
     ? 'text-ss-text-secondary'
-    : status === 'stale'
+    : isStale
       ? 'text-ss-warning'
       : 'text-ss-text-tertiary';
+  const GlyphIcon = isStale ? TriangleAlert : Tag;
   const statusTitle = isFresh
     ? 'Annotation is up to date'
-    : status === 'stale'
+    : isStale
       ? 'Annotation may be out of date — the cell changed since it was written'
       : 'Annotation freshness was not checked';
 
@@ -275,27 +280,16 @@ function AnnotationBarImpl(): React.JSX.Element | null {
             onClick={() => void commitEdit()}
             data-testid="annotation-bar-confirm"
             className="flex items-center justify-center w-[20px] h-[20px] shrink-0 rounded text-ss-success hover:bg-ss-success/10 transition-colors"
-            title="Confirm (Enter)"
+            title={record && record.status !== 'fresh' ? 'Confirm — mark up to date (Enter)' : 'Confirm (Enter)'}
             aria-label="Confirm edit"
           >
             <CheckmarkSvg className="w-3.5 h-3.5" />
           </button>
         </>
-      ) : !readOnly && !isFresh && record ? (
-        <button
-          type="button"
-          onClick={() => void acceptStale()}
-          data-testid="annotation-bar-accept"
-          className="flex items-center justify-center w-[20px] h-[20px] shrink-0 rounded text-ss-success hover:bg-ss-success/10 transition-colors"
-          title="Mark up to date"
-          aria-label="Mark annotation up to date"
-        >
-          <CheckmarkSvg className="w-3.5 h-3.5" />
-        </button>
       ) : null}
 
-      {/* Meaning glyph — the `fx` analog and the edit affordance. Its color
- carries freshness; clicking it opens the inline editor. */}
+      {/* Meaning glyph — the `fx` analog and the edit affordance. Its color and icon
+ carry freshness (amber warning when stale); clicking it opens the inline editor. */}
       <button
         type="button"
         onClick={beginEdit}
@@ -307,7 +301,7 @@ function AnnotationBarImpl(): React.JSX.Element | null {
         title={readOnly ? statusTitle : `${statusTitle} · Click to edit`}
         aria-label={readOnly ? statusTitle : 'Edit annotation'}
       >
-        <Tag size={12} strokeWidth={1.75} aria-hidden="true" />
+        <GlyphIcon size={12} strokeWidth={1.75} aria-hidden="true" />
       </button>
 
       {/* Text / inline editor */}
@@ -330,7 +324,7 @@ function AnnotationBarImpl(): React.JSX.Element | null {
           disabled={readOnly}
           data-testid="annotation-bar-text"
           className={`flex-1 min-w-0 text-left truncate text-ribbon leading-none cursor-text disabled:cursor-default ${
-            isFresh ? 'text-ss-text' : 'italic text-ss-text-secondary'
+            isFresh ? 'text-ss-text' : 'text-ss-text-secondary'
           }`}
           title={record?.text ?? ''}
         >

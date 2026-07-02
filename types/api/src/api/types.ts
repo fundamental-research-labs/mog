@@ -377,8 +377,31 @@ export interface Note {
 // Cell Write Options
 // =============================================================================
 
+export type CellWriteAnnotationText = string | null | undefined;
+
+export type CellAnnotationMatrix = readonly (readonly CellWriteAnnotationText[])[];
+
+/** Options for attaching a Mog-native annotation while writing a cell. */
+export interface CellAnnotationWriteOptions {
+  /**
+   * Optional Mog-native annotation text to set after the cell value/formula write
+   * succeeds. `null` and `undefined` mean "do not change the annotation".
+   */
+  annotation?: string | null;
+}
+
+/** Options for attaching Mog-native annotations while writing a rectangular grid. */
+export interface RangeWriteOptions {
+  /**
+   * Optional annotation matrix matching the written value/formula matrix.
+   * String entries set annotations for the corresponding cells; `null` and
+   * `undefined` entries leave annotations unchanged.
+   */
+  annotations?: CellAnnotationMatrix;
+}
+
 /** Options controlling how a cell value is interpreted when written. */
-export interface CellWriteOptions {
+export interface CellWriteOptions extends CellAnnotationWriteOptions {
   /** If true, value is treated as a formula (prefixed with =) */
   asFormula?: boolean;
   /** If true, string values starting with "=" are stored as literal text, not formulas. */

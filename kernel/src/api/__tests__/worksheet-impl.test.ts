@@ -264,6 +264,19 @@ function expectVersionOperationOptions(operationIdPrefix: string, domainIds: rea
   });
 }
 
+function expectAnnotationOperationOptions(operationIdPrefix: string) {
+  return expect.objectContaining({
+    operationContext: expect.objectContaining({
+      operationId: expect.stringMatching(
+        new RegExp(`^${operationIdPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:`),
+      ),
+      domainIds: ['annotations'],
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+    }),
+  });
+}
+
 function createMockCtx(): any {
   return {
     __apiTestNamedRanges: [],
@@ -272,6 +285,7 @@ function createMockCtx(): any {
       assertWritable: jest.fn(),
     },
     eventBus: {
+      emit: jest.fn(),
       onMany: jest.fn(() => jest.fn()),
     },
     mirror: {
@@ -289,6 +303,22 @@ function createMockCtx(): any {
       getSheetName: jest.fn().mockResolvedValue(null),
       setCells: jest.fn(),
       setCellsByPosition: jest.fn().mockResolvedValue(undefined),
+      setCellAnnotationByPosition: jest.fn().mockResolvedValue({
+        data: {
+          schemaVersion: 1,
+          id: 'annotation-1',
+          anchorId: 'cell-1',
+          text: 'annotation',
+          status: 'fresh',
+          fingerprint: {
+            profile: 'cellText',
+            canonicalizer: 'test',
+            hash: 'sha256:test',
+          },
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      }),
       clearRangeByPosition: jest.fn().mockResolvedValue(undefined),
       clearRange: jest.fn().mockResolvedValue(undefined),
       clearHyperlinksInRange: jest.fn().mockResolvedValue(undefined),
@@ -516,6 +546,59 @@ describe('WorksheetImpl', () => {
       );
     });
 
+    it('setCell writes an annotation after the cell write succeeds', async () => {
+      (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
+
+      await ws.setCell('B3', 42, { annotation: 'Source: model output' });
+
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        2,
+        1,
+        42,
+        expectVersionOperationOptions('worksheet.setCell', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        2,
+        1,
+        'Source: model output',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
+    });
+
+    it('setCell rejects invalid annotation text before writing the cell', async () => {
+      await expect(ws.setCell('A1', 'value', { annotation: 5 } as any)).rejects.toMatchObject({
+        code: 'API_INVALID_ARGUMENT',
+      });
+
+      expect(CellOps.setCell).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.setCellAnnotationByPosition).not.toHaveBeenCalled();
+    });
+
+    it('setValue writes an annotation after an explicit scalar write', async () => {
+      (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
+
+      await ws.setValue('A2', 'SKU-001', { asText: true, annotation: 'Literal SKU' });
+
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        1,
+        0,
+        "'SKU-001",
+        expectVersionOperationOptions('worksheet.setValue', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        1,
+        0,
+        'Literal SKU',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
+    });
+
     it('setCell("A1", value, { asFormula: true }) prepends = to non-formula string', async () => {
       (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
 
@@ -587,6 +670,52 @@ describe('WorksheetImpl', () => {
       const result = await ws.getFormula('A1');
 
       expect(result).toBeNull();
+    });
+
+    it('setFormula writes an annotation after storing the formula', async () => {
+      (CellOps.setCell as jest.Mock).mockResolvedValue(undefined);
+
+      await ws.setFormula('C4', 'SUM(A1:B3)', { annotation: 'Rollup formula' });
+
+      expect(CellOps.setCell).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        3,
+        2,
+        '=SUM(A1:B3)',
+        expectVersionOperationOptions('worksheet.setFormula', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        3,
+        2,
+        'Rollup formula',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
+    });
+
+    it('setFormulas applies inline annotations from annotated formula entries', async () => {
+      (RangeOps.setRange as jest.Mock).mockResolvedValue(undefined);
+
+      await ws.setFormulas('A1:B1', [
+        [{ formula: 'SUM(C1:C3)', annotation: 'Aggregates C1:C3' }, '=D1*2'],
+      ]);
+
+      expect(RangeOps.setRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        [['=SUM(C1:C3)', '=D1*2']],
+        expectVersionOperationOptions('worksheet.setFormulas', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        0,
+        0,
+        'Aggregates C1:C3',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
     });
   });
 
@@ -770,6 +899,53 @@ describe('WorksheetImpl', () => {
       );
     });
 
+    it('setRange applies inline annotations from annotated cell values', async () => {
+      (RangeOps.setRange as jest.Mock).mockResolvedValue(undefined);
+
+      const values = [
+        [{ value: 'a', annotation: 'First cell' }, 'b'],
+        ['c', { value: 'd', annotation: 'Last cell' }],
+      ];
+      await ws.setRange('A1:B2', values);
+
+      expect(RangeOps.setRange).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        0,
+        0,
+        [
+          ['a', 'b'],
+          ['c', 'd'],
+        ],
+        expectVersionOperationOptions('worksheet.setRange', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenNthCalledWith(
+        1,
+        SHEET_ID,
+        0,
+        0,
+        'First cell',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenNthCalledWith(
+        2,
+        SHEET_ID,
+        1,
+        1,
+        'Last cell',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
+    });
+
+    it('setRange rejects invalid inline annotation text before writing values', async () => {
+      await expect(ws.setRange('A1', [[{ value: 1, annotation: 7 } as any]])).rejects.toMatchObject(
+        { code: 'API_INVALID_ARGUMENT' },
+      );
+
+      expect(RangeOps.setRange).not.toHaveBeenCalled();
+      expect(ctx.computeBridge.setCellAnnotationByPosition).not.toHaveBeenCalled();
+    });
+
     it('setRange(0, 0, values) uses numeric path', async () => {
       (RangeOps.setRange as jest.Mock).mockResolvedValue(undefined);
 
@@ -797,6 +973,36 @@ describe('WorksheetImpl', () => {
     it('setRange with invalid A1 range throws KernelError', async () => {
       await expect(ws.setRange('invalid', [['x']])).rejects.toThrow(KernelError);
       await expect(ws.setRange('invalid', [['x']])).rejects.toThrow('Invalid range');
+    });
+
+    it('setCells applies annotations for final valid writes only', async () => {
+      (CellOps.setCells as jest.Mock).mockResolvedValue({ cellsWritten: 2, errors: null });
+
+      const result = await ws.setCells([
+        { address: 'A1', value: 1, annotation: 'superseded' },
+        { address: 'A1', value: 2 },
+        { row: 0, col: 1, formula: '=A1*2', annotation: 'Formula source' },
+      ]);
+
+      expect(result).toEqual({ cellsWritten: 2, errors: null });
+      expect(CellOps.setCells).toHaveBeenCalledWith(
+        ctx,
+        SHEET_ID,
+        [
+          { address: 'A1', value: 1, annotation: 'superseded' },
+          { address: 'A1', value: 2, annotation: undefined },
+          { row: 0, col: 1, value: '=A1*2', annotation: 'Formula source' },
+        ],
+        expectVersionOperationOptions('worksheet.setCells', ['cells']),
+      );
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledTimes(1);
+      expect(ctx.computeBridge.setCellAnnotationByPosition).toHaveBeenCalledWith(
+        SHEET_ID,
+        0,
+        1,
+        'Formula source',
+        expectAnnotationOperationOptions('worksheet.annotations.cells.set'),
+      );
     });
 
     it('clearData("A1:B2") resolves A1 range and delegates to RangeOps.clearRange', async () => {

@@ -265,6 +265,8 @@ export type {
   WorksheetGetCellsFullOptions,
   WorksheetGetCellsOptions,
   WorksheetGetCellsValuesOnlyOptions,
+  WorksheetRangeFormulaInput,
+  WorksheetRangeValueInput,
   WorksheetRangeCell,
   WorksheetRangeCellBase,
   WorksheetRangeFormulaCell,

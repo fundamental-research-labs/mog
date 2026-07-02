@@ -254,6 +254,8 @@ export type {
   AutoFillPreviewReceipt,
   FillSeriesApplyReceipt,
   WorksheetFill,
+  WorksheetRangeFormulaInput,
+  WorksheetRangeValueInput,
   PivotCreateOptions,
   PivotCreateWithSheetOptions,
   FindCellsFormatQuery,

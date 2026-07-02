@@ -38,6 +38,7 @@ import type {
 import type { IObjectBoundsReader } from '@mog/types-objects/objects/object-bounds-reader';
 import type {
   AggregateResult,
+  CellAnnotationWriteOptions,
   CellData,
   CellMetadataCache,
   CellRange,
@@ -57,6 +58,7 @@ import type {
   PivotTableHandle,
   PivotTableInfo,
   RangeValueType,
+  RangeWriteOptions,
   RawCellData,
   FindInRangeOptions,
   SearchOptions,
@@ -187,6 +189,21 @@ export interface SortByColorOptions {
   /** Sort only currently visible row slots, preserving hidden row positions. */
   visibleRowsOnly?: boolean;
 }
+
+export type WorksheetRangeValueInput =
+  | CellValuePrimitive
+  | Date
+  | {
+      readonly value: CellValuePrimitive | Date;
+      readonly annotation?: string | null;
+    };
+
+export type WorksheetRangeFormulaInput =
+  | string
+  | {
+      readonly formula: string;
+      readonly annotation?: string | null;
+    };
 
 /**
  * Typed cell readback record returned by {@link WorksheetCellsAccessor.get}.
@@ -365,14 +382,14 @@ export interface Worksheet extends WorksheetFill {
   setValue(
     address: string,
     value: CellValuePrimitive | Date,
-    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,
   ): Promise<void>;
   /** Set an explicit scalar value by row/col. */
   setValue(
     row: number,
     col: number,
     value: CellValuePrimitive | Date,
-    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,
   ): Promise<void>;
 
   /**
@@ -500,12 +517,20 @@ export interface Worksheet extends WorksheetFill {
    * Set a 2D array of values into a range (A1 notation).
    * String values starting with "=" are treated as formulas.
    */
-  setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+  setRange(
+    range: string,
+    values: WorksheetRangeValueInput[][],
+    options?: RangeWriteOptions,
+  ): Promise<void>;
   /**
    * Set a 2D array of values into a range (CellRange object).
    * String values starting with "=" are treated as formulas.
    */
-  setRange(range: CellRange, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+  setRange(
+    range: CellRange,
+    values: WorksheetRangeValueInput[][],
+    options?: RangeWriteOptions,
+  ): Promise<void>;
   /**
    * Set a 2D array of values into a range (starting at row/col).
    * String values starting with "=" are treated as formulas.
@@ -513,24 +538,43 @@ export interface Worksheet extends WorksheetFill {
   setRange(
     startRow: number,
     startCol: number,
-    values: (CellValuePrimitive | Date)[][],
+    values: WorksheetRangeValueInput[][],
+    options?: RangeWriteOptions,
   ): Promise<void>;
 
   /**
    * Set a formula in one cell. Accepts either "=SUM(A1:A10)" or
    * "SUM(A1:A10)" and stores the normalized formula with a leading "=".
    */
-  setFormula(address: string, formula: string): Promise<void>;
+  setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions): Promise<void>;
   /** Set a formula by row/col. */
-  setFormula(row: number, col: number, formula: string): Promise<void>;
+  setFormula(
+    row: number,
+    col: number,
+    formula: string,
+    options?: CellAnnotationWriteOptions,
+  ): Promise<void>;
 
   /**
    * Set formulas into a range, starting at the top-left cell.
    * Each formula accepts either leading-"=" or bare expression form.
    */
-  setFormulas(range: string, formulas: string[][]): Promise<void>;
-  setFormulas(range: CellRange, formulas: string[][]): Promise<void>;
-  setFormulas(startRow: number, startCol: number, formulas: string[][]): Promise<void>;
+  setFormulas(
+    range: string,
+    formulas: WorksheetRangeFormulaInput[][],
+    options?: RangeWriteOptions,
+  ): Promise<void>;
+  setFormulas(
+    range: CellRange,
+    formulas: WorksheetRangeFormulaInput[][],
+    options?: RangeWriteOptions,
+  ): Promise<void>;
+  setFormulas(
+    startRow: number,
+    startCol: number,
+    formulas: WorksheetRangeFormulaInput[][],
+    options?: RangeWriteOptions,
+  ): Promise<void>;
 
   /**
    * Enter a CSE (`Ctrl+Shift+Enter`) array formula on the given range.
@@ -1077,18 +1121,35 @@ export interface Worksheet extends WorksheetFill {
    * Supports both A1 addressing and numeric (row, col) addressing.
    */
   setCells(
-    cells: Array<{ addr: string; value: CellValuePrimitive | Date }>,
+    cells: Array<{ addr: string; value: CellValuePrimitive | Date; annotation?: string | null }>,
   ): Promise<SetCellsResult>;
   setCells(
-    cells: Array<{ address: string; value: CellValuePrimitive | Date }>,
+    cells: Array<{
+      address: string;
+      value: CellValuePrimitive | Date;
+      annotation?: string | null;
+    }>,
   ): Promise<SetCellsResult>;
   setCells(
-    cells: Array<{ row: number; col: number; value: CellValuePrimitive | Date }>,
+    cells: Array<{
+      row: number;
+      col: number;
+      value: CellValuePrimitive | Date;
+      annotation?: string | null;
+    }>,
   ): Promise<SetCellsResult>;
-  setCells(cells: Array<{ cell: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ addr: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ address: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ row: number; col: number; formula: string }>): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ cell: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ addr: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ address: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ row: number; col: number; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
 
   // ===========================================================================
   // Export helpers

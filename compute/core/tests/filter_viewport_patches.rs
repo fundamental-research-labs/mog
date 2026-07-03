@@ -230,6 +230,67 @@ fn clear_column_filter_emits_full_viewport_patches() {
 }
 
 #[test]
+fn clear_all_column_filters_clears_criteria_and_filter_hidden_rows() {
+    use domain_types::domain::filter::ColumnFilter;
+
+    let (mut engine, _) =
+        YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");
+    let sid = engine.mirror().sheet_by_name("Sheet1").expect("Sheet1");
+    let _vp = register_viewport(&mut engine, &sid);
+
+    engine
+        .create_filter(
+            &sid,
+            json!({
+                "startRow": 0u32,
+                "startCol": 0u32,
+                "endRow": 4u32,
+                "endCol": 0u32,
+            }),
+        )
+        .expect("create_filter");
+    let filter_id = engine.get_filters_in_sheet(&sid)[0].id.clone();
+
+    let criteria: ColumnFilter = serde_json::from_value(json!({
+        "type": "values",
+        "values": [10],
+    }))
+    .expect("ColumnFilter");
+    engine
+        .set_column_filter(&sid, &filter_id, 0, criteria)
+        .expect("set_column_filter");
+    assert!(engine.is_row_hidden_query(&sid, 2), "row 20 hidden");
+    assert!(engine.is_row_hidden_query(&sid, 3), "row 30 hidden");
+    assert!(engine.is_row_hidden_query(&sid, 4), "row 40 hidden");
+
+    let (patches, result) = engine
+        .clear_all_column_filters(&sid, &filter_id)
+        .expect("clear_all_column_filters");
+
+    assert_eq!(viewport_count(&patches), 1);
+    assert!(
+        first_viewport_payload_size(&patches) > 32,
+        "full viewport rebuild expected after clear_all_column_filters"
+    );
+    assert!(!engine.is_row_hidden_query(&sid, 2), "row 20 visible");
+    assert!(!engine.is_row_hidden_query(&sid, 3), "row 30 visible");
+    assert!(!engine.is_row_hidden_query(&sid, 4), "row 40 visible");
+
+    let filter = engine
+        .get_filters_in_sheet(&sid)
+        .into_iter()
+        .find(|filter| filter.id == filter_id)
+        .expect("filter remains after clearing criteria");
+    assert!(filter.column_filters.is_empty());
+
+    let change = result.filter_changes.first().expect("filter change");
+    assert_eq!(change.action.as_deref(), Some("cleared"));
+    assert_eq!(change.has_active_filter, Some(false));
+    assert_eq!(change.hidden_row_count, Some(0));
+    assert_eq!(change.visible_row_count, Some(4));
+}
+
+#[test]
 fn delete_filter_emits_full_viewport_patches() {
     let (mut engine, _) =
         YrsComputeEngine::from_snapshot(snapshot_with_filter_data()).expect("from_snapshot");

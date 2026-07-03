@@ -708,7 +708,7 @@ export function DataRibbon({
             label="Clear"
             onClick={() => dispatch('CLEAR_ALL_FILTERS')}
             disabled={!canClearFilters}
-            title={canClearFilters ? 'Clear all filter criteria' : 'Clear (no active filters)'}
+            title={canClearFilters ? 'Clear all filter criteria' : 'Clear (no filters available)'}
             aria-label="Clear All Filters"
           />
           <RibbonButton

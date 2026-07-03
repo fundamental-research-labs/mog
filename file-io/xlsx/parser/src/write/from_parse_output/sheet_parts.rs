@@ -57,8 +57,8 @@ pub(super) fn build_sheet_parts(
     // Per-sheet ChartEx entries: Vec<Vec<ChartExEntry>>.
     let mut all_chart_ex_entries: Vec<Vec<ChartExEntry>> = Vec::with_capacity(output.sheets.len());
 
-    // Metadata refs are emitted only with an authoritative modeled metadata part.
-    let emit_cell_metadata_refs = output.metadata.as_ref().is_some_and(|m| !m.is_empty());
+    // Metadata refs are emitted only when xl/metadata.xml will be emitted.
+    let emit_cell_metadata_refs = super::metadata::metadata_xml_would_export(output);
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_num = sheet_idx + 1;
 

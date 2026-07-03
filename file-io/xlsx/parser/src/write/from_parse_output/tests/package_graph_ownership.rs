@@ -117,6 +117,7 @@ fn rich_data_relationship_closure_registers_owned_media_parts() {
             ..Default::default()
         }],
         metadata: Some(domain_types::WorkbookMetadata {
+            value_metadata: vec![domain_types::ValueMetadataBlock::default()],
             rich_data: Some(domain_types::WorkbookRichData {
                 parts: vec![domain_types::RichDataPart {
                     path: "xl/richData/richValueRel.xml".to_string(),
@@ -150,9 +151,196 @@ fn rich_data_relationship_closure_registers_owned_media_parts() {
     .unwrap();
 
     assert!(archive.contains("xl/media/image1.png"));
+    assert!(archive.contains("xl/metadata.xml"));
     assert!(rels.contains(r#"Id="rId1""#));
     assert!(rels.contains(r#"Target="../media/image1.png""#));
     validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn rich_data_parts_do_not_emit_from_stale_cell_vm_fallback() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Text(Arc::from("stale")),
+                vm: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/richValueRel.xml".to_string(),
+                    content_type: "application/vnd.ms-excel.rdrichvaluerel+xml".to_string(),
+                    data: br#"<richValueRels xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rel r:id="rId1"/></richValueRels>"#.to_vec(),
+                    relationships: vec![ooxml_types::shared::OpcRelationship {
+                        id: "rId1".to_string(),
+                        rel_type: crate::infra::opc::REL_IMAGE.to_string(),
+                        target: "../media/image1.png".to_string(),
+                        target_mode: None,
+                    }],
+                }],
+                related_parts: vec![domain_types::RichDataRelatedPart {
+                    path: "xl/media/image1.png".to_string(),
+                    content_type: Some("image/png".to_string()),
+                    data: vec![0x89, b'P', b'N', b'G'],
+                }],
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/metadata.xml"));
+    assert!(!archive.contains("xl/richData/richValueRel.xml"));
+    assert!(!archive.contains("xl/media/image1.png"));
+    assert!(
+        !sheet_xml.contains(" vm="),
+        "stale vm refs must not be emitted without metadata.xml: {sheet_xml}"
+    );
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn stale_imported_metadata_xml_does_not_emit_rich_data_or_cell_vm_refs() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Text(Arc::from("stale")),
+                vm: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            imported_metadata_xml: Some(domain_types::ImportedMetadataXml {
+                bytes: br#"<metadata><valueMetadata count="1"><bk/></valueMetadata></metadata>"#
+                    .to_vec(),
+                generated_at_import: b"outdated generated metadata".to_vec(),
+                value_metadata_refs: vec![domain_types::MetadataCellReference {
+                    sheet_index: 0,
+                    row: 0,
+                    col: 0,
+                    index: 1,
+                }],
+                ..Default::default()
+            }),
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/richValueRel.xml".to_string(),
+                    content_type: "application/vnd.ms-excel.rdrichvaluerel+xml".to_string(),
+                    data: br#"<richValueRels xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rel r:id="rId1"/></richValueRels>"#.to_vec(),
+                    relationships: Vec::new(),
+                }],
+                related_parts: Vec::new(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output).unwrap();
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+
+    assert!(!archive.contains("xl/metadata.xml"));
+    assert!(!archive.contains("xl/richData/richValueRel.xml"));
+    assert!(!sheet_xml.contains(" vm="));
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+}
+
+#[test]
+fn rich_data_missing_related_part_does_not_block_export() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Text(Arc::from("image")),
+                vm: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            value_metadata: vec![domain_types::ValueMetadataBlock::default()],
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/richValueRel.xml".to_string(),
+                    content_type: "application/vnd.ms-excel.rdrichvaluerel+xml".to_string(),
+                    data: br#"<richValueRels xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rel r:id="rId1"/></richValueRels>"#.to_vec(),
+                    relationships: vec![ooxml_types::shared::OpcRelationship {
+                        id: "rId1".to_string(),
+                        rel_type: crate::infra::opc::REL_IMAGE.to_string(),
+                        target: "../media/missing.png".to_string(),
+                        target_mode: None,
+                    }],
+                }],
+                related_parts: Vec::new(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output)
+        .expect("missing richData related parts must not block export");
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+
+    assert!(archive.contains("xl/metadata.xml"));
+    assert!(archive.contains("xl/richData/richValueRel.xml"));
+    assert!(!archive.contains("xl/media/missing.png"));
+    let rels = String::from_utf8(
+        archive
+            .read_file("xl/richData/_rels/richValueRel.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(rels.contains(r#"Id="rId1""#));
+    assert!(rels.contains(r#"Target="../media/missing.png""#));
+    validate_archive_package_integrity(&archive)
+        .expect("stale richData target is quarantined, not an export failure");
+
+    let (roundtripped, diagnostics) =
+        crate::parse_xlsx_to_output(&bytes).expect("stale richData export should parse back");
+    assert!(
+        diagnostics
+            .errors
+            .iter()
+            .all(|error| !error.message.contains("Dropped XLSX import data")),
+        "stale richData relationship must not be reported as dropped: {:?}",
+        diagnostics.errors
+    );
+    assert!(
+        roundtripped
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.rich_data.as_ref())
+            .is_some_and(|rich_data| {
+                rich_data.parts.iter().any(|part| {
+                    part.path == "xl/richData/richValueRel.xml"
+                        && part
+                            .relationships
+                            .iter()
+                            .any(|rel| rel.id == "rId1" && rel.target == "../media/missing.png")
+                })
+            }),
+        "richData XML bytes should remain preserved"
+    );
 }
 
 #[test]

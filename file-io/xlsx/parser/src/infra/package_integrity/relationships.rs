@@ -68,7 +68,9 @@ pub(super) fn collect_relationships(
                 }
             };
 
-            if !archive.contains(&resolved) {
+            if !archive.contains(&resolved)
+                && !missing_relationship_target_is_quarantined(rels_path)
+            {
                 errors.push(PackageIntegrityError::MissingRelationshipTarget {
                     rels_path: rels_path.to_string(),
                     id: rel.id,
@@ -81,4 +83,10 @@ pub(super) fn collect_relationships(
     }
 
     relationships_by_part
+}
+
+fn missing_relationship_target_is_quarantined(rels_path: &str) -> bool {
+    relationship_owner_from_rels_path(rels_path).is_some_and(|owner_path| {
+        owner_path.starts_with("xl/richData/") && owner_path.ends_with(".xml")
+    })
 }

@@ -499,6 +499,14 @@ pub(super) fn validate_modeled_part_owner_relationship(
     }
 }
 
+pub(super) fn missing_relationship_target_is_quarantined(rels_path: &str) -> bool {
+    matches!(
+        owner_part_path_from_rels_path(rels_path),
+        Some(Some(owner_path)) if owner_path.starts_with("xl/richData/")
+            && owner_path.ends_with(".xml")
+    )
+}
+
 struct RequiredRelationship {
     rels_path: Option<String>,
     relationship_type: &'static str,

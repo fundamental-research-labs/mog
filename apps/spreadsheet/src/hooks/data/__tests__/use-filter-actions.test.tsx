@@ -47,7 +47,7 @@ describe('useFilterActions', () => {
     expect(result.current.activeFilterCount).toBe(2);
   });
 
-  it('keeps Clear available as a fast no-op when filters exist without active criteria', async () => {
+  it('disables Clear while keeping Reapply available when filters exist without active criteria', async () => {
     mockListSummaries.mockResolvedValue([
       {
         id: 'filter-1',
@@ -62,9 +62,10 @@ describe('useFilterActions', () => {
     const { result } = renderHook(() => useFilterActions());
 
     await waitFor(() => {
-      expect(result.current.canClearFilters).toBe(true);
+      expect(result.current.canReapplyFilters).toBe(true);
     });
 
+    expect(result.current.canClearFilters).toBe(false);
     expect(result.current.canReapplyFilters).toBe(true);
     expect(result.current.activeFilterCount).toBe(0);
   });

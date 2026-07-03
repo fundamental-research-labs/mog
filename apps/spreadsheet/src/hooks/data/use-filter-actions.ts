@@ -30,11 +30,12 @@ import { useActiveSheetId, useWorkbook } from '../../infra/context';
 
 interface FilterStateInfo {
   hasFilters: boolean;
+  hasClearableFilters: boolean;
   activeFilterCount: number;
 }
 
 export interface UseFilterActionsReturn {
-  /** True if the sheet has filter structures the Clear command can target */
+  /** True if there are active filter criteria the Clear command can clear */
   canClearFilters: boolean;
   /** True if there are any filters to reapply */
   canReapplyFilters: boolean;
@@ -52,6 +53,7 @@ export interface UseFilterActionsReturn {
  */
 function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo {
   let activeFilterCount = 0;
+  let hasClearableFilters = false;
 
   for (const filter of allFilters) {
     const activeColumnCount = filter.activeColumnCount ?? 0;
@@ -60,16 +62,21 @@ function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo
     if (hasActiveFilter) {
       activeFilterCount += activeColumnCount > 0 ? activeColumnCount : 1;
     }
+    if (filter.clearable ?? hasActiveFilter) {
+      hasClearableFilters = true;
+    }
   }
 
   return {
     hasFilters: allFilters.length > 0,
+    hasClearableFilters,
     activeFilterCount,
   };
 }
 
 const EMPTY_FILTER_STATE: FilterStateInfo = {
   hasFilters: false,
+  hasClearableFilters: false,
   activeFilterCount: 0,
 };
 
@@ -81,7 +88,7 @@ const EMPTY_FILTER_STATE: FilterStateInfo = {
  * Hook that provides filter state for toolbar buttons.
  *
  * Subscribes to filter events and returns:
- * - canClearFilters: true if the sheet has filter structures to clear/no-op against
+ * - canClearFilters: true if there are active clearable criteria
  * - canReapplyFilters: true if there are any filters on the sheet (nothing to reapply if no filters)
  * - activeFilterCount: total number of active column filter criteria
  *
@@ -146,7 +153,7 @@ export function useFilterActions(): UseFilterActionsReturn {
   }, [ws, activeSheetId, updateFilterState]); // Re-run when activeSheetId changes to re-subscribe to correct sheet
 
   return {
-    canClearFilters: filterState.hasFilters,
+    canClearFilters: filterState.hasClearableFilters,
     canReapplyFilters: filterState.hasFilters,
     activeFilterCount: filterState.activeFilterCount,
   };

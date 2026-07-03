@@ -2,7 +2,8 @@ use domain_types::ParseDiagnostics;
 
 use crate::output::results::FullParseResult;
 use crate::write::legacy_vml_ownership::{
-    LegacyVmlRelationshipRole, classify_legacy_vml_part, legacy_vml_disposition_label,
+    LegacyVmlDisposition, LegacyVmlRelationshipRole, classify_legacy_vml_part,
+    legacy_vml_disposition_label,
 };
 
 pub(super) fn append_dropped_import_diagnostics(
@@ -189,6 +190,9 @@ fn append_legacy_vml_diagnostics(result: &FullParseResult, dropped: &mut Vec<Str
         for (path, data, _) in &sheet.raw_vml_drawings {
             let role = legacy_vml_role_for_path(sheet, path);
             let disposition = classify_legacy_vml_part(data, role);
+            if matches!(disposition, LegacyVmlDisposition::Modeled { .. }) {
+                continue;
+            }
             dropped.push(format!(
                 "legacy VML {}: {}",
                 path,

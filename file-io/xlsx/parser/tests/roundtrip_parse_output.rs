@@ -6,6 +6,8 @@
 mod cells;
 #[path = "fixtures.rs"]
 mod fixtures;
+#[path = "roundtrip_parse_output/form_controls.rs"]
+mod form_controls;
 #[path = "roundtrip_parse_output/helpers.rs"]
 mod helpers;
 #[path = "roundtrip_parse_output/layout.rs"]

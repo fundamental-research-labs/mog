@@ -8,7 +8,7 @@ use super::{
     RelationshipIdentityHint, ResolvedPackageGraph, ResolvedPackageRelationship,
     allocate_relationship_id, imported_internal_target, imported_opaque_part,
     imported_relationship_match, is_external_target_mode, normalize_part_path, owner_rels_path,
-    relationship_current_occurrence, resolve_target, same_inert_cluster,
+    relationship_current_occurrence, resolve_target, same_active_x_cluster, same_inert_cluster,
     validate_internal_target_is_registered,
 };
 use crate::write::write_error::WriteError;
@@ -160,9 +160,6 @@ impl PackageGraphBuilder {
             if !is_inert_auxiliary && !is_non_editable_sheet_cluster && !is_quarantined_active {
                 continue;
             }
-            if is_quarantined_active && normalize_part_path(&part.path) != "xl/vbaProject.bin" {
-                continue;
-            }
             if !is_non_editable_sheet_cluster
                 && !is_quarantined_active
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
@@ -224,14 +221,19 @@ impl PackageGraphBuilder {
             };
             for hint in opaque_part_relationship_hints(metadata, part) {
                 if is_external_target_mode(hint.target_mode.as_deref()) {
+                    self.add_imported_external_hint_relationship(owner.clone(), hint);
                     continue;
                 }
 
                 let Some(target_path) = imported_internal_target(Some(&part.path), hint) else {
                     continue;
                 };
+                let owner_is_quarantined_active =
+                    crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
+                        == Some(AuxiliaryPackagePartPolicy::ActiveQuarantined);
                 if self.is_opaque_part(&target_path)
-                    && (same_inert_cluster(&part.path, &target_path)
+                    && (owner_is_quarantined_active
+                        || same_inert_cluster(&part.path, &target_path)
                         || same_quarantined_active_cluster(&part.path, &target_path)
                         || same_non_editable_sheet_cluster(
                             &part.path,
@@ -260,6 +262,23 @@ impl PackageGraphBuilder {
             target: PackageRelationshipTarget::InternalPart { path: target_path },
             identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
         });
+    }
+
+    fn add_imported_external_hint_relationship(
+        &mut self,
+        owner: PackageOwner,
+        hint: &domain_types::PackageRelationshipHint,
+    ) {
+        let relationship = PackageRelationship {
+            owner,
+            relationship_type: hint.relationship_type.clone(),
+            target: PackageRelationshipTarget::External {
+                target: hint.target.clone(),
+                target_mode: hint.target_mode.clone(),
+            },
+            identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+        };
+        self.add_relationship_if_absent(relationship);
     }
 
     fn relationship_exists(
@@ -424,8 +443,10 @@ fn same_non_editable_sheet_cluster(
 }
 
 fn same_quarantined_active_cluster(owner_path: &str, target_path: &str) -> bool {
-    normalize_part_path(owner_path) == "xl/vbaProject.bin"
-        && normalize_part_path(target_path) == "xl/vbaProject.bin"
+    let owner_path = normalize_part_path(owner_path);
+    let target_path = normalize_part_path(target_path);
+    (owner_path == "xl/vbaProject.bin" && target_path == "xl/vbaProject.bin")
+        || same_active_x_cluster(&owner_path, &target_path)
 }
 
 const REL_WEB_EXTENSION_TASKPANES: &str =

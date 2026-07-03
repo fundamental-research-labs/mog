@@ -302,7 +302,6 @@ pub const XLSX_PACKAGE_DIAGNOSTIC_CODES: &[&str] = &[
     "xlsx.printerSettings.staleProvenance",
     "xlsx.extensions.unsupportedDropped",
     "xlsx.externalLinks.unsupportedDropped",
-    "xlsx.activeContent.blocked",
     "xlsx.activeContent.quarantined",
     "xlsx.unknownInert.preserved",
     "xlsx.ownerPolicy.ambiguous",

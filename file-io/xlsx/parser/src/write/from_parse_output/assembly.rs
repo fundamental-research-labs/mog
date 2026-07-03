@@ -44,6 +44,8 @@ pub(super) struct SheetExtras {
     /// Shape-ID planning diagnostics for form-control package artifacts.
     #[allow(dead_code)]
     pub(super) form_control_diagnostics: Vec<FormControlExportDiagnostic>,
+    /// Imported worksheet `<controls>` XML retained for inert active controls.
+    pub(super) worksheet_controls_xml: Option<String>,
     /// OLE objects for this sheet (converted from floating-object state).
     pub(super) ole_objects: Vec<OleObjectExport>,
     /// Clean imported worksheet custom property sidecars.
@@ -99,6 +101,12 @@ pub(super) struct WorksheetControlPropertyGraphEntry {
     pub(super) sheet_idx: usize,
     pub(super) global_idx: usize,
     pub(super) target: String,
+    pub(super) relationship_id_hint: String,
+}
+
+pub(super) struct WorksheetActiveXControlGraphEntry {
+    pub(super) sheet_idx: usize,
+    pub(super) target_path: String,
     pub(super) relationship_id_hint: String,
 }
 

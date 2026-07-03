@@ -487,6 +487,12 @@ pub(super) fn build_sheet_parts(
         let ole_objects = convert_unified_ole_objects(&sheet_data.floating_objects);
         let form_control_plan =
             build_form_control_export_plan(&form_controls, &sheet_data.comments, &ole_objects);
+        let worksheet_controls_xml = sheet_data
+            .worksheet_semantic_containers
+            .controls
+            .as_ref()
+            .map(|xml| xml.raw_xml.clone())
+            .filter(|xml| !xml.is_empty());
         let custom_properties = None;
 
         sheet_writers.push(sheet_writer);
@@ -523,6 +529,7 @@ pub(super) fn build_sheet_parts(
             has_printer_settings,
             form_controls: form_control_plan.controls,
             form_control_diagnostics: form_control_plan.diagnostics,
+            worksheet_controls_xml,
             ole_objects,
             custom_properties,
         });

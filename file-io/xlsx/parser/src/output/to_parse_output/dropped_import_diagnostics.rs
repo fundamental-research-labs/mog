@@ -47,13 +47,6 @@ pub(super) fn append_dropped_import_diagnostics(
     if result
         .sheets
         .iter()
-        .any(|sheet| sheet.worksheet_controls_xml.is_some())
-    {
-        dropped.push("worksheet controls XML sidecar".to_string());
-    }
-    if result
-        .sheets
-        .iter()
         .any(|sheet| sheet.custom_properties_xml.is_some())
     {
         dropped.push("worksheet custom-property XML refs".to_string());
@@ -123,10 +116,8 @@ fn append_suppressed_auxiliary_diagnostics<'a>(
     dropped: &mut Vec<String>,
 ) {
     for path in paths {
-        if path.starts_with("xl/webextensions/") {
+        if path.starts_with("xl/webextensions/") || path.starts_with("xl/activeX/") {
             continue;
-        } else if path.starts_with("xl/activeX/") {
-            dropped.push(format!("ActiveX active content suppressed at {}", path));
         } else if path == "xl/volatileDependencies.xml" {
             dropped.push("volatile dependency calculation sidecar".to_string());
         } else if path.starts_with("xl/featurePropertyBag/") {
@@ -139,25 +130,42 @@ fn append_quarantined_active_content_diagnostics(
     result: &FullParseResult,
     diagnostics: &mut ParseDiagnostics,
 ) {
-    let has_vba = result.extensions.as_ref().is_some_and(|extensions| {
-        extensions
-            .imported_parts
-            .paths()
-            .any(|path| path == "xl/vbaProject.bin")
-    });
-    if !has_vba {
+    let mut active_paths = Vec::new();
+    if let Some(extensions) = result.extensions.as_ref() {
+        active_paths.extend(
+            extensions
+                .imported_parts
+                .paths()
+                .filter(|path| *path == "xl/vbaProject.bin" || path.starts_with("xl/activeX/"))
+                .map(str::to_string),
+        );
+    }
+    if let Some(inventory) = result.package_inventory.as_ref() {
+        active_paths.extend(
+            inventory
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.code == "active_content_quarantined")
+                .filter_map(|diagnostic| diagnostic.part.clone()),
+        );
+    }
+    active_paths.sort();
+    active_paths.dedup();
+    if active_paths.is_empty() {
         return;
     }
-    diagnostics.errors.push(domain_types::ParseError {
-        code: 9003,
-        severity: "warning".to_string(),
-        message:
-            "Preserved XLSX active content without interpretation or execution: VBA project at xl/vbaProject.bin"
-                .to_string(),
-        part: Some("xl/vbaProject.bin".to_string()),
-        row: None,
-        col: None,
-    });
+    for path in active_paths {
+        diagnostics.errors.push(domain_types::ParseError {
+            code: 9003,
+            severity: "warning".to_string(),
+            message: format!(
+                "Preserved XLSX active content without interpretation or execution: quarantined package part at {path}"
+            ),
+            part: Some(path),
+            row: None,
+            col: None,
+        });
+    }
     diagnostics.import_report = Some(diagnostics.clone().into_import_report());
 }
 

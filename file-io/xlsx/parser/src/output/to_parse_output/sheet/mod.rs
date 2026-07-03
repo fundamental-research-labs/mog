@@ -535,6 +535,11 @@ pub(super) fn convert_sheet(
     if let Some(properties) = &mut sheet_properties {
         properties.page_set_up_pr = None;
     }
+    let mut worksheet_semantic_containers = sheet.worksheet_semantic_containers.clone();
+    worksheet_semantic_containers.controls = sheet
+        .worksheet_controls_xml
+        .clone()
+        .map(domain_types::WorksheetSemanticXml::new);
 
     SheetData {
         name: sheet.name.clone(),
@@ -578,7 +583,7 @@ pub(super) fn convert_sheet(
         page_breaks,
         hf_images,
         protection,
-        worksheet_semantic_containers: sheet.worksheet_semantic_containers.clone(),
+        worksheet_semantic_containers,
         sheet_calc_pr: sheet.sheet_calc_pr.clone(),
         auto_filter: sheet.auto_filter.clone(),
         sort_state: sheet.sort_state.clone(),

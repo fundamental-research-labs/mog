@@ -152,6 +152,12 @@ pub(super) fn validate_opaque_part_relationship_references(
     if !opaque_part_may_contain_xml_relationship_references(part) {
         return;
     }
+    if matches!(
+        part.semantic_kind,
+        Some(domain_types::XlsxPackagePartKind::OpaqueQuarantined)
+    ) {
+        return;
+    }
     let Some(bytes) = part.bytes.as_deref() else {
         errors.push(PackageIntegrityIssue::MissingOpaquePartBytes {
             part_path: part.path.clone(),

@@ -23,13 +23,16 @@ pub(super) fn validate_worksheet_r_ids(
         .flatten()
         .map(|rel| rel.id.as_str())
         .collect();
-    for id in extract_r_ids(&xml) {
-        if !defined_ids.contains(id.as_str()) {
+    for attr in extract_prefixed_attr_values(&xml, "id") {
+        if is_worksheet_control_reference(&xml, attr.start) {
+            continue;
+        }
+        if !defined_ids.contains(attr.value.as_str()) {
             errors.push(
                 PackageIntegrityError::MissingWorksheetRelationshipReference {
                     worksheet_path: worksheet_path.to_string(),
                     rels_path: rels_path.clone(),
-                    id,
+                    id: attr.value,
                 },
             );
         }
@@ -64,29 +67,10 @@ pub(super) fn validate_part_relationship_references(
     }
 }
 
-fn extract_r_ids(xml: &[u8]) -> Vec<String> {
-    let mut ids = Vec::new();
-    let mut rest = xml;
-    while let Some(pos) = find_subslice(rest, b"r:id=") {
-        rest = &rest[pos + b"r:id=".len()..];
-        let Some((&quote, after_quote)) = rest.split_first() else {
-            break;
-        };
-        if quote != b'"' && quote != b'\'' {
-            continue;
-        }
-        let Some(end) = after_quote.iter().position(|b| *b == quote) else {
-            break;
-        };
-        ids.push(String::from_utf8_lossy(&after_quote[..end]).into_owned());
-        rest = &after_quote[end + 1..];
-    }
-    ids
-}
-
 struct RelationshipAttr {
     name: String,
     value: String,
+    start: usize,
 }
 
 fn extract_relationship_attrs(xml: &[u8]) -> Vec<RelationshipAttr> {
@@ -142,9 +126,35 @@ fn extract_prefixed_attr_values(xml: &[u8], local_name: &str) -> Vec<Relationshi
         attrs.push(RelationshipAttr {
             name: String::from_utf8_lossy(&xml[prefix_start..name_end]).into_owned(),
             value: String::from_utf8_lossy(&xml[value_start..value_start + value_len]).into_owned(),
+            start: attr_start,
         });
         pos = value_start + value_len + 1;
     }
 
     attrs
+}
+
+fn is_worksheet_control_reference(xml: &[u8], attr_start: usize) -> bool {
+    let Some(tag_start) = xml[..attr_start].iter().rposition(|byte| *byte == b'<') else {
+        return false;
+    };
+    if xml.get(tag_start + 1) == Some(&b'/') {
+        return false;
+    }
+    let mut name_start = tag_start + 1;
+    let mut name_end = name_start;
+    while name_end < xml.len() {
+        let b = xml[name_end];
+        if matches!(b, b' ' | b'\t' | b'\n' | b'\r' | b'>' | b'/') {
+            break;
+        }
+        name_end += 1;
+    }
+    if let Some(colon_offset) = xml[name_start..name_end]
+        .iter()
+        .position(|byte| *byte == b':')
+    {
+        name_start += colon_offset + 1;
+    }
+    &xml[name_start..name_end] == b"control"
 }

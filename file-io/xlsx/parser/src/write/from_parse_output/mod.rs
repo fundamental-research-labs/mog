@@ -50,6 +50,7 @@ mod theme_parts;
 mod threaded_comments;
 mod vml_merge;
 mod workbook_parts;
+mod worksheet_controls;
 mod worksheet_custom_properties;
 mod zip_assembly;
 
@@ -72,8 +73,8 @@ use crate::write::{
 
 use assembly::{
     ChartAuxiliaryRelationshipGraphEntry, ChartEntry, ChartExEntry, DrawingRelationshipGraphEntry,
-    VmlPreviewRelationshipGraphEntry, WorksheetCommentsGraphEntry,
-    WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
+    VmlPreviewRelationshipGraphEntry, WorksheetActiveXControlGraphEntry,
+    WorksheetCommentsGraphEntry, WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
     WorksheetFormControlVmlGraphEntry, WorksheetHeaderFooterVmlGraphEntry,
     WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry, WorksheetOleVmlGraphEntry,
     WorksheetPrinterSettingsGraphEntry, WorksheetTableGraphEntry,
@@ -260,6 +261,8 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry> = Vec::new();
     let mut worksheet_control_property_relationships: Vec<WorksheetControlPropertyGraphEntry> =
         Vec::new();
+    let mut worksheet_active_x_control_relationships: Vec<WorksheetActiveXControlGraphEntry> =
+        Vec::new();
     let mut worksheet_header_footer_vml_relationships: Vec<WorksheetHeaderFooterVmlGraphEntry> =
         Vec::new();
     let mut worksheet_form_control_vml_relationships: Vec<WorksheetFormControlVmlGraphEntry> =
@@ -336,6 +339,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let has_printer_settings = extras.has_printer_settings;
         let has_hf_vml = extras.hf_vml.is_some();
         let has_form_controls = !extras.form_controls.is_empty();
+        let imported_active_x_controls =
+            worksheet_controls::imported_worksheet_active_x_controls(output, sheet_idx);
+        let has_imported_active_x_controls = !imported_active_x_controls.is_empty();
         let has_ole_objects = !extras.ole_objects.is_empty();
         let has_custom_properties = extras.custom_properties.is_some();
         let has_pivot_tables = pivot_data
@@ -351,6 +357,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             && !has_printer_settings
             && !has_hf_vml
             && !has_form_controls
+            && !has_imported_active_x_controls
             && !has_ole_objects
             && !has_custom_properties
             && !has_pivot_tables
@@ -364,6 +371,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
 
         let sheet_num = sheet_idx + 1;
         let mut rels = create_sheet_rels();
+        worksheet_active_x_control_relationships.extend(imported_active_x_controls);
 
         // Hyperlink rels (external URLs and internal links stored as rels).
         if has_hyperlinks || !sheet_data.hyperlinks.is_empty() {
@@ -1553,6 +1561,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         )?;
     }
     package_graph_builder.register_imported_opaque_parts()?;
+    for entry in &worksheet_active_x_control_relationships {
+        crate::write::package_graph::register_worksheet_active_x_control(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.target_path,
+            &entry.relationship_id_hint,
+        );
+    }
     for entry in &worksheet_comments_relationships {
         crate::write::package_graph::register_worksheet_comments(
             &mut package_graph_builder,
@@ -1782,7 +1798,34 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             1025
         };
         let ctrl_xml = controls_writer.write_worksheet_controls(base_shape_id, &ctrl_prop_r_ids);
-        sheet_writers[sheet_idx].set_controls_xml(String::from_utf8_lossy(&ctrl_xml).to_string());
+        let mut controls_xml = String::from_utf8_lossy(&ctrl_xml).to_string();
+        if let Some(raw_controls_xml) = extras.worksheet_controls_xml.as_deref() {
+            controls_xml = worksheet_controls::merge_generated_controls_with_imported_active_x(
+                output,
+                &package_graph,
+                sheet_idx,
+                &controls_xml,
+                raw_controls_xml,
+                &worksheet_active_x_control_relationships,
+            );
+        }
+        sheet_writers[sheet_idx].set_controls_xml(controls_xml);
+    }
+
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        if !extras.form_controls.is_empty() {
+            continue;
+        }
+        let Some(raw_controls_xml) = extras.worksheet_controls_xml.as_deref() else {
+            continue;
+        };
+        let remapped_controls_xml = worksheet_controls::remap_imported_worksheet_relationship_ids(
+            output,
+            &package_graph,
+            sheet_idx,
+            raw_controls_xml,
+        );
+        sheet_writers[sheet_idx].set_controls_xml(remapped_controls_xml);
     }
 
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {

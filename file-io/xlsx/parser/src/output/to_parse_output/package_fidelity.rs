@@ -252,7 +252,7 @@ fn package_diagnostic_code(code: &str) -> &'static str {
         "unsupported_needs_model_dropped" => "xlsx.extensions.unsupportedDropped",
         "active_content_dropped"
         | "active_forbidden_dropped"
-        | "security_disabled_active_content" => "xlsx.activeContent.blocked",
+        | "security_disabled_active_content" => "xlsx.activeContent.quarantined",
         "active_content_quarantined" => "xlsx.activeContent.quarantined",
         _ => "xlsx.ownerPolicy.unmatched",
     }
@@ -262,7 +262,7 @@ fn package_diagnostic_severity(code: &str) -> domain_types::XlsxDiagnosticSeveri
     match code {
         "active_content_dropped"
         | "active_forbidden_dropped"
-        | "security_disabled_active_content" => domain_types::XlsxDiagnosticSeverity::Blocked,
+        | "security_disabled_active_content" => domain_types::XlsxDiagnosticSeverity::Warning,
         "active_content_quarantined" => domain_types::XlsxDiagnosticSeverity::Warning,
         "invalid_relationship_owner" => domain_types::XlsxDiagnosticSeverity::Error,
         _ => domain_types::XlsxDiagnosticSeverity::Warning,
@@ -271,10 +271,10 @@ fn package_diagnostic_severity(code: &str) -> domain_types::XlsxDiagnosticSeveri
 
 fn package_diagnostic_action(code: &str) -> domain_types::XlsxDiagnosticAction {
     match code {
-        "active_content_quarantined" => domain_types::XlsxDiagnosticAction::Quarantined,
-        "active_content_dropped"
+        "active_content_quarantined"
+        | "active_content_dropped"
         | "active_forbidden_dropped"
-        | "security_disabled_active_content" => domain_types::XlsxDiagnosticAction::Blocked,
+        | "security_disabled_active_content" => domain_types::XlsxDiagnosticAction::Quarantined,
         _ => domain_types::XlsxDiagnosticAction::Dropped,
     }
 }
@@ -297,8 +297,10 @@ fn package_diagnostic_continuation(code: &str) -> domain_types::XlsxDiagnosticCo
     match code {
         "active_content_dropped"
         | "active_forbidden_dropped"
-        | "security_disabled_active_content"
-        | "invalid_relationship_owner" => domain_types::XlsxDiagnosticContinuation::ExportFailed,
+        | "security_disabled_active_content" => {
+            domain_types::XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning
+        }
+        "invalid_relationship_owner" => domain_types::XlsxDiagnosticContinuation::ExportFailed,
         "active_content_quarantined" => domain_types::XlsxDiagnosticContinuation::ExportContinued,
         _ => domain_types::XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
     }
@@ -559,34 +561,56 @@ mod tests {
     use super::*;
 
     #[test]
-    fn active_content_drop_maps_to_blocked_package_diagnostic_contract() {
+    fn active_x_content_quarantine_maps_to_export_continued_package_diagnostic_contract() {
         assert_eq!(
-            package_diagnostic_code("active_content_dropped"),
-            "xlsx.activeContent.blocked"
+            package_diagnostic_code("active_content_quarantined"),
+            "xlsx.activeContent.quarantined"
         );
         assert_eq!(
-            package_diagnostic_severity("active_content_dropped"),
-            domain_types::XlsxDiagnosticSeverity::Blocked
+            package_diagnostic_severity("active_content_quarantined"),
+            domain_types::XlsxDiagnosticSeverity::Warning
         );
         assert_eq!(
-            package_diagnostic_action("active_content_dropped"),
-            domain_types::XlsxDiagnosticAction::Blocked
+            package_diagnostic_action("active_content_quarantined"),
+            domain_types::XlsxDiagnosticAction::Quarantined
         );
         assert_eq!(
-            package_diagnostic_reason("active_content_dropped"),
+            package_diagnostic_reason("active_content_quarantined"),
             domain_types::XlsxDiagnosticReason::UnsafeActiveContent
         );
         assert_eq!(
-            package_diagnostic_continuation("active_content_dropped"),
-            domain_types::XlsxDiagnosticContinuation::ExportFailed
+            package_diagnostic_continuation("active_content_quarantined"),
+            domain_types::XlsxDiagnosticContinuation::ExportContinued
         );
-        assert!(package_diagnostic_semantics_changed(
-            "active_content_dropped"
+        assert!(!package_diagnostic_semantics_changed(
+            "active_content_quarantined"
         ));
         assert_eq!(
             package_diagnostic_owner(Some("xl/activeX/activeX1.bin")),
             domain_types::XlsxPackageOwnerId::ActiveContent
         );
+    }
+
+    #[test]
+    fn legacy_active_content_inventory_codes_do_not_map_to_blocked_export_contract() {
+        for code in [
+            "active_content_dropped",
+            "active_forbidden_dropped",
+            "security_disabled_active_content",
+        ] {
+            assert_eq!(
+                package_diagnostic_code(code),
+                "xlsx.activeContent.quarantined"
+            );
+            assert_eq!(
+                package_diagnostic_action(code),
+                domain_types::XlsxDiagnosticAction::Quarantined
+            );
+            assert_ne!(
+                package_diagnostic_continuation(code),
+                domain_types::XlsxDiagnosticContinuation::ExportFailed
+            );
+        }
     }
 
     #[test]

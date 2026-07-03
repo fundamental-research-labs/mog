@@ -1547,6 +1547,8 @@ pub struct WorksheetSemanticContainers {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smart_tags: Option<WorksheetSemanticXml>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub controls: Option<WorksheetSemanticXml>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_watches: Option<WorksheetSemanticXml>,
 }
 
@@ -1560,6 +1562,7 @@ impl WorksheetSemanticContainers {
             && self.data_consolidate.is_none()
             && self.phonetic_pr.is_none()
             && self.smart_tags.is_none()
+            && self.controls.is_none()
             && self.cell_watches.is_none()
     }
 }

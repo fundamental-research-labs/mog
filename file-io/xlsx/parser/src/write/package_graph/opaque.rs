@@ -1,4 +1,5 @@
 use super::{CT_JPEG, CT_PNG, PackagePart, PackagePartKind, normalize_part_path};
+use crate::write::package_ownership::AuxiliaryPackagePartPolicy;
 
 pub(super) fn imported_opaque_part(
     path: &str,
@@ -26,12 +27,19 @@ pub(super) fn imported_opaque_part(
         };
         (extension, content_type)
     });
+    let semantic_kind =
+        match crate::write::package_ownership::auxiliary_package_part_policy(&normalized) {
+            Some(AuxiliaryPackagePartPolicy::ActiveQuarantined) => {
+                domain_types::XlsxPackagePartKind::OpaqueQuarantined
+            }
+            _ => domain_types::XlsxPackagePartKind::OpaqueInert,
+        };
     PackagePart {
         path: normalized,
         content_type,
         default_extension,
         kind: PackagePartKind::Opaque,
-        semantic_kind: Some(domain_types::XlsxPackagePartKind::OpaqueInert),
+        semantic_kind: Some(semantic_kind),
         bytes: Some(bytes),
     }
 }
@@ -56,4 +64,10 @@ pub(super) fn same_inert_cluster(owner_path: &str, target_path: &str) -> bool {
     } else {
         false
     }
+}
+
+pub(super) fn same_active_x_cluster(owner_path: &str, target_path: &str) -> bool {
+    let owner_path = normalize_part_path(owner_path);
+    let target_path = normalize_part_path(target_path);
+    owner_path.starts_with("xl/activeX/") && target_path.starts_with("xl/activeX/")
 }

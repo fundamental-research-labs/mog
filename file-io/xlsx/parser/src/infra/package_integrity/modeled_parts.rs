@@ -122,7 +122,10 @@ pub(super) fn validate_modeled_part_invariants(
             );
             require_content_type(archive, path, CT_THEME, errors);
         }
-        if is_relationship_reference_part(path) && !is_worksheet_part(path) {
+        if is_relationship_reference_part(path)
+            && !is_worksheet_part(path)
+            && !is_quarantined_active_reference_part(path)
+        {
             validate_part_relationship_references(archive, path, relationships_by_part, errors);
         }
         if is_worksheet_part(path) {
@@ -172,6 +175,10 @@ pub(super) fn validate_modeled_part_invariants(
             require_content_type(archive, path, CT_CHART, errors);
         }
     }
+}
+
+fn is_quarantined_active_reference_part(path: &str) -> bool {
+    path.starts_with("xl/activeX/") && path.ends_with(".xml")
 }
 
 fn require_relationship(

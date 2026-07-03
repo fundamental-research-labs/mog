@@ -16,6 +16,7 @@ mod chart_extents;
 mod chart_frame_transform;
 mod chart_replay;
 mod chart_source_completion;
+mod comment_notes;
 mod differential_formats;
 mod doc_props;
 mod export_context;
@@ -1509,33 +1510,43 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     }
     let mut drawing_relationship_keys = Vec::with_capacity(drawing_relationships.len());
     for (entry_idx, entry) in drawing_relationships.iter().enumerate() {
-        let relationship_key = if entry.rel_type == REL_CHART {
-            crate::write::package_graph::register_drawing_chart_relationship(
-                &mut package_graph_builder,
-                &entry.drawing_path,
-                &entry.target_path,
-                &entry.relationship_id_hint,
-            )?
-        } else if entry.rel_type == REL_CHART_EX {
-            crate::write::package_graph::register_drawing_chart_ex_relationship(
-                &mut package_graph_builder,
-                &entry.drawing_path,
-                &entry.target_path,
-                &entry.relationship_id_hint,
-            )?
+        let relationship_key = if entry.rel_type == REL_CHART
+            && package_graph_builder.contains_part(&entry.target_path)
+        {
+            Some(
+                crate::write::package_graph::register_drawing_chart_relationship(
+                    &mut package_graph_builder,
+                    &entry.drawing_path,
+                    &entry.target_path,
+                    &entry.relationship_id_hint,
+                )?,
+            )
+        } else if entry.rel_type == REL_CHART_EX
+            && package_graph_builder.contains_part(&entry.target_path)
+        {
+            Some(
+                crate::write::package_graph::register_drawing_chart_ex_relationship(
+                    &mut package_graph_builder,
+                    &entry.drawing_path,
+                    &entry.target_path,
+                    &entry.relationship_id_hint,
+                )?,
+            )
         } else if entry.rel_type
             == "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
             && !crate::write::package_graph::is_external_target_mode(entry.target_mode.as_deref())
+            && package_graph_builder.contains_part(&entry.target_path)
         {
-            crate::write::package_graph::register_drawing_image_relationship(
-                &mut package_graph_builder,
-                &entry.drawing_path,
-                &entry.target_path,
-                &entry.relationship_id_hint,
-            )?
+            Some(
+                crate::write::package_graph::register_drawing_image_relationship(
+                    &mut package_graph_builder,
+                    &entry.drawing_path,
+                    &entry.target_path,
+                    &entry.relationship_id_hint,
+                )?,
+            )
         } else {
-            crate::write::package_graph::register_drawing_relationship_with_target_mode(
-                &mut package_graph_builder,
+            package_graph_builder.add_drawing_relationship_with_current_opaque_closure(
                 &entry.drawing_path,
                 &entry.rel_type,
                 &entry.target_path,
@@ -1543,7 +1554,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 &entry.relationship_id_hint,
             )?
         };
-        drawing_relationship_keys.push((entry_idx, relationship_key));
+        if let Some(relationship_key) = relationship_key {
+            drawing_relationship_keys.push((entry_idx, relationship_key));
+        }
     }
     for entry in &worksheet_printer_settings_relationships {
         crate::write::package_graph::register_worksheet_printer_settings_payload(
@@ -1573,6 +1586,11 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             &entry.vml_path,
             entry.vml_relationship_id_hint.as_deref(),
         )?;
+        comment_notes::register_note_vml_image_relationships(
+            &mut package_graph_builder,
+            &output.sheets[entry.sheet_idx],
+            &entry.vml_path,
+        );
     }
     for entry in &worksheet_threaded_comments_relationships {
         crate::write::package_graph::register_worksheet_threaded_comments(

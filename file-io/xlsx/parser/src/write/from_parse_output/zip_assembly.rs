@@ -9,6 +9,7 @@ use super::{
     WriteError, chart_auxiliary, chart_replay, external_links, table_export_plan, vml_merge,
 };
 use crate::domain::content_types::write::ContentTypesManager;
+use crate::infra::opc::REL_IMAGE;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
@@ -217,6 +218,7 @@ pub(super) fn write_zip_package(
     let sheet_xmls: Vec<Vec<u8>> = sheet_writers.into_iter().map(|sw| sw.to_xml()).collect();
 
     let mut zip_ctrl_prop_idx: usize = 0;
+    let mut written_vml_relationships = std::collections::BTreeSet::new();
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
         add_registered_part(
@@ -240,7 +242,7 @@ pub(super) fn write_zip_package(
         }
 
         // Comment XML + VML
-        if let Some((ref comments_xml, ref vml_xml)) = sheet_extras[idx].comments {
+        if let Some((ref comments_xml, _)) = sheet_extras[idx].comments {
             let comments_entry = worksheet_comments_relationships
                 .iter()
                 .find(|entry| entry.sheet_idx == idx)
@@ -256,6 +258,11 @@ pub(super) fn write_zip_package(
                 &comments_entry.comments_path,
                 comments_xml.clone(),
             )?;
+            let comment_vml_xml = comment_vml_xml_for_export(
+                package_graph,
+                &comments_entry.vml_path,
+                &output.sheets[idx],
+            );
             let merged_vml = if !sheet_extras[idx].form_controls.is_empty()
                 || !sheet_extras[idx].ole_objects.is_empty()
             {
@@ -276,7 +283,7 @@ pub(super) fn write_zip_package(
                         .collect::<Vec<_>>(),
                     &preview_rel_ids,
                 );
-                vml_merge::merge_form_controls_into_comment_vml(vml_xml, &form_control_vml)
+                vml_merge::merge_form_controls_into_comment_vml(&comment_vml_xml, &form_control_vml)
                     .ok_or_else(|| {
                         WriteError::PackageIntegrity(format!(
                             "failed to merge form-control VML into comment VML for sheet {}",
@@ -284,7 +291,7 @@ pub(super) fn write_zip_package(
                         ))
                     })?
             } else {
-                vml_xml.clone()
+                comment_vml_xml
             };
             add_registered_part(
                 package_graph,
@@ -292,6 +299,12 @@ pub(super) fn write_zip_package(
                 &comments_entry.vml_path,
                 merged_vml,
             )?;
+            write_vml_relationships_once(
+                package_graph,
+                &mut zip,
+                &mut written_vml_relationships,
+                &comments_entry.vml_path,
+            );
         }
 
         // Header/footer image VML — generated from domain types
@@ -395,7 +408,6 @@ pub(super) fn write_zip_package(
     }
 
     let mut written_ole_parts = std::collections::BTreeSet::new();
-    let mut vml_paths_with_preview_rels = std::collections::BTreeSet::new();
     for (idx, extras) in sheet_extras.iter().enumerate() {
         if extras.ole_objects.is_empty() {
             continue;
@@ -424,19 +436,12 @@ pub(super) fn write_zip_package(
         ) else {
             continue;
         };
-        if vml_paths_with_preview_rels.insert(vml_path.clone()) {
-            let vml_rels = package_graph.relationship_manager_for_owner(
-                &crate::write::package_graph::PackageOwner::Part {
-                    path: vml_path.clone(),
-                },
-            );
-            if !vml_rels.is_empty() {
-                zip.add_file(
-                    &crate::write::package_graph::part_relationships_path(&vml_path),
-                    vml_rels.to_xml(),
-                );
-            }
-        }
+        write_vml_relationships_once(
+            package_graph,
+            &mut zip,
+            &mut written_vml_relationships,
+            &vml_path,
+        );
     }
 
     // Table XML files
@@ -866,6 +871,57 @@ fn ole_preview_relationship_ids(
                 .unwrap_or_default()
         })
         .collect()
+}
+
+fn comment_vml_xml_for_export(
+    package_graph: &ResolvedPackageGraph,
+    vml_path: &str,
+    sheet: &domain_types::SheetData,
+) -> Vec<u8> {
+    let owner = crate::write::package_graph::PackageOwner::Part {
+        path: vml_path.to_string(),
+    };
+    let relationship_id = |image: &domain_types::domain::comment::CommentNoteImage| {
+        if super::comment_notes::note_image_is_external(image) {
+            return package_graph
+                .relationship_id(&owner, REL_IMAGE, &image.original_target)
+                .map(str::to_string);
+        }
+        if image.package_path.is_empty() || image.bytes.is_empty() {
+            return None;
+        }
+        let target = relative_target(vml_path, &image.package_path);
+        package_graph
+            .relationship_id(&owner, REL_IMAGE, &target)
+            .map(str::to_string)
+    };
+    crate::domain::comments::write::comments_vml_from_domain_with_package(
+        &sheet.comments,
+        sheet.comment_package.as_ref(),
+        Some(&relationship_id),
+    )
+}
+
+fn write_vml_relationships_once(
+    package_graph: &ResolvedPackageGraph,
+    zip: &mut ZipWriter,
+    written: &mut std::collections::BTreeSet<String>,
+    vml_path: &str,
+) {
+    if !written.insert(vml_path.to_string()) {
+        return;
+    }
+    let vml_rels = package_graph.relationship_manager_for_owner(
+        &crate::write::package_graph::PackageOwner::Part {
+            path: vml_path.to_string(),
+        },
+    );
+    if !vml_rels.is_empty() {
+        zip.add_file(
+            &crate::write::package_graph::part_relationships_path(vml_path),
+            vml_rels.to_xml(),
+        );
+    }
 }
 
 fn legacy_vml_path_for_sheet(

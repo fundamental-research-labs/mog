@@ -88,7 +88,29 @@ fn parse_vml_shape(xml: &[u8]) -> Option<CommentShape> {
         }
     }
 
+    shape.image_relationship_ids = parse_imagedata_relationship_ids(xml);
+
     Some(shape)
+}
+
+fn parse_imagedata_relationship_ids(xml: &[u8]) -> Vec<String> {
+    let mut rel_ids = Vec::new();
+    let mut pos = 0;
+
+    while let Some(imgdata_start) = find_tag_simd(xml, b"v:imagedata", pos) {
+        let Some(imgdata_end) = find_gt_simd(xml, imgdata_start) else {
+            break;
+        };
+        let imgdata_element = &xml[imgdata_start..=imgdata_end];
+        if let Some(rel_id) = parse_string_attr(imgdata_element, b"o:relid=\"")
+            .or_else(|| parse_string_attr(imgdata_element, b"r:id=\""))
+        {
+            rel_ids.push(rel_id);
+        }
+        pos = imgdata_end + 1;
+    }
+
+    rel_ids
 }
 
 fn has_note_client_data(xml: &[u8]) -> bool {

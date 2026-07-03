@@ -1,6 +1,9 @@
 use super::*;
 
-pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
+pub(super) fn build_sheet_comments(
+    sheet: &FullParsedSheet,
+    binary_parts: &crate::output::to_parse_output::media::BinaryPartMap,
+) -> Vec<Comment> {
     let mut comments: Vec<Comment> = sheet
         .comments
         .iter()
@@ -35,6 +38,7 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
                 note_height: None,
                 note_width: None,
                 note_shape_anchor: None,
+                note_images: Vec::new(),
                 comment_pr: c.comment_pr.clone(),
             }
         })
@@ -48,11 +52,43 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
             note_height: Option<f64>,
             note_width: Option<f64>,
             note_shape_anchor: domain_types::domain::comment::NoteShapeAnchor,
+            note_images: Vec<domain_types::domain::comment::CommentNoteImage>,
         }
         let mut shape_by_cell: HashMap<String, ShapeData> = HashMap::new();
-        for (_, bytes, _) in &sheet.raw_vml_drawings {
+        for (vml_path, bytes, vml_rels) in &sheet.raw_vml_drawings {
+            let vml_relationships = vml_note_image_relationships(vml_rels);
             for shape in parse_vml_shapes(bytes) {
                 if let Some(ref cell_ref) = shape.cell_ref {
+                    let note_images = shape
+                        .image_relationship_ids
+                        .iter()
+                        .filter_map(|rel_id| {
+                            let rel = vml_relationships.get(rel_id)?;
+                            if target_mode_is_external(rel.target_mode.as_deref()) {
+                                return Some(domain_types::domain::comment::CommentNoteImage {
+                                    relationship_id: rel.id.clone(),
+                                    original_target: rel.target.clone(),
+                                    target_mode: rel.target_mode.clone(),
+                                    package_path: String::new(),
+                                    content_type: None,
+                                    bytes: Vec::new(),
+                                });
+                            }
+                            let payload = crate::output::to_parse_output::media::resolve_relationship_payload(
+                                binary_parts,
+                                Some(vml_path),
+                                rel,
+                            )?;
+                            Some(domain_types::domain::comment::CommentNoteImage {
+                                relationship_id: payload.relationship_id,
+                                original_target: payload.original_target,
+                                target_mode: None,
+                                package_path: payload.package_path,
+                                content_type: payload.content_type,
+                                bytes: payload.bytes,
+                            })
+                        })
+                        .collect();
                     shape_by_cell.entry(cell_ref.clone()).or_insert(ShapeData {
                         visible: shape.visible,
                         note_height: shape.note_height,
@@ -67,6 +103,7 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
                             bottom_row: shape.bottom_row,
                             bottom_offset: shape.bottom_offset,
                         },
+                        note_images,
                     });
                 }
             }
@@ -80,10 +117,28 @@ pub(super) fn build_sheet_comments(sheet: &FullParsedSheet) -> Vec<Comment> {
                     comment.note_height = data.note_height;
                     comment.note_width = data.note_width;
                     comment.note_shape_anchor = Some(data.note_shape_anchor.clone());
+                    comment.note_images = data.note_images.clone();
                 }
             }
         }
     }
 
     comments
+}
+
+fn vml_note_image_relationships(
+    vml_rels: &Option<(String, Vec<u8>)>,
+) -> HashMap<String, ooxml_types::shared::OpcRelationship> {
+    let Some((_, rels_bytes)) = vml_rels else {
+        return HashMap::new();
+    };
+    crate::domain::workbook::read::parse_all_rels(rels_bytes)
+        .into_iter()
+        .filter(|rel| rel.rel_type == crate::infra::opc::REL_IMAGE)
+        .map(|rel| (rel.id.clone(), rel))
+        .collect()
+}
+
+fn target_mode_is_external(mode: Option<&str>) -> bool {
+    mode.is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
 }

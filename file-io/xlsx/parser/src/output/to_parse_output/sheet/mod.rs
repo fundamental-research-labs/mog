@@ -395,7 +395,7 @@ pub(super) fn convert_sheet(
         .map(|view| SheetView::from_ooxml(&view))
         .collect();
 
-    let comments = build_sheet_comments(sheet);
+    let comments = build_sheet_comments(sheet, binary_parts);
 
     // --- Hyperlinks ---
     // Build a lookup from relationship ID to target URL for resolving external hyperlinks.

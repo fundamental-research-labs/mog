@@ -301,6 +301,7 @@ pub(super) fn build_sheet_parts(
                     root_ext_lst_xml,
                     sheet_data.comment_package.as_ref(),
                 );
+            append_note_vml_image_blobs(&mut all_image_blobs, &sheet_data.comments);
             Some((comments_xml, generated_vml_xml))
         } else {
             None
@@ -541,6 +542,24 @@ pub(super) fn build_sheet_parts(
         all_chart_entries,
         all_chart_ex_entries,
         all_image_blobs,
+    }
+}
+
+fn append_note_vml_image_blobs(
+    all_image_blobs: &mut Vec<(String, Vec<u8>)>,
+    comments: &[domain_types::Comment],
+) {
+    for image in comments.iter().flat_map(|comment| &comment.note_images) {
+        if image.package_path.is_empty() || image.bytes.is_empty() {
+            continue;
+        }
+        if all_image_blobs
+            .iter()
+            .any(|(path, _)| path == &image.package_path)
+        {
+            continue;
+        }
+        all_image_blobs.push((image.package_path.clone(), image.bytes.clone()));
     }
 }
 

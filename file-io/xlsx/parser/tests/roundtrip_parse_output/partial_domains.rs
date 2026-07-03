@@ -1,3 +1,5 @@
+#[path = "partial_domains/comments.rs"]
+mod comments;
 #[path = "partial_domains/harness.rs"]
 mod harness;
 #[path = "partial_domains/modeled_roundtrip.rs"]

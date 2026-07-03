@@ -45,13 +45,6 @@ pub(super) fn append_dropped_import_diagnostics(
     {
         dropped.push("worksheet header/footer XML".to_string());
     }
-    if result
-        .sheets
-        .iter()
-        .any(|sheet| sheet.custom_properties_xml.is_some())
-    {
-        dropped.push("worksheet custom-property XML refs".to_string());
-    }
     if result.sheets.iter().any(|sheet| {
         sheet.parsed_drawing.as_ref().is_some_and(|drawing| {
             drawing.raw_drawing_xml.is_some()

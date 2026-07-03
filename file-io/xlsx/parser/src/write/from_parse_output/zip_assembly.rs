@@ -219,6 +219,7 @@ pub(super) fn write_zip_package(
 
     let mut zip_ctrl_prop_idx: usize = 0;
     let mut written_vml_relationships = std::collections::BTreeSet::new();
+    let mut written_custom_property_parts = std::collections::BTreeSet::new();
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
         add_registered_part(
@@ -402,7 +403,9 @@ pub(super) fn write_zip_package(
 
         if let Some(custom_properties) = &sheet_extras[idx].custom_properties {
             for part in &custom_properties.parts {
-                add_registered_part(package_graph, &mut zip, &part.path, part.data.clone())?;
+                if written_custom_property_parts.insert(part.path.clone()) {
+                    add_registered_part(package_graph, &mut zip, &part.path, part.data.clone())?;
+                }
             }
         }
     }

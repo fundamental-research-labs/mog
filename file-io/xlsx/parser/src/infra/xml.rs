@@ -28,7 +28,8 @@ pub use mc::{
     resolve_mc_alternate_content_with_supported_namespaces,
 };
 pub use relationships::{
-    raw_xml_contains_relationship_attr, relationship_attr_values, remap_relationship_attrs,
+    raw_xml_contains_relationship_attr, relationship_attr_values,
+    relationship_attr_values_with_known_namespaces, remap_relationship_attrs,
 };
 
 #[cfg(test)]

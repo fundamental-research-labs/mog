@@ -65,6 +65,7 @@ use crate::domain::drawings::write::{
     AbsoluteAnchor, CellAnchor, ChartExRef, ChartRef, ClientData, DrawingAnchor, DrawingObject,
     DrawingWriter, Extent, OneCellAnchor, Position, TwoCellAnchor,
 };
+use crate::infra::opc::REL_CUSTOM_PROPERTY;
 use crate::write::relationships::{RelationshipManager, create_sheet_rels};
 use crate::write::{
     ControlsWriter, REL_CHART, REL_CHART_EX, REL_COMMENTS, REL_CTRL_PROP, REL_DRAWING,
@@ -75,7 +76,8 @@ use crate::write::{
 use assembly::{
     ChartAuxiliaryRelationshipGraphEntry, ChartEntry, ChartExEntry, DrawingRelationshipGraphEntry,
     VmlPreviewRelationshipGraphEntry, WorksheetActiveXControlGraphEntry,
-    WorksheetCommentsGraphEntry, WorksheetControlPropertyGraphEntry, WorksheetDrawingGraphEntry,
+    WorksheetCommentsGraphEntry, WorksheetControlPropertyGraphEntry,
+    WorksheetCustomPropertyGraphEntry, WorksheetDrawingGraphEntry,
     WorksheetFormControlVmlGraphEntry, WorksheetHeaderFooterVmlGraphEntry,
     WorksheetHyperlinkGraphEntry, WorksheetOleObjectGraphEntry, WorksheetOleVmlGraphEntry,
     WorksheetPrinterSettingsGraphEntry, WorksheetTableGraphEntry,
@@ -262,6 +264,9 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
     let mut worksheet_hyperlink_relationships: Vec<WorksheetHyperlinkGraphEntry> = Vec::new();
     let mut worksheet_control_property_relationships: Vec<WorksheetControlPropertyGraphEntry> =
         Vec::new();
+    let mut worksheet_custom_property_relationships: Vec<WorksheetCustomPropertyGraphEntry> =
+        Vec::new();
+    let mut worksheet_custom_property_relationship_keys = Vec::new();
     let mut worksheet_active_x_control_relationships: Vec<WorksheetActiveXControlGraphEntry> =
         Vec::new();
     let mut worksheet_header_footer_vml_relationships: Vec<WorksheetHeaderFooterVmlGraphEntry> =
@@ -515,6 +520,23 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
                 target: hf_target,
                 relationship_id_hint,
             });
+        }
+
+        if let Some(custom_properties) = &sheet_extras[sheet_idx].custom_properties {
+            for part in &custom_properties.parts {
+                let target = worksheet_relative_target(&part.path);
+                let generated_r_id = rels.add(REL_CUSTOM_PROPERTY, &target);
+                worksheet_custom_property_relationships.push(WorksheetCustomPropertyGraphEntry {
+                    sheet_idx,
+                    path: part.path.clone(),
+                    target,
+                    relationship_id_hint: if part.relationship_id_hint.is_empty() {
+                        generated_r_id
+                    } else {
+                        part.relationship_id_hint.clone()
+                    },
+                });
+            }
         }
 
         // Form controls rels (ctrlProp, VML, worksheet controls XML)
@@ -1308,6 +1330,15 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             &entry.relationship_id_hint,
         )?;
     }
+    for (entry_idx, entry) in worksheet_custom_property_relationships.iter().enumerate() {
+        let relationship_key = crate::write::package_graph::register_worksheet_custom_property(
+            &mut package_graph_builder,
+            entry.sheet_idx,
+            &entry.path,
+            &entry.relationship_id_hint,
+        )?;
+        worksheet_custom_property_relationship_keys.push((entry_idx, relationship_key));
+    }
     for entry in &worksheet_header_footer_vml_relationships {
         crate::write::package_graph::register_worksheet_vml_drawing(
             &mut package_graph_builder,
@@ -1777,6 +1808,20 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         if let Some(hyperlinks) = hyperlinks {
             sheet_writers[sheet_idx].set_hyperlinks(hyperlinks);
         }
+    }
+
+    for (sheet_idx, extras) in sheet_extras.iter().enumerate() {
+        let Some(custom_properties) = extras.custom_properties.as_ref() else {
+            continue;
+        };
+        let xml = worksheet_custom_properties::remap_relationship_ids(
+            &package_graph,
+            sheet_idx,
+            custom_properties,
+            &worksheet_custom_property_relationships,
+            &worksheet_custom_property_relationship_keys,
+        )?;
+        sheet_writers[sheet_idx].set_custom_properties_xml(xml);
     }
 
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {

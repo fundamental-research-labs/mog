@@ -528,3 +528,25 @@ fn relationship_attr_detector_is_prefix_agnostic_and_conservative() {
         r#"<x:state id = "rId1" embed = "rId2" link = "rId3"/>"#
     ));
 }
+
+#[test]
+fn namespace_aware_relationship_values_ignore_unrelated_prefixes() {
+    assert_eq!(
+        relationship_attr_values_with_known_namespaces(
+            r#"<x:state xmlns:foo="urn:example" foo:id="rIdIgnored"/>"#
+        ),
+        Vec::<String>::new()
+    );
+    assert_eq!(
+        relationship_attr_values_with_known_namespaces(
+            r#"<x:state xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>"#
+        ),
+        vec!["rId1".to_string()]
+    );
+    assert_eq!(
+        relationship_attr_values_with_known_namespaces(
+            r#"<v:imagedata xmlns:o="urn:schemas-microsoft-com:office:office" o:relid="rId2"/>"#
+        ),
+        vec!["rId2".to_string()]
+    );
+}

@@ -8,7 +8,7 @@ use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::sheet_ext_merge::merge_ext_lst_entries;
 use super::style_remap::StyleExportRemapper;
-use super::{chart_replay, sheet_preservation, table_export_plan};
+use super::{chart_replay, sheet_preservation, table_export_plan, worksheet_custom_properties};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::xml_namespaces::NamespaceMap;
@@ -494,7 +494,11 @@ pub(super) fn build_sheet_parts(
             .as_ref()
             .map(|xml| xml.raw_xml.clone())
             .filter(|xml| !xml.is_empty());
-        let custom_properties = None;
+        let custom_properties = worksheet_custom_properties::build_for_sheet(
+            sheet_idx,
+            sheet_data,
+            output.package_fidelity.as_ref(),
+        );
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {

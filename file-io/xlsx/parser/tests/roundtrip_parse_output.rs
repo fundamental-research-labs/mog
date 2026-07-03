@@ -26,3 +26,5 @@ mod styles;
 mod utf8;
 #[path = "roundtrip_parse_output/workbook.rs"]
 mod workbook;
+#[path = "roundtrip_parse_output/worksheet_custom_properties.rs"]
+mod worksheet_custom_properties;

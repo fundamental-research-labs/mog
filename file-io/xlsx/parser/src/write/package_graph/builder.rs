@@ -261,8 +261,12 @@ impl PackageGraphBuilder {
             let owner = PackageOwner::Part {
                 path: part.path.clone(),
             };
+            let referenced_ids = opaque_part_relationship_reference_ids(part);
             for hint in opaque_part_relationship_hints(metadata, part) {
                 if is_external_target_mode(hint.target_mode.as_deref()) {
+                    if !referenced_ids.contains(hint.id.as_str()) {
+                        continue;
+                    }
                     self.add_imported_external_hint_relationship(owner.clone(), hint);
                     continue;
                 }
@@ -578,7 +582,7 @@ fn opaque_part_relationship_reference_ids(
 ) -> HashSet<String> {
     std::str::from_utf8(&part.bytes)
         .ok()
-        .map(crate::infra::xml::relationship_attr_values)
+        .map(crate::infra::xml::relationship_attr_values_with_known_namespaces)
         .unwrap_or_default()
         .into_iter()
         .collect()

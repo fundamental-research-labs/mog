@@ -753,17 +753,16 @@ pub fn register_worksheet_custom_property(
     sheet_idx: usize,
     path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     graph.register_part(modeled_part(path, CT_WORKSHEET_CUSTOM_PROPERTY))?;
-    graph.add_relationship(PackageRelationship {
+    Ok(graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
         target: PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(path),
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
-    });
-    Ok(())
+    }))
 }
 
 pub fn register_worksheet_printer_settings_payload(

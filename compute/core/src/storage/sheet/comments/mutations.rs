@@ -105,6 +105,7 @@ pub fn add_comment(
         note_height: None,
         note_width: None,
         note_shape_anchor: None,
+        note_images: Vec::new(),
         comment_pr: None,
     };
     let prelim: MapPrelim = comment_schema::to_yrs_prelim(&comment)

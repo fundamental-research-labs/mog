@@ -11,6 +11,7 @@ pub fn parse_worksheet_semantic_containers(xml: &[u8]) -> WorksheetSemanticConta
         phonetic_pr: extract_semantic_xml(xml, b"phoneticPr"),
         smart_tags: extract_semantic_xml(xml, b"smartTags"),
         controls: extract_semantic_xml(xml, b"controls"),
+        custom_properties: extract_semantic_xml(xml, b"customProperties"),
         cell_watches: extract_semantic_xml(xml, b"cellWatches"),
     }
 }

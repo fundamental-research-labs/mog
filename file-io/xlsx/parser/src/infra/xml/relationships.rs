@@ -1,8 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const RELATIONSHIP_ATTR_LOCAL_NAMES: [&str; 9] = [
     "id", "embed", "link", "dm", "lo", "qs", "cs", "blip", "relid",
 ];
+const OOXML_RELATIONSHIPS_NS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const OFFICE_VML_NS: &str = "urn:schemas-microsoft-com:office:office";
 
 /// Returns true when raw XML contains a namespaced relationship-bearing
 /// attribute such as `r:id`, `r:embed`, `r:link`, SmartArt `r:dm`/`r:lo`
@@ -16,6 +19,24 @@ pub fn raw_xml_contains_relationship_attr(raw_xml: &str) -> bool {
 pub fn relationship_attr_values(raw_xml: &str) -> Vec<String> {
     let mut values = Vec::new();
     visit_relationship_attrs(raw_xml, |value| values.push(value.to_string()));
+    values
+}
+
+pub fn relationship_attr_values_with_known_namespaces(raw_xml: &str) -> Vec<String> {
+    let relationship_prefixes = namespace_prefixes(raw_xml, &[OOXML_RELATIONSHIPS_NS]);
+    let office_prefixes = namespace_prefixes(raw_xml, &[OFFICE_VML_NS]);
+    if relationship_prefixes.is_empty() && office_prefixes.is_empty() {
+        return Vec::new();
+    }
+
+    let mut values = Vec::new();
+    visit_relationship_attrs_with_name(raw_xml, |prefix, local_name, value| {
+        if relationship_prefixes.contains(prefix)
+            || (local_name == "relid" && office_prefixes.contains(prefix))
+        {
+            values.push(value.to_string());
+        }
+    });
     values
 }
 
@@ -110,6 +131,10 @@ fn raw_xml_contains_prefixed_attr(raw_xml: &str, local_name: &str) -> bool {
 }
 
 fn visit_relationship_attrs(raw_xml: &str, mut visit: impl FnMut(&str)) {
+    visit_relationship_attrs_with_name(raw_xml, |_, _, value| visit(value));
+}
+
+fn visit_relationship_attrs_with_name(raw_xml: &str, mut visit: impl FnMut(&str, &str, &str)) {
     let bytes = raw_xml.as_bytes();
     let mut cursor = 0;
 
@@ -125,7 +150,7 @@ fn visit_relationship_attrs(raw_xml: &str, mut visit: impl FnMut(&str)) {
         {
             name_start -= 1;
         }
-        let Some((_, local_name)) = raw_xml[name_start..eq_pos].rsplit_once(':') else {
+        let Some((prefix, local_name)) = raw_xml[name_start..eq_pos].rsplit_once(':') else {
             cursor = eq_pos + 1;
             continue;
         };
@@ -151,7 +176,61 @@ fn visit_relationship_attrs(raw_xml: &str, mut visit: impl FnMut(&str)) {
             break;
         };
         let value_end = value_content_start + value_len;
-        visit(&raw_xml[value_content_start..value_end]);
+        visit(prefix, local_name, &raw_xml[value_content_start..value_end]);
         cursor = value_end + 1;
     }
+}
+
+fn namespace_prefixes(raw_xml: &str, namespace_uris: &[&str]) -> HashSet<String> {
+    let mut prefixes = HashSet::new();
+    let bytes = raw_xml.as_bytes();
+    let mut cursor = 0;
+
+    while let Some(offset) = raw_xml[cursor..].find("xmlns:") {
+        let prefix_start = cursor + offset + "xmlns:".len();
+        let mut prefix_end = prefix_start;
+        while prefix_end < bytes.len() && is_xml_name_byte(bytes[prefix_end]) {
+            prefix_end += 1;
+        }
+        if prefix_end == prefix_start {
+            cursor = prefix_start;
+            continue;
+        }
+
+        let mut value_start = prefix_end;
+        while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+            value_start += 1;
+        }
+        if value_start >= bytes.len() || bytes[value_start] != b'=' {
+            cursor = prefix_end;
+            continue;
+        }
+        value_start += 1;
+        while value_start < bytes.len() && bytes[value_start].is_ascii_whitespace() {
+            value_start += 1;
+        }
+        if value_start >= bytes.len() || !matches!(bytes[value_start], b'"' | b'\'') {
+            cursor = value_start;
+            continue;
+        }
+        let quote = bytes[value_start];
+        let value_content_start = value_start + 1;
+        let Some(value_len) = bytes[value_content_start..]
+            .iter()
+            .position(|b| *b == quote)
+        else {
+            break;
+        };
+        let value_end = value_content_start + value_len;
+        if namespace_uris.contains(&&raw_xml[value_content_start..value_end]) {
+            prefixes.insert(raw_xml[prefix_start..prefix_end].to_string());
+        }
+        cursor = value_end + 1;
+    }
+
+    prefixes
+}
+
+fn is_xml_name_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
 }

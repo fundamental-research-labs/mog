@@ -540,6 +540,10 @@ pub(super) fn convert_sheet(
         .worksheet_controls_xml
         .clone()
         .map(domain_types::WorksheetSemanticXml::new);
+    worksheet_semantic_containers.custom_properties = sheet
+        .custom_properties_xml
+        .clone()
+        .map(domain_types::WorksheetSemanticXml::new);
 
     SheetData {
         name: sheet.name.clone(),

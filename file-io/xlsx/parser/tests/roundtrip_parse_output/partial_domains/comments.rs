@@ -2,11 +2,15 @@ use std::sync::Arc;
 
 use super::super::fixtures::ZipBuilder;
 use super::super::helpers::{cell, make_single_sheet};
+use domain_types::domain::floating_object::{
+    AnchorMode, FloatingObject, FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData,
+    FormControlData, FormControlOoxmlProps, FormControlWorksheetControlPr,
+};
 use domain_types::{Comment, CommentType};
 use value_types::CellValue;
 use xlsx_parser::domain::workbook::read::parse_all_rels;
 use xlsx_parser::infra::opc::{
-    REL_COMMENTS, REL_IMAGE, REL_VML_DRAWING, resolve_relationship_target,
+    REL_COMMENTS, REL_CTRL_PROP, REL_IMAGE, REL_VML_DRAWING, resolve_relationship_target,
 };
 use xlsx_parser::infra::package_integrity::validate_archive_package_integrity;
 use xlsx_parser::parse_xlsx_to_output;
@@ -121,6 +125,89 @@ fn imported_note_comment_vml_image_roundtrips_media_part_and_relationship() {
         .expect("roundtripped note should exist");
     assert_eq!(roundtripped_note.note_images.len(), 1);
     assert_eq!(roundtripped_note.note_images[0].bytes, NOTE_IMAGE);
+}
+
+#[test]
+fn note_image_and_form_control_share_comment_vml_without_losing_relationships() {
+    let imported = note_comment_vml_image_fixture(Some(NOTE_IMAGE));
+    let (mut output, _diagnostics) =
+        parse_xlsx_to_output(&imported).expect("note-image fixture should parse");
+    output.sheets[0].floating_objects = vec![FloatingObject {
+        common: FloatingObjectCommon {
+            id: "form-control-1".to_string(),
+            anchor: FloatingObjectAnchor {
+                anchor_mode: AnchorMode::OneCell,
+                anchor_row: 1,
+                anchor_col: 1,
+                ..Default::default()
+            },
+            width: 100.0,
+            height: 30.0,
+            name: "Modeled check".to_string(),
+            ..Default::default()
+        },
+        data: FloatingObjectData::FormControl(FormControlData {
+            control_type: "CheckBox".to_string(),
+            cell_link: Some("$A$1".to_string()),
+            input_range: None,
+            ooxml: Some(FormControlOoxmlProps {
+                control_pr: Some(FormControlWorksheetControlPr {
+                    linked_cell: Some("$A$1".to_string()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        }),
+    }];
+
+    let bytes = write_xlsx_from_parse_output(&output)
+        .expect("note image plus form control export should succeed");
+    let archive = XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    validate_archive_package_integrity(&archive).expect("exported package should be valid");
+
+    let sheet_rels = parse_all_rels(
+        &archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .expect("worksheet relationships should be emitted"),
+    );
+    assert_eq!(
+        sheet_rels
+            .iter()
+            .filter(|rel| rel.rel_type == REL_VML_DRAWING)
+            .count(),
+        1
+    );
+    assert!(sheet_rels.iter().any(|rel| rel.rel_type == REL_COMMENTS));
+    assert!(sheet_rels.iter().any(|rel| rel.rel_type == REL_CTRL_PROP));
+    let vml_path = worksheet_vml_path(&archive);
+    let vml_xml = String::from_utf8(archive.read_file(&vml_path).unwrap()).unwrap();
+    assert!(vml_xml.contains("<v:imagedata "));
+    assert!(vml_xml.contains(r#"ObjectType="Checkbox""#));
+
+    let vml_rels = parse_all_rels(
+        &archive
+            .read_file(&part_relationships_path(&vml_path))
+            .expect("shared VML relationships should be emitted"),
+    );
+    let image_rel = vml_rels
+        .iter()
+        .find(|rel| rel.rel_type == REL_IMAGE)
+        .expect("shared VML should relate to note image media");
+    assert!(vml_xml.contains(&format!(r#"o:relid="{}""#, image_rel.id)));
+    let image_path = resolve_relationship_target(Some(&vml_path), &image_rel.target)
+        .expect("image target should resolve");
+    assert_eq!(image_path, "xl/media/note.png");
+    assert_eq!(archive.read_file(&image_path).unwrap(), NOTE_IMAGE);
+
+    let (roundtripped, _diagnostics) =
+        parse_xlsx_to_output(&bytes).expect("exported XLSX should parse back");
+    assert_eq!(roundtripped.sheets[0].comments[0].note_images.len(), 1);
+    assert!(
+        roundtripped.sheets[0]
+            .floating_objects
+            .iter()
+            .any(|object| matches!(object.data, FloatingObjectData::FormControl(_)))
+    );
 }
 
 #[test]

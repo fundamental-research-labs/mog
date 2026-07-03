@@ -3,6 +3,7 @@ use domain_types::Hyperlink;
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
 use super::form_control_export_plan::build_form_control_export_plan;
 use super::form_controls::convert_unified_form_controls;
+use super::header_footer_images::build_header_footer_image_export;
 use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::sheet_ext_merge::merge_ext_lst_entries;
@@ -18,6 +19,7 @@ pub(super) struct BuiltSheetParts {
     pub(super) sheet_extras: Vec<SheetExtras>,
     pub(super) all_chart_entries: Vec<Vec<ChartEntry>>,
     pub(super) all_chart_ex_entries: Vec<Vec<ChartExEntry>>,
+    pub(super) all_image_blobs: Vec<(String, Vec<u8>)>,
 }
 
 pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> SharedStringsWriter {
@@ -36,6 +38,7 @@ pub(super) fn build_sheet_parts(
 ) -> BuiltSheetParts {
     let mut sheet_writers = Vec::with_capacity(output.sheets.len());
     let mut sheet_extras = Vec::with_capacity(output.sheets.len());
+    let mut all_image_blobs = Vec::new();
 
     // Global table counter for archive paths (xl/tables/table{N}.xml).
     let mut global_table_idx: u32 = 0;
@@ -431,10 +434,12 @@ pub(super) fn build_sheet_parts(
         // Check for floating objects (images, shapes, etc.)
         let has_floating_objects = !sheet_data.floating_objects.is_empty();
 
+        let hf_image_export = build_header_footer_image_export(sheet_idx, &sheet_data.hf_images);
+        all_image_blobs.extend(hf_image_export.image_blobs);
+
         let (
             original_comment_path,
             original_vml_path,
-            hf_vml,
             original_drawing_path,
             original_drawing_relationship_id,
         ) = (
@@ -446,7 +451,6 @@ pub(super) fn build_sheet_parts(
                 .comment_package
                 .as_ref()
                 .and_then(|package| package.vml_path_hint.clone()),
-            None,
             sheet_data
                 .drawing_package
                 .as_ref()
@@ -510,7 +514,7 @@ pub(super) fn build_sheet_parts(
                 .comment_package
                 .as_ref()
                 .and_then(|package| package.threaded_comments_relationship_id_hint.clone()),
-            hf_vml,
+            hf_vml: hf_image_export.vml,
             original_drawing_path,
             original_drawing_relationship_id,
             has_printer_settings,
@@ -526,6 +530,7 @@ pub(super) fn build_sheet_parts(
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
+        all_image_blobs,
     }
 }
 

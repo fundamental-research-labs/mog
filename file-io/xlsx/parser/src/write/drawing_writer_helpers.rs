@@ -23,6 +23,7 @@ use crate::domain::drawings::write::DrawingAnchor;
 pub use anchors::{
     anchor_position_to_absolute, anchor_position_to_one_cell, anchor_position_to_two_cell,
 };
+pub(in crate::write) use images::parse_data_url;
 pub use layer_order::{add_ordered_anchors, build_feature_drawing_anchors};
 
 /// Result of assembling drawing data for a single sheet.

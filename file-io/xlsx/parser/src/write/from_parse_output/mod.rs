@@ -23,6 +23,7 @@ mod export_report;
 mod external_links;
 mod form_control_export_plan;
 mod form_controls;
+mod header_footer_images;
 mod hyperlink_targets;
 mod media;
 mod metadata;
@@ -1285,6 +1286,7 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         &rich_data_parts,
         &rich_data_related_parts,
     )?;
+    media::register_image_blob_parts(&mut package_graph_builder, &all_image_blobs)?;
     for entry in &worksheet_hyperlink_relationships {
         crate::write::package_graph::register_worksheet_hyperlink(
             &mut package_graph_builder,
@@ -1513,7 +1515,6 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             &entry.relationship_id_hint,
         );
     }
-    media::register_image_blob_parts(&mut package_graph_builder, &all_image_blobs)?;
     let mut drawing_relationship_keys = Vec::with_capacity(drawing_relationships.len());
     for (entry_idx, entry) in drawing_relationships.iter().enumerate() {
         let relationship_key = if entry.rel_type == REL_CHART {

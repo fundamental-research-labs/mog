@@ -100,7 +100,7 @@ pub(super) fn ensure_image_blob_for_current_payload(
 ///
 /// Supports the format `data:<mime>;base64,<data>`.
 /// Returns `None` if the URL is not a valid data-URL or decoding fails.
-pub(super) fn parse_data_url(url: &str) -> Option<(String, Vec<u8>)> {
+pub(in crate::write) fn parse_data_url(url: &str) -> Option<(String, Vec<u8>)> {
     let rest = url.strip_prefix("data:")?;
     let (mime_and_params, data) = rest.split_once(',')?;
     let mime = mime_and_params.strip_suffix(";base64")?;

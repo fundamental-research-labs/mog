@@ -527,7 +527,7 @@ pub(super) fn convert_sheet(
 
     // --- Header/footer images ---
     // Parse HF images from VML drawings and resolve image rel IDs to file paths.
-    let hf_images = convert_hf_images(sheet);
+    let hf_images = convert_hf_images(sheet, binary_parts);
     let comment_package = build_sheet_comment_package_info(sheet);
 
     // --- Build SheetData ---

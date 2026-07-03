@@ -454,7 +454,6 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                         self.deps.push(DepTarget::Cell(cell_ref.id));
                     }
                     IdentityFormulaRef::Range(range_ref) => {
-                        // Resolve start/end CellIds to positions, create RangePos dep
                         let start = cell_ref_to_position(
                             &CellRef::Resolved(range_ref.start_id),
                             &self.sheet_ctx,
@@ -468,21 +467,28 @@ impl<'a> AstVisitor for DepExtractor<'a> {
                         if let (Some((s_sheet, s_row, s_col)), Some((_, e_row, e_col))) =
                             (start, end)
                         {
+                            let min_row = s_row.min(e_row);
+                            let max_row = s_row.max(e_row);
+                            let min_col = s_col.min(e_col);
+                            let max_col = s_col.max(e_col);
                             let access = self.current_range_access();
-                            self.deps.push(DepTarget::Range(
-                                RangePos::new(
-                                    s_sheet,
-                                    s_row.min(e_row),
-                                    s_col.min(e_col),
-                                    s_row.max(e_row),
-                                    s_col.max(e_col),
-                                ),
-                                access,
-                            ));
+                            self.push_range_dep(
+                                s_sheet, min_row, min_col, max_row, max_col, access,
+                            );
+
+                            let cell_count =
+                                (max_row - min_row + 1) as u64 * (max_col - min_col + 1) as u64;
+                            if cell_count >= RANGE_EXPANSION_THRESHOLD
+                                && access == RangeAccess::Aggregate
+                            {
+                                // Large Aggregate range: add corner cell deps for basic ordering.
+                                self.deps.push(DepTarget::Cell(range_ref.start_id));
+                                self.deps.push(DepTarget::Cell(range_ref.end_id));
+                            }
+                        } else {
+                            self.deps.push(DepTarget::Cell(range_ref.start_id));
+                            self.deps.push(DepTarget::Cell(range_ref.end_id));
                         }
-                        // Also push CellId deps on corners for topo ordering
-                        self.deps.push(DepTarget::Cell(range_ref.start_id));
-                        self.deps.push(DepTarget::Cell(range_ref.end_id));
                     }
                     IdentityFormulaRef::RectRange(rect_ref) => {
                         let (Some((start_row_sheet, start_row)), Some((end_row_sheet, end_row))) = (

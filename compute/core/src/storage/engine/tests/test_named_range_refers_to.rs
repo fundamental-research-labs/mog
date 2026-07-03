@@ -461,3 +461,57 @@ fn snapshot_with_reference_bearing_defined_name_recalculates_formula_dependents(
         "snapshot init should evaluate formulas against reference-bearing named ranges"
     );
 }
+
+#[test]
+fn snapshot_with_raw_a1_defined_name_exposes_backing_cell_dependencies() {
+    let mut snap = raw_a1_defined_name_replay_snapshot();
+    snap.sheets[0].cells.push(CellData {
+        cell_id: "550e8400-e29b-41d4-a716-446655440004".to_string(),
+        row: 2,
+        col: 0,
+        value: CellValue::Number(FiniteF64::must(30.0)),
+        formula: None,
+        identity_formula: None,
+        array_ref: None,
+    });
+    snap.named_ranges.push(NamedRangeDef::from_expression(
+        "SalesData".to_string(),
+        Scope::Workbook,
+        "=Sheet1!$A$1:$A$3".to_string(),
+    ));
+
+    let (engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let (_a1, _a2, formula_cell) = named_range_replay_cell_ids();
+    let sheet_id = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+
+    assert_eq!(
+        engine.mirror().get_cell_value(&formula_cell),
+        Some(&CellValue::Number(FiniteF64::must(60.0))),
+        "raw-A1 defined names should still evaluate during snapshot init"
+    );
+
+    let precedents: Vec<_> = engine
+        .get_precedents(&sheet_id, 0, 1)
+        .into_iter()
+        .map(|pos| (pos.row, pos.col))
+        .collect();
+    assert!(
+        precedents.contains(&(0, 0))
+            && precedents.contains(&(1, 0))
+            && precedents.contains(&(2, 0)),
+        "formula cells that use imported raw-A1 names should expose backing cells as precedents, got {precedents:?}"
+    );
+
+    for row in [0, 1, 2] {
+        let dependents: Vec<_> = engine
+            .get_dependents(&sheet_id, row, 0)
+            .into_iter()
+            .map(|pos| (pos.row, pos.col))
+            .collect();
+        assert!(
+            dependents.contains(&(0, 1)),
+            "backing cell A{} should expose the formula cell as a dependent, got {dependents:?}",
+            row + 1
+        );
+    }
+}

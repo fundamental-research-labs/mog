@@ -421,7 +421,7 @@ describe('InputCoordinator', () => {
       expect(scrollState.x).toBe(50);
     });
 
-    it('only constrains discrete horizontal wheel input at a hidden column run', () => {
+    it('constrains the first discrete horizontal wheel at a hidden column run but releases repeated wheel input', () => {
       const positions: Array<{ x: number; y: number }> = [];
       const baseDeps = createMockInputDependencies(mockCoordinateSystem);
       const columnDimensions = new Map<number, { left: number; width: number; hidden: boolean }>();
@@ -497,11 +497,31 @@ describe('InputCoordinator', () => {
       expect(positions.at(-1)).toEqual({ x: 1014, y: 133 });
       expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
 
-      jest.advanceTimersByTime(200);
+      jest.advanceTimersByTime(60);
 
-      expect(coordinator.getScrollState()).toMatchObject({ x: 1014, y: 133 });
+      coordinator.handleWheel(createWheelEvent({ deltaX: 150, deltaY: 0 }));
+
+      expect(positions.at(-1)).toEqual({ x: 1164, y: 133 });
+      expect(coordinator.getScrollState()).toMatchObject({ x: 1164, y: 133 });
+
+      coordinator.resetScrollPosition(1300, 133);
+      jest.advanceTimersByTime(60);
+
+      coordinator.handleWheel(createWheelEvent({ deltaX: -499, deltaY: 0 }));
+
+      expect(positions.at(-1)).toEqual({ x: 1016, y: 133 });
+      expect(coordinator.getScrollState()).toMatchObject({ x: 1016, y: 133 });
+
+      jest.advanceTimersByTime(60);
+
+      coordinator.handleWheel(createWheelEvent({ deltaX: -150, deltaY: 0 }));
+
+      expect(positions.at(-1)).toEqual({ x: 866, y: 133 });
+      expect(coordinator.getScrollState()).toMatchObject({ x: 866, y: 133 });
 
       coordinator.resetScrollPosition(877, 133);
+      jest.advanceTimersByTime(60);
+
       coordinator.handleWheel(createWheelEvent({ deltaX: 2400, deltaY: 0 }));
 
       expect(positions.at(-1)).toEqual({ x: 2077, y: 133 });

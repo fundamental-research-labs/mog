@@ -55,6 +55,7 @@ export type InputActor = InputMachineActor;
 
 const DIRECT_PIXEL_SCROLL_THRESHOLD = 500;
 const LARGE_HORIZONTAL_PIXEL_SCROLL_SCALE = 0.5;
+const HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON = 1;
 
 // =============================================================================
 // DEPENDENCIES
@@ -1356,9 +1357,16 @@ function adaptPositionDimensions(
 
 function crossesScrollAnchor(fromX: number, toX: number, anchorX: number): boolean {
   if (!Number.isFinite(anchorX) || fromX === toX) return false;
-  const minX = Math.min(fromX, toX);
-  const maxX = Math.max(fromX, toX);
-  return anchorX > minX && anchorX <= maxX;
+  if (toX > fromX) {
+    return (
+      anchorX > fromX + HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON &&
+      anchorX <= toX
+    );
+  }
+  return (
+    anchorX < fromX - HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON &&
+    anchorX >= toX
+  );
 }
 
 function stopBeforeScrollAnchor(fromX: number, anchorX: number): number {

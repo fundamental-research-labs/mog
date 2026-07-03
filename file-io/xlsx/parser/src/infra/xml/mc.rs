@@ -485,8 +485,19 @@ fn resolve_namespace_prefix(
 }
 
 fn namespace_decl_in_start_tag(xml: &[u8], prefix: &str) -> Option<String> {
-    let start_tag_end = find_gt_simd(xml, 0).unwrap_or(xml.len());
-    namespace_decl_anywhere(&xml[..start_tag_end], prefix)
+    let mut pos = 0;
+    while let Some(lt_offset) = xml.get(pos..)?.iter().position(|byte| *byte == b'<') {
+        let lt = pos + lt_offset;
+        let marker = xml.get(lt + 1).copied();
+        if matches!(marker, Some(b'?') | Some(b'!')) {
+            pos = find_gt_simd(xml, lt).map(|gt| gt + 1).unwrap_or(xml.len());
+            continue;
+        }
+
+        let start_tag_end = find_gt_simd(xml, lt).unwrap_or(xml.len());
+        return namespace_decl_anywhere(&xml[lt..start_tag_end], prefix);
+    }
+    None
 }
 
 fn namespace_decl_anywhere(xml: &[u8], prefix: &str) -> Option<String> {

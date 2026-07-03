@@ -355,6 +355,28 @@ fn test_mc_resolve_x15_choice() {
 }
 
 #[test]
+fn test_mc_resolve_context_namespace_after_xml_declaration() {
+    let worksheet = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <oleObjects/>
+</worksheet>"#;
+    let xml = br#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+  <mc:Choice Requires="r"><oleObject r:id="rIdOle"/></mc:Choice>
+  <mc:Fallback/>
+</mc:AlternateContent>"#;
+
+    let branch = resolve_mc_alternate_content_with_namespace_context(
+        xml,
+        Some(worksheet),
+        MC_WORKSHEET_MARKUP_SUPPORTED_NAMESPACES,
+    )
+    .expect("r namespace should resolve from worksheet root after XML declaration");
+    assert!(branch.is_choice);
+    let content = std::str::from_utf8(&xml[branch.start..branch.end]).unwrap();
+    assert!(content.contains(r#"r:id="rIdOle""#));
+}
+
+#[test]
 fn test_mc_resolve_requires_all_prefixes_supported() {
     let xml = br#"<mc:AlternateContent>
   <mc:Choice Requires="x14 unknownNs"><controls>bad</controls></mc:Choice>

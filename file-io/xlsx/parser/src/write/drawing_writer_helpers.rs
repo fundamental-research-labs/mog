@@ -46,6 +46,18 @@ pub struct SheetDrawingData {
     pub drawing_rels: Vec<ooxml_types::shared::OpcRelationship>,
 }
 
+pub(super) fn floating_object_requires_drawing_part(obj: &FloatingObject) -> bool {
+    matches!(
+        &obj.data,
+        FloatingObjectData::Picture(_)
+            | FloatingObjectData::Shape(_)
+            | FloatingObjectData::Textbox(_)
+            | FloatingObjectData::Drawing(_)
+            | FloatingObjectData::Connector(_)
+            | FloatingObjectData::Diagram(_)
+    )
+}
+
 /// Assemble all floating objects for a sheet into drawing anchors suitable for `DrawingWriter`.
 ///
 /// The unified `FloatingObject` type contains all object types (pictures, shapes,

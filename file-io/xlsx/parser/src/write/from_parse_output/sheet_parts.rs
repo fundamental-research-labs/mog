@@ -12,6 +12,7 @@ use super::{chart_replay, sheet_preservation, table_export_plan};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::xml_namespaces::NamespaceMap;
+use crate::write::drawing_writer_helpers::floating_object_requires_drawing_part;
 use crate::write::{SharedStringsWriter, SheetWriter};
 
 pub(super) struct BuiltSheetParts {
@@ -431,8 +432,10 @@ pub(super) fn build_sheet_parts(
         let has_chart_ex = !chart_ex_entries_for_sheet.is_empty();
         all_chart_ex_entries.push(chart_ex_entries_for_sheet);
 
-        // Check for floating objects (images, shapes, etc.)
-        let has_floating_objects = !sheet_data.floating_objects.is_empty();
+        let has_floating_objects = sheet_data
+            .floating_objects
+            .iter()
+            .any(floating_object_requires_drawing_part);
 
         let hf_image_export = build_header_footer_image_export(sheet_idx, &sheet_data.hf_images);
         all_image_blobs.extend(hf_image_export.image_blobs);

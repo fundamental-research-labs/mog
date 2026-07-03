@@ -224,7 +224,7 @@ fn build_package_diagnostics(result: &FullParseResult) -> Vec<domain_types::Xlsx
                     code: package_diagnostic_code(diagnostic.code).to_string(),
                     severity: package_diagnostic_severity(diagnostic.code),
                     owner_id: package_diagnostic_owner(diagnostic.part.as_deref()),
-                    action: domain_types::XlsxDiagnosticAction::Dropped,
+                    action: package_diagnostic_action(diagnostic.code),
                     reason: package_diagnostic_reason(diagnostic.code),
                     continuation: package_diagnostic_continuation(diagnostic.code),
                     lifecycle: domain_types::XlsxDiagnosticLifecycle::ImportOnlyEvidence,
@@ -239,7 +239,7 @@ fn build_package_diagnostics(result: &FullParseResult) -> Vec<domain_types::Xlsx
                     target_mode: None,
                     content_type: None,
                     affected_graph: Vec::new(),
-                    semantics_changed: true,
+                    semantics_changed: package_diagnostic_semantics_changed(diagnostic.code),
                 })
                 .collect()
         })
@@ -250,27 +250,42 @@ fn package_diagnostic_code(code: &str) -> &'static str {
     match code {
         "invalid_relationship_owner" => "xlsx.packageGraph.danglingRelationship",
         "unsupported_needs_model_dropped" => "xlsx.extensions.unsupportedDropped",
-        "active_forbidden_dropped" | "security_disabled_active_content" => {
-            "xlsx.activeContent.blocked"
-        }
+        "active_content_dropped"
+        | "active_forbidden_dropped"
+        | "security_disabled_active_content" => "xlsx.activeContent.blocked",
+        "active_content_quarantined" => "xlsx.activeContent.quarantined",
         _ => "xlsx.ownerPolicy.unmatched",
     }
 }
 
 fn package_diagnostic_severity(code: &str) -> domain_types::XlsxDiagnosticSeverity {
     match code {
-        "active_forbidden_dropped" | "security_disabled_active_content" => {
-            domain_types::XlsxDiagnosticSeverity::Blocked
-        }
+        "active_content_dropped"
+        | "active_forbidden_dropped"
+        | "security_disabled_active_content" => domain_types::XlsxDiagnosticSeverity::Blocked,
+        "active_content_quarantined" => domain_types::XlsxDiagnosticSeverity::Warning,
         "invalid_relationship_owner" => domain_types::XlsxDiagnosticSeverity::Error,
         _ => domain_types::XlsxDiagnosticSeverity::Warning,
+    }
+}
+
+fn package_diagnostic_action(code: &str) -> domain_types::XlsxDiagnosticAction {
+    match code {
+        "active_content_quarantined" => domain_types::XlsxDiagnosticAction::Quarantined,
+        "active_content_dropped"
+        | "active_forbidden_dropped"
+        | "security_disabled_active_content" => domain_types::XlsxDiagnosticAction::Blocked,
+        _ => domain_types::XlsxDiagnosticAction::Dropped,
     }
 }
 
 fn package_diagnostic_reason(code: &str) -> domain_types::XlsxDiagnosticReason {
     match code {
         "invalid_relationship_owner" => domain_types::XlsxDiagnosticReason::DanglingRelationship,
-        "active_forbidden_dropped" | "security_disabled_active_content" => {
+        "active_content_dropped"
+        | "active_content_quarantined"
+        | "active_forbidden_dropped"
+        | "security_disabled_active_content" => {
             domain_types::XlsxDiagnosticReason::UnsafeActiveContent
         }
         "unsupported_needs_model_dropped" => domain_types::XlsxDiagnosticReason::UnsupportedFeature,
@@ -280,11 +295,17 @@ fn package_diagnostic_reason(code: &str) -> domain_types::XlsxDiagnosticReason {
 
 fn package_diagnostic_continuation(code: &str) -> domain_types::XlsxDiagnosticContinuation {
     match code {
-        "active_forbidden_dropped"
+        "active_content_dropped"
+        | "active_forbidden_dropped"
         | "security_disabled_active_content"
         | "invalid_relationship_owner" => domain_types::XlsxDiagnosticContinuation::ExportFailed,
+        "active_content_quarantined" => domain_types::XlsxDiagnosticContinuation::ExportContinued,
         _ => domain_types::XlsxDiagnosticContinuation::ExportContinuedWithSemanticChangeWarning,
     }
+}
+
+fn package_diagnostic_semantics_changed(code: &str) -> bool {
+    !matches!(code, "active_content_quarantined")
 }
 
 fn package_diagnostic_owner(part: Option<&str>) -> domain_types::XlsxPackageOwnerId {
@@ -536,6 +557,68 @@ fn package_part_is_forbidden_active_content(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_content_drop_maps_to_blocked_package_diagnostic_contract() {
+        assert_eq!(
+            package_diagnostic_code("active_content_dropped"),
+            "xlsx.activeContent.blocked"
+        );
+        assert_eq!(
+            package_diagnostic_severity("active_content_dropped"),
+            domain_types::XlsxDiagnosticSeverity::Blocked
+        );
+        assert_eq!(
+            package_diagnostic_action("active_content_dropped"),
+            domain_types::XlsxDiagnosticAction::Blocked
+        );
+        assert_eq!(
+            package_diagnostic_reason("active_content_dropped"),
+            domain_types::XlsxDiagnosticReason::UnsafeActiveContent
+        );
+        assert_eq!(
+            package_diagnostic_continuation("active_content_dropped"),
+            domain_types::XlsxDiagnosticContinuation::ExportFailed
+        );
+        assert!(package_diagnostic_semantics_changed(
+            "active_content_dropped"
+        ));
+        assert_eq!(
+            package_diagnostic_owner(Some("xl/activeX/activeX1.bin")),
+            domain_types::XlsxPackageOwnerId::ActiveContent
+        );
+    }
+
+    #[test]
+    fn active_content_quarantine_maps_to_quarantined_package_diagnostic_contract() {
+        assert_eq!(
+            package_diagnostic_code("active_content_quarantined"),
+            "xlsx.activeContent.quarantined"
+        );
+        assert_eq!(
+            package_diagnostic_severity("active_content_quarantined"),
+            domain_types::XlsxDiagnosticSeverity::Warning
+        );
+        assert_eq!(
+            package_diagnostic_action("active_content_quarantined"),
+            domain_types::XlsxDiagnosticAction::Quarantined
+        );
+        assert_eq!(
+            package_diagnostic_reason("active_content_quarantined"),
+            domain_types::XlsxDiagnosticReason::UnsafeActiveContent
+        );
+        assert_eq!(
+            package_diagnostic_continuation("active_content_quarantined"),
+            domain_types::XlsxDiagnosticContinuation::ExportContinued
+        );
+        assert!(!package_diagnostic_semantics_changed(
+            "active_content_quarantined"
+        ));
+        assert_eq!(
+            package_diagnostic_owner(Some("xl/vbaProject.bin")),
+            domain_types::XlsxPackageOwnerId::ActiveContent
+        );
+    }
 
     #[test]
     fn drops_mog_version_metadata_opaque_cluster_before_package_replay() {

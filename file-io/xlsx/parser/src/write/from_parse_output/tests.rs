@@ -35,6 +35,7 @@ mod data_tables;
 mod drawing_pictures;
 mod package_graph_ownership;
 mod pivot_package;
+mod printer_settings;
 mod smoke_and_formulas;
 mod sparklines;
 mod styles;

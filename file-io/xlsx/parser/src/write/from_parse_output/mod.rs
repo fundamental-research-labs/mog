@@ -1150,19 +1150,14 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
             drawing_writer_data.push(None);
         }
 
-        // Printer settings relationship.
-        if has_printer_settings {
-            if let Some(entry) = sheet_data.print_settings.as_ref().and_then(|ps| {
-                printer_settings::relationship_for_export(
-                    sheet_idx,
-                    sheet_num,
-                    ps,
-                    output.package_fidelity.as_ref(),
-                )
-            }) {
-                worksheet_printer_settings_relationships.push(entry);
-            }
-        }
+        printer_settings::append_relationship_for_export(
+            sheet_idx,
+            sheet_num,
+            sheet_data.print_settings.as_ref(),
+            output.package_fidelity.as_ref(),
+            &mut sheet_writers[sheet_idx],
+            &mut worksheet_printer_settings_relationships,
+        );
     }
 
     for (sheet_idx, extras) in sheet_extras.iter().enumerate() {

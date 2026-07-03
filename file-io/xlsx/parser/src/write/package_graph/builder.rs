@@ -162,6 +162,7 @@ impl PackageGraphBuilder {
             }
             if !is_non_editable_sheet_cluster
                 && !is_quarantined_active
+                && !is_inert_printer_settings_part(&normalized_path)
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
                     &part.path,
                 )
@@ -378,6 +379,10 @@ fn normalize_relationship_target(mut relationship: PackageRelationship) -> Packa
         *path = normalize_part_path(path);
     }
     relationship
+}
+
+fn is_inert_printer_settings_part(path: &str) -> bool {
+    path.starts_with("xl/printerSettings/") && path.ends_with(".bin")
 }
 
 fn non_editable_sheet_cluster_paths(metadata: &PackageFidelityMetadata) -> HashSet<String> {

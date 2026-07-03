@@ -1316,21 +1316,10 @@ pub fn write_xlsx_from_parse_output(output: &ParseOutput) -> Result<Vec<u8>, Wri
         let Some(hf) = &extras.hf_vml else {
             continue;
         };
-        for (relationship_id, target) in &hf.image_targets {
-            let Ok(target_path) =
-                crate::infra::opc::resolve_relationship_target(Some(&hf.vml_path), target)
-            else {
-                continue;
-            };
-            if package_graph_builder.contains_part(&target_path) {
-                crate::write::package_graph::register_part_image_relationship(
-                    &mut package_graph_builder,
-                    &hf.vml_path,
-                    &target_path,
-                    relationship_id,
-                );
-            }
-        }
+        header_footer_images::register_header_footer_image_relationships(
+            &mut package_graph_builder,
+            hf,
+        )?;
     }
     for entry in &worksheet_form_control_vml_relationships {
         crate::write::package_graph::register_worksheet_vml_drawing(

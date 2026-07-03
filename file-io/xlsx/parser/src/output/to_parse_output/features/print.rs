@@ -243,6 +243,7 @@ pub(crate) fn convert_hf_images(
                 Some(HeaderFooterImageInfo {
                     position,
                     src,
+                    target_mode: relationship.target_mode.clone(),
                     title: img.title.clone(),
                     width_pt: img.width_pt,
                     height_pt: img.height_pt,

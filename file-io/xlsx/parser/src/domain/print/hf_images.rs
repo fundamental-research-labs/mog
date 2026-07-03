@@ -241,7 +241,7 @@ pub fn write_hf_images_vml(
 /// Each image needs a relationship mapping its `relid` to an image file path.
 pub fn write_hf_images_vml_rels(
     _images: &[HeaderFooterImage],
-    image_targets: &[(&str, &str)],
+    image_targets: &[HeaderFooterImageTarget],
 ) -> Vec<u8> {
     let mut w = String::with_capacity(400);
     w.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n");
@@ -249,11 +249,15 @@ pub fn write_hf_images_vml_rels(
         "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">",
     );
 
-    for (rel_id, target) in image_targets {
+    for target in image_targets {
         w.push_str(&format!(
-            "<Relationship Id=\"{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"{}\"/>",
-            rel_id, target
+            "<Relationship Id=\"{}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"{}\"",
+            target.relationship_id, target.target
         ));
+        if let Some(target_mode) = &target.target_mode {
+            w.push_str(&format!(" TargetMode=\"{}\"", target_mode));
+        }
+        w.push_str("/>");
     }
 
     w.push_str("</Relationships>");
@@ -262,8 +266,7 @@ pub fn write_hf_images_vml_rels(
 
 /// Parse image relationship targets from a VML .rels file.
 ///
-/// Returns pairs of (relationship_id, target_path), e.g. `("rId1", "../media/image0.png")`.
-pub fn parse_vml_rels_image_targets(rels_xml: &[u8]) -> Vec<(String, String)> {
+pub fn parse_vml_rels_image_targets(rels_xml: &[u8]) -> Vec<HeaderFooterImageTarget> {
     let mut targets = Vec::new();
     let xml = std::str::from_utf8(rels_xml).unwrap_or("");
     let mut pos = 0;
@@ -274,9 +277,14 @@ pub fn parse_vml_rels_image_targets(rels_xml: &[u8]) -> Vec<(String, String)> {
 
         let id = extract_xml_attr(elem, "Id=\"");
         let target = extract_xml_attr(elem, "Target=\"");
+        let target_mode = extract_xml_attr(elem, "TargetMode=\"").map(str::to_string);
 
         if let (Some(id), Some(target)) = (id, target) {
-            targets.push((id.to_string(), target.to_string()));
+            targets.push(HeaderFooterImageTarget {
+                relationship_id: id.to_string(),
+                target: target.to_string(),
+                target_mode,
+            });
         }
         pos = rel_start + rel_end + 2;
     }
@@ -290,13 +298,21 @@ fn extract_xml_attr<'a>(xml: &'a str, attr_prefix: &str) -> Option<&'a str> {
     Some(&xml[start..end])
 }
 
+/// Image relationship target from a header/footer VML `.rels` file.
+#[derive(Debug, Clone)]
+pub struct HeaderFooterImageTarget {
+    pub relationship_id: String,
+    pub target: String,
+    pub target_mode: Option<String>,
+}
+
 /// Parsed header/footer VML data for a single sheet — ready for writing.
 #[derive(Debug, Clone)]
 pub struct ParsedHfVml {
     /// Parsed image shapes.
     pub images: Vec<HeaderFooterImage>,
-    /// Image relationship targets from the .rels file: (rel_id, target_path).
-    pub image_targets: Vec<(String, String)>,
+    /// Image relationship targets from the .rels file.
+    pub image_targets: Vec<HeaderFooterImageTarget>,
     /// Original `o:idmap data` value for round-trip fidelity.
     pub idmap_data: String,
     /// Original spid base for round-trip fidelity.
@@ -411,7 +427,11 @@ mod tests {
             width_pt: 46.0,
             height_pt: 46.0,
         }];
-        let targets = vec![("rId1", "../media/image0.png")];
+        let targets = vec![HeaderFooterImageTarget {
+            relationship_id: "rId1".to_string(),
+            target: "../media/image0.png".to_string(),
+            target_mode: None,
+        }];
         let rels = write_hf_images_vml_rels(&images, &targets);
         let rels_str = std::str::from_utf8(&rels).unwrap();
         assert!(rels_str.contains("rId1"));

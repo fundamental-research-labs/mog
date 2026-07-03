@@ -301,6 +301,9 @@ pub struct HeaderFooterImageInfo {
     /// Image source — resolved path (e.g., "../media/image1.png") for imported,
     /// or data-URL ("data:image/png;base64,...") for API-created.
     pub src: String,
+    /// Relationship target mode for imported external images.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
     /// Descriptive title.
     pub title: String,
     /// Width in points.

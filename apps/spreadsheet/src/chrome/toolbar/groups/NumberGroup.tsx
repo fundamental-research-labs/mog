@@ -428,6 +428,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
           <Tooltip title="Increase Decimal Places">
             <RibbonButton
               id="increase-decimals"
+              data-testid="ribbon-button-increase-decimals"
               layout="icon-only"
               icon={<DecimalIncreaseIcon />}
               onClick={() => {
@@ -441,6 +442,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
           <Tooltip title="Decrease Decimal Places">
             <RibbonButton
               id="decrease-decimals"
+              data-testid="ribbon-button-decrease-decimals"
               layout="icon-only"
               icon={<DecimalDecreaseIcon />}
               onClick={() => {

@@ -676,6 +676,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             <Tooltip title="Decrease Indent">
               <RibbonButton
                 id="decrease-indent"
+                data-testid="ribbon-button-decrease-indent"
                 layout="icon-only"
                 icon={<DecreaseIndentIcon />}
                 onClick={() => dispatch('DECREASE_INDENT')}
@@ -688,6 +689,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             <Tooltip title="Increase Indent">
               <RibbonButton
                 id="increase-indent"
+                data-testid="ribbon-button-increase-indent"
                 layout="icon-only"
                 icon={<IncreaseIndentIcon />}
                 onClick={() => dispatch('INCREASE_INDENT')}

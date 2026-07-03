@@ -128,6 +128,13 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
     );
   }
 
+  const contentClassName = [
+    'flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]',
+    // The group launcher is absolutely positioned in the bottom-right corner.
+    // Reserve a gutter so its hit target never covers the trailing command.
+    dialogLauncher ? 'pr-5' : '',
+  ].join(' ');
+
   return (
     <RibbonVisibilityGroup group={groupVisibility.groupKey}>
       <GroupRenderModeProvider value={renderMode}>
@@ -137,7 +144,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
           aria-label={label}
         >
           {/* Content area - fixed height from design token */}
-          <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
+          <div data-ribbon-group-content className={contentClassName}>
             {children}
           </div>
           {dialogLauncher && <DialogLauncherButton launcher={dialogLauncher} placement="group" />}
@@ -177,9 +184,9 @@ export function resolveToolbarGroupRenderMode(
   // the most compact non-hidden mode reached while escalating from the
   // width-derived level.
   for (
-    let candidate = ((level - 1) as CollapseLevel);
+    let candidate = (level - 1) as CollapseLevel;
     candidate >= widthLevel;
-    candidate = ((candidate - 1) as CollapseLevel)
+    candidate = (candidate - 1) as CollapseLevel
   ) {
     const candidateMode = collapseConfig.levels[candidate];
     if (candidateMode !== 'hidden') {

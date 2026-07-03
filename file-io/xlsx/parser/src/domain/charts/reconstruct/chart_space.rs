@@ -74,6 +74,9 @@ fn external_data_relationship_is_supported(
 }
 
 fn user_shapes_relationship_is_supported(spec: &ChartSpec, r_id: &str) -> bool {
+    if standard_chart_authority_blocks_user_shapes_replay(spec) {
+        return false;
+    }
     spec.chart_relationships.iter().any(|rel| {
         rel.r_id == r_id
             && rel.relationship_type.as_deref() == Some(crate::infra::opc::REL_CHART_USER_SHAPES)
@@ -92,6 +95,18 @@ fn auxiliary_file_exists_for_target(target: &str, spec: &ChartSpec) -> bool {
             .chart_auxiliary_files
             .iter()
             .any(|(path, _)| path.rsplit('/').next().unwrap_or(path) == file_name)
+}
+
+fn standard_chart_authority_blocks_user_shapes_replay(spec: &ChartSpec) -> bool {
+    spec.standard_chart_export_authority
+        .as_ref()
+        .is_some_and(|authority| {
+            !matches!(
+                authority.validity,
+                domain_types::chart::StandardChartAuthorityValidity::Current
+            ) || !authority.relationship_closure_current
+                || !authority.invalidated_owner_ids.is_empty()
+        })
 }
 
 pub(super) fn clean_chart_extensions(extensions: &[ExtensionEntry]) -> Vec<ExtensionEntry> {

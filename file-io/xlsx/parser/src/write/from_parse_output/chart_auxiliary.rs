@@ -23,6 +23,13 @@ pub(super) struct ChartUserShapesDataRef<'a> {
     pub(super) relationship_id_hint: &'a str,
 }
 
+pub(super) struct ChartUserShapesImageDataRef<'a> {
+    pub(super) user_shapes_path: String,
+    pub(super) image_path: String,
+    pub(super) relationship_id_hint: String,
+    pub(super) data: &'a [u8],
+}
+
 pub(super) struct GeneratedChartColorStyle {
     pub(super) path: String,
     pub(super) data: Vec<u8>,
@@ -45,6 +52,9 @@ pub(super) fn chart_user_shapes_data<'a>(
     chart_spec: &'a ChartSpec,
     chart_path: &str,
 ) -> Option<ChartUserShapesDataRef<'a>> {
+    if standard_chart_authority_blocks_user_shapes_replay(chart_spec) {
+        return None;
+    }
     let r_id = chart_user_shapes_relationship_id(chart_spec)?;
     let user_shapes = chart_spec
         .chart_relationships
@@ -66,6 +76,50 @@ pub(super) fn chart_user_shapes_data<'a>(
         relationship_type,
         relationship_id_hint: r_id,
     })
+}
+
+pub(super) fn chart_user_shapes_image_data<'a>(
+    chart_spec: &'a ChartSpec,
+    chart_path: &str,
+) -> Vec<ChartUserShapesImageDataRef<'a>> {
+    let Some(user_shapes) = chart_user_shapes_data(chart_spec, chart_path) else {
+        return Vec::new();
+    };
+    let rels_path = relationships_path_for_part(&user_shapes.path);
+    let Some((_, rels_bytes)) = chart_spec
+        .chart_auxiliary_files
+        .iter()
+        .find(|(path, _)| normalize_path(path) == rels_path)
+    else {
+        return Vec::new();
+    };
+
+    crate::domain::workbook::read::parse_all_rels(rels_bytes)
+        .iter()
+        .filter_map(|rel| {
+            if rel.rel_type != crate::infra::opc::REL_IMAGE
+                || crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+            {
+                return None;
+            }
+            let image_path = crate::infra::opc::resolve_relationship_target(
+                Some(&user_shapes.path),
+                &rel.target,
+            )
+            .ok()
+            .map(|path| normalize_path(&path))?;
+            let (_, data) = chart_spec
+                .chart_auxiliary_files
+                .iter()
+                .find(|(path, _)| normalize_path(path) == image_path)?;
+            Some(ChartUserShapesImageDataRef {
+                user_shapes_path: user_shapes.path.clone(),
+                image_path,
+                relationship_id_hint: rel.id.clone(),
+                data: data.as_slice(),
+            })
+        })
+        .collect()
 }
 
 pub(super) fn generated_chart_color_style_data(
@@ -179,6 +233,19 @@ fn chart_user_shapes_relationship_id(chart_spec: &ChartSpec) -> Option<&str> {
     }
 }
 
+fn standard_chart_authority_blocks_user_shapes_replay(chart_spec: &ChartSpec) -> bool {
+    chart_spec
+        .standard_chart_export_authority
+        .as_ref()
+        .is_some_and(|authority| {
+            !matches!(
+                authority.validity,
+                domain_types::chart::StandardChartAuthorityValidity::Current
+            ) || !authority.relationship_closure_current
+                || !authority.invalidated_owner_ids.is_empty()
+        })
+}
+
 fn original_chart_number(path: &str, prefix: &str) -> Option<usize> {
     let fname = path.rsplit('/').next()?;
     let num_str = fname.strip_prefix(prefix)?.strip_suffix(".xml")?;
@@ -191,6 +258,14 @@ fn chart_number(path: &str) -> Option<usize> {
 
 fn normalize_path(path: &str) -> String {
     path.trim_start_matches('/').to_string()
+}
+
+fn relationships_path_for_part(part_path: &str) -> String {
+    let part_path = normalize_path(part_path);
+    let Some((dir, file_name)) = part_path.rsplit_once('/') else {
+        return format!("_rels/{part_path}.rels");
+    };
+    format!("{dir}/_rels/{file_name}.rels")
 }
 
 enum AuxiliaryKind {

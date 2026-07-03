@@ -14,7 +14,7 @@ use crate::zip::XlsxArchive;
 
 use xml_parsing::{
     chart_rel_id_target_map, extract_chart_refs_from_drawing, extract_drawing_path_for_sheet,
-    extract_rel_id_target_map_bytes, resolve_relative_path, typed_drawing_relationships,
+    typed_drawing_relationships,
 };
 
 use conversion::convert_chart_to_chart_spec;
@@ -186,16 +186,7 @@ pub fn parse_drawing_and_charts_for_sheet(
         let chart_rels_path = format!("{}/_rels/{}.rels", chart_dir, chart_filename);
 
         if let Ok(rels_bytes) = archive.read_file(&chart_rels_path) {
-            // Parse the .rels to find auxiliary file targets (style, colors, etc.)
-            let aux_targets = extract_rel_id_target_map_bytes(&rels_bytes);
-            let mut auxiliary_files = Vec::new();
-            for target in aux_targets.values() {
-                let aux_path = resolve_relative_path(chart_dir, target);
-                if let Ok(aux_bytes) = archive.read_file(&aux_path) {
-                    auxiliary_files.push((aux_path, aux_bytes));
-                }
-            }
-            chart.auxiliary_files = auxiliary_files;
+            chart.auxiliary_files = read_chart_auxiliary_files(archive, &chart_path, &rels_bytes);
             chart.chart_rels_bytes = Some((chart_rels_path, rels_bytes));
         }
 
@@ -203,4 +194,104 @@ pub fn parse_drawing_and_charts_for_sheet(
     }
 
     (Some(drawing), charts)
+}
+
+fn read_chart_auxiliary_files(
+    archive: &XlsxArchive,
+    chart_path: &str,
+    chart_rels_bytes: &[u8],
+) -> Vec<(String, Vec<u8>)> {
+    let mut auxiliary_files = Vec::new();
+    let mut seen_paths = std::collections::BTreeSet::new();
+
+    for rel in crate::domain::workbook::read::parse_all_rels(chart_rels_bytes) {
+        if target_mode_is_external(rel.target_mode.as_deref()) {
+            continue;
+        }
+        let Ok(aux_path) =
+            crate::infra::opc::resolve_relationship_target(Some(chart_path), &rel.target)
+        else {
+            continue;
+        };
+        let aux_path = aux_path.trim_start_matches('/').to_string();
+        let Ok(aux_bytes) = archive.read_file(&aux_path) else {
+            continue;
+        };
+        push_auxiliary_file(
+            &mut auxiliary_files,
+            &mut seen_paths,
+            aux_path.clone(),
+            aux_bytes,
+        );
+
+        if rel.rel_type == crate::infra::opc::REL_CHART_USER_SHAPES {
+            read_user_shapes_relationship_closure(
+                archive,
+                &aux_path,
+                &mut auxiliary_files,
+                &mut seen_paths,
+            );
+        }
+    }
+
+    auxiliary_files
+}
+
+fn read_user_shapes_relationship_closure(
+    archive: &XlsxArchive,
+    user_shapes_path: &str,
+    auxiliary_files: &mut Vec<(String, Vec<u8>)>,
+    seen_paths: &mut std::collections::BTreeSet<String>,
+) {
+    let rels_path = relationships_path_for_part(user_shapes_path);
+    let Ok(rels_bytes) = archive.read_file(&rels_path) else {
+        return;
+    };
+    push_auxiliary_file(
+        auxiliary_files,
+        seen_paths,
+        rels_path.clone(),
+        rels_bytes.clone(),
+    );
+
+    for rel in crate::domain::workbook::read::parse_all_rels(&rels_bytes) {
+        if rel.rel_type != crate::infra::opc::REL_IMAGE
+            || target_mode_is_external(rel.target_mode.as_deref())
+        {
+            continue;
+        }
+        let Ok(media_path) =
+            crate::infra::opc::resolve_relationship_target(Some(user_shapes_path), &rel.target)
+        else {
+            continue;
+        };
+        let media_path = media_path.trim_start_matches('/').to_string();
+        let Ok(media_bytes) = archive.read_file(&media_path) else {
+            continue;
+        };
+        push_auxiliary_file(auxiliary_files, seen_paths, media_path, media_bytes);
+    }
+}
+
+fn push_auxiliary_file(
+    auxiliary_files: &mut Vec<(String, Vec<u8>)>,
+    seen_paths: &mut std::collections::BTreeSet<String>,
+    path: String,
+    bytes: Vec<u8>,
+) {
+    if seen_paths.insert(path.clone()) {
+        auxiliary_files.push((path, bytes));
+    }
+}
+
+fn relationships_path_for_part(part_path: &str) -> String {
+    let part_path = part_path.trim_start_matches('/');
+    let Some((dir, file_name)) = part_path.rsplit_once('/') else {
+        return format!("_rels/{part_path}.rels");
+    };
+    format!("{dir}/_rels/{file_name}.rels")
+}
+
+fn target_mode_is_external(target_mode: Option<&str>) -> bool {
+    target_mode.is_some_and(|mode| mode.eq_ignore_ascii_case("External"))
 }

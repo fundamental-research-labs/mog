@@ -50,6 +50,114 @@ fn imported_current_worksheet_printer_settings_roundtrips_relationship_and_bytes
 }
 
 #[test]
+fn imported_current_noncanonical_worksheet_printer_settings_roundtrips() {
+    let imported = printer_settings_fixture_with_path(
+        "../printerSettings/customPrinterSettings.bin",
+        "xl/printerSettings/customPrinterSettings.bin",
+        Some(PRINTER_SETTINGS_BYTES),
+    );
+    let (parsed, _) = crate::parse_xlsx_to_output(&imported).expect("fixture should parse");
+
+    let imported_settings = parsed.sheets[0]
+        .print_settings
+        .as_ref()
+        .and_then(|settings| settings.imported_printer_settings.as_ref())
+        .expect("printer settings identity should be imported");
+    assert_eq!(
+        imported_settings.path,
+        "xl/printerSettings/customPrinterSettings.bin"
+    );
+
+    let exported = write_xlsx_from_parse_output(&parsed).expect("export should succeed");
+    let archive = crate::XlsxArchive::new(&exported).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = crate::domain::workbook::read::parse_all_rels(
+        &archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    );
+
+    assert!(sheet_xml.contains(r#"r:id="rIdPrinter""#));
+    assert!(
+        sheet_rels.iter().any(|rel| {
+            rel.id == "rIdPrinter"
+                && rel.rel_type == crate::infra::opc::REL_PRINTER_SETTINGS
+                && crate::infra::opc::resolve_relationship_target(
+                    Some("xl/worksheets/sheet1.xml"),
+                    &rel.target,
+                )
+                .as_deref()
+                    == Ok("xl/printerSettings/customPrinterSettings.bin")
+                && rel.target_mode.is_none()
+        }),
+        "expected normalized active printerSettings relationship, got {sheet_rels:?}"
+    );
+    assert_eq!(
+        archive
+            .read_file("xl/printerSettings/customPrinterSettings.bin")
+            .unwrap(),
+        PRINTER_SETTINGS_BYTES
+    );
+    crate::infra::package_integrity::validate_archive_package_integrity(&archive)
+        .expect("exported package should be valid");
+}
+
+#[test]
+fn imported_current_normalized_worksheet_printer_settings_target_roundtrips() {
+    let imported = printer_settings_fixture_with_path(
+        "../printerSettings/./customPrinterSettings.bin",
+        "xl/printerSettings/customPrinterSettings.bin",
+        Some(PRINTER_SETTINGS_BYTES),
+    );
+    let (parsed, _) = crate::parse_xlsx_to_output(&imported).expect("fixture should parse");
+
+    let imported_settings = parsed.sheets[0]
+        .print_settings
+        .as_ref()
+        .and_then(|settings| settings.imported_printer_settings.as_ref())
+        .expect("printer settings identity should be imported");
+    assert_eq!(
+        imported_settings.path,
+        "xl/printerSettings/./customPrinterSettings.bin"
+    );
+
+    let exported = write_xlsx_from_parse_output(&parsed).expect("export should succeed");
+    let archive = crate::XlsxArchive::new(&exported).expect("exported XLSX should be readable");
+    let sheet_xml =
+        String::from_utf8(archive.read_file("xl/worksheets/sheet1.xml").unwrap()).unwrap();
+    let sheet_rels = crate::domain::workbook::read::parse_all_rels(
+        &archive
+            .read_file("xl/worksheets/_rels/sheet1.xml.rels")
+            .unwrap(),
+    );
+
+    assert!(sheet_xml.contains(r#"r:id="rIdPrinter""#));
+    assert!(
+        sheet_rels.iter().any(|rel| {
+            rel.id == "rIdPrinter"
+                && rel.rel_type == crate::infra::opc::REL_PRINTER_SETTINGS
+                && crate::infra::opc::resolve_relationship_target(
+                    Some("xl/worksheets/sheet1.xml"),
+                    &rel.target,
+                )
+                .as_deref()
+                    == Ok("xl/printerSettings/customPrinterSettings.bin")
+                && rel.target_mode.is_none()
+        }),
+        "expected normalized active printerSettings relationship, got {sheet_rels:?}"
+    );
+    assert_eq!(
+        archive
+            .read_file("xl/printerSettings/customPrinterSettings.bin")
+            .unwrap(),
+        PRINTER_SETTINGS_BYTES
+    );
+    crate::infra::package_integrity::validate_archive_package_integrity(&archive)
+        .expect("exported package should be valid");
+}
+
+#[test]
 fn missing_imported_worksheet_printer_settings_target_does_not_block_or_dangle() {
     let imported = printer_settings_fixture(None);
     let (parsed, _) = crate::parse_xlsx_to_output(&imported).expect("fixture should parse");
@@ -121,6 +229,18 @@ fn stale_imported_worksheet_printer_settings_bytes_are_preserved_inertly() {
 }
 
 fn printer_settings_fixture(printer_settings: Option<&[u8]>) -> Vec<u8> {
+    printer_settings_fixture_with_path(
+        "../printerSettings/printerSettings1.bin",
+        "xl/printerSettings/printerSettings1.bin",
+        printer_settings,
+    )
+}
+
+fn printer_settings_fixture_with_path(
+    rel_target: &str,
+    part_path: &str,
+    printer_settings: Option<&[u8]>,
+) -> Vec<u8> {
     let mut zip = crate::write::ZipWriter::new();
     zip.add_file("[Content_Types].xml", content_types_xml().into_bytes())
         .add_file("_rels/.rels", root_rels_xml().into_bytes())
@@ -132,10 +252,10 @@ fn printer_settings_fixture(printer_settings: Option<&[u8]>) -> Vec<u8> {
         .add_file("xl/worksheets/sheet1.xml", worksheet_xml().into_bytes())
         .add_file(
             "xl/worksheets/_rels/sheet1.xml.rels",
-            worksheet_rels_xml().into_bytes(),
+            worksheet_rels_xml_with_target(rel_target).into_bytes(),
         );
     if let Some(bytes) = printer_settings {
-        zip.add_file("xl/printerSettings/printerSettings1.bin", bytes.to_vec());
+        zip.add_file(part_path, bytes.to_vec());
     }
     zip.finish().expect("fixture ZIP should write")
 }
@@ -173,11 +293,11 @@ fn workbook_rels_xml() -> String {
     )])
 }
 
-fn worksheet_rels_xml() -> String {
+fn worksheet_rels_xml_with_target(target: &str) -> String {
     rels_xml(&[(
         "rIdPrinter",
         crate::infra::opc::REL_PRINTER_SETTINGS,
-        "../printerSettings/printerSettings1.bin",
+        target,
     )])
 }
 

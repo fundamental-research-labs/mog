@@ -312,8 +312,21 @@ fn rich_data_missing_related_part_does_not_block_export() {
     .unwrap();
     assert!(rels.contains(r#"Id="rId1""#));
     assert!(rels.contains(r#"Target="../media/missing.png""#));
-    validate_archive_package_integrity(&archive)
-        .expect("stale richData target is quarantined, not an export failure");
+    let integrity_errors = validate_archive_package_integrity(&archive)
+        .expect_err("direct integrity should report stale richData target");
+    assert!(integrity_errors.iter().any(|error| matches!(
+        error,
+        crate::infra::package_integrity::PackageIntegrityError::MissingRelationshipTarget {
+            rels_path,
+            id,
+            target,
+            resolved_path,
+            ..
+        } if rels_path == "xl/richData/_rels/richValueRel.xml.rels"
+            && id == "rId1"
+            && target == "../media/missing.png"
+            && resolved_path == "xl/media/missing.png"
+    )));
 
     let (roundtripped, diagnostics) =
         crate::parse_xlsx_to_output(&bytes).expect("stale richData export should parse back");
@@ -341,6 +354,146 @@ fn rich_data_missing_related_part_does_not_block_export() {
             }),
         "richData XML bytes should remain preserved"
     );
+}
+
+#[test]
+fn rich_data_malformed_relationship_target_does_not_block_export() {
+    let malformed_target = r"..\media\image1.png";
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Text(Arc::from("image")),
+                vm: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            value_metadata: vec![domain_types::ValueMetadataBlock::default()],
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/richValueRel.xml".to_string(),
+                    content_type: "application/vnd.ms-excel.rdrichvaluerel+xml".to_string(),
+                    data: br#"<richValueRels xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rel r:id="rIdBad"/></richValueRels>"#.to_vec(),
+                    relationships: vec![ooxml_types::shared::OpcRelationship {
+                        id: "rIdBad".to_string(),
+                        rel_type: crate::infra::opc::REL_IMAGE.to_string(),
+                        target: malformed_target.to_string(),
+                        target_mode: None,
+                    }],
+                }],
+                related_parts: Vec::new(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output)
+        .expect("malformed richData relationship targets must not block export");
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let rels = String::from_utf8(
+        archive
+            .read_file("xl/richData/_rels/richValueRel.xml.rels")
+            .unwrap(),
+    )
+    .unwrap();
+
+    assert!(archive.contains("xl/richData/richValueRel.xml"));
+    assert!(rels.contains(r#"Id="rIdBad""#));
+    assert!(rels.contains(r#"Target="..\media\image1.png""#));
+    let integrity_errors = validate_archive_package_integrity(&archive)
+        .expect_err("direct integrity should report malformed richData target");
+    assert!(integrity_errors.iter().any(|error| matches!(
+        error,
+        crate::infra::package_integrity::PackageIntegrityError::InvalidRelationshipTarget {
+            rels_path,
+            id,
+            target,
+            ..
+        } if rels_path == "xl/richData/_rels/richValueRel.xml.rels"
+            && id == "rIdBad"
+            && target == malformed_target
+    )));
+
+    let (roundtripped, diagnostics) =
+        crate::parse_xlsx_to_output(&bytes).expect("malformed richData export should parse back");
+    assert!(
+        diagnostics
+            .errors
+            .iter()
+            .all(|error| !error.message.contains("Dropped XLSX import data")),
+        "malformed richData relationship must not be reported as dropped: {:?}",
+        diagnostics.errors
+    );
+    assert!(
+        roundtripped
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.rich_data.as_ref())
+            .is_some_and(|rich_data| {
+                rich_data.parts.iter().any(|part| {
+                    part.path == "xl/richData/richValueRel.xml"
+                        && part
+                            .relationships
+                            .iter()
+                            .any(|rel| rel.id == "rIdBad" && rel.target == malformed_target)
+                })
+            }),
+        "malformed richData relationship metadata should remain preserved"
+    );
+}
+
+#[test]
+fn rich_data_xml_relationship_reference_requires_matching_rels_entry() {
+    let output = ParseOutput {
+        sheets: vec![SheetData {
+            name: "Sheet1".to_string(),
+            cells: vec![DomainCellData {
+                row: 0,
+                col: 0,
+                value: DomainValue::Text(Arc::from("image")),
+                vm: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        metadata: Some(domain_types::WorkbookMetadata {
+            value_metadata: vec![domain_types::ValueMetadataBlock::default()],
+            rich_data: Some(domain_types::WorkbookRichData {
+                parts: vec![domain_types::RichDataPart {
+                    path: "xl/richData/richValueRel.xml".to_string(),
+                    content_type: "application/vnd.ms-excel.rdrichvaluerel+xml".to_string(),
+                    data: br#"<richValueRels xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rel r:id="rIdMissing"/></richValueRels>"#.to_vec(),
+                    relationships: Vec::new(),
+                }],
+                related_parts: Vec::new(),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let bytes = write_xlsx_from_parse_output(&output)
+        .expect("missing richData rel entry should not block export");
+    let archive = crate::XlsxArchive::new(&bytes).expect("exported XLSX should be readable");
+    let errors =
+        validate_archive_package_integrity(&archive).expect_err("richData r:id is dangling");
+
+    assert!(errors.iter().any(|error| matches!(
+        error,
+        crate::infra::package_integrity::PackageIntegrityError::MissingPartRelationshipReference {
+            part_path,
+            id,
+            attr_name,
+            ..
+        } if part_path == "xl/richData/richValueRel.xml"
+            && id == "rIdMissing"
+            && attr_name == "r:id"
+    )));
 }
 
 #[test]

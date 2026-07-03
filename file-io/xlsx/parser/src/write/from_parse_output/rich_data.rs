@@ -65,18 +65,20 @@ pub(super) fn register_parts(
                     target_mode: relationship.target_mode.clone(),
                 }
             } else {
-                let target_path = crate::infra::opc::resolve_relationship_target(
+                match crate::infra::opc::resolve_relationship_target(
                     Some(&part.path),
                     &relationship.target,
-                )
-                .map_err(|err| {
-                    WriteError::PackageIntegrity(format!(
-                        "invalid richData relationship target for {}: {} ({:?})",
-                        part.path, relationship.target, err
-                    ))
-                })?;
-                crate::write::package_graph::PackageRelationshipTarget::InternalPart {
-                    path: target_path,
+                ) {
+                    Ok(target_path) => {
+                        crate::write::package_graph::PackageRelationshipTarget::InternalPart {
+                            path: target_path,
+                        }
+                    }
+                    Err(_) => {
+                        crate::write::package_graph::PackageRelationshipTarget::InternalPath {
+                            target: relationship.target.clone(),
+                        }
+                    }
                 }
             };
             graph.add_relationship(crate::write::package_graph::PackageRelationship {

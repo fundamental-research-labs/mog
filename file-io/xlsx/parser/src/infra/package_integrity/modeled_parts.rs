@@ -178,7 +178,7 @@ pub(super) fn validate_modeled_part_invariants(
 }
 
 fn is_quarantined_relationship_reference_part(path: &str) -> bool {
-    (path.starts_with("xl/activeX/") || path.starts_with("xl/richData/")) && path.ends_with(".xml")
+    path.starts_with("xl/activeX/") && path.ends_with(".xml")
 }
 
 fn require_relationship(

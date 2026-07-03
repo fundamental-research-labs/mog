@@ -151,6 +151,46 @@ fn standard_chart_relationship_closure_reports_unsupported_relationships() {
 }
 
 #[test]
+fn standard_chart_relationship_closure_reports_missing_user_shapes_nested_media() {
+    let chart_space = ooxml_types::charts::ChartSpace {
+        user_shapes: Some("rIdUserShapes".to_string()),
+        ..Default::default()
+    };
+    let relationships = vec![domain_types::chart::ChartRelationshipData {
+        r_id: "rIdUserShapes".to_string(),
+        relationship_type: Some(crate::infra::opc::REL_CHART_USER_SHAPES.to_string()),
+        target: Some("../drawings/userShapeDrawing1.xml".to_string()),
+        target_mode: None,
+    }];
+    let auxiliary_files = vec![
+        (
+            "xl/drawings/userShapeDrawing1.xml".to_string(),
+            br#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><xdr:oneCellAnchor><xdr:pic><xdr:blipFill><a:blip r:embed="rIdShapeImage"/></xdr:blipFill></xdr:pic></xdr:oneCellAnchor></xdr:wsDr>"#.to_vec(),
+        ),
+        (
+            "xl/drawings/_rels/userShapeDrawing1.xml.rels".to_string(),
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdShapeImage" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/missing.png"/></Relationships>"#.to_vec(),
+        ),
+    ];
+
+    let closure = standard_chart_relationship_closure(
+        Some("xl/charts/chart1.xml"),
+        &chart_space,
+        &relationships,
+        &auxiliary_files,
+        Some("Revenue"),
+    );
+
+    assert!(!closure.current);
+    assert!(closure.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code == Some(domain_types::ImportDiagnosticCode::MissingRelationshipTarget)
+            && diagnostic.message.as_deref().is_some_and(|message| {
+                message.contains("missing media part `xl/media/missing.png`")
+            })
+    }));
+}
+
+#[test]
 fn standard_chart_source_replay_rejects_unqualified_local_refs() {
     let readiness = chart_xml_source_replay_readiness(
         r#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:cat><c:strRef><c:f>A4:A10</c:f></c:strRef></c:cat><c:val><c:numRef><c:f>B4:B10</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>"#,

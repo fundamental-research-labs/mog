@@ -81,16 +81,11 @@ fn normalize_printer_settings_path(path: &str) -> Option<String> {
     if path.contains('\\') {
         return None;
     }
-    let resolved = crate::infra::opc::resolve_relationship_target(None, path).ok()?;
-    (resolved == path).then_some(resolved)
+    crate::infra::opc::resolve_relationship_target(None, path).ok()
 }
 
 fn is_supported_printer_settings_path(path: &str) -> bool {
-    let Some(name) = path.strip_prefix("xl/printerSettings/printerSettings") else {
-        return false;
-    };
-    let Some(number) = name.strip_suffix(".bin") else {
-        return false;
-    };
-    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+    path.starts_with("xl/printerSettings/")
+        && path.ends_with(".bin")
+        && path.len() > "xl/printerSettings/.bin".len()
 }

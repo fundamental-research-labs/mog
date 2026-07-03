@@ -763,7 +763,10 @@ fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
         Some(REL_CTRL_PROP)
     } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
         Some(REL_PIVOT_TABLE)
-    } else if path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin") {
+    } else if path.starts_with("xl/printerSettings/")
+        && path.ends_with(".bin")
+        && path.len() > "xl/printerSettings/.bin".len()
+    {
         Some(REL_PRINTER_SETTINGS)
     } else if path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml") {
         Some(REL_VML_DRAWING)

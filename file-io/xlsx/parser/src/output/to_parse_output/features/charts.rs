@@ -165,6 +165,7 @@ const REL_CHART_COLOR_STYLE: &str =
     "http://schemas.microsoft.com/office/2011/relationships/chartColorStyle";
 const REL_CHART_USER_SHAPES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartUserShapes";
+const REL_IMAGE: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 
 #[derive(Debug, Clone)]
 struct ChartRelationshipClosure {
@@ -325,6 +326,18 @@ fn standard_chart_relationship_closure(
             diagnostics.push(diagnostic);
         }
     }
+    if let (Some(chart_path), Some(user_shapes_r_id)) = (chart_path, user_shapes_r_id)
+        && let Some(rel) = relationships
+            .iter()
+            .find(|rel| rel.r_id == user_shapes_r_id)
+    {
+        diagnostics.extend(validate_chart_user_shapes_nested_relationship_closure(
+            rel,
+            chart_path,
+            auxiliary_files,
+            object_name,
+        ));
+    }
 
     ChartRelationshipClosure {
         current: diagnostics.is_empty(),
@@ -433,6 +446,161 @@ fn validate_standard_chart_relationship(
         object_name,
         Some(r_id),
     ))
+}
+
+fn validate_chart_user_shapes_nested_relationship_closure(
+    rel: &domain_types::chart::ChartRelationshipData,
+    chart_path: &str,
+    auxiliary_files: &[(String, Vec<u8>)],
+    object_name: Option<&str>,
+) -> Vec<domain_types::ImportDiagnosticRef> {
+    let mut diagnostics = Vec::new();
+    if rel.relationship_type.as_deref() != Some(REL_CHART_USER_SHAPES)
+        || crate::write::package_graph::is_external_target_mode(rel.target_mode.as_deref())
+    {
+        return diagnostics;
+    }
+    let Some(target) = rel.target.as_deref() else {
+        return diagnostics;
+    };
+    let Ok(user_shapes_path) =
+        crate::infra::opc::resolve_relationship_target(Some(chart_path), target)
+            .map(|path| path.trim_start_matches('/').to_string())
+    else {
+        return diagnostics;
+    };
+    let Some((_, user_shapes_xml)) = auxiliary_files
+        .iter()
+        .find(|(path, _)| path.trim_start_matches('/') == user_shapes_path)
+    else {
+        return diagnostics;
+    };
+
+    let relationship_ids =
+        user_shapes_relationship_reference_ids(user_shapes_xml).unwrap_or_default();
+
+    let rels_path = relationships_path_for_part(&user_shapes_path);
+    let Some((_, rels_xml)) = auxiliary_files
+        .iter()
+        .find(|(path, _)| path.trim_start_matches('/') == rels_path)
+    else {
+        if relationship_ids.is_empty() {
+            return diagnostics;
+        }
+        diagnostics.push(chart_relationship_diagnostic(
+            domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+            format!(
+                "Chart userShapes part `{user_shapes_path}` references relationships but missing relationship part `{rels_path}`"
+            ),
+            Some(chart_path),
+            object_name,
+            Some(rel.r_id.as_str()),
+        ));
+        return diagnostics;
+    };
+
+    let nested_relationships = crate::domain::workbook::read::parse_all_rels(rels_xml);
+    let nested_ids: std::collections::BTreeSet<_> = nested_relationships
+        .iter()
+        .map(|nested| nested.id.as_str())
+        .collect();
+    for relationship_id in &relationship_ids {
+        if !nested_ids.contains(relationship_id.as_str()) {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+                format!(
+                    "Chart userShapes part `{user_shapes_path}` references missing relationship `{relationship_id}`"
+                ),
+                Some(chart_path),
+                object_name,
+                Some(relationship_id),
+            ));
+        }
+    }
+
+    for nested in nested_relationships
+        .into_iter()
+        .filter(|nested| relationship_ids.contains(nested.id.as_str()))
+    {
+        if nested.rel_type != REL_IMAGE {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::UnsupportedFeature,
+                format!(
+                    "Chart userShapes relationship `{}` has unsupported type `{}`",
+                    nested.id, nested.rel_type
+                ),
+                Some(chart_path),
+                object_name,
+                Some(nested.id.as_str()),
+            ));
+            continue;
+        }
+        if crate::write::package_graph::is_external_target_mode(nested.target_mode.as_deref()) {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::ExternalReference,
+                format!(
+                    "Chart userShapes image relationship `{}` uses unsupported external target mode",
+                    nested.id
+                ),
+                Some(chart_path),
+                object_name,
+                Some(nested.id.as_str()),
+            ));
+            continue;
+        }
+        let Ok(media_path) =
+            crate::infra::opc::resolve_relationship_target(Some(&user_shapes_path), &nested.target)
+                .map(|path| path.trim_start_matches('/').to_string())
+        else {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::MalformedRelationshipTarget,
+                format!(
+                    "Chart userShapes relationship `{}` has malformed target `{}`",
+                    nested.id, nested.target
+                ),
+                Some(chart_path),
+                object_name,
+                Some(nested.id.as_str()),
+            ));
+            continue;
+        };
+        if !auxiliary_files
+            .iter()
+            .any(|(path, _)| path.trim_start_matches('/') == media_path)
+        {
+            diagnostics.push(chart_relationship_diagnostic(
+                domain_types::ImportDiagnosticCode::MissingRelationshipTarget,
+                format!(
+                    "Chart userShapes relationship `{}` targets missing media part `{media_path}`",
+                    nested.id
+                ),
+                Some(chart_path),
+                object_name,
+                Some(nested.id.as_str()),
+            ));
+        }
+    }
+
+    diagnostics
+}
+
+fn user_shapes_relationship_reference_ids(
+    bytes: &[u8],
+) -> Option<std::collections::BTreeSet<String>> {
+    let xml = std::str::from_utf8(bytes).ok()?;
+    Some(
+        crate::infra::xml::relationship_attr_values(xml)
+            .into_iter()
+            .collect(),
+    )
+}
+
+fn relationships_path_for_part(part_path: &str) -> String {
+    let part_path = part_path.trim_start_matches('/');
+    let Some((dir, file_name)) = part_path.rsplit_once('/') else {
+        return format!("_rels/{part_path}.rels");
+    };
+    format!("{dir}/_rels/{file_name}.rels")
 }
 
 fn standard_chart_pivot_format_diagnostics(

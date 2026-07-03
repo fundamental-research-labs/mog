@@ -41,6 +41,10 @@ import { useActiveCell, useActiveSheetId, useReadOnly, useWorkbook } from '../..
 
 type LoadState = 'loading' | 'ready' | 'saving' | 'error';
 
+// Cap the expanded popover's text area; beyond this it scrolls. Mirrors the way
+// the formula bar bounds a long formula's height rather than growing without end.
+const ANNOTATION_BAR_MAX_TEXT_HEIGHT_PX = 140;
+
 function disposeSubscription(subscription: unknown): void {
   if (typeof subscription === 'function') {
     subscription();
@@ -68,7 +72,14 @@ function AnnotationBarImpl(): React.JSX.Element | null {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  // Long-note handling: when expanded the popover drops its single-row height and
+  // wraps the text over multiple lines (echoing the formula bar's tall layout).
+  const [expanded, setExpanded] = useState(false);
+  // Whether the collapsed note is actually truncated — drives whether the expand
+  // affordance is shown, so short fresh notes stay just glyph + text.
+  const [overflowing, setOverflowing] = useState(false);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  const textRef = useRef<HTMLButtonElement | null>(null);
   const barRef = useRef<HTMLDivElement | null>(null);
   // Left offset (px, relative to the grid container) that lines the popover up with
   // the START of the formula bar's input — just right of `fx`. Measured rather than
@@ -103,9 +114,11 @@ function AnnotationBarImpl(): React.JSX.Element | null {
     };
   }, [col, reloadToken, row, worksheet]);
 
-  // Moving to another cell abandons any in-progress inline edit.
+  // Moving to another cell abandons any in-progress inline edit and collapses the
+  // popover back to its quiet single-row form.
   useEffect(() => {
     setEditing(false);
+    setExpanded(false);
   }, [col, row, sheetId]);
 
   // Keep the popover live as annotations and the anchored cell change (freshness).
@@ -135,9 +148,26 @@ function AnnotationBarImpl(): React.JSX.Element | null {
     };
   }, [col, reload, row, sheetId, workbook]);
 
+  // Refocus when editing starts, and when toggling expand mid-edit (which swaps
+  // the single-line input for a textarea, dropping DOM focus).
   useEffect(() => {
     if (editing) inputRef.current?.focus();
-  }, [editing]);
+  }, [editing, expanded]);
+
+  // Measure whether the collapsed note is truncated so the expand chevron only
+  // appears when it buys the user something. Skipped while expanded/editing (the
+  // measured element isn't the truncating one then).
+  useLayoutEffect(() => {
+    if (editing || expanded) {
+      return;
+    }
+    const el = textRef.current;
+    if (!el) {
+      setOverflowing(false);
+      return;
+    }
+    setOverflowing(el.scrollWidth > el.clientWidth + 1);
+  }, [editing, expanded, leftPx, record?.text]);
 
   // Align the popover's left edge with the formula bar's input field. The input and
   // this popover share the same left origin (both stacked in the app's flex column),
@@ -171,8 +201,11 @@ function AnnotationBarImpl(): React.JSX.Element | null {
   const beginEdit = useCallback(() => {
     if (readOnly) return;
     setDraft(record?.text ?? '');
+    // A note long enough to truncate is more comfortable to edit wrapped, so open
+    // straight into the tall layout.
+    if (overflowing) setExpanded(true);
     setEditing(true);
-  }, [readOnly, record]);
+  }, [overflowing, readOnly, record]);
 
   const cancelEdit = useCallback(() => {
     setEditing(false);
@@ -214,9 +247,17 @@ function AnnotationBarImpl(): React.JSX.Element | null {
     }
   }, [col, draft, readOnly, record, reload, row, worksheet]);
 
+  // In the tall (multi-line) layout, plain Enter inserts a line break and
+  // Cmd/Ctrl+Enter commits — mirroring the formula bar's Ctrl+Enter contract.
+  // In the single-line layout Enter commits.
+  const isMultiLine = expanded || (editing ? draft : (record?.text ?? '')).includes('\n');
+
   const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
+    (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       if (event.key === 'Enter') {
+        if (isMultiLine && !(event.metaKey || event.ctrlKey)) {
+          return; // let the textarea insert a newline
+        }
         event.preventDefault();
         void commitEdit();
       } else if (event.key === 'Escape') {
@@ -224,7 +265,7 @@ function AnnotationBarImpl(): React.JSX.Element | null {
         cancelEdit();
       }
     },
-    [cancelEdit, commitEdit],
+    [cancelEdit, commitEdit, isMultiLine],
   );
 
   // The popover exists only when the active cell has an annotation (or one is being
@@ -257,8 +298,15 @@ function AnnotationBarImpl(): React.JSX.Element | null {
       data-annotation-bar
       role="dialog"
       aria-label="Cell annotation"
-      className="absolute top-0 z-20 max-w-[520px] flex items-center gap-1 pl-1 pr-2 border border-ss-border rounded-b-md bg-ss-surface-secondary text-ss-text overflow-hidden shadow-ss-md"
-      style={{ height: COL_HEADER_HEIGHT, left: leftPx ?? 0, visibility: leftPx == null ? 'hidden' : undefined }}
+      className={`absolute top-0 z-20 max-w-[520px] flex gap-1 pl-1 pr-2 border border-ss-border rounded-b-md bg-ss-surface-secondary text-ss-text shadow-ss-md ${
+        isMultiLine ? 'items-start py-1' : 'items-center overflow-hidden'
+      }`}
+      style={{
+        height: isMultiLine ? undefined : COL_HEADER_HEIGHT,
+        minHeight: COL_HEADER_HEIGHT,
+        left: leftPx ?? 0,
+        visibility: leftPx == null ? 'hidden' : undefined,
+      }}
     >
       {/* ✕ / ✓ signs — same vocabulary as the formula bar. */}
       {!readOnly && editing ? (
@@ -304,31 +352,83 @@ function AnnotationBarImpl(): React.JSX.Element | null {
         <GlyphIcon size={12} strokeWidth={1.75} aria-hidden="true" />
       </button>
 
-      {/* Text / inline editor */}
+      {/* Text / inline editor. Both read and edit surfaces switch to a wrapping,
+ multi-line form when expanded — the annotation analog of the formula bar
+ swapping its single-line input for a word-wrapping textarea on long formulas. */}
       {editing ? (
-        <input
-          ref={inputRef}
-          data-testid="annotation-bar-input"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={() => void commitEdit()}
-          placeholder="Describe this cell…"
-          className="flex-1 min-w-0 h-[18px] bg-transparent text-ribbon text-ss-text outline-none placeholder:text-ss-text-tertiary"
-          spellCheck
-        />
+        isMultiLine ? (
+          <textarea
+            ref={inputRef as React.Ref<HTMLTextAreaElement>}
+            data-testid="annotation-bar-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => void commitEdit()}
+            placeholder="Describe this cell…"
+            rows={3}
+            className="flex-1 min-w-0 resize-none bg-transparent text-ribbon leading-snug text-ss-text outline-none placeholder:text-ss-text-tertiary"
+            style={{
+              maxHeight: ANNOTATION_BAR_MAX_TEXT_HEIGHT_PX,
+              whiteSpace: 'pre-wrap',
+              overflowWrap: 'break-word',
+            }}
+            spellCheck
+          />
+        ) : (
+          <input
+            ref={inputRef as React.Ref<HTMLInputElement>}
+            data-testid="annotation-bar-input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => void commitEdit()}
+            placeholder="Describe this cell…"
+            className="flex-1 min-w-0 h-[18px] bg-transparent text-ribbon text-ss-text outline-none placeholder:text-ss-text-tertiary"
+            spellCheck
+          />
+        )
       ) : (
         <button
           type="button"
+          ref={textRef}
           onClick={beginEdit}
           disabled={readOnly}
           data-testid="annotation-bar-text"
-          className={`flex-1 min-w-0 text-left truncate text-ribbon leading-none cursor-text disabled:cursor-default ${
-            isFresh ? 'text-ss-text' : 'text-ss-text-secondary'
-          }`}
-          title={record?.text ?? ''}
+          className={`flex-1 min-w-0 text-left text-ribbon cursor-text disabled:cursor-default ${
+            isMultiLine
+              ? 'whitespace-pre-wrap break-words leading-snug overflow-y-auto'
+              : 'truncate leading-none'
+          } ${isFresh ? 'text-ss-text' : 'text-ss-text-secondary'}`}
+          style={isMultiLine ? { maxHeight: ANNOTATION_BAR_MAX_TEXT_HEIGHT_PX } : undefined}
+          title={isMultiLine ? undefined : (record?.text ?? '')}
         >
           {record?.text ?? ''}
+        </button>
+      )}
+
+      {/* Expand / collapse — the annotation twin of the formula bar's chevron.
+ Shown only when the note truncates (or is already expanded / being edited), so a
+ short fresh note stays quiet. Held focus on mousedown so toggling mid-edit
+ doesn't blur-commit the field first. */}
+      {(expanded || overflowing || editing) && (
+        <button
+          type="button"
+          onMouseDown={holdFocus}
+          onClick={() => setExpanded((value) => !value)}
+          data-testid="annotation-bar-expand"
+          className="flex items-center justify-center w-[18px] h-[18px] shrink-0 self-start rounded text-ss-text-secondary hover:bg-ss-surface-hover cursor-pointer transition-colors"
+          title={expanded ? 'Collapse annotation' : 'Expand annotation'}
+          aria-label={expanded ? 'Collapse annotation' : 'Expand annotation'}
+          aria-expanded={expanded}
+        >
+          <svg
+            className={`w-3 h-3 transition-transform ${expanded ? '' : 'rotate-180'}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+          </svg>
         </button>
       )}
     </div>

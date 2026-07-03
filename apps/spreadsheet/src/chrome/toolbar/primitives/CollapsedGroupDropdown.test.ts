@@ -17,4 +17,20 @@ describe('CollapsedGroupDropdown dense layout', () => {
     expect(source).toContain('text-ribbon-compact text-ss-text-secondary');
     expect(source).toContain('<span className={labelClassName}>{label}</span>');
   });
+
+  it('uses the normalized group key for keytip-controlled open state', () => {
+    const source = readFileSync(
+      nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/primitives/CollapsedGroupDropdown.tsx'),
+      'utf8',
+    );
+    const toolbarGroupSource = readFileSync(
+      nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/primitives/ToolbarGroup.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain('groupKey?: string');
+    expect(source).toContain('s.ribbonCollapsedGroups[groupKey] ?? false');
+    expect(source).toContain('setRibbonCollapsedGroupOpen(groupKey, open)');
+    expect(toolbarGroupSource).toContain('groupKey={groupVisibility.groupKey}');
+  });
 });

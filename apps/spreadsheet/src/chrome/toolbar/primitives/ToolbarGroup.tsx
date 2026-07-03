@@ -111,7 +111,12 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   if (renderMode === 'dropdown') {
     return (
       <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+        <CollapsedGroupDropdown
+          label={label}
+          groupKey={groupVisibility.groupKey}
+          icon={dropdownIcon}
+          isLast={isLast}
+        >
           {dialogLauncher && (
             <div className="mb-2 flex justify-end border-b border-ss-border pb-2">
               <DialogLauncherButton launcher={dialogLauncher} placement="dropdown" />

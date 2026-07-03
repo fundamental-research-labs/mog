@@ -276,7 +276,8 @@ export const NumberGroup = React.memo(function NumberGroup() {
       collapseConfig={NUMBER_COLLAPSE_CONFIG}
       dropdownIcon={<NumberFormatIcon />}
       dialogLauncher={{
-        ariaLabel: 'Number Settings',
+        testId: 'ribbon-button-number-format-settings',
+        ariaLabel: 'Number Format Settings',
         onClick: () => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'number' }),
       }}
     >

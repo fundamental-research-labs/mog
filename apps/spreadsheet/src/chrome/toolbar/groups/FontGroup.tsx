@@ -489,6 +489,7 @@ export const FontGroup = React.memo(function FontGroup() {
       collapseConfig={FONT_COLLAPSE_CONFIG}
       dropdownIcon={<FontIcon />}
       dialogLauncher={{
+        testId: 'ribbon-button-font-settings',
         ariaLabel: 'Font Settings',
         onClick: () => dispatch('OPEN_FONT_DIALOG'),
       }}

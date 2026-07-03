@@ -269,6 +269,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
       dropdownIcon={<AlignCenterIcon />}
       dialogLauncher={{
+        testId: 'ribbon-button-alignment-settings',
         ariaLabel: 'Alignment Settings',
         onClick: () => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' }),
       }}

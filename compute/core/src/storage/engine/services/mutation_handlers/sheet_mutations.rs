@@ -149,7 +149,7 @@ fn create_sheet_with_origin(
         compute_layout_index::LayoutIndex::with_defaults(
             100,
             26,
-            compute_layout_index::DEFAULT_ROW_HEIGHT,
+            stores.layout_metrics.default_row_height(),
             default_col_width,
         ),
     );

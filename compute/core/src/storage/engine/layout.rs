@@ -23,7 +23,7 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_row_position(&self, sheet_id: &SheetId, row: u32) -> f64 {
         self.stores.layout_indexes.get(sheet_id).map_or(
-            row as f64 * compute_layout_index::DEFAULT_ROW_HEIGHT.0,
+            row as f64 * self.stores.layout_metrics.default_row_height_px,
             |li| li.get_row_position(row as usize).0,
         )
     }
@@ -41,7 +41,7 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_row_at_pixel(&self, sheet_id: &SheetId, y: f64) -> u32 {
         self.stores.layout_indexes.get(sheet_id).map_or(
-            (y / compute_layout_index::DEFAULT_ROW_HEIGHT.0).max(0.0) as u32,
+            (y / self.stores.layout_metrics.default_row_height_px).max(0.0) as u32,
             |li| li.get_row_at_pixel(domain_types::units::Pixels(y)) as u32,
         )
     }
@@ -61,7 +61,7 @@ impl YrsComputeEngine {
         self.stores
             .layout_indexes
             .get(sheet_id)
-            .map_or(compute_layout_index::DEFAULT_ROW_HEIGHT.0, |li| {
+            .map_or(self.stores.layout_metrics.default_row_height_px, |li| {
                 li.get_row_height(row as usize).0
             })
     }

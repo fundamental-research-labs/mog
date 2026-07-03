@@ -262,10 +262,11 @@ impl YrsComputeEngine {
             return true;
         }
 
-        let settings = sheets::get_sheet_settings(
+        let settings = sheets::get_sheet_settings_with_layout_metrics(
             self.stores.storage.doc(),
             self.stores.storage.sheets(),
             sheet_id,
+            self.stores.layout_metrics,
         );
         let opts = settings.protection_options.unwrap_or_default();
 

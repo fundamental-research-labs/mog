@@ -117,7 +117,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
             );
             let height = layout_index
                 .map(|li| li.get_row_height(row as usize))
-                .unwrap_or(compute_layout_index::DEFAULT_ROW_HEIGHT);
+                .unwrap_or_else(|| stores.layout_metrics.default_row_height());
             RenderRowDimension {
                 row,
                 height: if hidden { 0.0 } else { height.0 as f32 },
@@ -137,7 +137,7 @@ pub(in crate::storage::engine::viewport) fn build_viewport_render_data_inner(
             );
             let width = layout_index
                 .map(|li| li.get_col_width(col as usize))
-                .unwrap_or_else(compute_layout_index::platform_default_col_width);
+                .unwrap_or_else(|| stores.layout_metrics.default_column_width());
             RenderColDimension {
                 col,
                 width: if hidden { 0.0 } else { width.0 as f32 },

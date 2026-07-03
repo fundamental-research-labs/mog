@@ -313,9 +313,7 @@ pub(in crate::storage::engine) fn apply_dimension_changes_to_layout(
                     li.set_row_height(row as usize, height_px);
                 }
                 CellChangeKind::Removed => {
-                    let default_px =
-                        domain_types::units::points_to_pixels(dimensions::DEFAULT_ROW_HEIGHT);
-                    li.set_row_height(row as usize, default_px);
+                    li.set_row_height(row as usize, stores.layout_metrics.default_row_height());
                 }
             }
         }

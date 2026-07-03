@@ -122,7 +122,7 @@ pub(in crate::storage::engine) fn auto_fit_row(
 ) -> Result<Pixels, ComputeError> {
     let grid = match stores.grid_indexes.get(sheet_id) {
         Some(g) => g,
-        None => return Ok(compute_layout_index::DEFAULT_ROW_HEIGHT),
+        None => return Ok(stores.layout_metrics.default_row_height()),
     };
 
     let max_col = grid.col_count();

@@ -196,6 +196,66 @@ pub const DEFAULT_ROW_HEIGHT: Points = Points(15.0);
 /// Default column width: 8.43 character-width units.
 pub const DEFAULT_COL_WIDTH: CharWidth = CharWidth(8.43);
 
+/// Runtime layout metrics used to convert canonical spreadsheet dimensions
+/// into pixels.
+///
+/// Native Rust can choose metrics from `cfg!(target_os)`, but browser WASM
+/// cannot infer the host OS from Rust. Kernel resolves the browser profile once
+/// during compute initialization and passes it through this explicit contract.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayoutMetrics {
+    pub column_width_mdw: f64,
+    pub default_column_width_px: f64,
+    pub default_row_height_px: f64,
+}
+
+impl LayoutMetrics {
+    pub fn from_column_width_mdw(column_width_mdw: f64) -> Option<Self> {
+        if !column_width_mdw.is_finite() || column_width_mdw <= 0.0 {
+            return None;
+        }
+
+        Some(Self {
+            column_width_mdw,
+            default_column_width_px: char_width_to_pixels(DEFAULT_COL_WIDTH, column_width_mdw).0,
+            default_row_height_px: points_to_pixels(DEFAULT_ROW_HEIGHT).0,
+        })
+    }
+
+    pub fn platform_default() -> Self {
+        Self::from_column_width_mdw(platform_mdw()).expect("platform MDW must be valid")
+    }
+
+    pub fn validate(self) -> Option<Self> {
+        if self.column_width_mdw.is_finite()
+            && self.column_width_mdw > 0.0
+            && self.default_column_width_px.is_finite()
+            && self.default_column_width_px > 0.0
+            && self.default_row_height_px.is_finite()
+            && self.default_row_height_px > 0.0
+        {
+            Some(self)
+        } else {
+            None
+        }
+    }
+
+    pub fn default_column_width(self) -> Pixels {
+        Pixels(self.default_column_width_px)
+    }
+
+    pub fn default_row_height(self) -> Pixels {
+        Pixels(self.default_row_height_px)
+    }
+}
+
+impl Default for LayoutMetrics {
+    fn default() -> Self {
+        Self::platform_default()
+    }
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -216,6 +276,26 @@ mod tests {
         // 8.43 chars @ MDW=8 should give 72 pixels
         let px = char_width_to_pixels(CharWidth(8.43), MDW_CALIBRI_11_MACOS);
         assert_eq!(px, Pixels(72.0));
+    }
+
+    #[test]
+    fn layout_metrics_from_mdw_sets_pixel_defaults() {
+        assert_eq!(
+            LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_96DPI),
+            Some(LayoutMetrics {
+                column_width_mdw: 7.0,
+                default_column_width_px: 64.0,
+                default_row_height_px: 20.0,
+            })
+        );
+        assert_eq!(
+            LayoutMetrics::from_column_width_mdw(MDW_CALIBRI_11_MACOS),
+            Some(LayoutMetrics {
+                column_width_mdw: 8.0,
+                default_column_width_px: 72.0,
+                default_row_height_px: 20.0,
+            })
+        );
     }
 
     #[test]

@@ -212,9 +212,13 @@ impl ComputeService {
     #[bridge::lifecycle(create)]
     pub fn init(
         snapshot: snapshot_types::WorkbookSnapshot,
+        layout_metrics: Option<domain_types::units::LayoutMetrics>,
     ) -> Result<(Self, snapshot_types::RecalcResult), value_types::ComputeError> {
         let (engine, recalc) =
-            compute_core::storage::engine::YrsComputeEngine::from_snapshot(snapshot)?;
+            compute_core::storage::engine::YrsComputeEngine::from_snapshot_with_layout_metrics(
+                snapshot,
+                layout_metrics.unwrap_or_default(),
+            )?;
         let dispatch = crate::dispatch::Dispatch::from_engine(engine).map_err(|e| {
             value_types::ComputeError::Eval {
                 message: e.to_string(),
@@ -231,9 +235,13 @@ impl ComputeService {
     #[bridge::lifecycle(create_from = "yrs_state")]
     pub fn init_from_yrs_state(
         state: Vec<u8>,
+        layout_metrics: Option<domain_types::units::LayoutMetrics>,
     ) -> Result<(Self, snapshot_types::RecalcResult), value_types::ComputeError> {
         let (engine, recalc) =
-            compute_core::storage::engine::YrsComputeEngine::from_yrs_state(&state)?;
+            compute_core::storage::engine::YrsComputeEngine::from_yrs_state_with_layout_metrics(
+                &state,
+                layout_metrics.unwrap_or_default(),
+            )?;
         let dispatch = crate::dispatch::Dispatch::from_engine(engine).map_err(|e| {
             value_types::ComputeError::Eval {
                 message: format!("dispatch creation failed: {e}"),

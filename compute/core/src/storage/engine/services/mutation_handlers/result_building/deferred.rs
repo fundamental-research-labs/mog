@@ -10,9 +10,7 @@ use crate::snapshot::{
 };
 use crate::storage::engine::stores::EngineStores;
 use crate::storage::sheet::filters;
-use domain_types::units::{
-    CharWidth, Points, char_width_to_pixels, platform_mdw, points_to_pixels,
-};
+use domain_types::units::{CharWidth, Points, char_width_to_pixels, points_to_pixels};
 
 fn workbook_settings_for_deferred(
     data: &crate::storage::engine::construction::DeferredHydrationData,
@@ -231,12 +229,14 @@ pub(in crate::storage::engine) fn build_mutation_result_for_deferred(
             .dimensions
             .default_row_height
             .map(|height| points_to_pixels(Points(height)).0)
-            .unwrap_or(20.0);
+            .unwrap_or(stores.layout_metrics.default_row_height_px);
         let default_col_width = sheet_data
             .dimensions
             .default_col_width
-            .map(|width| char_width_to_pixels(CharWidth(width), platform_mdw()).0)
-            .unwrap_or(64.0);
+            .map(|width| {
+                char_width_to_pixels(CharWidth(width), stores.layout_metrics.column_width_mdw).0
+            })
+            .unwrap_or(stores.layout_metrics.default_column_width_px);
         let sheet_settings = domain_types::domain::sheet::SheetSettings {
             show_gridlines: sheet_data.view.show_gridlines,
             show_row_headers: sheet_data.view.show_row_col_headers,

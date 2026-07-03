@@ -24,6 +24,13 @@ impl YrsComputeEngine {
         construction::from_snapshot(snapshot)
     }
 
+    pub fn from_snapshot_with_layout_metrics(
+        snapshot: WorkbookSnapshot,
+        layout_metrics: domain_types::units::LayoutMetrics,
+    ) -> Result<(Self, RecalcResult), ComputeError> {
+        construction::from_snapshot_with_layout_metrics(snapshot, layout_metrics)
+    }
+
     /// Assemble an export-capable Yrs engine from an already-initialized
     /// formula-eval compute state without running another full recalculation.
     #[cfg(feature = "__internal")]
@@ -87,6 +94,13 @@ impl YrsComputeEngine {
     /// CRDT sync to work between engines.
     pub fn from_yrs_state(state: &[u8]) -> Result<(Self, RecalcResult), ComputeError> {
         construction::from_yrs_state(state)
+    }
+
+    pub fn from_yrs_state_with_layout_metrics(
+        state: &[u8],
+        layout_metrics: domain_types::units::LayoutMetrics,
+    ) -> Result<(Self, RecalcResult), ComputeError> {
+        construction::from_yrs_state_with_layout_metrics(state, layout_metrics)
     }
 
     /// Construct a `YrsComputeEngine` directly from raw XLSX bytes (no recalc).

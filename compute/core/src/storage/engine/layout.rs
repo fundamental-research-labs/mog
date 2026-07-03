@@ -32,7 +32,7 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_col_position(&self, sheet_id: &SheetId, col: u32) -> f64 {
         self.stores.layout_indexes.get(sheet_id).map_or(
-            col as f64 * compute_layout_index::platform_default_col_width().0,
+            col as f64 * self.stores.layout_metrics.default_column_width_px,
             |li| li.get_col_position(col as usize).0,
         )
     }
@@ -50,7 +50,7 @@ impl YrsComputeEngine {
     #[bridge::read(scope = "sheet")]
     pub fn get_col_at_pixel(&self, sheet_id: &SheetId, x: f64) -> u32 {
         self.stores.layout_indexes.get(sheet_id).map_or(
-            (x / compute_layout_index::platform_default_col_width().0).max(0.0) as u32,
+            (x / self.stores.layout_metrics.default_column_width_px).max(0.0) as u32,
             |li| li.get_col_at_pixel(domain_types::units::Pixels(x)) as u32,
         )
     }
@@ -72,7 +72,7 @@ impl YrsComputeEngine {
         self.stores
             .layout_indexes
             .get(sheet_id)
-            .map_or(compute_layout_index::platform_default_col_width().0, |li| {
+            .map_or(self.stores.layout_metrics.default_column_width_px, |li| {
                 li.get_col_width(col as usize).0
             })
     }

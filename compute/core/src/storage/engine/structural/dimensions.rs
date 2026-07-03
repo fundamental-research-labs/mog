@@ -29,7 +29,7 @@ impl YrsComputeEngine {
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
         // Validate in canonical units (char-width)
         let width_px = domain_types::units::Pixels(width_px);
-        let mdw = domain_types::units::platform_mdw();
+        let mdw = self.stores.layout_metrics.column_width_mdw;
         let width_cw = domain_types::units::pixels_to_char_width(width_px, mdw);
         validation::structure::validate_col_width(width_cw)?;
         services::structural::set_col_width(&mut self.stores, sheet_id, col, width_px)
@@ -41,7 +41,7 @@ impl YrsComputeEngine {
         sheet_id: &SheetId,
         widths: &[(u32, f64)],
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let mdw = domain_types::units::platform_mdw();
+        let mdw = self.stores.layout_metrics.column_width_mdw;
         let widths_px: Vec<(u32, domain_types::units::Pixels)> = widths
             .iter()
             .map(|(col, width)| (*col, domain_types::units::Pixels(*width)))

@@ -322,7 +322,7 @@ pub(in crate::storage::engine) fn apply_dimension_changes_to_layout(
     }
 
     // Column widths — Yrs stores char-width, LayoutIndex needs pixels
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     for dch in &changes.col_widths {
         let col_pos = resolve_hex_id_to_position(stores, &dch.sheet_id, &dch.key, false);
         if let Some(col) = col_pos

@@ -411,7 +411,8 @@ pub(in crate::storage::engine) fn build_sheet_hydration_changes(
     // a single-key update. The mirror replaces its full settings
     // payload from `settings` rather than diffing against the prior
     // state (which is empty on hydration).
-    let sheet_settings = settings::get_sheet_settings(doc, sheets, sid);
+    let sheet_settings =
+        settings::get_sheet_settings_with_layout_metrics(doc, sheets, sid, stores.layout_metrics);
     let settings_value =
         serde_json::to_value(&sheet_settings).expect("SheetSettings must serialize to JSON");
     result.settings_changes.push(SheetSettingsChange {

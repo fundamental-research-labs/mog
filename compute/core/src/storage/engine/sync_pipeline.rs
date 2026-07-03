@@ -101,6 +101,7 @@ impl YrsComputeEngine {
             &self.stores.storage,
             &workbook_snap,
             &self.stores.grid_indexes,
+            self.stores.layout_metrics,
         )?;
 
         self.settings = construction::derive_settings(&self.stores.storage);
@@ -307,6 +308,7 @@ impl YrsComputeEngine {
             sheet_snap.rows,
             sheet_snap.cols,
             self.stores.grid_indexes.get(&sheet_id),
+            self.stores.layout_metrics,
         );
         self.stores.layout_indexes.insert(sheet_id, li);
 
@@ -473,6 +475,7 @@ impl YrsComputeEngine {
                 &self.stores.storage,
                 &workbook_snap,
                 &self.stores.grid_indexes,
+                self.stores.layout_metrics,
             )?;
 
             self.settings = construction::derive_settings(&self.stores.storage);
@@ -750,6 +753,7 @@ impl YrsComputeEngine {
                 &self.stores.storage,
                 *sheet_id,
                 self.stores.grid_id_alloc.clone(),
+                self.stores.layout_metrics,
             )? {
                 // Collect cells with legacy formula but no IdentityFormula.
                 for cell_data in &runtime.sheet_snapshot.cells {

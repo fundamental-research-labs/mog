@@ -13,7 +13,12 @@ pub(in crate::storage::engine) fn get_sheet_settings(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> SheetSettings {
-    settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id)
+    settings::get_sheet_settings_with_layout_metrics(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        stores.layout_metrics,
+    )
 }
 
 pub(in crate::storage::engine) fn set_sheet_setting(
@@ -22,15 +27,15 @@ pub(in crate::storage::engine) fn set_sheet_setting(
     key: &str,
     value: &str,
 ) -> Result<MutationResult, ComputeError> {
-    settings::set_sheet_setting(
+    settings::set_sheet_setting_with_layout_metrics(
         stores.storage.doc(),
         stores.storage.sheets(),
         sheet_id,
         key,
         value,
+        stores.layout_metrics,
     );
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = get_sheet_settings(stores, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -56,8 +61,7 @@ pub(in crate::storage::engine) fn protect_sheet(
         sheet_id,
         password_hash,
     );
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = get_sheet_settings(stores, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -84,8 +88,7 @@ pub(in crate::storage::engine) fn unprotect_sheet(
             message: "Incorrect password".to_string(),
         });
     }
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = get_sheet_settings(stores, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),

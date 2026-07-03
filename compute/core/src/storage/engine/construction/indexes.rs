@@ -101,6 +101,7 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, GridIndex>,
     range: std::ops::Range<usize>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<FxHashMap<SheetId, LayoutIndex>, ComputeError> {
     let mut indexes = FxHashMap::default();
     for i in range {
@@ -109,18 +110,23 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
         let sheet_data = &parse_output.sheets[i];
         let dims = &sheet_data.dimensions;
 
-        let mdw = domain_types::units::platform_mdw();
         let default_row_height_pt = domain_types::units::Points(
             dims.default_row_height
                 .unwrap_or(dimensions::DEFAULT_ROW_HEIGHT.0),
         );
-        let default_col_width_cw = domain_types::units::CharWidth(
-            dims.default_col_width
-                .unwrap_or(dimensions::DEFAULT_COL_WIDTH.0),
-        );
-        let default_row_height_px = domain_types::units::points_to_pixels(default_row_height_pt);
-        let default_col_width_px =
-            domain_types::units::char_width_to_pixels(default_col_width_cw, mdw);
+        let default_row_height_px = dims
+            .default_row_height
+            .map(|_| domain_types::units::points_to_pixels(default_row_height_pt))
+            .unwrap_or_else(|| layout_metrics.default_row_height());
+        let default_col_width_px = dims
+            .default_col_width
+            .map(|width| {
+                domain_types::units::char_width_to_pixels(
+                    domain_types::units::CharWidth(width),
+                    layout_metrics.column_width_mdw,
+                )
+            })
+            .unwrap_or_else(|| layout_metrics.default_column_width());
 
         let custom_row_heights: Vec<(usize, domain_types::units::Pixels)> = dims
             .row_heights
@@ -142,7 +148,7 @@ pub(in crate::storage::engine) fn build_layout_indexes_from_parse_output_range(
                     c.col as usize,
                     domain_types::units::char_width_to_pixels(
                         domain_types::units::CharWidth(c.width),
-                        mdw,
+                        layout_metrics.column_width_mdw,
                     ),
                 )
             })
@@ -216,13 +222,20 @@ pub(in crate::storage::engine) fn build_layout_indexes(
     storage: &YrsStorage,
     snapshot: &WorkbookSnapshot,
     grid_indexes: &FxHashMap<SheetId, GridIndex>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<FxHashMap<SheetId, LayoutIndex>, ComputeError> {
     let mut indexes = FxHashMap::default();
     for sheet_snap in &snapshot.sheets {
         let sheet_id = SheetId::from_uuid_str(&sheet_snap.id)?;
         let gi = grid_indexes.get(&sheet_id);
-        let li =
-            build_layout_index_for_sheet(storage, &sheet_id, sheet_snap.rows, sheet_snap.cols, gi);
+        let li = build_layout_index_for_sheet(
+            storage,
+            &sheet_id,
+            sheet_snap.rows,
+            sheet_snap.cols,
+            gi,
+            layout_metrics,
+        );
         indexes.insert(sheet_id, li);
     }
     Ok(indexes)
@@ -235,6 +248,7 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
     rows: u32,
     cols: u32,
     grid_index: Option<&GridIndex>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> LayoutIndex {
     use crate::storage::sheet::properties;
 
@@ -250,9 +264,19 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
         .unwrap_or(dimensions::DEFAULT_COL_WIDTH);
 
     // Convert canonical → pixels for the LayoutIndex (rendering concern)
-    let mdw = domain_types::units::platform_mdw();
-    let default_row_height_px = domain_types::units::points_to_pixels(default_row_height_pt);
-    let default_col_width_px = domain_types::units::char_width_to_pixels(default_col_width_cw, mdw);
+    let default_row_height_px = meta
+        .as_ref()
+        .map(|_| domain_types::units::points_to_pixels(default_row_height_pt))
+        .unwrap_or_else(|| layout_metrics.default_row_height());
+    let default_col_width_px = meta
+        .as_ref()
+        .map(|_| {
+            domain_types::units::char_width_to_pixels(
+                default_col_width_cw,
+                layout_metrics.column_width_mdw,
+            )
+        })
+        .unwrap_or_else(|| layout_metrics.default_column_width());
 
     // Read custom dimensions (canonical units from Yrs) and convert to pixels
     let custom_row_heights: Vec<(usize, domain_types::units::Pixels)> =
@@ -273,7 +297,12 @@ pub(in crate::storage::engine) fn build_layout_index_for_sheet(
             grid_index,
         )
         .into_iter()
-        .map(|(col, cw)| (col, domain_types::units::char_width_to_pixels(cw, mdw)))
+        .map(|(col, cw)| {
+            (
+                col,
+                domain_types::units::char_width_to_pixels(cw, layout_metrics.column_width_mdw),
+            )
+        })
         .collect();
 
     let mut hidden_rows = dimensions::get_hidden_rows(storage.doc(), storage.sheets(), sheet_id);

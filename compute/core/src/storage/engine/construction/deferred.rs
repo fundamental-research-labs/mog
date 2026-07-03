@@ -261,6 +261,7 @@ pub(in crate::storage::engine) fn import_from_xlsx_bytes_deferred(
         &workbook_snap,
         &engine.stores.grid_indexes,
         critical_sheet_range,
+        engine.stores.layout_metrics,
     )?;
 
     engine.mirror.install_row_col_indexes(
@@ -524,7 +525,9 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         let grid_indexes =
             build_grid_indexes_from_yrs(&new_storage, &full_snap, shared_alloc.clone())?;
         let merge_indexes = build_merge_indexes(&new_storage, &full_snap, &grid_indexes)?;
-        let layout_indexes = build_layout_indexes(&new_storage, &full_snap, &grid_indexes)?;
+        let layout_metrics = engine.stores.layout_metrics;
+        let layout_indexes =
+            build_layout_indexes(&new_storage, &full_snap, &grid_indexes, layout_metrics)?;
 
         dh_log!("phase 3 done: grid/merge/layout indexes built");
 
@@ -575,6 +578,7 @@ pub(in crate::storage::engine) fn stage_deferred_hydration(
         ));
         let mut stores = EngineStores {
             storage: new_storage,
+            layout_metrics,
             grid_id_alloc: shared_alloc,
             id_alloc,
             grid_indexes,

@@ -32,10 +32,15 @@ pub(in crate::storage::engine) fn get_sheet_settings(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,
 ) -> SheetSettings {
-    settings::get_sheet_settings(
+    sheet_settings_for_engine(engine, sheet_id)
+}
+
+fn sheet_settings_for_engine(engine: &YrsComputeEngine, sheet_id: &SheetId) -> SheetSettings {
+    settings::get_sheet_settings_with_layout_metrics(
         engine.stores.storage.doc(),
         engine.stores.storage.sheets(),
         sheet_id,
+        engine.stores.layout_metrics,
     )
 }
 
@@ -45,19 +50,16 @@ pub(in crate::storage::engine) fn set_sheet_setting(
     key: &str,
     value: &str,
 ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-    settings::set_sheet_setting(
+    settings::set_sheet_setting_with_layout_metrics(
         engine.stores.storage.doc(),
         engine.stores.storage.sheets(),
         sheet_id,
         key,
         value,
+        engine.stores.layout_metrics,
     );
     rebuild_layout_index_if_dimension_default_changed(engine, sheet_id, key);
-    let settings = settings::get_sheet_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -88,6 +90,7 @@ fn rebuild_layout_index_if_dimension_default_changed(
         rows,
         cols,
         engine.stores.grid_indexes.get(sheet_id),
+        engine.stores.layout_metrics,
     );
     engine.stores.layout_indexes.insert(*sheet_id, layout);
 }
@@ -103,11 +106,7 @@ pub(in crate::storage::engine) fn protect_sheet(
         sheet_id,
         password_hash.as_deref(),
     );
-    let settings = settings::get_sheet_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -131,11 +130,7 @@ pub(in crate::storage::engine) fn protect_sheet_with_options(
         password_hash.as_deref(),
         &options,
     );
-    let settings = settings::get_sheet_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -157,11 +152,7 @@ pub(in crate::storage::engine) fn set_sheet_protection_options(
         sheet_id,
         &options,
     );
-    let settings = settings::get_sheet_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),
@@ -188,11 +179,7 @@ pub(in crate::storage::engine) fn unprotect_sheet(
             message: "Incorrect password".to_string(),
         });
     }
-    let settings = settings::get_sheet_settings(
-        engine.stores.storage.doc(),
-        engine.stores.storage.sheets(),
-        sheet_id,
-    );
+    let settings = sheet_settings_for_engine(engine, sheet_id);
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),

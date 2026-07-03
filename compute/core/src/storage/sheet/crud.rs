@@ -25,7 +25,7 @@ use compute_document::schema::{
     KEY_VALIDATION_RULES, write_schema_version,
 };
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::units::Pixels;
+use domain_types::units::CharWidth;
 use domain_types::yrs_schema::comment as comment_schema;
 // Note: ORIGIN_BOOTSTRAP is supplied by callers via `*_with_origin` and never
 // referenced directly here — this file only needs to know it can accept any
@@ -41,7 +41,7 @@ use super::yrs_helpers::{
 
 struct SheetCreationOptions {
     origin: Origin,
-    default_col_width_px: Pixels,
+    default_col_width: CharWidth,
 }
 
 // =============================================================================
@@ -346,7 +346,7 @@ impl YrsStorage {
             name,
             id_alloc,
             Origin::from(ORIGIN_USER_EDIT),
-            compute_layout_index::platform_default_col_width(),
+            domain_types::units::DEFAULT_COL_WIDTH,
         )
     }
 
@@ -362,7 +362,7 @@ impl YrsStorage {
         name: &str,
         id_alloc: &cell_types::IdAllocator,
         origin: Origin,
-        default_col_width_px: Pixels,
+        default_col_width: CharWidth,
     ) -> Result<SheetId, ComputeError> {
         let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
@@ -374,7 +374,7 @@ impl YrsStorage {
             26,
             SheetCreationOptions {
                 origin,
-                default_col_width_px,
+                default_col_width,
             },
         )?;
         Ok(sheet_id)
@@ -628,7 +628,7 @@ impl YrsStorage {
             cols,
             SheetCreationOptions {
                 origin: Origin::from(ORIGIN_USER_EDIT),
-                default_col_width_px: compute_layout_index::platform_default_col_width(),
+                default_col_width: domain_types::units::DEFAULT_COL_WIDTH,
             },
         )
     }
@@ -678,13 +678,7 @@ impl YrsStorage {
                 ),
                 (
                     KEY_DEFAULT_COL_WIDTH,
-                    Any::Number(
-                        domain_types::units::pixels_to_char_width(
-                            options.default_col_width_px,
-                            domain_types::units::platform_mdw(),
-                        )
-                        .0,
-                    ),
+                    Any::Number(options.default_col_width.0),
                 ),
             ]);
             sheet_map.insert(&mut txn, KEY_PROPERTIES, meta);

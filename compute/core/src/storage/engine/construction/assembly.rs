@@ -11,6 +11,14 @@ use super::*;
 pub(in crate::storage::engine) fn from_snapshot(
     snapshot: WorkbookSnapshot,
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
+    from_snapshot_with_layout_metrics(snapshot, domain_types::units::LayoutMetrics::default())
+}
+
+pub(in crate::storage::engine) fn from_snapshot_with_layout_metrics(
+    snapshot: WorkbookSnapshot,
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
+    let layout_metrics = validate_layout_metrics(layout_metrics)?;
     let storage = {
         let _span = tracing::info_span!("yrs_storage_from_snapshot").entered();
         YrsStorage::from_snapshot(snapshot.clone())?
@@ -24,7 +32,8 @@ pub(in crate::storage::engine) fn from_snapshot(
         (compute, recalc_result, mirror)
     };
 
-    let engine = assemble_engine(storage, mirror, compute, &snapshot)?;
+    let engine =
+        assemble_engine_with_layout_metrics(storage, mirror, compute, &snapshot, layout_metrics)?;
 
     Ok((engine, recalc_result))
 }
@@ -38,6 +47,14 @@ pub(in crate::storage::engine) fn from_snapshot(
 pub(in crate::storage::engine) fn from_yrs_state(
     state: &[u8],
 ) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
+    from_yrs_state_with_layout_metrics(state, domain_types::units::LayoutMetrics::default())
+}
+
+pub(in crate::storage::engine) fn from_yrs_state_with_layout_metrics(
+    state: &[u8],
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<(YrsComputeEngine, RecalcResult), ComputeError> {
+    let layout_metrics = validate_layout_metrics(layout_metrics)?;
     let storage = YrsStorage::from_yrs_state(state).map_err(|e| ComputeError::Eval {
         message: format!("from_yrs_state: {e}"),
     })?;
@@ -91,6 +108,7 @@ pub(in crate::storage::engine) fn from_yrs_state(
         &snapshot,
         collab_alloc.clone(),
         metadata_alloc,
+        layout_metrics,
     )?;
 
     // `assemble_engine_with_alloc` normalizes any legacy/import-era raw-A1
@@ -128,6 +146,16 @@ pub(in crate::storage::engine) fn snapshot_id_high_water_mark(snapshot: &Workboo
     seed.max(1)
 }
 
+fn validate_layout_metrics(
+    metrics: domain_types::units::LayoutMetrics,
+) -> Result<domain_types::units::LayoutMetrics, ComputeError> {
+    metrics
+        .validate()
+        .ok_or_else(|| ComputeError::InvalidInput {
+            message: format!("Invalid layout metrics: {metrics:?}"),
+        })
+}
+
 /// Assemble a fully initialized `YrsComputeEngine` from pre-built components.
 ///
 /// Builds indexes, observer, undo manager, settings, and initializes CF caches.
@@ -136,9 +164,26 @@ pub(in crate::storage::engine) fn snapshot_id_high_water_mark(snapshot: &Workboo
 pub(in crate::storage::engine) fn assemble_engine(
     storage: YrsStorage,
     mirror: CellMirror,
-    mut compute: ComputeCore,
+    compute: ComputeCore,
     snapshot: &WorkbookSnapshot,
 ) -> Result<YrsComputeEngine, ComputeError> {
+    assemble_engine_with_layout_metrics(
+        storage,
+        mirror,
+        compute,
+        snapshot,
+        domain_types::units::LayoutMetrics::default(),
+    )
+}
+
+pub(in crate::storage::engine) fn assemble_engine_with_layout_metrics(
+    storage: YrsStorage,
+    mirror: CellMirror,
+    mut compute: ComputeCore,
+    snapshot: &WorkbookSnapshot,
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<YrsComputeEngine, ComputeError> {
+    let layout_metrics = validate_layout_metrics(layout_metrics)?;
     let seed = snapshot_id_high_water_mark(snapshot);
     let grid_id_alloc = std::sync::Arc::new(cell_types::IdAllocator::with_seed(seed));
     // Share the same allocator with ComputeCore to prevent CellId collisions
@@ -147,7 +192,15 @@ pub(in crate::storage::engine) fn assemble_engine(
     let id_alloc = std::sync::Arc::new(crate::storage::metadata_id_allocator_for_doc_client(
         storage.doc().client_id(),
     ));
-    assemble_engine_inner(storage, mirror, compute, snapshot, grid_id_alloc, id_alloc)
+    assemble_engine_inner(
+        storage,
+        mirror,
+        compute,
+        snapshot,
+        grid_id_alloc,
+        id_alloc,
+        layout_metrics,
+    )
 }
 
 /// Like `assemble_engine` but with custom ID allocators (for collaborative mode).
@@ -158,8 +211,17 @@ pub(in crate::storage::engine) fn assemble_engine_with_alloc(
     snapshot: &WorkbookSnapshot,
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<YrsComputeEngine, ComputeError> {
-    assemble_engine_inner(storage, mirror, compute, snapshot, grid_id_alloc, id_alloc)
+    assemble_engine_inner(
+        storage,
+        mirror,
+        compute,
+        snapshot,
+        grid_id_alloc,
+        id_alloc,
+        validate_layout_metrics(layout_metrics)?,
+    )
 }
 
 fn assemble_engine_inner(
@@ -169,10 +231,11 @@ fn assemble_engine_inner(
     snapshot: &WorkbookSnapshot,
     grid_id_alloc: std::sync::Arc<cell_types::IdAllocator>,
     id_alloc: std::sync::Arc<cell_types::IdAllocator>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<YrsComputeEngine, ComputeError> {
     let grid_indexes = build_grid_indexes_from_yrs(&storage, snapshot, grid_id_alloc.clone())?;
     let merge_indexes = build_merge_indexes(&storage, snapshot, &grid_indexes)?;
-    let layout_indexes = build_layout_indexes(&storage, snapshot, &grid_indexes)?;
+    let layout_indexes = build_layout_indexes(&storage, snapshot, &grid_indexes, layout_metrics)?;
 
     // unified reference model — seed the mirror's `RowId → (SheetId, row)` /
     // `ColId → (SheetId, col)` reverse index from the grid indexes so
@@ -226,6 +289,7 @@ fn assemble_engine_inner(
             storage,
             grid_id_alloc,
             id_alloc,
+            layout_metrics,
             grid_indexes,
             layout_indexes,
             merge_indexes,
@@ -357,6 +421,7 @@ pub(in crate::storage::engine) fn rebuild_engine_from_snapshot(
         &engine.stores.storage,
         &workbook_snap,
         &engine.stores.grid_indexes,
+        engine.stores.layout_metrics,
     )?;
 
     // unified reference model — re-seed mirror's row/col reverse index after the rebuild.

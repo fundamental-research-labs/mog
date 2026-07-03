@@ -120,6 +120,32 @@ describe('SDK agent API guidance', () => {
     ).toContain('addFormula(');
   });
 
+  it('surfaces Mog-native cell annotation write APIs to agents', () => {
+    expect(api.describe().worksheet.subApis).toContain('annotations');
+
+    const setCell = api.describe('ws.setCell');
+    const cellWriteOptions =
+      setCell && 'types' in setCell ? setCell.types.CellWriteOptions?.definition : '';
+    expect(cellWriteOptions).toContain('annotation?: string | null');
+
+    const setValue = api.describe('ws.setValue');
+    expect(setValue && 'signature' in setValue ? setValue.signature : '').toContain(
+      "'literal' | 'asText' | 'annotation'",
+    );
+
+    expect(resolveGuidanceTarget('ws.annotations.cells.set')).toEqual(
+      expect.objectContaining({
+        path: 'ws.annotations.cells.set',
+        visibility: 'public',
+      }),
+    );
+
+    const annotationSet = api.describe('ws.annotations.cells.set');
+    expect(
+      annotationSet && 'signature' in annotationSet ? annotationSet.signature : '',
+    ).toContain('set(ref: WorksheetCellAnnotationRef, text: string)');
+  });
+
   it('surfaces receipt-aware examples for lifecycle-heavy worksheet APIs', () => {
     const examplesFor = (path: string) => {
       const explanation = api.guidance.explain(path);

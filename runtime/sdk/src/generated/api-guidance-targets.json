@@ -6230,6 +6230,408 @@
     },
     {
       "schemaVersion": "1",
+      "path": "ws.annotations",
+      "stableId": "Worksheet.annotations",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "Worksheet",
+      "member": "annotations",
+      "kind": "subApiAccessor",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly annotations: WorksheetAnnotations;",
+      "typeText": "WorksheetAnnotations",
+      "compatibility": [],
+      "targetInterface": "WorksheetAnnotations",
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells",
+      "stableId": "WorksheetAnnotations.cells",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "cells",
+      "kind": "property",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly cells: WorksheetCellAnnotations;",
+      "typeText": "WorksheetCellAnnotations",
+      "compatibility": [],
+      "targetInterface": "WorksheetCellAnnotations",
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.acceptStale",
+      "stableId": "WorksheetCellAnnotations.acceptStale",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "acceptStale",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "acceptStale(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationRecord>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.clear",
+      "stableId": "WorksheetCellAnnotations.clear",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "clear",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "clear(range?: string | CellRange): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics",
+      "stableId": "WorksheetCellAnnotations.diagnostics",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "diagnostics",
+      "kind": "property",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly diagnostics: WorksheetCellAnnotationDiagnostics;",
+      "typeText": "WorksheetCellAnnotationDiagnostics",
+      "compatibility": [],
+      "targetInterface": "WorksheetCellAnnotationDiagnostics",
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics.get",
+      "stableId": "WorksheetCellAnnotationDiagnostics.get",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotationDiagnostics",
+      "member": "get",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "get(\n    ref: WorksheetCellAnnotationRef,\n    options?: WorksheetAnnotationDiagnosticReadOptions,\n  ): Promise<WorksheetCellAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics.list",
+      "stableId": "WorksheetCellAnnotationDiagnostics.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotationDiagnostics",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    options?: WorksheetCellAnnotationDiagnosticListOptions,\n  ): Promise<WorksheetCellAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.get",
+      "stableId": "WorksheetCellAnnotations.get",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "get",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "get(\n    ref: WorksheetCellAnnotationRef,\n    options?: WorksheetAnnotationReadOptions,\n  ): Promise<WorksheetCellAnnotationView | null>;",
+      "typeText": "Promise<WorksheetCellAnnotationView|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.getText",
+      "stableId": "WorksheetCellAnnotations.getText",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "getText",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getText(ref: WorksheetCellAnnotationRef): Promise<string | null>;",
+      "typeText": "Promise<string|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.list",
+      "stableId": "WorksheetCellAnnotations.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(options?: WorksheetCellAnnotationListOptions): Promise<WorksheetCellAnnotationView[]>;",
+      "typeText": "Promise<WorksheetCellAnnotationView[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.remove",
+      "stableId": "WorksheetCellAnnotations.remove",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "remove",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "remove(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetCellAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.set",
+      "stableId": "WorksheetCellAnnotations.set",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "set",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "set(ref: WorksheetCellAnnotationRef, text: string): Promise<WorksheetCellAnnotationRecord>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.setMany",
+      "stableId": "WorksheetCellAnnotations.setMany",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "setMany",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setMany(entries: readonly WorksheetCellAnnotationWriteEntry[]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.getCell",
+      "stableId": "WorksheetAnnotations.getCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "getCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "getCell(cell: string): Promise<WorksheetAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.getTable",
+      "stableId": "WorksheetAnnotations.getTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "getTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getTable(tableRef: string): Promise<WorksheetAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.listCells",
+      "stableId": "WorksheetAnnotations.listCells",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "listCells",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "listCells(): Promise<WorksheetAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.listTables",
+      "stableId": "WorksheetAnnotations.listTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "listTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listTables(): Promise<WorksheetAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.removeCell",
+      "stableId": "WorksheetAnnotations.removeCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "removeCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "removeCell(cell: string): Promise<WorksheetAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.removeTable",
+      "stableId": "WorksheetAnnotations.removeTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "removeTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeTable(tableRef: string): Promise<WorksheetAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.setCell",
+      "stableId": "WorksheetAnnotations.setCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "setCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "setCell(cell: string, text: string): Promise<WorksheetAnnotationRecord>;",
+      "typeText": "Promise<WorksheetAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
+      "path": "ws.annotations.setTable",
+      "stableId": "WorksheetAnnotations.setTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "setTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setTable(tableRef: string, text: string): Promise<WorksheetAnnotationRecord>;",
+      "typeText": "Promise<WorksheetAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    {
+      "schemaVersion": "1",
       "path": "ws.autoFill",
       "stableId": "Worksheet.autoFill",
       "root": "worksheet",
@@ -15998,7 +16400,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCells(\n    cells: Array<{ addr: string; value: CellValuePrimitive | Date }>,\n  ): Promise<SetCellsResult>;",
+      "signature": "setCells(\n    cells: Array<{ addr: string; value: CellValuePrimitive | Date; annotation?: string | null }>,\n  ): Promise<SetCellsResult>;",
       "typeText": "Promise<SetCellsResult>",
       "compatibility": [],
       "source": {
@@ -16052,7 +16454,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "signature": "setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -16088,7 +16490,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "signature": "setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -16142,7 +16544,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>;",
+      "signature": "setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -16293,7 +16695,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -26108,6 +26510,408 @@
       },
       "ownerPackage": "@mog/types-api"
     },
+    "ws.annotations": {
+      "schemaVersion": "1",
+      "path": "ws.annotations",
+      "stableId": "Worksheet.annotations",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "Worksheet",
+      "member": "annotations",
+      "kind": "subApiAccessor",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly annotations: WorksheetAnnotations;",
+      "typeText": "WorksheetAnnotations",
+      "compatibility": [],
+      "targetInterface": "WorksheetAnnotations",
+      "source": {
+        "file": "types/api/src/api/worksheet.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells",
+      "stableId": "WorksheetAnnotations.cells",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "cells",
+      "kind": "property",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly cells: WorksheetCellAnnotations;",
+      "typeText": "WorksheetCellAnnotations",
+      "compatibility": [],
+      "targetInterface": "WorksheetCellAnnotations",
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.acceptStale": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.acceptStale",
+      "stableId": "WorksheetCellAnnotations.acceptStale",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "acceptStale",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "acceptStale(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationRecord>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.clear": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.clear",
+      "stableId": "WorksheetCellAnnotations.clear",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "clear",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "clear(range?: string | CellRange): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.diagnostics": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics",
+      "stableId": "WorksheetCellAnnotations.diagnostics",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "diagnostics",
+      "kind": "property",
+      "visibility": "public",
+      "asyncModel": "sync",
+      "signature": "readonly diagnostics: WorksheetCellAnnotationDiagnostics;",
+      "typeText": "WorksheetCellAnnotationDiagnostics",
+      "compatibility": [],
+      "targetInterface": "WorksheetCellAnnotationDiagnostics",
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.diagnostics.get": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics.get",
+      "stableId": "WorksheetCellAnnotationDiagnostics.get",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotationDiagnostics",
+      "member": "get",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "get(\n    ref: WorksheetCellAnnotationRef,\n    options?: WorksheetAnnotationDiagnosticReadOptions,\n  ): Promise<WorksheetCellAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.diagnostics.list": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.diagnostics.list",
+      "stableId": "WorksheetCellAnnotationDiagnostics.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotationDiagnostics",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(\n    options?: WorksheetCellAnnotationDiagnosticListOptions,\n  ): Promise<WorksheetCellAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.get": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.get",
+      "stableId": "WorksheetCellAnnotations.get",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "get",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "get(\n    ref: WorksheetCellAnnotationRef,\n    options?: WorksheetAnnotationReadOptions,\n  ): Promise<WorksheetCellAnnotationView | null>;",
+      "typeText": "Promise<WorksheetCellAnnotationView|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.getText": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.getText",
+      "stableId": "WorksheetCellAnnotations.getText",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "getText",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getText(ref: WorksheetCellAnnotationRef): Promise<string | null>;",
+      "typeText": "Promise<string|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.list": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.list",
+      "stableId": "WorksheetCellAnnotations.list",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "list",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "list(options?: WorksheetCellAnnotationListOptions): Promise<WorksheetCellAnnotationView[]>;",
+      "typeText": "Promise<WorksheetCellAnnotationView[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.remove": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.remove",
+      "stableId": "WorksheetCellAnnotations.remove",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "remove",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "remove(ref: WorksheetCellAnnotationRef): Promise<WorksheetCellAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetCellAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.set": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.set",
+      "stableId": "WorksheetCellAnnotations.set",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "set",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "set(ref: WorksheetCellAnnotationRef, text: string): Promise<WorksheetCellAnnotationRecord>;",
+      "typeText": "Promise<WorksheetCellAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.cells.setMany": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.cells.setMany",
+      "stableId": "WorksheetCellAnnotations.setMany",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetCellAnnotations",
+      "member": "setMany",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setMany(entries: readonly WorksheetCellAnnotationWriteEntry[]): Promise<void>;",
+      "typeText": "Promise<void>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.getCell": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.getCell",
+      "stableId": "WorksheetAnnotations.getCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "getCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "getCell(cell: string): Promise<WorksheetAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.getTable": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.getTable",
+      "stableId": "WorksheetAnnotations.getTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "getTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "getTable(tableRef: string): Promise<WorksheetAnnotationRecord | null>;",
+      "typeText": "Promise<WorksheetAnnotationRecord|null>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.listCells": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.listCells",
+      "stableId": "WorksheetAnnotations.listCells",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "listCells",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "listCells(): Promise<WorksheetAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.listTables": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.listTables",
+      "stableId": "WorksheetAnnotations.listTables",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "listTables",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "listTables(): Promise<WorksheetAnnotationRecord[]>;",
+      "typeText": "Promise<WorksheetAnnotationRecord[]>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.removeCell": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.removeCell",
+      "stableId": "WorksheetAnnotations.removeCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "removeCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "removeCell(cell: string): Promise<WorksheetAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.removeTable": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.removeTable",
+      "stableId": "WorksheetAnnotations.removeTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "removeTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "removeTable(tableRef: string): Promise<WorksheetAnnotationDeleteResult>;",
+      "typeText": "Promise<WorksheetAnnotationDeleteResult>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.setCell": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.setCell",
+      "stableId": "WorksheetAnnotations.setCell",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "setCell",
+      "kind": "method",
+      "visibility": "deprecated",
+      "asyncModel": "promise",
+      "signature": "setCell(cell: string, text: string): Promise<WorksheetAnnotationRecord>;",
+      "typeText": "Promise<WorksheetAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
+    "ws.annotations.setTable": {
+      "schemaVersion": "1",
+      "path": "ws.annotations.setTable",
+      "stableId": "WorksheetAnnotations.setTable",
+      "root": "subApi",
+      "parentRoot": "worksheet",
+      "interface": "WorksheetAnnotations",
+      "member": "setTable",
+      "kind": "method",
+      "visibility": "public",
+      "asyncModel": "promise",
+      "signature": "setTable(tableRef: string, text: string): Promise<WorksheetAnnotationRecord>;",
+      "typeText": "Promise<WorksheetAnnotationRecord>",
+      "compatibility": [],
+      "source": {
+        "file": "types/api/src/api/worksheet/annotations.ts"
+      },
+      "ownerPackage": "@mog/types-api"
+    },
     "ws.autoFill": {
       "schemaVersion": "1",
       "path": "ws.autoFill",
@@ -35878,7 +36682,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCells(\n    cells: Array<{ addr: string; value: CellValuePrimitive | Date }>,\n  ): Promise<SetCellsResult>;",
+      "signature": "setCells(\n    cells: Array<{ addr: string; value: CellValuePrimitive | Date; annotation?: string | null }>,\n  ): Promise<SetCellsResult>;",
       "typeText": "Promise<SetCellsResult>",
       "compatibility": [],
       "source": {
@@ -35932,7 +36736,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFormula(address: string, formula: string): Promise<void>;",
+      "signature": "setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -35968,7 +36772,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setFormulas(range: string, formulas: string[][]): Promise<void>;",
+      "signature": "setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -36022,7 +36826,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>;",
+      "signature": "setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -36173,7 +36977,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,\n  ): Promise<void>;",
+      "signature": "setValue(\n    address: string,\n    value: CellValuePrimitive | Date,\n    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {

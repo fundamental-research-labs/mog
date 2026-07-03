@@ -190,6 +190,7 @@ const DEFAULT_SEARCH_LIMIT = 10;
 const MAX_SEARCH_LIMIT = 30;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 30_000;
 const MAX_EXECUTION_TIMEOUT_MS = 120_000;
+const SEARCH_STOP_TOKENS = new Set(['api', 'mog', 'native', 'public']);
 
 const apiSpec = rawApiSpec as ApiSpec;
 const apiGuidanceTargets = (rawApiGuidanceTargets as GeneratedApiGuidanceTargets).targets;
@@ -415,6 +416,9 @@ function ok(tool: string, result: unknown): DevAgentToolExecution {
 function searchMogApi(query: string, limit: number): ApiSearchHit[] {
   const queryTokens = expandQueryTokens(tokenize(query));
   const queryLower = query.trim().toLowerCase();
+  const queryMentionsAnnotation = queryTokens.has('annotation') || queryTokens.has('annotations');
+  const queryMentionsComments =
+    queryTokens.has('comment') || queryTokens.has('comments') || queryTokens.has('note');
 
   return apiGuidanceTargets
     .filter((target) => target.visibility === 'public' || target.visibility === 'deprecated')
@@ -423,6 +427,7 @@ function searchMogApi(query: string, limit: number): ApiSearchHit[] {
       const docstringText =
         described && 'docstring' in described ? (described.docstring ?? '') : '';
       const memberTokens = new Set(tokenize(target.member ?? target.path));
+      const pathTokens = new Set(tokenize(target.path));
       const haystack = [
         target.path,
         target.stableId,
@@ -456,6 +461,30 @@ function searchMogApi(query: string, limit: number): ApiSearchHit[] {
       if (memberTokens.has('cell') && queryTokens.has('cell')) score += 12;
       if (memberTokens.has('value') && queryTokens.has('value')) score += 8;
       if (memberTokens.has('set') && queryTokens.has('set')) score += 6;
+      if (
+        queryMentionsAnnotation &&
+        (pathTokens.has('annotation') ||
+          pathTokens.has('annotations') ||
+          haystackTokens.has('annotation') ||
+          haystackTokens.has('annotations'))
+      ) {
+        score += 14;
+      }
+      if (
+        queryMentionsAnnotation &&
+        queryTokens.has('cell') &&
+        target.path.startsWith('ws.annotations.cells')
+      ) {
+        score += 12;
+      }
+      if (
+        queryMentionsAnnotation &&
+        !queryMentionsComments &&
+        (target.path.includes('.comments') || target.path.includes('.notes'))
+      ) {
+        score -= 10;
+      }
+      if (target.visibility === 'deprecated') score -= 6;
       if (
         memberTokens.has('set') &&
         memberTokens.has('cell') &&
@@ -816,7 +845,7 @@ function tokenize(value: string): string[] {
   return camelToWords(value)
     .toLowerCase()
     .split(/[^a-z0-9]+/g)
-    .filter((token) => token.length > 1);
+    .filter((token) => token.length > 1 && !SEARCH_STOP_TOKENS.has(token));
 }
 
 function camelToWords(value: string): string {
@@ -825,6 +854,10 @@ function camelToWords(value: string): string {
 
 function expandQueryTokens(tokens: readonly string[]): Set<string> {
   const expanded = new Set(tokens);
+  for (const token of tokens) {
+    if (token.endsWith('s') && token.length > 3) expanded.add(token.slice(0, -1));
+    else if (token.length > 2) expanded.add(`${token}s`);
+  }
   if (tokens.some((token) => /^[a-z]{1,3}[0-9]{1,7}$/i.test(token))) {
     for (const token of ['cell', 'address', 'worksheet', 'value']) expanded.add(token);
   }
@@ -836,6 +869,13 @@ function expandQueryTokens(tokens: readonly string[]): Set<string> {
   }
   if (tokens.some((token) => ['formula', 'calculate', 'calculation'].includes(token))) {
     for (const token of ['formula', 'evaluate', 'recalc']) expanded.add(token);
+  }
+  if (
+    tokens.some((token) =>
+      ['annotate', 'annotates', 'annotation', 'annotations'].includes(token),
+    )
+  ) {
+    for (const token of ['annotation', 'annotations', 'annotate', 'review']) expanded.add(token);
   }
   return expanded;
 }

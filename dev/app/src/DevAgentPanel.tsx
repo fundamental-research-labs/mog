@@ -482,7 +482,7 @@ async function runAgentConversation({
   const toolSession = createDevAgentToolSession();
   let toolMode: 'native' | 'fallback' = 'native';
 
-  for (let iteration = 0; iteration < 6; iteration += 1) {
+  while (true) {
     const streamToTranscript = toolMode === 'native';
     let bufferedContent = '';
     const captureDelta = (delta: string) => {
@@ -561,8 +561,6 @@ async function runAgentConversation({
 
     ensureTurnSeparator();
   }
-
-  throw new Error('Stopped after 6 Mog tool iterations without a final answer.');
 }
 
 export function DevAgentPanel({ shell, onClose }: DevAgentPanelProps): React.JSX.Element {

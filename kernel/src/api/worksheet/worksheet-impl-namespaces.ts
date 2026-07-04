@@ -182,7 +182,7 @@ export class WorksheetImplNamespaces extends WorksheetImplBatchApi {
             type: 'sheet:deactivated',
             sheetId: this.sheetId,
             name: this.name,
-            timestamp: Date.now(),
+            timestamp: this.ctx.clock.now(),
           });
         }
       });

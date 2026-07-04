@@ -202,7 +202,7 @@ export class WorksheetAnnotationsImpl implements WorksheetAnnotations {
   ): void {
     this.ctx.eventBus.emit({
       type: 'cellAnnotation:changed',
-      timestamp: Date.now(),
+      timestamp: this.ctx.clock.now(),
       sheetId: this.sheetId,
       row,
       col,
@@ -216,7 +216,7 @@ export class WorksheetAnnotationsImpl implements WorksheetAnnotations {
   private _emitCellAnnotationsCleared(range?: CellRange): void {
     this.ctx.eventBus.emit({
       type: 'cellAnnotations:cleared',
-      timestamp: Date.now(),
+      timestamp: this.ctx.clock.now(),
       sheetId: this.sheetId,
       ...(range ? { range: normalizeRange(range) } : {}),
       source: 'api',

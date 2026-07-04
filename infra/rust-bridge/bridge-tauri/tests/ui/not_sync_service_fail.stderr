@@ -75,22 +75,6 @@ error[E0599]: the method `with_read` exists for struct `State<'_, TauriRegistry<
            which is required by `NotSyncService: Sync`
    = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0282]: type annotations needed
-  --> tests/ui/not_sync_service_fail.rs:22:9
-   |
-22 | /         $gen! {
-23 | |             bridge_version = 1;
-24 | |             group = ops;
-25 | |             service = NotSyncService;
-...  |
-36 | |         }
-   | |_________^ cannot infer type
-...
-40 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSyncService_ops);
-   |   ---------------------------------------------------------------------- in this macro invocation
-   |
-   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
-
 error[E0599]: the method `remove` exists for struct `State<'_, TauriRegistry<NotSyncService>>`, but its trait bounds were not satisfied
   --> tests/ui/not_sync_service_fail.rs:22:9
    |

@@ -100,6 +100,8 @@ const RUST_ONLY_ALLOWED: Record<string, string> = {
     'ECMA-376 charset attribute — preserved for XLSX round-trip fidelity, not exposed to TS UI',
   fontFamilyType:
     'ECMA-376 font family type / pitch — preserved for XLSX round-trip fidelity, not exposed to TS UI',
+  pivotButton:
+    'ECMA-376 pivotButton attribute — preserved for XLSX round-trip fidelity, not exposed to TS UI',
   quotePrefix:
     'ECMA-376 quotePrefix attribute — TS uses forcedTextMode for the same concept (different name)',
 };

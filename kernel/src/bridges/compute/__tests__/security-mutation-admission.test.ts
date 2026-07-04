@@ -31,7 +31,7 @@ function createStartedBridge(ctx: IKernelContext, transport: BridgeTransport): C
 }
 
 describe('security mutation admission', () => {
-  it('rejects blocked security mutators before transport execution', async () => {
+  it('admits security mutators to transport without version-history capture', async () => {
     const diagnostics: MutationAdmissionDiagnostic[] = [];
     const ctx = makeMockContext({
       versioningAdmissionDiagnostics: {
@@ -39,37 +39,56 @@ describe('security mutation admission', () => {
       },
     } as unknown as Partial<IKernelContext>);
     const transport: BridgeTransport & { call: jest.Mock } = {
-      call: jest.fn(async () => undefined),
+      call: jest.fn(async (command: string) => {
+        if (command === 'compute_wb_security_add_policy') return 'policy-1';
+        if (command === 'compute_wb_security_apply_template') return ['policy-2'];
+        return undefined;
+      }),
     };
     const bridge = createStartedBridge(ctx, transport);
 
-    await expect(bridge.wbSecurityAddPolicy({ id: 'policy-1' })).rejects.toThrow(
-      "VC-02 admission blocked 'compute_wb_security_add_policy' before transport execution.",
-    );
-    await expect(bridge.wbSecurityRemovePolicy('policy-1')).rejects.toThrow(
-      "VC-02 admission blocked 'compute_wb_security_remove_policy' before transport execution.",
-    );
-    await expect(bridge.wbSecurityUpdatePolicy('policy-1', { effect: 'allow' })).rejects.toThrow(
-      "VC-02 admission blocked 'compute_wb_security_update_policy' before transport execution.",
-    );
-    await expect(bridge.wbSecurityApplyTemplate({ id: 'template-1' })).rejects.toThrow(
-      "VC-02 admission blocked 'compute_wb_security_apply_template' before transport execution.",
-    );
-    await expect(bridge.wbSecurityRemoveTemplate('template-1')).rejects.toThrow(
-      "VC-02 admission blocked 'compute_wb_security_remove_template' before transport execution.",
-    );
+    await expect(bridge.wbSecurityAddPolicy({ id: 'policy-1' })).resolves.toBe('policy-1');
+    await expect(bridge.wbSecurityRemovePolicy('policy-1')).resolves.toBeUndefined();
+    await expect(
+      bridge.wbSecurityUpdatePolicy('policy-1', { effect: 'allow' }),
+    ).resolves.toBeUndefined();
+    await expect(bridge.wbSecurityApplyTemplate({ id: 'template-1' })).resolves.toEqual([
+      'policy-2',
+    ]);
+    await expect(bridge.wbSecurityRemoveTemplate('template-1')).resolves.toBeUndefined();
 
     expect(diagnostics).toEqual([
-      blockedDiagnostic('compute_wb_security_add_policy'),
-      blockedDiagnostic('compute_wb_security_remove_policy'),
-      blockedDiagnostic('compute_wb_security_update_policy'),
-      blockedDiagnostic('compute_wb_security_apply_template'),
-      blockedDiagnostic('compute_wb_security_remove_template'),
+      noHistoryDiagnostic('compute_wb_security_add_policy'),
+      noHistoryDiagnostic('compute_wb_security_remove_policy'),
+      noHistoryDiagnostic('compute_wb_security_update_policy'),
+      noHistoryDiagnostic('compute_wb_security_apply_template'),
+      noHistoryDiagnostic('compute_wb_security_remove_template'),
     ]);
-    expect(transport.call).not.toHaveBeenCalled();
+    expect(transport.call).toHaveBeenCalledTimes(5);
+    expect(transport.call).toHaveBeenCalledWith('compute_wb_security_add_policy', {
+      docId: 'test-doc',
+      policy: { id: 'policy-1' },
+    });
+    expect(transport.call).toHaveBeenCalledWith('compute_wb_security_remove_policy', {
+      docId: 'test-doc',
+      id: 'policy-1',
+    });
+    expect(transport.call).toHaveBeenCalledWith('compute_wb_security_update_policy', {
+      docId: 'test-doc',
+      id: 'policy-1',
+      patch: { effect: 'allow' },
+    });
+    expect(transport.call).toHaveBeenCalledWith('compute_wb_security_apply_template', {
+      docId: 'test-doc',
+      template: { id: 'template-1' },
+    });
+    expect(transport.call).toHaveBeenCalledWith('compute_wb_security_remove_template', {
+      docId: 'test-doc',
+      templateId: 'template-1',
+    });
   });
 
-  it('keeps security reads and session principal plumbing outside blocked write admission', async () => {
+  it('keeps security reads and session principal plumbing outside write admission', async () => {
     const ctx = makeMockContext();
     const transport: BridgeTransport & { call: jest.Mock } = {
       call: jest.fn(async (command: string) => {
@@ -108,11 +127,15 @@ describe('security mutation admission', () => {
   });
 });
 
-function blockedDiagnostic(command: string): unknown {
+function noHistoryDiagnostic(command: string): unknown {
   return expect.objectContaining({
-    code: 'versioning.admission.blocked-write',
-    severity: 'error',
+    code: 'versioning.admission.missing-context',
+    severity: 'warning',
     command,
-    classification: expect.objectContaining({ writeAdmissionMode: 'block' }),
+    classification: expect.objectContaining({
+      capturePolicy: 'excluded',
+      domainClass: 'secret',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+    }),
   });
 }

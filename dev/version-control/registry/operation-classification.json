@@ -47,8 +47,8 @@
     "baseCommit": "5f272c766228d54ffe6ca504b746e580a20ad3fc",
     "sourceDigest": "sha256:034c99758e04f8be713ff4ced7bc9c744633180a5548752d3068bb132496cc2c",
     "coverageExpectation": {
-      "entryCount": 304,
-      "uniqueCommandCount": 296,
+      "entryCount": 308,
+      "uniqueCommandCount": 300,
       "duplicateCommands": [
         "compute_add_comment_by_position",
         "compute_apply_sync_update",
@@ -322,23 +322,22 @@
       }
     },
     {
-      "ruleId": "secret-direct-compute-prefix",
+      "ruleId": "secret-no-history-prefix",
       "match": {
         "type": "prefix",
         "prefixes": ["compute_wb_security_"]
       },
       "classification": {
         "invocation": {
-          "mode": "fixed",
-          "value": "direct-compute-api"
+          "mode": "hint-with-default",
+          "default": "public-mutation"
         },
         "operationKind": "mutation",
         "domainClass": "secret",
         "capturePolicy": "excluded",
-        "writeAdmissionMode": "block",
-        "rationale": "Security-policy mutation payloads are not admitted to version capture in this slice."
-      },
-      "modeOverrideRationale": "Secret-bearing security writes use the excluded capture policy but block transport instead of merely disabling history capture."
+        "writeAdmissionMode": "captureDisabledNoHistory",
+        "rationale": "Security-policy mutation payloads are admitted to the security engine but excluded from version capture."
+      }
     },
     {
       "ruleId": "shadow-only-prefix",
@@ -484,7 +483,7 @@
       "coveragePurpose": "Runtime control-plane state is observed without authored capture."
     },
     {
-      "classId": "blocked-secret-write",
+      "classId": "secret-no-history-write",
       "command": "compute_wb_security_add_policy",
       "inventoryWrapper": "direct-compute-api",
       "expected": {
@@ -492,9 +491,9 @@
         "operationKind": "mutation",
         "domainClass": "secret",
         "capturePolicy": "excluded",
-        "writeAdmissionMode": "block"
+        "writeAdmissionMode": "captureDisabledNoHistory"
       },
-      "coveragePurpose": "Secret-bearing security writes are blocked before transport."
+      "coveragePurpose": "Secret-bearing security writes reach the security engine but do not enter version-history capture."
     }
   ],
   "diagnostics": {

@@ -83,7 +83,7 @@ const SHADOW_ONLY_EXACT_COMMANDS = new Set([
   'compute_update_viewport_bounds',
 ]);
 
-const BLOCKED_SECRET_PREFIXES = ['compute_wb_security_'];
+const SECRET_NO_HISTORY_PREFIXES = ['compute_wb_security_'];
 
 const SHADOW_ONLY_PREFIXES = [
   'compute_set_calculation',
@@ -198,15 +198,15 @@ export function classifyWriteOperation(
     });
   }
 
-  if (hasAnyPrefix(command, BLOCKED_SECRET_PREFIXES)) {
+  if (hasAnyPrefix(command, SECRET_NO_HISTORY_PREFIXES)) {
     return withCommand(command, {
-      invocation: 'direct-compute-api',
+      invocation: invocationHint ?? 'public-mutation',
       operationKind: 'mutation',
       domainClass: 'secret',
       capturePolicy: 'excluded',
-      writeAdmissionMode: 'block',
+      writeAdmissionMode: 'captureDisabledNoHistory',
       rationale:
-        'Security-policy mutation payloads are not admitted to version capture in this slice.',
+        'Security-policy mutation payloads are admitted to the security engine but excluded from version capture.',
     });
   }
 

@@ -60,7 +60,7 @@
       "class": "native compute-api write",
       "command": "compute_wb_security_add_policy",
       "capturePolicy": "excluded",
-      "writeAdmissionMode": "block"
+      "writeAdmissionMode": "captureDisabledNoHistory"
     }
   ]
 }

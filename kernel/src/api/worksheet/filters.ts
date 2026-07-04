@@ -42,6 +42,11 @@ import { KernelError } from '../../errors';
 
 import type { DocumentContext } from '../../context';
 import { parseCellRange, toA1 } from '../internal/utils';
+import {
+  findExistingFilterForRange,
+  resolveDefaultFilter,
+  selectDefaultFilter,
+} from './filter-selection';
 import { resolveFilterRange } from './filter-range-resolution';
 import {
   applyDynamicFilterWithReceipt,
@@ -344,10 +349,10 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
    */
   private async resolveFilterId(filterId?: string): Promise<string> {
     if (filterId) return filterId;
-    const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-    if (filters.length === 0)
+    const filter = await resolveDefaultFilter(this.ctx, this.sheetId);
+    if (!filter)
       throw new KernelError('COMPUTE_ERROR', 'No auto-filter set. Call setAutoFilter() first.');
-    return filters[0].id;
+    return filter.id;
   }
 
   /** Standard alias for {@link setAutoFilter}. */
@@ -418,77 +423,66 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   /** @deprecated Use {@link add} instead. */
   async setAutoFilter(range: string | CellRange): Promise<AutoFilterSetReceipt> {
     await this.awaitAllMaterialized();
-    if (typeof range === 'string') {
-      const parsed = parseCellRange(range);
-      if (!parsed) throw new KernelError('COMPUTE_ERROR', `Invalid range: "${range}"`);
-      await assertNoProtectedTableFilterCreation(this.ctx, this.sheetId, 'filters.add', parsed);
+    const parsed =
+      typeof range === 'string'
+        ? parseCellRange(range)
+        : range.startRow < 0 ||
+            range.startCol < 0 ||
+            range.endRow < range.startRow ||
+            range.endCol < range.startCol
+          ? null
+          : range;
 
-      await this.ctx.computeBridge.createFilter(this.sheetId, {
-        startRow: parsed.startRow,
-        startCol: parsed.startCol,
-        endRow: parsed.endRow,
-        endCol: parsed.endCol,
-      });
+    if (!parsed) {
+      const display =
+        typeof range === 'string'
+          ? `"${range}"`
+          : `(${range.startRow}, ${range.startCol}) to (${range.endRow}, ${range.endCol})`;
+      throw new KernelError('COMPUTE_ERROR', `Invalid range: ${display}`);
+    }
+
+    const rangeStr =
+      typeof range === 'string'
+        ? range
+        : `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
+
+    const existing = await findExistingFilterForRange(this.ctx, this.sheetId, parsed);
+    if (existing) {
       return {
         kind: 'autoFilterSet',
-        status: 'applied',
-        effects: [
-          {
-            type: 'createdObject',
-            sheetId: this.sheetId,
-            range,
-            details: { objectType: 'filter' },
-          },
-          {
-            type: 'changedFilterProjection',
-            sheetId: this.sheetId,
-            range,
-          },
-        ],
-        diagnostics: [],
-        range,
-      };
-    } else {
-      if (
-        range.startRow < 0 ||
-        range.startCol < 0 ||
-        range.endRow < range.startRow ||
-        range.endCol < range.startCol
-      ) {
-        throw new KernelError(
-          'COMPUTE_ERROR',
-          `Invalid range: (${range.startRow}, ${range.startCol}) to (${range.endRow}, ${range.endCol})`,
-        );
-      }
-
-      await assertNoProtectedTableFilterCreation(this.ctx, this.sheetId, 'filters.add', range);
-      await this.ctx.computeBridge.createFilter(this.sheetId, {
-        startRow: range.startRow,
-        startCol: range.startCol,
-        endRow: range.endRow,
-        endCol: range.endCol,
-      });
-      const rangeStr = `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`;
-      return {
-        kind: 'autoFilterSet',
-        status: 'applied',
-        effects: [
-          {
-            type: 'createdObject',
-            sheetId: this.sheetId,
-            range: rangeStr,
-            details: { objectType: 'filter' },
-          },
-          {
-            type: 'changedFilterProjection',
-            sheetId: this.sheetId,
-            range: rangeStr,
-          },
-        ],
+        status: 'noOp',
+        effects: [],
         diagnostics: [],
         range: rangeStr,
       };
     }
+
+    await assertNoProtectedTableFilterCreation(this.ctx, this.sheetId, 'filters.add', parsed);
+    await this.ctx.computeBridge.createFilter(this.sheetId, {
+      startRow: parsed.startRow,
+      startCol: parsed.startCol,
+      endRow: parsed.endRow,
+      endCol: parsed.endCol,
+    });
+    return {
+      kind: 'autoFilterSet',
+      status: 'applied',
+      effects: [
+        {
+          type: 'createdObject',
+          sheetId: this.sheetId,
+          range: rangeStr,
+          details: { objectType: 'filter' },
+        },
+        {
+          type: 'changedFilterProjection',
+          sheetId: this.sheetId,
+          range: rangeStr,
+        },
+      ],
+      diagnostics: [],
+      range: rangeStr,
+    };
   }
 
   /** @deprecated Use {@link clear} instead. */
@@ -528,16 +522,16 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
   /** @deprecated Use {@link get} instead. */
   async getAutoFilter(): Promise<FilterState | null> {
     await this.awaitSheetMaterialized();
-    const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-    if (filters.length === 0) return null;
-    const filter = filters[0];
+    const filter = await resolveDefaultFilter(this.ctx, this.sheetId);
+    if (!filter) return null;
+    const range = await resolveFilterRange(this.ctx, this.sheetId, filter);
     const rawFilters = filter.columnFilters ?? {};
     const converted: Record<string, ColumnFilterCriteria> = {};
     for (const [key, cf] of Object.entries(rawFilters)) {
       converted[key] = computeColumnFilterToCriteria(cf);
     }
     return {
-      range: `${toA1(filter.startRow ?? 0, filter.startCol ?? 0)}:${toA1(filter.endRow ?? 0, filter.endCol ?? 0)}`,
+      range: `${toA1(range.startRow, range.startCol)}:${toA1(range.endRow, range.endCol)}`,
       columnFilters: converted,
     };
   }
@@ -605,15 +599,17 @@ export class WorksheetFiltersImpl implements WorksheetFilters {
     if (filterId) {
       return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filterId, col);
     }
-    const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-    if (filters.length === 0) return [];
-    return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filters[0].id, col);
+    const filter = await resolveDefaultFilter(this.ctx, this.sheetId);
+    if (!filter) return [];
+    return this.ctx.computeBridge.getUniqueColumnValues(this.sheetId, filter.id, col);
   }
 
   async getFilterDropdownData(col: number, filterId?: string): Promise<FilterDropdownData> {
     await this.awaitSheetMaterialized();
     const filters = await this.ctx.computeBridge.getFiltersInSheet(this.sheetId);
-    const filter = filterId ? filters.find((candidate) => candidate.id === filterId) : filters[0];
+    const filter = filterId
+      ? filters.find((candidate) => candidate.id === filterId)
+      : selectDefaultFilter(filters);
     if (!filter) return EMPTY_FILTER_DROPDOWN_DATA;
 
     const range = await resolveFilterRange(this.ctx, this.sheetId, filter);

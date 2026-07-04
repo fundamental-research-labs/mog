@@ -335,7 +335,7 @@ export interface ApplyScenarioResult { baselineId: string; documentId?: string; 
 export interface AutoFillApplyReceipt extends OperationReceiptBase, AutoFillResult { readonly kind: 'autofill.apply'; readonly status: 'applied' | 'noOp'; readonly mode: AutoFillMode; }
 export interface AutoFillPreviewReceipt extends OperationReceiptBase, AutoFillPreviewResult { readonly kind: 'autofill.preview'; readonly status: 'completed'; readonly mode: AutoFillMode; readonly wor ...
 export interface AutoFilterClearReceipt extends OperationReceiptBase { readonly kind: 'autoFilterClear'; readonly status: 'applied' | 'noOp'; readonly clearedCount: number; }
-export interface AutoFilterSetReceipt extends OperationReceiptBase { readonly kind: 'autoFilterSet'; readonly status: 'applied'; readonly range: string; }
+export interface AutoFilterSetReceipt extends OperationReceiptBase { readonly kind: 'autoFilterSet'; readonly status: 'applied' | 'noOp'; readonly range: string; }
 export interface AxisLayout extends ElementBounds { channel: string; }
 export interface BinaryCellData { row: number; col: number; /** Raw binary payload for direct rendering. */ data?: ArrayBuffer; }
 export interface BinaryCellReader { moveTo(row: number, col: number): boolean; readonly valueType: number; readonly numberValue: number; readonly displayText: FormattedText | null; readonly errorText: ...
@@ -1217,7 +1217,7 @@ export function isFloatingObjectMutationReceipt(receipt: MutationReceipt): recei
 export function isFloatingObjectReceipt(receipt: MutationReceipt): receipt is FloatingObjectReceipt
 export function isFloatingObjectRemoveReceipt(receipt: MutationReceipt): receipt is FloatingObjectRemoveReceipt
 export interface AutoFilterClearReceipt extends OperationReceiptBase { readonly kind: 'autoFilterClear'; readonly status: 'applied' | 'noOp'; readonly clearedCount: number; }
-export interface AutoFilterSetReceipt extends OperationReceiptBase { readonly kind: 'autoFilterSet'; readonly status: 'applied'; readonly range: string; }
+export interface AutoFilterSetReceipt extends OperationReceiptBase { readonly kind: 'autoFilterSet'; readonly status: 'applied' | 'noOp'; readonly range: string; }
 export interface ChartActivateReceipt extends OperationReceiptBase { readonly kind: 'chart.activate'; readonly status: 'applied'; readonly chartId: string; }
 export interface ChartAddReceipt extends OperationReceiptBase { readonly kind: 'chart.add'; readonly status: 'applied'; readonly chart: Chart; }
 export interface ChartDuplicateReceipt extends OperationReceiptBase { readonly kind: 'chart.duplicate'; readonly status: 'applied'; readonly sourceChartId: string; readonly chart: Chart; }

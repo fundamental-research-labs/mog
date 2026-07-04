@@ -247,6 +247,7 @@ const Merges = await import('../../domain/formatting/merges');
 // ---------------------------------------------------------------------------
 
 const SHEET_ID = sheetId('sheet-1');
+const TEST_NOW = 1_700_000_000_000;
 
 function expectVersionOperationOptions(operationIdPrefix: string, domainIds: readonly string[]) {
   return expect.objectContaining({
@@ -284,6 +285,7 @@ function createMockCtx(): any {
     writeGate: {
       assertWritable: jest.fn(),
     },
+    clock: { now: jest.fn(() => TEST_NOW), dateNow: jest.fn(() => TEST_NOW) },
     eventBus: {
       emit: jest.fn(),
       onMany: jest.fn(() => jest.fn()),

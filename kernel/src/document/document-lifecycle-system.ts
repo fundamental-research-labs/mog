@@ -174,8 +174,8 @@ export interface DocumentLifecycleConfigLegacy {
 
   /**
    * Runtime environment. Determines which bridges and services are booted.
-   * - 'browser': Full environment — IndexedDB persistence, schema bridge, DOM/Canvas stubs available
-   * - 'headless': Minimal environment — no persistence, no schema bridge, no-op DOM/Canvas stubs
+   * - 'browser': Full environment — IndexedDB persistence, DOM/Canvas stubs available
+   * - 'headless': Minimal environment — no persistence, no-op DOM/Canvas stubs
    * Default: 'browser' (preserves existing behavior)
    */
   environment?: 'browser' | 'headless';
@@ -2033,9 +2033,10 @@ export class DocumentLifecycleSystem {
     input.computeBridge.setWriteGate(writeGate);
     this._writeGate = writeGate;
 
-    // Schema bridge: start() deferred from createDocumentContext.
-    // In headless mode, schema bridge is not started (no schema validation needed).
-    if (this.environment !== 'headless' && input.documentContext) {
+    // Schema bridge: start() deferred from createDocumentContext. Headless
+    // SDK/API consumers still rely on validation metadata reads such as
+    // ws.validations.getErrorsInRange(), so this bridge is environment-neutral.
+    if (input.documentContext) {
       input.documentContext.schema.start();
     }
 

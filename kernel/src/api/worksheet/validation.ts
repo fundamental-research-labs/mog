@@ -24,7 +24,6 @@ import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/
 import type { RangeSchema } from '../../bridges/compute/compute-bridge';
 import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
-import * as Properties from '../../domain/cells/cell-properties';
 import { KernelError } from '../../errors';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import { createVersionOperationContext } from '../internal/version-operation-context';
@@ -77,6 +76,14 @@ function receivedType(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
   return typeof value;
+}
+
+function validationTextForCellValue(value: unknown): string | null {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return null;
 }
 
 function rangeCellCount(range: CellRange): number {
@@ -784,11 +791,39 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     endCol: number,
   ): Promise<Array<{ row: number; col: number }>> {
     this._assertLive('validation.getErrorsInRange');
-    return Properties.queryByMetadata(
-      this.ctx,
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+
+    const range = await this.ctx.computeBridge.queryRange(
       this.sheetId,
-      (meta) => (meta.validationErrors?.length ?? 0) > 0,
-      { startRow, startCol, endRow, endCol },
+      minRow,
+      minCol,
+      maxRow,
+      maxCol,
     );
+    const cells = range?.cells ?? [];
+    const errors: Array<{ row: number; col: number }> = [];
+
+    for (const cell of cells) {
+      const value = validationTextForCellValue(cell.value);
+      if (value == null) continue;
+
+      const listResult = await this.validateResolvedListValue(cell.row, cell.col, value);
+      const result =
+        listResult ??
+        (await this.ctx.computeBridge.validateCellValueInDoc(
+          this.sheetId,
+          cell.row,
+          cell.col,
+          value,
+        ));
+      if (!result.valid) {
+        errors.push({ row: cell.row, col: cell.col });
+      }
+    }
+
+    return errors;
   }
 }

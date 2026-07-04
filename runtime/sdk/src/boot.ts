@@ -3,8 +3,8 @@
  *
  * Thin shim that delegates to DocumentLifecycleSystem via DocumentFactory.
  * DocumentLifecycleSystem accepts `{ environment: 'headless' }` and handles
- * all headless-specific behavior (skipPersistenceLoad, no schema bridge,
- * headless environment stubs, NAPI transport auto-detection).
+ * all headless-specific behavior (skipPersistenceLoad, headless environment
+ * stubs, NAPI transport auto-detection).
  *
  * Architecture:
  * - Uses `DocumentFactory.create({ environment: 'headless' })` for blank documents

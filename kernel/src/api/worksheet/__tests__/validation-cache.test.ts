@@ -383,6 +383,48 @@ describe('WorksheetValidationImpl sheet cache', () => {
   });
 });
 
+describe('WorksheetValidationImpl getErrorsInRange', () => {
+  it('validates live cell values inside normalized range bounds', async () => {
+    const ctx = createCtx();
+    (ctx.computeBridge.queryRange as jest.Mock).mockResolvedValue({
+      cells: [
+        { row: 0, col: 0, value: 'hello' },
+        { row: 0, col: 1, value: 42 },
+        { row: 0, col: 2, value: { type: 'Error', code: '#VALUE!' } },
+      ],
+      merges: [],
+    });
+    (ctx.computeBridge.validateCellValueInDoc as jest.Mock).mockImplementation(
+      async (_sheetId: string, row: number, col: number) => ({
+        valid: !(row === 0 && col === 0),
+        enforcement: col === 0 ? 'warning' : 'none',
+      }),
+    );
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.getErrorsInRange(0, 2, 0, 0)).resolves.toEqual([
+      { row: 0, col: 0 },
+    ]);
+
+    expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 0, 2);
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenCalledTimes(2);
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      0,
+      0,
+      'hello',
+    );
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      0,
+      1,
+      '42',
+    );
+  });
+});
+
 describe('WorksheetValidationImpl list validation', () => {
   function makeRangeBackedListSchema(overrides: Partial<RangeSchema> = {}): RangeSchema {
     return makeSchema({

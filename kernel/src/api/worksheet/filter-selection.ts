@@ -98,7 +98,7 @@ export async function findExistingFilterForRange(
   const filters = await ctx.computeBridge.getFiltersInSheet(sheetId);
   const matches: ComputeFilterState[] = [];
   for (const filter of filters) {
-    if (filter.type !== 'autoFilter' && filter.type !== 'tableFilter') continue;
+    if (filter.type !== 'autoFilter') continue;
     const resolved = await resolveFilterRange(ctx, sheetId, filter);
     if (rangesEqual(resolved, range)) {
       matches.push(filter);

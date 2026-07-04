@@ -1,7 +1,7 @@
 use super::helpers::*;
 use crate::storage::engine::YrsComputeEngine;
 use compute_wire::constants::{MUTATION_HEADER_SIZE, PATCH_STRIDE};
-use domain_types::{CellFormat, ColStyleRange, DocumentFormat, FontFormat, ParseOutput, SheetData};
+use domain_types::CellFormat;
 
 fn patch_display_text_at(mutation_bytes: &[u8], row: u32, col: u32) -> Option<String> {
     let patch_count = u32::from_le_bytes([
@@ -164,41 +164,25 @@ fn formula_format_inheritance_is_undone_with_formula_edit() {
 
 #[test]
 fn bulk_value_paste_formats_formula_dependents_with_sparse_column_style_range() {
-    let output = ParseOutput {
-        style_palette: vec![
-            DocumentFormat::default(),
-            DocumentFormat {
-                number_format: Some("\"$\"#,##0.0_);\\(\"$\"#,##0.0\\)".to_string()),
-                font: Some(FontFormat {
-                    bold: Some(true),
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-        ],
-        sheets: vec![SheetData {
-            name: "Sheet1".to_string(),
-            rows: 64,
-            cols: 8,
-            col_style_ranges: vec![ColStyleRange {
-                start_col: 2,
-                end_col: 3,
-                style_id: 1,
-            }],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-    let mut engine = engine_from_parse_output_normal(&output);
-    let sid = *engine
-        .mirror()
-        .sheet_ids()
-        .next()
-        .expect("hydrated sheet id");
+    let snap = simple_snapshot();
+    let (mut engine, _) = YrsComputeEngine::from_snapshot(snap).unwrap();
+    let sid = sheet_id();
 
     engine
         .register_viewport("main", &sid, 0, 0, 40, 8)
         .expect("register viewport");
+    engine
+        .set_col_format_range(
+            &sid,
+            2,
+            3,
+            CellFormat {
+                number_format: Some("\"$\"#,##0.0_);\\(\"$\"#,##0.0\\)".to_string()),
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("set sparse column format range");
     engine
         .set_cell_values_parsed(&sid, vec![(17, 2, "58.8".to_string())])
         .expect("seed denominator");

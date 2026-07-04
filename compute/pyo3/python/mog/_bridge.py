@@ -85,7 +85,7 @@ class Bridge:
         """
         ComputeEngine = _get_engine_class()
         try:
-            engine = ComputeEngine(snapshot_json)
+            engine = ComputeEngine(snapshot_json, json.dumps(None))
             # The constructor stores the lifecycle result; retrieve it.
             lifecycle_raw = engine.take_lifecycle_result()
             lifecycle = json.loads(lifecycle_raw) if isinstance(lifecycle_raw, str) else lifecycle_raw

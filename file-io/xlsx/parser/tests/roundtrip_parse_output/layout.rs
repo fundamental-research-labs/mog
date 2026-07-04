@@ -380,7 +380,7 @@ fn regenerated_row_layout_flags_come_from_modeled_state() {
         .split("<row ")
         .find(|row| row.contains(r#"r="3""#))
         .expect("row 3 should be regenerated from modeled row layout state");
-    assert!(styled_hidden_row.contains(r#"s="1""#));
+    assert!(styled_hidden_row.contains(r#"s="0""#));
     assert!(styled_hidden_row.contains(r#"customFormat="1""#));
     assert!(styled_hidden_row.contains(r#"ht="24""#));
     assert!(styled_hidden_row.contains(r#"hidden="1""#));

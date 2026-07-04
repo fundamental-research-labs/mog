@@ -41,12 +41,6 @@ pub(super) struct StyleExportPlan {
 pub(super) fn build_style_export_plan(output: &ParseOutput) -> StyleExportPlan {
     let palette = if output_references_style_ids(output) {
         output.style_palette.as_slice()
-    } else if output
-        .style_palette
-        .first()
-        .is_some_and(|fmt| fmt != &domain_types::DocumentFormat::default())
-    {
-        &output.style_palette[..1]
     } else {
         &[]
     };

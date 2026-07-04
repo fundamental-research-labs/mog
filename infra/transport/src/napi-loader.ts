@@ -25,9 +25,9 @@ function getRequire(): NodeRequire {
  * Extended addon module type — includes the ComputeEngine constructor.
  */
 export type NapiAddonModule = NapiAddon & {
-  ComputeEngine: (new (snapshotJson: string) => NapiComputeEngine) & {
+  ComputeEngine: (new (snapshotJson: string, layoutMetricsJson: string) => NapiComputeEngine) & {
     /** Factory method: create engine from raw Yrs state bytes (collaboration). */
-    initFromYrsState?: (state: Buffer) => NapiComputeEngine;
+    initFromYrsState?: (state: Buffer, layoutMetricsJson: string) => NapiComputeEngine;
   };
 };
 

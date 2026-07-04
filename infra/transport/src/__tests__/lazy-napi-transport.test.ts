@@ -13,10 +13,27 @@ function createMockEngineClass() {
 
   class MockEngine {
     public snapshotJson: string;
+    public layoutMetricsJson: string;
+    static fromYrsStateCalls: Array<{
+      readonly state: Buffer;
+      readonly layoutMetricsJson: string;
+      readonly engine: MockEngine;
+    }> = [];
 
-    constructor(snapshotJson: string) {
+    constructor(snapshotJson: string, layoutMetricsJson: string) {
       this.snapshotJson = snapshotJson;
+      this.layoutMetricsJson = layoutMetricsJson;
       instances.push(this);
+    }
+
+    static initFromYrsState(state: Buffer, layoutMetricsJson: string): MockEngine {
+      const engine = new MockEngine('from-yrs-state', layoutMetricsJson);
+      MockEngine.fromYrsStateCalls.push({ state, layoutMetricsJson, engine });
+      return engine;
+    }
+
+    takeLifecycleResult(): string {
+      return JSON.stringify({ sheet_ids: ['from-state'] });
     }
 
     compute_take_init_result(): string {
@@ -35,7 +52,9 @@ function createMockEngineClass() {
   return { MockEngine, instances };
 }
 
-function createMockAddon(EngineClass?: new (snapshotJson: string) => unknown): NapiAddonModule {
+function createMockAddon(
+  EngineClass?: new (snapshotJson: string, layoutMetricsJson: string) => unknown,
+): NapiAddonModule {
   const { MockEngine } = createMockEngineClass();
   return {
     ComputeEngine: (EngineClass ?? MockEngine) as NapiAddonModule['ComputeEngine'],
@@ -82,6 +101,23 @@ describe('createLazyNapiTransport', () => {
 
       expect(instances).toHaveLength(1);
       expect(instances[0].snapshotJson).toBe(JSON.stringify(snapshot));
+      expect(instances[0].layoutMetricsJson).toBe(JSON.stringify(null));
+    });
+
+    it('should pass layout metrics to the engine constructor', async () => {
+      const { MockEngine, instances } = createMockEngineClass();
+      const addon = createMockAddon(MockEngine);
+      const transport = createLazyNapiTransport(addon);
+
+      const layoutMetrics = { fontScale: 1.1, defaultDpi: 144 };
+      await transport.call('compute_init', {
+        docId: 'doc1',
+        snapshot: {},
+        layoutMetrics,
+      });
+
+      expect(instances).toHaveLength(1);
+      expect(instances[0].layoutMetricsJson).toBe(JSON.stringify(layoutMetrics));
     });
 
     it('should return the parsed init result with camelCase keys', async () => {
@@ -115,7 +151,7 @@ describe('createLazyNapiTransport', () => {
 
     it('should return undefined when engine produces no init result', async () => {
       class NoInitResultEngine {
-        constructor(_snapshotJson: string) {}
+        constructor(_snapshotJson: string, _layoutMetricsJson: string) {}
         compute_take_init_result(): null {
           return null;
         }
@@ -129,6 +165,40 @@ describe('createLazyNapiTransport', () => {
       });
 
       expect(result).toBeUndefined();
+    });
+  });
+
+  describe('compute_init_from_yrs_state', () => {
+    it('should create engine from Yrs state with layout metrics', async () => {
+      const { MockEngine } = createMockEngineClass();
+      const addon = createMockAddon(MockEngine);
+      const transport = createLazyNapiTransport(addon);
+
+      const state = Buffer.from([1, 2, 3]);
+      const layoutMetrics = { fontScale: 0.9 };
+      const result = await transport.call('compute_init_from_yrs_state', {
+        docId: 'doc1',
+        state,
+        layoutMetrics,
+      });
+
+      expect(MockEngine.fromYrsStateCalls).toHaveLength(1);
+      expect(MockEngine.fromYrsStateCalls[0].state).toBe(state);
+      expect(MockEngine.fromYrsStateCalls[0].layoutMetricsJson).toBe(JSON.stringify(layoutMetrics));
+      expect(result).toEqual({ sheetIds: ['from-state'] });
+    });
+
+    it('should pass null layout metrics when omitted', async () => {
+      const { MockEngine } = createMockEngineClass();
+      const addon = createMockAddon(MockEngine);
+      const transport = createLazyNapiTransport(addon);
+
+      await transport.call('compute_init_from_yrs_state', {
+        docId: 'doc1',
+        state: Buffer.from([4, 5, 6]),
+      });
+
+      expect(MockEngine.fromYrsStateCalls[0].layoutMetricsJson).toBe(JSON.stringify(null));
     });
   });
 

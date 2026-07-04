@@ -909,7 +909,7 @@ export function App(): React.JSX.Element {
   // React just observes state changes via store subscriptions.
   return (
     <CapabilityProvider registry={shell.capabilityRegistry}>
-      <ShellProvider shell={shell} platform={shell.platform}>
+      <ShellProvider shell={shell}>
         <ErrorBoundary>
           <div className="h-screen w-screen" data-mog-engine="" {...themeAttributes}>
             <PortalContainerProvider>

@@ -9,9 +9,9 @@
 use std::collections::HashMap;
 
 use domain_types::domain::chart::{
-    ChartSeriesData, ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData,
-    ChartSeriesPointCachePointData, apply_explicit_chart_source_ranges,
-    synthesize_chart_series_from_data_range,
+    ChartSeriesCategoryLevelCacheData, ChartSeriesCategoryLevelsCacheData, ChartSeriesData,
+    ChartSeriesDimensionSourceKindData, ChartSeriesPointCacheData, ChartSeriesPointCachePointData,
+    apply_explicit_chart_source_ranges, synthesize_chart_series_from_data_range,
 };
 use domain_types::{ParseOutput, SheetData};
 use formula_types::{CellRef, RangeType};
@@ -123,16 +123,25 @@ fn complete_series_live_ref_caches(
             }
         }
 
-        if should_materialize_live_ref_cache(series.category_source_kind)
-            && series.category_levels.is_none()
-        {
+        if should_materialize_live_ref_cache(series.category_source_kind) {
             if let Some(reference) = non_empty_ref(series.categories.as_deref()) {
                 series.category_cache = None;
-                if let Some(range) = parse_workbook_a1_range(reference, sheet_name)
-                    && let Some(cache) = point_cache_from_live_range(&range, None, &mut cell_text)
-                {
-                    series.category_cache = Some(cache);
-                    series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                let had_category_levels = series.category_levels.take().is_some();
+                if let Some(range) = parse_workbook_a1_range(reference, sheet_name) {
+                    let category_levels = if had_category_levels {
+                        category_levels_cache_from_live_range(&range, &mut cell_text)
+                    } else {
+                        None
+                    };
+                    if let Some(cache) = category_levels {
+                        series.category_levels = Some(cache);
+                        series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                    } else if let Some(cache) =
+                        point_cache_from_live_range(&range, None, &mut cell_text)
+                    {
+                        series.category_cache = Some(cache);
+                        series.category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+                    }
                 }
             }
         }
@@ -218,6 +227,53 @@ fn point_positions(range: &ParsedLocalRange) -> Vec<(u32, u32)> {
         }
     }
     positions
+}
+
+fn category_levels_cache_from_live_range(
+    range: &ParsedWorkbookRange,
+    mut cell_text: impl FnMut(&str, u32, u32) -> Option<String>,
+) -> Option<ChartSeriesCategoryLevelsCacheData> {
+    let row_count = range
+        .range
+        .end_row
+        .checked_sub(range.range.start_row)?
+        .checked_add(1)?;
+    let col_count = range
+        .range
+        .end_col
+        .checked_sub(range.range.start_col)?
+        .checked_add(1)?;
+    if col_count < 2 {
+        return None;
+    }
+
+    let levels = (0..col_count)
+        .map(|level| {
+            let col = range.range.start_col + level;
+            let points = (0..row_count)
+                .filter_map(|idx| {
+                    let row = range.range.start_row + idx;
+                    cell_text(&range.sheet_name, row, col).and_then(|value| {
+                        (!value.trim().is_empty()).then_some(ChartSeriesPointCachePointData {
+                            idx,
+                            value,
+                            format_code: None,
+                        })
+                    })
+                })
+                .collect();
+            ChartSeriesCategoryLevelCacheData {
+                level,
+                point_count: Some(row_count),
+                points,
+            }
+        })
+        .collect();
+
+    Some(ChartSeriesCategoryLevelsCacheData {
+        point_count: Some(row_count),
+        levels,
+    })
 }
 
 fn complete_series_name_refs_from_data_range(
@@ -495,5 +551,97 @@ mod tests {
 
         assert_eq!(series[0].value_cache, Some(imported.clone()));
         assert_eq!(series[0].category_cache, Some(imported));
+    }
+
+    #[test]
+    fn refreshes_stale_multi_level_category_cache_from_sheet_cells() {
+        let stale_levels = ChartSeriesCategoryLevelsCacheData {
+            point_count: Some(2),
+            levels: vec![ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(2),
+                points: vec![ChartSeriesPointCachePointData {
+                    idx: 0,
+                    value: "Stale".to_string(),
+                    format_code: None,
+                }],
+            }],
+        };
+        let mut series = vec![series(serde_json::json!({
+            "categories": "A2:B3"
+        }))];
+        series[0].category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        series[0].category_levels = Some(stale_levels);
+
+        complete_series_live_ref_caches(&mut series, "Sheet1", |_, row, col| match (row, col) {
+            (1, 0) => Some("North".to_string()),
+            (1, 1) => Some("Q1".to_string()),
+            (2, 0) => Some("South".to_string()),
+            (2, 1) => Some("Q2".to_string()),
+            _ => None,
+        });
+
+        let levels = series[0]
+            .category_levels
+            .as_ref()
+            .expect("refreshed category levels");
+        assert_eq!(levels.point_count, Some(2));
+        assert!(series[0].category_cache.is_none());
+        assert_eq!(
+            levels.levels[0]
+                .points
+                .iter()
+                .map(|point| point.value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["North", "South"]
+        );
+        assert_eq!(
+            levels.levels[1]
+                .points
+                .iter()
+                .map(|point| point.value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Q1", "Q2"]
+        );
+    }
+
+    #[test]
+    fn stale_multi_level_category_cache_falls_back_to_point_cache_for_single_column_ref() {
+        let stale_levels = ChartSeriesCategoryLevelsCacheData {
+            point_count: Some(2),
+            levels: vec![ChartSeriesCategoryLevelCacheData {
+                level: 0,
+                point_count: Some(2),
+                points: vec![ChartSeriesPointCachePointData {
+                    idx: 0,
+                    value: "Stale".to_string(),
+                    format_code: None,
+                }],
+            }],
+        };
+        let mut series = vec![series(serde_json::json!({
+            "categories": "A2:A3"
+        }))];
+        series[0].category_source_kind = Some(ChartSeriesDimensionSourceKindData::Ref);
+        series[0].category_levels = Some(stale_levels);
+
+        complete_series_live_ref_caches(&mut series, "Sheet1", |_, row, col| match (row, col) {
+            (1, 0) => Some("North".to_string()),
+            (2, 0) => Some("South".to_string()),
+            _ => None,
+        });
+
+        assert!(series[0].category_levels.is_none());
+        assert_eq!(
+            series[0]
+                .category_cache
+                .as_ref()
+                .expect("refreshed category cache")
+                .points
+                .iter()
+                .map(|point| point.value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["North", "South"]
+        );
     }
 }

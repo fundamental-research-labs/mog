@@ -1361,9 +1361,9 @@ fn labels_markers_error_bars_and_no_fill_project_and_reconstruct() {
     assert_eq!(label.link_number_format, Some(false));
 
     let error_bars = series
-        .y_error_bars
+        .error_bars
         .as_ref()
-        .expect("projected y error bars");
+        .expect("projected standard chart error bars");
     assert_eq!(error_bars.direction.as_deref(), Some("y"));
     assert_eq!(error_bars.bar_type.as_deref(), Some("both"));
     assert_eq!(error_bars.value_type.as_deref(), Some("cust"));

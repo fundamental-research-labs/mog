@@ -274,7 +274,7 @@ fn direct_cell_row_col_and_styled_blank_formats_export_through_xlsx() {
         .authored_style_runs
         .iter()
         .find(|run| {
-            run.start_row <= 2 && run.end_row >= 2 && run.start_col <= 0 && run.end_col >= 1
+            run.start_row <= 2 && run.end_row >= 2 && run.start_col == 0 && run.end_col >= 1
         })
         .expect("styled blank cell run should round-trip");
     let blank_format = style_for(&parsed, Some(blank_run.style_id), "styled blank run");

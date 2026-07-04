@@ -9,6 +9,7 @@ use value_types::ComputeError;
 use yrs::{Any, Map, MapRef, Origin, Out, ReadTxn, Transact};
 
 use crate::storage::YrsStorage;
+use crate::storage::cells::values::cell_has_identity_backing_metadata;
 use crate::storage::engine::{YrsComputeEngine, construction};
 
 pub(super) fn repair_orphaned_cell_bindings_after_sync(
@@ -94,18 +95,25 @@ pub(super) fn repair_orphaned_cell_bindings_after_sync(
         let Some(Out::YMap(pos_to_id)) = grid_index.get(&txn, KEY_GRID_POS_TO_ID) else {
             continue;
         };
-        let Some(Out::YMap(cells)) = sheet_map.get(&txn, KEY_CELLS) else {
-            continue;
+        let cells = match sheet_map.get(&txn, KEY_CELLS) {
+            Some(Out::YMap(cells)) => Some(cells),
+            _ => None,
         };
 
         let should_repair = match pos_to_id.get(&txn, pos_key.as_str()) {
             Some(Out::Any(Any::String(existing))) if existing.as_ref() == cell_hex => false,
             Some(Out::Any(Any::String(existing)))
-                if physical_cell_exists(Some(&cells), &txn, existing.as_ref()) =>
+                if cell_identity_exists(
+                    cells.as_ref(),
+                    &txn,
+                    sheets,
+                    sheet_hex.as_ref(),
+                    existing.as_ref(),
+                ) =>
             {
                 false
             }
-            _ => physical_cell_exists(Some(&cells), &txn, cell_hex.as_str()),
+            _ => cell_identity_exists(cells.as_ref(), &txn, sheets, sheet_hex.as_ref(), &cell_hex),
         };
 
         if should_repair {
@@ -153,7 +161,13 @@ fn collect_repairs_for_sheet(
                 continue;
             };
             if !position_resolves(axis_grid, pos_key.as_ref())
-                || !physical_cell_exists(cells.as_ref(), &txn, cell_hex.as_ref())
+                || !cell_identity_exists(
+                    cells.as_ref(),
+                    &txn,
+                    storage.sheets(),
+                    sheet_hex.as_ref(),
+                    cell_hex.as_ref(),
+                )
             {
                 removals.insert(Binding {
                     sheet_id,
@@ -182,7 +196,13 @@ fn collect_repairs_for_sheet(
             };
 
             if !position_resolves(axis_grid, pos_key_str)
-                || !physical_cell_exists(cells.as_ref(), &txn, cell_hex_str)
+                || !cell_identity_exists(
+                    cells.as_ref(),
+                    &txn,
+                    storage.sheets(),
+                    sheet_hex.as_ref(),
+                    cell_hex_str,
+                )
             {
                 removals.insert(binding);
                 continue;
@@ -194,7 +214,13 @@ fn collect_repairs_for_sheet(
             {
                 Some(Out::Any(Any::String(existing))) if existing.as_ref() == cell_hex_str => false,
                 Some(Out::Any(Any::String(existing)))
-                    if physical_cell_exists(cells.as_ref(), &txn, existing.as_ref()) =>
+                    if cell_identity_exists(
+                        cells.as_ref(),
+                        &txn,
+                        storage.sheets(),
+                        sheet_hex.as_ref(),
+                        existing.as_ref(),
+                    ) =>
                 {
                     false
                 }
@@ -216,6 +242,13 @@ fn position_resolves(axis_grid: &GridIndex, pos_key: &str) -> bool {
         && axis_grid.col_index_from_hex(col_hex).is_some()
 }
 
-fn physical_cell_exists<T: ReadTxn>(cells: Option<&MapRef>, txn: &T, cell_hex: &str) -> bool {
+fn cell_identity_exists<T: ReadTxn>(
+    cells: Option<&MapRef>,
+    txn: &T,
+    sheets: &MapRef,
+    sheet_hex: &str,
+    cell_hex: &str,
+) -> bool {
     cells.is_some_and(|cells| cells.get(txn, cell_hex).is_some())
+        || cell_has_identity_backing_metadata(txn, sheets, sheet_hex, cell_hex)
 }

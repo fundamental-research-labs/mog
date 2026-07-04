@@ -458,9 +458,7 @@ describe('WorksheetValidationImpl getErrorsInRange', () => {
     });
     const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
 
-    await expect(validations.getErrorsInRange(0, 0, 0, 0)).resolves.toEqual([
-      { row: 0, col: 0 },
-    ]);
+    await expect(validations.getErrorsInRange(0, 0, 0, 0)).resolves.toEqual([{ row: 0, col: 0 }]);
 
     expect(ctx.computeBridge.validateCellValueInDoc).not.toHaveBeenCalled();
   });

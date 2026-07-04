@@ -91,7 +91,7 @@ fn assert_sdk_authored_chart_color_style_export(
 }
 
 #[test]
-fn imported_standard_chart_metadata_survives_yrs_without_auxiliary_package_replay() {
+fn imported_standard_chart_metadata_survives_yrs_with_current_package_replay() {
     let input = ParseOutput {
         sheets: vec![SheetData {
             name: "Data".to_string(),
@@ -158,11 +158,11 @@ fn imported_standard_chart_metadata_survives_yrs_without_auxiliary_package_repla
     let archive =
         xlsx_parser::zip::XlsxArchive::new(&exported_bytes).expect("exported XLSX is readable");
 
-    assert!(archive.contains("xl/charts/chart1.xml"));
-    assert!(!archive.contains("xl/charts/chart2.xml"));
-    assert!(!archive.contains("xl/charts/_rels/chart2.xml.rels"));
-    assert!(!archive.contains("xl/charts/style2.xml"));
-    assert!(!archive.contains("xl/charts/colors2.xml"));
+    assert!(!archive.contains("xl/charts/chart1.xml"));
+    assert!(archive.contains("xl/charts/chart2.xml"));
+    assert!(archive.contains("xl/charts/_rels/chart2.xml.rels"));
+    assert!(archive.contains("xl/charts/style2.xml"));
+    assert!(archive.contains("xl/charts/colors2.xml"));
 }
 
 #[test]

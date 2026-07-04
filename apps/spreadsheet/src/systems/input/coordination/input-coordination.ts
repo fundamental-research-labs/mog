@@ -1358,15 +1358,9 @@ function adaptPositionDimensions(
 function crossesScrollAnchor(fromX: number, toX: number, anchorX: number): boolean {
   if (!Number.isFinite(anchorX) || fromX === toX) return false;
   if (toX > fromX) {
-    return (
-      anchorX > fromX + HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON &&
-      anchorX <= toX
-    );
+    return anchorX > fromX + HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON && anchorX <= toX;
   }
-  return (
-    anchorX < fromX - HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON &&
-    anchorX >= toX
-  );
+  return anchorX < fromX - HIDDEN_COLUMN_SCROLL_ANCHOR_RELEASE_EPSILON && anchorX >= toX;
 }
 
 function stopBeforeScrollAnchor(fromX: number, anchorX: number): number {

@@ -141,9 +141,9 @@ describe('SDK agent API guidance', () => {
     );
 
     const annotationSet = api.describe('ws.annotations.cells.set');
-    expect(
-      annotationSet && 'signature' in annotationSet ? annotationSet.signature : '',
-    ).toContain('set(ref: WorksheetCellAnnotationRef, text: string)');
+    expect(annotationSet && 'signature' in annotationSet ? annotationSet.signature : '').toContain(
+      'set(ref: WorksheetCellAnnotationRef, text: string)',
+    );
   });
 
   it('surfaces receipt-aware examples for lifecycle-heavy worksheet APIs', () => {

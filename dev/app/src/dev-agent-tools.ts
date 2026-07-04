@@ -70,7 +70,10 @@ interface ApiSpec {
 interface OverviewResult {
   readonly workbook: { readonly methods: readonly string[]; readonly subApis: readonly string[] };
   readonly worksheet: { readonly methods: readonly string[]; readonly subApis: readonly string[] };
-  readonly utilities: { readonly namespaces: readonly string[]; readonly methods: readonly string[] };
+  readonly utilities: {
+    readonly namespaces: readonly string[];
+    readonly methods: readonly string[];
+  };
 }
 
 interface InterfaceResult {
@@ -213,8 +216,7 @@ export const DEV_AGENT_TOOL_DEFINITIONS: readonly DevAgentToolDefinition[] = [
         properties: {
           query: {
             type: 'string',
-            description:
-              'Natural-language or API-path query for the workbook task.',
+            description: 'Natural-language or API-path query for the workbook task.',
           },
           limit: {
             type: 'number',
@@ -598,7 +600,10 @@ function rootMethodNames(interfaceName: string, excluded: ReadonlySet<string>): 
   return Object.keys(entry.functions).filter((name) => !excluded.has(name));
 }
 
-function getInterfaceMember(interfaceName: string, memberName: string): ApiSpecFunctionEntry | null {
+function getInterfaceMember(
+  interfaceName: string,
+  memberName: string,
+): ApiSpecFunctionEntry | null {
   const entry = apiSpec.interfaces[interfaceName];
   return entry?.members[memberName] ?? entry?.functions[memberName] ?? null;
 }
@@ -678,11 +683,13 @@ function preflightMogCodeLocal(code: string): {
   const checks: Array<{ readonly pattern: RegExp; readonly message: string }> = [
     {
       pattern: /\bExcel\s*\./,
-      message: 'Office.js Excel APIs are not available. Use public Mog APIs discovered by mog_api_search.',
+      message:
+        'Office.js Excel APIs are not available. Use public Mog APIs discovered by mog_api_search.',
     },
     {
       pattern: /\bOffice\s*\./,
-      message: 'Office.js APIs are not available. Use public Mog APIs discovered by mog_api_search.',
+      message:
+        'Office.js APIs are not available. Use public Mog APIs discovered by mog_api_search.',
     },
     {
       pattern: /\bcontext\s*\.\s*(workbook|sync)\b/,
@@ -695,7 +702,8 @@ function preflightMogCodeLocal(code: string): {
       code: 'MOG_DEV_AGENT_FOREIGN_API',
       severity: 'error',
       message: check.message,
-      suggestion: 'Call mog_api_search and rewrite the code using wb/workbook, ws/worksheet, or api.',
+      suggestion:
+        'Call mog_api_search and rewrite the code using wb/workbook, ws/worksheet, or api.',
     });
   }
   return { ok: diagnostics.length === 0, diagnostics };
@@ -812,7 +820,10 @@ async function activeWorkbookSummary(workbook: DevAgentWorkbookLike): Promise<un
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`Execution timed out after ${timeoutMs}ms.`)), timeoutMs);
+    timeoutId = setTimeout(
+      () => reject(new Error(`Execution timed out after ${timeoutMs}ms.`)),
+      timeoutMs,
+    );
   });
   try {
     return await Promise.race([promise, timeout]);
@@ -821,10 +832,12 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
   }
 }
 
-async function resolveActiveWorkbook(
-  shell: DevAgentShellLike,
-): Promise<
-  | { readonly ok: true; readonly snapshot: DevAgentActiveDocumentSnapshot; readonly workbook: DevAgentWorkbookLike }
+async function resolveActiveWorkbook(shell: DevAgentShellLike): Promise<
+  | {
+      readonly ok: true;
+      readonly snapshot: DevAgentActiveDocumentSnapshot;
+      readonly workbook: DevAgentWorkbookLike;
+    }
   | { readonly ok: false; readonly message: string }
 > {
   const snapshot = readDevAgentActiveDocumentSnapshot(shell);
@@ -871,9 +884,7 @@ function expandQueryTokens(tokens: readonly string[]): Set<string> {
     for (const token of ['formula', 'evaluate', 'recalc']) expanded.add(token);
   }
   if (
-    tokens.some((token) =>
-      ['annotate', 'annotates', 'annotation', 'annotations'].includes(token),
-    )
+    tokens.some((token) => ['annotate', 'annotates', 'annotation', 'annotations'].includes(token))
   ) {
     for (const token of ['annotation', 'annotations', 'annotate', 'review']) expanded.add(token);
   }
@@ -931,17 +942,25 @@ function booleanArg(args: Record<string, unknown>, name: string, fallback: boole
 }
 
 function toJsonSafe(value: unknown, seen = new WeakSet<object>(), depth = 0): unknown {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
     return value;
   }
   if (typeof value === 'bigint') return value.toString();
   if (typeof value === 'undefined') return null;
   if (typeof value === 'function' || typeof value === 'symbol') return String(value);
   if (depth > 4) return '[MaxDepth]';
-  if (Array.isArray(value)) return value.slice(0, 50).map((entry) => toJsonSafe(entry, seen, depth + 1));
+  if (Array.isArray(value))
+    return value.slice(0, 50).map((entry) => toJsonSafe(entry, seen, depth + 1));
   if (!isRecord(value)) return String(value);
   if (seen.has(value)) return '[Circular]';
   seen.add(value);
   const entries = Object.entries(value).slice(0, 50);
-  return Object.fromEntries(entries.map(([key, entry]) => [key, toJsonSafe(entry, seen, depth + 1)]));
+  return Object.fromEntries(
+    entries.map(([key, entry]) => [key, toJsonSafe(entry, seen, depth + 1)]),
+  );
 }

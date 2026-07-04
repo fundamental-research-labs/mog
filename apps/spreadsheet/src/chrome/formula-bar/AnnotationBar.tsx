@@ -328,7 +328,11 @@ function AnnotationBarImpl(): React.JSX.Element | null {
             onClick={() => void commitEdit()}
             data-testid="annotation-bar-confirm"
             className="flex items-center justify-center w-[20px] h-[20px] shrink-0 rounded text-ss-success hover:bg-ss-success/10 transition-colors"
-            title={record && record.status !== 'fresh' ? 'Confirm — mark up to date (Enter)' : 'Confirm (Enter)'}
+            title={
+              record && record.status !== 'fresh'
+                ? 'Confirm — mark up to date (Enter)'
+                : 'Confirm (Enter)'
+            }
             aria-label="Confirm edit"
           >
             <CheckmarkSvg className="w-3.5 h-3.5" />

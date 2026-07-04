@@ -6,10 +6,7 @@ const APP_ROOT = process.cwd().endsWith(`${nodePath.sep}apps${nodePath.sep}sprea
   : nodePath.resolve(process.cwd(), 'apps/spreadsheet');
 
 function readGroupSource(fileName: string): string {
-  return readFileSync(
-    nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/groups', fileName),
-    'utf8',
-  );
+  return readFileSync(nodePath.resolve(APP_ROOT, 'src/chrome/toolbar/groups', fileName), 'utf8');
 }
 
 describe('Home ribbon Format Cells launchers', () => {

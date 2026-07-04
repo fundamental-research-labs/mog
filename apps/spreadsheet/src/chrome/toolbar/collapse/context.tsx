@@ -17,7 +17,11 @@
 
 import { createContext, useContext } from 'react';
 
-import type { CollapseLevel, GroupRenderMode, RibbonCollapseState } from '@mog-sdk/contracts/ribbon';
+import type {
+  CollapseLevel,
+  GroupRenderMode,
+  RibbonCollapseState,
+} from '@mog-sdk/contracts/ribbon';
 // =============================================================================
 // Ribbon Collapse Context (provided by TabbedToolbar)
 // =============================================================================

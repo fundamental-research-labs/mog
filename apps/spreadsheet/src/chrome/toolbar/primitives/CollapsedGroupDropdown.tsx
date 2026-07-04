@@ -90,7 +90,7 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
 }: CollapsedGroupDropdownProps) {
   const [localOpen, setLocalOpen] = useState(false);
   const controlledOpen = useUIStore((s) =>
-    groupKey ? s.ribbonCollapsedGroups[groupKey] ?? false : false,
+    groupKey ? (s.ribbonCollapsedGroups[groupKey] ?? false) : false,
   );
   const setRibbonCollapsedGroupOpen = useUIStore((s) => s.setRibbonCollapsedGroupOpen);
   const isOpen = groupKey ? controlledOpen : localOpen;

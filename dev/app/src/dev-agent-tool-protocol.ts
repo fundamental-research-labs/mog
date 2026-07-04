@@ -87,7 +87,9 @@ function parseToolArguments(argumentsJson: string): {
   }
 }
 
-function parseJson(value: string): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
+function parseJson(
+  value: string,
+): { readonly ok: true; readonly value: unknown } | { readonly ok: false } {
   try {
     return { ok: true, value: JSON.parse(value) };
   } catch {

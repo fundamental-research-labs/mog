@@ -18,6 +18,7 @@ import type {
   ValidationSetReceipt,
   WorksheetValidation,
 } from '@mog-sdk/contracts/api';
+import type { CellValue } from '@mog-sdk/contracts/core';
 
 import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/contracts/events';
 
@@ -29,6 +30,7 @@ import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
+import { normalizeCellValue } from '../internal/value-conversions';
 import {
   applyListSourceString,
   errorStyleToEnforcement,
@@ -78,10 +80,15 @@ function receivedType(value: unknown): string {
   return typeof value;
 }
 
-function validationTextForCellValue(value: unknown): string | null {
-  if (value == null) return '';
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
+function validationInputForCellValue(value: unknown): string | null {
+  const normalized = normalizeCellValue(value as CellValue);
+  if (normalized == null) return '';
+  if (
+    typeof normalized === 'string' ||
+    typeof normalized === 'number' ||
+    typeof normalized === 'boolean'
+  ) {
+    return String(normalized);
   }
   return null;
 }
@@ -807,7 +814,7 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     const errors: Array<{ row: number; col: number }> = [];
 
     for (const cell of cells) {
-      const value = validationTextForCellValue(cell.value);
+      const value = validationInputForCellValue(cell.value);
       if (value == null) continue;
 
       const listResult = await this.validateResolvedListValue(cell.row, cell.col, value);

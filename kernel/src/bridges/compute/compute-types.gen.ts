@@ -1655,6 +1655,7 @@ export interface Comment {
   noteHeight?: number;
   noteWidth?: number;
   noteShapeAnchor?: NoteShapeAnchor;
+  noteImages?: CommentNoteImage[];
   commentPr?: unknown;
 }
 
@@ -1673,6 +1674,15 @@ export interface CommentMention {
   email?: string;
   startIndex: number;
   length: number;
+}
+
+export interface CommentNoteImage {
+  relationshipId: string;
+  originalTarget: string;
+  targetMode?: string;
+  packagePath: string;
+  contentType?: string;
+  bytes?: Uint8Array;
 }
 
 export type CommentType = "note" | "threadedComment";
@@ -2746,6 +2756,7 @@ export interface HeaderFooter {
 export interface HeaderFooterImageInfo {
   position: HfImagePosition;
   src: string;
+  targetMode?: string;
   title: string;
   widthPt: number;
   heightPt: number;
@@ -3582,6 +3593,14 @@ export interface PictureData {
   ooxml?: PictureOoxmlProps;
 }
 
+export interface PictureEmbeddedMediaAuthority {
+  relationshipId: string;
+  originalTarget: string;
+  packagePath: string;
+  contentType?: string;
+  src: string;
+}
+
 export interface PictureOoxmlProps {
   picture: unknown;
   anchorIndex: number | null;
@@ -3592,6 +3611,7 @@ export interface PictureOoxmlProps {
   clientDataPrintsWithSheet: boolean | null;
   mcAlternateContentRawXml: string | null;
   imagePath: string | null;
+  embeddedMedia?: PictureEmbeddedMediaAuthority;
   relationships?: unknown[];
 }
 

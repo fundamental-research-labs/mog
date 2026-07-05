@@ -1,6 +1,6 @@
 {
   "name": "@mog-sdk/darwin-arm64",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "os": [
     "darwin"
   ],

@@ -53,6 +53,7 @@ function assertEq(actual, expected, message) {
 
 /** JSON.stringify a UUID for serde-tagged params. */
 const sid = (id) => JSON.stringify(id);
+const DEFAULT_LAYOUT_METRICS = JSON.stringify(null);
 
 // ---- Constants ----
 const SHEET_ID = '00000000-0000-0000-0000-000000000001';
@@ -114,7 +115,7 @@ if (typeof addon.computeGetCfPresets === 'function') {
 console.log('\n--- Test 3: Engine construction ---');
 let engine;
 try {
-  engine = new addon.ComputeEngine(minimalSnapshot());
+  engine = new addon.ComputeEngine(minimalSnapshot(), DEFAULT_LAYOUT_METRICS);
   assert(engine != null, 'engine constructed from empty snapshot');
 } catch (e) {
   assert(false, `Engine construction threw: ${e.message}`);
@@ -188,6 +189,7 @@ try {
   // Create engine2 with A1 = 999 in snapshot
   const engine2 = new addon.ComputeEngine(
     minimalSnapshot([{ cellId: CELL_A1, row: 0, col: 0, value: 999 }]),
+    DEFAULT_LAYOUT_METRICS,
   );
 
   // engine2 A1 should be 999
@@ -209,7 +211,7 @@ try {
 // =========================================================================
 console.log('\n--- Test 8: Serde performance (1K round-trips) ---');
 try {
-  const perfEngine = new addon.ComputeEngine(minimalSnapshot());
+  const perfEngine = new addon.ComputeEngine(minimalSnapshot(), DEFAULT_LAYOUT_METRICS);
   const N = 1000;
 
   // Warm up

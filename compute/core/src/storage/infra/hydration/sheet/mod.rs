@@ -243,6 +243,7 @@ pub(crate) fn hydrate_sheet(
 
     let comments_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let comments_map: MapRef = sheet_map.insert(txn, KEY_COMMENTS, comments_prelim);
+    sheet_map.insert(txn, KEY_CELL_ANNOTATIONS, MapPrelim::default());
 
     let filters_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let filters_map: MapRef = sheet_map.insert(txn, KEY_FILTERS, filters_prelim);
@@ -678,6 +679,7 @@ pub(crate) fn hydrate_sheet_with_allocation(
 
     let comments_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let comments_map: MapRef = sheet_map.insert(txn, KEY_COMMENTS, comments_prelim);
+    sheet_map.insert(txn, KEY_CELL_ANNOTATIONS, MapPrelim::default());
 
     let filters_prelim = MapPrelim::from([] as [(&str, Any); 0]);
     let filters_map: MapRef = sheet_map.insert(txn, KEY_FILTERS, filters_prelim);

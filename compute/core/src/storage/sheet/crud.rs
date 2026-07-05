@@ -14,18 +14,18 @@ use yrs::{
 use cell_types::{IdAllocator, SheetId};
 use compute_document::hex::{hex_to_id, id_to_hex};
 use compute_document::schema::{
-    KEY_BINDINGS, KEY_CELL_PROPERTIES, KEY_CELLS, KEY_CF_RULES, KEY_COL_FORMAT_RANGES,
-    KEY_COL_FORMATS, KEY_COL_ORDER, KEY_COL_WIDTHS, KEY_COMMENTS, KEY_CONDITIONAL_FORMAT,
-    KEY_FILTER_HIDDEN_ROWS, KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS, KEY_FLOATING_OBJECT_GROUPS,
-    KEY_FLOATING_OBJECT_ORDER, KEY_FLOATING_OBJECTS, KEY_FORMULA_REFS, KEY_GRID_ID_TO_POS,
-    KEY_GRID_INDEX, KEY_GRID_POS_TO_ID, KEY_GROUPING, KEY_HIDDEN_COLS, KEY_HIDDEN_ROWS,
-    KEY_MANUAL_HIDDEN_ROWS, KEY_MERGES, KEY_NAME, KEY_PIVOT_TABLES, KEY_PROPERTIES,
-    KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS, KEY_RANGES, KEY_ROW_FORMATS,
-    KEY_ROW_HEIGHTS, KEY_ROW_ORDER, KEY_SCHEMAS, KEY_SORTING, KEY_SPARKLINES, KEY_VALIDATION_RULES,
-    write_schema_version,
+    KEY_BINDINGS, KEY_CELL_ANNOTATIONS, KEY_CELL_PROPERTIES, KEY_CELLS, KEY_CF_RULES,
+    KEY_COL_FORMAT_RANGES, KEY_COL_FORMATS, KEY_COL_ORDER, KEY_COL_WIDTHS, KEY_COMMENTS,
+    KEY_CONDITIONAL_FORMAT, KEY_FILTER_HIDDEN_ROWS, KEY_FILTER_METADATA_BINDINGS, KEY_FILTERS,
+    KEY_FLOATING_OBJECT_GROUPS, KEY_FLOATING_OBJECT_ORDER, KEY_FLOATING_OBJECTS, KEY_FORMULA_REFS,
+    KEY_GRID_ID_TO_POS, KEY_GRID_INDEX, KEY_GRID_POS_TO_ID, KEY_GROUPING, KEY_HIDDEN_COLS,
+    KEY_HIDDEN_ROWS, KEY_MANUAL_HIDDEN_ROWS, KEY_MERGES, KEY_NAME, KEY_PIVOT_TABLES,
+    KEY_PROPERTIES, KEY_RANGE_BINDINGS, KEY_RANGE_FORMATS, KEY_RANGE_PAYLOADS, KEY_RANGES,
+    KEY_ROW_FORMATS, KEY_ROW_HEIGHTS, KEY_ROW_ORDER, KEY_SCHEMAS, KEY_SORTING, KEY_SPARKLINES,
+    KEY_VALIDATION_RULES, write_schema_version,
 };
 use compute_document::undo::ORIGIN_USER_EDIT;
-use domain_types::units::Pixels;
+use domain_types::units::CharWidth;
 use domain_types::yrs_schema::comment as comment_schema;
 // Note: ORIGIN_BOOTSTRAP is supplied by callers via `*_with_origin` and never
 // referenced directly here — this file only needs to know it can accept any
@@ -41,7 +41,7 @@ use super::yrs_helpers::{
 
 struct SheetCreationOptions {
     origin: Origin,
-    default_col_width_px: Pixels,
+    default_col_width: CharWidth,
 }
 
 // =============================================================================
@@ -346,7 +346,7 @@ impl YrsStorage {
             name,
             id_alloc,
             Origin::from(ORIGIN_USER_EDIT),
-            compute_layout_index::platform_default_col_width(),
+            domain_types::units::DEFAULT_COL_WIDTH,
         )
     }
 
@@ -362,7 +362,7 @@ impl YrsStorage {
         name: &str,
         id_alloc: &cell_types::IdAllocator,
         origin: Origin,
-        default_col_width_px: Pixels,
+        default_col_width: CharWidth,
     ) -> Result<SheetId, ComputeError> {
         let sheet_id = self.next_unused_sheet_id(id_alloc);
         // Default: 100 rows x 26 cols
@@ -374,7 +374,7 @@ impl YrsStorage {
             26,
             SheetCreationOptions {
                 origin,
-                default_col_width_px,
+                default_col_width,
             },
         )?;
         Ok(sheet_id)
@@ -628,7 +628,7 @@ impl YrsStorage {
             cols,
             SheetCreationOptions {
                 origin: Origin::from(ORIGIN_USER_EDIT),
-                default_col_width_px: compute_layout_index::platform_default_col_width(),
+                default_col_width: domain_types::units::DEFAULT_COL_WIDTH,
             },
         )
     }
@@ -678,13 +678,7 @@ impl YrsStorage {
                 ),
                 (
                     KEY_DEFAULT_COL_WIDTH,
-                    Any::Number(
-                        domain_types::units::pixels_to_char_width(
-                            options.default_col_width_px,
-                            domain_types::units::platform_mdw(),
-                        )
-                        .0,
-                    ),
+                    Any::Number(options.default_col_width.0),
                 ),
             ]);
             sheet_map.insert(&mut txn, KEY_PROPERTIES, meta);
@@ -733,6 +727,7 @@ impl YrsStorage {
                 KEY_COL_FORMATS,
                 KEY_COL_FORMAT_RANGES,
                 KEY_COMMENTS,
+                KEY_CELL_ANNOTATIONS,
                 KEY_FILTERS,
                 KEY_FILTER_METADATA_BINDINGS,
                 KEY_SPARKLINES,

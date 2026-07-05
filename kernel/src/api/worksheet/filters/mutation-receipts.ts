@@ -16,6 +16,7 @@ import type {
 import { columnFilterCriteriaToCompute } from '../../../bridges/compute/compute-wire-converters';
 import type { DocumentContext } from '../../../context';
 import { toA1 } from '../../internal/utils';
+import { selectDefaultFilter } from '../filter-selection';
 import { resolveFilterRange, type ResolvedFilterRange } from '../filter-range-resolution';
 import { assertFilterMutationAllowed } from '../protected-table-operations';
 
@@ -247,7 +248,7 @@ export async function resolveFilterForMutation(
   const filters = await ctx.computeBridge.getFiltersInSheet(sheetId);
   return filterId
     ? (filters.find((filter) => filter.id === filterId) ?? null)
-    : (filters[0] ?? null);
+    : selectDefaultFilter(filters);
 }
 
 export async function resolveHeaderCellIdForFilterColumn(

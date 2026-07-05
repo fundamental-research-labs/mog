@@ -31,6 +31,7 @@ import { useSelectionActions } from '../../hooks/selection/use-selection-actions
 import { useActiveCell, useActiveSheetId, useWorkbook } from '../../internal-api';
 import { extractFormulaRanges } from '../../domain/editor/formula-range-parser';
 import { toA1 } from '@mog/spreadsheet-utils/a1';
+import { CellAnnotationPanel } from '../annotations/CellAnnotationPanel';
 import { VersionHistoryPanel } from '../version-control/VersionHistoryPanel';
 
 type FormulaReferenceSeverity = 'error' | 'warning' | 'info';
@@ -109,6 +110,10 @@ function SidePanelImpl() {
     setCommentsPanelVisible(true);
   }, [setCommentsPanelVisible]);
 
+  const handleOpenCellAnnotation = useCallback(() => {
+    uiStore.getState().setSidePanelContent('cell-annotation');
+  }, [uiStore]);
+
   const handleOpenVersionHistory = useCallback(() => {
     if (!versionControlEnabled) return;
     uiStore.getState().setSidePanelContent('version-history');
@@ -129,6 +134,9 @@ function SidePanelImpl() {
 
   if (effectiveSidePanelContent === 'formula-references') {
     return <FormulaReferenceDiagnosticsPanel onClose={handleClose} />;
+  }
+  if (effectiveSidePanelContent === 'cell-annotation') {
+    return <CellAnnotationPanel onClose={handleClose} />;
   }
   if (effectiveSidePanelContent === 'version-history') {
     return <VersionHistoryPanel onClose={handleClose} />;
@@ -162,6 +170,17 @@ function SidePanelImpl() {
           className="w-full text-left px-3 py-2 rounded text-body-sm text-ss-text hover:bg-ss-surface-hover"
         >
           Comments
+        </button>
+        <button
+          type="button"
+          onClick={handleOpenCellAnnotation}
+          data-testid="panel-side-cell-annotation"
+          data-action="open-cell-annotation"
+          className="w-full text-left px-3 py-2 rounded text-body-sm text-ss-text hover:bg-ss-surface-hover"
+          aria-label="Open Cell Annotation"
+          title="Open Cell Annotation"
+        >
+          Cell Annotation
         </button>
         <button
           type="button"

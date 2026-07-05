@@ -46,4 +46,27 @@ describe('useFilterActions', () => {
     expect(result.current.canReapplyFilters).toBe(true);
     expect(result.current.activeFilterCount).toBe(2);
   });
+
+  it('disables Clear while keeping Reapply available when filters exist without active criteria', async () => {
+    mockListSummaries.mockResolvedValue([
+      {
+        id: 'filter-1',
+        filterKind: 'autoFilter',
+        range: { startRow: 0, startCol: 0, endRow: 10, endCol: 2 },
+        activeColumnCount: 0,
+        hasActiveFilter: false,
+        clearable: false,
+      },
+    ]);
+
+    const { result } = renderHook(() => useFilterActions());
+
+    await waitFor(() => {
+      expect(result.current.canReapplyFilters).toBe(true);
+    });
+
+    expect(result.current.canClearFilters).toBe(false);
+    expect(result.current.canReapplyFilters).toBe(true);
+    expect(result.current.activeFilterCount).toBe(0);
+  });
 });

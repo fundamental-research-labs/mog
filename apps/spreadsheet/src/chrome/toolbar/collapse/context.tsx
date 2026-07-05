@@ -17,17 +17,30 @@
 
 import { createContext, useContext } from 'react';
 
-import type { GroupRenderMode, RibbonCollapseState } from '@mog-sdk/contracts/ribbon';
+import type {
+  CollapseLevel,
+  GroupRenderMode,
+  RibbonCollapseState,
+} from '@mog-sdk/contracts/ribbon';
 // =============================================================================
 // Ribbon Collapse Context (provided by TabbedToolbar)
 // =============================================================================
+
+export interface RibbonCollapseContextState extends RibbonCollapseState {
+  /**
+   * Collapse level derived from container width before content-aware overflow
+   * escalation. When omitted, consumers should treat it as equal to `level`.
+   */
+  widthLevel?: CollapseLevel;
+}
 
 /**
  * Default state for collapse context.
  * Level 0 = full expansion (largest screens).
  */
-const DEFAULT_COLLAPSE_STATE: RibbonCollapseState = {
+const DEFAULT_COLLAPSE_STATE: RibbonCollapseContextState = {
   level: 0,
+  widthLevel: 0,
   containerWidth: 1920,
 };
 
@@ -35,7 +48,7 @@ const DEFAULT_COLLAPSE_STATE: RibbonCollapseState = {
  * Context for ribbon collapse state.
  * Provided by TabbedToolbar, consumed by ToolbarGroup.
  */
-const RibbonCollapseContext = createContext<RibbonCollapseState>(DEFAULT_COLLAPSE_STATE);
+const RibbonCollapseContext = createContext<RibbonCollapseContextState>(DEFAULT_COLLAPSE_STATE);
 
 /**
  * Provider component for ribbon collapse state.
@@ -58,7 +71,7 @@ export const RibbonCollapseProvider = RibbonCollapseContext.Provider;
  * }
  * ```
  */
-export function useRibbonCollapseLevel(): RibbonCollapseState {
+export function useRibbonCollapseLevel(): RibbonCollapseContextState {
   return useContext(RibbonCollapseContext);
 }
 

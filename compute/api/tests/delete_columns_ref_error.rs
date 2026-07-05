@@ -7,7 +7,7 @@
 //! position B1 and the deleted ref is silently dropped).
 
 use compute_api::{SheetSnapshot, Workbook, WorkbookSnapshot};
-use value_types::FiniteF64;
+use value_types::{CellError, CellValue, FiniteF64};
 
 fn blank_snapshot() -> WorkbookSnapshot {
     WorkbookSnapshot {
@@ -30,6 +30,13 @@ fn blank_snapshot() -> WorkbookSnapshot {
     }
 }
 
+fn assert_ref_error(value: &CellValue, context: &str) {
+    assert!(
+        matches!(value, CellValue::Error(CellError::Ref, _)),
+        "{context}; got value={value:?}"
+    );
+}
+
 #[test]
 fn delete_column_breaks_ref_should_become_ref_error() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
@@ -45,7 +52,7 @@ fn delete_column_breaks_ref_should_become_ref_error() {
     let a1_before = res.recalc.changed_cells.iter().find(|c| {
         c.position
             .as_ref()
-            .map_or(false, |p| p.row == 0 && p.col == 0)
+            .is_some_and(|p| p.row == 0 && p.col == 0)
     });
     eprintln!("A1 before delete: {:?}", a1_before.map(|c| &c.value));
 
@@ -58,7 +65,7 @@ fn delete_column_breaks_ref_should_become_ref_error() {
     let a1_after = res.recalc.changed_cells.iter().find(|c| {
         c.position
             .as_ref()
-            .map_or(false, |p| p.row == 0 && p.col == 0)
+            .is_some_and(|p| p.row == 0 && p.col == 0)
     });
     eprintln!("A1 after delete: {:?}", a1_after.map(|c| &c.value));
 
@@ -97,7 +104,7 @@ fn delete_row_breaks_ref_should_become_ref_error() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 0 && p.col == 0)
+                .is_some_and(|p| p.row == 0 && p.col == 0)
         })
         .expect("A1 should be in changed_cells after delete row");
     eprintln!(
@@ -132,7 +139,7 @@ fn delete_column_outside_ref_band_preserves_value() {
     let a1 = res.recalc.changed_cells.iter().find(|c| {
         c.position
             .as_ref()
-            .map_or(false, |p| p.row == 0 && p.col == 0)
+            .is_some_and(|p| p.row == 0 && p.col == 0)
     });
 
     use value_types::{CellValue, FiniteF64};
@@ -162,7 +169,7 @@ fn delete_column_shifts_surviving_ref() {
     let a1 = res.recalc.changed_cells.iter().find(|c| {
         c.position
             .as_ref()
-            .map_or(false, |p| p.row == 0 && p.col == 0)
+            .is_some_and(|p| p.row == 0 && p.col == 0)
     });
 
     use value_types::{CellValue, FiniteF64};
@@ -179,7 +186,7 @@ fn delete_column_shifts_surviving_ref() {
 }
 
 #[test]
-fn delete_column_retargets_shifted_formula_to_previous_column() {
+fn delete_column_shifted_formula_with_deleted_ref_becomes_ref_error() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -197,20 +204,18 @@ fn delete_column_retargets_shifted_formula_to_previous_column() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 13 && p.col == 11)
+                .is_some_and(|p| p.row == 13 && p.col == 11)
         })
         .expect("L14 should be recalculated after deleting column L");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        l14.value,
-        CellValue::Number(FiniteF64::must(125.0)),
-        "shifted formula should recalculate from the previous surviving column"
+    assert_ref_error(
+        &l14.value,
+        "shifted formula should preserve Excel #REF! behavior for the deleted referenced column",
     );
 }
 
 #[test]
-fn delete_column_retargets_shifted_absolute_formula_to_previous_column() {
+fn delete_column_shifted_absolute_formula_with_deleted_ref_becomes_ref_error() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -228,20 +233,18 @@ fn delete_column_retargets_shifted_absolute_formula_to_previous_column() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 13 && p.col == 11)
+                .is_some_and(|p| p.row == 13 && p.col == 11)
         })
         .expect("L14 should be recalculated after deleting column L");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        l14.value,
-        CellValue::Number(FiniteF64::must(125.0)),
-        "absolute shifted formula should recalculate from the previous surviving column"
+    assert_ref_error(
+        &l14.value,
+        "shifted absolute formula should preserve Excel #REF! behavior for the deleted referenced column",
     );
 }
 
 #[test]
-fn delete_column_retargets_shifted_formula_to_empty_previous_column() {
+fn delete_column_shifted_formula_does_not_retarget_to_empty_previous_column() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -258,20 +261,18 @@ fn delete_column_retargets_shifted_formula_to_empty_previous_column() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 13 && p.col == 11)
+                .is_some_and(|p| p.row == 13 && p.col == 11)
         })
         .expect("L14 should be recalculated after deleting column L");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        l14.value,
-        CellValue::Number(FiniteF64::must(0.0)),
-        "shifted formula should reference the empty previous surviving column"
+    assert_ref_error(
+        &l14.value,
+        "shifted formula should not retarget a deleted column ref to an empty previous column",
     );
 }
 
 #[test]
-fn delete_row_retargets_shifted_formula_to_previous_row() {
+fn delete_row_shifted_formula_with_deleted_ref_becomes_ref_error() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -289,20 +290,18 @@ fn delete_row_retargets_shifted_formula_to_previous_row() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 10 && p.col == 0)
+                .is_some_and(|p| p.row == 10 && p.col == 0)
         })
         .expect("A11 should be recalculated after deleting row 11");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        a11.value,
-        CellValue::Number(FiniteF64::must(125.0)),
-        "shifted formula should recalculate from the previous surviving row"
+    assert_ref_error(
+        &a11.value,
+        "shifted formula should preserve Excel #REF! behavior for the deleted referenced row",
     );
 }
 
 #[test]
-fn delete_row_retargets_shifted_absolute_formula_to_previous_row() {
+fn delete_row_shifted_absolute_formula_with_deleted_ref_becomes_ref_error() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -320,20 +319,18 @@ fn delete_row_retargets_shifted_absolute_formula_to_previous_row() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 10 && p.col == 0)
+                .is_some_and(|p| p.row == 10 && p.col == 0)
         })
         .expect("A11 should be recalculated after deleting row 11");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        a11.value,
-        CellValue::Number(FiniteF64::must(125.0)),
-        "absolute shifted formula should recalculate from the previous surviving row"
+    assert_ref_error(
+        &a11.value,
+        "shifted absolute formula should preserve Excel #REF! behavior for the deleted referenced row",
     );
 }
 
 #[test]
-fn delete_row_retargets_shifted_formula_to_empty_previous_row() {
+fn delete_row_shifted_formula_does_not_retarget_to_empty_previous_row() {
     let (wb, _) = Workbook::from_snapshot(blank_snapshot()).unwrap();
     let sheet = wb.sheet_by_index(0).unwrap();
 
@@ -350,14 +347,12 @@ fn delete_row_retargets_shifted_formula_to_empty_previous_row() {
         .find(|c| {
             c.position
                 .as_ref()
-                .map_or(false, |p| p.row == 10 && p.col == 0)
+                .is_some_and(|p| p.row == 10 && p.col == 0)
         })
         .expect("A11 should be recalculated after deleting row 11");
 
-    use value_types::{CellValue, FiniteF64};
-    assert_eq!(
-        a11.value,
-        CellValue::Number(FiniteF64::must(0.0)),
-        "shifted formula should reference the empty previous surviving row"
+    assert_ref_error(
+        &a11.value,
+        "shifted formula should not retarget a deleted row ref to an empty previous row",
     );
 }

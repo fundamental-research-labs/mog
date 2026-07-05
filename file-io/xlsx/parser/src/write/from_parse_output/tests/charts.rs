@@ -1211,9 +1211,17 @@ fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
         "{level_chart_xml}"
     );
     assert!(
-        !level_chart_xml.contains("<c:multiLvlStrCache>"),
+        level_chart_xml.contains("<c:multiLvlStrCache>"),
         "{level_chart_xml}"
     );
+    for expected in [
+        "<c:v>North</c:v>",
+        "<c:v>South</c:v>",
+        "<c:v>Q1</c:v>",
+        "<c:v>Q2</c:v>",
+    ] {
+        assert!(level_chart_xml.contains(expected), "{level_chart_xml}");
+    }
     assert!(
         !level_chart_xml.contains("Stale Region"),
         "{level_chart_xml}"
@@ -1231,9 +1239,12 @@ fn modeled_chart_export_reports_omitted_level_and_bubble_size_ref_caches() {
         "{bubble_chart_xml}"
     );
     assert!(
-        !bubble_chart_xml.contains("<c:numCache>"),
+        bubble_chart_xml.contains("<c:numCache>"),
         "{bubble_chart_xml}"
     );
+    for expected in ["<c:v>20</c:v>", "<c:v>30</c:v>"] {
+        assert!(bubble_chart_xml.contains(expected), "{bubble_chart_xml}");
+    }
     assert!(!bubble_chart_xml.contains("999"), "{bubble_chart_xml}");
     assert_export_report_contains(
         &report,

@@ -40,6 +40,7 @@ fn test_cell_comment_serde_roundtrip() {
         note_height: None,
         note_width: None,
         note_shape_anchor: None,
+        note_images: Vec::new(),
     };
     let json = serde_json::to_string(&comment).unwrap();
     let deserialized: Comment = serde_json::from_str(&json).unwrap();

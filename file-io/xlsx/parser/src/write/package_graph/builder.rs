@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use domain_types::PackageFidelityMetadata;
 
@@ -8,7 +8,7 @@ use super::{
     RelationshipIdentityHint, ResolvedPackageGraph, ResolvedPackageRelationship,
     allocate_relationship_id, imported_internal_target, imported_opaque_part,
     imported_relationship_match, is_external_target_mode, normalize_part_path, owner_rels_path,
-    relationship_current_occurrence, resolve_target, same_inert_cluster,
+    relationship_current_occurrence, resolve_target, same_active_x_cluster, same_inert_cluster,
     validate_internal_target_is_registered,
 };
 use crate::write::write_error::WriteError;
@@ -99,6 +99,47 @@ impl PackageGraphBuilder {
         self.add_relationship(relationship)
     }
 
+    pub fn add_drawing_relationship_with_current_opaque_closure(
+        &mut self,
+        drawing_path: &str,
+        relationship_type: &str,
+        target: &str,
+        target_mode: Option<&str>,
+        relationship_id_hint: &str,
+    ) -> Result<Option<RegisteredRelationshipKey>, WriteError> {
+        let target = if is_external_target_mode(target_mode) {
+            PackageRelationshipTarget::External {
+                target: target.to_string(),
+                target_mode: target_mode.map(str::to_string),
+            }
+        } else if relationship_type == crate::infra::opc::REL_HYPERLINK && target.starts_with('#') {
+            PackageRelationshipTarget::InternalPath {
+                target: target.to_string(),
+            }
+        } else {
+            PackageRelationshipTarget::InternalPart {
+                path: normalize_part_path(target),
+            }
+        };
+
+        if let PackageRelationshipTarget::InternalPart { path } = &target {
+            if !self.contains_part(path)
+                && !self.register_current_opaque_drawing_closure(path, relationship_type)?
+            {
+                return Ok(None);
+            }
+        }
+
+        Ok(Some(self.add_relationship(PackageRelationship {
+            owner: PackageOwner::Part {
+                path: normalize_part_path(drawing_path),
+            },
+            relationship_type: relationship_type.to_string(),
+            target,
+            identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+        })))
+    }
+
     pub fn contains_part(&self, path: &str) -> bool {
         self.parts.contains_key(&normalize_part_path(path))
     }
@@ -160,11 +201,9 @@ impl PackageGraphBuilder {
             if !is_inert_auxiliary && !is_non_editable_sheet_cluster && !is_quarantined_active {
                 continue;
             }
-            if is_quarantined_active && normalize_part_path(&part.path) != "xl/vbaProject.bin" {
-                continue;
-            }
             if !is_non_editable_sheet_cluster
                 && !is_quarantined_active
+                && !is_inert_printer_settings_part(&normalized_path)
                 && crate::write::package_ownership::modeled_feature_part_must_not_be_opaque(
                     &part.path,
                 )
@@ -222,16 +261,25 @@ impl PackageGraphBuilder {
             let owner = PackageOwner::Part {
                 path: part.path.clone(),
             };
+            let referenced_ids = opaque_part_relationship_reference_ids(part);
             for hint in opaque_part_relationship_hints(metadata, part) {
                 if is_external_target_mode(hint.target_mode.as_deref()) {
+                    if !referenced_ids.contains(hint.id.as_str()) {
+                        continue;
+                    }
+                    self.add_imported_external_hint_relationship(owner.clone(), hint);
                     continue;
                 }
 
                 let Some(target_path) = imported_internal_target(Some(&part.path), hint) else {
                     continue;
                 };
+                let owner_is_quarantined_active =
+                    crate::write::package_ownership::auxiliary_package_part_policy(&part.path)
+                        == Some(AuxiliaryPackagePartPolicy::ActiveQuarantined);
                 if self.is_opaque_part(&target_path)
-                    && (same_inert_cluster(&part.path, &target_path)
+                    && (owner_is_quarantined_active
+                        || same_inert_cluster(&part.path, &target_path)
                         || same_quarantined_active_cluster(&part.path, &target_path)
                         || same_non_editable_sheet_cluster(
                             &part.path,
@@ -262,6 +310,23 @@ impl PackageGraphBuilder {
         });
     }
 
+    fn add_imported_external_hint_relationship(
+        &mut self,
+        owner: PackageOwner,
+        hint: &domain_types::PackageRelationshipHint,
+    ) {
+        let relationship = PackageRelationship {
+            owner,
+            relationship_type: hint.relationship_type.clone(),
+            target: PackageRelationshipTarget::External {
+                target: hint.target.clone(),
+                target_mode: hint.target_mode.clone(),
+            },
+            identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+        };
+        self.add_relationship_if_absent(relationship);
+    }
+
     fn relationship_exists(
         &self,
         owner: &PackageOwner,
@@ -283,6 +348,43 @@ impl PackageGraphBuilder {
         self.parts
             .get(&normalize_part_path(path))
             .is_some_and(|part| matches!(part.kind, PackagePartKind::Opaque))
+    }
+
+    fn register_current_opaque_drawing_closure(
+        &mut self,
+        target_path: &str,
+        relationship_type: &str,
+    ) -> Result<bool, WriteError> {
+        let Some(metadata) = self.package_fidelity.clone() else {
+            return Ok(false);
+        };
+        let Some(closure) =
+            current_opaque_drawing_closure(&metadata, &self.parts, target_path, relationship_type)
+        else {
+            return Ok(false);
+        };
+
+        for part_path in closure.part_paths {
+            if self.contains_part(&part_path) {
+                continue;
+            }
+            let part = closure
+                .opaque_parts_by_path
+                .get(&part_path)
+                .expect("closure part must be present in opaque part map");
+            let mut package_part =
+                imported_opaque_part(&part.path, part.content_type.clone(), part.bytes.clone());
+            if let Some(semantic_kind) = closure.semantic_kinds_by_path.get(&part_path).copied() {
+                package_part.semantic_kind = Some(semantic_kind);
+            }
+            self.register_part(package_part)?;
+        }
+
+        for relationship in closure.relationships {
+            self.add_relationship_if_absent(relationship);
+        }
+
+        Ok(true)
     }
 
     pub fn resolve(self) -> Result<ResolvedPackageGraph, WriteError> {
@@ -354,11 +456,147 @@ impl PackageGraphBuilder {
     }
 }
 
+struct CurrentOpaqueDrawingClosure<'a> {
+    part_paths: BTreeSet<String>,
+    opaque_parts_by_path: HashMap<String, &'a domain_types::OpaquePackagePartHint>,
+    semantic_kinds_by_path: HashMap<String, domain_types::XlsxPackagePartKind>,
+    relationships: Vec<PackageRelationship>,
+}
+
+fn current_opaque_drawing_closure<'a>(
+    metadata: &'a PackageFidelityMetadata,
+    parts: &BTreeMap<String, PackagePart>,
+    target_path: &str,
+    relationship_type: &str,
+) -> Option<CurrentOpaqueDrawingClosure<'a>> {
+    let opaque_parts_by_path: HashMap<String, &domain_types::OpaquePackagePartHint> = metadata
+        .opaque_parts
+        .iter()
+        .map(|part| (normalize_part_path(&part.path), part))
+        .collect();
+    let target_path = normalize_part_path(target_path);
+    if !opaque_parts_by_path.contains_key(&target_path) {
+        return None;
+    }
+
+    let mut part_paths = BTreeSet::new();
+    let mut semantic_kinds_by_path = HashMap::new();
+    let mut relationships = Vec::new();
+    let mut pending = vec![(target_path, relationship_type.to_string())];
+
+    while let Some((part_path, inbound_relationship_type)) = pending.pop() {
+        note_opaque_target_semantic_kind(
+            &mut semantic_kinds_by_path,
+            &part_path,
+            &inbound_relationship_type,
+        )?;
+        if !part_paths.insert(part_path.clone()) {
+            continue;
+        }
+        let part = opaque_parts_by_path.get(&part_path)?;
+        let referenced_ids = opaque_part_relationship_reference_ids(part);
+        for hint in opaque_part_relationship_hints(metadata, part) {
+            if !referenced_ids.contains(hint.id.as_str()) {
+                continue;
+            }
+            let owner = PackageOwner::Part {
+                path: part_path.clone(),
+            };
+            if is_external_target_mode(hint.target_mode.as_deref()) {
+                relationships.push(PackageRelationship {
+                    owner,
+                    relationship_type: hint.relationship_type.clone(),
+                    target: PackageRelationshipTarget::External {
+                        target: hint.target.clone(),
+                        target_mode: hint.target_mode.clone(),
+                    },
+                    identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+                });
+                continue;
+            }
+
+            let target_path = imported_internal_target(Some(&part_path), hint)?;
+            let target_path = normalize_part_path(&target_path);
+            if !parts.contains_key(&target_path) && !opaque_parts_by_path.contains_key(&target_path)
+            {
+                return None;
+            }
+            if opaque_parts_by_path.contains_key(&target_path) {
+                pending.push((target_path.clone(), hint.relationship_type.clone()));
+            }
+            relationships.push(PackageRelationship {
+                owner,
+                relationship_type: hint.relationship_type.clone(),
+                target: PackageRelationshipTarget::InternalPart { path: target_path },
+                identity_hint: Some(RelationshipIdentityHint::new(hint.id.as_str())),
+            });
+        }
+    }
+
+    Some(CurrentOpaqueDrawingClosure {
+        part_paths,
+        opaque_parts_by_path,
+        semantic_kinds_by_path,
+        relationships,
+    })
+}
+
+fn note_opaque_target_semantic_kind(
+    semantic_kinds_by_path: &mut HashMap<String, domain_types::XlsxPackagePartKind>,
+    path: &str,
+    relationship_type: &str,
+) -> Option<()> {
+    let Some(semantic_kind) = opaque_target_semantic_kind_for_relationship(relationship_type)
+    else {
+        return Some(());
+    };
+    match semantic_kinds_by_path.get(path).copied() {
+        Some(existing) if existing != semantic_kind => None,
+        Some(_) => Some(()),
+        None => {
+            semantic_kinds_by_path.insert(path.to_string(), semantic_kind);
+            Some(())
+        }
+    }
+}
+
+fn opaque_target_semantic_kind_for_relationship(
+    relationship_type: &str,
+) -> Option<domain_types::XlsxPackagePartKind> {
+    match crate::infra::opc::OoxmlRelationshipType::from_uri(relationship_type) {
+        crate::infra::opc::OoxmlRelationshipType::Chart => {
+            Some(domain_types::XlsxPackagePartKind::Chart)
+        }
+        crate::infra::opc::OoxmlRelationshipType::ChartEx => {
+            Some(domain_types::XlsxPackagePartKind::ChartEx)
+        }
+        crate::infra::opc::OoxmlRelationshipType::Image => {
+            Some(domain_types::XlsxPackagePartKind::Media)
+        }
+        _ => None,
+    }
+}
+
+fn opaque_part_relationship_reference_ids(
+    part: &domain_types::OpaquePackagePartHint,
+) -> HashSet<String> {
+    std::str::from_utf8(&part.bytes)
+        .ok()
+        .map(crate::infra::xml::relationship_attr_values_with_known_namespaces)
+        .unwrap_or_default()
+        .into_iter()
+        .collect()
+}
+
 fn normalize_relationship_target(mut relationship: PackageRelationship) -> PackageRelationship {
     if let PackageRelationshipTarget::InternalPart { path } = &mut relationship.target {
         *path = normalize_part_path(path);
     }
     relationship
+}
+
+fn is_inert_printer_settings_part(path: &str) -> bool {
+    path.starts_with("xl/printerSettings/") && path.ends_with(".bin")
 }
 
 fn non_editable_sheet_cluster_paths(metadata: &PackageFidelityMetadata) -> HashSet<String> {
@@ -424,8 +662,10 @@ fn same_non_editable_sheet_cluster(
 }
 
 fn same_quarantined_active_cluster(owner_path: &str, target_path: &str) -> bool {
-    normalize_part_path(owner_path) == "xl/vbaProject.bin"
-        && normalize_part_path(target_path) == "xl/vbaProject.bin"
+    let owner_path = normalize_part_path(owner_path);
+    let target_path = normalize_part_path(target_path);
+    (owner_path == "xl/vbaProject.bin" && target_path == "xl/vbaProject.bin")
+        || same_active_x_cluster(&owner_path, &target_path)
 }
 
 const REL_WEB_EXTENSION_TASKPANES: &str =

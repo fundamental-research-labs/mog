@@ -16,8 +16,8 @@ use compute_document::undo::ORIGIN_USER_EDIT;
 use domain_types::domain::protection::SheetProtection;
 use domain_types::domain::sheet::{SheetProtectionOptions, SheetSettings};
 use domain_types::units::{
-    CharWidth, Pixels, Points, char_width_to_pixels, pixels_to_char_width, pixels_to_points,
-    platform_mdw, points_to_pixels,
+    CharWidth, LayoutMetrics, Pixels, Points, char_width_to_pixels, pixels_to_char_width,
+    pixels_to_points, points_to_pixels,
 };
 use domain_types::yrs_schema::protection as protection_schema;
 
@@ -74,7 +74,17 @@ pub fn is_sheet_settings_key(key: &str) -> bool {
 }
 
 /// Get all settings for a sheet.
+#[cfg(test)]
 pub(crate) fn get_sheet_settings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId) -> SheetSettings {
+    get_sheet_settings_with_layout_metrics(doc, sheets, sheet_id, LayoutMetrics::default())
+}
+
+pub(crate) fn get_sheet_settings_with_layout_metrics(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    layout_metrics: LayoutMetrics,
+) -> SheetSettings {
     let txn = doc.transact();
     match get_meta_map(&txn, sheets, sheet_id) {
         Some(meta) => {
@@ -104,12 +114,20 @@ pub(crate) fn get_sheet_settings(doc: &Doc, sheets: &MapRef, sheet_id: &SheetId)
                 default_col_width: {
                     // Yrs stores canonical (char-width); convert to pixels for TS bridge
                     let cw = CharWidth(meta_number(&txn, &meta, KEY_DEFAULT_COL_WIDTH, 8.43));
-                    char_width_to_pixels(cw, platform_mdw()).0
+                    char_width_to_pixels(cw, layout_metrics.column_width_mdw).0
                 },
                 custom_properties: meta_string(&txn, &meta, KEY_CUSTOM_PROPERTIES),
             }
         }
-        None => SheetSettings::default(),
+        None => default_sheet_settings(layout_metrics),
+    }
+}
+
+fn default_sheet_settings(layout_metrics: LayoutMetrics) -> SheetSettings {
+    SheetSettings {
+        default_row_height: layout_metrics.default_row_height_px,
+        default_col_width: layout_metrics.default_column_width_px,
+        ..SheetSettings::default()
     }
 }
 
@@ -169,12 +187,31 @@ fn is_protection_setting_key(key: &str) -> bool {
 ///
 /// Protection keys are routed into the nested `protectionDetails` Y.Map so
 /// that sheet protection has one storage domain model.
+#[cfg(test)]
 pub(crate) fn set_sheet_setting(
     doc: &Doc,
     sheets: &MapRef,
     sheet_id: &SheetId,
     key: &str,
     value: &str,
+) {
+    set_sheet_setting_with_layout_metrics(
+        doc,
+        sheets,
+        sheet_id,
+        key,
+        value,
+        LayoutMetrics::default(),
+    )
+}
+
+pub(crate) fn set_sheet_setting_with_layout_metrics(
+    doc: &Doc,
+    sheets: &MapRef,
+    sheet_id: &SheetId,
+    key: &str,
+    value: &str,
+    layout_metrics: LayoutMetrics,
 ) {
     let mut txn = doc.transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
     if let Some(meta) = get_meta_map(&txn, sheets, sheet_id) {
@@ -220,7 +257,9 @@ pub(crate) fn set_sheet_setting(
             // The TS bridge sends pixel values for dimensions; convert to
             // canonical units before storing so GET round-trips correctly.
             let stored = match key {
-                KEY_DEFAULT_COL_WIDTH => pixels_to_char_width(Pixels(n), platform_mdw()).0,
+                KEY_DEFAULT_COL_WIDTH => {
+                    pixels_to_char_width(Pixels(n), layout_metrics.column_width_mdw).0
+                }
                 KEY_DEFAULT_ROW_HEIGHT => pixels_to_points(Pixels(n)).0,
                 _ => n,
             };

@@ -24,7 +24,8 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
-import type { CollapseLevel, RibbonCollapseState } from '@mog-sdk/contracts/ribbon';
+import type { CollapseLevel } from '@mog-sdk/contracts/ribbon';
+import type { RibbonCollapseContextState } from './context';
 
 // =============================================================================
 // Collapse Level Computation
@@ -145,9 +146,10 @@ export function useRibbonCollapse(
   containerRef: RefObject<HTMLElement | null>,
   panelRef?: RefObject<HTMLElement | null>,
   contentKey?: unknown,
-): RibbonCollapseState {
-  const [state, setState] = useState<RibbonCollapseState>({
+): RibbonCollapseContextState {
+  const [state, setState] = useState<RibbonCollapseContextState>({
     level: 0,
+    widthLevel: 0,
     containerWidth: 1920,
   });
 
@@ -178,8 +180,9 @@ export function useRibbonCollapse(
         );
         releaseWidthRef.current = resolved.releaseWidth;
         const level = resolved.level;
-        if (prev.level === level && prev.containerWidth === width) return prev;
-        return { level, containerWidth: width };
+        if (prev.level === level && prev.widthLevel === widthLevel && prev.containerWidth === width)
+          return prev;
+        return { level, widthLevel, containerWidth: width };
       });
     };
 
@@ -227,7 +230,9 @@ export function useRibbonCollapse(
       if (state.level > widthLevel) {
         releaseWidthRef.current = Number.POSITIVE_INFINITY;
         setState((prev) =>
-          prev.level === widthLevel ? prev : { level: widthLevel, containerWidth: width },
+          prev.level === widthLevel && prev.widthLevel === widthLevel
+            ? prev
+            : { level: widthLevel, widthLevel, containerWidth: width },
         );
         // Re-baselined; the resulting re-render re-runs this effect to measure
         // the new content at the baseline level.
@@ -244,6 +249,7 @@ export function useRibbonCollapse(
       releaseWidthRef.current = panel.scrollWidth + RELEASE_MARGIN_PX;
       setState((prev) => ({
         level: Math.min(MAX_COLLAPSE_LEVEL, prev.level + 1) as CollapseLevel,
+        widthLevel,
         containerWidth: width,
       }));
     }

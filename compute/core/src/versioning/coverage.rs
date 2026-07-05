@@ -524,6 +524,7 @@ fn sheet_scope_for_key(key: &str) -> SemanticCoverageScope {
         KEY_PROPERTIES
         | KEY_SCHEMAS
         | KEY_COMMENTS
+        | KEY_CELL_ANNOTATIONS
         | KEY_FILTERS
         | KEY_FILTER_METADATA_BINDINGS
         | KEY_SPARKLINES

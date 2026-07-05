@@ -102,7 +102,11 @@ fn create_sheet_with_origin(
         name.to_string()
     };
 
-    let default_col_width = resolve_default_col_width(default_col_width_px)?;
+    let default_col_width = resolve_default_col_width(default_col_width_px, stores.layout_metrics)?;
+    let default_col_width_cw = domain_types::units::pixels_to_char_width(
+        default_col_width,
+        stores.layout_metrics.column_width_mdw,
+    );
 
     // 1 + 2. Create sheet in yrs Doc and mirror
     let sheet_id = {
@@ -112,7 +116,7 @@ fn create_sheet_with_origin(
             &name,
             &stores.grid_id_alloc,
             origin,
-            default_col_width,
+            default_col_width_cw,
         )?
     };
     let hex: String = id_to_hex(sheet_id.as_u128()).into();
@@ -145,7 +149,7 @@ fn create_sheet_with_origin(
         compute_layout_index::LayoutIndex::with_defaults(
             100,
             26,
-            compute_layout_index::DEFAULT_ROW_HEIGHT,
+            stores.layout_metrics.default_row_height(),
             default_col_width,
         ),
     );
@@ -179,13 +183,16 @@ fn create_sheet_with_origin(
     Ok((hex, result))
 }
 
-fn resolve_default_col_width(default_col_width_px: Option<f64>) -> Result<Pixels, ComputeError> {
+fn resolve_default_col_width(
+    default_col_width_px: Option<f64>,
+    layout_metrics: domain_types::units::LayoutMetrics,
+) -> Result<Pixels, ComputeError> {
     match default_col_width_px {
         Some(width) if width.is_finite() && width > 0.0 => Ok(Pixels(width)),
         Some(width) => Err(ComputeError::InvalidInput {
             message: format!("Invalid default column width: {width}"),
         }),
-        None => Ok(compute_layout_index::platform_default_col_width()),
+        None => Ok(layout_metrics.default_column_width()),
     }
 }
 
@@ -407,6 +414,7 @@ pub(in crate::storage::engine) fn mutation_copy_sheet(
         rows,
         cols,
         stores.grid_indexes.get(&new_id),
+        stores.layout_metrics,
     );
     stores.layout_indexes.insert(new_id, li);
 

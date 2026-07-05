@@ -20,6 +20,7 @@ import type { ReactNode } from 'react';
 import React, { useState } from 'react';
 
 import { Popover, PopoverContent, PopoverTrigger, Tooltip } from '@mog/shell';
+import { useUIStore } from '../../../internal-api';
 import { useRibbonCollapseLevel } from '../collapse';
 
 // =============================================================================
@@ -54,6 +55,8 @@ function ChevronDownIcon() {
 export interface CollapsedGroupDropdownProps {
   /** Group label shown on the collapsed button */
   label: string;
+  /** Normalized ribbon visibility key for this group. */
+  groupKey?: string;
   /** Icon to show on the collapsed button (optional) */
   icon?: ReactNode;
   /** Whether this is the last group (no right separator) */
@@ -80,11 +83,24 @@ export interface CollapsedGroupDropdownProps {
  */
 export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown({
   label,
+  groupKey,
   icon,
   isLast = false,
   children,
 }: CollapsedGroupDropdownProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const controlledOpen = useUIStore((s) =>
+    groupKey ? (s.ribbonCollapsedGroups[groupKey] ?? false) : false,
+  );
+  const setRibbonCollapsedGroupOpen = useUIStore((s) => s.setRibbonCollapsedGroupOpen);
+  const isOpen = groupKey ? controlledOpen : localOpen;
+  const setIsOpen = (open: boolean) => {
+    if (groupKey) {
+      setRibbonCollapsedGroupOpen(groupKey, open);
+    } else {
+      setLocalOpen(open);
+    }
+  };
   const { level } = useRibbonCollapseLevel();
   const isDense = level >= 3;
   const labelClassName = isDense

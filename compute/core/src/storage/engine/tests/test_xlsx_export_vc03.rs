@@ -295,7 +295,7 @@ fn vc03_xlsx_export_reparse_preserves_authored_cells_sheets_dimensions_and_workb
             .iter()
             .any(|run| run.start_row <= 5
                 && run.end_row >= 5
-                && run.start_col <= 0
+                && run.start_col == 0
                 && run.end_col >= 1),
         "authored styled blank range should export/reparse without becoming value cells"
     );

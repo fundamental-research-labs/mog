@@ -117,8 +117,12 @@ pub(in crate::storage::engine) fn set_view_option(
         key,
         value,
     );
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = settings::get_sheet_settings_with_layout_metrics(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        stores.layout_metrics,
+    );
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {
         sheet_id: sheet_id.to_uuid_string(),

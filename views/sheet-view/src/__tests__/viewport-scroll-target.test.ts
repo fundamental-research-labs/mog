@@ -73,6 +73,30 @@ describe('getLayoutAwareScrollToCell', () => {
     expect(getCoordinateScrollTarget).not.toHaveBeenCalled();
   });
 
+  it('derives a scroll target when renderer page bounds are nonzero but clipped', () => {
+    const target = getLayoutAwareScrollToCell({
+      sheetId: 'sheet-1',
+      cell: { row: 4, col: 10 },
+      layout: layout([
+        viewport({
+          id: 'main',
+          bounds: { x: 160, y: 100, width: 500, height: 200 },
+          viewportOrigin: { x: 160, y: 100 },
+          scrollOffset: { x: 664, y: 0 },
+          cellRange: { startRow: 4, startCol: 10, endRow: 12, endCol: 15 },
+        }),
+      ]),
+      positionIndex,
+      frozenPanes: { rows: 4, cols: 2 },
+      currentScroll: { x: 664, y: 0 },
+      maxScroll: { x: 1000, y: 1000 },
+      getCellPageBounds: () => ({ width: 56, height: 25 }),
+      getCoordinateScrollTarget: () => ({ left: 664, top: 0 }),
+    });
+
+    expect(target).toEqual({ x: 620, y: 0 });
+  });
+
   it('derives a vertical target from the layout when legacy coordinates return a no-op target', () => {
     const target = getLayoutAwareScrollToCell({
       sheetId: 'sheet-1',

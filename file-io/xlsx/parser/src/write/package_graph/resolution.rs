@@ -89,7 +89,8 @@ pub(super) fn validate_internal_target_is_registered(
 ) -> Result<(), WriteError> {
     if let PackageRelationshipTarget::InternalPart { path } = &relationship.target {
         let normalized = normalize_part_path(path);
-        if !parts.contains_key(&normalized) {
+        if !parts.contains_key(&normalized) && !missing_internal_target_is_quarantined(relationship)
+        {
             return Err(WriteError::PackageIntegrity(format!(
                 "relationship target is not an emitted package part: {}",
                 normalized
@@ -97,4 +98,12 @@ pub(super) fn validate_internal_target_is_registered(
         }
     }
     Ok(())
+}
+
+fn missing_internal_target_is_quarantined(relationship: &PackageRelationship) -> bool {
+    matches!(
+        &relationship.owner,
+        PackageOwner::Part { path }
+            if path.starts_with("xl/richData/") && path.ends_with(".xml")
+    )
 }

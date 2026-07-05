@@ -3,7 +3,8 @@ use domain_types::domain::comment::CommentType;
 use super::legacy::CommentsWriter;
 use super::threaded::ThreadedCommentsWriter;
 use super::types::{
-    CommentShape, CommentTextRun, LegacyComment, ThreadedAuthor, ThreadedComment, ThreadedMention,
+    CommentShape, CommentShapeImage, CommentTextRun, LegacyComment, ThreadedAuthor,
+    ThreadedComment, ThreadedMention,
 };
 
 // ============================================================================
@@ -42,6 +43,44 @@ pub fn comments_from_domain_with_package(
     root_ext_lst_xml: Option<&str>,
     comment_package: Option<&domain_types::SheetCommentPackageInfo>,
 ) -> (Vec<u8>, Vec<u8>) {
+    let cw = build_comments_writer(
+        comments,
+        root_namespace_attrs,
+        root_ext_lst_xml,
+        comment_package,
+        None,
+    );
+
+    (cw.to_xml(), cw.to_vml())
+}
+
+/// Build only comment VML using owner-scoped package metadata.
+pub fn comments_vml_from_domain_with_package(
+    comments: &[domain_types::Comment],
+    comment_package: Option<&domain_types::SheetCommentPackageInfo>,
+    vml_image_relationship_id: Option<
+        &dyn Fn(&domain_types::domain::comment::CommentNoteImage) -> Option<String>,
+    >,
+) -> Vec<u8> {
+    build_comments_writer(
+        comments,
+        None,
+        None,
+        comment_package,
+        vml_image_relationship_id,
+    )
+    .to_vml()
+}
+
+fn build_comments_writer(
+    comments: &[domain_types::Comment],
+    root_namespace_attrs: Option<&[(String, String)]>,
+    root_ext_lst_xml: Option<&str>,
+    comment_package: Option<&domain_types::SheetCommentPackageInfo>,
+    vml_image_relationship_id: Option<
+        &dyn Fn(&domain_types::domain::comment::CommentNoteImage) -> Option<String>,
+    >,
+) -> CommentsWriter {
     let mut cw = CommentsWriter::new();
 
     if let Some(attrs) = root_namespace_attrs {
@@ -176,6 +215,16 @@ pub fn comments_from_domain_with_package(
             shape.has_vml_note_provenance = true;
             shape.note_height_style = vml_shape.height.clone();
             shape.note_width_style = vml_shape.width.clone();
+            shape.note_images = comment
+                .note_images
+                .iter()
+                .filter_map(|image| {
+                    let relationship_id = vml_image_relationship_id
+                        .and_then(|resolver| resolver(image))
+                        .unwrap_or_else(|| image.relationship_id.clone());
+                    (!relationship_id.is_empty()).then_some(CommentShapeImage { relationship_id })
+                })
+                .collect();
         }
         if let Some(anchor) = &comment.note_shape_anchor {
             shape.left_col = anchor.left_column;
@@ -190,7 +239,7 @@ pub fn comments_from_domain_with_package(
         cw.add_with_shape(legacy, shape);
     }
 
-    (cw.to_xml(), cw.to_vml())
+    cw
 }
 
 /// Build threaded comments XML for a single sheet.

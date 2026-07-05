@@ -177,19 +177,19 @@ pub(in crate::storage::engine) fn create_shape(
         let py = py_f.get();
         let li = stores.layout_indexes.get(sheet_id);
         let row = li.map_or(
-            (py / compute_layout_index::DEFAULT_ROW_HEIGHT.0).max(0.0) as u32,
+            (py / stores.layout_metrics.default_row_height_px).max(0.0) as u32,
             |l| l.get_row_at_pixel(domain_types::units::Pixels(py)) as u32,
         );
         let col = li.map_or(
-            (px / compute_layout_index::platform_default_col_width().0).max(0.0) as u32,
+            (px / stores.layout_metrics.default_column_width_px).max(0.0) as u32,
             |l| l.get_col_at_pixel(domain_types::units::Pixels(px)) as u32,
         );
         let row_pos = li.map_or(
-            row as f64 * compute_layout_index::DEFAULT_ROW_HEIGHT.0,
+            row as f64 * stores.layout_metrics.default_row_height_px,
             |l| l.get_row_position(row as usize).0,
         );
         let col_pos = li.map_or(
-            col as f64 * compute_layout_index::platform_default_col_width().0,
+            col as f64 * stores.layout_metrics.default_column_width_px,
             |l| l.get_col_position(col as usize).0,
         );
         config.anchor_row = row;

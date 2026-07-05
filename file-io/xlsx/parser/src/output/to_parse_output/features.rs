@@ -2,14 +2,13 @@
 //! conditional formats, data validations, sparklines, slicers, floating objects,
 //! data tables, print settings, page breaks, comment runs, outline groups.
 
-use std::collections::HashMap;
-
 use crate::infra::opc::opc_target_to_zip_path;
 use domain_types::domain::floating_object::{
     AnchorMode, ConnectorBinding, ConnectorData, ConnectorOoxmlProps, FloatingObject,
     FloatingObjectAnchor, FloatingObjectCommon, FloatingObjectData, FormControlData,
     FormControlOoxmlProps, OleObjectData, OleObjectOoxmlProps, OleObjectPackageIdentity,
-    OleObjectPreviewIdentity, PictureData, PictureOoxmlProps, ShapeData, ShapeOoxmlProps,
+    OleObjectPreviewIdentity, PictureData, PictureEmbeddedMediaAuthority, PictureOoxmlProps,
+    ShapeData, ShapeOoxmlProps,
 };
 use domain_types::{
     AxisBound, AxisBoundLabel, CFCellRange, CFColorPoint, CFColorScale, CFCustomIcon, CFDataBar,
@@ -30,6 +29,9 @@ use crate::output::results::{
     RowHeight,
 };
 
+use super::media::{
+    BinaryPartMap, data_url_for_payload, resolve_package_payload, resolve_relationship_payload,
+};
 use super::non_empty;
 
 #[allow(clippy::string_slice)]

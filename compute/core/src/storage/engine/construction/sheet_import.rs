@@ -220,6 +220,7 @@ pub(in crate::storage::engine) fn import_sheets_from_xlsx(
             hs.rows,
             hs.cols,
             engine.stores.grid_indexes.get(&hs.sheet_id),
+            engine.stores.layout_metrics,
         );
         engine.stores.layout_indexes.insert(hs.sheet_id, layout);
 

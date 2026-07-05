@@ -293,7 +293,7 @@ pub(in crate::storage::engine) fn get_default_col_width(
     sheet_id: &SheetId,
 ) -> f64 {
     let cw = services::queries::get_default_col_width(&engine.stores, sheet_id);
-    domain_types::units::char_width_to_pixels(cw, domain_types::units::platform_mdw()).0
+    domain_types::units::char_width_to_pixels(cw, engine.stores.layout_metrics.column_width_mdw).0
 }
 
 pub(in crate::storage::engine) fn get_row_heights_batch(

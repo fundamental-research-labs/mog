@@ -80,7 +80,7 @@ import { StatusBar } from './chrome/status-bar/StatusBar';
 import { SpreadsheetGrid } from './components/grid/SpreadsheetGrid';
 
 // App-owned chrome components
-import { FormulaBarContainer } from './chrome/formula-bar';
+import { AnnotationBar, FormulaBarContainer } from './chrome/formula-bar';
 import { NLFormulaBarContainer } from './chrome/nl-formula-bar';
 import { TabStrip } from './chrome/sheet-tabs';
 import { ToolbarContainer } from './chrome/toolbar/primitives/ToolbarContainer';
@@ -853,6 +853,12 @@ function SpreadsheetContent(): React.JSX.Element {
           {/* Note: h-full is required because SpreadsheetGrid uses height: 100% internally */}
           <div className="flex-1 min-h-0 h-full overflow-hidden relative">
             <SpreadsheetGrid className="h-full w-full" />
+
+            {/* Annotation popover — the meaning layer of the formula bar. Floats over
+ the top of the grid (covering the column headers) instead of occupying a
+ lane, so it never reflows the cells. Follows the active cell and mounts
+ only when that cell carries an annotation (renders null otherwise). */}
+            {showFormulaBar && <AnnotationBar />}
 
             {/* Status indicators (calculation progress, export notifications) */}
             <SpreadsheetIndicators exportState={{ progress: 0 }} exportNotification={null} />

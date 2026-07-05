@@ -69,6 +69,7 @@ impl ComputeCore {
         // 1. Populate the cell mirror from snapshot.
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        self.normalize_raw_named_ranges_for_graph(mirror);
         let formula_count = formula_cells.len();
         // Pre-size graph: `precedents` needs formula_count entries, `dependents` needs
         // total_cell_count entries (data cells that are depended upon + formula cells).
@@ -156,6 +157,7 @@ impl ComputeCore {
         }
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
+        self.normalize_raw_named_ranges_for_graph(mirror);
         let formula_count = formula_cells.len();
         self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
         self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
@@ -228,6 +230,7 @@ impl ComputeCore {
 
         let total_cell_count: usize = snapshot.sheets.iter().map(|s| s.cells.len()).sum();
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        self.normalize_raw_named_ranges_for_graph(mirror);
         let formula_count = formula_cells.len();
         self.graph = DependencyGraph::with_capacity_full(formula_count, total_cell_count);
         self.ast_cache = FxHashMap::with_capacity_and_hasher(formula_count, Default::default());
@@ -299,6 +302,7 @@ impl ComputeCore {
         }
 
         *mirror = CellMirror::from_snapshot(snapshot)?;
+        self.normalize_raw_named_ranges_for_graph(mirror);
 
         // Formula text is document identity, not graph output. Seed it before
         // deferred graph construction so readback/UI/export can identify

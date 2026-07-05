@@ -6,12 +6,18 @@
 mod cells;
 #[path = "fixtures.rs"]
 mod fixtures;
+#[path = "roundtrip_parse_output/form_controls.rs"]
+mod form_controls;
 #[path = "roundtrip_parse_output/helpers.rs"]
 mod helpers;
 #[path = "roundtrip_parse_output/layout.rs"]
 mod layout;
+#[path = "roundtrip_parse_output/media.rs"]
+mod media;
 #[path = "roundtrip_parse_output/partial_domains.rs"]
 mod partial_domains;
+#[path = "roundtrip_parse_output/rich_data.rs"]
+mod rich_data;
 #[path = "roundtrip_parse_output/shared_strings.rs"]
 mod shared_strings;
 #[path = "roundtrip_parse_output/styles.rs"]
@@ -20,3 +26,5 @@ mod styles;
 mod utf8;
 #[path = "roundtrip_parse_output/workbook.rs"]
 mod workbook;
+#[path = "roundtrip_parse_output/worksheet_custom_properties.rs"]
+mod worksheet_custom_properties;

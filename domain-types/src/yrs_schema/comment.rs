@@ -32,6 +32,7 @@ pub const KEY_VISIBLE: &str = "visible";
 pub const KEY_NOTE_HEIGHT: &str = "noteHeight";
 pub const KEY_NOTE_WIDTH: &str = "noteWidth";
 pub const KEY_NOTE_SHAPE_ANCHOR: &str = "noteShapeAnchor";
+pub const KEY_NOTE_IMAGES: &str = "noteImages";
 pub const KEY_COMMENT_PR: &str = "commentPr";
 
 /// Convert a [`Comment`] to Yrs prelim entries.
@@ -126,6 +127,11 @@ pub fn to_yrs_prelim(comment: &Comment) -> Vec<(&str, Any)> {
     {
         entries.push((KEY_NOTE_SHAPE_ANCHOR, Any::String(Arc::from(json))));
     }
+    if !comment.note_images.is_empty()
+        && let Ok(json) = serde_json::to_string(&comment.note_images)
+    {
+        entries.push((KEY_NOTE_IMAGES, Any::String(Arc::from(json))));
+    }
     if let Some(ref comment_pr) = comment.comment_pr
         && let Ok(json) = serde_json::to_string(comment_pr)
     {
@@ -179,6 +185,9 @@ pub fn from_yrs_map<T: ReadTxn>(map: &MapRef, txn: &T) -> Option<Comment> {
         note_width: read_number(map, txn, KEY_NOTE_WIDTH),
         note_shape_anchor: read_string(map, txn, KEY_NOTE_SHAPE_ANCHOR)
             .and_then(|s| serde_json::from_str(&s).ok()),
+        note_images: read_string(map, txn, KEY_NOTE_IMAGES)
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
         comment_pr: read_string(map, txn, KEY_COMMENT_PR)
             .and_then(|s| serde_json::from_str(&s).ok()),
     })
@@ -247,6 +256,14 @@ mod tests {
                 bottom_row: 7,
                 bottom_offset: 8,
             }),
+            note_images: vec![crate::domain::comment::CommentNoteImage {
+                relationship_id: "rIdImage".to_string(),
+                original_target: "../media/note.png".to_string(),
+                target_mode: None,
+                package_path: "xl/media/note.png".to_string(),
+                content_type: Some("image/png".to_string()),
+                bytes: b"note-image".to_vec(),
+            }],
             ..Default::default()
         };
 
@@ -270,6 +287,7 @@ mod tests {
         assert_eq!(restored.note_height, Some(60.0));
         assert_eq!(restored.note_width, Some(120.0));
         assert_eq!(restored.note_shape_anchor, original.note_shape_anchor);
+        assert_eq!(restored.note_images, original.note_images);
     }
 
     #[test]

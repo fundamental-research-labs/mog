@@ -91,8 +91,12 @@ pub(in crate::storage::engine) fn get_sheet_protection_config(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> SheetProtectionConfig {
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = settings::get_sheet_settings_with_layout_metrics(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        stores.layout_metrics,
+    );
     SheetProtectionConfig {
         is_protected: settings.is_protected,
         protection_password_hash: settings.protection_password_hash,
@@ -170,8 +174,12 @@ pub(in crate::storage::engine) fn has_sheet_protection_password(
     stores: &EngineStores,
     sheet_id: &SheetId,
 ) -> bool {
-    let settings =
-        settings::get_sheet_settings(stores.storage.doc(), stores.storage.sheets(), sheet_id);
+    let settings = settings::get_sheet_settings_with_layout_metrics(
+        stores.storage.doc(),
+        stores.storage.sheets(),
+        sheet_id,
+        stores.layout_metrics,
+    );
     settings
         .protection_password_hash
         .map(|h| !h.is_empty())

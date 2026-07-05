@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use value_types::FiniteF64;
 
 use crate::MutationResult;
 
@@ -658,7 +659,7 @@ pub struct SemanticRowState {
     pub index: u32,
     pub ordinal: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explicit_height_points: Option<f64>,
+    pub explicit_height_points: Option<FiniteF64>,
     pub effective_hidden: bool,
     pub manual_hidden: bool,
     pub structural_hidden: bool,
@@ -676,7 +677,7 @@ pub struct SemanticColumnState {
     pub index: u32,
     pub ordinal: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub explicit_width_chars: Option<f64>,
+    pub explicit_width_chars: Option<FiniteF64>,
     pub hidden: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub digest: Option<ObjectDigest>,

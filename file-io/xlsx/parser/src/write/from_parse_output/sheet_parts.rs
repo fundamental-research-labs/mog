@@ -3,14 +3,16 @@ use domain_types::Hyperlink;
 use super::assembly::{ChartEntry, ChartExEntry, SheetExtras};
 use super::form_control_export_plan::build_form_control_export_plan;
 use super::form_controls::convert_unified_form_controls;
+use super::header_footer_images::build_header_footer_image_export;
 use super::ole_objects::convert_unified_ole_objects;
 use super::sheet_builder::{apply_outline_groups_rows_only, build_sheet};
 use super::sheet_ext_merge::merge_ext_lst_entries;
 use super::style_remap::StyleExportRemapper;
-use super::{chart_replay, sheet_preservation, table_export_plan};
+use super::{chart_replay, sheet_preservation, table_export_plan, worksheet_custom_properties};
 use crate::domain::charts::chart_ex::write::serialize_chart_ex_space;
 use crate::domain::charts::write_canonical::serialize_chart_space;
 use crate::infra::xml_namespaces::NamespaceMap;
+use crate::write::drawing_writer_helpers::floating_object_requires_drawing_part;
 use crate::write::{SharedStringsWriter, SheetWriter};
 
 pub(super) struct BuiltSheetParts {
@@ -18,6 +20,7 @@ pub(super) struct BuiltSheetParts {
     pub(super) sheet_extras: Vec<SheetExtras>,
     pub(super) all_chart_entries: Vec<Vec<ChartEntry>>,
     pub(super) all_chart_ex_entries: Vec<Vec<ChartExEntry>>,
+    pub(super) all_image_blobs: Vec<(String, Vec<u8>)>,
 }
 
 pub(super) fn build_shared_strings(output: &domain_types::ParseOutput) -> SharedStringsWriter {
@@ -36,6 +39,7 @@ pub(super) fn build_sheet_parts(
 ) -> BuiltSheetParts {
     let mut sheet_writers = Vec::with_capacity(output.sheets.len());
     let mut sheet_extras = Vec::with_capacity(output.sheets.len());
+    let mut all_image_blobs = Vec::new();
 
     // Global table counter for archive paths (xl/tables/table{N}.xml).
     let mut global_table_idx: u32 = 0;
@@ -53,8 +57,8 @@ pub(super) fn build_sheet_parts(
     // Per-sheet ChartEx entries: Vec<Vec<ChartExEntry>>.
     let mut all_chart_ex_entries: Vec<Vec<ChartExEntry>> = Vec::with_capacity(output.sheets.len());
 
-    // Metadata refs are emitted only with an authoritative modeled metadata part.
-    let emit_cell_metadata_refs = output.metadata.as_ref().is_some_and(|m| !m.is_empty());
+    // Metadata refs are emitted only when xl/metadata.xml will be emitted.
+    let emit_cell_metadata_refs = super::metadata::metadata_xml_would_export(output);
     for (sheet_idx, sheet_data) in output.sheets.iter().enumerate() {
         let sheet_num = sheet_idx + 1;
 
@@ -297,6 +301,7 @@ pub(super) fn build_sheet_parts(
                     root_ext_lst_xml,
                     sheet_data.comment_package.as_ref(),
                 );
+            append_note_vml_image_blobs(&mut all_image_blobs, &sheet_data.comments);
             Some((comments_xml, generated_vml_xml))
         } else {
             None
@@ -428,13 +433,17 @@ pub(super) fn build_sheet_parts(
         let has_chart_ex = !chart_ex_entries_for_sheet.is_empty();
         all_chart_ex_entries.push(chart_ex_entries_for_sheet);
 
-        // Check for floating objects (images, shapes, etc.)
-        let has_floating_objects = !sheet_data.floating_objects.is_empty();
+        let has_floating_objects = sheet_data
+            .floating_objects
+            .iter()
+            .any(floating_object_requires_drawing_part);
+
+        let hf_image_export = build_header_footer_image_export(sheet_idx, &sheet_data.hf_images);
+        all_image_blobs.extend(hf_image_export.image_blobs);
 
         let (
             original_comment_path,
             original_vml_path,
-            hf_vml,
             original_drawing_path,
             original_drawing_relationship_id,
         ) = (
@@ -446,7 +455,6 @@ pub(super) fn build_sheet_parts(
                 .comment_package
                 .as_ref()
                 .and_then(|package| package.vml_path_hint.clone()),
-            None,
             sheet_data
                 .drawing_package
                 .as_ref()
@@ -480,7 +488,17 @@ pub(super) fn build_sheet_parts(
         let ole_objects = convert_unified_ole_objects(&sheet_data.floating_objects);
         let form_control_plan =
             build_form_control_export_plan(&form_controls, &sheet_data.comments, &ole_objects);
-        let custom_properties = None;
+        let worksheet_controls_xml = sheet_data
+            .worksheet_semantic_containers
+            .controls
+            .as_ref()
+            .map(|xml| xml.raw_xml.clone())
+            .filter(|xml| !xml.is_empty());
+        let custom_properties = worksheet_custom_properties::build_for_sheet(
+            sheet_idx,
+            sheet_data,
+            output.package_fidelity.as_ref(),
+        );
 
         sheet_writers.push(sheet_writer);
         sheet_extras.push(SheetExtras {
@@ -510,12 +528,13 @@ pub(super) fn build_sheet_parts(
                 .comment_package
                 .as_ref()
                 .and_then(|package| package.threaded_comments_relationship_id_hint.clone()),
-            hf_vml,
+            hf_vml: hf_image_export.vml,
             original_drawing_path,
             original_drawing_relationship_id,
             has_printer_settings,
             form_controls: form_control_plan.controls,
             form_control_diagnostics: form_control_plan.diagnostics,
+            worksheet_controls_xml,
             ole_objects,
             custom_properties,
         });
@@ -526,6 +545,25 @@ pub(super) fn build_sheet_parts(
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
+        all_image_blobs,
+    }
+}
+
+fn append_note_vml_image_blobs(
+    all_image_blobs: &mut Vec<(String, Vec<u8>)>,
+    comments: &[domain_types::Comment],
+) {
+    for image in comments.iter().flat_map(|comment| &comment.note_images) {
+        if image.package_path.is_empty() || image.bytes.is_empty() {
+            continue;
+        }
+        if all_image_blobs
+            .iter()
+            .any(|(path, _)| path == &image.package_path)
+        {
+            continue;
+        }
+        all_image_blobs.push((image.package_path.clone(), image.bytes.clone()));
     }
 }
 

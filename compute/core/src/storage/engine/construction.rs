@@ -54,8 +54,8 @@ mod types;
 mod xlsx;
 
 pub(super) use assembly::{
-    assemble_engine, from_snapshot, from_yrs_state, rebuild_engine_from_snapshot,
-    snapshot_id_high_water_mark,
+    assemble_engine, from_snapshot, from_snapshot_with_layout_metrics, from_yrs_state,
+    from_yrs_state_with_layout_metrics, rebuild_engine_from_snapshot, snapshot_id_high_water_mark,
 };
 pub(in crate::storage::engine) use axis_resolver::{
     register_pos_to_id_entries, resolve_sheet_axes_from_yrs,

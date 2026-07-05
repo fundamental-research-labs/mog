@@ -7,7 +7,7 @@ use snapshot_types::versioning::{
     SemanticObjectDigest, SemanticObjectKind, SemanticRowState, SemanticSheetState,
     SemanticWorkbookState, VersionDomainCapabilityState, VersionDomainClass, canonical_digest,
 };
-use value_types::CellValue;
+use value_types::{CellValue, FiniteF64};
 
 use crate::storage::{
     engine::YrsComputeEngine,
@@ -722,7 +722,7 @@ fn canonical_rows(
             row,
             grid,
         )
-        .map(|height| height.0);
+        .and_then(|height| FiniteF64::new(height.0));
         let visibility = dimensions::get_row_visibility_ownership(
             engine.storage().doc(),
             engine.storage().sheets(),
@@ -781,7 +781,7 @@ fn canonical_columns(
             column,
             grid,
         )
-        .map(|width| width.0);
+        .and_then(|width| FiniteF64::new(width.0));
         let hidden = dimensions::is_column_hidden(
             engine.storage().doc(),
             engine.storage().sheets(),

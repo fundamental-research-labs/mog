@@ -23,6 +23,11 @@
       "types": "./dist/cell-events.d.ts",
       "import": "./dist/cell-events.js"
     },
+    "./annotation-events": {
+      "development": "./src/annotation-events.ts",
+      "types": "./dist/annotation-events.d.ts",
+      "import": "./dist/annotation-events.js"
+    },
     "./chart-events": {
       "development": "./src/chart-events.ts",
       "types": "./dist/chart-events.d.ts",

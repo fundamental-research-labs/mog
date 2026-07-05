@@ -254,6 +254,8 @@ export type {
   AutoFillPreviewReceipt,
   FillSeriesApplyReceipt,
   WorksheetFill,
+  WorksheetRangeFormulaInput,
+  WorksheetRangeValueInput,
   PivotCreateOptions,
   PivotCreateWithSheetOptions,
   FindCellsFormatQuery,
@@ -263,6 +265,28 @@ export type {
   FindCellsValueType,
   FoundCell,
 } from './worksheet';
+export type {
+  WorksheetAnnotationDiagnosticReadOptions,
+  WorksheetAnnotationDeleteResult,
+  WorksheetAnnotationFingerprint,
+  WorksheetAnnotationFingerprintProfile,
+  WorksheetAnnotationListOptions,
+  WorksheetAnnotationReadOptions,
+  WorksheetAnnotationReadValidationMode,
+  WorksheetAnnotationRecord,
+  WorksheetAnnotationView,
+  WorksheetAnnotations,
+  WorksheetAnnotationStatus,
+  WorksheetCellAnnotationDeleteResult,
+  WorksheetCellAnnotationDiagnosticListOptions,
+  WorksheetCellAnnotationDiagnostics,
+  WorksheetCellAnnotationListOptions,
+  WorksheetCellAnnotationRecord,
+  WorksheetCellAnnotationRef,
+  WorksheetCellAnnotations,
+  WorksheetCellAnnotationView,
+  WorksheetCellAnnotationWriteEntry,
+} from './worksheet/annotations';
 export type * from './operation-receipt';
 export type * from '@mog/types-api/api';
 export type {

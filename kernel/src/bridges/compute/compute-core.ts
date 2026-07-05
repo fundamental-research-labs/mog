@@ -45,6 +45,7 @@ import {
 } from '../wire/viewport-prefetch';
 
 import { ViewportFetchManager } from './viewport-fetch-manager';
+import { computeInitLayoutMetrics } from './runtime-layout';
 import { refreshViewportForCfSiblings } from './cf-sibling-refresh';
 import { refreshViewportsAfterHistoryReplay } from './history-replay-refresh';
 import {
@@ -643,6 +644,7 @@ export class ComputeCore {
     this.initResult = await this.transport.call<RecalcResult>('compute_init', {
       docId: this.docId,
       snapshot: initSnapshot,
+      layoutMetrics: computeInitLayoutMetrics(),
     });
     this.engineCreated = true;
     activeInstancePerDocId.set(this.docId, this);
@@ -672,6 +674,7 @@ export class ComputeCore {
     this.initResult = await this.transport.call<RecalcResult>('compute_init_from_yrs_state', {
       docId: this.docId,
       state: yrsState,
+      layoutMetrics: computeInitLayoutMetrics(),
     });
     this.engineCreated = true;
     activeInstancePerDocId.set(this.docId, this);

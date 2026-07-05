@@ -93,7 +93,13 @@ describe('TabBar text wrapping', () => {
       'flex-shrink-0',
       'whitespace-nowrap',
     );
-    expect(screen.getByTestId('tabbar-command-cluster')).toHaveClass('hidden', 'min-[720px]:flex');
+    expect(screen.getByRole('tablist', { name: 'Command bar tabs' })).toHaveClass(
+      'flex-1',
+      'min-w-0',
+      'overflow-x-auto',
+    );
+    expect(screen.getByTestId('tabbar-command-cluster')).toHaveClass('hidden', 'flex-shrink-0');
+    expect(screen.getByTestId('tabbar-command-cluster')).not.toHaveClass('min-[720px]:flex');
   });
 
   it('renders Save as a persistent quick-access command next to Undo', () => {

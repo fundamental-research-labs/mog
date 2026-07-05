@@ -2,6 +2,7 @@
  * Worksheet Sub-API Implementations — Barrel Export
  */
 
+export { WorksheetAnnotationsImpl } from './annotations';
 export { WorksheetBindingsImpl } from './bindings';
 export { ChangeAccumulator } from './change-accumulator';
 export { WorksheetChangesImpl } from './changes';

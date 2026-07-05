@@ -117,8 +117,7 @@ pub(crate) fn convert_form_controls(controls: &[FormControlOutput]) -> Vec<Float
 /// Convert parser `OleObjectOutput` items into unified `FloatingObject` items.
 pub(crate) fn convert_ole_objects(
     objects: &[OleObjectOutput],
-    binary_parts: &HashMap<String, Vec<u8>>,
-    media_data_urls: &HashMap<String, String>,
+    binary_parts: &BinaryPartMap,
 ) -> Vec<FloatingObject> {
     objects
         .iter()
@@ -161,23 +160,33 @@ pub(crate) fn convert_ole_objects(
                 });
             // Build typed ooxml props for round-trip
             let embedding = o.data_path.as_ref().and_then(|path| {
-                resolve_binary_part(binary_parts, path).map(|bytes| OleObjectPackageIdentity {
-                    path: path.clone(),
-                    kind: o
-                        .embedding_kind
-                        .clone()
-                        .unwrap_or_else(|| "oleObject".to_string()),
-                    content_type: o.embedding_content_type.clone(),
-                    relationship_id: o.r_id.clone(),
-                    bytes,
+                resolve_package_payload(binary_parts, path).map(|payload| {
+                    OleObjectPackageIdentity {
+                        path: payload.package_path.clone(),
+                        kind: o
+                            .embedding_kind
+                            .clone()
+                            .unwrap_or_else(|| "oleObject".to_string()),
+                        content_type: o
+                            .embedding_content_type
+                            .clone()
+                            .or(payload.content_type.clone()),
+                        relationship_id: o.r_id.clone(),
+                        bytes: payload.bytes,
+                    }
                 })
             });
-            let preview = o.preview_image_path.as_ref().and_then(|path| {
-                resolve_binary_part(binary_parts, path).map(|bytes| OleObjectPreviewIdentity {
-                    path: path.clone(),
-                    relationship_id: o.preview_image_rel_id.clone(),
-                    bytes,
-                })
+            let preview_payload = o
+                .preview_image_path
+                .as_ref()
+                .and_then(|path| resolve_package_payload(binary_parts, path));
+            let preview_image_src = preview_payload.as_ref().map(|payload| {
+                data_url_for_payload(payload.content_type.as_deref(), payload.bytes.as_slice())
+            });
+            let preview = preview_payload.map(|payload| OleObjectPreviewIdentity {
+                path: payload.package_path.clone(),
+                relationship_id: o.preview_image_rel_id.clone(),
+                bytes: payload.bytes,
             });
             let object_id = format!("ole-shape-{}", o.shape_id);
             let import_status = Some(ole_object_import_status(
@@ -232,10 +241,7 @@ pub(crate) fn convert_ole_objects(
                     dv_aspect: o.dv_aspect.clone(),
                     is_linked: o.link.is_some(),
                     is_embedded: o.data_path.is_some(),
-                    preview_image_src: o
-                        .preview_image_path
-                        .as_ref()
-                        .and_then(|path| resolve_media_data_url(media_data_urls, path)),
+                    preview_image_src,
                     alt_text: None,
                     ooxml: Some(ooxml),
                 }),
@@ -384,69 +390,6 @@ fn ole_related_parts(
         related_parts.push(link.clone());
     }
     related_parts
-}
-
-fn resolve_binary_part(binary_parts: &HashMap<String, Vec<u8>>, target: &str) -> Option<Vec<u8>> {
-    if let Some(bytes) = binary_parts.get(target) {
-        return Some(bytes.clone());
-    }
-
-    let normalized = target.replace('\\', "/");
-    if let Some(bytes) = binary_parts.get(&normalized) {
-        return Some(bytes.clone());
-    }
-
-    if let Some(stripped) = normalized.strip_prefix("../") {
-        let workbook_relative = format!("xl/{stripped}");
-        if let Some(bytes) = binary_parts.get(&workbook_relative) {
-            return Some(bytes.clone());
-        }
-    }
-
-    if normalized.starts_with("media/") || normalized.starts_with("embeddings/") {
-        let workbook_relative = format!("xl/{normalized}");
-        if let Some(bytes) = binary_parts.get(&workbook_relative) {
-            return Some(bytes.clone());
-        }
-    }
-
-    normalized
-        .rsplit('/')
-        .next()
-        .and_then(|file_name| binary_parts.get(file_name).cloned())
-}
-
-fn resolve_media_data_url(
-    media_data_urls: &HashMap<String, String>,
-    target: &str,
-) -> Option<String> {
-    if let Some(data_url) = media_data_urls.get(target) {
-        return Some(data_url.clone());
-    }
-
-    let normalized = target.replace('\\', "/");
-    if let Some(data_url) = media_data_urls.get(&normalized) {
-        return Some(data_url.clone());
-    }
-
-    if let Some(stripped) = normalized.strip_prefix("../") {
-        let workbook_relative = format!("xl/{stripped}");
-        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
-            return Some(data_url.clone());
-        }
-    }
-
-    if normalized.starts_with("media/") {
-        let workbook_relative = format!("xl/{normalized}");
-        if let Some(data_url) = media_data_urls.get(&workbook_relative) {
-            return Some(data_url.clone());
-        }
-    }
-
-    normalized
-        .rsplit('/')
-        .next()
-        .and_then(|file_name| media_data_urls.get(file_name).cloned())
 }
 
 // =============================================================================

@@ -82,6 +82,15 @@ function isSingleCellRange(range: CellRange): boolean {
   return range.startRow === range.endRow && range.startCol === range.endCol;
 }
 
+function rangesEqual(a: CellRange, b: CellRange): boolean {
+  return (
+    a.startRow === b.startRow &&
+    a.startCol === b.startCol &&
+    a.endRow === b.endRow &&
+    a.endCol === b.endCol
+  );
+}
+
 async function isBlankSingleCellSource(ws: Worksheet, range: CellRange): Promise<boolean> {
   if (!isSingleCellRange(range)) return false;
   try {
@@ -145,6 +154,13 @@ export async function resolveChartSourceRange(
   }
 
   if (!options.trimHiddenDetail) {
+    return range;
+  }
+
+  // Hidden-detail trimming is only for inferred current-region sources. If
+  // expansion returned the exact range the user selected, preserve that
+  // explicit source even when it spans collapsed outline detail.
+  if (rangesEqual(range, sourceRange)) {
     return range;
   }
 

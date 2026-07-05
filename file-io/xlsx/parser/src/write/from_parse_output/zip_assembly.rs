@@ -9,6 +9,7 @@ use super::{
     WriteError, chart_auxiliary, chart_replay, external_links, table_export_plan, vml_merge,
 };
 use crate::domain::content_types::write::ContentTypesManager;
+use crate::infra::opc::REL_IMAGE;
 use crate::write::package_graph::ResolvedPackageGraph;
 use crate::write::pivot_writer::PivotWriteData;
 use crate::write::{CompressionMethod, ControlsWriter, SheetWriter, ZipWriter};
@@ -217,6 +218,8 @@ pub(super) fn write_zip_package(
     let sheet_xmls: Vec<Vec<u8>> = sheet_writers.into_iter().map(|sw| sw.to_xml()).collect();
 
     let mut zip_ctrl_prop_idx: usize = 0;
+    let mut written_vml_relationships = std::collections::BTreeSet::new();
+    let mut written_custom_property_parts = std::collections::BTreeSet::new();
     for (idx, sheet_xml) in sheet_xmls.into_iter().enumerate() {
         let sheet_num = idx + 1;
         add_registered_part(
@@ -240,7 +243,7 @@ pub(super) fn write_zip_package(
         }
 
         // Comment XML + VML
-        if let Some((ref comments_xml, ref vml_xml)) = sheet_extras[idx].comments {
+        if let Some((ref comments_xml, _)) = sheet_extras[idx].comments {
             let comments_entry = worksheet_comments_relationships
                 .iter()
                 .find(|entry| entry.sheet_idx == idx)
@@ -256,6 +259,11 @@ pub(super) fn write_zip_package(
                 &comments_entry.comments_path,
                 comments_xml.clone(),
             )?;
+            let comment_vml_xml = comment_vml_xml_for_export(
+                package_graph,
+                &comments_entry.vml_path,
+                &output.sheets[idx],
+            );
             let merged_vml = if !sheet_extras[idx].form_controls.is_empty()
                 || !sheet_extras[idx].ole_objects.is_empty()
             {
@@ -276,7 +284,7 @@ pub(super) fn write_zip_package(
                         .collect::<Vec<_>>(),
                     &preview_rel_ids,
                 );
-                vml_merge::merge_form_controls_into_comment_vml(vml_xml, &form_control_vml)
+                vml_merge::merge_form_controls_into_comment_vml(&comment_vml_xml, &form_control_vml)
                     .ok_or_else(|| {
                         WriteError::PackageIntegrity(format!(
                             "failed to merge form-control VML into comment VML for sheet {}",
@@ -284,7 +292,7 @@ pub(super) fn write_zip_package(
                         ))
                     })?
             } else {
-                vml_xml.clone()
+                comment_vml_xml
             };
             add_registered_part(
                 package_graph,
@@ -292,6 +300,12 @@ pub(super) fn write_zip_package(
                 &comments_entry.vml_path,
                 merged_vml,
             )?;
+            write_vml_relationships_once(
+                package_graph,
+                &mut zip,
+                &mut written_vml_relationships,
+                &comments_entry.vml_path,
+            );
         }
 
         // Header/footer image VML — generated from domain types
@@ -389,13 +403,14 @@ pub(super) fn write_zip_package(
 
         if let Some(custom_properties) = &sheet_extras[idx].custom_properties {
             for part in &custom_properties.parts {
-                add_registered_part(package_graph, &mut zip, &part.path, part.data.clone())?;
+                if written_custom_property_parts.insert(part.path.clone()) {
+                    add_registered_part(package_graph, &mut zip, &part.path, part.data.clone())?;
+                }
             }
         }
     }
 
     let mut written_ole_parts = std::collections::BTreeSet::new();
-    let mut vml_paths_with_preview_rels = std::collections::BTreeSet::new();
     for (idx, extras) in sheet_extras.iter().enumerate() {
         if extras.ole_objects.is_empty() {
             continue;
@@ -424,19 +439,12 @@ pub(super) fn write_zip_package(
         ) else {
             continue;
         };
-        if vml_paths_with_preview_rels.insert(vml_path.clone()) {
-            let vml_rels = package_graph.relationship_manager_for_owner(
-                &crate::write::package_graph::PackageOwner::Part {
-                    path: vml_path.clone(),
-                },
-            );
-            if !vml_rels.is_empty() {
-                zip.add_file(
-                    &crate::write::package_graph::part_relationships_path(&vml_path),
-                    vml_rels.to_xml(),
-                );
-            }
-        }
+        write_vml_relationships_once(
+            package_graph,
+            &mut zip,
+            &mut written_vml_relationships,
+            &vml_path,
+        );
     }
 
     // Table XML files
@@ -570,6 +578,8 @@ pub(super) fn write_zip_package(
 
     // Chart XML files + auxiliary files (style, colors, .rels)
     {
+        let mut written_user_shapes_relationship_paths = std::collections::BTreeSet::new();
+        let mut written_user_shapes_media_paths = std::collections::BTreeSet::new();
         for (sheet_idx, chart_entries) in all_chart_entries.iter().enumerate() {
             for entry in chart_entries {
                 let chart_path = format!("xl/charts/chart{}.xml", entry.global_idx);
@@ -608,7 +618,7 @@ pub(super) fn write_zip_package(
                         add_registered_part(package_graph, &mut zip, path, data.clone())?;
                     }
                 }
-                if let Some(user_shapes) = typed_user_shapes
+                if let Some(user_shapes) = typed_user_shapes.as_ref()
                     && written_auxiliary_paths.insert(user_shapes.path.clone())
                 {
                     add_registered_part(
@@ -617,6 +627,31 @@ pub(super) fn write_zip_package(
                         &user_shapes.path,
                         user_shapes.data.to_vec(),
                     )?;
+                }
+                if let Some(user_shapes) = typed_user_shapes.as_ref() {
+                    let rels_path =
+                        crate::write::package_graph::part_relationships_path(&user_shapes.path);
+                    if written_user_shapes_relationship_paths.insert(rels_path.clone()) {
+                        let user_shapes_rels = package_graph.relationship_manager_for_owner(
+                            &crate::write::package_graph::PackageOwner::Part {
+                                path: user_shapes.path.clone(),
+                            },
+                        );
+                        if !user_shapes_rels.is_empty() {
+                            zip.add_file(&rels_path, user_shapes_rels.to_xml());
+                        }
+                    }
+                }
+                for image in chart_auxiliary::chart_user_shapes_image_data(chart_spec, &chart_path)
+                {
+                    if written_user_shapes_media_paths.insert(image.image_path.clone()) {
+                        add_registered_part(
+                            package_graph,
+                            &mut zip,
+                            &image.image_path,
+                            image.data.to_vec(),
+                        )?;
+                    }
                 }
                 let chart_rels = package_graph.relationship_manager_for_owner(
                     &crate::write::package_graph::PackageOwner::Part { path: chart_path },
@@ -736,14 +771,51 @@ pub(super) fn write_zip_package(
     if let Err(errors) =
         crate::infra::package_integrity::validate_archive_package_integrity(&archive)
     {
-        let message = errors
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join("; ");
-        return Err(WriteError::PackageIntegrity(message));
+        let blocking_errors: Vec<_> = errors
+            .into_iter()
+            .filter(|error| !export_validation_error_is_quarantined(error))
+            .collect();
+        if !blocking_errors.is_empty() {
+            let message = blocking_errors
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Err(WriteError::PackageIntegrity(message));
+        }
     }
     Ok(xlsx_bytes)
+}
+
+fn export_validation_error_is_quarantined(
+    error: &crate::infra::package_integrity::PackageIntegrityError,
+) -> bool {
+    match error {
+        crate::infra::package_integrity::PackageIntegrityError::MissingPartRelationshipReference {
+            part_path,
+            rels_path,
+            ..
+        } => {
+            is_rich_data_xml_part(part_path)
+                && rels_path == &crate::write::package_graph::part_relationships_path(part_path)
+        }
+        crate::infra::package_integrity::PackageIntegrityError::InvalidRelationshipTarget {
+            rels_path,
+            ..
+        }
+        | crate::infra::package_integrity::PackageIntegrityError::MissingRelationshipTarget {
+            rels_path,
+            ..
+        } => crate::infra::opc::relationship_owner_from_rels_path(rels_path)
+            .as_deref()
+            .is_some_and(is_rich_data_xml_part),
+        _ => false,
+    }
+}
+
+fn is_rich_data_xml_part(path: &str) -> bool {
+    let path = path.trim_start_matches('/');
+    path.starts_with("xl/richData/") && path.ends_with(".xml")
 }
 
 fn table_relationships_path(table_path: &str) -> String {
@@ -802,6 +874,57 @@ fn ole_preview_relationship_ids(
                 .unwrap_or_default()
         })
         .collect()
+}
+
+fn comment_vml_xml_for_export(
+    package_graph: &ResolvedPackageGraph,
+    vml_path: &str,
+    sheet: &domain_types::SheetData,
+) -> Vec<u8> {
+    let owner = crate::write::package_graph::PackageOwner::Part {
+        path: vml_path.to_string(),
+    };
+    let relationship_id = |image: &domain_types::domain::comment::CommentNoteImage| {
+        if super::comment_notes::note_image_is_external(image) {
+            return package_graph
+                .relationship_id(&owner, REL_IMAGE, &image.original_target)
+                .map(str::to_string);
+        }
+        if image.package_path.is_empty() || image.bytes.is_empty() {
+            return None;
+        }
+        let target = relative_target(vml_path, &image.package_path);
+        package_graph
+            .relationship_id(&owner, REL_IMAGE, &target)
+            .map(str::to_string)
+    };
+    crate::domain::comments::write::comments_vml_from_domain_with_package(
+        &sheet.comments,
+        sheet.comment_package.as_ref(),
+        Some(&relationship_id),
+    )
+}
+
+fn write_vml_relationships_once(
+    package_graph: &ResolvedPackageGraph,
+    zip: &mut ZipWriter,
+    written: &mut std::collections::BTreeSet<String>,
+    vml_path: &str,
+) {
+    if !written.insert(vml_path.to_string()) {
+        return;
+    }
+    let vml_rels = package_graph.relationship_manager_for_owner(
+        &crate::write::package_graph::PackageOwner::Part {
+            path: vml_path.to_string(),
+        },
+    );
+    if !vml_rels.is_empty() {
+        zip.add_file(
+            &crate::write::package_graph::part_relationships_path(vml_path),
+            vml_rels.to_xml(),
+        );
+    }
 }
 
 fn legacy_vml_path_for_sheet(

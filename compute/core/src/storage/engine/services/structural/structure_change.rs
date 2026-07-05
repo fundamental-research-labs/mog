@@ -167,6 +167,7 @@ pub(in crate::storage::engine) fn apply_structure_change(
             grid.row_count(),
             grid.col_count(),
             Some(grid),
+            stores.layout_metrics,
         );
         stores.layout_indexes.insert(*sheet_id, layout);
     }

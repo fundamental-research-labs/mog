@@ -712,6 +712,7 @@ impl ComputeCore {
         name: String,
         def: formula_types::NamedRangeDef,
     ) {
+        let def = self.resolve_named_range_def_for_graph(mirror, def);
         let scope = def.scope.clone();
         let raw_expr = def.raw_expression.clone();
 

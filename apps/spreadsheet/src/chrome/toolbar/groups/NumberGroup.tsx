@@ -275,6 +275,11 @@ export const NumberGroup = React.memo(function NumberGroup() {
       label="Number"
       collapseConfig={NUMBER_COLLAPSE_CONFIG}
       dropdownIcon={<NumberFormatIcon />}
+      dialogLauncher={{
+        testId: 'ribbon-button-number-format-settings',
+        ariaLabel: 'Number Format Settings',
+        onClick: () => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'number' }),
+      }}
     >
       <div className="flex flex-col gap-[var(--ribbon-button-gap)]">
         {/* Row 1: Number format dropdown */}
@@ -423,6 +428,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
           <Tooltip title="Increase Decimal Places">
             <RibbonButton
               id="increase-decimals"
+              data-testid="ribbon-button-increase-decimals"
               layout="icon-only"
               icon={<DecimalIncreaseIcon />}
               onClick={() => {
@@ -436,6 +442,7 @@ export const NumberGroup = React.memo(function NumberGroup() {
           <Tooltip title="Decrease Decimal Places">
             <RibbonButton
               id="decrease-decimals"
+              data-testid="ribbon-button-decrease-decimals"
               layout="icon-only"
               icon={<DecimalDecreaseIcon />}
               onClick={() => {

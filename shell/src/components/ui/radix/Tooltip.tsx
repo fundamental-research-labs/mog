@@ -52,9 +52,6 @@ export interface TooltipProps {
 
 // Content container classes - Excel-style light background
 const contentClasses = [
-  // Tooltip content is portaled under the shell portal host, which is
-  // pointer-transparent so empty portal space never blocks the app.
-  'pointer-events-auto',
   // Layout
   'px-1.5 py-1',
   'max-w-[240px]',
@@ -80,6 +77,9 @@ const contentClasses = [
   'data-[side=right]:slide-in-from-left-2',
   'duration-ss-fast',
 ].join(' ');
+
+const nonInteractiveContentClasses = `pointer-events-none ${contentClasses}`;
+const interactiveContentClasses = `pointer-events-auto ${contentClasses}`;
 
 /**
  * Tooltip component wrapping Radix UI Tooltip.
@@ -130,7 +130,9 @@ export const Tooltip = memo(function Tooltip({
           side={resolvedSide}
           align={align}
           sideOffset={8}
-          className={contentClasses}
+          className={
+            hasInteractiveContent ? interactiveContentClasses : nonInteractiveContentClasses
+          }
           // Allow pointer events only if we have interactive content (links)
           onPointerDownOutside={(e) => {
             if (!hasInteractiveContent) {

@@ -31,6 +31,10 @@ fn semantic_fixture() -> WorksheetSemanticContainers {
         smart_tags: semantic_xml(
             r#"<smartTags><cellSmartTags r="A1"><cellSmartTag type="0"/></cellSmartTags></smartTags>"#,
         ),
+        controls: semantic_xml(r#"<controls><control shapeId="1025"/></controls>"#),
+        custom_properties: semantic_xml(
+            r#"<customProperties><customPr name="Mog"/></customProperties>"#,
+        ),
         cell_watches: semantic_xml(r#"<cellWatches><cellWatch r="A1"/></cellWatches>"#),
     }
 }
@@ -69,6 +73,8 @@ fn all_worksheet_semantic_containers_round_trip_through_parse_output() {
         "dataConsolidate",
         "phoneticPr",
         "smartTags",
+        "controls",
+        "customProperties",
         "cellWatches",
     ] {
         assert!(xml.contains(tag), "writer omitted <{tag}> from typed state");
@@ -93,6 +99,7 @@ fn typed_deletion_removes_containers_from_export() {
         "dataConsolidate",
         "phoneticPr",
         "smartTags",
+        "controls",
         "cellWatches",
     ] {
         assert!(

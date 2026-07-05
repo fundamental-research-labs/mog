@@ -38,6 +38,7 @@ import type {
 import type { IObjectBoundsReader } from '@mog/types-objects/objects/object-bounds-reader';
 import type {
   AggregateResult,
+  CellAnnotationWriteOptions,
   CellData,
   CellMetadataCache,
   CellRange,
@@ -91,6 +92,7 @@ import type {
 import type { RegionMeta } from '../store/store-types';
 import type { CopyFromOptions } from '@mog/types-core/core';
 import type {
+  WorksheetAnnotations,
   WorksheetBindings,
   ChartReadOptions,
   WorksheetChanges,
@@ -186,6 +188,25 @@ export interface SortByColorOptions {
   /** Sort only currently visible row slots, preserving hidden row positions. */
   visibleRowsOnly?: boolean;
 }
+
+export type WorksheetRangeValueInput =
+  | CellValuePrimitive
+  | Date
+  | {
+      /** Cell value to write. */
+      readonly value: CellValuePrimitive | Date;
+      /** Optional Mog-native annotation to set after this cell write succeeds. */
+      readonly annotation?: string | null;
+    };
+
+export type WorksheetRangeFormulaInput =
+  | string
+  | {
+      /** Formula expression, with or without a leading "=". */
+      readonly formula: string;
+      /** Optional Mog-native annotation to set after this formula write succeeds. */
+      readonly annotation?: string | null;
+    };
 
 /**
  * Typed cell readback record returned by {@link WorksheetCellsAccessor.get}.
@@ -364,14 +385,14 @@ export interface Worksheet extends WorksheetFill {
   setValue(
     address: string,
     value: CellValuePrimitive | Date,
-    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,
   ): Promise<void>;
   /** Set an explicit scalar value by row/col. */
   setValue(
     row: number,
     col: number,
     value: CellValuePrimitive | Date,
-    options?: Pick<CellWriteOptions, 'literal' | 'asText'>,
+    options?: Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>,
   ): Promise<void>;
 
   /**
@@ -498,38 +519,47 @@ export interface Worksheet extends WorksheetFill {
   /**
    * Set a 2D array of values into a range (A1 notation).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(range: string, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+  setRange(range: string, values: WorksheetRangeValueInput[][]): Promise<void>;
   /**
    * Set a 2D array of values into a range (CellRange object).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(range: CellRange, values: (CellValuePrimitive | Date)[][]): Promise<void>;
+  setRange(range: CellRange, values: WorksheetRangeValueInput[][]): Promise<void>;
   /**
    * Set a 2D array of values into a range (starting at row/col).
    * String values starting with "=" are treated as formulas.
+   * To annotate a cell while writing, pass an entry as `{ value, annotation }`.
    */
-  setRange(
-    startRow: number,
-    startCol: number,
-    values: (CellValuePrimitive | Date)[][],
-  ): Promise<void>;
+  setRange(startRow: number, startCol: number, values: WorksheetRangeValueInput[][]): Promise<void>;
 
   /**
    * Set a formula in one cell. Accepts either "=SUM(A1:A10)" or
    * "SUM(A1:A10)" and stores the normalized formula with a leading "=".
    */
-  setFormula(address: string, formula: string): Promise<void>;
+  setFormula(address: string, formula: string, options?: CellAnnotationWriteOptions): Promise<void>;
   /** Set a formula by row/col. */
-  setFormula(row: number, col: number, formula: string): Promise<void>;
+  setFormula(
+    row: number,
+    col: number,
+    formula: string,
+    options?: CellAnnotationWriteOptions,
+  ): Promise<void>;
 
   /**
    * Set formulas into a range, starting at the top-left cell.
    * Each formula accepts either leading-"=" or bare expression form.
+   * To annotate a cell while writing, pass an entry as `{ formula, annotation }`.
    */
-  setFormulas(range: string, formulas: string[][]): Promise<void>;
-  setFormulas(range: CellRange, formulas: string[][]): Promise<void>;
-  setFormulas(startRow: number, startCol: number, formulas: string[][]): Promise<void>;
+  setFormulas(range: string, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
+  setFormulas(range: CellRange, formulas: WorksheetRangeFormulaInput[][]): Promise<void>;
+  setFormulas(
+    startRow: number,
+    startCol: number,
+    formulas: WorksheetRangeFormulaInput[][],
+  ): Promise<void>;
 
   /**
    * Enter a CSE (`Ctrl+Shift+Enter`) array formula on the given range.
@@ -1076,18 +1106,35 @@ export interface Worksheet extends WorksheetFill {
    * Supports both A1 addressing and numeric (row, col) addressing.
    */
   setCells(
-    cells: Array<{ addr: string; value: CellValuePrimitive | Date }>,
+    cells: Array<{ addr: string; value: CellValuePrimitive | Date; annotation?: string | null }>,
   ): Promise<SetCellsResult>;
   setCells(
-    cells: Array<{ address: string; value: CellValuePrimitive | Date }>,
+    cells: Array<{
+      address: string;
+      value: CellValuePrimitive | Date;
+      annotation?: string | null;
+    }>,
   ): Promise<SetCellsResult>;
   setCells(
-    cells: Array<{ row: number; col: number; value: CellValuePrimitive | Date }>,
+    cells: Array<{
+      row: number;
+      col: number;
+      value: CellValuePrimitive | Date;
+      annotation?: string | null;
+    }>,
   ): Promise<SetCellsResult>;
-  setCells(cells: Array<{ cell: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ addr: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ address: string; formula: string }>): Promise<SetCellsResult>;
-  setCells(cells: Array<{ row: number; col: number; formula: string }>): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ cell: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ addr: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ address: string; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
+  setCells(
+    cells: Array<{ row: number; col: number; formula: string; annotation?: string | null }>,
+  ): Promise<SetCellsResult>;
 
   // ===========================================================================
   // Export helpers
@@ -1340,6 +1387,8 @@ export interface Worksheet extends WorksheetFill {
   readonly slicers: WorksheetSlicers;
   /** Sparkline CRUD and groups */
   readonly sparklines: WorksheetSparklines;
+  /** Review annotations anchored to cell/table content */
+  readonly annotations: WorksheetAnnotations;
   /** Notes and threaded comments */
   readonly comments: WorksheetComments;
   /** Sheet-level custom properties (key-value store) */

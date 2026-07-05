@@ -140,7 +140,7 @@ pub(in crate::storage::engine) fn set_col_width(
     // works instead of failing with a misleading SheetNotFound.
     ensure_axis_capacity(stores, sheet_id, 0, col)?;
     // Store canonical units (char-width) in Yrs
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     let width_cw = domain_types::units::pixels_to_char_width(width_px, mdw);
     dimensions::set_col_width(
         stores.storage.doc(),
@@ -183,7 +183,7 @@ pub(in crate::storage::engine) fn set_col_widths(
     if let Some(max_col) = widths.iter().map(|(col, _)| *col).max() {
         ensure_axis_capacity(stores, sheet_id, 0, max_col)?;
     }
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     let mut result = MutationResult::empty();
 
     for (col, width_px) in widths {
@@ -231,7 +231,7 @@ pub(in crate::storage::engine) fn set_col_width_chars(
         stores.grid_indexes.get(sheet_id),
     )?;
     // LayoutIndex stays in pixels
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     let width_px = domain_types::units::char_width_to_pixels(width_cw, mdw);
     if let Some(li) = stores.layout_indexes.get_mut(sheet_id) {
         li.set_col_width(col as usize, width_px);
@@ -259,7 +259,7 @@ pub(in crate::storage::engine) fn set_col_widths_chars(
     if let Some(max_col) = widths.iter().map(|(col, _)| *col).max() {
         ensure_axis_capacity(stores, sheet_id, 0, max_col)?;
     }
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     let mut result = MutationResult::empty();
 
     for (col, width_cw) in widths {

@@ -296,7 +296,7 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
 
     // --- Dimension changes (col widths) ---
     // Yrs stores canonical units (char-width); DimensionChange.size must be pixels for TS.
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     for dch in &changes.col_widths {
         let sheet_id_str = dch.sheet_id.to_uuid_string();
         if let Some(col) = resolve_col_id_to_index(stores, &dch.sheet_id, &dch.key) {
@@ -788,7 +788,12 @@ pub(in crate::storage::engine) fn build_mutation_result_from_changes(
         // SheetSettings). Source of truth: SHEET_SETTINGS_KEYS in
         // crate::storage::sheet::settings.
         if settings::is_sheet_settings_key(field_str) {
-            let post_settings = settings::get_sheet_settings(sheet_doc, sheet_map, &smch.sheet_id);
+            let post_settings = settings::get_sheet_settings_with_layout_metrics(
+                sheet_doc,
+                sheet_map,
+                &smch.sheet_id,
+                stores.layout_metrics,
+            );
             let settings_value =
                 serde_json::to_value(&post_settings).expect("SheetSettings must serialize to JSON");
             result.settings_changes.push(SheetSettingsChange {

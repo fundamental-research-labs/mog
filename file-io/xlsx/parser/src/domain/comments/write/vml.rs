@@ -98,6 +98,15 @@ fn write_vml_shape(w: &mut XmlWriter, shape: &CommentShape, index: usize) {
         .attr("color2", "#ffffe1")
         .self_close();
 
+    for image in &shape.note_images {
+        if image.relationship_id.is_empty() {
+            continue;
+        }
+        w.start_element_ns("v", "imagedata")
+            .attr("o:relid", &image.relationship_id)
+            .self_close();
+    }
+
     // Shadow
     w.start_element_ns("v", "shadow")
         .attr("color", "black")

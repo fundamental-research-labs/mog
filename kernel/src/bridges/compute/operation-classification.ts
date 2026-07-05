@@ -48,6 +48,13 @@ const SYNC_EXCLUDED_COMMANDS = new Set([
   'compute_settle_for_mirror',
 ]);
 
+const ANNOTATION_CACHE_EXCLUDED_COMMANDS = new Set([
+  'compute_remove_cell_annotation_by_position',
+  'compute_remove_table_annotation',
+  'compute_set_cell_annotation_by_position',
+  'compute_set_table_annotation',
+]);
+
 const UNDO_REDO_COMMANDS = new Set([
   'compute_begin_undo_group',
   'compute_end_undo_group',
@@ -76,7 +83,7 @@ const SHADOW_ONLY_EXACT_COMMANDS = new Set([
   'compute_update_viewport_bounds',
 ]);
 
-const BLOCKED_SECRET_PREFIXES = ['compute_wb_security_'];
+const SECRET_NO_HISTORY_PREFIXES = ['compute_wb_security_'];
 
 const SHADOW_ONLY_PREFIXES = [
   'compute_set_calculation',
@@ -143,6 +150,18 @@ export function classifyWriteOperation(
     });
   }
 
+  if (ANNOTATION_CACHE_EXCLUDED_COMMANDS.has(command)) {
+    return withCommand(command, {
+      invocation: invocationHint ?? 'public-mutation',
+      operationKind: 'mutation',
+      domainClass: 'transient',
+      capturePolicy: 'excluded',
+      writeAdmissionMode: 'captureDisabledNoHistory',
+      rationale:
+        'Annotation cache writes are non-authoritative sidecar state, not workbook history.',
+    });
+  }
+
   if (UNDO_REDO_COMMANDS.has(command)) {
     return withCommand(command, {
       invocation: 'undo-redo-control',
@@ -179,15 +198,15 @@ export function classifyWriteOperation(
     });
   }
 
-  if (hasAnyPrefix(command, BLOCKED_SECRET_PREFIXES)) {
+  if (hasAnyPrefix(command, SECRET_NO_HISTORY_PREFIXES)) {
     return withCommand(command, {
-      invocation: 'direct-compute-api',
+      invocation: invocationHint ?? 'public-mutation',
       operationKind: 'mutation',
       domainClass: 'secret',
       capturePolicy: 'excluded',
-      writeAdmissionMode: 'block',
+      writeAdmissionMode: 'captureDisabledNoHistory',
       rationale:
-        'Security-policy mutation payloads are not admitted to version capture in this slice.',
+        'Security-policy mutation payloads are admitted to the security engine but excluded from version capture.',
     });
   }
 

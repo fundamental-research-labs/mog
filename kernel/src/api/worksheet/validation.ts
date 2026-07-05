@@ -18,18 +18,19 @@ import type {
   ValidationSetReceipt,
   WorksheetValidation,
 } from '@mog-sdk/contracts/api';
+import type { CellValue } from '@mog-sdk/contracts/core';
 
 import type { RangeSchemaCreatedEvent, RangeSchemaDeletedEvent } from '@mog-sdk/contracts/events';
 
 import type { RangeSchema } from '../../bridges/compute/compute-bridge';
 import type { MutationAdmissionOptions } from '../../bridges/compute';
 import type { DocumentContext } from '../../context';
-import * as Properties from '../../domain/cells/cell-properties';
 import { KernelError } from '../../errors';
 import type { HandleLiveness } from '../lifecycle/handle-liveness';
 import { createVersionOperationContext } from '../internal/version-operation-context';
 import { resolveCell, resolveRange } from '../internal/address-resolver';
 import { parseCellRange, rangeToA1 } from '../internal/utils';
+import { normalizeCellValue } from '../internal/value-conversions';
 import {
   applyListSourceString,
   errorStyleToEnforcement,
@@ -77,6 +78,19 @@ function receivedType(value: unknown): string {
   if (value === null) return 'null';
   if (Array.isArray(value)) return 'array';
   return typeof value;
+}
+
+function validationInputForCellValue(value: unknown): string | null {
+  const normalized = normalizeCellValue(value as CellValue);
+  if (normalized == null) return '';
+  if (
+    typeof normalized === 'string' ||
+    typeof normalized === 'number' ||
+    typeof normalized === 'boolean'
+  ) {
+    return String(normalized);
+  }
+  return null;
 }
 
 function rangeCellCount(range: CellRange): number {
@@ -784,11 +798,39 @@ export class WorksheetValidationImpl implements WorksheetValidation {
     endCol: number,
   ): Promise<Array<{ row: number; col: number }>> {
     this._assertLive('validation.getErrorsInRange');
-    return Properties.queryByMetadata(
-      this.ctx,
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+
+    const range = await this.ctx.computeBridge.queryRange(
       this.sheetId,
-      (meta) => (meta.validationErrors?.length ?? 0) > 0,
-      { startRow, startCol, endRow, endCol },
+      minRow,
+      minCol,
+      maxRow,
+      maxCol,
     );
+    const cells = range?.cells ?? [];
+    const errors: Array<{ row: number; col: number }> = [];
+
+    for (const cell of cells) {
+      const value = validationInputForCellValue(cell.value);
+      if (value == null) continue;
+
+      const listResult = await this.validateResolvedListValue(cell.row, cell.col, value);
+      const result =
+        listResult ??
+        (await this.ctx.computeBridge.validateCellValueInDoc(
+          this.sheetId,
+          cell.row,
+          cell.col,
+          value,
+        ));
+      if (!result.valid) {
+        errors.push({ row: cell.row, col: cell.col });
+      }
+    }
+
+    return errors;
   }
 }

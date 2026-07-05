@@ -204,6 +204,7 @@ export const RUST_CELL_FORMAT_FIELDS = [
   'patternForegroundColor',
   'patternForegroundColorTint',
   'patternType',
+  'pivotButton',
   'quotePrefix',
   'readingOrder',
   'shrinkToFit',

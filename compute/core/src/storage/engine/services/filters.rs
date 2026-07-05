@@ -10,6 +10,9 @@ use cell_types::{CellId, SheetId, SheetPos};
 use compute_document::hex::{hex_to_id, id_to_hex};
 use value_types::{CellValue, ComputeError};
 
+mod clear_all;
+mod value_queries;
+
 pub(in crate::storage::engine) fn create_filter(
     stores: &mut EngineStores,
     mirror: &mut CellMirror,
@@ -437,18 +440,7 @@ pub(in crate::storage::engine) fn clear_all_column_filters(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Result<MutationResult, ComputeError> {
-    filters::clear_all_column_filters(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-    );
-    imported_filters::sync_imported_auto_filter_metadata_from_runtime(
-        stores, mirror, sheet_id, filter_id,
-    );
-    apply_filter_with_action(
-        stores, mirror, settings, sheet_id, filter_id, "cleared", None,
-    )
+    clear_all::clear_all_column_filters(stores, mirror, settings, sheet_id, filter_id)
 }
 
 pub(in crate::storage::engine) fn get_filter(
@@ -919,26 +911,7 @@ pub(in crate::storage::engine) fn get_unique_column_values(
     filter_id: &str,
     header_col: u32,
 ) -> Vec<CellValue> {
-    let header_cell_id = match resolve_header_col(stores, mirror, sheet_id, filter_id, header_col) {
-        Some(id) => id,
-        None => return vec![],
-    };
-    let sid = *sheet_id;
-    filters::get_unique_values(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-        &header_cell_id,
-        |row, col| {
-            let pos = SheetPos::new(row, col);
-            mirror
-                .get_cell_value_at(&sid, pos)
-                .cloned()
-                .unwrap_or(CellValue::Null)
-        },
-        |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
-    )
+    value_queries::get_unique_column_values(stores, mirror, sheet_id, filter_id, header_col)
 }
 
 pub(in crate::storage::engine) fn get_filtered_record_count(
@@ -948,24 +921,7 @@ pub(in crate::storage::engine) fn get_filtered_record_count(
     sheet_id: &SheetId,
     filter_id: &str,
 ) -> Option<filters::FilterRecordCount> {
-    let sid = *sheet_id;
-    filters::get_filtered_record_count(
-        stores.storage.doc(),
-        stores.storage.sheets(),
-        sheet_id,
-        filter_id,
-        |row, col| {
-            let pos = SheetPos::new(row, col);
-            mirror
-                .get_cell_value_at(&sid, pos)
-                .cloned()
-                .unwrap_or(CellValue::Null)
-        },
-        |row, col| {
-            resolved_formats::get_resolved_cell_format(stores, mirror, settings, sheet_id, row, col)
-        },
-        |hex| resolve_filter_cell_pos(stores, mirror, sheet_id, hex),
-    )
+    value_queries::get_filtered_record_count(stores, mirror, settings, sheet_id, filter_id)
 }
 
 #[cfg(test)]

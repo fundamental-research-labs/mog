@@ -236,6 +236,7 @@ fn push_sheet_records(records: &mut Vec<SemanticCoverageRecord>) {
             KEY_SCHEMAS,
             KEY_PIVOT_TABLES,
             KEY_COMMENTS,
+            KEY_CELL_ANNOTATIONS,
             KEY_FILTERS,
             KEY_FILTER_METADATA_BINDINGS,
             KEY_SPARKLINES,

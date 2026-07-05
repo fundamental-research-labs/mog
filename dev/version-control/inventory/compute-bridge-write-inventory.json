@@ -1006,6 +1006,13 @@
     },
     {
       "source": "generated-bridge",
+      "method": "removeCellAnnotationByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_cell_annotation_by_position"
+    },
+    {
+      "source": "generated-bridge",
       "method": "removeComputeSheet",
       "access": "write",
       "wrapper": "mutatePublic",
@@ -1080,6 +1087,13 @@
       "access": "write",
       "wrapper": "mutatePublic",
       "command": "compute_remove_subtotals"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "removeTableAnnotation",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_remove_table_annotation"
     },
     {
       "source": "generated-bridge",
@@ -1255,6 +1269,13 @@
       "access": "write",
       "wrapper": "mutatePublic",
       "command": "compute_set_cell_binary"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setCellAnnotationByPosition",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_cell_annotation_by_position"
     },
     {
       "source": "generated-bridge",
@@ -1654,6 +1675,13 @@
       "access": "write",
       "wrapper": "mutatePublic",
       "command": "compute_set_tab_color"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setTableAnnotation",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_table_annotation"
     },
     {
       "source": "generated-bridge",

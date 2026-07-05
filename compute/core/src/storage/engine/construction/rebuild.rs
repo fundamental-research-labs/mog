@@ -32,6 +32,7 @@ pub(in crate::storage::engine) fn rebuild_sheet_runtime_from_yrs(
     storage: &YrsStorage,
     sheet_id: SheetId,
     grid_id_alloc: Arc<IdAllocator>,
+    layout_metrics: domain_types::units::LayoutMetrics,
 ) -> Result<Option<RebuiltSheetRuntime>, ComputeError> {
     let Some(sheet_snapshot) = build_sheet_snapshot_from_yrs(storage, &sheet_id)? else {
         return Ok(None);
@@ -44,6 +45,7 @@ pub(in crate::storage::engine) fn rebuild_sheet_runtime_from_yrs(
         sheet_snapshot.rows,
         sheet_snapshot.cols,
         Some(&grid_index),
+        layout_metrics,
     );
     let merge_index = build_merge_index_for_sheet(storage, sheet_id, &grid_index);
 

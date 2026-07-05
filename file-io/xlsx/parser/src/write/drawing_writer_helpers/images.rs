@@ -66,6 +66,7 @@ pub(super) fn next_available_image_r_id(image_rels: &[(String, String)]) -> Stri
     }
 }
 
+#[cfg(test)]
 pub(super) fn push_image_blob_if_data_url(
     image_blobs: &mut Vec<(String, Vec<u8>)>,
     image_path: &str,
@@ -80,11 +81,26 @@ pub(super) fn push_image_blob_if_data_url(
     image_blobs.push((image_path.to_string(), decoded));
 }
 
+pub(super) fn ensure_image_blob_for_current_payload(
+    image_blobs: &mut Vec<(String, Vec<u8>)>,
+    image_path: &str,
+    picture_src: &str,
+) -> bool {
+    if image_blobs.iter().any(|(path, _)| path == image_path) {
+        return true;
+    }
+    let Some((_, decoded)) = parse_data_url(picture_src) else {
+        return false;
+    };
+    image_blobs.push((image_path.to_string(), decoded));
+    true
+}
+
 /// Parse a `data:` URL into (file_extension, decoded_bytes).
 ///
 /// Supports the format `data:<mime>;base64,<data>`.
 /// Returns `None` if the URL is not a valid data-URL or decoding fails.
-pub(super) fn parse_data_url(url: &str) -> Option<(String, Vec<u8>)> {
+pub(in crate::write) fn parse_data_url(url: &str) -> Option<(String, Vec<u8>)> {
     let rest = url.strip_prefix("data:")?;
     let (mime_and_params, data) = rest.split_once(',')?;
     let mime = mime_and_params.strip_suffix(";base64")?;

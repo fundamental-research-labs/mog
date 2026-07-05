@@ -233,6 +233,11 @@
       "types": "./dist/api/worksheet/collections/text-effects-collection.d.ts",
       "import": "./dist/api/worksheet/collections/text-effects-collection.js"
     },
+    "./api/worksheet/annotations": {
+      "development": "./src/api/worksheet/annotations.ts",
+      "types": "./dist/api/worksheet/annotations.d.ts",
+      "import": "./dist/api/worksheet/annotations.js"
+    },
     "./api/worksheet/comments": {
       "development": "./src/api/worksheet/comments.ts",
       "types": "./dist/api/worksheet/comments.d.ts",

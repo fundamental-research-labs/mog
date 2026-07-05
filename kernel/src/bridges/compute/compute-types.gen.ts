@@ -99,6 +99,35 @@ export interface AnchorPosition {
   extentCy?: number;
 }
 
+export interface AnnotationDeleteResult {
+  anchorId: string;
+  removed: boolean;
+  annotation?: AnnotationRecord;
+}
+
+export interface AnnotationFingerprint {
+  profile: AnnotationFingerprintProfile;
+  canonicalizer: string;
+  hash: string;
+}
+
+export type AnnotationFingerprintProfile = "cellFormula" | "cellValue" | "cellText" | "cellBlank" | "tableSchema" | "tableShape";
+
+export interface AnnotationRecord {
+  schemaVersion: number;
+  id: string;
+  anchorId: string;
+  text: string;
+  status: AnnotationStatus;
+  staleReason?: string;
+  fingerprint: AnnotationFingerprint;
+  createdAt: number;
+  updatedAt: number;
+  checkedAt?: number;
+}
+
+export type AnnotationStatus = "fresh" | "stale" | "unchecked";
+
 export interface AutoExpansionResult {
   shouldExpand: boolean;
   newEndRow: number;
@@ -1626,6 +1655,7 @@ export interface Comment {
   noteHeight?: number;
   noteWidth?: number;
   noteShapeAnchor?: NoteShapeAnchor;
+  noteImages?: CommentNoteImage[];
   commentPr?: unknown;
 }
 
@@ -1644,6 +1674,15 @@ export interface CommentMention {
   email?: string;
   startIndex: number;
   length: number;
+}
+
+export interface CommentNoteImage {
+  relationshipId: string;
+  originalTarget: string;
+  targetMode?: string;
+  packagePath: string;
+  contentType?: string;
+  bytes?: Uint8Array;
 }
 
 export type CommentType = "note" | "threadedComment";
@@ -2717,6 +2756,7 @@ export interface HeaderFooter {
 export interface HeaderFooterImageInfo {
   position: HfImagePosition;
   src: string;
+  targetMode?: string;
   title: string;
   widthPt: number;
   heightPt: number;
@@ -3553,6 +3593,14 @@ export interface PictureData {
   ooxml?: PictureOoxmlProps;
 }
 
+export interface PictureEmbeddedMediaAuthority {
+  relationshipId: string;
+  originalTarget: string;
+  packagePath: string;
+  contentType?: string;
+  src: string;
+}
+
 export interface PictureOoxmlProps {
   picture: unknown;
   anchorIndex: number | null;
@@ -3563,6 +3611,7 @@ export interface PictureOoxmlProps {
   clientDataPrintsWithSheet: boolean | null;
   mcAlternateContentRawXml: string | null;
   imagePath: string | null;
+  embeddedMedia?: PictureEmbeddedMediaAuthority;
   relationships?: unknown[];
 }
 
@@ -3808,6 +3857,9 @@ export interface PivotTableDef {
   rowFieldIndices: number[];
   colFieldIndices: number[];
   dataOnRows: boolean;
+  style?: PivotTableStyle;
+  showRowGrandTotals?: boolean;
+  showColumnGrandTotals?: boolean;
 }
 
 export interface PivotTableLayout {

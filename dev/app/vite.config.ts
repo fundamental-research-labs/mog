@@ -1,9 +1,27 @@
 import react from '@vitejs/plugin-react';
+import type { IncomingMessage } from 'node:http';
 import path from 'path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import svgr from 'vite-plugin-svgr';
 
 import { mogWasmPlugin } from '@mog/vite-wasm-plugin';
+
+const DEV_AGENT_CHAT_COMPLETIONS_ROUTE = '/api/mog-dev-agent/chat/completions';
+
+interface DevAgentProxyEnv {
+  readonly MOG_DEV_AGENT_API_KEY?: string;
+  readonly MOG_DEV_AGENT_BASE_URL?: string;
+  readonly PIVOT_API_KEY?: string;
+  readonly PIVOT_BASE_URL?: string;
+  readonly SHORTCUT_API_KEY?: string;
+  readonly SHORTCUT_PIVOT_API_BASE_URL?: string;
+  readonly SHORTCUT_PIVOT_API_KEY?: string;
+  readonly SHORTCUT_PIVOT_API_URL?: string;
+  readonly SHORTCUT_PIVOT_BASE_URL?: string;
+  readonly SHORTCUT_TOKEN?: string;
+}
+
+type EnvSource = Record<string, string | undefined>;
 
 /**
  * Dev-only fingerprint injection.
@@ -32,11 +50,178 @@ function injectFingerprint(): Plugin {
   };
 }
 
+function normalizeChatCompletionsBaseUrl(url: string): string {
+  let normalized = url.trim().replace(/\/+$/, '');
+  if (normalized.endsWith('/chat/completions')) {
+    normalized = normalized.slice(0, -'/chat/completions'.length);
+  }
+  if (!normalized.endsWith('/v1')) {
+    normalized = `${normalized}/v1`;
+  }
+  return normalized;
+}
+
+function readEnvValue(source: EnvSource, key: keyof DevAgentProxyEnv): string | undefined {
+  const value = source[key];
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function pickDevAgentProxyEnv(source: EnvSource): DevAgentProxyEnv {
+  return {
+    MOG_DEV_AGENT_API_KEY: readEnvValue(source, 'MOG_DEV_AGENT_API_KEY'),
+    MOG_DEV_AGENT_BASE_URL: readEnvValue(source, 'MOG_DEV_AGENT_BASE_URL'),
+    PIVOT_API_KEY: readEnvValue(source, 'PIVOT_API_KEY'),
+    PIVOT_BASE_URL: readEnvValue(source, 'PIVOT_BASE_URL'),
+    SHORTCUT_API_KEY: readEnvValue(source, 'SHORTCUT_API_KEY'),
+    SHORTCUT_PIVOT_API_BASE_URL: readEnvValue(source, 'SHORTCUT_PIVOT_API_BASE_URL'),
+    SHORTCUT_PIVOT_API_KEY: readEnvValue(source, 'SHORTCUT_PIVOT_API_KEY'),
+    SHORTCUT_PIVOT_API_URL: readEnvValue(source, 'SHORTCUT_PIVOT_API_URL'),
+    SHORTCUT_PIVOT_BASE_URL: readEnvValue(source, 'SHORTCUT_PIVOT_BASE_URL'),
+    SHORTCUT_TOKEN: readEnvValue(source, 'SHORTCUT_TOKEN'),
+  };
+}
+
+function mergeDevAgentProxyEnv(...sources: readonly DevAgentProxyEnv[]): DevAgentProxyEnv {
+  const merged: Record<string, string> = {};
+  for (const source of sources) {
+    for (const [key, value] of Object.entries(source)) {
+      const trimmed = value?.trim();
+      if (trimmed) merged[key] = trimmed;
+    }
+  }
+  return merged as unknown as DevAgentProxyEnv;
+}
+
+function resolvePivotApiKey(env: DevAgentProxyEnv): string | undefined {
+  return (
+    env.MOG_DEV_AGENT_API_KEY ??
+    env.PIVOT_API_KEY ??
+    env.SHORTCUT_PIVOT_API_KEY ??
+    env.SHORTCUT_API_KEY ??
+    env.SHORTCUT_TOKEN
+  );
+}
+
+function resolvePivotBaseUrl(env: DevAgentProxyEnv): string | undefined {
+  const configured =
+    env.MOG_DEV_AGENT_BASE_URL ??
+    env.PIVOT_BASE_URL ??
+    env.SHORTCUT_PIVOT_BASE_URL ??
+    env.SHORTCUT_PIVOT_API_BASE_URL ??
+    env.SHORTCUT_PIVOT_API_URL;
+  return configured ? normalizeChatCompletionsBaseUrl(configured) : undefined;
+}
+
+function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer | string) => {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+function shouldForwardUpstreamHeader(name: string): boolean {
+  const lower = name.toLowerCase();
+  return (
+    lower !== 'connection' &&
+    lower !== 'content-encoding' &&
+    lower !== 'content-length' &&
+    lower !== 'transfer-encoding'
+  );
+}
+
+function devAgentProxy(initialEnv: DevAgentProxyEnv): Plugin {
+  return {
+    name: 'mog-dev-agent-proxy',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(DEV_AGENT_CHAT_COMPLETIONS_ROUTE, async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: { message: 'Method not allowed.' } }));
+          return;
+        }
+
+        const env = mergeDevAgentProxyEnv(initialEnv, pickDevAgentProxyEnv(process.env));
+        const apiKey = resolvePivotApiKey(env);
+        const baseUrl = resolvePivotBaseUrl(env);
+        if (!apiKey || !baseUrl) {
+          res.statusCode = 503;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: {
+                message:
+                  'Pivot provider is not configured. Set MOG_DEV_AGENT_API_KEY/PIVOT_API_KEY/SHORTCUT_PIVOT_API_KEY and MOG_DEV_AGENT_BASE_URL/PIVOT_BASE_URL/SHORTCUT_PIVOT_BASE_URL.',
+              },
+            }),
+          );
+          return;
+        }
+
+        try {
+          const body = (await readRequestBody(req)).toString('utf8');
+          const upstream = await fetch(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: body || undefined,
+          });
+
+          res.statusCode = upstream.status;
+          upstream.headers.forEach((value, key) => {
+            if (!shouldForwardUpstreamHeader(key)) return;
+            res.setHeader(key, value);
+          });
+
+          if (!upstream.body) {
+            res.end();
+            return;
+          }
+
+          const reader = upstream.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            res.write(Buffer.from(value));
+          }
+          res.end();
+        } catch (error) {
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(
+            JSON.stringify({
+              error: {
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          );
+        }
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode, command }) => {
-  const env = loadEnv(mode, process.cwd(), ['VITE_', 'MOG_']);
-  const enableHmr = env.MOG_DEV_HMR === '1' || env.MOG_DEV_HMR === 'true';
   const publicRoot = path.resolve(__dirname, '..', '..');
+  const packageEnv = loadEnv(mode, __dirname, '');
+  const workspaceEnv = loadEnv(mode, publicRoot, '');
+  const serverEnv = {
+    ...workspaceEnv,
+    ...packageEnv,
+    ...process.env,
+  };
+  const pivotEnv = mergeDevAgentProxyEnv(pickDevAgentProxyEnv(serverEnv));
+  const env = serverEnv;
+  const enableHmr = env.MOG_DEV_HMR === '1' || env.MOG_DEV_HMR === 'true';
 
   // Resolver condition selection: honor the `development` export
   // condition so composite workspace packages resolve to `src/*.ts` during
@@ -58,6 +243,7 @@ export default defineConfig(({ mode, command }) => {
     plugins: [
       ...mogWasmPlugin(),
       injectFingerprint(),
+      devAgentProxy(pivotEnv),
       react(),
       svgr({
         // Transform SVGs to React components when imported with ?react

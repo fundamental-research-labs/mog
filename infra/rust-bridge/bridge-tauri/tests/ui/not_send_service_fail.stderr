@@ -79,22 +79,6 @@ error[E0599]: the method `with_read` exists for struct `State<'_, TauriRegistry<
            which is required by `NotSendService: Send`
    = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0282]: type annotations needed
-  --> tests/ui/not_send_service_fail.rs:24:9
-   |
-24 | /         $gen! {
-25 | |             bridge_version = 1;
-26 | |             group = ops;
-27 | |             service = NotSendService;
-...  |
-38 | |         }
-   | |_________^ cannot infer type
-...
-42 |   bridge_tauri::generate!(crate::__bridge_descriptor_NotSendService_ops);
-   |   ---------------------------------------------------------------------- in this macro invocation
-   |
-   = note: this error originates in the macro `bridge_tauri::__expand` which comes from the expansion of the macro `bridge_tauri::generate` (in Nightly builds, run with -Z macro-backtrace for more info)
-
 error[E0599]: the method `remove` exists for struct `State<'_, TauriRegistry<NotSendService>>`, but its trait bounds were not satisfied
   --> tests/ui/not_send_service_fail.rs:24:9
    |

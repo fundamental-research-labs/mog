@@ -19,8 +19,13 @@
 import type { ReactNode } from 'react';
 import React from 'react';
 
-import type { GroupCollapseConfig, GroupRenderMode } from '@mog-sdk/contracts/ribbon';
+import type {
+  CollapseLevel,
+  GroupCollapseConfig,
+  GroupRenderMode,
+} from '@mog-sdk/contracts/ribbon';
 import { GroupRenderModeProvider, useRibbonCollapseLevel } from '../collapse';
+import type { RibbonCollapseContextState } from '../collapse/context';
 import {
   RibbonVisibilityGroup,
   useRibbonGroupVisibility,
@@ -90,12 +95,8 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   dialogLauncher,
 }: ToolbarGroupProps) {
   const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
-  // Get current collapse level from context (provided by TabbedToolbar)
-  const { level } = useRibbonCollapseLevel();
-
-  // Determine render mode from config + current collapse level
-  // If no config provided, always render in 'full' mode
-  const renderMode: GroupRenderMode = collapseConfig?.levels[level] ?? 'full';
+  const collapseState = useRibbonCollapseLevel();
+  const renderMode = resolveToolbarGroupRenderMode(collapseConfig, collapseState);
 
   if (!groupVisibility.visible) {
     return null;
@@ -110,7 +111,12 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   if (renderMode === 'dropdown') {
     return (
       <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown label={label} icon={dropdownIcon} isLast={isLast}>
+        <CollapsedGroupDropdown
+          label={label}
+          groupKey={groupVisibility.groupKey}
+          icon={dropdownIcon}
+          isLast={isLast}
+        >
           {dialogLauncher && (
             <div className="mb-2 flex justify-end border-b border-ss-border pb-2">
               <DialogLauncherButton launcher={dialogLauncher} placement="dropdown" />
@@ -122,6 +128,13 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
     );
   }
 
+  const contentClassName = [
+    'flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]',
+    // The group launcher is absolutely positioned in the bottom-right corner.
+    // Reserve a gutter so its hit target never covers the trailing command.
+    dialogLauncher ? 'pr-5' : '',
+  ].join(' ');
+
   return (
     <RibbonVisibilityGroup group={groupVisibility.groupKey}>
       <GroupRenderModeProvider value={renderMode}>
@@ -131,7 +144,7 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
           aria-label={label}
         >
           {/* Content area - fixed height from design token */}
-          <div className="flex items-center justify-center gap-[var(--ribbon-group-items-gap)] h-[var(--ribbon-content-height)]">
+          <div data-ribbon-group-content className={contentClassName}>
             {children}
           </div>
           {dialogLauncher && <DialogLauncherButton launcher={dialogLauncher} placement="group" />}
@@ -151,6 +164,38 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
     </RibbonVisibilityGroup>
   );
 });
+
+export function resolveToolbarGroupRenderMode(
+  collapseConfig: GroupCollapseConfig | undefined,
+  collapseState: RibbonCollapseContextState,
+): GroupRenderMode {
+  if (!collapseConfig) return 'full';
+
+  const { level } = collapseState;
+  const widthLevel = collapseState.widthLevel ?? level;
+  const renderMode = collapseConfig.levels[level] ?? 'full';
+
+  if (renderMode !== 'hidden' || level <= widthLevel) {
+    return renderMode;
+  }
+
+  // Content-aware overflow escalation can compact a desktop/tablet-width
+  // ribbon into level 4. Do not make commands unreachable in that case; use
+  // the most compact non-hidden mode reached while escalating from the
+  // width-derived level.
+  for (
+    let candidate = (level - 1) as CollapseLevel;
+    candidate >= widthLevel;
+    candidate = (candidate - 1) as CollapseLevel
+  ) {
+    const candidateMode = collapseConfig.levels[candidate];
+    if (candidateMode !== 'hidden') {
+      return candidateMode;
+    }
+  }
+
+  return renderMode;
+}
 
 function DialogLauncherButton({
   launcher,

@@ -23,6 +23,7 @@ use crate::domain::drawings::write::DrawingAnchor;
 pub use anchors::{
     anchor_position_to_absolute, anchor_position_to_one_cell, anchor_position_to_two_cell,
 };
+pub(in crate::write) use images::parse_data_url;
 pub use layer_order::{add_ordered_anchors, build_feature_drawing_anchors};
 
 /// Result of assembling drawing data for a single sheet.
@@ -43,6 +44,18 @@ pub struct SheetDrawingData {
     pub image_rels: Vec<(String, String)>,
     /// Non-image drawing relationship entries imported with OOXML drawing objects.
     pub drawing_rels: Vec<ooxml_types::shared::OpcRelationship>,
+}
+
+pub(super) fn floating_object_requires_drawing_part(obj: &FloatingObject) -> bool {
+    matches!(
+        &obj.data,
+        FloatingObjectData::Picture(_)
+            | FloatingObjectData::Shape(_)
+            | FloatingObjectData::Textbox(_)
+            | FloatingObjectData::Drawing(_)
+            | FloatingObjectData::Connector(_)
+            | FloatingObjectData::Diagram(_)
+    )
 }
 
 /// Assemble all floating objects for a sheet into drawing anchors suitable for `DrawingWriter`.

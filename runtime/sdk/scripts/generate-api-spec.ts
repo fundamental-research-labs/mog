@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { Project, type SourceFile as MorphSourceFile } from 'ts-morph';
+import { format as formatWithPrettier, resolveConfig as resolvePrettierConfig } from 'prettier';
 import {
   FORMAT_PRESETS,
   DEFAULT_FORMAT_BY_TYPE,
@@ -2139,8 +2140,21 @@ function assertApiGuidanceCatalog(
   }
 }
 
-function writeGeneratedFile(filePath: string, value: unknown): void {
-  const newContent = JSON.stringify(value, null, 2) + '\n';
+async function formatGeneratedContent(filePath: string, value: unknown): Promise<string> {
+  const jsonContent = JSON.stringify(value, null, 2) + '\n';
+  if (filePath !== OUTPUT_FILE) {
+    return jsonContent;
+  }
+  const prettierConfig = (await resolvePrettierConfig(filePath)) ?? {};
+  return formatWithPrettier(jsonContent, {
+    ...prettierConfig,
+    filepath: filePath,
+    parser: 'json',
+  });
+}
+
+async function writeGeneratedFile(filePath: string, value: unknown): Promise<void> {
+  const newContent = await formatGeneratedContent(filePath, value);
   const existingContent = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : '';
   if (newContent === existingContent) {
     console.log(`Unchanged: ${filePath}\n`);
@@ -2168,14 +2182,14 @@ assertApiGuidanceCatalog(guidanceCatalog, guidanceTargets);
 fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
 
 // Only write if content actually changed (avoids noisy diffs on publish)
-writeGeneratedFile(OUTPUT_SCHEMA_FILE, API_SPEC_SCHEMA);
-writeGeneratedFile(OUTPUT_FILE, spec);
-writeGeneratedFile(API_COMPATIBILITY_SCHEMA_FILE, API_COMPATIBILITY_SCHEMA);
-writeGeneratedFile(API_COMPATIBILITY_FILE, API_COMPATIBILITY_INDEX);
-writeGeneratedFile(API_GUIDANCE_SCHEMA_FILE, API_GUIDANCE_SCHEMA);
-writeGeneratedFile(API_GUIDANCE_FILE, guidanceCatalog);
-writeGeneratedFile(GUIDANCE_TARGETS_SCHEMA_FILE, API_GUIDANCE_TARGETS_SCHEMA);
-writeGeneratedFile(GUIDANCE_TARGETS_FILE, guidanceTargets);
+await writeGeneratedFile(OUTPUT_SCHEMA_FILE, API_SPEC_SCHEMA);
+await writeGeneratedFile(OUTPUT_FILE, spec);
+await writeGeneratedFile(API_COMPATIBILITY_SCHEMA_FILE, API_COMPATIBILITY_SCHEMA);
+await writeGeneratedFile(API_COMPATIBILITY_FILE, API_COMPATIBILITY_INDEX);
+await writeGeneratedFile(API_GUIDANCE_SCHEMA_FILE, API_GUIDANCE_SCHEMA);
+await writeGeneratedFile(API_GUIDANCE_FILE, guidanceCatalog);
+await writeGeneratedFile(GUIDANCE_TARGETS_SCHEMA_FILE, API_GUIDANCE_TARGETS_SCHEMA);
+await writeGeneratedFile(GUIDANCE_TARGETS_FILE, guidanceTargets);
 
 // Print summary
 const ifaceCount = Object.keys(spec.interfaces).length;

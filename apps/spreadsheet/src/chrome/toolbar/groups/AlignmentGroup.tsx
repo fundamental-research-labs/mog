@@ -268,6 +268,11 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
       label="Alignment"
       collapseConfig={ALIGNMENT_COLLAPSE_CONFIG}
       dropdownIcon={<AlignCenterIcon />}
+      dialogLauncher={{
+        testId: 'ribbon-button-alignment-settings',
+        ariaLabel: 'Alignment Settings',
+        onClick: () => dispatch('OPEN_FORMAT_CELLS_DIALOG', { initialTab: 'alignment' }),
+      }}
     >
       <div className="flex h-full items-start gap-2">
         <div className="flex h-[calc(var(--ribbon-content-height)-4px)] flex-col justify-between">
@@ -671,6 +676,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             <Tooltip title="Decrease Indent">
               <RibbonButton
                 id="decrease-indent"
+                data-testid="ribbon-button-decrease-indent"
                 layout="icon-only"
                 icon={<DecreaseIndentIcon />}
                 onClick={() => dispatch('DECREASE_INDENT')}
@@ -683,6 +689,7 @@ export const AlignmentGroup = React.memo(function AlignmentGroup() {
             <Tooltip title="Increase Indent">
               <RibbonButton
                 id="increase-indent"
+                data-testid="ribbon-button-increase-indent"
                 layout="icon-only"
                 icon={<IncreaseIndentIcon />}
                 onClick={() => dispatch('INCREASE_INDENT')}

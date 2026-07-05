@@ -402,12 +402,17 @@ export interface Note {
   width?: number;
 }
 
-// =============================================================================
-// Cell Write Options
-// =============================================================================
+/** Options for attaching a Mog-native annotation while writing a cell. */
+export interface CellAnnotationWriteOptions {
+  /**
+   * Optional Mog-native annotation text to set after the cell value/formula write
+   * succeeds. `null` and `undefined` mean "do not change the annotation".
+   */
+  annotation?: string | null;
+}
 
 /** Options controlling how a cell value is interpreted when written. */
-export interface CellWriteOptions {
+export interface CellWriteOptions extends CellAnnotationWriteOptions {
   /** If true, value is treated as a formula (prefixed with =) */
   asFormula?: boolean;
   /** If true, string values are stored as literal text without numeric/date/formula coercion. */

@@ -177,6 +177,8 @@ pub struct CommentShape {
     pub note_height_style: Option<domain_types::VmlStyleDimensionInfo>,
     /// Parsed VML width declaration, retained as typed provenance.
     pub note_width_style: Option<domain_types::VmlStyleDimensionInfo>,
+    /// Relationship IDs from note-owned `<v:imagedata>` children.
+    pub image_relationship_ids: Vec<String>,
 }
 
 #[cfg(test)]

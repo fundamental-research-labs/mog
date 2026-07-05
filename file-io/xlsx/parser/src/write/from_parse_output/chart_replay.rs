@@ -564,5 +564,19 @@ pub(super) fn register_chart_owned_external_relationships(
         );
     }
 
+    for image in chart_auxiliary::chart_user_shapes_image_data(chart_spec, chart_path) {
+        crate::write::package_graph::register_media_part_with_bytes(
+            package_graph_builder,
+            &image.image_path,
+            image.data,
+        )?;
+        crate::write::package_graph::register_part_image_relationship(
+            package_graph_builder,
+            &image.user_shapes_path,
+            &image.image_path,
+            &image.relationship_id_hint,
+        );
+    }
+
     Ok(())
 }

@@ -199,7 +199,7 @@ function getNapiSerdeIndices(
  * `string | null`, `Option<u32>` as `number | null`, or string enums).
  * These edge cases require `serdeParams` for correctness.
  *
- * @param engine - A ComputeEngine class instance (created via `new ComputeEngine(snapshotJson)`)
+ * @param engine - A ComputeEngine class instance.
  * @param serdeParams - Optional map of command -> serde param indices.
  *   When provided, args at these indices are always JSON.stringify'd.
  *   When absent, the transport uses a type-based heuristic.
@@ -401,7 +401,8 @@ export function createLazyNapiTransport(addon: NapiAddonModule): BridgeTransport
         // Create the engine with the snapshot from the init args
         const snapshotJson =
           typeof args.snapshot === 'string' ? args.snapshot : JSON.stringify(args.snapshot);
-        const engine = new addon.ComputeEngine(snapshotJson);
+        const layoutMetricsJson = stringifySerdeValue(args.layoutMetrics ?? null);
+        const engine = new addon.ComputeEngine(snapshotJson, layoutMetricsJson);
 
         // Reuse the existing createNapiTransport which handles ALL serde
         // complexity: docId stripping, named→positional conversion,
@@ -425,7 +426,8 @@ export function createLazyNapiTransport(addon: NapiAddonModule): BridgeTransport
         if (!addon.ComputeEngine.initFromYrsState) {
           throw new TransportError(command, 'NAPI addon does not support initFromYrsState');
         }
-        const engine = addon.ComputeEngine.initFromYrsState(state);
+        const layoutMetricsJson = stringifySerdeValue(args.layoutMetrics ?? null);
+        const engine = addon.ComputeEngine.initFromYrsState(state, layoutMetricsJson);
 
         innerTransport = createNapiTransport(engine, DEFAULT_NAPI_SERDE_PARAMS, addon);
 

@@ -10,7 +10,7 @@
  */
 
 import type { MouseEvent } from 'react';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { dispatch, useDocumentContext, useFeatureGate } from '../../../internal-api';
 
@@ -72,6 +72,8 @@ export const TAB_KEYTIP_MAP: Record<string, string> = {
   'pivot-analyze': 'JY', // Multi-key sequence (J followed by Y)
   'pivot-design': 'JV', // Multi-key sequence (J followed by V)
 };
+
+const COMMAND_CLUSTER_MIN_WIDTH_PX = 720;
 
 // =============================================================================
 // Types
@@ -176,8 +178,27 @@ function TabBarImpl<T extends string>({
   const ribbonCollapsed = useStore(uiStore, (s) => s.ribbonCollapsed);
 
   // Double-click tracking for tabs toggle
+  const tabBarRootRef = useRef<HTMLDivElement>(null);
   const lastClickTimeRef = useRef<number>(0);
   const lastClickTabRef = useRef<string | null>(null);
+  const [showCommandClusterForWidth, setShowCommandClusterForWidth] = useState(false);
+
+  useEffect(() => {
+    const root = tabBarRootRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return;
+
+    const update = () => {
+      setShowCommandClusterForWidth(
+        root.getBoundingClientRect().width >= COMMAND_CLUSTER_MIN_WIDTH_PX,
+      );
+    };
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+
+    return () => observer.disconnect();
+  }, []);
   const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
   // Handle tab click with display mode awareness.
@@ -284,7 +305,10 @@ function TabBarImpl<T extends string>({
   }, [showFileMenu, tabs]);
 
   return (
-    <div className="flex items-center h-[var(--tabbar-height)] px-2 bg-ss-surface-secondary min-w-0 overflow-hidden">
+    <div
+      ref={tabBarRootRef}
+      className="flex items-center h-[var(--tabbar-height)] px-2 bg-ss-surface-secondary min-w-0 overflow-hidden"
+    >
       {/* Quick access: Save/Undo/Redo - Excel-like compact buttons (gated by capabilities) */}
       <div
         data-testid="tabbar-quick-access"
@@ -431,7 +455,7 @@ function TabBarImpl<T extends string>({
       <div
         role="tablist"
         aria-label="Command bar tabs"
-        className="flex items-end h-full min-w-0 overflow-x-auto overflow-y-hidden scrollbar-none"
+        className="flex flex-1 items-end h-full min-w-0 overflow-x-auto overflow-y-hidden scrollbar-none"
       >
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -481,7 +505,7 @@ function TabBarImpl<T extends string>({
       {/* Collaborate, Save, Print, PDF, Export buttons and command-bar display options */}
       <div
         data-testid="tabbar-command-cluster"
-        className="hidden min-[720px]:flex flex-shrink-0 items-center gap-[var(--tabbar-button-group-gap)] ml-auto"
+        className={`${showCommandClusterForWidth ? 'flex' : 'hidden'} flex-shrink-0 items-center gap-[var(--tabbar-button-group-gap)] ml-auto`}
       >
         {collabEnabled && remoteParticipants.size > 0 && (
           <RibbonVisibilityPathItem path={['collaboration', 'tabBar', 'avatars']}>

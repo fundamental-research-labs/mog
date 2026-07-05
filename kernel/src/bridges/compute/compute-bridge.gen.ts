@@ -3,7 +3,7 @@
 import type { BridgeTransport } from '@rust-bridge/client';
 import type { ComputeCore } from './compute-core';
 import type { MutationAdmissionOptions } from './mutation-admission';
-import type { A1CellRef, A1RangeRef, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillPreviewResult, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, Hyperlink, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, SyncApplyMutationMetadataWire, SyncApplyOperationContextWire, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, SemanticWorkbookDiff, SemanticWorkbookState, SemanticWorkbookStateEnvelope, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
+import type { A1CellRef, A1RangeRef, AnnotationRecord, AutoExpansionResult, BatchCellInput, BatchRangeRequest, BatchRangeResponse, BridgeAutoFillPreviewResult, BridgeAutoFillRequest, BridgeFlashFillRequest, BridgeSortOptions, CFColorScale, CFDataBar, CFIconSetName, CFIconSetPreset, CFPresetCategory, CFRule, CacheInvalidationEventReason, Table as CanonicalTable, CellCFResult, CalculationSettings, ChartStatistics, Comment, CommentMention, CommentType, CellEdit, CellInput, CellPosition, CellPositionResult, CellInfo, CellStyleDef, CellMergeInfo, SheetPos, CellValidationResult, ColumnEdge, ColumnFilter, AdvancedFilterRequest, DynamicFilterRule, ConditionalFormat, CopyType, CreateBindingInput, CreateShapeConfig, DefaultFont, DefinedName, DefinedNameInput, DefinedNameWire, DisconnectionEventReason, DocumentProperties, FilterHeaderInfo, FilterRecordCount, FilterSortState, FilterState, FormulaReferenceDiagnosticsOptions, FormulaReferenceDiagnosticsPage, RuntimeDiagnosticsOptions, RuntimeDiagnosticsPage, FloatingObjectBounds, FlipAxis, FrozenPanes, GroupDefinition, Hyperlink, IdentityCell, ImportDiagnostic, MergeRegion, MoveTarget, MutationResult, SyncApplyMutationMetadataWire, SyncApplyOperationContextWire, NameValidationResult, NamedRangeUpdate, OutlineLevel, OutlineLevelButton, OutlineRenderData, OutlineSettingsUpdate, OutlineSymbol, ProjectionData, ProtectedWorkbookOperation, RawCellData, RangeQueryResult, RangeSchema, RectBounds, RowEdge, RegexSearchOptions, RegexSearchResult, ResolvedMergedRegion, ResizeConfig, Scenario, ScenarioActiveState, ScenarioCreateInput, ScenarioUpdateInput, SelectionAggregates, SetCellsBatchResult, FloatingObject, SerializedFloatingObjectGroup, ShapeStyleUpdate, SheetDataBinding, FindInRangeOptions, FindInRangeResult, WorkbookSearchResult, SignCheckOptions, SignCheckResult, SheetGroupingConfig, SheetMeta, SheetProtectionConfig, SheetProtectionOptions, SheetScrollPosition, SheetSettings, SheetSnapshot, SheetViewOptions, SplitViewConfig, SlicerItem, StoredSlicer, StoredSlicerUpdate, SlicerCustomStyle, NamedSlicerStyle, CsvImportOptions, PivotFieldItems, ImportedPivotViewRecord, PivotTableConfig, PivotTableResult, PivotField, HeaderFooterImageInfo, HfImagePosition, PrintRange, PrintSettings, PrintTitles, Sparkline, SparklineGroup, SparklineUpdate, SubtotalOptions, CustomTableStyleConfig, TableBoolOption, TableColumn, TableHitRegion, TableNameValidationResult, TableTopBottomFilter, TextToColumnsOptions, ThemeData, Transform, TotalsFunction, UndoState, UpdateBindingFields, RustWorkbookSettingsPatch, SemanticWorkbookDiff, SemanticWorkbookState, SemanticWorkbookStateEnvelope, Viewport, WorkbookProtectionOptions, WorkbookComment, WorkbookPivotTable, WorkbookSettings, WorkbookTable, ZOrderEntry } from './compute-types.gen';
 import type { IdentityFormulaWire as IdentityFormula, ColumnSchemaWire as ColumnSchema, SchemaTypeWire as SchemaType, ValidationResultWire as ValidationResult, EditorTypeResolutionInputWire as EditorTypeResolutionInput, EditorTypeResolutionResultWire as EditorTypeResolutionResult, InferredSchemaWire as InferredSchema, NamedRangeDef, DataRow, Point, RegressionMethod, RegressionOptions, RegressionOutput, DensityResult, HistogramBin, StackInput, StackMode, StackOutput, FormatEntry, DateValueResult, ParsedDateInput, FormulaCircularReferenceValidation, CFRuleWire, CfPresets, GoalSeekParams, GoalSeekResult, CreateDataTableInput, DataTableParams, DataTableResult, SchemaMapEntryWire, PageBreaks, TableRange, SlicerSortOrder, CFCellRange } from './types';
 import type { Table, FilterCriteria, Slicer, SlicerCache, SortSpec, RowVisibility, TableCellFormat, TableStyleDef, StructuredRef, DynamicFilter, FilterDropdownData, TableStructureChange } from '@mog/table-engine';
 import type { CellFormat, CellValue, SheetId } from '@mog-sdk/contracts/core';
@@ -537,6 +537,14 @@ export interface GeneratedBridgeMethods {
   clearAllGrouping(sheetId: SheetId, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   checkSortRangeMerges(sheetId: SheetId, startRow: number, startCol: number, endRow: number, endCol: number): Promise<unknown>;
   previewTextToColumns(sheetId: SheetId, sourceStartRow: number, sourceEndRow: number, sourceCol: number, options: TextToColumnsOptions, maxPreviewRows: number): Promise<string[][]>;
+  setCellAnnotationByPosition(sheetId: SheetId, row: number, col: number, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  getCellAnnotationByPosition(sheetId: SheetId, row: number, col: number): Promise<AnnotationRecord | null>;
+  removeCellAnnotationByPosition(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  listCellAnnotations(sheetId: SheetId): Promise<AnnotationRecord[]>;
+  setTableAnnotation(tableRef: string, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  getTableAnnotation(tableRef: string): Promise<AnnotationRecord | null>;
+  removeTableAnnotation(tableRef: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  listTableAnnotations(): Promise<AnnotationRecord[]>;
   convertNoteToThread(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   updateComment(sheetId: SheetId, commentId: string, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   deleteComment(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
@@ -2759,6 +2767,38 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   previewTextToColumns(sheetId: SheetId, sourceStartRow: number, sourceEndRow: number, sourceCol: number, options: TextToColumnsOptions, maxPreviewRows: number): Promise<string[][]> {
     return this.core.query(this.core.transport.call<string[][]>('compute_preview_text_to_columns', { docId: this.core.docId, sheetId, sourceStartRow, sourceEndRow, sourceCol, options, maxPreviewRows }));
+  }
+
+  setCellAnnotationByPosition(sheetId: SheetId, row: number, col: number, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_cell_annotation_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_cell_annotation_by_position', { docId: this.core.docId, sheetId, row, col, text }), undefined, admissionOptions);
+  }
+
+  getCellAnnotationByPosition(sheetId: SheetId, row: number, col: number): Promise<AnnotationRecord | null> {
+    return this.core.query(this.core.transport.call<AnnotationRecord | null>('compute_get_cell_annotation_by_position', { docId: this.core.docId, sheetId, row, col }));
+  }
+
+  removeCellAnnotationByPosition(sheetId: SheetId, row: number, col: number, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_cell_annotation_by_position', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_cell_annotation_by_position', { docId: this.core.docId, sheetId, row, col }), undefined, admissionOptions);
+  }
+
+  listCellAnnotations(sheetId: SheetId): Promise<AnnotationRecord[]> {
+    return this.core.query(this.core.transport.call<AnnotationRecord[]>('compute_list_cell_annotations', { docId: this.core.docId, sheetId }));
+  }
+
+  setTableAnnotation(tableRef: string, text: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_set_table_annotation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_set_table_annotation', { docId: this.core.docId, tableRef, text }), undefined, admissionOptions);
+  }
+
+  getTableAnnotation(tableRef: string): Promise<AnnotationRecord | null> {
+    return this.core.query(this.core.transport.call<AnnotationRecord | null>('compute_get_table_annotation', { docId: this.core.docId, tableRef }));
+  }
+
+  removeTableAnnotation(tableRef: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_remove_table_annotation', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_remove_table_annotation', { docId: this.core.docId, tableRef }), undefined, admissionOptions);
+  }
+
+  listTableAnnotations(): Promise<AnnotationRecord[]> {
+    return this.core.query(this.core.transport.call<AnnotationRecord[]>('compute_list_table_annotations', { docId: this.core.docId }));
   }
 
   convertNoteToThread(sheetId: SheetId, commentId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {

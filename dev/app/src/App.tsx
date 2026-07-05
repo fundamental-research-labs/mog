@@ -36,12 +36,16 @@ import {
   useFileExplorerConfig,
 } from '@mog/shell';
 import { useCollabStore } from '@mog/app-spreadsheet/chrome/collab';
+import { PanelRightOpen } from 'lucide-react';
 import React, { Component, ReactNode, useCallback, useEffect, useState } from 'react';
+import { DevAgentPanel } from './DevAgentPanel';
 import { nextSearchForActiveDoc } from './routing/active-doc-route';
 
 const disposeSpreadsheetTestingPanel = registerSpreadsheetTestingPanel();
 type DevColorScheme = 'light' | 'dark' | 'system';
 type DevResolvedColorScheme = 'light' | 'dark';
+const DEV_AGENT_PANEL_OPEN_KEY = 'mog:dev-agent-panel-open';
+const DEV_AGENT_COLLAPSED_WIDTH = 44;
 
 function getSystemColorScheme(): DevResolvedColorScheme {
   if (
@@ -76,6 +80,24 @@ function persistDevColorScheme(mode: DevColorScheme): void {
     window.localStorage.setItem('mog-spreadsheet-display-mode', mode);
   } catch {
     // Display preference persistence is best-effort and must not block the app.
+  }
+}
+
+function readInitialDevAgentPanelOpen(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const persisted = window.localStorage.getItem(DEV_AGENT_PANEL_OPEN_KEY);
+    return persisted === null ? true : persisted === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function persistDevAgentPanelOpen(open: boolean): void {
+  try {
+    window.localStorage.setItem(DEV_AGENT_PANEL_OPEN_KEY, String(open));
+  } catch {
+    // Dev-only preference persistence is best-effort.
   }
 }
 
@@ -258,6 +280,7 @@ function LoadingSpinner(): React.JSX.Element {
 // =============================================================================
 
 interface ShellHostWithFileExplorerProps {
+  shell: ShellBootstrapResult;
   kernel: IAppKernelAPI;
   onOpenSettings: () => void;
   appearanceMode: DevColorScheme;
@@ -271,6 +294,7 @@ interface ShellHostWithFileExplorerProps {
  * This component just provides the FileExplorer configuration.
  */
 function ShellHostWithFileExplorer({
+  shell,
   kernel,
   onOpenSettings,
   appearanceMode,
@@ -286,18 +310,87 @@ function ShellHostWithFileExplorer({
   // during shell bootstrap, BEFORE React mounted.
 
   return (
-    <ShellHost
+    <ShellHostWithDevAgent
+      shell={shell}
       kernel={kernel}
       onOpenSettings={onOpenSettings}
-      showFileExplorer={true}
       fileExplorer={fileExplorerConfig}
-      // Dev shell exposes all features so the app-eval corpus tests them.
-      // C's surgical pageLayout exception is subsumed by this open-everything
-      // approach (which landed on dev between when C branched and merge time).
       featureGates={featureGates}
       appearanceMode={appearanceMode}
       onAppearanceModeChange={onAppearanceModeChange}
     />
+  );
+}
+
+interface ShellHostWithDevAgentProps {
+  shell: ShellBootstrapResult;
+  kernel: IAppKernelAPI;
+  onOpenSettings: () => void;
+  fileExplorer: ReturnType<typeof useFileExplorerConfig>;
+  featureGates: FeatureGates;
+  appearanceMode: DevColorScheme;
+  onAppearanceModeChange: (mode: DevColorScheme) => void;
+}
+
+function ShellHostWithDevAgent({
+  shell,
+  kernel,
+  onOpenSettings,
+  fileExplorer,
+  featureGates,
+  appearanceMode,
+  onAppearanceModeChange,
+}: ShellHostWithDevAgentProps): React.JSX.Element {
+  const [agentOpen, setAgentOpen] = useState(() => readInitialDevAgentPanelOpen());
+
+  const setAgentPanelOpen = useCallback((open: boolean) => {
+    setAgentOpen(open);
+    persistDevAgentPanelOpen(open);
+  }, []);
+
+  return (
+    <div className="flex h-full w-full overflow-hidden bg-ss-surface">
+      <div className="min-w-0 flex-1">
+        <ShellHost
+          kernel={kernel}
+          onOpenSettings={onOpenSettings}
+          showFileExplorer={true}
+          fileExplorer={fileExplorer}
+          // Dev shell exposes all features so the app-eval corpus tests them.
+          // C's surgical pageLayout exception is subsumed by this open-everything
+          // approach (which landed on dev between when C branched and merge time).
+          featureGates={featureGates}
+          appearanceMode={appearanceMode}
+          onAppearanceModeChange={onAppearanceModeChange}
+        />
+      </div>
+      {agentOpen ? (
+        <DevAgentPanel shell={shell} onClose={() => setAgentPanelOpen(false)} />
+      ) : (
+        <aside
+          className="flex h-full flex-none justify-center border-l border-ss-border bg-ss-surface-secondary pt-3 text-ss-text"
+          style={{
+            flexBasis: DEV_AGENT_COLLAPSED_WIDTH,
+            maxWidth: DEV_AGENT_COLLAPSED_WIDTH,
+            minWidth: DEV_AGENT_COLLAPSED_WIDTH,
+            width: DEV_AGENT_COLLAPSED_WIDTH,
+          }}
+          aria-label="Mog dev agent collapsed"
+          data-testid="dev-agent-collapsed-rail"
+        >
+          <button
+            type="button"
+            className="flex h-8 w-8 items-center justify-center rounded text-ss-text-secondary transition-colors hover:bg-ss-surface-hover hover:text-ss-text"
+            onClick={() => setAgentPanelOpen(true)}
+            aria-label="Open dev agent"
+            title="Open dev agent"
+            data-testid="dev-agent-open"
+          >
+            <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </aside>
+      )}
+    </div>
   );
 }
 
@@ -821,6 +914,7 @@ export function App(): React.JSX.Element {
           <div className="h-screen w-screen" data-mog-engine="" {...themeAttributes}>
             <PortalContainerProvider>
               <ShellHostWithFileExplorer
+                shell={shell}
                 kernel={appKernelAPI}
                 onOpenSettings={handleOpenSettings}
                 appearanceMode={uiColorScheme}

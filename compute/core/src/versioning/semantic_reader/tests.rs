@@ -606,7 +606,7 @@ fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
 
     assert_eq!(row.index, 2);
     assert_eq!(row.ordinal, 2);
-    assert!(row.explicit_height_points.expect("height") > 0.0);
+    assert!(row.explicit_height_points.expect("height").get() > 0.0);
     assert!(row.effective_hidden);
     assert!(row.manual_hidden);
     assert!(!row.structural_hidden);
@@ -614,7 +614,10 @@ fn engine_semantic_reader_reads_axis_dimensions_and_hidden_state() {
     assert!(!row.cache_hidden_without_owner);
     assert_eq!(column.index, 3);
     assert_eq!(column.ordinal, 3);
-    assert_eq!(column.explicit_width_chars, Some(12.5));
+    assert_eq!(
+        column.explicit_width_chars.map(|width| width.get()),
+        Some(12.5)
+    );
     assert!(column.hidden);
 
     let diff = diff_semantic_workbook_states(&before_state, &after_state).expect("diff");

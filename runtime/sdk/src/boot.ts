@@ -3,8 +3,8 @@
  *
  * Thin shim that delegates to DocumentLifecycleSystem via DocumentFactory.
  * DocumentLifecycleSystem accepts `{ environment: 'headless' }` and handles
- * all headless-specific behavior (skipPersistenceLoad, no schema bridge,
- * headless environment stubs, NAPI transport auto-detection).
+ * all headless-specific behavior (skipPersistenceLoad, headless environment
+ * stubs, NAPI transport auto-detection).
  *
  * Architecture:
  * - Uses `DocumentFactory.create({ environment: 'headless' })` for blank documents
@@ -485,9 +485,12 @@ function isSdkDebugEnabled(opts: Pick<CreateWorkbookOptions, 'debug'>): boolean 
  * Use createWorkbook() instead.
  */
 export interface NapiAddonModule {
-  ComputeEngine: (new (snapshotJson: string) => ComputeEngineInstance) & {
+  ComputeEngine: (new (
+    snapshotJson: string,
+    layoutMetricsJson: string,
+  ) => ComputeEngineInstance) & {
     /** Factory method: create engine from raw Yrs state bytes (collaboration). */
-    initFromYrsState?: (state: Buffer) => ComputeEngineInstance;
+    initFromYrsState?: (state: Buffer, layoutMetricsJson: string) => ComputeEngineInstance;
   };
   render_chart_marks_image?: (requestJson: string) => {
     readonly bytes: Uint8Array;

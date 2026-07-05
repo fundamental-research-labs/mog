@@ -563,7 +563,7 @@ export interface NameClearReceipt extends OperationReceiptBase {
 /** Receipt for setting an auto-filter. */
 export interface AutoFilterSetReceipt extends OperationReceiptBase {
   readonly kind: 'autoFilterSet';
-  readonly status: 'applied';
+  readonly status: 'applied' | 'noOp';
   readonly range: string;
 }
 

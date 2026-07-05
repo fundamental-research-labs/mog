@@ -43,6 +43,25 @@ pub struct NoteShapeAnchor {
     pub bottom_offset: u32,
 }
 
+/// Imported image media owned by a legacy note VML shape.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommentNoteImage {
+    /// Imported VML relationship ID referenced by `<v:imagedata>`.
+    pub relationship_id: String,
+    /// Original relationship target text from the imported VML `.rels`.
+    pub original_target: String,
+    /// Relationship target mode; `External` links preserve the target without embedded bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_mode: Option<String>,
+    /// Normalized package path for the image target.
+    pub package_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bytes: Vec<u8>,
+}
+
 /// Whether a comment is a legacy note or a modern threaded comment.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -139,6 +158,9 @@ pub struct Comment {
     /// Only meaningful when comment_type == CommentType::Note.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note_shape_anchor: Option<NoteShapeAnchor>,
+    /// Imported image media attached to the legacy note VML shape.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub note_images: Vec<CommentNoteImage>,
     /// Legacy SpreadsheetML `<commentPr>` display properties.
     ///
     /// This is note/comment package fidelity that is regenerated from typed
@@ -174,6 +196,7 @@ impl Default for Comment {
             note_height: None,
             note_width: None,
             note_shape_anchor: None,
+            note_images: Vec::new(),
             comment_pr: None,
         }
     }

@@ -165,22 +165,31 @@ pub(crate) fn convert_page_breaks(pb: &PageBreaksOutput) -> PageBreaks {
 /// image relationship IDs to file paths, producing domain `HeaderFooterImageInfo` entries.
 pub(crate) fn convert_hf_images(
     sheet: &FullParsedSheet,
+    binary_parts: &BinaryPartMap,
 ) -> Vec<domain_types::domain::print::HeaderFooterImageInfo> {
-    use crate::domain::print::hf_images::{parse_hf_images_from_vml, parse_vml_rels_image_targets};
+    use crate::domain::print::hf_images::parse_hf_images_from_vml;
+    use crate::infra::opc::REL_IMAGE;
     use domain_types::domain::print::{HeaderFooterImageInfo, HfImagePosition};
 
-    // Identify the comment VML path so we can skip it.
-    let comment_vml_path: Option<String> = sheet.legacy_drawing_r_id.as_ref().and_then(|rid| {
+    // Header/footer images are owned specifically by `<legacyDrawingHF>`.
+    // A sheet may also have comment/control/OLE VML drawings, so do not treat
+    // the first non-comment VML part as header/footer image authority.
+    let Some(hf_vml_path) = sheet.legacy_drawing_hf_r_id.as_ref().and_then(|rid| {
         sheet
             .sheet_opc_rels
             .iter()
-            .find(|r| r.id == *rid && r.rel_type == crate::infra::opc::REL_VML_DRAWING)
-            .map(|r| opc_target_to_zip_path(&r.target, "xl"))
-    });
+            .find(|r| {
+                r.id == *rid
+                    && r.rel_type == crate::infra::opc::REL_VML_DRAWING
+                    && r.target_mode.as_deref() != Some("External")
+            })
+            .map(|r| opc_target_to_zip_path(&r.target, "xl/worksheets"))
+    }) else {
+        return Vec::new();
+    };
 
-    // Scan non-comment VML drawings for HF image shapes.
     for (path, data, rels) in &sheet.raw_vml_drawings {
-        if comment_vml_path.as_deref() == Some(path.as_str()) {
+        if path != &hf_vml_path {
             continue;
         }
 
@@ -189,23 +198,28 @@ pub(crate) fn convert_hf_images(
             continue;
         }
 
-        // Parse .rels to get rel_id → target path mapping
-        let rels_targets: Vec<(String, String)> = rels
+        // Parse .rels to get rel_id → relationship mapping.
+        let rels_targets: Vec<ooxml_types::shared::OpcRelationship> = rels
             .as_ref()
-            .map(|(_, rels_data)| parse_vml_rels_image_targets(rels_data))
+            .map(|(_, rels_data)| crate::domain::workbook::read::parse_all_rels(rels_data))
             .unwrap_or_default();
-        let rel_map: std::collections::HashMap<&str, &str> = rels_targets
-            .iter()
-            .map(|(id, target)| (id.as_str(), target.as_str()))
-            .collect();
+        let rel_map: std::collections::HashMap<&str, &ooxml_types::shared::OpcRelationship> =
+            rels_targets
+                .iter()
+                .filter(|rel| rel.rel_type == REL_IMAGE)
+                .map(|rel| (rel.id.as_str(), rel))
+                .collect();
 
         // Map parser HeaderFooterImage → domain HeaderFooterImageInfo
         let hf_images: Vec<HeaderFooterImageInfo> = images
             .iter()
             .filter_map(|img| {
-                let src = rel_map
-                    .get(img.image_rel_id.as_str())
-                    .map(|t| t.to_string())?;
+                let relationship = rel_map.get(img.image_rel_id.as_str())?;
+                let src = resolve_relationship_payload(binary_parts, Some(path), relationship)
+                    .map(|payload| {
+                        data_url_for_payload(payload.content_type.as_deref(), &payload.bytes)
+                    })
+                    .unwrap_or_else(|| relationship.target.clone());
                 let position = match img.position {
                     crate::domain::print::HfImagePosition::LeftHeader => {
                         HfImagePosition::LeftHeader
@@ -229,6 +243,7 @@ pub(crate) fn convert_hf_images(
                 Some(HeaderFooterImageInfo {
                     position,
                     src,
+                    target_mode: relationship.target_mode.clone(),
                     title: img.title.clone(),
                     width_pt: img.width_pt,
                     height_pt: img.height_pt,

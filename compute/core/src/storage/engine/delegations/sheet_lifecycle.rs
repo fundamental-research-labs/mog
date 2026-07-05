@@ -200,10 +200,11 @@ pub(in crate::storage::engine) fn set_view_option(
         key,
         value,
     );
-    let settings = settings::get_sheet_settings(
+    let settings = settings::get_sheet_settings_with_layout_metrics(
         engine.stores.storage.doc(),
         engine.stores.storage.sheets(),
         sheet_id,
+        engine.stores.layout_metrics,
     );
     let mut result = MutationResult::empty();
     result.settings_changes.push(SheetSettingsChange {

@@ -40,6 +40,9 @@ pub(crate) struct EngineStores {
     /// Yrs CRDT storage (persistence layer).
     pub(super) storage: YrsStorage,
 
+    /// Engine-local pixel conversion profile for spreadsheet dimensions.
+    pub(super) layout_metrics: domain_types::units::LayoutMetrics,
+
     /// Shared ID allocator for GridIndex operations (RowId/ColId).
     pub(super) grid_id_alloc: Arc<IdAllocator>,
 

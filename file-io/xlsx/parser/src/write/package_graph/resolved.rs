@@ -50,12 +50,14 @@ impl ResolvedPackageGraph {
             match relationship_target_part_path(&rel.owner_rels_path, &rel.target) {
                 Ok(Some(target_path)) => {
                     if !self.parts.contains_key(&target_path) {
-                        errors.push(PackageIntegrityIssue::MissingRelationshipTarget {
-                            rels_path: rel.owner_rels_path.clone(),
-                            id: rel.id.clone(),
-                            target: rel.target.clone(),
-                            resolved_path: target_path,
-                        });
+                        if !missing_relationship_target_is_quarantined(&rel.owner_rels_path) {
+                            errors.push(PackageIntegrityIssue::MissingRelationshipTarget {
+                                rels_path: rel.owner_rels_path.clone(),
+                                id: rel.id.clone(),
+                                target: rel.target.clone(),
+                                resolved_path: target_path,
+                            });
+                        }
                     } else {
                         validate_relationship_target_semantic_kind(
                             rel,
@@ -66,12 +68,16 @@ impl ResolvedPackageGraph {
                     }
                 }
                 Ok(_) => {}
-                Err(reason) => errors.push(PackageIntegrityIssue::InvalidRelationshipTarget {
-                    rels_path: rel.owner_rels_path.clone(),
-                    id: rel.id.clone(),
-                    target: rel.target.clone(),
-                    reason,
-                }),
+                Err(reason) => {
+                    if !missing_relationship_target_is_quarantined(&rel.owner_rels_path) {
+                        errors.push(PackageIntegrityIssue::InvalidRelationshipTarget {
+                            rels_path: rel.owner_rels_path.clone(),
+                            id: rel.id.clone(),
+                            target: rel.target.clone(),
+                            reason,
+                        });
+                    }
+                }
             }
         }
 

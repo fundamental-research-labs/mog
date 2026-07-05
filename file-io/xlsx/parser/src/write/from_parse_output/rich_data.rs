@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use domain_types::{ParseOutput, RichDataPart};
 
 use super::WriteError;
@@ -14,12 +16,7 @@ pub(super) fn parts_for_export(output: &ParseOutput) -> Vec<RichDataPart> {
     if rich_data.parts.is_empty() {
         return Vec::new();
     }
-    if metadata_preserves_rich_data_cluster(output)
-        || output
-            .sheets
-            .iter()
-            .any(|sheet| sheet.cells.iter().any(|cell| cell.vm.is_some()))
-    {
+    if metadata_preserves_rich_data_cluster(output) {
         return rich_data.parts.clone();
     }
 
@@ -28,15 +25,24 @@ pub(super) fn parts_for_export(output: &ParseOutput) -> Vec<RichDataPart> {
 
 pub(super) fn related_parts_for_export(
     output: &ParseOutput,
+    exported_parts: &[RichDataPart],
 ) -> Vec<domain_types::RichDataRelatedPart> {
-    if parts_for_export(output).is_empty() {
+    if exported_parts.is_empty() {
         return Vec::new();
     }
+    let referenced_targets = referenced_related_targets(exported_parts);
     output
         .metadata
         .as_ref()
         .and_then(|metadata| metadata.rich_data.as_ref())
-        .map(|rich_data| rich_data.related_parts.clone())
+        .map(|rich_data| {
+            rich_data
+                .related_parts
+                .iter()
+                .filter(|part| referenced_targets.contains(part.path.as_str()))
+                .cloned()
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -59,18 +65,20 @@ pub(super) fn register_parts(
                     target_mode: relationship.target_mode.clone(),
                 }
             } else {
-                let target_path = crate::infra::opc::resolve_relationship_target(
+                match crate::infra::opc::resolve_relationship_target(
                     Some(&part.path),
                     &relationship.target,
-                )
-                .map_err(|err| {
-                    WriteError::PackageIntegrity(format!(
-                        "invalid richData relationship target for {}: {} ({:?})",
-                        part.path, relationship.target, err
-                    ))
-                })?;
-                crate::write::package_graph::PackageRelationshipTarget::InternalPart {
-                    path: target_path,
+                ) {
+                    Ok(target_path) => {
+                        crate::write::package_graph::PackageRelationshipTarget::InternalPart {
+                            path: target_path,
+                        }
+                    }
+                    Err(_) => {
+                        crate::write::package_graph::PackageRelationshipTarget::InternalPath {
+                            target: relationship.target.clone(),
+                        }
+                    }
                 }
             };
             graph.add_relationship(crate::write::package_graph::PackageRelationship {
@@ -115,4 +123,24 @@ fn metadata_preserves_rich_data_cluster(output: &ParseOutput) -> bool {
         super::metadata::imported_metadata_xml_is_current(output, metadata)
             || (!metadata.value_metadata.is_empty() && metadata.imported_metadata_xml.is_none())
     })
+}
+
+fn referenced_related_targets(parts: &[RichDataPart]) -> HashSet<String> {
+    let mut targets = HashSet::new();
+    for part in parts {
+        for relationship in &part.relationships {
+            if crate::write::package_graph::is_external_target_mode(
+                relationship.target_mode.as_deref(),
+            ) {
+                continue;
+            }
+            if let Ok(target_path) = crate::infra::opc::resolve_relationship_target(
+                Some(&part.path),
+                &relationship.target,
+            ) {
+                targets.insert(target_path);
+            }
+        }
+    }
+    targets
 }

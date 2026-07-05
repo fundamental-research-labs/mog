@@ -36,7 +36,16 @@ export function getLayoutAwareScrollToCell({
 }: LayoutAwareScrollToCellInput): Point | null {
   if (layout) {
     const pageBounds = getCellPageBounds(cell.row, cell.col);
-    if (pageBounds && pageBounds.width > 0 && pageBounds.height > 0) {
+    if (
+      pageBounds &&
+      isFullyVisiblePageBounds({
+        sheetId,
+        cell,
+        layout,
+        positionIndex,
+        pageBounds,
+      })
+    ) {
       return null;
     }
     if (positionIndex.hasData) {
@@ -61,6 +70,46 @@ export function getLayoutAwareScrollToCell({
   }
 
   return null;
+}
+
+function isFullyVisiblePageBounds({
+  sheetId,
+  cell,
+  layout,
+  positionIndex,
+  pageBounds,
+}: {
+  sheetId: string;
+  cell: CellCoord;
+  layout: ViewportLayout;
+  positionIndex: PositionIndexLike;
+  pageBounds: { width: number; height: number };
+}): boolean {
+  if (pageBounds.width <= 0 || pageBounds.height <= 0) return false;
+
+  const viewport =
+    layout.viewports.find(
+      (candidate) =>
+        matchesSheet(candidate, sheetId) &&
+        cell.row >= candidate.cellRange.startRow &&
+        cell.row <= candidate.cellRange.endRow &&
+        cell.col >= candidate.cellRange.startCol &&
+        cell.col <= candidate.cellRange.endCol,
+    ) ??
+    layout.viewports.find((candidate) => candidate.id === layout.primaryViewportId) ??
+    layout.viewports.find((candidate) => candidate.id === 'main') ??
+    layout.viewports[0];
+  const zoom = viewport?.zoom ?? layout.headerInfo?.zoom ?? 1;
+  const expectedWidth = positionIndex.getColWidth(cell.col) * zoom;
+  const expectedHeight = positionIndex.getRowHeight(cell.row) * zoom;
+  const tolerance = 0.5;
+
+  return (
+    expectedWidth > 0 &&
+    expectedHeight > 0 &&
+    pageBounds.width >= expectedWidth - tolerance &&
+    pageBounds.height >= expectedHeight - tolerance
+  );
 }
 
 type DeriveScrollToCellInput = {

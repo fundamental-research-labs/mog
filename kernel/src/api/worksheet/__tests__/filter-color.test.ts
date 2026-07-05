@@ -36,6 +36,18 @@ function tableFilter(overrides: Record<string, unknown> = {}): any {
   };
 }
 
+function autoFilter(overrides: Record<string, unknown> = {}): any {
+  return {
+    id: 'auto-filter-1',
+    type: 'autoFilter',
+    headerStartCellId: 'auto-start',
+    headerEndCellId: 'auto-end',
+    dataEndCellId: 'auto-data-end',
+    columnFilters: {},
+    ...overrides,
+  };
+}
+
 function advancedFilter(overrides: Record<string, unknown> = {}): any {
   return {
     id: 'advanced-filter-1',
@@ -193,6 +205,91 @@ describe('WorksheetFiltersImpl.byColor', () => {
       diagnostics: [],
       range: 'A1:B10',
     });
+  });
+
+  it('does not create a duplicate filter when the requested range already has a filter', async () => {
+    ctx = createMockCtx({
+      existingFilters: [
+        autoFilter({
+          headerStartCellId: 'existing-start',
+          headerEndCellId: 'existing-end',
+          dataEndCellId: 'existing-data-end',
+        }),
+      ],
+    });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.getCellPosition.mockImplementation(
+      async (_sheetId: string, cellId: string) => {
+        const positions: Record<string, { row: number; col: number }> = {
+          'existing-start': { row: 0, col: 0 },
+          'existing-end': { row: 0, col: 1 },
+          'existing-data-end': { row: 9, col: 1 },
+        };
+        return positions[cellId] ?? null;
+      },
+    );
+
+    const receipt = await filters.add('A1:B10');
+
+    expect(ctx.computeBridge.createFilter).not.toHaveBeenCalled();
+    expect(receipt).toEqual({
+      kind: 'autoFilterSet',
+      status: 'noOp',
+      effects: [],
+      diagnostics: [],
+      range: 'A1:B10',
+    });
+  });
+
+  it('uses an existing sheet auto-filter as the default target before table filters', async () => {
+    ctx = createMockCtx({
+      existingFilters: [
+        tableFilter({ id: 'table-filter-1' }),
+        autoFilter({ id: 'sheet-auto-filter-1' }),
+      ],
+    });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.setColumnFilter.mockResolvedValueOnce(mutationResult());
+
+    await filters.setColumnFilter(1, { type: 'value', values: ['May 2026'] });
+
+    expect(ctx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
+      SHEET_ID,
+      'sheet-auto-filter-1',
+      1,
+      expect.objectContaining({
+        type: 'values',
+        values: ['May 2026'],
+      }),
+    );
+  });
+
+  it('keeps omitted-filter mutations on the active filter instead of raw storage order', async () => {
+    ctx = createMockCtx({
+      existingFilters: [
+        autoFilter({ id: 'inactive-auto-filter' }),
+        tableFilter({
+          id: 'active-table-filter',
+          columnFilters: {
+            usageBandHeader: { type: 'values', values: ['High'], includeBlanks: false },
+          },
+        }),
+      ],
+    });
+    filters = new WorksheetFiltersImpl(ctx, SHEET_ID);
+    ctx.computeBridge.setColumnFilter.mockResolvedValueOnce(mutationResult());
+
+    await filters.setColumnFilter(3, { type: 'value', values: ['May 2026'] });
+
+    expect(ctx.computeBridge.setColumnFilter).toHaveBeenCalledWith(
+      SHEET_ID,
+      'active-table-filter',
+      3,
+      expect.objectContaining({
+        type: 'values',
+        values: ['May 2026'],
+      }),
+    );
   });
 
   it('returns applied and no-op receipts when clearing auto-filters', async () => {

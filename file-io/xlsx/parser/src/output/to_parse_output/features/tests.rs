@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::*;
 use crate::domain::drawings::{CellAnchor, ClientData, Extent, OneCellAnchor};
 use crate::domain::styles::types::{ColorDef, DxfDef, FontDef};
@@ -413,7 +415,7 @@ fn convert_floating_objects_skips_chart_graphic_frames() {
             ..Default::default()
         };
 
-        let objects = convert_floating_objects(Some(&drawing), &HashMap::new());
+        let objects = convert_floating_objects(Some(&drawing), None, &HashMap::new());
 
         assert!(
             objects.is_empty(),
@@ -446,7 +448,7 @@ fn convert_floating_objects_preserves_opaque_graphic_frames() {
         ..Default::default()
     };
 
-    let objects = convert_floating_objects(Some(&drawing), &HashMap::new());
+    let objects = convert_floating_objects(Some(&drawing), None, &HashMap::new());
 
     assert_eq!(objects.len(), 1);
     assert_eq!(objects[0].common.id, "fobj-0");
@@ -454,4 +456,66 @@ fn convert_floating_objects_preserves_opaque_graphic_frames() {
         objects[0].data,
         domain_types::domain::floating_object::FloatingObjectData::Drawing(_)
     ));
+}
+
+#[test]
+fn convert_floating_picture_hydrates_embedded_media_for_absolute_and_relative_targets() {
+    for target in ["/xl/media/image1.png", "../media/image1.png"] {
+        let mut picture = ooxml_types::drawings::SpreadsheetPicture::default();
+        picture.blip_fill.embed_id = Some("rIdImage".to_string());
+        let drawing = Drawing {
+            anchors: vec![DrawingAnchor::OneCell(OneCellAnchor {
+                from: CellAnchor {
+                    col: 1,
+                    row: 1,
+                    col_off: 0,
+                    row_off: 0,
+                },
+                extent: Extent { cx: 10, cy: 20 },
+                content: DrawingContent::Picture(picture),
+                client_data: ClientData::default(),
+                mc_alternate_content: None,
+            })],
+            opc_rels: vec![ooxml_types::shared::OpcRelationship {
+                id: "rIdImage".to_string(),
+                rel_type:
+                    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+                        .to_string(),
+                target: target.to_string(),
+                target_mode: None,
+            }],
+            ..Default::default()
+        };
+        let binary_parts = HashMap::from([(
+            "xl/media/image1.png".to_string(),
+            super::super::media::OwnedBinaryPart {
+                package_path: "xl/media/image1.png".to_string(),
+                content_type: None,
+                bytes: b"\x89PNG\r\n\x1a\npayload".to_vec(),
+            },
+        )]);
+
+        let objects = convert_floating_objects(
+            Some(&drawing),
+            Some("xl/drawings/drawing1.xml"),
+            &binary_parts,
+        );
+
+        assert_eq!(objects.len(), 1);
+        let domain_types::domain::floating_object::FloatingObjectData::Picture(data) =
+            &objects[0].data
+        else {
+            panic!("expected picture");
+        };
+        assert!(data.src.starts_with("data:image/png;base64,"));
+        let media = data
+            .ooxml
+            .as_ref()
+            .and_then(|ooxml| ooxml.embedded_media.as_ref())
+            .expect("embedded media authority");
+        assert_eq!(media.relationship_id, "rIdImage");
+        assert_eq!(media.original_target, target);
+        assert_eq!(media.package_path, "xl/media/image1.png");
+        assert_eq!(media.src, data.src);
+    }
 }

@@ -58,7 +58,11 @@ export interface PanelTogglesSlice {
   setSidePanelContent: (content: SidePanelContent) => void;
 }
 
-export type SidePanelContent = 'index' | 'formula-references' | 'version-history';
+export type SidePanelContent =
+  | 'index'
+  | 'formula-references'
+  | 'version-history'
+  | 'cell-annotation';
 
 export const createPanelTogglesSlice: StateCreator<PanelTogglesSlice, [], [], PanelTogglesSlice> = (
   set,

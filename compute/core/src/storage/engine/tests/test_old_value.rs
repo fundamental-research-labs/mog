@@ -220,13 +220,10 @@ fn test_old_value_formula_edit() {
 
     let a2_change = find_change_by_cell_id(&result.recalc.changed_cells, cell_id_a2())
         .expect("A2 should be in changed_cells");
-    // When a formula cell is directly edited, apply_edit writes Null to the mirror
-    // before recalc, so level_eval sees Null as the old value. The direct-edit
-    // patching doesn't override because level_eval already set old_value = Some(Null).
     assert_eq!(
         a2_change.old_value,
-        Some(CellValue::Null),
-        "old_value should be Null (mirror was cleared before recalc)"
+        Some(CellValue::Number(FiniteF64::must(30.0))),
+        "old_value should be the previous formula result"
     );
     assert_eq!(
         a2_change.value,
@@ -511,12 +508,10 @@ fn test_old_value_error_propagation() {
 
     let a2_change = find_change_by_cell_id(&result1.recalc.changed_cells, cell_id_a2())
         .expect("A2 should be in changed_cells");
-    // When a formula cell is directly edited, apply_edit writes Null to the mirror
-    // before recalc, so old_value is Null (same behavior as test_old_value_formula_edit).
     assert_eq!(
         a2_change.old_value,
-        Some(CellValue::Null),
-        "old_value should be Null (mirror cleared before recalc)"
+        Some(CellValue::Number(FiniteF64::must(30.0))),
+        "old_value should be the previous formula result"
     );
     // New value should be an error
     assert!(
@@ -540,11 +535,10 @@ fn test_old_value_error_propagation() {
 
     let a2_fix = find_change_by_cell_id(&result2.recalc.changed_cells, cell_id_a2())
         .expect("A2 should be in changed_cells after fix");
-    // Same pattern: mirror is cleared to Null before recalc
-    assert_eq!(
-        a2_fix.old_value,
-        Some(CellValue::Null),
-        "old_value should be Null (mirror cleared before recalc)"
+    assert!(
+        matches!(a2_fix.old_value, Some(CellValue::Error(..))),
+        "old_value should be the previous formula error, got {:?}",
+        a2_fix.old_value
     );
     assert_eq!(
         a2_fix.value,

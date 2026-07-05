@@ -138,6 +138,10 @@ fn bridge_source_files() -> Vec<String> {
         format!("{}/compute/core/src/storage/engine/tables.rs", base),
         format!("{}/compute/core/src/storage/engine/features/mod.rs", base),
         format!(
+            "{}/compute/core/src/storage/engine/objects/annotations.rs",
+            base
+        ),
+        format!(
             "{}/compute/core/src/storage/engine/objects/comments.rs",
             base
         ),
@@ -279,6 +283,13 @@ fn parse_all_bridges(verbose: bool) -> TsApi {
 /// Run: pnpm generate:bridge
 #[test]
 fn generate() {
+    // Keep normal `cargo test` verification read-only. This test is the
+    // explicit regeneration entry point when invoked with the `generate`
+    // test filter shown in the file header and package script.
+    if !std::env::args().any(|arg| arg == "generate") {
+        return;
+    }
+
     let api = parse_all_bridges(true);
 
     // ── Handler registry (Rust) ──

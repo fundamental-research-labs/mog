@@ -383,6 +383,87 @@ describe('WorksheetValidationImpl sheet cache', () => {
   });
 });
 
+describe('WorksheetValidationImpl getErrorsInRange', () => {
+  it('validates live scalar cell values inside normalized range bounds', async () => {
+    const ctx = createCtx();
+    (ctx.computeBridge.queryRange as jest.Mock).mockResolvedValue({
+      cells: [
+        { row: 0, col: 0, value: 'hello' },
+        { row: 0, col: 1, value: 42 },
+        { row: 0, col: 2, value: { type: 'error', value: 'Div0' } },
+        { row: 0, col: 3, value: { type: 'Text', value: 'legacy-wire-object' } },
+      ],
+      merges: [],
+    });
+    (ctx.computeBridge.validateCellValueInDoc as jest.Mock).mockImplementation(
+      async (_sheetId: string, row: number, col: number) => ({
+        valid: !(row === 0 && (col === 0 || col === 2)),
+        enforcement: col === 0 ? 'warning' : 'none',
+      }),
+    );
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.getErrorsInRange(0, 3, 0, 0)).resolves.toEqual([
+      { row: 0, col: 0 },
+      { row: 0, col: 2 },
+    ]);
+
+    expect(ctx.computeBridge.queryRange).toHaveBeenCalledWith(SHEET_ID, 0, 0, 0, 3);
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenCalledTimes(3);
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenNthCalledWith(
+      1,
+      SHEET_ID,
+      0,
+      0,
+      'hello',
+    );
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenNthCalledWith(
+      2,
+      SHEET_ID,
+      0,
+      1,
+      '42',
+    );
+    expect(ctx.computeBridge.validateCellValueInDoc).toHaveBeenNthCalledWith(
+      3,
+      SHEET_ID,
+      0,
+      2,
+      '#DIV/0!',
+    );
+  });
+
+  it('uses resolved list validation before falling back to document validation', async () => {
+    const ctx = createCtx([
+      makeSchema({
+        id: 'list-rule',
+        schema: {
+          type: 'list',
+          constraints: {
+            enum: ['Red', 'Blue'],
+            allowBlank: false,
+          },
+        },
+        ui: {
+          errorMessage: {
+            title: 'Choose from list',
+            message: 'Use an allowed value.',
+          },
+        },
+      }),
+    ]);
+    (ctx.computeBridge.queryRange as jest.Mock).mockResolvedValue({
+      cells: [{ row: 0, col: 0, value: 'Green' }],
+      merges: [],
+    });
+    const validations = new WorksheetValidationImpl(ctx, SHEET_ID);
+
+    await expect(validations.getErrorsInRange(0, 0, 0, 0)).resolves.toEqual([{ row: 0, col: 0 }]);
+
+    expect(ctx.computeBridge.validateCellValueInDoc).not.toHaveBeenCalled();
+  });
+});
+
 describe('WorksheetValidationImpl list validation', () => {
   function makeRangeBackedListSchema(overrides: Partial<RangeSchema> = {}): RangeSchema {
     return makeSchema({

@@ -78,6 +78,25 @@ describe('resolveChartSourceRange', () => {
     await expect(resolveChartSourceRange(ws, range)).resolves.toEqual(range);
   });
 
+  it('preserves explicit single-row chart sources when hidden-detail trimming is requested', async () => {
+    const range = { startRow: 20, startCol: 11, endRow: 20, endCol: 27 };
+    const ws = createWorksheet({
+      expandedRegion: range,
+      hiddenCols: [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+      cellValues: {
+        '20,11': 'Total',
+        '20,12': 34500,
+        '20,13': 45000,
+        '20,14': null,
+        '20,27': 6732,
+      },
+    });
+
+    await expect(resolveChartSourceRange(ws, range, { trimHiddenDetail: true })).resolves.toEqual(
+      range,
+    );
+  });
+
   it('preserves explicit multi-row chart sources even when hidden detail columns split the range', async () => {
     const range = { startRow: 2, startCol: 11, endRow: 6, endCol: 27 };
     const ws = createWorksheet({

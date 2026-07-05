@@ -110,6 +110,8 @@ const WORKBOOK_MUTATION_EVENT_TYPES = new Set<string>([
   'comment:deleted',
   'comment:resolved',
   'comments:cleared',
+  'cellAnnotation:changed',
+  'cellAnnotations:cleared',
   'name:created',
   'name:updated',
   'name:deleted',

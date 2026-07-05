@@ -30,12 +30,12 @@ import { useActiveSheetId, useWorkbook } from '../../infra/context';
 
 interface FilterStateInfo {
   hasFilters: boolean;
-  hasActiveFilters: boolean;
+  hasClearableFilters: boolean;
   activeFilterCount: number;
 }
 
 export interface UseFilterActionsReturn {
-  /** True if there are active column or advanced filters to clear */
+  /** True if there are active filter criteria the Clear command can clear */
   canClearFilters: boolean;
   /** True if there are any filters to reapply */
   canReapplyFilters: boolean;
@@ -53,29 +53,30 @@ export interface UseFilterActionsReturn {
  */
 function deriveFilterStateInfo(allFilters: FilterSummaryInfo[]): FilterStateInfo {
   let activeFilterCount = 0;
-  let hasActiveFilters = false;
+  let hasClearableFilters = false;
 
   for (const filter of allFilters) {
     const activeColumnCount = filter.activeColumnCount ?? 0;
     const hasActiveFilter =
       filter.hasActiveFilter ?? filter.hasActiveCriteria ?? activeColumnCount > 0;
-    const clearable = filter.clearable ?? hasActiveFilter;
-    if (clearable) {
-      hasActiveFilters = true;
+    if (hasActiveFilter) {
       activeFilterCount += activeColumnCount > 0 ? activeColumnCount : 1;
+    }
+    if (filter.clearable ?? hasActiveFilter) {
+      hasClearableFilters = true;
     }
   }
 
   return {
     hasFilters: allFilters.length > 0,
-    hasActiveFilters,
+    hasClearableFilters,
     activeFilterCount,
   };
 }
 
 const EMPTY_FILTER_STATE: FilterStateInfo = {
   hasFilters: false,
-  hasActiveFilters: false,
+  hasClearableFilters: false,
   activeFilterCount: 0,
 };
 
@@ -87,7 +88,7 @@ const EMPTY_FILTER_STATE: FilterStateInfo = {
  * Hook that provides filter state for toolbar buttons.
  *
  * Subscribes to filter events and returns:
- * - canClearFilters: true if there are active column filters to clear
+ * - canClearFilters: true if there are active clearable criteria
  * - canReapplyFilters: true if there are any filters on the sheet (nothing to reapply if no filters)
  * - activeFilterCount: total number of active column filter criteria
  *
@@ -152,7 +153,7 @@ export function useFilterActions(): UseFilterActionsReturn {
   }, [ws, activeSheetId, updateFilterState]); // Re-run when activeSheetId changes to re-subscribe to correct sheet
 
   return {
-    canClearFilters: filterState.hasActiveFilters,
+    canClearFilters: filterState.hasClearableFilters,
     canReapplyFilters: filterState.hasFilters,
     activeFilterCount: filterState.activeFilterCount,
   };

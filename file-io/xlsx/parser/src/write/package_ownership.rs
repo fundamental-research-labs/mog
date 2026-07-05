@@ -479,7 +479,7 @@ pub const PACKAGE_OWNERSHIP_MATRIX: &[PackageOwnershipContract] = &[
             "control property mutation",
             "ActiveX placeholder mutation",
         ],
-        opaque_policy: "form controls require typed control state; ActiveX is diagnosed/dropped",
+        opaque_policy: "form controls require typed control state; ActiveX is quarantined/preserved without interpretation",
     },
     PackageOwnershipContract {
         owner: PackageFeatureOwner::PrintSettings,
@@ -690,12 +690,12 @@ pub const CURRENT_STATE_OWNER_POLICY_TABLE: &[CurrentStateOwnerPolicy] = &[
             "OLE object, preview, and binary relationships remain package-closed",
         ],
         mutation_invalidators: &["OLE object", "embedded binary", "worksheet object anchor"],
-        currentness_validator: "unsafe or unmodeled OLE behavior is not silently replayed",
-        export_action: XlsxExportAction::DiagnosticDrop,
-        diagnostic_code: "xlsx.activeContent.blocked",
-        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
+        currentness_validator: "unsafe or unmodeled OLE behavior is preserved only as inert/quarantined package data",
+        export_action: XlsxExportAction::QuarantinedPreserve,
+        diagnostic_code: "xlsx.activeContent.quarantined",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
         diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
-        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
         required_tests: ALL_OWNER_POLICY_TESTS,
     },
     CurrentStateOwnerPolicy {
@@ -962,7 +962,7 @@ pub const CURRENT_STATE_OWNER_POLICY_TABLE: &[CurrentStateOwnerPolicy] = &[
             "worksheet -> activeX",
             "activeX binary",
         ],
-        typed_live_state: "form controls and disabled active-control diagnostics",
+        typed_live_state: "form controls and inert active-control diagnostics",
         typed_import_fields: &["supported form control descriptors"],
         provenance_only_fields: &[
             "ActiveX bytes",
@@ -970,15 +970,15 @@ pub const CURRENT_STATE_OWNER_POLICY_TABLE: &[CurrentStateOwnerPolicy] = &[
             "control property paths",
         ],
         closure_requirements: &[
-            "control properties are closed; executable ActiveX is blocked or removed consistently",
+            "control properties are closed; executable ActiveX payloads are preserved inertly/quarantined without execution",
         ],
         mutation_invalidators: &["control", "ActiveX payload", "worksheet object anchor"],
-        currentness_validator: "active controls must be disabled, dropped, or blocked by policy",
-        export_action: XlsxExportAction::BlockedExport,
-        diagnostic_code: "xlsx.activeContent.blocked",
-        diagnostic_severity: XlsxDiagnosticSeverity::Blocked,
+        currentness_validator: "active controls must be disabled for interpretation and preserved inertly/quarantined for export",
+        export_action: XlsxExportAction::QuarantinedPreserve,
+        diagnostic_code: "xlsx.activeContent.quarantined",
+        diagnostic_severity: XlsxDiagnosticSeverity::Warning,
         diagnostic_reason: XlsxDiagnosticReason::UnsafeActiveContent,
-        continuation: XlsxDiagnosticContinuation::ExportFailed,
+        continuation: XlsxDiagnosticContinuation::ExportContinued,
         required_tests: ALL_OWNER_POLICY_TESTS,
     },
     CurrentStateOwnerPolicy {
@@ -1288,9 +1288,9 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         api_exposure: ApiExposureLevel::ReadOnly,
         production_writer: "domain comment/control/OLE writers",
         package_feature_owner: Some(PackageFeatureOwner::Comments),
-        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
-        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy: "unsupported-active-dropped for ActiveX/executable controls; typed-owned-partial for comments/OLE gaps",
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveQuarantined),
+        opaque_package_policy: OpaquePackagePolicy::OwnerScopedInert,
+        unsupported_diagnostic_policy: "ActiveX/executable controls are quarantined and preserved without interpretation; typed-owned-partial for comments/OLE gaps",
         dirty_invalidation_triggers: &[
             "comment mutation",
             "control mutation",
@@ -1397,11 +1397,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         parse_output_domain_owner: "diagnostics only until disabled placeholders are persisted",
         yrs_app_persistence_owner: "diagnostic-only",
         api_exposure: ApiExposureLevel::DiagnosticOnly,
-        production_writer: "diagnostic/drop; never emits enabled ActiveX",
+        production_writer: "quarantine-preserve imported package closure; never interprets or executes ActiveX",
         package_feature_owner: Some(PackageFeatureOwner::Controls),
-        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
-        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy: "security-disabled-active-content diagnostic with package part and relationship fingerprints",
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveQuarantined),
+        opaque_package_policy: OpaquePackagePolicy::OwnerScopedInert,
+        unsupported_diagnostic_policy: "quarantined active-content diagnostic with package part and relationship fingerprints",
         dirty_invalidation_triggers: &[
             "ActiveX XML detected",
             "ActiveX binary detected",
@@ -1413,8 +1413,8 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
             "ActiveX XML path",
             "ActiveX binary path",
         ],
-        user_visible_behavior: "diagnostic-only disabled active content",
-        fixture_coverage: "domain::controls active_x parser tests; production placeholder persistence pending",
+        user_visible_behavior: "diagnostic-only disabled active content preserved for Excel",
+        fixture_coverage: "domain::controls active_x parser tests; production package closure roundtrip",
     },
     OoxmlOwnershipRow {
         surface: "pivot tables, pivot caches, slicers, timelines, metadata, rich data, and MDX/cube adjuncts",
@@ -1550,11 +1550,11 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         parse_output_domain_owner: "diagnostics and external reference metadata where modeled",
         yrs_app_persistence_owner: "diagnostic-only unless a future plan adds typed state",
         api_exposure: ApiExposureLevel::DiagnosticOnly,
-        production_writer: "VBA project quarantine-preserve; external links only when typed owner is available; unsupported active adjuncts diagnostic/drop",
+        production_writer: "VBA project quarantine-preserve; external links only when typed owner is available; unsupported active adjuncts are preserved inertly/quarantined or omitted only when cache/derived",
         package_feature_owner: Some(PackageFeatureOwner::ExternalLinks),
         auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveQuarantined),
         opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
-        unsupported_diagnostic_policy: "VBA is preserved as quarantined active content with package closure and no interpretation/execution; other unsupported active or external-capable adjuncts are diagnosed/dropped; shared-workbook revisions are diagnostics-only unless a typed revision model owns invalidation",
+        unsupported_diagnostic_policy: "VBA is preserved as quarantined active content with package closure and no interpretation/execution; other unsupported active or external-capable adjuncts are preserved inertly/quarantined unless they are explicit cache/derived artifacts; shared-workbook revisions are diagnostics-only unless a typed revision model owns invalidation",
         dirty_invalidation_triggers: &[
             "external reference mutation",
             "macro/security content detected",
@@ -1592,6 +1592,28 @@ pub const ROUND_9_OOXML_OWNERSHIP_MATRIX: &[OoxmlOwnershipRow] = &[
         ],
         user_visible_behavior: "Office add-in taskpane package payload and activation metadata",
         fixture_coverage: "xlsx roundtrip package graph regression",
+    },
+    OoxmlOwnershipRow {
+        surface: "OPC digital signature package parts",
+        package_part_patterns: &["_xmlsignatures/origin.sigs", "_xmlsignatures/sig*.xml"],
+        ooxml_modules: &[],
+        canonical_type_status: CanonicalTypeStatus::InventoryOnly,
+        classification: OoxmlOwnershipClassification::UnsupportedActive,
+        production_reader: "package graph security-sensitive part classifier",
+        private_parser_adapter: "package inventory only",
+        full_parse_result_field: "unsupported package diagnostics",
+        parse_output_domain_owner: "diagnostics only",
+        yrs_app_persistence_owner: "diagnostic-only",
+        api_exposure: ApiExposureLevel::DiagnosticOnly,
+        production_writer: "forbidden active signature parts are never replayed as current workbook state",
+        package_feature_owner: None,
+        auxiliary_policy: Some(AuxiliaryPackagePartPolicy::ActiveForbidden),
+        opaque_package_policy: OpaquePackagePolicy::DiagnosticDrop,
+        unsupported_diagnostic_policy: "digital signatures are invalidated by workbook mutation and are classified as active-forbidden package parts",
+        dirty_invalidation_triggers: &["any workbook package mutation"],
+        semantic_references: &["signature origin relationship", "signature part target"],
+        user_visible_behavior: "stale workbook signatures are not preserved as trusted signatures",
+        fixture_coverage: "round-9 matrix contract and package graph security-sensitive classifier",
     },
     OoxmlOwnershipRow {
         surface: "unsupported functional package adjuncts awaiting typed round-9 models; volatile dependencies are workbook-owned calculation sidecars",
@@ -1758,12 +1780,9 @@ pub fn auxiliary_package_part_policy(path: &str) -> Option<AuxiliaryPackagePartP
         || (path.starts_with("xl/tables/tableSingleCells") && path.ends_with(".xml"))
     {
         Some(AuxiliaryPackagePartPolicy::TypedOwned)
-    } else if path == "xl/vbaProject.bin" {
+    } else if path == "xl/vbaProject.bin" || path.starts_with("xl/activeX/") {
         Some(AuxiliaryPackagePartPolicy::ActiveQuarantined)
-    } else if path.starts_with("xl/activeX/")
-        || path == "_xmlsignatures/origin.sigs"
-        || path.starts_with("_xmlsignatures/sig")
-    {
+    } else if path == "_xmlsignatures/origin.sigs" || path.starts_with("_xmlsignatures/sig") {
         Some(AuxiliaryPackagePartPolicy::ActiveForbidden)
     } else if path.starts_with("xl/featurePropertyBag/") {
         Some(AuxiliaryPackagePartPolicy::TypedOwned)

@@ -45,7 +45,7 @@ pub(in crate::storage::engine) fn auto_fit_column(
 ) -> Result<Pixels, ComputeError> {
     let grid = match stores.grid_indexes.get(sheet_id) {
         Some(g) => g,
-        None => return Ok(compute_layout_index::platform_default_col_width()),
+        None => return Ok(stores.layout_metrics.default_column_width()),
     };
 
     let max_row = grid.row_count();
@@ -122,7 +122,7 @@ pub(in crate::storage::engine) fn auto_fit_row(
 ) -> Result<Pixels, ComputeError> {
     let grid = match stores.grid_indexes.get(sheet_id) {
         Some(g) => g,
-        None => return Ok(compute_layout_index::DEFAULT_ROW_HEIGHT),
+        None => return Ok(stores.layout_metrics.default_row_height()),
     };
 
     let max_col = grid.col_count();
@@ -401,7 +401,7 @@ fn measure_cell_height_for_autofit(
         .layout_indexes
         .get(sheet_id)
         .map(|li| li.get_col_width(col as usize).0 as f32)
-        .unwrap_or(compute_layout_index::platform_default_col_width().0 as f32);
+        .unwrap_or(stores.layout_metrics.default_column_width_px as f32);
 
     let height = text_measure::measure_cell_height(
         &stores.font_db,

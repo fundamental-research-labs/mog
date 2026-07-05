@@ -36,6 +36,9 @@ pub struct PictureOoxmlProps {
     pub mc_alternate_content_raw_xml: Option<String>,
     /// Image path resolved from OPC relationships (e.g., "../media/image1.png").
     pub image_path: Option<String>,
+    /// Embedded picture media payload imported from the XLSX package.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedded_media: Option<PictureEmbeddedMediaAuthority>,
     /// Drawing relationships referenced by this picture's OOXML.
     ///
     /// `image_path` carries the current embedded image owner separately because
@@ -45,6 +48,25 @@ pub struct PictureOoxmlProps {
     /// drawing package graph can register and remap them consistently.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relationships: Vec<ooxml_types::shared::OpcRelationship>,
+}
+
+/// Owned embedded picture media authority resolved from a DrawingML relationship.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[serde(default)]
+#[derive(Default)]
+pub struct PictureEmbeddedMediaAuthority {
+    /// Imported drawing relationship id used by `a:blip/@r:embed`.
+    pub relationship_id: String,
+    /// Verbatim relationship target spelling from the source package.
+    pub original_target: String,
+    /// Normalized ZIP package path, e.g. `xl/media/image1.png`.
+    pub package_path: String,
+    /// Package content type if declared or inferred.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    /// Current image data URL hydrated from imported package bytes.
+    pub src: String,
 }
 
 /// OOXML round-trip properties for a shape floating object.

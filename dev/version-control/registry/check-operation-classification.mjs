@@ -370,9 +370,9 @@ function validateRuntimeClassifierParity(registry) {
     `${REGISTRY_PATH}: shadow-only exact commands are stale against ${RUNTIME_CLASSIFIER_PATH}`,
   );
   expectExactArray(
-    rulePrefixes(registry, 'secret-direct-compute-prefix'),
-    extractRuntimeArray(runtimeSource, 'BLOCKED_SECRET_PREFIXES'),
-    `${REGISTRY_PATH}: blocked secret prefixes are stale against ${RUNTIME_CLASSIFIER_PATH}`,
+    rulePrefixes(registry, 'secret-no-history-prefix'),
+    extractRuntimeArray(runtimeSource, 'SECRET_NO_HISTORY_PREFIXES'),
+    `${REGISTRY_PATH}: secret no-history prefixes are stale against ${RUNTIME_CLASSIFIER_PATH}`,
   );
   expectExactArray(
     rulePrefixes(registry, 'shadow-only-prefix'),
@@ -432,7 +432,10 @@ function validateRepresentatives(registry, inventory) {
   const representedModes = new Set(
     registry.requiredRepresentativeClasses.map((item) => item.expected.writeAdmissionMode),
   );
-  for (const mode of registry.contractEnums.writeAdmissionModes) {
+  const ruleAdmissionModes = new Set(
+    registry.rules.map((rule) => rule.classification.writeAdmissionMode),
+  );
+  for (const mode of ruleAdmissionModes) {
     assert(
       representedModes.has(mode),
       `${REGISTRY_PATH}: admission mode ${mode} lacks a representative class`,

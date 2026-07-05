@@ -705,6 +705,73 @@ fn opaque_sidecar_external_relationships_are_not_replayed() {
 }
 
 #[test]
+fn opaque_sidecar_referenced_external_relationships_are_preserved() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![relationship_hint(
+            "rId7",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+            "customXml/item1.xml",
+        )],
+        opaque_parts: vec![domain_types::OpaquePackagePartHint {
+            path: "customXml/item1.xml".to_string(),
+            bytes: br#"<root xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/>"#.to_vec(),
+            content_type: Some("application/xml".to_string()),
+            relationships: vec![external_relationship_hint(
+                "rId1",
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+                "https://example.invalid/",
+            )],
+        }],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    graph.validate_for_export().unwrap();
+    assert!(graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "customXml/_rels/item1.xml.rels"
+            && rel.id == "rId1"
+            && rel.target == "https://example.invalid/"
+            && rel.target_mode.as_deref() == Some("External")
+    }));
+}
+
+#[test]
+fn opaque_sidecar_unrelated_prefixed_id_does_not_replay_external_relationship() {
+    let metadata = PackageFidelityMetadata {
+        root_relationships: vec![relationship_hint(
+            "rId7",
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml",
+            "customXml/item1.xml",
+        )],
+        opaque_parts: vec![domain_types::OpaquePackagePartHint {
+            path: "customXml/item1.xml".to_string(),
+            bytes: br#"<root xmlns:foo="urn:example" foo:id="rId1"/>"#.to_vec(),
+            content_type: Some("application/xml".to_string()),
+            relationships: vec![external_relationship_hint(
+                "rId1",
+                "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+                "https://example.invalid/",
+            )],
+        }],
+        ..Default::default()
+    };
+
+    let mut builder = build_modeled_workbook_graph_builder(graph_options(Some(metadata))).unwrap();
+    builder.register_imported_opaque_parts().unwrap();
+    let graph = builder.resolve().unwrap();
+
+    graph.validate_for_export().unwrap();
+    assert!(!graph.relationships.iter().any(|rel| {
+        rel.owner_rels_path == "customXml/_rels/item1.xml.rels"
+            && rel.id == "rId1"
+            && rel.target == "https://example.invalid/"
+    }));
+}
+
+#[test]
 fn webextension_cluster_is_dropped_without_root_taskpanes_relationship() {
     let metadata = PackageFidelityMetadata {
         opaque_parts: vec![

@@ -820,12 +820,15 @@ impl YrsComputeEngine {
         &mut self,
         table_name: &str,
     ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
-        let converted_table = self.mirror.get_table(table_name).cloned();
-        let result = services::tables::convert_table_to_range(
-            &mut self.stores,
-            &mut self.mirror,
-            table_name,
-        )?;
+        let (converted_table, result) = self.with_undo_group_if(true, |engine| {
+            let converted_table = engine.mirror.get_table(table_name).cloned();
+            let result = services::tables::convert_table_to_range(
+                &mut engine.stores,
+                &mut engine.mirror,
+                table_name,
+            )?;
+            Ok((converted_table, result))
+        })?;
         let patches = converted_table
             .as_ref()
             .and_then(|table| {

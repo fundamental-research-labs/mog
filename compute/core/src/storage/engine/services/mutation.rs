@@ -313,16 +313,14 @@ pub(in crate::storage::engine) fn apply_dimension_changes_to_layout(
                     li.set_row_height(row as usize, height_px);
                 }
                 CellChangeKind::Removed => {
-                    let default_px =
-                        domain_types::units::points_to_pixels(dimensions::DEFAULT_ROW_HEIGHT);
-                    li.set_row_height(row as usize, default_px);
+                    li.set_row_height(row as usize, stores.layout_metrics.default_row_height());
                 }
             }
         }
     }
 
     // Column widths — Yrs stores char-width, LayoutIndex needs pixels
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     for dch in &changes.col_widths {
         let col_pos = resolve_hex_id_to_position(stores, &dch.sheet_id, &dch.key, false);
         if let Some(col) = col_pos

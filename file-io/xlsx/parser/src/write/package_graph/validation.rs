@@ -152,6 +152,12 @@ pub(super) fn validate_opaque_part_relationship_references(
     if !opaque_part_may_contain_xml_relationship_references(part) {
         return;
     }
+    if matches!(
+        part.semantic_kind,
+        Some(domain_types::XlsxPackagePartKind::OpaqueQuarantined)
+    ) {
+        return;
+    }
     let Some(bytes) = part.bytes.as_deref() else {
         errors.push(PackageIntegrityIssue::MissingOpaquePartBytes {
             part_path: part.path.clone(),
@@ -493,6 +499,14 @@ pub(super) fn validate_modeled_part_owner_relationship(
     }
 }
 
+pub(super) fn missing_relationship_target_is_quarantined(rels_path: &str) -> bool {
+    matches!(
+        owner_part_path_from_rels_path(rels_path),
+        Some(Some(owner_path)) if owner_path.starts_with("xl/richData/")
+            && owner_path.ends_with(".xml")
+    )
+}
+
 struct RequiredRelationship {
     rels_path: Option<String>,
     relationship_type: &'static str,
@@ -749,7 +763,10 @@ fn relationship_type_for_worksheet_child(path: &str) -> Option<&'static str> {
         Some(REL_CTRL_PROP)
     } else if path.starts_with("xl/pivotTables/pivotTable") && path.ends_with(".xml") {
         Some(REL_PIVOT_TABLE)
-    } else if path.starts_with("xl/printerSettings/printerSettings") && path.ends_with(".bin") {
+    } else if path.starts_with("xl/printerSettings/")
+        && path.ends_with(".bin")
+        && path.len() > "xl/printerSettings/.bin".len()
+    {
         Some(REL_PRINTER_SETTINGS)
     } else if path.starts_with("xl/drawings/vmlDrawing") && path.ends_with(".vml") {
         Some(REL_VML_DRAWING)

@@ -43,6 +43,7 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
         sheet_extras,
         all_chart_entries,
         all_chart_ex_entries,
+        all_image_blobs,
     } = sheet_parts::build_sheet_parts(
         &remapped_output,
         &mut shared_strings,
@@ -60,6 +61,6 @@ pub(super) fn run(output: &ParseOutput) -> WorkbookPreflight {
         all_chart_entries,
         all_chart_ex_entries,
         pivot_data,
-        all_image_blobs: Vec::new(),
+        all_image_blobs,
     }
 }

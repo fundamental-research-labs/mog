@@ -12,7 +12,14 @@ pub(super) fn metadata_xml_for_export(output: &ParseOutput) -> Option<Vec<u8>> {
         .then(|| crate::domain::metadata::spreadsheet_xml::write_metadata_model_xml(metadata))
 }
 
-fn has_metadata_xml_state(metadata: &WorkbookMetadata) -> bool {
+pub(super) fn metadata_xml_would_export(output: &ParseOutput) -> bool {
+    let Some(metadata) = output.metadata.as_ref() else {
+        return false;
+    };
+    imported_metadata_xml_is_current(output, metadata) || has_metadata_xml_state(metadata)
+}
+
+pub(super) fn has_metadata_xml_state(metadata: &WorkbookMetadata) -> bool {
     !metadata.metadata_types.is_empty()
         || !metadata.future_metadata.is_empty()
         || !metadata.cell_metadata.is_empty()

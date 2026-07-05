@@ -194,7 +194,7 @@ pub(in crate::storage::engine) fn get_col_width_query(
     if width_cw.0 == 0.0 {
         Pixels(0.0)
     } else {
-        domain_types::units::char_width_to_pixels(width_cw, domain_types::units::platform_mdw())
+        domain_types::units::char_width_to_pixels(width_cw, stores.layout_metrics.column_width_mdw)
     }
 }
 
@@ -290,7 +290,7 @@ pub(in crate::storage::engine) fn get_col_widths_batch(
     start_col: u32,
     end_col: u32,
 ) -> Vec<(u32, Pixels)> {
-    let mdw = domain_types::units::platform_mdw();
+    let mdw = stores.layout_metrics.column_width_mdw;
     (start_col..=end_col)
         .map(|col| {
             let cw = sheet_dimensions::get_col_width(

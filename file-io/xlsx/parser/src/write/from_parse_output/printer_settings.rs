@@ -3,7 +3,32 @@ use super::assembly::WorksheetPrinterSettingsGraphEntry;
 const PRINTER_SETTINGS_CONTENT_TYPE: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings";
 
-pub(super) fn relationship_for_export(
+pub(super) fn append_relationship_for_export(
+    sheet_idx: usize,
+    sheet_num: usize,
+    print_settings: Option<&domain_types::PrintSettings>,
+    package_fidelity: Option<&domain_types::PackageFidelityMetadata>,
+    sheet_writer: &mut crate::write::SheetWriter,
+    relationships: &mut Vec<WorksheetPrinterSettingsGraphEntry>,
+) {
+    let Some(print_settings) = print_settings else {
+        return;
+    };
+    if print_settings.r_id.is_none() {
+        return;
+    }
+    if let Some(entry) =
+        relationship_for_export(sheet_idx, sheet_num, print_settings, package_fidelity)
+    {
+        relationships.push(entry);
+    } else {
+        sheet_writer
+            .ensure_print_writer()
+            .set_printer_settings_r_id(None);
+    }
+}
+
+fn relationship_for_export(
     sheet_idx: usize,
     sheet_num: usize,
     print_settings: &domain_types::PrintSettings,
@@ -56,16 +81,11 @@ fn normalize_printer_settings_path(path: &str) -> Option<String> {
     if path.contains('\\') {
         return None;
     }
-    let resolved = crate::infra::opc::resolve_relationship_target(None, path).ok()?;
-    (resolved == path).then_some(resolved)
+    crate::infra::opc::resolve_relationship_target(None, path).ok()
 }
 
 fn is_supported_printer_settings_path(path: &str) -> bool {
-    let Some(name) = path.strip_prefix("xl/printerSettings/printerSettings") else {
-        return false;
-    };
-    let Some(number) = name.strip_suffix(".bin") else {
-        return false;
-    };
-    !number.is_empty() && number.bytes().all(|byte| byte.is_ascii_digit())
+    path.starts_with("xl/printerSettings/")
+        && path.ends_with(".bin")
+        && path.len() > "xl/printerSettings/.bin".len()
 }

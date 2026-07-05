@@ -135,7 +135,7 @@ describe('Compute mutation admission', () => {
     });
     expect(classifyWriteOperation('compute_wb_security_add_policy')).toMatchObject({
       capturePolicy: 'excluded',
-      writeAdmissionMode: 'block',
+      writeAdmissionMode: 'captureDisabledNoHistory',
       domainClass: 'secret',
     });
   });

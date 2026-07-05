@@ -698,6 +698,80 @@ impl ComputeCore {
         }
     }
 
+    /// Resolve raw-A1 named-range definitions to identity-backed definitions before
+    /// formula dependency extraction.
+    ///
+    /// XLSX import lowers defined names before `CellId`s are available, so those
+    /// names enter the snapshot as `raw_expression` with empty `refers_to.refs`.
+    /// Evaluation can still parse the raw name through the synthetic variable node,
+    /// but formula dependency extraction only inlines backing cells when the
+    /// `NamedRangeDef` already carries identity refs. Normalize the in-memory mirror
+    /// here so imported names have the same graph/API behavior as SDK-created names.
+    pub(super) fn normalize_raw_named_ranges_for_graph(&mut self, mirror: &mut CellMirror) {
+        let defs: Vec<formula_types::NamedRangeDef> = mirror
+            .variables
+            .all_variables()
+            .map(|(_, _, def)| def.clone())
+            .collect();
+
+        for def in defs {
+            if !def.refers_to.refs.is_empty() {
+                continue;
+            }
+            let name = def.name.clone();
+            let resolved = self.resolve_named_range_def_for_graph(mirror, def);
+            if resolved.refers_to.refs.is_empty() {
+                continue;
+            }
+            mirror.set_named_range(name, resolved);
+        }
+    }
+
+    pub(super) fn resolve_named_range_def_for_graph(
+        &mut self,
+        mirror: &mut CellMirror,
+        mut def: formula_types::NamedRangeDef,
+    ) -> formula_types::NamedRangeDef {
+        if !def.refers_to.refs.is_empty() {
+            return def;
+        }
+
+        let Some(raw_expr) = def.raw_expression.as_deref() else {
+            return def;
+        };
+        if raw_expr.is_empty() {
+            return def;
+        }
+
+        let context_sheet = match &def.scope {
+            formula_types::Scope::Sheet(sheet_id) => Some(*sheet_id),
+            formula_types::Scope::Workbook => self
+                .ordered_sheets()
+                .first()
+                .copied()
+                .or_else(|| mirror.sheet_ids().next().copied()),
+        };
+        let Some(context_sheet) = context_sheet else {
+            return def;
+        };
+
+        let formula = if raw_expr.starts_with('=') {
+            raw_expr.to_string()
+        } else {
+            format!("={raw_expr}")
+        };
+
+        let Ok(identity) = self.to_identity_formula(mirror, &context_sheet, &formula) else {
+            return def;
+        };
+        if identity.refs.is_empty() {
+            return def;
+        }
+
+        def.refers_to = identity;
+        def
+    }
+
     /// Register a single variable as a DAG node.
     ///
     /// If the variable has a `raw_expression`:

@@ -9,6 +9,7 @@ pub use domain_types::CellFormat;
 pub use domain_types::ResolvedCellFormat;
 
 // --- Compute-core-specific domain modules ---
+pub mod annotations;
 pub mod bindings;
 pub mod cell_ops;
 /// Conditional formatting presets and icon set registry.
@@ -24,6 +25,7 @@ pub mod queries;
 pub mod ranges;
 pub mod sparklines;
 
+pub use annotations::*;
 pub use bindings::*;
 pub use cell_ops::*;
 pub use cf::*;

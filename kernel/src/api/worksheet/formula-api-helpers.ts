@@ -8,6 +8,7 @@ export type SetCellsValueEntry = {
   row?: number;
   col?: number;
   value: CellValuePrimitive | Date;
+  annotation?: string | null;
 };
 
 export type SetCellsFormulaEntry = {
@@ -17,6 +18,7 @@ export type SetCellsFormulaEntry = {
   row?: number;
   col?: number;
   formula: string;
+  annotation?: string | null;
 };
 
 export type SetCellsEntry = SetCellsValueEntry | SetCellsFormulaEntry;
@@ -27,12 +29,10 @@ export type NormalizedSetCellsEntry = {
   row?: number;
   col?: number;
   value: CellValuePrimitive | Date;
+  annotation?: string | null;
 };
 
-export type ExplicitTextWriteOptions = {
-  literal?: boolean;
-  asText?: boolean;
-};
+export type ExplicitTextWriteOptions = Pick<CellWriteOptions, 'literal' | 'asText' | 'annotation'>;
 
 export type FormulaCellWriteOptions = CellWriteOptions & ExplicitTextWriteOptions;
 

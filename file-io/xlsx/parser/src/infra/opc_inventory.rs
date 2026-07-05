@@ -275,9 +275,13 @@ fn imported_inert_part_bytes(
     if normalized_path == "[Content_Types].xml" || is_relationship_sidecar {
         return None;
     }
-    if crate::write::package_ownership::auxiliary_package_part_policy(normalized_path)
-        != Some(AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary)
-    {
+    if !matches!(
+        crate::write::package_ownership::auxiliary_package_part_policy(normalized_path),
+        Some(
+            AuxiliaryPackagePartPolicy::InertOpaqueAuxiliary
+                | AuxiliaryPackagePartPolicy::ActiveQuarantined
+        )
+    ) {
         return None;
     }
     archive.read_file_verbatim(original_path).ok()

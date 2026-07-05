@@ -732,22 +732,37 @@ pub fn register_worksheet_control_property(
     Ok(())
 }
 
+pub fn register_worksheet_active_x_control(
+    graph: &mut PackageGraphBuilder,
+    sheet_idx: usize,
+    active_x_path: &str,
+    relationship_id_hint: &str,
+) {
+    graph.add_relationship(PackageRelationship {
+        owner: worksheet_owner(sheet_idx),
+        relationship_type: crate::infra::opc::REL_ACTIVE_X_CONTROL.to_string(),
+        target: PackageRelationshipTarget::InternalPart {
+            path: normalize_part_path(active_x_path),
+        },
+        identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
+    });
+}
+
 pub fn register_worksheet_custom_property(
     graph: &mut PackageGraphBuilder,
     sheet_idx: usize,
     path: &str,
     relationship_id_hint: &str,
-) -> Result<(), WriteError> {
+) -> Result<RegisteredRelationshipKey, WriteError> {
     graph.register_part(modeled_part(path, CT_WORKSHEET_CUSTOM_PROPERTY))?;
-    graph.add_relationship(PackageRelationship {
+    Ok(graph.add_relationship(PackageRelationship {
         owner: worksheet_owner(sheet_idx),
         relationship_type: REL_WORKSHEET_CUSTOM_PROPERTY.to_string(),
         target: PackageRelationshipTarget::InternalPart {
             path: normalize_part_path(path),
         },
         identity_hint: Some(RelationshipIdentityHint::new(relationship_id_hint)),
-    });
-    Ok(())
+    }))
 }
 
 pub fn register_worksheet_printer_settings_payload(

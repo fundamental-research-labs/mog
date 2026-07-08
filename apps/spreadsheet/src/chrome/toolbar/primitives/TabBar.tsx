@@ -211,8 +211,7 @@ function TabBarImpl<T extends string>({
       // Whether the command area is currently on screen. This mirrors the
       // render gate in TabbedToolbar so the toggle below matches what the user
       // actually sees.
-      const commandsVisible =
-        !ribbonCollapsed && (displayMode === 'full' || temporaryShow);
+      const commandsVisible = !ribbonCollapsed && (displayMode === 'full' || temporaryShow);
 
       const revealCommands = () => {
         // A fully-collapsed ribbon (Ctrl+Shift+F1) is restored by un-collapsing;

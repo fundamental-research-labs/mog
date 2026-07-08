@@ -85,9 +85,7 @@ function snapshotGroups(
   panel: HTMLElement,
   assignments: Record<string, GroupRenderMode>,
 ): GroupSnapshot[] {
-  const els = Array.from(
-    panel.querySelectorAll<HTMLElement>(`[${LADDER_DATA_ATTRS.key}]`),
-  );
+  const els = Array.from(panel.querySelectorAll<HTMLElement>(`[${LADDER_DATA_ATTRS.key}]`));
   return els.map((el, domIndex) => {
     const key = el.getAttribute(LADDER_DATA_ATTRS.key) ?? '';
     const priority = Number(el.getAttribute(LADDER_DATA_ATTRS.priority) ?? '0');

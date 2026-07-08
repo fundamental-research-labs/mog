@@ -30,11 +30,41 @@ interface GroupDef {
 // A sparse Insert-like tab (as under the public visibility profile, plus the
 // low-priority groups the user said must not disappear).
 const INSERT_DEFS: GroupDef[] = [
-  { key: 'tables', priority: 2, rungs: ['full', 'compact', 'icons', 'dropdown'], canHide: false, widthByMode: { full: 180, compact: 140, icons: 110, dropdown: 70 } },
-  { key: 'charts', priority: 3, rungs: ['full', 'compact', 'icons', 'dropdown'], canHide: false, widthByMode: { full: 120, compact: 100, icons: 80, dropdown: 70 } },
-  { key: 'filters', priority: 4, rungs: ['full', 'dropdown'], canHide: true, widthByMode: { full: 110, dropdown: 70 } },
-  { key: 'links', priority: 4, rungs: ['full', 'dropdown'], canHide: true, widthByMode: { full: 70, dropdown: 60 } },
-  { key: 'comments', priority: 4, rungs: ['full', 'dropdown'], canHide: true, widthByMode: { full: 90, dropdown: 70 } },
+  {
+    key: 'tables',
+    priority: 2,
+    rungs: ['full', 'compact', 'icons', 'dropdown'],
+    canHide: false,
+    widthByMode: { full: 180, compact: 140, icons: 110, dropdown: 70 },
+  },
+  {
+    key: 'charts',
+    priority: 3,
+    rungs: ['full', 'compact', 'icons', 'dropdown'],
+    canHide: false,
+    widthByMode: { full: 120, compact: 100, icons: 80, dropdown: 70 },
+  },
+  {
+    key: 'filters',
+    priority: 4,
+    rungs: ['full', 'dropdown'],
+    canHide: true,
+    widthByMode: { full: 110, dropdown: 70 },
+  },
+  {
+    key: 'links',
+    priority: 4,
+    rungs: ['full', 'dropdown'],
+    canHide: true,
+    widthByMode: { full: 70, dropdown: 60 },
+  },
+  {
+    key: 'comments',
+    priority: 4,
+    rungs: ['full', 'dropdown'],
+    canHide: true,
+    widthByMode: { full: 90, dropdown: 70 },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -62,7 +92,17 @@ beforeEach(() => {
   globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
 
   HTMLElement.prototype.getBoundingClientRect = function () {
-    return { width: containerWidth, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON() {} } as DOMRect;
+    return {
+      width: containerWidth,
+      height: 0,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    } as DOMRect;
   };
   Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
     configurable: true,
@@ -86,8 +126,10 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.ResizeObserver = originalRO;
   HTMLElement.prototype.getBoundingClientRect = originalGBCR;
-  if (originalScrollWidth) Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth);
-  if (originalClientWidth) Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+  if (originalScrollWidth)
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', originalScrollWidth);
+  if (originalClientWidth)
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
 });
 
 function resizeTo(width: number) {
@@ -199,8 +241,20 @@ describe('progressive per-group ribbon collapse', () => {
     containerWidth = 560;
     // A sparse tab that fits fully → nothing collapsed (groupModes === {}).
     const sparse: GroupDef[] = [
-      { key: 'a', priority: 2, rungs: ['full', 'dropdown'], canHide: false, widthByMode: { full: 180, dropdown: 70 } },
-      { key: 'b', priority: 3, rungs: ['full', 'dropdown'], canHide: false, widthByMode: { full: 120, dropdown: 70 } },
+      {
+        key: 'a',
+        priority: 2,
+        rungs: ['full', 'dropdown'],
+        canHide: false,
+        widthByMode: { full: 180, dropdown: 70 },
+      },
+      {
+        key: 'b',
+        priority: 3,
+        rungs: ['full', 'dropdown'],
+        canHide: false,
+        widthByMode: { full: 120, dropdown: 70 },
+      },
     ];
     const { rerender } = render(<Harness defs={sparse} contentKey="sparse-tab" />);
     expect(latestModes).toEqual({});

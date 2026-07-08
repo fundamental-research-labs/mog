@@ -57,8 +57,10 @@ describe('deriveCollapseLadder', () => {
 });
 
 describe('pickCollapseStep — progressive, priority-ordered', () => {
-  const tables = () => group('tables', 2, ['full', 'compact', 'icons', 'dropdown'], false, 'full', 0);
-  const charts = () => group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'full', 1);
+  const tables = () =>
+    group('tables', 2, ['full', 'compact', 'icons', 'dropdown'], false, 'full', 0);
+  const charts = () =>
+    group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'full', 1);
   const links = () => group('links', 4, ['full', 'dropdown'], true, 'full', 2);
 
   it('collapses the least-important group first, one rung at a time', () => {
@@ -79,7 +81,14 @@ describe('pickCollapseStep — progressive, priority-ordered', () => {
   });
 
   it('advances one rung at a time (compact → icons), not straight to dropdown', () => {
-    const charts2 = group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'compact', 1);
+    const charts2 = group(
+      'charts',
+      3,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'compact',
+      1,
+    );
     const links2 = group('links', 4, ['full', 'dropdown'], true, 'dropdown', 2);
     expect(pickCollapseStep([tables(), charts2, links2])).toEqual({
       key: 'charts',
@@ -88,7 +97,14 @@ describe('pickCollapseStep — progressive, priority-ordered', () => {
   });
 
   it('only touches the most-important group after all others are fully collapsed', () => {
-    const charts2 = group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'dropdown', 1);
+    const charts2 = group(
+      'charts',
+      3,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'dropdown',
+      1,
+    );
     const links2 = group('links', 4, ['full', 'dropdown'], true, 'dropdown', 2);
     expect(pickCollapseStep([tables(), charts2, links2])).toEqual({
       key: 'tables',
@@ -97,8 +113,22 @@ describe('pickCollapseStep — progressive, priority-ordered', () => {
   });
 
   it('hides only as a last resort, after every group is at its tightest rung', () => {
-    const tables2 = group('tables', 2, ['full', 'compact', 'icons', 'dropdown'], false, 'dropdown', 0);
-    const charts2 = group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'dropdown', 1);
+    const tables2 = group(
+      'tables',
+      2,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'dropdown',
+      0,
+    );
+    const charts2 = group(
+      'charts',
+      3,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'dropdown',
+      1,
+    );
     const links2 = group('links', 4, ['full', 'dropdown'], true, 'dropdown', 2);
     // Everything is at its last non-hidden rung → hide the least-important
     // hideable group (links). Tables/Charts (canHide=false) are never chosen.
@@ -109,8 +139,22 @@ describe('pickCollapseStep — progressive, priority-ordered', () => {
   });
 
   it('returns null when nothing can collapse further (physically impossible)', () => {
-    const tables2 = group('tables', 2, ['full', 'compact', 'icons', 'dropdown'], false, 'dropdown', 0);
-    const charts2 = group('charts', 3, ['full', 'compact', 'icons', 'dropdown'], false, 'dropdown', 1);
+    const tables2 = group(
+      'tables',
+      2,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'dropdown',
+      0,
+    );
+    const charts2 = group(
+      'charts',
+      3,
+      ['full', 'compact', 'icons', 'dropdown'],
+      false,
+      'dropdown',
+      1,
+    );
     // Both at last rung and neither can hide → nothing left to do.
     expect(pickCollapseStep([tables2, charts2])).toBeNull();
   });

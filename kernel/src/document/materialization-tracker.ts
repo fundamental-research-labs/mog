@@ -24,10 +24,7 @@ export class DocumentMaterializationTracker {
     this.deferredSheetIds.clear();
   }
 
-  markDeferredImport(
-    sheetIds: readonly SheetId[],
-    materializedSheetIds: readonly SheetId[],
-  ): void {
+  markDeferredImport(sheetIds: readonly SheetId[], materializedSheetIds: readonly SheetId[]): void {
     this.deferredSheetIds.clear();
     const materialized = new Set(materializedSheetIds);
     for (const sheetId of sheetIds) {

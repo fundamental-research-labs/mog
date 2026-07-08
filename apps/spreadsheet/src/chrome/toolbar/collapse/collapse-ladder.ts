@@ -15,7 +15,11 @@
  * physically impossible to fit them".
  */
 
-import type { CollapseLevel, GroupCollapseConfig, GroupRenderMode } from '@mog-sdk/contracts/ribbon';
+import type {
+  CollapseLevel,
+  GroupCollapseConfig,
+  GroupRenderMode,
+} from '@mog-sdk/contracts/ribbon';
 
 const LEVELS: readonly CollapseLevel[] = [0, 1, 2, 3, 4];
 

@@ -98,16 +98,23 @@ export const createRibbonSlice: StateCreator<RibbonSlice, [], [], RibbonSlice> =
   },
 
   toggleTabsMode: () => {
-    const { displayMode } = get();
+    const { displayMode, ribbonCollapsed } = get();
     // Only toggle between 'full' and 'tabs-only', not auto-hide
     if (displayMode === 'auto-hide') return;
 
     const newMode: RibbonDisplayMode = displayMode === 'full' ? 'tabs-only' : 'full';
     saveDisplayMode(newMode);
+    // Entering tabs-only mode should temporarily REVEAL the commands only when
+    // the ribbon was fully collapsed (Ctrl+Shift+F1) — i.e. this toggle is a
+    // "bring it back" gesture. When the commands are already visible (full
+    // mode), double-clicking a tab / Ctrl+F1 is a "collapse" gesture, so the
+    // commands must actually hide (temporaryShow=false). Previously this
+    // always set temporaryShow=true for tabs-only, so collapsing a visible
+    // ribbon by double-clicking a tab left the commands on screen.
     set({
       ribbonCollapsed: false,
       displayMode: newMode,
-      temporaryShow: newMode !== 'full',
+      temporaryShow: newMode === 'tabs-only' ? ribbonCollapsed : false,
     });
   },
 

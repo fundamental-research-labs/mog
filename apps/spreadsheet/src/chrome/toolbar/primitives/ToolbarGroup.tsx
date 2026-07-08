@@ -17,15 +17,11 @@
  */
 
 import type { ReactNode } from 'react';
-import React from 'react';
+import React, { useMemo } from 'react';
 
-import type {
-  CollapseLevel,
-  GroupCollapseConfig,
-  GroupRenderMode,
-} from '@mog-sdk/contracts/ribbon';
+import type { GroupCollapseConfig } from '@mog-sdk/contracts/ribbon';
 import { GroupRenderModeProvider, useRibbonCollapseLevel } from '../collapse';
-import type { RibbonCollapseContextState } from '../collapse/context';
+import { deriveCollapseLadder, LADDER_DATA_ATTRS } from '../collapse/collapse-ladder';
 import {
   RibbonVisibilityGroup,
   useRibbonGroupVisibility,
@@ -95,8 +91,19 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   dialogLauncher,
 }: ToolbarGroupProps) {
   const groupVisibility = useRibbonGroupVisibility(label, visibilityKey);
-  const collapseState = useRibbonCollapseLevel();
-  const renderMode = resolveToolbarGroupRenderMode(collapseConfig, collapseState);
+  const { groupModes } = useRibbonCollapseLevel();
+  const ladder = useMemo(() => deriveCollapseLadder(collapseConfig), [collapseConfig]);
+  const groupKey = groupVisibility.groupKey;
+  // The coordinator assigns each group a render mode; absent → most-expanded
+  // rung. The ladder metadata below lets the (DOM-driven) coordinator know how
+  // far this group can collapse and how important it is.
+  const renderMode = groupModes[groupKey] ?? ladder.rungs[0];
+  const ladderAttrs = {
+    [LADDER_DATA_ATTRS.key]: groupKey,
+    [LADDER_DATA_ATTRS.priority]: String(ladder.priority),
+    [LADDER_DATA_ATTRS.rungs]: ladder.rungs.join(','),
+    [LADDER_DATA_ATTRS.canHide]: ladder.canHide ? '1' : '0',
+  };
 
   if (!groupVisibility.visible) {
     return null;
@@ -107,23 +114,27 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
     return null;
   }
 
-  // Dropdown mode - render collapsed button with dropdown
+  // Dropdown mode - render collapsed button with dropdown. The layout-transparent
+  // (`display: contents`) wrapper carries the ladder metadata for the coordinator
+  // without adding a box to the flex row.
   if (renderMode === 'dropdown') {
     return (
-      <RibbonVisibilityGroup group={groupVisibility.groupKey}>
-        <CollapsedGroupDropdown
-          label={label}
-          groupKey={groupVisibility.groupKey}
-          icon={dropdownIcon}
-          isLast={isLast}
-        >
-          {dialogLauncher && (
-            <div className="mb-2 flex justify-end border-b border-ss-border pb-2">
-              <DialogLauncherButton launcher={dialogLauncher} placement="dropdown" />
-            </div>
-          )}
-          {dropdownContent ?? children}
-        </CollapsedGroupDropdown>
+      <RibbonVisibilityGroup group={groupKey}>
+        <div className="contents" {...ladderAttrs}>
+          <CollapsedGroupDropdown
+            label={label}
+            groupKey={groupKey}
+            icon={dropdownIcon}
+            isLast={isLast}
+          >
+            {dialogLauncher && (
+              <div className="mb-2 flex justify-end border-b border-ss-border pb-2">
+                <DialogLauncherButton launcher={dialogLauncher} placement="dropdown" />
+              </div>
+            )}
+            {dropdownContent ?? children}
+          </CollapsedGroupDropdown>
+        </div>
       </RibbonVisibilityGroup>
     );
   }
@@ -136,12 +147,13 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
   ].join(' ');
 
   return (
-    <RibbonVisibilityGroup group={groupVisibility.groupKey}>
+    <RibbonVisibilityGroup group={groupKey}>
       <GroupRenderModeProvider value={renderMode}>
         <div
           className="relative flex px-[var(--ribbon-group-padding-x)] group/toolbar-group"
           role="group"
           aria-label={label}
+          {...ladderAttrs}
         >
           {/* Content area - fixed height from design token */}
           <div data-ribbon-group-content className={contentClassName}>
@@ -164,38 +176,6 @@ export const ToolbarGroup = React.memo(function ToolbarGroup({
     </RibbonVisibilityGroup>
   );
 });
-
-export function resolveToolbarGroupRenderMode(
-  collapseConfig: GroupCollapseConfig | undefined,
-  collapseState: RibbonCollapseContextState,
-): GroupRenderMode {
-  if (!collapseConfig) return 'full';
-
-  const { level } = collapseState;
-  const widthLevel = collapseState.widthLevel ?? level;
-  const renderMode = collapseConfig.levels[level] ?? 'full';
-
-  if (renderMode !== 'hidden' || level <= widthLevel) {
-    return renderMode;
-  }
-
-  // Content-aware overflow escalation can compact a desktop/tablet-width
-  // ribbon into level 4. Do not make commands unreachable in that case; use
-  // the most compact non-hidden mode reached while escalating from the
-  // width-derived level.
-  for (
-    let candidate = (level - 1) as CollapseLevel;
-    candidate >= widthLevel;
-    candidate = (candidate - 1) as CollapseLevel
-  ) {
-    const candidateMode = collapseConfig.levels[candidate];
-    if (candidateMode !== 'hidden') {
-      return candidateMode;
-    }
-  }
-
-  return renderMode;
-}
 
 function DialogLauncherButton({
   launcher,

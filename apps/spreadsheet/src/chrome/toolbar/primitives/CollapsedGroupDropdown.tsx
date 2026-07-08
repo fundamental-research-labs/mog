@@ -101,8 +101,9 @@ export const CollapsedGroupDropdown = React.memo(function CollapsedGroupDropdown
       setLocalOpen(open);
     }
   };
-  const { level } = useRibbonCollapseLevel();
-  const isDense = level >= 3;
+  const { containerWidth } = useRibbonCollapseLevel();
+  // Denser collapsed button on narrow ribbons (mirrors the old level ≥ 3 cue).
+  const isDense = containerWidth < 800;
   const labelClassName = isDense
     ? 'text-ribbon-compact text-ss-text-secondary leading-none whitespace-nowrap max-w-[58px] overflow-hidden text-ellipsis'
     : 'text-ribbon text-ss-text-secondary whitespace-nowrap max-w-[68px] overflow-hidden text-ellipsis';

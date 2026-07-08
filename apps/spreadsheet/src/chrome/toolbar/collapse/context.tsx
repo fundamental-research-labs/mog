@@ -17,30 +17,32 @@
 
 import { createContext, useContext } from 'react';
 
-import type {
-  CollapseLevel,
-  GroupRenderMode,
-  RibbonCollapseState,
-} from '@mog-sdk/contracts/ribbon';
+import type { GroupRenderMode } from '@mog-sdk/contracts/ribbon';
 // =============================================================================
 // Ribbon Collapse Context (provided by TabbedToolbar)
 // =============================================================================
 
-export interface RibbonCollapseContextState extends RibbonCollapseState {
-  /**
-   * Collapse level derived from container width before content-aware overflow
-   * escalation. When omitted, consumers should treat it as equal to `level`.
-   */
-  widthLevel?: CollapseLevel;
+/**
+ * Collapse state broadcast to every group.
+ *
+ * Progressive collapse is PER-GROUP: `groupModes` maps a group's key to the
+ * render mode the coordinator has assigned it. A group missing from the map
+ * renders at its most-expanded rung (`full`-equivalent). There is no single
+ * global "level" anymore — the coordinator collapses groups independently,
+ * least-important first, so the ribbon fills the available width.
+ */
+export interface RibbonCollapseContextState {
+  /** Render mode assigned to each group, keyed by group key. */
+  groupModes: Record<string, GroupRenderMode>;
+  /** Container width in pixels (consumed by width-sensitive groups, e.g. Charts). */
+  containerWidth: number;
 }
 
 /**
- * Default state for collapse context.
- * Level 0 = full expansion (largest screens).
+ * Default state for collapse context: nothing collapsed.
  */
 const DEFAULT_COLLAPSE_STATE: RibbonCollapseContextState = {
-  level: 0,
-  widthLevel: 0,
+  groupModes: {},
   containerWidth: 1920,
 };
 
@@ -58,15 +60,15 @@ export const RibbonCollapseProvider = RibbonCollapseContext.Provider;
 /**
  * Hook to access the current ribbon collapse state.
  *
- * Used by ToolbarGroup to determine render mode based on collapse config.
+ * Used by ToolbarGroup to read the render mode the coordinator assigned to it.
  *
- * @returns Current collapse level and container width
+ * @returns Per-group render modes and container width
  *
  * @example
  * ```tsx
- * function ToolbarGroup({ collapseConfig, children }) {
- * const { level } = useRibbonCollapseLevel;
- * const renderMode = collapseConfig?.levels[level] ?? 'full';
+ * function ToolbarGroup({ groupKey, children }) {
+ * const { groupModes } = useRibbonCollapseLevel();
+ * const renderMode = groupModes[groupKey] ?? 'full';
  * // ...
  * }
  * ```

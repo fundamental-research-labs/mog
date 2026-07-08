@@ -2,102 +2,140 @@
  * useRibbonCollapse Hook
  *
  * The COORDINATOR for ribbon responsive collapse.
- * This is the SINGLE SOURCE OF TRUTH for collapse state.
  *
- * ARCHITECTURE:
- * - Observes ResizeObserver events on a STABLE ancestor (viewport-determined
- *   width). We deliberately do NOT observe the ribbon content panel: its width
- *   changes in response to collapse-level changes, which previously created an
- *   infinite ResizeObserver feedback loop (see ui/ribbon-tab-flicker.spec.ts).
- * - Computes a baseline collapse level from that width (width breakpoints).
- * - Then makes the level CONTENT-AWARE: width breakpoints are only an estimate
- *   of "does it fit". Some tabs (notably Formulas) have more controls than fit
- *   at the baseline level for a given width, so after layout we measure the
- *   panel's actual horizontal overflow and escalate the level until the content
- *   fits. This is what keeps the widest tab from clipping in the dead zone
- *   between two breakpoints.
+ * PROGRESSIVE, PER-GROUP COLLAPSE
+ * -------------------------------
+ * The ribbon does NOT move through discrete global levels in lock-step. Instead
+ * each group collapses INDEPENDENTLY, one rung at a time, in priority order:
+ *
+ *   - When the panel overflows, the LEAST-important group that still has a
+ *     tighter rung available is collapsed by ONE rung (full → compact → icons →
+ *     dropdown). We re-measure and repeat. So a group steps all the way down its
+ *     ladder before the next-least-important group starts collapsing, and
+ *     important groups (e.g. Tables) only collapse once everything below them
+ *     is exhausted.
+ *   - Hiding a group is a LAST RESORT: only after every group is already at its
+ *     most-compact non-hidden rung and the ribbon STILL overflows do we hide
+ *     groups (again least-important first). So a group never disappears merely
+ *     because the window is narrow — only when it is physically impossible to
+ *     fit every group even as a single dropdown button.
+ *   - When there is room (the window widened, or the tab changed), we rebase to
+ *     "everything expanded" and re-collapse from scratch, so freed space is
+ *     always reclaimed by the most-important groups first.
+ *
+ * The per-group metadata (priority + rungs) is read from data attributes each
+ * group stamps on its DOM element (see collapse-ladder.ts), so the coordinator
+ * stays DOM-driven and needs no React registration handshake.
+ *
+ * NO FEEDBACK LOOP
+ * ----------------
+ * We observe a STABLE ancestor (viewport-determined width) with a
+ * ResizeObserver — never the content panel, whose width changes with the
+ * collapse decisions and previously caused an infinite observer loop (see
+ * ui/ribbon-tab-flicker.spec.ts). Convergence runs in a layout effect (before
+ * paint) so the user never sees a clipped or mis-collapsed intermediate frame.
  *
  * This follows the coordinator pattern from docs/renderer/README.md:
  * "Machine Owns State, Coordinator Owns Execution"
- *
  */
 
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
-import type { CollapseLevel } from '@mog-sdk/contracts/ribbon';
+import type { GroupRenderMode } from '@mog-sdk/contracts/ribbon';
 import type { RibbonCollapseContextState } from './context';
+import { LADDER_DATA_ATTRS } from './collapse-ladder';
 
 // =============================================================================
-// Collapse Level Computation
+// Tuning constants
 // =============================================================================
 
 /**
- * Width breakpoints for each collapse level.
- *
- * | Level | Min Width | Description |
- * |-------|-----------|-------------|
- * | 0 | ≥1600px | Full: All groups expanded |
- * | 1 | ≥1200px | Compact: Some labels hidden |
- * | 2 | ≥1000px | Dense: Most buttons icon-only |
- * | 3 | ≥800px | Minimal: Low-priority groups collapsed |
- * | 4 | <800px | Mobile: Most groups collapsed |
- */
-const COLLAPSE_BREAKPOINTS: Record<CollapseLevel, number> = {
-  0: 1600,
-  1: 1200,
-  2: 1000,
-  3: 800,
-  4: 0, // Anything below 800
-};
-
-const MAX_COLLAPSE_LEVEL: CollapseLevel = 4;
-
-/**
- * Overflow past the panel's client width (in px) before we treat the ribbon as
- * clipped and escalate the collapse level. Matches the 1px tolerance used by
- * the app-eval density guard so the two agree on what "clipped" means.
+ * Overflow past the panel's client width (px) before the ribbon counts as
+ * clipped and we collapse another rung. Matches the 1px tolerance used by the
+ * app-eval density guard so the two agree on what "clipped" means.
  */
 const OVERFLOW_TOLERANCE_PX = 1;
 
 /**
- * Margin (px) added on top of a level's measured natural width before we allow
- * de-escalating back to it. This is the hysteresis band: we collapse when the
- * container drops below the content's natural width, but only expand again once
- * the container is comfortably wider, so a container hovering near the boundary
- * does not flip-flop between levels every frame.
+ * Width change (px) below which a ResizeObserver tick is treated as jitter and
+ * does not re-open the collapse search. A real resize (> this) rebases so a
+ * now-wider container expands the most-important groups back.
  */
-const RELEASE_MARGIN_PX = 8;
+const WIDTH_EPSILON_PX = 1;
 
-/**
- * Compute collapse level from container width.
- *
- * This is the SINGLE SOURCE OF TRUTH for the width → level mapping.
- *
- * @param width - Container width in pixels
- * @returns Collapse level (0-4)
- */
-function computeCollapseLevel(width: number): CollapseLevel {
-  if (width >= COLLAPSE_BREAKPOINTS[0]) return 0;
-  if (width >= COLLAPSE_BREAKPOINTS[1]) return 1;
-  if (width >= COLLAPSE_BREAKPOINTS[2]) return 2;
-  if (width >= COLLAPSE_BREAKPOINTS[3]) return 3;
-  return 4;
+// =============================================================================
+// Progressive collapse decision (pure, DOM-driven)
+// =============================================================================
+
+interface GroupSnapshot {
+  key: string;
+  priority: number;
+  rungs: GroupRenderMode[];
+  canHide: boolean;
+  current: GroupRenderMode;
+  domIndex: number;
 }
 
-function resolveWidthCollapseLevel(
-  width: number,
-  widthLevel: CollapseLevel,
-  previousLevel: CollapseLevel,
-  releaseWidth: number,
-): { level: CollapseLevel; releaseWidth: number } {
-  if (releaseWidth === Number.POSITIVE_INFINITY || width > releaseWidth) {
-    return { level: widthLevel, releaseWidth: Number.POSITIVE_INFINITY };
+/**
+ * Read the visible groups' collapse metadata + current assignment from the DOM.
+ * Groups that are currently `hidden` render no element and are simply absent —
+ * they stay hidden (via `assignments`) until the next rebase.
+ */
+function snapshotGroups(
+  panel: HTMLElement,
+  assignments: Record<string, GroupRenderMode>,
+): GroupSnapshot[] {
+  const els = Array.from(panel.querySelectorAll<HTMLElement>(`[${LADDER_DATA_ATTRS.key}]`));
+  return els.map((el, domIndex) => {
+    const key = el.getAttribute(LADDER_DATA_ATTRS.key) ?? '';
+    const priority = Number(el.getAttribute(LADDER_DATA_ATTRS.priority) ?? '0');
+    const rungsRaw = el.getAttribute(LADDER_DATA_ATTRS.rungs) ?? 'full';
+    const rungs = rungsRaw.split(',') as GroupRenderMode[];
+    const canHide = el.getAttribute(LADDER_DATA_ATTRS.canHide) === '1';
+    const current = assignments[key] ?? rungs[0] ?? 'full';
+    return { key, priority, rungs, canHide, current, domIndex };
+  });
+}
+
+/**
+ * Order groups for collapsing: least-important first (higher priority number),
+ * and within equal priority the right-most group first (larger DOM index), so
+ * groups collapse from the trailing edge inward.
+ */
+function leastImportantFirst(a: GroupSnapshot, b: GroupSnapshot): number {
+  return b.priority - a.priority || b.domIndex - a.domIndex;
+}
+
+/**
+ * Pick the single next collapse step, or null when nothing can collapse further
+ * (the ribbon is at its most-compact possible layout and simply cannot fit).
+ */
+export function pickCollapseStep(
+  groups: GroupSnapshot[],
+): { key: string; mode: GroupRenderMode } | null {
+  // Phase 1 — shrink a rung (never hidden). Least-important group with a
+  // tighter rung remaining.
+  const shrinkable = groups
+    .filter((g) => {
+      const idx = Math.max(0, g.rungs.indexOf(g.current));
+      return idx < g.rungs.length - 1;
+    })
+    .sort(leastImportantFirst);
+  if (shrinkable.length > 0) {
+    const g = shrinkable[0];
+    const idx = Math.max(0, g.rungs.indexOf(g.current));
+    return { key: g.key, mode: g.rungs[idx + 1] };
   }
 
-  return {
-    level: Math.max(widthLevel, previousLevel) as CollapseLevel,
-    releaseWidth,
-  };
+  // Phase 2 — last resort: hide a group. Least-important hideable group.
+  const hideable = groups
+    .filter((g) => g.canHide && g.current !== 'hidden')
+    .sort(leastImportantFirst);
+  if (hideable.length > 0) {
+    return { key: hideable[0].key, mode: 'hidden' };
+  }
+
+  return null;
 }
 
 // =============================================================================
@@ -105,42 +143,18 @@ function resolveWidthCollapseLevel(
 // =============================================================================
 
 /**
- * Hook that observes container width and computes a content-aware collapse
- * level.
- *
- * This is the COORDINATOR for ribbon collapse:
- * - Observes ResizeObserver events on a stable ancestor
- * - Computes a baseline collapse level from width
- * - Escalates the level when the rendered panel actually overflows
- * - Broadcasts via context (components react)
+ * Coordinator hook for progressive, per-group ribbon collapse.
  *
  * @param containerRef - Ref to a STABLE ribbon ancestor (viewport-determined
- *   width). Must NOT be the element whose width changes with the collapse
- *   level, or the ResizeObserver will feed back on itself.
+ *   width). Must NOT be the element whose width changes with collapse, or the
+ *   ResizeObserver will feed back on itself.
  * @param panelRef - Ref to the ribbon content panel that can clip horizontally
- *   (`data-testid="panel-ribbon"`). Used to measure actual overflow. When
- *   omitted, the hook falls back to pure width-based collapse.
+ *   (`data-testid="panel-ribbon"`). Used to measure overflow and to read each
+ *   group's collapse metadata from its DOM element. When omitted, the hook
+ *   never collapses (all groups render expanded).
  * @param contentKey - Changes whenever the panel's content changes (e.g. the
- *   active tab). Lets the hook drop a previous tab's escalation and re-measure
- *   for the new content.
- * @returns Collapse state (level + width)
- *
- * @example
- * ```tsx
- * function TabbedToolbar() {
- * const containerRef = useRef<HTMLDivElement>(null);
- * const panelRef = useRef<HTMLDivElement>(null);
- * const collapseState = useRibbonCollapse(containerRef, panelRef, activeTab);
- *
- * return (
- * <RibbonCollapseProvider value={collapseState}>
- * <div ref={containerRef}>
- * <div ref={panelRef} data-testid="panel-ribbon">{/* groups *\/}</div>
- * </div>
- * </RibbonCollapseProvider>
- * );
- * }
- * ```
+ *   active tab). Rebases the collapse search for the new content.
+ * @returns Collapse state (per-group modes + container width).
  */
 export function useRibbonCollapse(
   containerRef: RefObject<HTMLElement | null>,
@@ -148,51 +162,39 @@ export function useRibbonCollapse(
   contentKey?: unknown,
 ): RibbonCollapseContextState {
   const [state, setState] = useState<RibbonCollapseContextState>({
-    level: 0,
-    widthLevel: 0,
-    containerWidth: 1920,
+    groupModes: {},
+    containerWidth: 0,
   });
 
-  // The container width at/above which the current escalation may be released.
-  // Set to the overflowing level's natural content width (+ margin) when we
-  // escalate; Infinity means "no escalation pending".
-  const releaseWidthRef = useRef<number>(Number.POSITIVE_INFINITY);
-
-  // Tracks the content the escalation was computed for, so a tab switch can
-  // re-baseline rather than inherit the previous tab's escalation.
+  // Width the current collapse assignment was computed for. A change > epsilon
+  // re-opens the search: a WIDER container rebases to fully-expanded and
+  // re-collapses (reclaiming space for important groups); a NARROWER container
+  // keeps the current assignment and just collapses further as needed.
+  const lastWidthRef = useRef<number>(0);
   const contentKeyRef = useRef<unknown>(contentKey);
 
   // ---------------------------------------------------------------------------
-  // 1. Width observer → baseline level (with hysteresis on release)
+  // 1. Width observer → keep containerWidth in sync so the convergence effect
+  //    re-runs on resize. Observes the STABLE container only (never the panel).
   // ---------------------------------------------------------------------------
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const applyWidth = (width: number) => {
-      const widthLevel = computeCollapseLevel(width);
-      setState((prev) => {
-        const resolved = resolveWidthCollapseLevel(
-          width,
-          widthLevel,
-          prev.level,
-          releaseWidthRef.current,
-        );
-        releaseWidthRef.current = resolved.releaseWidth;
-        const level = resolved.level;
-        if (prev.level === level && prev.widthLevel === widthLevel && prev.containerWidth === width)
-          return prev;
-        return { level, widthLevel, containerWidth: width };
-      });
+      setState((prev) =>
+        Math.abs(prev.containerWidth - width) < WIDTH_EPSILON_PX
+          ? prev
+          : { ...prev, containerWidth: width },
+      );
     };
 
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 1920;
+      const width = entries[0]?.contentRect.width ?? 0;
       applyWidth(width);
     });
 
     observer.observe(container);
-
     // Initial measurement (ResizeObserver may not fire immediately)
     applyWidth(container.getBoundingClientRect().width);
 
@@ -202,15 +204,15 @@ export function useRibbonCollapse(
   }, [containerRef]);
 
   // ---------------------------------------------------------------------------
-  // 2. Content-aware escalation → measure actual overflow and step down a level
-  //    until the panel fits. Runs in a layout effect (before paint) so the user
-  //    never sees a clipped intermediate frame.
+  // 2. Progressive convergence → measure overflow and collapse/expand one group
+  //    one rung per pass until the panel fits. Runs in a layout effect (before
+  //    paint) so intermediate frames are never shown.
   //
-  //    Convergence / no-feedback-loop guarantees:
-  //    - We do NOT observe the panel; clientWidth is viewport-determined and
-  //      stable across collapse levels, only scrollWidth (content) shrinks.
-  //    - Escalation is monotonic and bounded by MAX_COLLAPSE_LEVEL, and stops
-  //      as soon as the content fits, so it settles in ≤4 passes per change.
+  //    Convergence guarantees:
+  //    - Within a width bucket, collapsing is monotonic (we only ever tighten),
+  //      bounded by the finite total rungs across groups → it always settles.
+  //    - A wider container / new content rebases to expanded exactly once, then
+  //      re-collapses monotonically → no oscillation.
   // ---------------------------------------------------------------------------
   useLayoutEffect(() => {
     const panel = panelRef?.current;
@@ -218,42 +220,50 @@ export function useRibbonCollapse(
     if (!panel || !container) return;
 
     const width = container.getBoundingClientRect().width;
-    const widthLevel = computeCollapseLevel(width);
     const contentChanged = contentKeyRef.current !== contentKey;
+    const widthGrew = width > lastWidthRef.current + WIDTH_EPSILON_PX;
+    const widthShrank = width < lastWidthRef.current - WIDTH_EPSILON_PX;
 
-    // New content (e.g. tab switch): drop the previous content's escalation and
-    // re-baseline. We only need an explicit reset when the current level is
-    // *more* collapsed than the width baseline (i.e. an escalation is in
-    // effect); otherwise we can measure the new content immediately below.
-    if (contentChanged) {
+    // Rebase on new content or a wider container: expand everything, then
+    // re-collapse to fit. This is what reclaims freed space for the
+    // most-important groups.
+    if (contentChanged || widthGrew) {
       contentKeyRef.current = contentKey;
-      if (state.level > widthLevel) {
-        releaseWidthRef.current = Number.POSITIVE_INFINITY;
-        setState((prev) =>
-          prev.level === widthLevel && prev.widthLevel === widthLevel
-            ? prev
-            : { level: widthLevel, widthLevel, containerWidth: width },
-        );
-        // Re-baselined; the resulting re-render re-runs this effect to measure
-        // the new content at the baseline level.
+      lastWidthRef.current = width;
+      if (Object.keys(state.groupModes).length > 0) {
+        // Clear existing collapses; the resulting re-render re-runs this effect
+        // to measure from a fully-expanded baseline.
+        setState({ groupModes: {}, containerWidth: width });
         return;
       }
+      // Already fully expanded — the DOM (e.g. the just-switched-to tab) already
+      // reflects that, so fall through and measure it NOW. Returning here would
+      // be a no-op setState that never re-runs the effect, leaving a denser new
+      // tab clipped until the next resize.
+    } else if (widthShrank) {
+      // A narrower container keeps the current (already-collapsed) assignment
+      // and simply continues collapsing below if it now overflows.
+      lastWidthRef.current = width;
     }
 
-    const overflowing = panel.scrollWidth > panel.clientWidth + OVERFLOW_TOLERANCE_PX;
-
-    if (overflowing && state.level < MAX_COLLAPSE_LEVEL) {
-      // scrollWidth is the natural width of the *current* (overflowing) level —
-      // the container must exceed it (plus a hysteresis margin) before we allow
-      // de-escalating back to this level.
-      releaseWidthRef.current = panel.scrollWidth + RELEASE_MARGIN_PX;
-      setState((prev) => ({
-        level: Math.min(MAX_COLLAPSE_LEVEL, prev.level + 1) as CollapseLevel,
-        widthLevel,
-        containerWidth: width,
-      }));
+    const overflowPx = panel.scrollWidth - panel.clientWidth;
+    if (overflowPx > OVERFLOW_TOLERANCE_PX) {
+      const step = pickCollapseStep(snapshotGroups(panel, state.groupModes));
+      if (step) {
+        setState((prev) => ({
+          groupModes: { ...prev.groupModes, [step.key]: step.mode },
+          containerWidth: width,
+        }));
+        return;
+      }
+      // Nothing left to collapse: physically cannot fit. Settle (content clips).
     }
-  }, [containerRef, panelRef, contentKey, state.level, state.containerWidth]);
+
+    // Settled. Keep containerWidth in sync without touching assignments.
+    if (state.containerWidth !== width) {
+      setState((prev) => ({ ...prev, containerWidth: width }));
+    }
+  }, [containerRef, panelRef, contentKey, state.groupModes, state.containerWidth]);
 
   return state;
 }
@@ -264,10 +274,10 @@ export function useRibbonCollapse(
 
 /**
  * Exported for testing purposes only.
- * Use useRibbonCollapse hook in production code.
+ * Use the useRibbonCollapse hook in production code.
  */
 export const __testing__ = {
-  computeCollapseLevel,
-  resolveWidthCollapseLevel,
-  COLLAPSE_BREAKPOINTS,
+  pickCollapseStep,
+  OVERFLOW_TOLERANCE_PX,
+  WIDTH_EPSILON_PX,
 };

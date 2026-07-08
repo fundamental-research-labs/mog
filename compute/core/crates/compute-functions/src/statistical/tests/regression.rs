@@ -45,6 +45,14 @@ fn arr_get(result: &CellValue, row: usize, col: usize) -> CellValue {
         .clone()
 }
 
+fn assert_linest_shape(result: &CellValue, rows: usize, cols: usize, label: &str) {
+    let array = result
+        .as_array()
+        .unwrap_or_else(|| panic!("{label}: expected array, got {:?}", result));
+    assert_eq!(array.rows(), rows, "{label}: row count");
+    assert_eq!(array.cols(), cols, "{label}: column count");
+}
+
 #[test]
 fn test_slope_intercept() {
     // y = 2x + 1: points (1,3), (2,5), (3,7)
@@ -394,6 +402,7 @@ fn test_linest_perfect_linear() {
             arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
         ],
     );
+    assert_linest_shape(&r, 1, 2, "LINEST perfect linear shape");
     assert_num(arr_get(&r, 0, 0), 2.0, 1e-10, "LINEST slope");
     assert_num(arr_get(&r, 0, 1), 0.0, 1e-10, "LINEST intercept");
 }
@@ -409,6 +418,7 @@ fn test_linest_hand_calculated() {
             arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
         ],
     );
+    assert_linest_shape(&r, 1, 2, "LINEST hand-calculated shape");
     assert_num(arr_get(&r, 0, 0), 0.8, 1e-10, "LINEST hand slope");
     assert_num(arr_get(&r, 0, 1), 0.6, 1e-10, "LINEST hand intercept");
 }
@@ -418,8 +428,217 @@ fn test_linest_y_only_implicit_x() {
     // LINEST({2,4,6}) => implicit x={1,2,3} => slope=2, intercept=0
     let reg = crate::FunctionRegistry::new();
     let r = reg.call("LINEST", &[arr(vec![2.0, 4.0, 6.0])]);
+    assert_linest_shape(&r, 1, 2, "LINEST implicit x shape");
     assert_num(arr_get(&r, 0, 0), 2.0, 1e-10, "LINEST implicit slope");
     assert_num(arr_get(&r, 0, 1), 0.0, 1e-10, "LINEST implicit intercept");
+}
+
+#[test]
+fn test_linest_single_variable_stats_true_matches_excel_matrix() {
+    let reg = crate::FunctionRegistry::new();
+    let r = reg.call(
+        "LINEST",
+        &[
+            arr(vec![2.0, 4.0, 5.0, 4.0, 5.0]),
+            arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
+            CellValue::Boolean(true),
+            CellValue::Boolean(true),
+        ],
+    );
+
+    assert_linest_shape(&r, 5, 2, "LINEST stats TRUE shape");
+    assert_num(arr_get(&r, 0, 0), 0.6, 1e-12, "LINEST stats slope");
+    assert_num(arr_get(&r, 0, 1), 2.2, 1e-12, "LINEST stats intercept");
+    assert_num(
+        arr_get(&r, 1, 0),
+        0.282_842_712_474_619,
+        1e-12,
+        "LINEST stats slope standard error",
+    );
+    assert_num(
+        arr_get(&r, 1, 1),
+        0.938_083_151_964_686,
+        1e-12,
+        "LINEST stats intercept standard error",
+    );
+    assert_num(arr_get(&r, 2, 0), 0.6, 1e-12, "LINEST stats r2");
+    assert_num(
+        arr_get(&r, 2, 1),
+        0.894_427_190_999_916,
+        1e-12,
+        "LINEST stats standard error y estimate",
+    );
+    assert_num(arr_get(&r, 3, 0), 4.5, 1e-12, "LINEST stats F");
+    assert_num(arr_get(&r, 3, 1), 3.0, 1e-12, "LINEST stats df");
+    assert_num(arr_get(&r, 4, 0), 3.6, 1e-12, "LINEST stats ssreg");
+    assert_num(arr_get(&r, 4, 1), 2.4, 1e-12, "LINEST stats ssresid");
+}
+
+#[test]
+fn test_linest_stats_false_or_omitted_returns_first_row_only() {
+    let reg = crate::FunctionRegistry::new();
+    let ys = arr(vec![2.0, 4.0, 5.0, 4.0, 5.0]);
+    let xs = arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    let cases = vec![
+        (
+            "LINEST stats FALSE",
+            vec![
+                ys.clone(),
+                xs.clone(),
+                CellValue::Boolean(true),
+                CellValue::Boolean(false),
+            ],
+        ),
+        (
+            "LINEST stats omitted with const supplied",
+            vec![ys.clone(), xs.clone(), CellValue::Boolean(true)],
+        ),
+        ("LINEST const/stats omitted", vec![ys, xs]),
+    ];
+
+    for (label, args) in cases {
+        let r = reg.call("LINEST", &args);
+        assert_linest_shape(&r, 1, 2, label);
+        assert_num(arr_get(&r, 0, 0), 0.6, 1e-12, label);
+        assert_num(arr_get(&r, 0, 1), 2.2, 1e-12, label);
+    }
+}
+
+#[test]
+fn test_linest_omitted_arg_defaults_match_excel() {
+    let f = FnLinest;
+    assert_eq!(f.default_for_arg(2), Some(CellValue::Boolean(true)));
+    assert_eq!(f.default_for_arg(3), Some(CellValue::Boolean(false)));
+    assert_eq!(f.default_for_arg(1), None);
+}
+
+#[test]
+fn test_linest_const_false_forces_zero_intercept() {
+    let reg = crate::FunctionRegistry::new();
+    let r = reg.call(
+        "LINEST",
+        &[
+            arr(vec![2.0, 4.0, 5.0, 4.0, 5.0]),
+            arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
+            CellValue::Boolean(false),
+            CellValue::Boolean(false),
+        ],
+    );
+
+    assert_linest_shape(&r, 1, 2, "LINEST const FALSE shape");
+    assert_num(arr_get(&r, 0, 0), 1.2, 1e-12, "LINEST const FALSE slope");
+    assert_num(
+        arr_get(&r, 0, 1),
+        0.0,
+        1e-12,
+        "LINEST const FALSE intercept",
+    );
+}
+
+#[test]
+fn test_linest_const_false_stats_reports_intercept_se_as_na() {
+    let reg = crate::FunctionRegistry::new();
+    let r = reg.call(
+        "LINEST",
+        &[
+            arr(vec![2.0, 4.0, 5.0, 4.0, 5.0]),
+            arr(vec![1.0, 2.0, 3.0, 4.0, 5.0]),
+            CellValue::Boolean(false),
+            CellValue::Boolean(true),
+        ],
+    );
+
+    assert_linest_shape(&r, 5, 2, "LINEST const FALSE stats shape");
+    assert_num(
+        arr_get(&r, 0, 0),
+        1.2,
+        1e-12,
+        "LINEST const FALSE stats slope",
+    );
+    assert_num(
+        arr_get(&r, 0, 1),
+        0.0,
+        1e-12,
+        "LINEST const FALSE stats intercept",
+    );
+    assert_err(
+        arr_get(&r, 1, 1),
+        CellError::Na,
+        "LINEST const FALSE intercept standard error",
+    );
+}
+
+#[test]
+fn test_linest_multi_variable_shape_and_excel_coefficient_order() {
+    let reg = crate::FunctionRegistry::new();
+    let ys = arr(vec![27.0, 33.0, 49.0, 51.0, 59.0]);
+    let xs = CellValue::from_rows(vec![
+        vec![num(1.0), num(5.0)],
+        vec![num(2.0), num(3.0)],
+        vec![num(3.0), num(6.0)],
+        vec![num(4.0), num(2.0)],
+        vec![num(5.0), num(1.0)],
+    ]);
+    let r = reg.call(
+        "LINEST",
+        &[ys, xs, CellValue::Boolean(true), CellValue::Boolean(false)],
+    );
+
+    assert_linest_shape(&r, 1, 3, "LINEST multi-variable shape");
+    assert_num(
+        arr_get(&r, 0, 0),
+        2.0,
+        1e-10,
+        "LINEST multi-variable rightmost x coefficient",
+    );
+    assert_num(
+        arr_get(&r, 0, 1),
+        10.0,
+        1e-10,
+        "LINEST multi-variable leftmost x coefficient",
+    );
+    assert_num(
+        arr_get(&r, 0, 2),
+        7.0,
+        1e-10,
+        "LINEST multi-variable intercept",
+    );
+}
+
+#[test]
+fn test_linest_removes_redundant_x_columns() {
+    let reg = crate::FunctionRegistry::new();
+    let ys = arr(vec![7.0, 9.0, 11.0, 13.0]);
+    let xs = CellValue::from_rows(vec![
+        vec![num(1.0), num(2.0)],
+        vec![num(2.0), num(4.0)],
+        vec![num(3.0), num(6.0)],
+        vec![num(4.0), num(8.0)],
+    ]);
+    let r = reg.call(
+        "LINEST",
+        &[ys, xs, CellValue::Boolean(true), CellValue::Boolean(false)],
+    );
+
+    assert_linest_shape(&r, 1, 3, "LINEST redundant-column shape");
+    assert_num(
+        arr_get(&r, 0, 0),
+        0.0,
+        1e-12,
+        "LINEST redundant rightmost x coefficient",
+    );
+    assert_num(
+        arr_get(&r, 0, 1),
+        2.0,
+        1e-12,
+        "LINEST retained leftmost x coefficient",
+    );
+    assert_num(
+        arr_get(&r, 0, 2),
+        5.0,
+        1e-12,
+        "LINEST redundant-column intercept",
+    );
 }
 
 #[test]

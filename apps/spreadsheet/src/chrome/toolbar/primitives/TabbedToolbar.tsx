@@ -341,11 +341,20 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
   const displayMode = useStore(uiStore, (s) => s.displayMode);
   const temporaryShow = useStore(uiStore, (s) => s.temporaryShow);
 
-  // Ref for ribbon content area (used for auto-hide click-outside detection)
+  // Ref for ribbon content area (the command panel that clips/collapses).
   const ribbonContentRef = useRef<HTMLDivElement>(null);
 
-  // Set up auto-hide behavior
-  useAutoHideRibbon(ribbonContentRef);
+  // Ref for the whole ribbon chrome (tab strip + command panel). Declared here
+  // so auto-hide click-outside detection can scope to the entire ribbon, not
+  // just the command panel — otherwise clicking a ribbon *tab* (which lives in
+  // the tab strip, outside the panel) counts as an "outside" click and hides
+  // the temporarily-shown commands, producing a collapse-then-expand flicker
+  // when the tab handler immediately re-reveals them.
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Set up auto-hide behavior. Scope click-outside to the full ribbon chrome so
+  // interacting with the tab strip never triggers a hide.
+  useAutoHideRibbon(containerRef);
 
   // Get contextual tabs from the framework
   const contextualTabConfigs = useContextualTabs();
@@ -360,7 +369,6 @@ export const TabbedToolbar = React.memo(function TabbedToolbar({
 
   // Ribbon collapse coordinator - computes collapse level from container width
   // This is the SINGLE SOURCE OF TRUTH for collapse state
-  const containerRef = useRef<HTMLDivElement>(null);
   // Pass the content panel + active tab so collapse is content-aware: the width
   // breakpoints are only an estimate of "does it fit", and the widest tab
   // (Formulas) overflows in the dead zone between breakpoints unless we measure

@@ -4,9 +4,11 @@
  * Top bar with quick access buttons (undo/redo), tabs, and print/export actions.
  * Migrated to Tailwind CSS with UI primitives.
  *
- * Extended to support ribbon display modes:
- * - In tabs-only mode: clicking a tab shows ribbon temporarily
- * - Double-click on tabs toggles between full and tabs-only mode
+ * Tab-click semantics (single-click driven):
+ * - Clicking an inactive tab switches to it (and reveals the commands if the
+ *   ribbon was hidden).
+ * - Clicking the already-active tab toggles the command area (hide / show).
+ *   This is the same collapse toggle as Ctrl+Shift+F1.
  */
 
 import type { MouseEvent } from 'react';
@@ -176,11 +178,9 @@ function TabBarImpl<T extends string>({
   const { uiStore } = useDocumentContext();
   const displayMode = useStore(uiStore, (s) => s.displayMode);
   const ribbonCollapsed = useStore(uiStore, (s) => s.ribbonCollapsed);
+  const temporaryShow = useStore(uiStore, (s) => s.temporaryShow);
 
-  // Double-click tracking for tabs toggle
   const tabBarRootRef = useRef<HTMLDivElement>(null);
-  const lastClickTimeRef = useRef<number>(0);
-  const lastClickTabRef = useRef<string | null>(null);
   const [showCommandClusterForWidth, setShowCommandClusterForWidth] = useState(false);
 
   useEffect(() => {
@@ -199,47 +199,53 @@ function TabBarImpl<T extends string>({
 
     return () => observer.disconnect();
   }, []);
-  const DOUBLE_CLICK_THRESHOLD = 300; // ms
 
-  // Handle tab click with display mode awareness.
+  // Handle tab click. Single-click driven:
+  //   - inactive tab → switch to it, revealing the commands if they are hidden;
+  //   - active tab   → toggle the command area (hide if showing, reveal if hidden).
   // The File affordance is a standalone backstage-trigger button (rendered
   // outside the tab loop) with its own onClick — it never reaches this
   // handler, so there is no `isFileTab` branch here.
   const handleTabClick = useCallback(
-    (tabId: T, event: MouseEvent<HTMLButtonElement>) => {
-      // Only pointer-generated double-clicks should toggle ribbon tab mode.
-      // Keyboard activation produces click events too, but detail is 0.
-      const now = Date.now();
-      const isDoubleClick =
-        event.detail >= 2 &&
-        lastClickTabRef.current === tabId &&
-        now - lastClickTimeRef.current < DOUBLE_CLICK_THRESHOLD;
+    (tabId: T) => {
+      // Whether the command area is currently on screen. This mirrors the
+      // render gate in TabbedToolbar so the toggle below matches what the user
+      // actually sees.
+      const commandsVisible = !ribbonCollapsed && (displayMode === 'full' || temporaryShow);
 
-      lastClickTimeRef.current = now;
-      lastClickTabRef.current = tabId as string;
-
-      if (isDoubleClick) {
-        // Double-click: toggle between full and tabs-only mode
-        // Only works in full or tabs-only mode (not auto-hide)
-        if (displayMode !== 'auto-hide') {
-          dispatch('TOGGLE_RIBBON_TABS_MODE', deps);
-        }
-      } else {
-        // Single click: switch tab
-        onTabChange(tabId);
-
+      const revealCommands = () => {
+        // A fully-collapsed ribbon (Ctrl+Shift+F1) is restored by un-collapsing;
+        // a tabs-only / auto-hide ribbon is revealed temporarily.
         if (ribbonCollapsed) {
           dispatch('TOGGLE_RIBBON', deps);
-          return;
-        }
-
-        // In tabs-only mode, also show ribbon temporarily
-        if (displayMode === 'tabs-only') {
+        } else {
           dispatch('SHOW_RIBBON_TEMPORARILY', deps);
         }
+      };
+
+      if (tabId !== activeTab) {
+        // Switching to a different tab; bring the commands back if hidden.
+        onTabChange(tabId);
+        if (!commandsVisible) {
+          revealCommands();
+        }
+        return;
+      }
+
+      // Re-clicking the active tab toggles the command area's visibility.
+      if (commandsVisible) {
+        // Hide: in full mode collapse the ribbon; otherwise drop the temporary
+        // reveal.
+        if (displayMode === 'full') {
+          dispatch('TOGGLE_RIBBON', deps);
+        } else {
+          dispatch('HIDE_RIBBON_TEMPORARILY', deps);
+        }
+      } else {
+        revealCommands();
       }
     },
-    [displayMode, ribbonCollapsed, onTabChange, deps],
+    [activeTab, displayMode, ribbonCollapsed, temporaryShow, onTabChange, deps],
   );
 
   const handleUndoClick = () => {
@@ -470,7 +476,7 @@ function TabBarImpl<T extends string>({
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={(event) => handleTabClick(tab.id, event)}
+              onClick={() => handleTabClick(tab.id)}
               className={`
  relative px-[var(--tabbar-tab-padding-x)] py-[var(--tabbar-tab-padding-y)]
  flex-shrink-0 whitespace-nowrap

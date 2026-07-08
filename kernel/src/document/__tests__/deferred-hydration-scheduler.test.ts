@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import type { SheetId } from '@mog-sdk/contracts/core';
 import { DocumentLifecycleSystem } from '../document-lifecycle-system';
+import { DocumentMaterializationTracker } from '../materialization-tracker';
 
 type SchedulerHarness = Pick<
   DocumentLifecycleSystem,
@@ -28,9 +29,23 @@ type SchedulerHarness = Pick<
   environment: 'browser' | 'headless';
   importDurabilityPending: boolean;
   materializationError: null;
+  materializationTracker: DocumentMaterializationTracker;
 };
 
-function createSchedulerHarness(completeDeferredHydration: jest.Mock): SchedulerHarness {
+function createSchedulerHarness(
+  completeDeferredHydration: jest.Mock,
+  options: {
+    readonly deferredImportSheetIds?: string[];
+    readonly materializedSheetIds?: string[];
+    readonly deferredHydrationPending?: boolean;
+  } = {},
+): SchedulerHarness {
+  const materializationTracker = new DocumentMaterializationTracker();
+  materializationTracker.markDeferredImport(
+    (options.deferredImportSheetIds ?? ['critical-sheet', 'secondary-sheet']) as SheetId[],
+    (options.materializedSheetIds ?? ['critical-sheet']) as SheetId[],
+  );
+
   const harness = Object.create(DocumentLifecycleSystem.prototype) as SchedulerHarness;
   harness.actor = {
     getSnapshot: () => ({
@@ -44,7 +59,7 @@ function createSchedulerHarness(completeDeferredHydration: jest.Mock): Scheduler
       value: 'ready',
     }),
   };
-  harness.deferredHydrationPending = true;
+  harness.deferredHydrationPending = options.deferredHydrationPending ?? true;
   harness.deferredHydrationPromise = null;
   harness.deferredHydrationTimer = null;
   harness.startDeferredHydrationNow = null;
@@ -52,6 +67,7 @@ function createSchedulerHarness(completeDeferredHydration: jest.Mock): Scheduler
   harness.environment = 'browser';
   harness.importDurabilityPending = false;
   harness.materializationError = null;
+  harness.materializationTracker = materializationTracker;
   return harness;
 }
 
@@ -100,6 +116,15 @@ describe('DocumentLifecycleSystem deferred hydration scheduling', () => {
     expect(completeDeferredHydration).toHaveBeenCalledTimes(1);
     expect(harness.deferredHydrationPending).toBe(false);
     expect(harness.importDurabilityPending).toBe(false);
+  });
+
+  it('does not force deferred import hydration for sheets outside the deferred scope', async () => {
+    const completeDeferredHydration = jest.fn().mockResolvedValue(undefined);
+    const harness = createSchedulerHarness(completeDeferredHydration);
+
+    await expect(harness.awaitMaterialized('added-sheet' as SheetId)).resolves.toBeUndefined();
+
+    expect(completeDeferredHydration).not.toHaveBeenCalled();
   });
 
   it('reports all-sheets hydrating once the full hydration run is scheduled', async () => {

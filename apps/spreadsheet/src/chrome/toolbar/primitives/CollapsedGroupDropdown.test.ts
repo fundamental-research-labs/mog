@@ -12,7 +12,7 @@ describe('CollapsedGroupDropdown dense layout', () => {
       'utf8',
     );
 
-    expect(source).toContain('const isDense = level >= 3');
+    expect(source).toContain('const isDense = containerWidth < 800');
     expect(source).toContain("isDense ? 'px-1' : 'px-[var(--ribbon-group-padding-x)]'");
     expect(source).toContain('text-ribbon-compact text-ss-text-secondary');
     expect(source).toContain('<span className={labelClassName}>{label}</span>');
@@ -31,6 +31,7 @@ describe('CollapsedGroupDropdown dense layout', () => {
     expect(source).toContain('groupKey?: string');
     expect(source).toContain('s.ribbonCollapsedGroups[groupKey] ?? false');
     expect(source).toContain('setRibbonCollapsedGroupOpen(groupKey, open)');
-    expect(toolbarGroupSource).toContain('groupKey={groupVisibility.groupKey}');
+    expect(toolbarGroupSource).toContain('const groupKey = groupVisibility.groupKey');
+    expect(toolbarGroupSource).toContain('groupKey={groupKey}');
   });
 });

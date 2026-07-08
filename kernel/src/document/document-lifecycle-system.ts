@@ -62,6 +62,10 @@ import {
 import { validateHostContext } from './validate-host-context';
 import { mapHostRuntimeToTransportConfig } from './host-runtime-transport';
 import { slog } from '../lib/slog';
+import {
+  DocumentMaterializationTracker,
+  materializedSheetIdsForDeferredImport,
+} from './materialization-tracker';
 
 import {
   documentLifecycleMachine,
@@ -342,6 +346,9 @@ export class DocumentLifecycleSystem {
   /** Last deferred hydration/materialization failure, if any. */
   private materializationError: MaterializationState['error'] | null = null;
 
+  /** Owns deferred-import sheet scope; not a sheet-existence registry. */
+  private readonly materializationTracker = new DocumentMaterializationTracker();
+
   /** Provider registry for the host-backed path (the storage provider lifecycle). */
   private readonly providerRegistry: StorageProviderRegistry;
 
@@ -531,6 +538,7 @@ export class DocumentLifecycleSystem {
         '[DocumentLifecycleSystem] Cannot create — system is disposed',
       );
     }
+    this.materializationTracker.reset();
     this.actor.send({ type: 'CREATE', docId, options });
   }
 
@@ -556,6 +564,7 @@ export class DocumentLifecycleSystem {
         `[DocumentLifecycleSystem] authorized room documentId mismatch: host=${this.hostLifecycleInput.documentId}, docId=${docId}, room=${options.authorizedRoomBootstrap.documentId}`,
       );
     }
+    this.materializationTracker.reset();
     this.authorizedRoomBootstrap = options.authorizedRoomBootstrap;
     this.actor.send({ type: 'CREATE', docId, options: { skipDefaultSheet: true } });
   }
@@ -575,6 +584,7 @@ export class DocumentLifecycleSystem {
         '[DocumentLifecycleSystem] Cannot create — system is disposed',
       );
     }
+    this.materializationTracker.reset();
     this.actor.send({
       type: 'CREATE_FROM_XLSX',
       docId,
@@ -599,6 +609,7 @@ export class DocumentLifecycleSystem {
         '[DocumentLifecycleSystem] Cannot create — system is disposed',
       );
     }
+    this.materializationTracker.reset();
     this.actor.send({
       type: 'CREATE_FROM_CSV',
       docId,
@@ -701,6 +712,7 @@ export class DocumentLifecycleSystem {
       );
     }
 
+    this.materializationTracker.reset();
     this.actor.send({ type: 'RECOVER', yrsState });
     return this.waitForReady();
   }
@@ -898,22 +910,12 @@ export class DocumentLifecycleSystem {
   }
 
   async awaitMaterialized(scope: SheetId | 'allSheets' = 'allSheets'): Promise<void> {
-    const initialActiveSheetId = this.getInitialActiveSheetId();
-
-    if (scope !== 'allSheets' && initialActiveSheetId === scope) {
-      return;
-    }
-
-    if (scope !== 'allSheets' && !this.isKnownSheetId(scope)) {
-      throw this.materializationFailure({
-        code: 'sheet_not_found',
-        scope,
-        message: `Sheet ${scope} is not part of this document.`,
-      });
-    }
-
     if (this.materializationError) {
       throw this.materializationFailure(this.materializationError);
+    }
+
+    if (scope !== 'allSheets' && !this.materializationTracker.requiresDeferredHydration(scope)) {
+      return;
     }
 
     await this.ensureDeferredHydration();
@@ -972,13 +974,6 @@ export class DocumentLifecycleSystem {
     return snap.context.initialSheetIds?.[0];
   }
 
-  private isKnownSheetId(sheetId: SheetId): boolean {
-    const snap = this.actor.getSnapshot();
-    if (!documentLifecycleSelectors.isReady(snap)) return true;
-    const ids = snap.context.initialSheetIds ?? [];
-    return ids.includes(sheetId);
-  }
-
   private materializationFailure(details: MaterializationState['error']): Error {
     const err = new Error(details?.message ?? 'XLSX materialization failed') as Error & {
       code?: string;
@@ -1007,6 +1002,7 @@ export class DocumentLifecycleSystem {
     if (!bridge) {
       this.deferredHydrationPending = false;
       this.importDurabilityPending = false;
+      this.materializationTracker.markAllMaterialized();
       return Promise.resolve();
     }
 
@@ -1047,6 +1043,7 @@ export class DocumentLifecycleSystem {
       }
 
       this.deferredHydrationPending = false;
+      this.materializationTracker.markAllMaterialized();
     };
 
     // Use a macrotask after the app's first paint. Host-backed browser imports
@@ -2135,6 +2132,13 @@ export class DocumentLifecycleSystem {
       // Get sheet IDs from the engine (populated by Rust import)
       await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
+      this.materializationTracker.markDeferredImport(
+        sheetIds,
+        materializedSheetIdsForDeferredImport(
+          sheetIds,
+          input.documentContext.mirror.getSelectedSheetIds(),
+        ),
+      );
 
       // Identity formula conversion is already done in Rust during
       // init_from_snapshot() → bulk_parse_and_register(). No TypeScript pass needed.
@@ -2205,6 +2209,13 @@ export class DocumentLifecycleSystem {
 
       await this.settleDeferredImportMirror(computeBridge);
       const sheetIds = await computeBridge.getAllSheetIds();
+      this.materializationTracker.markDeferredImport(
+        sheetIds,
+        materializedSheetIdsForDeferredImport(
+          sheetIds,
+          input.documentContext.mirror.getSelectedSheetIds(),
+        ),
+      );
 
       return {
         cellCount: 0, // cell count not available from single-call path

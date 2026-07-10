@@ -77,6 +77,10 @@ export default defineConfig({
     options.conditions = ['development', ...(options.conditions ?? [])];
     options.alias = {
       ...options.alias,
+      '@mog/transport/bridge-error': resolve(
+        __dirname,
+        '../../infra/transport/src/bridge-error.ts',
+      ),
       '@mog/transport': resolve(__dirname, '../../infra/transport/src/index.browser.ts'),
       '@rust-bridge/client': resolve(__dirname, '../../infra/rust-bridge/client/src/index.ts'),
       '@mog-sdk/kernel/host-lifecycle-internal': resolve(

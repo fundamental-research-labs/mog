@@ -1,5 +1,5 @@
 import type { SheetId } from '@mog-sdk/contracts/core';
-import { parseBridgeError } from '@mog/transport';
+import { parseBridgeError } from '@mog/transport/bridge-error';
 
 import { KernelError } from './kernel-error';
 

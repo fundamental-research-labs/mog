@@ -6,6 +6,7 @@
  */
 
 import type { SheetId } from '@mog-sdk/contracts/core';
+import type { CellFormatInput } from '@mog-sdk/contracts/api';
 import type { VersionOperationContext } from '@mog-sdk/contracts/versioning';
 import type { MutationAdmissionOptions } from '../../../bridges/compute';
 import type {
@@ -25,6 +26,7 @@ import {
 
 import { normalizeRange } from '../../internal/utils';
 import { createVersionOperationContext } from '../../internal/version-operation-context';
+import { normalizeCellFormatInput, normalizeCellFormatMapInput } from '../format-input';
 import { assertFormatOperationsAllowed, assertFormatRangesAllowed } from '../protection-guards';
 
 /**
@@ -88,27 +90,24 @@ export async function setFormat(
   sheetId: SheetId,
   row: number,
   col: number,
-  format: Partial<CellFormat>,
+  format: Partial<CellFormatInput>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   const invalid = validateAddress(row, col);
   if (invalid) return invalid;
 
   try {
+    const normalizedFormat = normalizeCellFormatInput(format, 'setFormat.format');
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatCells']);
     if (options) {
       await ctx.computeBridge.setFormatForRanges(
         sheetId,
         [[row, col, row, col]],
-        format as CellFormat,
+        normalizedFormat,
         options,
       );
     } else {
-      await ctx.computeBridge.setFormatForRanges(
-        sheetId,
-        [[row, col, row, col]],
-        format as CellFormat,
-      );
+      await ctx.computeBridge.setFormatForRanges(sheetId, [[row, col, row, col]], normalizedFormat);
     }
     return {
       success: true,
@@ -146,7 +145,7 @@ export async function setRangeFormat(
   ctx: DocumentContext,
   sheetId: SheetId,
   range: CellRange,
-  format: Partial<CellFormat>,
+  format: Partial<CellFormatInput>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   const invalid = validateRange(range);
@@ -155,20 +154,21 @@ export async function setRangeFormat(
   const normalized = normalizeRange(range);
 
   try {
+    const normalizedFormat = normalizeCellFormatInput(format, 'setRangeFormat.format');
     await assertFormatRangesAllowed(ctx, sheetId, [range]);
     // Single range tuple — O(1) payload regardless of range size
     if (options) {
       await ctx.computeBridge.setFormatForRanges(
         sheetId,
         [[normalized.startRow, normalized.startCol, normalized.endRow, normalized.endCol]],
-        format as CellFormat,
+        normalizedFormat,
         options,
       );
     } else {
       await ctx.computeBridge.setFormatForRanges(
         sheetId,
         [[normalized.startRow, normalized.startCol, normalized.endRow, normalized.endCol]],
-        format as CellFormat,
+        normalizedFormat,
       );
     }
 
@@ -204,10 +204,11 @@ export async function setFormatForRanges(
   ctx: DocumentContext,
   sheetId: SheetId,
   ranges: CellRange[],
-  format: CellFormat,
+  format: CellFormatInput,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('setFormatForRanges', async () => {
+    const normalizedFormat = normalizeCellFormatInput(format, 'setFormatForRanges.format');
     await assertFormatRangesAllowed(ctx, sheetId, ranges);
     const nextOptions = createGroupedFormatOperationOptions(
       ctx,
@@ -224,8 +225,8 @@ export async function setFormatForRanges(
           const admissionOptions = nextOptions();
           promises.push(
             admissionOptions
-              ? ctx.computeBridge.setColFormat(sheetId, col, format, admissionOptions)
-              : ctx.computeBridge.setColFormat(sheetId, col, format),
+              ? ctx.computeBridge.setColFormat(sheetId, col, normalizedFormat, admissionOptions)
+              : ctx.computeBridge.setColFormat(sheetId, col, normalizedFormat),
           );
         }
       } else if (range.isFullRow) {
@@ -233,8 +234,8 @@ export async function setFormatForRanges(
           const admissionOptions = nextOptions();
           promises.push(
             admissionOptions
-              ? ctx.computeBridge.setRowFormat(sheetId, row, format, admissionOptions)
-              : ctx.computeBridge.setRowFormat(sheetId, row, format),
+              ? ctx.computeBridge.setRowFormat(sheetId, row, normalizedFormat, admissionOptions)
+              : ctx.computeBridge.setRowFormat(sheetId, row, normalizedFormat),
           );
         }
       } else {
@@ -246,8 +247,13 @@ export async function setFormatForRanges(
       const admissionOptions = nextOptions();
       promises.push(
         admissionOptions
-          ? ctx.computeBridge.setFormatForRanges(sheetId, boundedRanges, format, admissionOptions)
-          : ctx.computeBridge.setFormatForRanges(sheetId, boundedRanges, format),
+          ? ctx.computeBridge.setFormatForRanges(
+              sheetId,
+              boundedRanges,
+              normalizedFormat,
+              admissionOptions,
+            )
+          : ctx.computeBridge.setFormatForRanges(sheetId, boundedRanges, normalizedFormat),
       );
     }
 
@@ -275,7 +281,7 @@ export async function setRowFormat(
   ctx: DocumentContext,
   sheetId: SheetId,
   row: number,
-  format: Partial<CellFormat>,
+  format: Partial<CellFormatInput>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   if (!Number.isInteger(row) || row < 0) {
@@ -283,11 +289,12 @@ export async function setRowFormat(
   }
 
   return wrapOp('setRowFormat', async () => {
+    const normalizedFormat = normalizeCellFormatInput(format, 'setRowFormat.format');
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatRows']);
     if (options) {
-      await ctx.computeBridge.setRowFormat(sheetId, row, format, options);
+      await ctx.computeBridge.setRowFormat(sheetId, row, normalizedFormat, options);
     } else {
-      await ctx.computeBridge.setRowFormat(sheetId, row, format);
+      await ctx.computeBridge.setRowFormat(sheetId, row, normalizedFormat);
     }
   });
 }
@@ -310,7 +317,7 @@ export async function setColFormat(
   ctx: DocumentContext,
   sheetId: SheetId,
   col: number,
-  format: Partial<CellFormat>,
+  format: Partial<CellFormatInput>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   if (!Number.isInteger(col) || col < 0) {
@@ -318,11 +325,12 @@ export async function setColFormat(
   }
 
   return wrapOp('setColFormat', async () => {
+    const normalizedFormat = normalizeCellFormatInput(format, 'setColFormat.format');
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatColumns']);
     if (options) {
-      await ctx.computeBridge.setColFormat(sheetId, col, format, options);
+      await ctx.computeBridge.setColFormat(sheetId, col, normalizedFormat, options);
     } else {
-      await ctx.computeBridge.setColFormat(sheetId, col, format);
+      await ctx.computeBridge.setColFormat(sheetId, col, normalizedFormat);
     }
   });
 }
@@ -388,17 +396,21 @@ export async function clearFormat(
 export async function applyFormatToRange(
   ctx: DocumentContext,
   sheetId: SheetId,
-  sourceFormat: CellFormat,
+  sourceFormat: CellFormatInput,
   sourceRange: CellRange | null,
   targetRange: CellRange,
   options?: MutationAdmissionOptions,
 ): Promise<void> {
+  const normalizedSourceFormat = normalizeCellFormatInput(
+    sourceFormat,
+    'applyFormatToRange.sourceFormat',
+  );
   await assertFormatRangesAllowed(ctx, sheetId, [targetRange]);
   const normalized = normalizeRange(targetRange);
 
   // Simple case: no source range - apply same format to all cells
   if (!sourceRange) {
-    await setFormatForRanges(ctx, sheetId, [targetRange], sourceFormat, options);
+    await setFormatForRanges(ctx, sheetId, [targetRange], normalizedSourceFormat, options);
     return;
   }
 
@@ -408,7 +420,7 @@ export async function applyFormatToRange(
 
   // For single-cell source, use simple format application with optimization
   if (sourceRows === 1 && sourceCols === 1) {
-    await setFormatForRanges(ctx, sheetId, [targetRange], sourceFormat, options);
+    await setFormatForRanges(ctx, sheetId, [targetRange], normalizedSourceFormat, options);
     return;
   }
 
@@ -564,12 +576,13 @@ export async function getRowProperties(
 export async function setRowProperties(
   ctx: DocumentContext,
   sheetId: SheetId,
-  updates: Map<number, CellFormat>,
+  updates: Map<number, Partial<CellFormatInput>>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('setRowProperties', async () => {
+    const normalizedUpdates = normalizeCellFormatMapInput(updates, 'setRowProperties');
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatRows']);
-    const entries: Array<[number, CellFormat]> = Array.from(updates.entries());
+    const entries: Array<[number, CellFormat]> = Array.from(normalizedUpdates.entries());
     if (options) {
       await ctx.computeBridge.setRowFormats(sheetId, entries, options);
     } else {
@@ -623,12 +636,13 @@ export async function getColumnProperties(
 export async function setColumnProperties(
   ctx: DocumentContext,
   sheetId: SheetId,
-  updates: Map<number, CellFormat>,
+  updates: Map<number, Partial<CellFormatInput>>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('setColumnProperties', async () => {
+    const normalizedUpdates = normalizeCellFormatMapInput(updates, 'setColumnProperties');
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatColumns']);
-    const entries: Array<[number, CellFormat]> = Array.from(updates.entries());
+    const entries: Array<[number, CellFormat]> = Array.from(normalizedUpdates.entries());
     if (options) {
       await ctx.computeBridge.setColFormats(sheetId, entries, options);
     } else {
@@ -687,12 +701,16 @@ export async function getCellProperties(
 export async function setCellProperties(
   ctx: DocumentContext,
   sheetId: SheetId,
-  updates: Array<{ row: number; col: number; format: CellFormat }>,
+  updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,
   options?: MutationAdmissionOptions,
 ): Promise<OperationResult<void>> {
   return wrapOp('setCellProperties', async () => {
+    const normalizedUpdates = updates.map((update, index) => ({
+      ...update,
+      format: normalizeCellFormatInput(update.format, `setCellProperties[${index}].format`),
+    }));
     await assertFormatOperationsAllowed(ctx, sheetId, ['formatCells']);
-    const tuples: Array<[number, number, CellFormat]> = updates.map((u) => [
+    const tuples: Array<[number, number, CellFormat]> = normalizedUpdates.map((u) => [
       u.row,
       u.col,
       u.format,

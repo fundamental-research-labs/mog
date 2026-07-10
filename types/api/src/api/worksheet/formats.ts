@@ -7,6 +7,86 @@
 import type { CellFormat, CellRange, FormatChangeResult, ResolvedCellFormat } from '../types';
 import type { NumberFormatType } from '@mog/types-core/core';
 
+type CellFormatBorderSideInput = NonNullable<NonNullable<CellFormat['borders']>['top']>;
+
+/** Compatibility font container accepted by worksheet format mutators. */
+export interface CellFormatFontInput {
+  name?: string;
+  fontFamily?: CellFormat['fontFamily'];
+  size?: CellFormat['fontSize'];
+  fontSize?: CellFormat['fontSize'];
+  color?: CellFormat['fontColor'];
+  fontColor?: CellFormat['fontColor'];
+  tintAndShade?: CellFormat['fontColorTint'];
+  colorTint?: CellFormat['fontColorTint'];
+  fontColorTint?: CellFormat['fontColorTint'];
+  bold?: CellFormat['bold'];
+  italic?: CellFormat['italic'];
+  underline?: boolean | CellFormat['underlineType'];
+  underlineType?: CellFormat['underlineType'];
+  strikethrough?: CellFormat['strikethrough'];
+  superscript?: CellFormat['superscript'];
+  subscript?: CellFormat['subscript'];
+  outline?: CellFormat['fontOutline'];
+  fontOutline?: CellFormat['fontOutline'];
+  shadow?: CellFormat['fontShadow'];
+  fontShadow?: CellFormat['fontShadow'];
+  fontTheme?: CellFormat['fontTheme'];
+}
+
+/** Compatibility fill container accepted by worksheet format mutators. */
+export interface CellFormatFillInput {
+  color?: CellFormat['backgroundColor'];
+  backgroundColor?: CellFormat['backgroundColor'];
+  tintAndShade?: CellFormat['backgroundColorTint'];
+  backgroundColorTint?: CellFormat['backgroundColorTint'];
+  pattern?: CellFormat['patternType'];
+  patternType?: CellFormat['patternType'];
+  patternColor?: CellFormat['patternForegroundColor'];
+  patternForegroundColor?: CellFormat['patternForegroundColor'];
+  patternTintAndShade?: CellFormat['patternForegroundColorTint'];
+  patternForegroundColorTint?: CellFormat['patternForegroundColorTint'];
+  gradientFill?: CellFormat['gradientFill'];
+}
+
+/** Compatibility alignment container accepted by worksheet format mutators. */
+export interface CellFormatAlignmentInput {
+  horizontalAlignment?: CellFormat['horizontalAlign'];
+  horizontalAlign?: CellFormat['horizontalAlign'];
+  verticalAlignment?: CellFormat['verticalAlign'] | 'center';
+  verticalAlign?: CellFormat['verticalAlign'] | 'center';
+  wrapText?: CellFormat['wrapText'];
+  indent?: CellFormat['indent'];
+  indentLevel?: CellFormat['indent'];
+  textRotation?: CellFormat['textRotation'];
+  textOrientation?: CellFormat['textRotation'];
+  shrinkToFit?: CellFormat['shrinkToFit'];
+  readingOrder?: CellFormat['readingOrder'];
+  autoIndent?: CellFormat['autoIndent'];
+}
+
+/** Compatibility protection container accepted by worksheet format mutators. */
+export interface CellFormatProtectionInput {
+  locked?: CellFormat['locked'];
+  hidden?: CellFormat['hidden'];
+}
+
+/** Compatibility border container accepted by worksheet format mutators. */
+export type CellFormatBorderInput = NonNullable<CellFormat['borders']> & {
+  style?: CellFormatBorderSideInput['style'];
+  color?: CellFormatBorderSideInput['color'];
+  colorTint?: CellFormatBorderSideInput['colorTint'];
+};
+
+/** Public worksheet format mutators accept canonical CellFormat plus known compatibility containers. */
+export interface CellFormatInput extends CellFormat {
+  font?: CellFormatFontInput;
+  fill?: CellFormatFillInput;
+  alignment?: CellFormatAlignmentInput;
+  protection?: CellFormatProtectionInput;
+  border?: CellFormatBorderInput;
+}
+
 /** Sub-API for cell formatting operations on a worksheet. */
 export interface WorksheetFormats {
   /**
@@ -23,7 +103,7 @@ export interface WorksheetFormats {
    * // Header style
    * await ws.formats.set('A1', { bold: true, fontSize: 14, backgroundColor: '#4472c4', fontColor: '#ffffff' });
    */
-  set(address: string, format: CellFormat): Promise<FormatChangeResult>;
+  set(address: string, format: CellFormatInput): Promise<FormatChangeResult>;
   /**
    * Set format for a single cell.
    *
@@ -31,7 +111,7 @@ export interface WorksheetFormats {
    * @param col - Column index (0-based)
    * @param format - Format properties to apply
    */
-  set(row: number, col: number, format: CellFormat): Promise<FormatChangeResult>;
+  set(row: number, col: number, format: CellFormatInput): Promise<FormatChangeResult>;
 
   /**
    * Set format for a contiguous range.
@@ -50,14 +130,14 @@ export interface WorksheetFormats {
    *   borders: { bottom: { style: 'medium', color: '#2f5496' } }
    * });
    */
-  setRange(range: string, format: CellFormat): Promise<FormatChangeResult>;
+  setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>;
   /**
    * Set format for a contiguous range.
    *
    * @param range - Range object with start/end row and column
    * @param format - Format properties to apply
    */
-  setRange(range: CellRange, format: CellFormat): Promise<FormatChangeResult>;
+  setRange(range: CellRange, format: CellFormatInput): Promise<FormatChangeResult>;
 
   /**
    * Set format for multiple ranges, with full row/column optimization.
@@ -65,7 +145,7 @@ export interface WorksheetFormats {
    * @param ranges - Array of range objects
    * @param format - Format properties to apply
    */
-  setRanges(ranges: CellRange[], format: CellFormat): Promise<void>;
+  setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>;
 
   /**
    * Check if a cell has explicit formatting applied (not just inherited from row/column/sheet).
@@ -294,7 +374,7 @@ export interface WorksheetFormats {
    * @param targetRange - Target range to apply formats to
    */
   applyPattern(
-    format: CellFormat,
+    format: CellFormatInput,
     sourceRange: CellRange | null,
     targetRange: CellRange,
   ): Promise<void>;
@@ -340,7 +420,7 @@ export interface WorksheetFormats {
    * @param updates - Array of {row, col, format} entries
    */
   setCellProperties(
-    updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,
+    updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,
   ): Promise<void>;
 
   /**
@@ -361,7 +441,7 @@ export interface WorksheetFormats {
    *
    * @param updates - Map of row index to format properties
    */
-  setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;
+  setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;
 
   /**
    * Get column-level formats for the specified columns.
@@ -381,5 +461,5 @@ export interface WorksheetFormats {
    *
    * @param updates - Map of column index to format properties
    */
-  setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;
+  setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;
 }

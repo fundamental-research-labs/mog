@@ -10,6 +10,7 @@
 
 import type {
   CellFormat,
+  CellFormatInput,
   CellRange,
   FormatChangeResult,
   ResolvedCellFormat,
@@ -30,6 +31,7 @@ import {
 } from '../internal/number-format-locale';
 import { normalizeRange, parseCellRange } from '../internal/utils';
 import { createVersionOperationContext } from '../internal/version-operation-context';
+import { normalizeCellFormatInput, normalizeCellFormatMapInput } from './format-input';
 import {
   applyFormatToRange,
   getCellProperties as getCellPropertiesOp,
@@ -62,22 +64,23 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
 
   async set(
     a: string | number,
-    b: CellFormat | number,
-    c?: CellFormat,
+    b: CellFormatInput | number,
+    c?: CellFormatInput,
   ): Promise<FormatChangeResult> {
     this._ensureWritable('formats.set');
-    const { row, col, value: format } = resolveCellArgs<CellFormat>(a, b, c);
+    const { row, col, value: format } = resolveCellArgs<CellFormatInput>(a, b, c);
+    const normalizedFormat = normalizeCellFormatInput(format, 'formats.set.format');
     await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatCells']);
     const result = await this.ctx.computeBridge.setFormatForRanges(
       this.sheetId,
       [[row, col, row, col]],
-      format,
+      normalizedFormat,
       createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.set'),
     );
     return { cellCount: result.propertyChanges?.length ?? 0 };
   }
 
-  async setRange(a: string | CellRange, b: CellFormat): Promise<FormatChangeResult> {
+  async setRange(a: string | CellRange, b: CellFormatInput): Promise<FormatChangeResult> {
     this._ensureWritable('formats.setRange');
     let range: CellRange;
     if (typeof a === 'string') {
@@ -88,18 +91,20 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       range = a;
     }
     const n = normalizeRange(range);
+    const normalizedFormat = normalizeCellFormatInput(b, 'formats.setRange.format');
     await assertFormatRangesAllowed(this.ctx, this.sheetId, [range]);
     const result = await this.ctx.computeBridge.setFormatForRanges(
       this.sheetId,
       [[n.startRow, n.startCol, n.endRow, n.endCol]],
-      b,
+      normalizedFormat,
       createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.setRange'),
     );
     return { cellCount: result.propertyChanges?.length ?? 0 };
   }
 
-  async setRanges(ranges: CellRange[], format: CellFormat): Promise<void> {
+  async setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void> {
     this._ensureWritable('formats.setRanges');
+    const normalizedFormat = normalizeCellFormatInput(format, 'formats.setRanges.format');
     await assertFormatRangesAllowed(this.ctx, this.sheetId, ranges);
     const nextOptions = createGroupedFormatMutationOptions(
       this.ctx,
@@ -113,13 +118,13 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
       if (range.isFullColumn) {
         for (let col = range.startCol; col <= range.endCol; col++) {
           promises.push(
-            this.ctx.computeBridge.setColFormat(this.sheetId, col, format, nextOptions()),
+            this.ctx.computeBridge.setColFormat(this.sheetId, col, normalizedFormat, nextOptions()),
           );
         }
       } else if (range.isFullRow) {
         for (let row = range.startRow; row <= range.endRow; row++) {
           promises.push(
-            this.ctx.computeBridge.setRowFormat(this.sheetId, row, format, nextOptions()),
+            this.ctx.computeBridge.setRowFormat(this.sheetId, row, normalizedFormat, nextOptions()),
           );
         }
       } else {
@@ -132,7 +137,7 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
         this.ctx.computeBridge.setFormatForRanges(
           this.sheetId,
           boundedRanges,
-          format,
+          normalizedFormat,
           nextOptions(DIRECT_CELL_FORMAT_DOMAIN_IDS),
         ),
       );
@@ -391,15 +396,16 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
   }
 
   async applyPattern(
-    format: CellFormat,
+    format: CellFormatInput,
     sourceRange: CellRange | null,
     targetRange: CellRange,
   ): Promise<void> {
+    const normalizedFormat = normalizeCellFormatInput(format, 'formats.applyPattern.format');
     await assertFormatRangesAllowed(this.ctx, this.sheetId, [targetRange]);
     await applyFormatToRange(
       this.ctx,
       this.sheetId,
-      format,
+      normalizedFormat,
       sourceRange,
       targetRange,
       createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.applyFormatToRange'),
@@ -434,14 +440,21 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
   }
 
   async setCellProperties(
-    updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,
+    updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,
   ): Promise<void> {
+    const normalizedUpdates = updates.map((update, index) => ({
+      ...update,
+      format: normalizeCellFormatInput(
+        update.format as CellFormat,
+        `formats.setCellProperties[${index}].format`,
+      ),
+    }));
     await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatCells']);
     unwrap(
       await setCellPropertiesOp(
         this.ctx,
         this.sheetId,
-        updates as Array<{ row: number; col: number; format: CellFormat }>,
+        normalizedUpdates as Array<{ row: number; col: number; format: CellFormat }>,
         createDirectFormatMutationOptions(this.ctx, this.sheetId, 'formats.setCellProperties'),
       ),
     );
@@ -451,13 +464,14 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     return unwrap(await getRowPropertiesOp(this.ctx, this.sheetId, rows));
   }
 
-  async setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void> {
+  async setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void> {
+    const normalizedUpdates = normalizeCellFormatMapInput(updates, 'formats.setRowProperties');
     await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatRows']);
     unwrap(
       await setRowPropertiesOp(
         this.ctx,
         this.sheetId,
-        updates as Map<number, CellFormat>,
+        normalizedUpdates,
         createFormatMutationOptions(this.ctx, this.sheetId, 'formats.setRowProperties'),
       ),
     );
@@ -467,13 +481,14 @@ export class WorksheetFormatsImpl implements WorksheetFormats {
     return unwrap(await getColumnPropertiesOp(this.ctx, this.sheetId, cols));
   }
 
-  async setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void> {
+  async setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void> {
+    const normalizedUpdates = normalizeCellFormatMapInput(updates, 'formats.setColumnProperties');
     await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
     unwrap(
       await setColumnPropertiesOp(
         this.ctx,
         this.sheetId,
-        updates as Map<number, CellFormat>,
+        normalizedUpdates,
         createFormatMutationOptions(this.ctx, this.sheetId, 'formats.setColumnProperties'),
       ),
     );

@@ -11057,7 +11057,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyPattern(\n    format: CellFormat,\n    sourceRange: CellRange | null,\n    targetRange: CellRange,\n  ): Promise<void>;",
+      "signature": "applyPattern(\n    format: CellFormatInput,\n    sourceRange: CellRange | null,\n    targetRange: CellRange,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -11369,7 +11369,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "set(address: string, format: CellFormat): Promise<FormatChangeResult>;",
+      "signature": "set(address: string, format: CellFormatInput): Promise<FormatChangeResult>;",
       "typeText": "Promise<FormatChangeResult>",
       "compatibility": [],
       "source": {
@@ -11388,7 +11388,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCellProperties(\n    updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,\n  ): Promise<void>;",
+      "signature": "setCellProperties(\n    updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -11407,7 +11407,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;",
+      "signature": "setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -11445,7 +11445,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRange(range: string, format: CellFormat): Promise<FormatChangeResult>;",
+      "signature": "setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>;",
       "typeText": "Promise<FormatChangeResult>",
       "compatibility": [],
       "source": {
@@ -11464,7 +11464,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRanges(ranges: CellRange[], format: CellFormat): Promise<void>;",
+      "signature": "setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -11483,7 +11483,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;",
+      "signature": "setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -31339,7 +31339,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "applyPattern(\n    format: CellFormat,\n    sourceRange: CellRange | null,\n    targetRange: CellRange,\n  ): Promise<void>;",
+      "signature": "applyPattern(\n    format: CellFormatInput,\n    sourceRange: CellRange | null,\n    targetRange: CellRange,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -31651,7 +31651,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "set(address: string, format: CellFormat): Promise<FormatChangeResult>;",
+      "signature": "set(address: string, format: CellFormatInput): Promise<FormatChangeResult>;",
       "typeText": "Promise<FormatChangeResult>",
       "compatibility": [],
       "source": {
@@ -31670,7 +31670,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setCellProperties(\n    updates: Array<{ row: number; col: number; format: Partial<CellFormat> }>,\n  ): Promise<void>;",
+      "signature": "setCellProperties(\n    updates: Array<{ row: number; col: number; format: Partial<CellFormatInput> }>,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -31689,7 +31689,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;",
+      "signature": "setColumnProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -31727,7 +31727,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRange(range: string, format: CellFormat): Promise<FormatChangeResult>;",
+      "signature": "setRange(range: string, format: CellFormatInput): Promise<FormatChangeResult>;",
       "typeText": "Promise<FormatChangeResult>",
       "compatibility": [],
       "source": {
@@ -31746,7 +31746,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRanges(ranges: CellRange[], format: CellFormat): Promise<void>;",
+      "signature": "setRanges(ranges: CellRange[], format: CellFormatInput): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -31765,7 +31765,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setRowProperties(updates: Map<number, Partial<CellFormat>>): Promise<void>;",
+      "signature": "setRowProperties(updates: Map<number, Partial<CellFormatInput>>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {

@@ -91,7 +91,15 @@ export type {
   FillSeriesApplyReceipt,
   WorksheetFill,
 } from './fill';
-export type { WorksheetFormats } from './formats';
+export type {
+  CellFormatAlignmentInput,
+  CellFormatBorderInput,
+  CellFormatFillInput,
+  CellFormatFontInput,
+  CellFormatInput,
+  CellFormatProtectionInput,
+  WorksheetFormats,
+} from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal, WorksheetInternalChart } from './internal';
 export type { RangePixelPosition, WorksheetLayout } from './layout';

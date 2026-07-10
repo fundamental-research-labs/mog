@@ -18,6 +18,8 @@ function createMockCtx(): any {
       clearFormatForRanges: jest.fn().mockResolvedValue({}),
       setRowFormat: jest.fn().mockResolvedValue({}),
       setColFormat: jest.fn().mockResolvedValue({}),
+      setRowFormats: jest.fn().mockResolvedValue({}),
+      setColFormats: jest.fn().mockResolvedValue({}),
       setCellPropertiesBatch: jest.fn().mockResolvedValue({}),
       queryRange: jest.fn().mockResolvedValue({ cells: [], merges: [] }),
       getResolvedFormat: jest.fn().mockResolvedValue({}),
@@ -86,6 +88,132 @@ describe('WorksheetFormatsImpl admission options', () => {
       SHEET_ID,
       [[2, 3, { italic: true }]],
       expectFormatAdmission('formats.setCellProperties', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
+  it('normalizes supported compatibility format containers before bridge writes', async () => {
+    await formats.set('A1', {
+      font: { bold: true, color: '#FF0000', underline: true },
+      fill: { color: '#ADD8E6' },
+      alignment: { horizontalAlignment: 'Center', verticalAlignment: 'Center', indentLevel: 2 },
+      protection: { locked: true },
+      border: {
+        style: 'thin',
+        color: '#111111',
+        bottom: { style: 'thick', color: '#222222' },
+      },
+    } as any);
+
+    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      SHEET_ID,
+      [[0, 0, 0, 0]],
+      {
+        bold: true,
+        fontColor: '#FF0000',
+        underlineType: 'single',
+        backgroundColor: '#ADD8E6',
+        horizontalAlign: 'center',
+        verticalAlign: 'middle',
+        indent: 2,
+        locked: true,
+        borders: {
+          top: { style: 'thin', color: '#111111' },
+          right: { style: 'thin', color: '#111111' },
+          bottom: { style: 'thick', color: '#222222' },
+          left: { style: 'thin', color: '#111111' },
+        },
+      },
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
+  it('keeps canonical flat keys authoritative when compatibility containers overlap', async () => {
+    await formats.set('A1', {
+      bold: false,
+      fontColor: '#111111',
+      backgroundColor: '#222222',
+      font: { bold: true, color: '#FF0000' },
+      fill: { color: '#ADD8E6' },
+    } as any);
+
+    expect(ctx.computeBridge.setFormatForRanges).toHaveBeenCalledWith(
+      SHEET_ID,
+      [[0, 0, 0, 0]],
+      {
+        bold: false,
+        fontColor: '#111111',
+        backgroundColor: '#222222',
+      },
+      expectFormatAdmission('formats.set', DIRECT_CELL_FORMAT_DOMAIN_IDS),
+    );
+  });
+
+  it('rejects unsupported top-level and nested format keys before bridge writes', async () => {
+    await expect(
+      formats.set('A1', {
+        fill: { color: '#ADD8E6', themeColor: 'accent1' },
+      } as any),
+    ).rejects.toThrow('Unsupported format property "formats.set.format.fill.themeColor".');
+
+    await expect(
+      formats.set('A1', {
+        font: { bold: true },
+        richText: { bold: true },
+      } as any),
+    ).rejects.toThrow('Unsupported format property "formats.set.format.richText".');
+
+    expect(ctx.computeBridge.setFormatForRanges).not.toHaveBeenCalled();
+  });
+
+  it('normalizes compatibility inputs for bulk row and column properties', async () => {
+    await formats.setRowProperties(
+      new Map([
+        [
+          2,
+          {
+            font: { bold: true },
+            fill: { color: '#ADD8E6' },
+          } as any,
+        ],
+      ]),
+    );
+    await formats.setColumnProperties(
+      new Map([
+        [
+          3,
+          {
+            alignment: { verticalAlignment: 'Center' },
+            protection: { hidden: true },
+          } as any,
+        ],
+      ]),
+    );
+
+    expect(ctx.computeBridge.setRowFormats).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        [
+          2,
+          {
+            bold: true,
+            backgroundColor: '#ADD8E6',
+          },
+        ],
+      ],
+      expectFormatAdmission('formats.setRowProperties'),
+    );
+    expect(ctx.computeBridge.setColFormats).toHaveBeenCalledWith(
+      SHEET_ID,
+      [
+        [
+          3,
+          {
+            verticalAlign: 'middle',
+            hidden: true,
+          },
+        ],
+      ],
+      expectFormatAdmission('formats.setColumnProperties'),
     );
   });
 

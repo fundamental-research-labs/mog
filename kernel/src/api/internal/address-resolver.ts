@@ -13,7 +13,7 @@ import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 
 import { KernelError, type KernelErrorCode } from '../../errors';
 
-import { parseCellAddress, parseCellRange, rangeToA1 } from './utils';
+import { letterToCol, parseCellAddress, parseCellRange, rangeToA1 } from './utils';
 
 type ResolverPath = string[];
 
@@ -25,6 +25,11 @@ const SINGLE_CELL_NOT_RANGE_SUGGESTION =
 
 const RANGE_ADDRESS_SUGGESTION =
   'Pass a contiguous A1 range such as "A1:B2". If you are generating a range from row/column indexes, call a1.range(row1, col1, row2, col2) with zero-based Mog coordinates.';
+
+const COLUMN_SELECTOR_SUGGESTION =
+  'Use a zero-based column index, a column name such as "B", or a whole-column reference such as "B:B" or "B:D".';
+
+const COLUMN_SELECTOR_REGEX = /^\$?([A-Za-z]+)(?::\$?([A-Za-z]+))?$/;
 
 interface AddressDiagnostic {
   code?: KernelErrorCode;
@@ -278,6 +283,108 @@ export function resolveRange(
     endCol: d,
   });
   return { startRow: a, startCol: b, endRow: c, endCol: d };
+}
+
+// =============================================================================
+// Worksheet layout column selector resolution
+// =============================================================================
+
+/** Inclusive numeric bounds resolved from a worksheet layout column selector. */
+export interface ResolvedColumnSelection {
+  readonly startCol: number;
+  readonly endCol: number;
+}
+
+/**
+ * Resolve a layout column selector to inclusive zero-based bounds.
+ *
+ * Numeric selectors remain zero-based. String selectors accept Excel/Office-style
+ * bare names and whole-column references: `B`, `$B`, `B:B`, or `B:D`.
+ * Sheet-qualified, cell, row, reversed, and discontiguous references are rejected.
+ */
+export function resolveColumnSelection(
+  selector: number | string,
+  path: ResolverPath = ['col'],
+): ResolvedColumnSelection {
+  if (typeof selector === 'number') {
+    validateCol(selector, path, selector);
+    return { startCol: selector, endCol: selector };
+  }
+
+  const normalized = selector.trim();
+  const match = COLUMN_SELECTOR_REGEX.exec(normalized);
+  if (!match) {
+    failAddressDiagnostic({
+      validationKind: 'invalidColumnSelector',
+      message: `Invalid column selector: ${JSON.stringify(selector)}`,
+      path,
+      expected: 'zero-based column index, column name, or whole-column reference',
+      received: selector,
+      suggestion: COLUMN_SELECTOR_SUGGESTION,
+    });
+  }
+
+  const startCol = letterToCol(match[1]);
+  const endCol = letterToCol(match[2] ?? match[1]);
+  validateCol(startCol, [...path, 'startCol'], selector);
+  validateCol(endCol, [...path, 'endCol'], selector);
+
+  if (endCol < startCol) {
+    failAddressDiagnostic({
+      validationKind: 'reversedColumnSelector',
+      message: `Column selector start must not follow its end: ${JSON.stringify(selector)}`,
+      path,
+      expected: 'ascending whole-column reference such as "B:D"',
+      received: selector,
+      suggestion: COLUMN_SELECTOR_SUGGESTION,
+    });
+  }
+
+  return { startCol, endCol };
+}
+
+/** Resolve a selector that must identify exactly one column. */
+export function resolveSingleColumn(
+  selector: number | string,
+  path: ResolverPath = ['col'],
+): number {
+  const resolved = resolveColumnSelection(selector, path);
+  if (resolved.startCol !== resolved.endCol) {
+    failAddressDiagnostic({
+      validationKind: 'expectedSingleColumn',
+      message: `Expected one column but received range: ${JSON.stringify(selector)}`,
+      path,
+      expected: 'one column such as 1, "B", or "B:B"',
+      received: selector,
+      suggestion:
+        'Pass one column to this scalar read. Use a batch layout method for multi-column ranges.',
+    });
+  }
+  return resolved.startCol;
+}
+
+/**
+ * Resolve either one range selector or separate inclusive start/end selectors.
+ */
+export function resolveColumnSelectionRange(
+  start: number | string,
+  end?: number | string,
+): ResolvedColumnSelection {
+  if (end === undefined) return resolveColumnSelection(start, ['startCol']);
+
+  const startCol = resolveSingleColumn(start, ['startCol']);
+  const endCol = resolveSingleColumn(end, ['endCol']);
+  if (endCol < startCol) {
+    failAddressDiagnostic({
+      validationKind: 'reversedColumnRange',
+      message: `Column range start must not follow its end: ${String(start)} to ${String(end)}`,
+      path: ['startCol', 'endCol'],
+      expected: 'inclusive start column at or before the end column',
+      received: { startCol: start, endCol: end },
+      suggestion: COLUMN_SELECTOR_SUGGESTION,
+    });
+  }
+  return { startCol, endCol };
 }
 
 // =============================================================================

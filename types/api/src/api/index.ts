@@ -332,6 +332,7 @@ export type {
   WorksheetInternal,
   WorksheetInternalChart,
   WorksheetLayout,
+  WorksheetLayoutColumnSelector,
   RangePixelPosition,
   WorksheetNames,
   WorksheetObjects,

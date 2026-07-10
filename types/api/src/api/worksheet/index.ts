@@ -102,7 +102,7 @@ export type {
 } from './formats';
 export type { WorksheetHyperlink, WorksheetHyperlinks } from './hyperlinks';
 export type { WorksheetInternal, WorksheetInternalChart } from './internal';
-export type { RangePixelPosition, WorksheetLayout } from './layout';
+export type { RangePixelPosition, WorksheetLayout, WorksheetLayoutColumnSelector } from './layout';
 export type { WorksheetNames } from './names';
 /** @internal — kept for kernel WorksheetObjectsImpl; not part of the public Worksheet interface. */
 export type { WorksheetObjects } from './objects';

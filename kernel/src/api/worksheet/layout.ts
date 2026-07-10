@@ -11,7 +11,42 @@ import { KernelError } from '../../errors';
 import { invalidCellAddress, operationFailed } from '../../errors/api';
 
 import type { DocumentContext } from '../../context';
+import {
+  resolveColumnSelection,
+  resolveColumnSelectionRange,
+  resolveSingleColumn,
+  type ResolvedColumnSelection,
+} from '../internal/address-resolver';
 import { assertFormatOperationsAllowed } from './protection-guards';
+
+type WorksheetLayoutColumnSelector = number | string;
+
+function columnsInSelection(selection: ResolvedColumnSelection): number[] {
+  return Array.from(
+    { length: selection.endCol - selection.startCol + 1 },
+    (_, index) => selection.startCol + index,
+  );
+}
+
+function selectorList(
+  selectors: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+): readonly WorksheetLayoutColumnSelector[] {
+  return Array.isArray(selectors)
+    ? (selectors as readonly WorksheetLayoutColumnSelector[])
+    : [selectors as WorksheetLayoutColumnSelector];
+}
+
+function resolveColumnList(
+  selectors: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+): number[] {
+  const resolved = new Set<number>();
+  for (const selector of selectorList(selectors)) {
+    for (const col of columnsInSelection(resolveColumnSelection(selector))) {
+      resolved.add(col);
+    }
+  }
+  return [...resolved];
+}
 
 export class WorksheetLayoutImpl implements WorksheetLayout {
   constructor(
@@ -50,39 +85,40 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async getColumnWidth(col: number): Promise<number> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number> {
+    const resolvedCol = resolveSingleColumn(col);
     try {
-      return await this.ctx.computeBridge.getColWidthQuery(this.sheetId, col);
+      return await this.ctx.computeBridge.getColWidthQuery(this.sheetId, resolvedCol);
     } catch (e) {
       throw KernelError.from(e, 'OPERATION_FAILED', `Failed to get column width: ${String(e)}`);
     }
   }
 
-  async setColumnWidth(col: number, widthPx: number): Promise<void> {
+  async setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void> {
     this._ensureWritable('layout.setColumnWidth');
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+    const columns = columnsInSelection(resolveColumnSelection(col));
     if (!Number.isFinite(widthPx) || widthPx <= 0) {
       throw operationFailed('setColumnWidth', 'Width must be a finite number greater than 0');
     }
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.setColWidth(this.sheetId, col, widthPx);
+      if (columns.length === 1) {
+        await this.ctx.computeBridge.setColWidth(this.sheetId, columns[0], widthPx);
+      } else {
+        await this.ctx.computeBridge.setColWidths(
+          this.sheetId,
+          columns.map((resolvedCol) => [resolvedCol, widthPx]),
+        );
+      }
     } catch (e) {
       throw operationFailed('setColumnWidth', String(e));
     }
   }
 
-  async getColumnWidthChars(col: number): Promise<number> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number> {
+    const resolvedCol = resolveSingleColumn(col);
     try {
-      return await this.ctx.computeBridge.getColWidthCharsQuery(this.sheetId, col);
+      return await this.ctx.computeBridge.getColWidthCharsQuery(this.sheetId, resolvedCol);
     } catch (e) {
       throw KernelError.from(
         e,
@@ -92,77 +128,89 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async setColumnWidthChars(col: number, widthChars: number): Promise<void> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void> {
+    const columns = columnsInSelection(resolveColumnSelection(col));
     if (!Number.isFinite(widthChars) || widthChars <= 0) {
       throw operationFailed('setColumnWidthChars', 'Width must be a finite number greater than 0');
     }
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.setColWidthChars(this.sheetId, col, widthChars);
+      if (columns.length === 1) {
+        await this.ctx.computeBridge.setColWidthChars(this.sheetId, columns[0], widthChars);
+      } else {
+        await this.ctx.computeBridge.setColWidthsChars(
+          this.sheetId,
+          columns.map((resolvedCol) => [resolvedCol, widthChars]),
+        );
+      }
     } catch (e) {
       throw operationFailed('setColumnWidthChars', String(e));
     }
   }
 
-  async setColumnWidths(widths: Array<[number, number]>): Promise<void> {
+  async setColumnWidths(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void> {
     if (widths.length === 0) return;
-    for (const [col, widthPx] of widths) {
-      if (col < 0) {
-        throw invalidCellAddress(0, col);
-      }
+    const resolvedWidths = new Map<number, number>();
+    for (const [selector, widthPx] of widths) {
+      const columns = columnsInSelection(resolveColumnSelection(selector));
       if (!Number.isFinite(widthPx) || widthPx <= 0) {
         throw operationFailed('setColumnWidths', 'Width must be a finite number greater than 0');
       }
+      for (const col of columns) resolvedWidths.set(col, widthPx);
     }
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.setColWidths(this.sheetId, widths);
+      await this.ctx.computeBridge.setColWidths(this.sheetId, [...resolvedWidths]);
     } catch (e) {
       throw operationFailed('setColumnWidths', String(e));
     }
   }
 
-  async setColumnWidthsChars(widths: Array<[number, number]>): Promise<void> {
+  async setColumnWidthsChars(
+    widths: Array<[WorksheetLayoutColumnSelector, number]>,
+  ): Promise<void> {
     if (widths.length === 0) return;
-    for (const [col, widthChars] of widths) {
-      if (col < 0) {
-        throw invalidCellAddress(0, col);
-      }
+    const resolvedWidths = new Map<number, number>();
+    for (const [selector, widthChars] of widths) {
+      const columns = columnsInSelection(resolveColumnSelection(selector));
       if (!Number.isFinite(widthChars) || widthChars <= 0) {
         throw operationFailed(
           'setColumnWidthsChars',
           'Width must be a finite number greater than 0',
         );
       }
+      for (const col of columns) resolvedWidths.set(col, widthChars);
     }
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.setColWidthsChars(this.sheetId, widths);
+      await this.ctx.computeBridge.setColWidthsChars(this.sheetId, [...resolvedWidths]);
     } catch (e) {
       throw operationFailed('setColumnWidthsChars', String(e));
     }
   }
 
-  async autoFitColumn(col: number): Promise<void> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void> {
+    const columns = columnsInSelection(resolveColumnSelection(col));
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.autoFitColumnAndSet(this.sheetId, col);
+      if (columns.length === 1) {
+        await this.ctx.computeBridge.autoFitColumnAndSet(this.sheetId, columns[0]);
+      } else {
+        await this.ctx.computeBridge.autoFitColumnsAndSet(this.sheetId, columns);
+      }
     } catch (e) {
       throw operationFailed('autoFitColumn', String(e));
     }
   }
 
-  async autoFitColumns(cols: number[]): Promise<void> {
-    if (cols.length === 0) return;
+  async autoFitColumns(
+    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+  ): Promise<void> {
+    if (Array.isArray(cols) && cols.length === 0) return;
+    const resolvedColumns = resolveColumnList(cols);
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      await this.ctx.computeBridge.autoFitColumnsAndSet(this.sheetId, cols);
+      await this.ctx.computeBridge.autoFitColumnsAndSet(this.sheetId, resolvedColumns);
     } catch (e) {
       throw operationFailed('autoFitColumns', String(e));
     }
@@ -202,9 +250,17 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async getColWidthsBatch(startCol: number, endCol: number): Promise<Array<[number, number]>> {
+  async getColWidthsBatch(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<Array<[number, number]>> {
+    const resolved = resolveColumnSelectionRange(startCol, endCol);
     try {
-      return await this.ctx.computeBridge.getColWidthsBatch(this.sheetId, startCol, endCol);
+      return await this.ctx.computeBridge.getColWidthsBatch(
+        this.sheetId,
+        resolved.startCol,
+        resolved.endCol,
+      );
     } catch (e) {
       throw KernelError.from(
         e,
@@ -214,9 +270,17 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>> {
+  async getColWidthsBatchChars(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<Array<[number, number]>> {
+    const resolved = resolveColumnSelectionRange(startCol, endCol);
     try {
-      return await this.ctx.computeBridge.getColWidthsBatchChars(this.sheetId, startCol, endCol);
+      return await this.ctx.computeBridge.getColWidthsBatchChars(
+        this.sheetId,
+        resolved.startCol,
+        resolved.endCol,
+      );
     } catch (e) {
       throw KernelError.from(
         e,
@@ -242,16 +306,14 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async setColumnVisible(col: number, visible: boolean): Promise<void> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void> {
+    const columns = columnsInSelection(resolveColumnSelection(col));
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       if (visible) {
-        await this.ctx.computeBridge.unhideColumns(this.sheetId, [col]);
+        await this.ctx.computeBridge.unhideColumns(this.sheetId, columns);
       } else {
-        await this.ctx.computeBridge.hideColumns(this.sheetId, [col]);
+        await this.ctx.computeBridge.hideColumns(this.sheetId, columns);
       }
     } catch (e) {
       throw operationFailed('setColumnVisible', String(e));
@@ -269,12 +331,10 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async isColumnHidden(col: number): Promise<boolean> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean> {
+    const resolvedCol = resolveSingleColumn(col);
     try {
-      return await this.ctx.computeBridge.isColHiddenQuery(this.sheetId, col);
+      return await this.ctx.computeBridge.isColHiddenQuery(this.sheetId, resolvedCol);
     } catch (e) {
       throw KernelError.from(
         e,
@@ -297,14 +357,14 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async unhideColumns(startCol: number, endCol: number): Promise<void> {
-    if (startCol < 0 || endCol < startCol) {
-      throw operationFailed('unhideColumns', 'Invalid column range');
-    }
+  async unhideColumns(
+    startCol: WorksheetLayoutColumnSelector,
+    endCol?: WorksheetLayoutColumnSelector,
+  ): Promise<void> {
+    const columns = columnsInSelection(resolveColumnSelectionRange(startCol, endCol));
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-      const cols = Array.from({ length: endCol - startCol + 1 }, (_, i) => startCol + i);
-      await this.ctx.computeBridge.unhideColumns(this.sheetId, cols);
+      await this.ctx.computeBridge.unhideColumns(this.sheetId, columns);
     } catch (e) {
       throw operationFailed('unhideColumns', String(e));
     }
@@ -316,10 +376,13 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     await this.ctx.computeBridge.hideRows(this.sheetId, rows);
   }
 
-  async hideColumns(cols: number[]): Promise<void> {
-    if (cols.length === 0) return;
+  async hideColumns(
+    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],
+  ): Promise<void> {
+    if (Array.isArray(cols) && cols.length === 0) return;
+    const resolvedColumns = resolveColumnList(cols);
     await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
-    await this.ctx.computeBridge.hideColumns(this.sheetId, cols);
+    await this.ctx.computeBridge.hideColumns(this.sheetId, resolvedColumns);
   }
 
   async getHiddenRowsBitmap(): Promise<Set<number>> {
@@ -362,14 +425,19 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async resetColumnWidth(col: number): Promise<void> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void> {
+    const columns = columnsInSelection(resolveColumnSelection(col));
     try {
       await assertFormatOperationsAllowed(this.ctx, this.sheetId, ['formatColumns']);
       const defaultWidth = await this.ctx.computeBridge.getDefaultColWidthChars(this.sheetId);
-      await this.ctx.computeBridge.setColWidthChars(this.sheetId, col, defaultWidth);
+      if (columns.length === 1) {
+        await this.ctx.computeBridge.setColWidthChars(this.sheetId, columns[0], defaultWidth);
+      } else {
+        await this.ctx.computeBridge.setColWidthsChars(
+          this.sheetId,
+          columns.map((resolvedCol) => [resolvedCol, defaultWidth]),
+        );
+      }
     } catch (e) {
       throw operationFailed('resetColumnWidth', String(e));
     }
@@ -386,12 +454,10 @@ export class WorksheetLayoutImpl implements WorksheetLayout {
     }
   }
 
-  async getColPosition(col: number): Promise<number> {
-    if (col < 0) {
-      throw invalidCellAddress(0, col);
-    }
+  async getColPosition(col: WorksheetLayoutColumnSelector): Promise<number> {
+    const resolvedCol = resolveSingleColumn(col);
     try {
-      return await this.ctx.computeBridge.getColPosition(this.sheetId, col);
+      return await this.ctx.computeBridge.getColPosition(this.sheetId, resolvedCol);
     } catch (e) {
       throw KernelError.from(e, 'OPERATION_FAILED', `Failed to get column position: ${String(e)}`);
     }

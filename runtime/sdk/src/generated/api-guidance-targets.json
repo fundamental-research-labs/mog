@@ -12698,7 +12698,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFitColumn(col: number): Promise<void>;",
+      "signature": "autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -12717,7 +12717,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFitColumns(cols: number[]): Promise<void>;",
+      "signature": "autoFitColumns(\n    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -12774,7 +12774,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColPosition(col: number): Promise<number>;",
+      "signature": "getColPosition(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -12793,7 +12793,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnWidth(col: number): Promise<number>;",
+      "signature": "getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -12812,7 +12812,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnWidthChars(col: number): Promise<number>;",
+      "signature": "getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -12831,7 +12831,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColWidthsBatch(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
+      "signature": "getColWidthsBatch(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
       "compatibility": [],
       "source": {
@@ -12850,7 +12850,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
+      "signature": "getColWidthsBatchChars(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
       "compatibility": [],
       "source": {
@@ -13002,7 +13002,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "hideColumns(cols: number[]): Promise<void>;",
+      "signature": "hideColumns(\n    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13040,7 +13040,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "isColumnHidden(col: number): Promise<boolean>;",
+      "signature": "isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -13078,7 +13078,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetColumnWidth(col: number): Promise<void>;",
+      "signature": "resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13116,7 +13116,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnVisible(col: number, visible: boolean): Promise<void>;",
+      "signature": "setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13135,9 +13135,17 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidth(col: number, widthPx: number): Promise<void>;",
+      "signature": "setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>;",
       "typeText": "Promise<void>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "mog-api.layout.office-column-selector.input-alias",
+          "observedPath": "ws.layout.setColumnWidth(\"B\", width)",
+          "canonicalPath": "ws.layout.setColumnWidth",
+          "status": "input_alias",
+          "appliesTo": "argument"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/layout.ts"
       },
@@ -13154,7 +13162,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidthChars(col: number, widthChars: number): Promise<void>;",
+      "signature": "setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13173,7 +13181,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidths(widths: Array<[number, number]>): Promise<void>;",
+      "signature": "setColumnWidths(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13192,7 +13200,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidthsChars(widths: Array<[number, number]>): Promise<void>;",
+      "signature": "setColumnWidthsChars(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -13249,7 +13257,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "unhideColumns(startCol: number, endCol: number): Promise<void>;",
+      "signature": "unhideColumns(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -32980,7 +32988,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFitColumn(col: number): Promise<void>;",
+      "signature": "autoFitColumn(col: WorksheetLayoutColumnSelector): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -32999,7 +33007,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "autoFitColumns(cols: number[]): Promise<void>;",
+      "signature": "autoFitColumns(\n    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33056,7 +33064,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColPosition(col: number): Promise<number>;",
+      "signature": "getColPosition(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -33075,7 +33083,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnWidth(col: number): Promise<number>;",
+      "signature": "getColumnWidth(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -33094,7 +33102,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColumnWidthChars(col: number): Promise<number>;",
+      "signature": "getColumnWidthChars(col: WorksheetLayoutColumnSelector): Promise<number>;",
       "typeText": "Promise<number>",
       "compatibility": [],
       "source": {
@@ -33113,7 +33121,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColWidthsBatch(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
+      "signature": "getColWidthsBatch(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
       "compatibility": [],
       "source": {
@@ -33132,7 +33140,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "getColWidthsBatchChars(startCol: number, endCol: number): Promise<Array<[number, number]>>;",
+      "signature": "getColWidthsBatchChars(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<Array<[number, number]>>;",
       "typeText": "Promise<Array<[number,number]>>",
       "compatibility": [],
       "source": {
@@ -33284,7 +33292,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "hideColumns(cols: number[]): Promise<void>;",
+      "signature": "hideColumns(\n    cols: WorksheetLayoutColumnSelector | readonly WorksheetLayoutColumnSelector[],\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33322,7 +33330,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "isColumnHidden(col: number): Promise<boolean>;",
+      "signature": "isColumnHidden(col: WorksheetLayoutColumnSelector): Promise<boolean>;",
       "typeText": "Promise<boolean>",
       "compatibility": [],
       "source": {
@@ -33360,7 +33368,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "resetColumnWidth(col: number): Promise<void>;",
+      "signature": "resetColumnWidth(col: WorksheetLayoutColumnSelector): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33398,7 +33406,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnVisible(col: number, visible: boolean): Promise<void>;",
+      "signature": "setColumnVisible(col: WorksheetLayoutColumnSelector, visible: boolean): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33417,9 +33425,17 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidth(col: number, widthPx: number): Promise<void>;",
+      "signature": "setColumnWidth(col: WorksheetLayoutColumnSelector, widthPx: number): Promise<void>;",
       "typeText": "Promise<void>",
-      "compatibility": [],
+      "compatibility": [
+        {
+          "id": "mog-api.layout.office-column-selector.input-alias",
+          "observedPath": "ws.layout.setColumnWidth(\"B\", width)",
+          "canonicalPath": "ws.layout.setColumnWidth",
+          "status": "input_alias",
+          "appliesTo": "argument"
+        }
+      ],
       "source": {
         "file": "types/api/src/api/worksheet/layout.ts"
       },
@@ -33436,7 +33452,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidthChars(col: number, widthChars: number): Promise<void>;",
+      "signature": "setColumnWidthChars(col: WorksheetLayoutColumnSelector, widthChars: number): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33455,7 +33471,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidths(widths: Array<[number, number]>): Promise<void>;",
+      "signature": "setColumnWidths(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33474,7 +33490,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "setColumnWidthsChars(widths: Array<[number, number]>): Promise<void>;",
+      "signature": "setColumnWidthsChars(widths: Array<[WorksheetLayoutColumnSelector, number]>): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {
@@ -33531,7 +33547,7 @@
       "kind": "method",
       "visibility": "public",
       "asyncModel": "promise",
-      "signature": "unhideColumns(startCol: number, endCol: number): Promise<void>;",
+      "signature": "unhideColumns(\n    startCol: WorksheetLayoutColumnSelector,\n    endCol?: WorksheetLayoutColumnSelector,\n  ): Promise<void>;",
       "typeText": "Promise<void>",
       "compatibility": [],
       "source": {

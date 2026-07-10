@@ -8,6 +8,45 @@ const WORKSHEET_METHOD_GUIDANCE = 'api-compatibility:mog-api/worksheet-method-gu
 
 export const apiCompatibilityRegistry = [
   {
+    id: 'mog-api.layout.office-column-selector.input-alias',
+    observedPath: 'ws.layout.setColumnWidth("B", width)',
+    canonicalPath: 'ws.layout.setColumnWidth',
+    status: 'input_alias',
+    appliesTo: 'argument',
+    ownerTheme: 'api-compatibility/layout-column-addressing',
+    ownerPackage: '@mog-sdk/kernel',
+    firstObservedVersion: '0.10.4',
+    canonicalSince: '0.10.5',
+    deprecatedSince: null,
+    removeAfter: null,
+    evidence: [
+      {
+        source: 'trace',
+        reference: 'https://github.com/fundamental-research-labs/mog/issues/326#issue-1',
+      },
+      {
+        source: 'source',
+        reference: 'api-compatibility:layout/office-style-column-selectors',
+      },
+    ],
+    behavior:
+      'Worksheet layout column inputs accept zero-based numeric indexes plus Excel/Office-style bare names and whole-column references such as B, $B, B:B, and B:D. Multi-column selectors expand only on mutation and batch APIs; scalar reads require exactly one column. Pixel-width methods remain pixels, and character-width methods remain explicit.',
+    runtimeSurfaces: ['typescript', 'kernel', 'api-describe', 'agent-guidance', 'docs'],
+    surfaceDisposition: {
+      typescript: 'input_alias',
+      kernel: 'input_alias',
+      'api-describe': 'input_alias',
+      'agent-guidance': 'input_alias',
+      docs: 'input_alias',
+      python: 'structured_diagnostic',
+    },
+    verification: [
+      'pnpm --filter @mog-sdk/kernel test -- worksheet-layout-column-selectors address-resolver sdk-runtime-node',
+      'pnpm --filter @mog/types-api typecheck',
+      'pnpm --filter @mog-sdk/sdk test -- api-spec api-compatibility',
+    ],
+  },
+  {
     id: 'mog-api.worksheet.describeRange.no-range',
     observedPath: 'ws.describeRange()',
     canonicalPath: 'ws.describeRange',

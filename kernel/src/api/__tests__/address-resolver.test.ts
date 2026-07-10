@@ -1,7 +1,14 @@
 import { MAX_COLS, MAX_ROWS, type CellRange } from '@mog-sdk/contracts/core';
 
 import { KernelError, MogSdkError } from '../../errors';
-import { resolveCell, resolveCellArgs, resolveRange } from '../internal/address-resolver';
+import {
+  resolveCell,
+  resolveCellArgs,
+  resolveColumnSelection,
+  resolveColumnSelectionRange,
+  resolveRange,
+  resolveSingleColumn,
+} from '../internal/address-resolver';
 
 function captureKernelError(fn: () => unknown): KernelError {
   try {
@@ -494,5 +501,52 @@ describe('resolveRange', () => {
         }),
       );
     });
+  });
+});
+
+describe('worksheet layout column selectors', () => {
+  it.each([
+    [0, { startCol: 0, endCol: 0 }],
+    ['B', { startCol: 1, endCol: 1 }],
+    ['$aa', { startCol: 26, endCol: 26 }],
+    [' b:b ', { startCol: 1, endCol: 1 }],
+    ['$AA:$AC', { startCol: 26, endCol: 28 }],
+    ['XFD:XFD', { startCol: MAX_COLS - 1, endCol: MAX_COLS - 1 }],
+  ])('resolves %p to inclusive numeric bounds', (selector, expected) => {
+    expect(resolveColumnSelection(selector)).toEqual(expected);
+  });
+
+  it('resolves scalar and endpoint forms', () => {
+    expect(resolveSingleColumn('B:B')).toBe(1);
+    expect(resolveColumnSelectionRange('B:D')).toEqual({ startCol: 1, endCol: 3 });
+    expect(resolveColumnSelectionRange('$B', 'D:D')).toEqual({ startCol: 1, endCol: 3 });
+  });
+
+  it('rejects multi-column selectors for scalar reads', () => {
+    const error = captureKernelError(() => resolveSingleColumn('B:D'));
+    expect(error.context).toEqual(
+      expect.objectContaining({
+        validationKind: 'expectedSingleColumn',
+        received: 'B:D',
+      }),
+    );
+  });
+
+  it.each([
+    [-1, 'columnOutOfBounds'],
+    [1.5, 'invalidColumnIndex'],
+    [Number.NaN, 'invalidColumnIndex'],
+    [MAX_COLS, 'columnOutOfBounds'],
+    ['', 'invalidColumnSelector'],
+    ['A1', 'invalidColumnSelector'],
+    ['1:3', 'invalidColumnSelector'],
+    ['Sheet1!A:A', 'invalidColumnSelector'],
+    ['A:A,C:C', 'invalidColumnSelector'],
+    ['D:B', 'reversedColumnSelector'],
+    ['XFE', 'columnOutOfBounds'],
+  ])('rejects invalid selector %p', (selector, validationKind) => {
+    const error = captureKernelError(() => resolveColumnSelection(selector));
+    expect(error.code).toBe('API_INVALID_ARGUMENT');
+    expect(error.context).toEqual(expect.objectContaining({ validationKind }));
   });
 });

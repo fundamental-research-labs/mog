@@ -33,11 +33,17 @@ pub(super) fn build_styles(palette: &[DocumentFormat]) -> StylesWriter {
     writer.cell_xfs[0] = cell_xf_from_components(normal_fmt, &normal_components, Some(0), true);
 
     for doc_fmt in remaining_palette {
-        let components = add_style_components(&mut writer, doc_fmt);
-        writer.add_cell_xf(cell_xf_from_components(doc_fmt, &components, Some(0), true));
+        append_generated_cell_xf(&mut writer, doc_fmt);
     }
 
     writer
+}
+
+/// Append a live/generated cell XF without disturbing any imported style-table
+/// indices already present in `writer`.
+pub(super) fn append_generated_cell_xf(writer: &mut StylesWriter, doc_fmt: &DocumentFormat) -> u32 {
+    let components = add_style_components(writer, doc_fmt);
+    writer.add_cell_xf(cell_xf_from_components(doc_fmt, &components, Some(0), true))
 }
 
 #[derive(Clone)]
@@ -56,10 +62,13 @@ fn cell_xf_from_components(
     xf_id: Option<u32>,
     include_apply_flags: bool,
 ) -> CellXfDef {
-    let has_font = components.font_id != 0;
-    let has_fill = components.fill_id != 0;
-    let has_border = components.border_id != 0;
-    let has_num_fmt = components.num_fmt_id != 0;
+    // Component IDs are table positions, not authored-intent flags. A live
+    // format may intentionally apply the Normal font, explicit no-fill, or an
+    // empty border and deduplicate to slot 0; its apply flag must still be set.
+    let has_font = doc_fmt.font.is_some();
+    let has_fill = doc_fmt.fill.is_some();
+    let has_border = doc_fmt.border.is_some();
+    let has_num_fmt = doc_fmt.number_format.is_some();
     let has_alignment = components.alignment.is_some();
     let has_protection = components.protection.is_some();
 
@@ -295,47 +304,6 @@ fn convert_font(font: &FontFormat) -> FontDef {
 
 /// Convert a `FillFormat` to a `FillDef`.
 fn convert_fill(fill: &FillFormat) -> FillDef {
-    let pattern_type = fill
-        .pattern_type
-        .as_deref()
-        .map(|s| match s {
-            "solid" => PatternType::Solid,
-            "gray125" => PatternType::Gray125,
-            "darkGray" => PatternType::DarkGray,
-            "mediumGray" => PatternType::MediumGray,
-            "lightGray" => PatternType::LightGray,
-            "gray0625" => PatternType::Gray0625,
-            "darkHorizontal" => PatternType::DarkHorizontal,
-            "darkVertical" => PatternType::DarkVertical,
-            "darkDown" => PatternType::DarkDown,
-            "darkUp" => PatternType::DarkUp,
-            "darkGrid" => PatternType::DarkGrid,
-            "darkTrellis" => PatternType::DarkTrellis,
-            "lightHorizontal" => PatternType::LightHorizontal,
-            "lightVertical" => PatternType::LightVertical,
-            "lightDown" => PatternType::LightDown,
-            "lightUp" => PatternType::LightUp,
-            "lightGrid" => PatternType::LightGrid,
-            "lightTrellis" => PatternType::LightTrellis,
-            _ => PatternType::Solid,
-        })
-        .unwrap_or(PatternType::Solid);
-
-    let fg_color = if let Some(ref pfg) = fill.pattern_foreground_color {
-        Some(hex_to_color_def_with_tint(
-            pfg,
-            fill.pattern_foreground_color_tint,
-        ))
-    } else {
-        fill.background_color
-            .as_ref()
-            .map(|bg| hex_to_color_def_with_tint(bg, fill.background_color_tint))
-    };
-    let bg_color = fill
-        .background_color
-        .as_deref()
-        .map(|c| hex_to_color_def_with_tint(c, fill.background_color_tint));
-
     if let Some(gradient) = &fill.gradient_fill {
         return FillDef::Gradient {
             gradient_type: match gradient.gradient_type.as_str() {
@@ -358,10 +326,62 @@ fn convert_fill(fill: &FillFormat) -> FillDef {
         };
     }
 
-    FillDef::Pattern {
-        pattern_type: Some(pattern_type),
-        fg_color,
-        bg_color,
+    let background_color = fill
+        .background_color
+        .as_deref()
+        .map(|color| hex_to_color_def_with_tint(color, fill.background_color_tint));
+    let pattern_foreground_color = fill
+        .pattern_foreground_color
+        .as_deref()
+        .map(|color| hex_to_color_def_with_tint(color, fill.pattern_foreground_color_tint));
+
+    let Some(pattern_token) = fill.pattern_type.as_deref() else {
+        // `backgroundColor` is also the public shorthand for a solid cell
+        // fill. Infer solid only when the caller did not provide an explicit
+        // pattern token; malformed explicit tokens must not become solid.
+        return match background_color {
+            Some(fg_color) => FillDef::Solid { fg_color },
+            None if pattern_foreground_color.is_some() => FillDef::Pattern {
+                pattern_type: None,
+                fg_color: pattern_foreground_color,
+                bg_color: None,
+            },
+            None => FillDef::None,
+        };
+    };
+
+    let Some(pattern_type) = PatternType::from_ooxml_token(pattern_token) else {
+        tracing::warn!(
+            token = %pattern_token,
+            "unknown PatternType on FillFormat → FillDef conversion; omitting patternType"
+        );
+        return FillDef::Pattern {
+            pattern_type: None,
+            fg_color: pattern_foreground_color,
+            bg_color: background_color,
+        };
+    };
+
+    match pattern_type {
+        // An explicit no-fill marker must win over any stale color fields.
+        PatternType::None => FillDef::None,
+        // DocumentFormat uses `backgroundColor` for a cell's visible solid
+        // color. OOXML stores that same color in patternFill/fgColor.
+        PatternType::Solid => match background_color {
+            Some(fg_color) => FillDef::Solid { fg_color },
+            None => FillDef::Pattern {
+                pattern_type: Some(PatternType::Solid),
+                fg_color: None,
+                bg_color: None,
+            },
+        },
+        // For real patterns the two domain color roles map directly to the
+        // OOXML foreground/background children.
+        pattern_type => FillDef::Pattern {
+            pattern_type: Some(pattern_type),
+            fg_color: pattern_foreground_color,
+            bg_color: background_color,
+        },
     }
 }
 

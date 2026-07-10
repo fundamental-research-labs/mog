@@ -33,6 +33,7 @@ const KEY_STYLE_REGISTRY_FILLS: &str = "fills";
 const KEY_STYLE_REGISTRY_BORDERS: &str = "borders";
 const KEY_STYLE_REGISTRY_CELL_STYLE_XFS: &str = "cellStyleXfs";
 const KEY_STYLE_REGISTRY_CELL_XFS: &str = "cellXfs";
+const KEY_STYLE_REGISTRY_CELL_XF_LINEAGE: &str = "cellXfLineage";
 const KEY_STYLE_REGISTRY_NAMED_CELL_STYLES: &str = "namedCellStyles";
 const KEY_STYLE_REGISTRY_DXFS: &str = "differentialFormats";
 const KEY_STYLE_REGISTRY_INDEXED_COLORS: &str = "indexedColors";
@@ -279,6 +280,11 @@ pub(super) fn export_workbook_stylesheet(
             borders: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_BORDERS),
             cell_style_xfs: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_CELL_STYLE_XFS),
             cell_xfs: read_style_registry_vec(&txn, &map, KEY_STYLE_REGISTRY_CELL_XFS),
+            cell_xf_lineage: read_style_registry_vec(
+                &txn,
+                &map,
+                KEY_STYLE_REGISTRY_CELL_XF_LINEAGE,
+            ),
             named_cell_styles: read_style_registry_vec(
                 &txn,
                 &map,

@@ -231,6 +231,44 @@ impl StylesWriter {
         writer
     }
 
+    /// Seed the writer from an imported workbook stylesheet.
+    ///
+    /// This preserves the raw component tables and XF inheritance/application
+    /// metadata for style entries whose import lineage is still valid. Generated
+    /// live styles can then be appended through the normal deduplicating APIs.
+    pub fn from_workbook_stylesheet(stylesheet: &domain_types::WorkbookStylesheet) -> Self {
+        let stylesheet = stylesheet.normalized();
+        let next_num_fmt_id = stylesheet
+            .number_formats
+            .iter()
+            .map(|format| format.id.saturating_add(1))
+            .max()
+            .unwrap_or(CUSTOM_NUM_FMT_START_ID)
+            .max(CUSTOM_NUM_FMT_START_ID);
+
+        Self {
+            num_fmts: stylesheet.number_formats,
+            next_num_fmt_id,
+            fonts: stylesheet.fonts,
+            fills: stylesheet.fills,
+            borders: stylesheet.borders,
+            cell_xfs: stylesheet.cell_xfs,
+            cell_style_xfs: stylesheet.cell_style_xfs,
+            cell_styles: stylesheet.named_cell_styles,
+            dxfs: stylesheet.differential_formats,
+            colors: stylesheet.indexed_colors,
+            table_styles: stylesheet.table_styles,
+            default_table_style: stylesheet.default_table_style,
+            default_pivot_style: stylesheet.default_pivot_style,
+            known_fonts: stylesheet.known_fonts,
+            root_namespaces: StyleRootNamespaces::from_attrs_and_mce(
+                stylesheet.root_namespace_attrs,
+                stylesheet.root_mce_attributes,
+            ),
+            ext_lst_raw: stylesheet.ext_lst_xml,
+        }
+    }
+
     /// Add a custom number format, returns the format ID
     ///
     /// Built-in formats (0-163) are not stored; this method is for custom formats only.

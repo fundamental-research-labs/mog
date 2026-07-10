@@ -69,6 +69,10 @@ pub fn add_format_range(
     });
     mirror.rebuild_format_range_spatial_index();
     mirror.range_format_cache.insert(range_id, format);
+    // Replacing an imported range is a live edit. Its semantic format may
+    // equal the old XF, but it must not retain that XF's apply/inheritance
+    // provenance.
+    mirror.range_xlsx_style_id_cache.remove(&range_id);
 }
 
 /// Remove a Format Range from both mirror and Yrs storage.

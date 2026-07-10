@@ -257,6 +257,7 @@ pub fn full_parse_result_to_parse_output(
             result.styles_root_namespace_attrs.clone(),
             result.styles_ext_lst_xml.clone(),
         )
+        .with_cell_xf_lineage(style_palette.clone())
         .with_root_mce_attributes(
             result
                 .extensions

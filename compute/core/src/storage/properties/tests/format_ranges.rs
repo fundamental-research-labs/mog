@@ -100,6 +100,35 @@ fn test_format_cascade_all_layers() {
 }
 
 #[test]
+fn updating_imported_format_range_clears_xlsx_style_lineage() {
+    let (mut storage, sid, _gi, mut mirror) = storage_with_sheet_and_mirror();
+    let range_id = crate::mirror::RangeId::from_raw(1_001);
+    let sheet_mirror = mirror.get_sheet_mut(&sid).unwrap();
+    sheet_mirror.range_xlsx_style_id_cache.insert(range_id, 17);
+
+    add_format_range(
+        &mut storage,
+        &sid,
+        sheet_mirror,
+        range_id,
+        0,
+        0,
+        2,
+        2,
+        &CellFormat {
+            bold: Some(true),
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(
+        sheet_mirror.range_xlsx_style_id_cache().get(&range_id),
+        None,
+        "a live range edit must not reacquire imported XF provenance"
+    );
+}
+
+#[test]
 fn col_format_ranges_are_column_defaults_below_explicit_col_and_row_formats() {
     let (mut storage, sid, gi, mut mirror) = storage_with_sheet_and_mirror();
 

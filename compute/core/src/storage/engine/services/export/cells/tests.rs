@@ -138,6 +138,59 @@ fn authored_style_run_output() -> domain_types::ParseOutput {
     }
 }
 
+fn imported_cell_xf_lineage_output() -> domain_types::ParseOutput {
+    let imported_bold = DocumentFormat {
+        font: Some(domain_types::FontFormat {
+            bold: Some(true),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let mut raw = xlsx_parser::domain::styles::write::StylesWriter::with_defaults();
+    let bold_font_id = raw.add_font(ooxml_types::styles::FontDef {
+        bold: Some(true),
+        ..raw.fonts[0].clone()
+    });
+    raw.cell_xfs.push(ooxml_types::styles::CellXfDef {
+        num_fmt_id: Some(0),
+        font_id: Some(bold_font_id),
+        fill_id: Some(0),
+        border_id: Some(0),
+        xf_id: Some(0),
+        apply_font: Some(true),
+        ..Default::default()
+    });
+
+    domain_types::ParseOutput {
+        style_palette: vec![DocumentFormat::default(), imported_bold.clone()],
+        workbook_stylesheet: Some(domain_types::WorkbookStylesheet {
+            number_formats: raw.num_fmts,
+            fonts: raw.fonts,
+            fills: raw.fills,
+            borders: raw.borders,
+            cell_style_xfs: raw.cell_style_xfs,
+            cell_xfs: raw.cell_xfs,
+            cell_xf_lineage: vec![DocumentFormat::default(), imported_bold],
+            named_cell_styles: raw.cell_styles,
+            ..Default::default()
+        }),
+        sheets: vec![domain_types::SheetData {
+            name: "Sheet1".to_string(),
+            rows: 1,
+            cols: 1,
+            cells: vec![domain_types::CellData {
+                row: 0,
+                col: 0,
+                value: number(1.0),
+                style_id: Some(1),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
 #[test]
 fn authored_style_runs_hydrate_as_format_ranges_without_blank_cells() {
     let output = authored_style_run_output();
@@ -230,6 +283,64 @@ fn mutated_row_and_col_formats_use_authored_palette_ids() {
     assert_eq!(exported.style_palette.len(), 3);
     assert_eq!(exported.sheets[0].row_styles[0].style_id, 1);
     assert_eq!(exported.sheets[0].col_styles[0].style_id, 2);
+}
+
+#[test]
+fn imported_cell_xf_lineage_survives_yrs_and_live_edits_use_generated_tail() {
+    let source = imported_cell_xf_lineage_output();
+    let original_xfs = source
+        .workbook_stylesheet
+        .as_ref()
+        .unwrap()
+        .cell_xfs
+        .clone();
+    let (mut engine, sheet_id) = engine_from_parse_output(&source);
+
+    let pristine = engine.build_parse_output_from_yrs();
+    assert_eq!(pristine.sheets[0].cells[0].style_id, Some(1));
+    assert_eq!(
+        pristine
+            .workbook_stylesheet
+            .as_ref()
+            .unwrap()
+            .cell_xf_lineage,
+        source.style_palette
+    );
+
+    let cell_id = engine.stores.grid_indexes[&sheet_id]
+        .cell_id_at(0, 0)
+        .expect("A1 identity");
+    engine
+        .set_cell_format(
+            &sheet_id,
+            &cell_id,
+            &CellFormat {
+                bold: Some(true),
+                ..Default::default()
+            },
+        )
+        .expect("re-author the effective imported format");
+
+    let edited = engine.build_parse_output_from_yrs();
+    assert_eq!(edited.sheets[0].cells[0].style_id, Some(2));
+    assert_eq!(edited.style_palette.len(), 3);
+    assert_eq!(edited.style_palette[1], edited.style_palette[2]);
+    assert_eq!(
+        edited.workbook_stylesheet.as_ref().unwrap().cell_xfs,
+        original_xfs,
+        "raw imported XFs are immutable lineage records"
+    );
+
+    let bytes = engine
+        .export_to_xlsx_bytes()
+        .expect("export edited workbook");
+    let sheet_xml = xlsx_parser::zip::XlsxArchive::new(&bytes)
+        .unwrap()
+        .read_file("xl/worksheets/sheet1.xml")
+        .map(String::from_utf8)
+        .unwrap()
+        .unwrap();
+    assert!(sheet_xml.contains(r#"<c r="A1" s="2""#), "{sheet_xml}");
 }
 
 #[test]

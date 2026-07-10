@@ -1061,6 +1061,16 @@ pub struct WorkbookStylesheet {
     pub cell_style_xfs: Vec<ooxml_types::styles::CellXfDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cell_xfs: Vec<ooxml_types::styles::CellXfDef>,
+    /// Immutable import-time binding between `cell_xfs[i]` and the resolved
+    /// `style_palette[i]` value produced from that XF.
+    ///
+    /// XLSX export may replay the raw XF (including `xfId` and `apply*`
+    /// provenance) only while the current live palette entry still equals this
+    /// snapshot. Mutated and newly-created formats are emitted as generated XFs
+    /// instead. Keeping this binding explicit prevents semantically-equal edits
+    /// from accidentally reacquiring inherited import provenance.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cell_xf_lineage: Vec<DocumentFormat>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub named_cell_styles: Vec<ooxml_types::styles::CellStyleDef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1110,6 +1120,7 @@ impl WorkbookStylesheet {
             borders: stylesheet.borders,
             cell_style_xfs: stylesheet.cell_style_xfs,
             cell_xfs: stylesheet.cell_xfs,
+            cell_xf_lineage: Vec::new(),
             named_cell_styles: stylesheet.cell_styles,
             differential_formats: Vec::new(),
             dxf_registry,
@@ -1127,6 +1138,14 @@ impl WorkbookStylesheet {
     #[must_use]
     pub fn with_root_mce_attributes(mut self, root_mce_attributes: MceAttributes) -> Self {
         self.root_mce_attributes = root_mce_attributes;
+        self
+    }
+
+    /// Attach the import-time resolved palette that is index-aligned with the
+    /// raw `cell_xfs` table.
+    #[must_use]
+    pub fn with_cell_xf_lineage(mut self, cell_xf_lineage: Vec<DocumentFormat>) -> Self {
+        self.cell_xf_lineage = cell_xf_lineage;
         self
     }
 
@@ -1170,6 +1189,7 @@ impl WorkbookStylesheet {
                 self.root_namespace_attrs.clone(),
                 self.ext_lst_xml.clone(),
             )
+            .with_cell_xf_lineage(self.cell_xf_lineage.clone())
             .with_root_mce_attributes(self.root_mce_attributes.clone());
         }
         let mut normalized = self.clone();

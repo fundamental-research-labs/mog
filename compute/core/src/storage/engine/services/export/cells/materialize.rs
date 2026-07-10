@@ -164,13 +164,19 @@ fn is_imported_style_only_blank(
 
 fn cell_style_id(cell_props: Option<&CellProperties>, palette: &impl PaletteOps) -> Option<u32> {
     cell_props.and_then(|props| {
+        // A compact imported property keeps its original cellXf index. Preserve
+        // that lineage verbatim; only edited/inline formats (whose mutators
+        // clear `style_id`) belong in the generated palette tail.
+        if let Some(style_id) = props.style_id {
+            return Some(style_id);
+        }
         if let Some(cell_fmt) = props.format.as_ref() {
             let doc_fmt = cell_format_to_document_format(cell_fmt);
             if doc_fmt != DocumentFormat::default() {
                 return Some(palette.get_or_insert(doc_fmt));
             }
         }
-        props.style_id
+        None
     })
 }
 

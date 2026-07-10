@@ -7,6 +7,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { argv } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 interface FunctionEntry {
@@ -266,7 +267,7 @@ function validateReferences(content: string, spec: ApiSpec): void {
 }
 
 function main(): void {
-  const check = process.argv.includes('--check');
+  const check = argv.includes('--check');
   const spec = readSpec();
   const current = fs.readFileSync(LLMS_PATH, 'utf8');
   const expected = replaceGeneratedContracts(current, renderGeneratedContracts(spec));

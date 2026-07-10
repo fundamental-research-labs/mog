@@ -64,7 +64,14 @@ function createHarness(source: 'table' | 'pivot' = 'table') {
   const eventBus = {
     emit: jest.fn().mockImplementation(() => order.push('event')),
   };
-  return { ctx: { computeBridge, eventBus } as any, computeBridge, eventBus, filter, order, stored };
+  return {
+    ctx: { computeBridge, eventBus } as any,
+    computeBridge,
+    eventBus,
+    filter,
+    order,
+    stored,
+  };
 }
 
 describe('table slicer selection authority', () => {
@@ -112,11 +119,7 @@ describe('table slicer selection authority', () => {
 
     await setSlicerSelection(ctx, SHEET_ID, 'slicer-1', ['West']);
 
-    expect(computeBridge.setSlicerSelection).toHaveBeenCalledWith(
-      SHEET_ID,
-      'slicer-1',
-      ['West'],
-    );
+    expect(computeBridge.setSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-1', ['West']);
     expect(eventBus.emit).not.toHaveBeenCalled();
   });
 });

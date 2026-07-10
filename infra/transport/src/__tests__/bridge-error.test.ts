@@ -204,8 +204,7 @@ describe('wire-shape uniformity — NAPI and WASM produce the same envelope', ()
       });
     if (kind === 'SlicerNotFound')
       Object.assign(sample, { message: 'm', sheetId: 'sheet-1', slicerId: 'slicer-1' });
-    if (kind === 'SlicerIdConflict')
-      Object.assign(sample, { message: 'm', slicerId: 'slicer-1' });
+    if (kind === 'SlicerIdConflict') Object.assign(sample, { message: 'm', slicerId: 'slicer-1' });
     if (kind === 'SlicerSheetMismatch')
       Object.assign(sample, {
         message: 'm',

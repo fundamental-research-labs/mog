@@ -17,6 +17,9 @@ coverage/
 # Downloaded VS Code integration test runtime
 integrations/vscode/mog-xlsx-editor/.vscode-test/
 
+# Generated VS Code extension bundles and copied spreadsheet assets
+integrations/vscode/mog-xlsx-editor/media/
+
 # Generated files
 *.gen.ts
 *.gen.js

@@ -17,7 +17,7 @@ pub(in crate::storage::engine) use self::grouping::{
     ungroup_columns, ungroup_rows,
 };
 pub(in crate::storage::engine) use self::slicer_crdt::{
-    clear_slicer_selection, create_slicer, delete_slicer, get_all_slicers,
+    clear_slicer_selection, create_slicer, delete_slicer, delete_slicers, get_all_slicers,
     get_all_slicers_workbook, get_slicer_state, set_slicer_selection, toggle_slicer_item,
     update_slicer_config,
 };

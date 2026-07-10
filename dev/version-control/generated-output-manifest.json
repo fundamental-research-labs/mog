@@ -6,7 +6,7 @@
       "path": "dev/version-control/inventory/compute-bridge-write-inventory.json",
       "kind": "compute-bridge-write-inventory",
       "generator": "vc02-inventory-baseline",
-      "sha256": "sha256:edd9d00a910e6aa60ff30cba30fe630b9a7828f9497492aa070fe1719c6983ef",
+      "sha256": "sha256:18f4bee6c4183b7a34ba7ed583ab9a093c92b058b0353a181d972a04b0fb84d7",
       "inputs": [
         {
           "path": "infra/rust-bridge/bridge-ts/src/emit/bridge.rs",
@@ -35,7 +35,7 @@
       "path": "dev/version-control/registry/operation-classification.json",
       "kind": "operation-classification-registry",
       "generator": "dev/version-control/registry/check-operation-classification.mjs",
-      "sha256": "sha256:bca8f313fc8ddfd6764d43f423b4e9bcb1d590b39136300181d80d2d3e843891",
+      "sha256": "sha256:9c43d404d5e8e1afecc6d873f7eb2aafb20d9c1f86dc8e7417270f0e0e8fc9c1",
       "inputs": [
         {
           "path": "dev/version-control/registry/check-operation-classification.mjs",
@@ -47,7 +47,7 @@
         },
         {
           "path": "dev/version-control/inventory/compute-bridge-write-inventory.json",
-          "sha256": "sha256:edd9d00a910e6aa60ff30cba30fe630b9a7828f9497492aa070fe1719c6983ef"
+          "sha256": "sha256:18f4bee6c4183b7a34ba7ed583ab9a093c92b058b0353a181d972a04b0fb84d7"
         },
         {
           "path": "dev/version-control/registry/operation-classification.schema.json",

@@ -21,6 +21,7 @@
 import { toCellId, type CellId } from '@mog-sdk/contracts/cell-identity';
 import { type CellValue, type SheetId, sheetId as toSheetId } from '@mog-sdk/contracts/core';
 import type { StructureChangeSource } from '@mog-sdk/contracts/event-base';
+import type { SlicerSelectionChangedEvent } from '@mog-sdk/contracts/events';
 
 import type { Slicer } from '../../bridges/compute/compute-types.gen';
 import type { DocumentContext } from '../../context/types';
@@ -93,11 +94,10 @@ export async function setSlicerSelection(
   const storedSlicer = await getSlicer(ctx, sheetId, slicerId);
   if (!storedSlicer) return;
 
-  await ctx.computeBridge.setSlicerSelection(sheetId, slicerId, selectedValues);
-
   if (storedSlicer.source.type === 'pivot') {
-    // MutationResultHandler emits the selection event; the slicer-pivot bridge
-    // projects that event onto the pivot filter.
+    // Pivot selections have no table-filter authority. Persist them natively;
+    // MutationResultHandler emits the corresponding selection event.
+    await ctx.computeBridge.setSlicerSelection(sheetId, slicerId, selectedValues);
     return;
   }
 
@@ -135,7 +135,22 @@ export async function setSlicerSelection(
     );
   }
 
-  // MutationResultHandler emits slicer:selectionChanged from native evidence.
+  // Table selections are owned by the table filter. Read the committed filter
+  // state back before publishing the slicer event so observers never see a
+  // selection that the filter write failed to apply.
+  const authoritativeSelection = await getSlicerSelectedValues(
+    ctx,
+    storedSlicerToComputeSlicer(storedSlicer),
+  );
+  const event: SlicerSelectionChangedEvent = {
+    type: 'slicer:selectionChanged',
+    timestamp: Date.now(),
+    sheetId,
+    slicerId,
+    selectedValues: authoritativeSelection,
+    changeType: authoritativeSelection.length === 0 ? 'clear' : 'select',
+  };
+  ctx.eventBus.emit(event);
 }
 
 /**

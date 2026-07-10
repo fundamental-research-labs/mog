@@ -425,6 +425,16 @@ impl YrsComputeEngine {
         slicers::delete_slicer(self, sheet_id, slicer_id)
     }
 
+    /// Delete multiple slicers in one all-or-nothing mutation.
+    #[bridge::write(scope = "sheet")]
+    pub fn delete_slicers(
+        &self,
+        sheet_id: &SheetId,
+        slicer_ids: Vec<String>,
+    ) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+        slicers::delete_slicers(self, sheet_id, slicer_ids)
+    }
+
     /// Update a slicer's configuration with a partial update.
     #[bridge::write(scope = "sheet")]
     pub fn update_slicer_config(

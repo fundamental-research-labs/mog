@@ -47,8 +47,8 @@
     "baseCommit": "5f272c766228d54ffe6ca504b746e580a20ad3fc",
     "sourceDigest": "sha256:034c99758e04f8be713ff4ced7bc9c744633180a5548752d3068bb132496cc2c",
     "coverageExpectation": {
-      "entryCount": 308,
-      "uniqueCommandCount": 300,
+      "entryCount": 310,
+      "uniqueCommandCount": 302,
       "duplicateCommands": [
         "compute_add_comment_by_position",
         "compute_apply_sync_update",

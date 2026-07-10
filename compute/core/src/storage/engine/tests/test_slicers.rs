@@ -480,6 +480,11 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
     let values = vec![
         CellValue::Text("West".into()),
         CellValue::Text("East".into()),
+        CellValue::Text("West".into()),
+    ];
+    let normalized_values = vec![
+        CellValue::Text("West".into()),
+        CellValue::Text("East".into()),
     ];
     let (_, result) = engine
         .set_slicer_selection(&sid, "slicer-1", values.clone())
@@ -491,8 +496,11 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
         change.selection_change_type,
         Some(SlicerSelectionChangeType::Select)
     );
-    assert_eq!(change.selected_values, Some(values.clone()));
-    assert_eq!(change.data.as_ref().unwrap().selected_values, values);
+    assert_eq!(change.selected_values, Some(normalized_values.clone()));
+    assert_eq!(
+        change.data.as_ref().unwrap().selected_values,
+        normalized_values
+    );
     assert_eq!(
         engine
             .get_slicer_state(&sid, "slicer-1")
@@ -500,4 +508,89 @@ fn atomic_set_selection_emits_one_authoritative_post_state() {
             .selected_values,
         change.data.as_ref().unwrap().selected_values
     );
+
+    let (_, toggle_result) = engine
+        .toggle_slicer_item(&sid, "slicer-1", CellValue::Text("West".into()))
+        .unwrap();
+    let expected_after_toggle = vec![CellValue::Text("East".into())];
+    assert_eq!(
+        toggle_result.slicer_changes[0].selected_values,
+        Some(expected_after_toggle.clone())
+    );
+    assert_eq!(
+        engine
+            .get_slicer_state(&sid, "slicer-1")
+            .unwrap()
+            .selected_values,
+        expected_after_toggle
+    );
+}
+
+#[test]
+fn bulk_delete_validates_all_targets_before_one_atomic_removal() {
+    let (engine, _recalc) = YrsComputeEngine::from_snapshot(two_sheet_snapshot()).unwrap();
+    let owner = sheet_id();
+    let other = second_sheet_id();
+    engine
+        .create_slicer(&owner, table_slicer_on("first", &owner))
+        .unwrap();
+    engine
+        .create_slicer(&owner, table_slicer_on("second", &owner))
+        .unwrap();
+    engine
+        .create_slicer(&other, table_slicer_on("foreign", &other))
+        .unwrap();
+
+    assert_not_found_without_side_effects(&engine, &owner, "missing", || {
+        engine.delete_slicers(
+            &owner,
+            vec!["first".into(), "missing".into(), "second".into()],
+        )
+    });
+    assert!(engine.get_slicer_state(&owner, "first").is_some());
+    assert!(engine.get_slicer_state(&owner, "second").is_some());
+
+    assert_not_found_without_side_effects(&engine, &owner, "foreign", || {
+        engine.delete_slicers(&owner, vec!["first".into(), "foreign".into()])
+    });
+    assert!(engine.get_slicer_state(&owner, "first").is_some());
+    assert!(engine.get_slicer_state(&other, "foreign").is_some());
+
+    let before_state_vector = engine.encode_state_vector();
+    let before_undo = engine.get_undo_state();
+    let (_, empty_result) = engine.delete_slicers(&owner, Vec::new()).unwrap();
+    assert!(empty_result.slicer_changes.is_empty());
+    assert_eq!(engine.encode_state_vector(), before_state_vector);
+    assert_eq!(engine.get_undo_state().undo_depth, before_undo.undo_depth);
+    assert!(engine.drain_pending_updates().unwrap().is_empty());
+
+    let (_, result) = engine
+        .delete_slicers(
+            &owner,
+            vec!["second".into(), "first".into(), "second".into()],
+        )
+        .unwrap();
+    assert_eq!(result.slicer_changes.len(), 2);
+    assert_eq!(result.slicer_changes[0].kind, SlicerChangeKind::Deleted);
+    assert_eq!(result.slicer_changes[0].slicer_id, "second");
+    assert_eq!(
+        result.slicer_changes[0]
+            .data
+            .as_ref()
+            .map(|s| s.id.as_str()),
+        Some("second")
+    );
+    assert_eq!(result.slicer_changes[1].kind, SlicerChangeKind::Deleted);
+    assert_eq!(result.slicer_changes[1].slicer_id, "first");
+    assert_eq!(
+        result.slicer_changes[1]
+            .data
+            .as_ref()
+            .map(|s| s.id.as_str()),
+        Some("first")
+    );
+    assert_eq!(engine.get_slicer_state(&owner, "first"), None);
+    assert_eq!(engine.get_slicer_state(&owner, "second"), None);
+    assert!(engine.get_slicer_state(&other, "foreign").is_some());
+    assert_eq!(engine.drain_pending_updates().unwrap().len(), 1);
 }

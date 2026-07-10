@@ -33,6 +33,19 @@ pub(super) fn delete_slicer(
     })
 }
 
+pub(super) fn delete_slicers(
+    engine: &YrsComputeEngine,
+    sheet_id: &SheetId,
+    slicer_ids: Vec<String>,
+) -> Result<(Vec<u8>, MutationResult), ComputeError> {
+    svc::delete_slicers(&engine.stores, sheet_id, &slicer_ids).map(|r| {
+        (
+            compute_wire::mutation::serialize_multi_viewport_patches(&[]),
+            r,
+        )
+    })
+}
+
 pub(super) fn update_slicer_config(
     engine: &YrsComputeEngine,
     sheet_id: &SheetId,

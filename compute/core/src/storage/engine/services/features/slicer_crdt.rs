@@ -191,6 +191,61 @@ pub(in crate::storage::engine) fn delete_slicer(
     Ok(result)
 }
 
+pub(in crate::storage::engine) fn delete_slicers(
+    stores: &EngineStores,
+    sheet_id: &SheetId,
+    slicer_ids: &[String],
+) -> Result<MutationResult, ComputeError> {
+    if slicer_ids.is_empty() {
+        return Ok(MutationResult::empty());
+    }
+
+    // Treat repeated IDs as one requested entity while preserving the caller's
+    // order for deterministic mutation evidence.
+    let mut unique_ids = Vec::with_capacity(slicer_ids.len());
+    for slicer_id in slicer_ids {
+        if !unique_ids.iter().any(|existing| *existing == slicer_id) {
+            unique_ids.push(slicer_id);
+        }
+    }
+
+    let workbook = stores.storage.workbook_map().clone();
+    let mut txn = stores
+        .storage
+        .doc()
+        .transact_mut_with(Origin::from(ORIGIN_USER_EDIT));
+    let slicers_map = match workbook.get(&txn, KEY_SLICERS) {
+        Some(yrs::Out::YMap(map)) => map,
+        _ => return Err(slicer_not_found(sheet_id, unique_ids[0])),
+    };
+
+    // Resolve the complete request before the first write so a stale or
+    // wrong-sheet ID cannot turn a bulk delete into a partial delete.
+    let mut existing = Vec::with_capacity(unique_ids.len());
+    for slicer_id in &unique_ids {
+        let slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
+            .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
+        existing.push(slicer);
+    }
+
+    for slicer_id in unique_ids {
+        slicers_map.remove(&mut txn, slicer_id);
+    }
+    drop(txn);
+
+    let mut result = MutationResult::empty();
+    for slicer in existing {
+        result.slicer_changes.push(slicer_change(
+            &slicer,
+            SlicerChangeKind::Deleted,
+            Vec::new(),
+            None,
+            None,
+        ));
+    }
+    Ok(result)
+}
+
 pub(in crate::storage::engine) fn update_slicer_config(
     stores: &EngineStores,
     sheet_id: &SheetId,
@@ -351,7 +406,13 @@ pub(in crate::storage::engine) fn set_slicer_selection(
     };
     let mut slicer = resolve_owned_slicer(&slicers_map, &txn, sheet_id, slicer_id)
         .ok_or_else(|| slicer_not_found(sheet_id, slicer_id))?;
-    slicer.selected_values = values.to_vec();
+    let mut normalized_values = Vec::with_capacity(values.len());
+    for value in values {
+        if !normalized_values.iter().any(|existing| existing == value) {
+            normalized_values.push(value.clone());
+        }
+    }
+    slicer.selected_values = normalized_values;
     replace_slicer(&slicers_map, &mut txn, &slicer);
     drop(txn);
 

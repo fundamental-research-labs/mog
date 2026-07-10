@@ -663,6 +663,13 @@
     },
     {
       "source": "generated-bridge",
+      "method": "deleteSlicers",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_delete_slicers"
+    },
+    {
+      "source": "generated-bridge",
       "method": "deleteSlicerStyle",
       "access": "write",
       "wrapper": "mutatePublic",
@@ -1661,6 +1668,13 @@
       "access": "write",
       "wrapper": "mutatePublic",
       "command": "compute_set_sheet_visibility"
+    },
+    {
+      "source": "generated-bridge",
+      "method": "setSlicerSelection",
+      "access": "write",
+      "wrapper": "mutatePublic",
+      "command": "compute_set_slicer_selection"
     },
     {
       "source": "generated-bridge",

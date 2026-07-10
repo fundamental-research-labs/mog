@@ -388,14 +388,22 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
     for (const slicer of slicers) {
       await assertSlicerObjectTopologyAllowed(this.ctx, this.sheetId, 'slicers.clear', slicer.name);
     }
-    const removedSlicers: Slicer[] = [];
-    for (const slicer of slicers) {
-      const result = await this.callNativeSlicerMutation(slicer.id, () =>
-        this.ctx.computeBridge.deleteSlicer(this.sheetId, slicer.id),
-      );
-      const change = this.requireSlicerChange(result, slicer.id, 'deleted', 'slicers.clear');
-      removedSlicers.push(await this.projectStoredSlicer(change.data));
+    if (slicers.length === 0) {
+      return buildSlicerClearReceipt({
+        sheetId: this.sheetId,
+        slicers: [],
+      });
     }
+    const slicerIds = slicers.map((slicer) => slicer.id);
+    const result = await this.callNativeSlicerMutation(undefined, () =>
+      this.ctx.computeBridge.deleteSlicers(this.sheetId, slicerIds),
+    );
+    const removedSlicers = await Promise.all(
+      slicerIds.map((slicerId) => {
+        const change = this.requireSlicerChange(result, slicerId, 'deleted', 'slicers.clear');
+        return this.projectStoredSlicer(change.data);
+      }),
+    );
     return buildSlicerClearReceipt({
       sheetId: this.sheetId,
       slicers: removedSlicers,
@@ -548,7 +556,11 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       'selectionChanged',
       'slicers.setSelection',
     );
-    const projection = await this.propagateToAutofilter(change.data, selectedItems, resolvedSource);
+    const projection = await this.propagateToAutofilter(
+      change.data,
+      change.data.selectedValues,
+      resolvedSource,
+    );
     const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerSelectionSetReceipt({
       sheetId: toSheetId(change.sheetId),
@@ -586,7 +598,11 @@ export class WorksheetSlicersImpl implements WorksheetSlicers {
       'selectionChanged',
       'slicers.clearSelection',
     );
-    const projection = await this.propagateToAutofilter(change.data, [], resolvedSource);
+    const projection = await this.propagateToAutofilter(
+      change.data,
+      change.data.selectedValues,
+      resolvedSource,
+    );
     const slicer = await this.projectStoredSlicer(change.data);
     return buildSlicerSelectionClearReceipt({
       sheetId: toSheetId(change.sheetId),

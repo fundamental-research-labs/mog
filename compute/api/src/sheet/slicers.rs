@@ -38,6 +38,17 @@ impl SheetSlicers {
             .and_then(|r| r.map_err(ComputeApiError::from))
     }
 
+    /// Delete multiple slicers atomically.
+    pub fn delete_slicers(
+        &self,
+        slicer_ids: Vec<String>,
+    ) -> Result<MutationResult, ComputeApiError> {
+        let sid = self.sheet_id;
+        self.dispatch
+            .call_engine(move |e| e.delete_slicers(&sid, slicer_ids).map(|(_, r)| r))
+            .and_then(|r| r.map_err(ComputeApiError::from))
+    }
+
     /// Get all slicers on the sheet.
     pub fn get_all_slicers(&self) -> Result<Vec<StoredSlicer>, ComputeApiError> {
         let sid = self.sheet_id;

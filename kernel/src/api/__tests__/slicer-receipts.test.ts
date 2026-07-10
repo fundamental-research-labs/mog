@@ -71,6 +71,7 @@ function createMockComputeBridge() {
   return {
     createSlicer: jest.fn().mockResolvedValue(mutation('created', storedSalesSlicer())),
     deleteSlicer: jest.fn().mockResolvedValue(mutation('deleted', storedSalesSlicer())),
+    deleteSlicers: jest.fn().mockResolvedValue({ slicerChanges: [] }),
     getAllSlicers: jest.fn().mockResolvedValue([]),
     getAllSlicersWorkbook: jest.fn().mockResolvedValue([]),
     getSlicerState: jest.fn().mockResolvedValue(null),
@@ -256,8 +257,9 @@ describe('WorksheetSlicersImpl operation receipts', () => {
       mutation('selectionChanged', storedSalesSlicer({ selectedValues: ['West'] })),
     );
 
-    const receipt = await slicers.setSelection('slicer-1', ['West']);
+    const receipt = await slicers.setSelection('slicer-1', ['West', 'West']);
 
+    expect(bridge.setSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-1', ['West', 'West']);
     expect(bridge.setColumnFilter).toHaveBeenCalledWith(
       SHEET_ID,
       'f-1',
@@ -294,6 +296,7 @@ describe('WorksheetSlicersImpl operation receipts', () => {
 
     const receipt = await slicers.clearSelection('slicer-1');
 
+    expect(bridge.setSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-1', []);
     expect(bridge.clearColumnFilter).toHaveBeenCalledWith(SHEET_ID, 'f-1', 0);
     expect(receipt).toEqual(
       expect.objectContaining({
@@ -317,6 +320,26 @@ describe('WorksheetSlicersImpl operation receipts', () => {
     );
   });
 
+  it('persists pivot selection through native authoritative change evidence', async () => {
+    const pivot = storedSalesSlicer({
+      source: { type: 'pivot', pivotId: 'pivot-1', fieldName: 'Region', fieldArea: 'row' },
+      selectedValues: [],
+    });
+    const selected = storedSalesSlicer({ ...pivot, selectedValues: ['West'] });
+    bridge.getSlicerState.mockResolvedValue(pivot);
+    bridge.setSlicerSelection.mockResolvedValue(mutation('selectionChanged', selected));
+
+    const receipt = await slicers.setSelection('slicer-1', ['West']);
+
+    expect(bridge.setSlicerSelection).toHaveBeenCalledWith(SHEET_ID, 'slicer-1', ['West']);
+    expect(bridge.setColumnFilter).not.toHaveBeenCalled();
+    expect(receipt).toMatchObject({
+      selectedItems: ['West'],
+      sourcePivotId: 'pivot-1',
+      slicer: { selectedItems: ['West'] },
+    });
+  });
+
   it('rejects add and duplicate when native creation evidence is absent', async () => {
     bridge.getTableByName.mockResolvedValue(SALES_TABLE);
     bridge.createSlicer.mockResolvedValue({ data: storedSalesSlicer({ id: 'fabricated' }) });
@@ -334,10 +357,46 @@ describe('WorksheetSlicersImpl operation receipts', () => {
     });
   });
 
-  it('builds clear receipts only from observed delete evidence', async () => {
-    bridge.getAllSlicers.mockResolvedValue([storedSalesSlicer()]);
-    bridge.deleteSlicer.mockResolvedValue({ slicerChanges: [] });
+  it('clears all slicers with one atomic bulk mutation and authoritative evidence', async () => {
+    const first = storedSalesSlicer();
+    const second = storedSalesSlicer({ id: 'slicer-2', caption: 'Amount' });
+    bridge.getAllSlicers.mockResolvedValue([first, second]);
+    bridge.deleteSlicers.mockResolvedValue({
+      slicerChanges: [
+        mutation('deleted', first).slicerChanges[0],
+        mutation('deleted', second).slicerChanges[0],
+      ],
+    });
+
+    const receipt = await slicers.clear();
+
+    expect(bridge.deleteSlicers).toHaveBeenCalledTimes(1);
+    expect(bridge.deleteSlicers).toHaveBeenCalledWith(SHEET_ID, ['slicer-1', 'slicer-2']);
+    expect(bridge.deleteSlicer).not.toHaveBeenCalled();
+    expect(receipt).toMatchObject({
+      status: 'applied',
+      slicerIds: ['slicer-1', 'slicer-2'],
+      removedCount: 2,
+    });
+  });
+
+  it('rejects a bulk clear receipt when any requested delete evidence is absent', async () => {
+    const first = storedSalesSlicer();
+    const second = storedSalesSlicer({ id: 'slicer-2' });
+    bridge.getAllSlicers.mockResolvedValue([first, second]);
+    bridge.deleteSlicers.mockResolvedValue({
+      slicerChanges: [mutation('deleted', first).slicerChanges[0]],
+    });
 
     await expect(slicers.clear()).rejects.toMatchObject({ code: 'OPERATION_FAILED' });
+    expect(bridge.deleteSlicers).toHaveBeenCalledTimes(1);
+    expect(bridge.deleteSlicer).not.toHaveBeenCalled();
+  });
+
+  it('returns noOp without a bulk mutation when clear has no targets', async () => {
+    bridge.getAllSlicers.mockResolvedValue([]);
+
+    await expect(slicers.clear()).resolves.toMatchObject({ status: 'noOp', removedCount: 0 });
+    expect(bridge.deleteSlicers).not.toHaveBeenCalled();
   });
 });

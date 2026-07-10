@@ -476,6 +476,7 @@ export interface GeneratedBridgeMethods {
   getGroups(sheetId: SheetId, axis: string): Promise<GroupDefinition[]>;
   createSlicer(sheetId: SheetId, config: StoredSlicer, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   deleteSlicer(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
+  deleteSlicers(sheetId: SheetId, slicerIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult>;
   getAllSlicers(sheetId: SheetId): Promise<StoredSlicer[]>;
   getAllSlicersWorkbook(): Promise<StoredSlicer[]>;
@@ -2524,6 +2525,10 @@ export class GeneratedBridgeBase implements GeneratedBridgeMethods {
 
   deleteSlicer(sheetId: SheetId, slicerId: string, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
     return this.core.mutatePublic('compute_delete_slicer', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicer', { docId: this.core.docId, sheetId, slicerId }), undefined, admissionOptions);
+  }
+
+  deleteSlicers(sheetId: SheetId, slicerIds: string[], admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {
+    return this.core.mutatePublic('compute_delete_slicers', () => this.core.transport.call<[Uint8Array, MutationResult]>('compute_delete_slicers', { docId: this.core.docId, sheetId, slicerIds }), undefined, admissionOptions);
   }
 
   updateSlicerConfig(sheetId: SheetId, slicerId: string, update: StoredSlicerUpdate, admissionOptions?: MutationAdmissionOptions): Promise<MutationResult> {

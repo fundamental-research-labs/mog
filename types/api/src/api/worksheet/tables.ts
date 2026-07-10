@@ -151,7 +151,9 @@ export interface WorksheetTables {
    * Create a new table from a cell range.
    *
    * @param range - A1-style range string (e.g. "A1:D10") or CellRange object
-   * @param options - Optional table creation settings (name, headers, style)
+   * @param options - Optional table creation settings (name, headers, style). A name must start
+   * with a letter or underscore, contain only letters, digits, and underscores, and must not
+   * parse as a cell reference such as A1, T1, or Q3.
    * @returns A receipt containing the created table information.
    */
   add(range: string | CellRange, options?: TableOptions): Promise<TableAddReceipt>;

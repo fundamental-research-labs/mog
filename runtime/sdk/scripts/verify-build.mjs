@@ -340,6 +340,8 @@ assert(pkg.module === 'dist/index.mjs' || pkg.module === 'dist/index.js', 'modul
 assert(pkg.types === 'dist/index.d.ts', 'types points to DTS');
 assert(pkg.exports, 'exports field exists');
 assert(pkg.files && pkg.files.includes('dist'), 'files includes dist');
+assert(pkg.files && pkg.files.includes('llms.txt'), 'files includes llms.txt');
+assert(existsSync(resolve(SDK_ROOT, 'llms.txt')), 'llms.txt exists');
 assert(
   pkg.publishConfig && pkg.publishConfig.access === 'public',
   'publishConfig.access is public',

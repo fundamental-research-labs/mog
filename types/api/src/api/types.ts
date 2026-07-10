@@ -715,7 +715,11 @@ export interface ClearResult {
 
 /** Options for creating a new table. */
 export interface TableOptions {
-  /** Table name (auto-generated if omitted) */
+  /**
+   * Table name (auto-generated if omitted).
+   * Must start with a letter or underscore, contain only letters, digits, and
+   * underscores, and must not parse as a cell reference such as A1, T1, or Q3.
+   */
   name?: string;
   /** Whether the first row of the range contains headers (default: true) */
   hasHeaders?: boolean;

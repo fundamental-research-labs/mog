@@ -71,10 +71,12 @@
     "node": ">= 18"
   },
   "scripts": {
-    "generate:api-spec": "tsx scripts/generate-api-spec.ts",
-    "build": "tsx scripts/generate-api-spec.ts && tsup --no-dts && tsc -p tsconfig.build.json && node scripts/build-types.mjs && node ../../tools/fix-dts-extensions.mjs dist",
+    "generate:api-spec": "tsx scripts/generate-api-spec.ts && tsx scripts/generate-llms.ts",
+    "generate:llms": "tsx scripts/generate-llms.ts",
+    "check:llms": "tsx scripts/generate-llms.ts --check",
+    "build": "pnpm generate:api-spec && tsup --no-dts && tsc -p tsconfig.build.json && node scripts/build-types.mjs && node ../../tools/fix-dts-extensions.mjs dist",
     "build:dev": "tsup --no-dts",
-    "test": "NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --config jest.config.cjs",
+    "test": "pnpm check:llms && NODE_OPTIONS=\"--experimental-vm-modules --disable-warning=ExperimentalWarning\" jest --config jest.config.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check-types": "tsc -p tsconfig.json --noEmit",
     "verify-build": "node scripts/verify-build.mjs",

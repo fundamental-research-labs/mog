@@ -88,6 +88,24 @@ export interface TypeResult {
 
 export type DescribeResult = OverviewResult | InterfaceResult | MethodResult | TypeResult | null;
 
+export type ApiSearchResultKind = 'method' | 'property' | 'subApi' | 'type' | 'utility';
+
+export interface ApiSearchOptions {
+  /** Maximum results to return. Defaults to 20. */
+  limit?: number;
+  /** Restrict results to one or more API surface kinds. */
+  kinds?: readonly ApiSearchResultKind[];
+}
+
+export interface ApiSearchResult {
+  /** Exact path accepted by api.describe(). */
+  path: string;
+  name: string;
+  kind: ApiSearchResultKind;
+  signature?: string;
+  docstring: string;
+}
+
 // ─── Index built at module load ──────────────────────────────────────────────
 
 // Sub-API accessor names per root: { wb: Set('sheets','history'), ws: Set('charts','formats') }
@@ -480,7 +498,152 @@ function resolveMethod(
 
 // ─── Object Tree API ────────────────────────────────────────────────────────
 //
-// Navigate the API as an object tree instead of passing string paths:
+// Search the installed API before constructing the object-tree facade below.
+interface SearchIndexEntry extends ApiSearchResult {
+  normalizedPath: string;
+  normalizedName: string;
+  normalizedSignature: string;
+  normalizedDocstring: string;
+  haystack: string;
+}
+
+interface SearchIndexSeed extends ApiSearchResult {
+  searchText?: string;
+}
+
+let searchIndex: SearchIndexEntry[] | null = null;
+
+function normalizeSearchText(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[^A-Za-z0-9]+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function searchResultKind(entry: ApiSpecFunctionEntry): ApiSearchResultKind {
+  if (entry.targetInterface || entry.kind === 'subApiAccessor') return 'subApi';
+  if (entry.kind === 'property') return 'property';
+  return 'method';
+}
+
+function buildSearchIndex(): SearchIndexEntry[] {
+  const results = new Map<string, SearchIndexSeed>();
+
+  for (const iface of Object.values(spec.interfaces)) {
+    for (const [name, entry] of Object.entries(iface.members)) {
+      const path = entry.canonicalPath;
+      if (!path || results.has(path)) continue;
+      results.set(path, {
+        path,
+        name,
+        kind: searchResultKind(entry),
+        signature: entry.signature,
+        docstring: entry.docstring,
+      });
+    }
+  }
+
+  for (const [name, entry] of Object.entries(A1_UTILITY_METHODS)) {
+    const path = `a1.${name}`;
+    results.set(path, {
+      path,
+      name,
+      kind: 'utility',
+      signature: entry.signature,
+      docstring: entry.docstring,
+    });
+  }
+
+  for (const [name, entry] of Object.entries(spec.types)) {
+    const path = `type:${name}`;
+    results.set(path, {
+      path,
+      name,
+      kind: 'type',
+      docstring: entry.docstring ?? '',
+      searchText: entry.definition ?? '',
+    });
+  }
+
+  return [...results.values()].map((result) => {
+    const { searchText = '', ...publicResult } = result;
+    const normalizedPath = normalizeSearchText(result.path);
+    const normalizedName = normalizeSearchText(result.name);
+    const normalizedSignature = normalizeSearchText(result.signature ?? '');
+    const normalizedDocstring = normalizeSearchText(result.docstring);
+    return {
+      ...publicResult,
+      normalizedPath,
+      normalizedName,
+      normalizedSignature,
+      normalizedDocstring,
+      haystack: [
+        normalizedPath,
+        normalizedName,
+        normalizedSignature,
+        normalizedDocstring,
+        normalizeSearchText(searchText),
+      ].join(' '),
+    };
+  });
+}
+
+function searchScore(
+  entry: SearchIndexEntry,
+  normalizedQuery: string,
+  terms: readonly string[],
+): number {
+  let score = 0;
+  if (entry.normalizedPath === normalizedQuery) score += 1_000;
+  if (entry.normalizedName === normalizedQuery) score += 800;
+  if (entry.normalizedPath.includes(normalizedQuery)) score += 300;
+  if (entry.normalizedName.includes(normalizedQuery)) score += 200;
+  for (const term of terms) {
+    if (entry.normalizedPath.includes(term)) score += 30;
+    if (entry.normalizedName.includes(term)) score += 20;
+    if (entry.normalizedSignature.includes(term)) score += 10;
+    if (entry.normalizedDocstring.includes(term)) score += 5;
+  }
+  return score;
+}
+
+/**
+ * Search the API bundled with the installed SDK version.
+ *
+ * Terms are case-insensitive, camelCase-aware, and ANDed. Results contain exact
+ * paths that can be passed to api.describe() for complete signatures and types.
+ */
+function search(query: string, options: ApiSearchOptions = {}): ApiSearchResult[] {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return [];
+
+  const terms = normalizedQuery.split(/\s+/);
+  const allowedKinds = options.kinds ? new Set(options.kinds) : null;
+  const requestedLimit = options.limit ?? 20;
+  const limit = Number.isFinite(requestedLimit) ? Math.max(0, Math.floor(requestedLimit)) : 20;
+  if (limit === 0) return [];
+
+  searchIndex ??= buildSearchIndex();
+  return searchIndex
+    .filter(
+      (entry) =>
+        (!allowedKinds || allowedKinds.has(entry.kind)) &&
+        terms.every((term) => entry.haystack.includes(term)),
+    )
+    .map((entry) => ({ entry, score: searchScore(entry, normalizedQuery, terms) }))
+    .sort((a, b) => b.score - a.score || a.entry.path.localeCompare(b.entry.path))
+    .slice(0, limit)
+    .map(({ entry }) => ({
+      path: entry.path,
+      name: entry.name,
+      kind: entry.kind,
+      ...(entry.signature ? { signature: entry.signature } : {}),
+      docstring: entry.docstring,
+    }));
+}
+
+// Object tree navigation:
 //
 //   api.ws.charts                → sub-API node (name, docstring, methods)
 //   api.ws.charts.add            → method node  (signature, docstring, types)
@@ -655,6 +818,7 @@ export const api: {
     (): OverviewResult;
     (path: string): DescribeResult;
   };
+  search: (query: string, options?: ApiSearchOptions) => ApiSearchResult[];
   guidance: ApiGuidanceApi;
   compatibility: ApiCompatibilityIndex;
   a1: PublicA1Utils;
@@ -664,6 +828,7 @@ export const api: {
   types: TypesNode;
 } = {
   describe,
+  search,
   guidance: apiGuidance,
   compatibility: apiCompatibility,
   a1,

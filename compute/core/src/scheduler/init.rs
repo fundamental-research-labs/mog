@@ -505,7 +505,7 @@ impl ComputeCore {
                 formula_cells
                     .into_par_iter()
                     .map(|(cell_id, sheet_id, formula)| {
-                        let resolver = CoreResolver {
+                        let resolver = MirrorCellRefResolver {
                             mirror: mirror_ref,
                             current_sheet: sheet_id,
                         };
@@ -644,7 +644,7 @@ impl ComputeCore {
             );
 
             for (cell_id, sheet_id, formula) in formula_cells {
-                let resolver = CoreResolver {
+                let resolver = MirrorCellRefResolver {
                     mirror: &*mirror,
                     current_sheet: sheet_id,
                 };

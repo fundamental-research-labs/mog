@@ -128,6 +128,75 @@ fn test_get_selection_aggregates_empty() {
     assert!(agg.max.is_none());
 }
 
+#[test]
+fn evaluate_expression_resolves_references_in_the_requested_sheet_context() {
+    let mut snapshot = simple_snapshot();
+    let second_sheet_id = SheetId::from_uuid_str("550e8400-e29b-41d4-a716-446655440099").unwrap();
+    snapshot.sheets.push(SheetSnapshot {
+        id: second_sheet_id.to_uuid_string(),
+        name: "Inputs".to_string(),
+        rows: 100,
+        cols: 26,
+        cells: vec![
+            CellData {
+                cell_id: "550e8400-e29b-41d4-a716-446655440100".to_string(),
+                row: 0,
+                col: 9,
+                value: num(7.0),
+                formula: None,
+                identity_formula: None,
+                array_ref: None,
+            },
+            CellData {
+                cell_id: "550e8400-e29b-41d4-a716-446655440101".to_string(),
+                row: 1,
+                col: 9,
+                value: num(5.0),
+                formula: None,
+                identity_formula: None,
+                array_ref: None,
+            },
+        ],
+        ranges: vec![],
+    });
+    let (engine, _) = YrsComputeEngine::from_snapshot(snapshot).unwrap();
+
+    assert_eq!(
+        engine.evaluate_expression(&sheet_id(), "A1+B1").unwrap(),
+        num(30.0),
+    );
+    assert_eq!(
+        engine
+            .evaluate_expression(&second_sheet_id, "SUM(J1:J2)")
+            .unwrap(),
+        num(12.0),
+    );
+    assert_eq!(
+        engine
+            .evaluate_expression(&second_sheet_id, "$J$1+$J$2")
+            .unwrap(),
+        num(12.0),
+    );
+    assert_eq!(
+        engine
+            .evaluate_expression(&second_sheet_id, "SUM(J:J)")
+            .unwrap(),
+        num(12.0),
+    );
+    assert_eq!(
+        engine
+            .evaluate_expression(&second_sheet_id, "SUM(1:2)")
+            .unwrap(),
+        num(12.0),
+    );
+    assert_eq!(
+        engine
+            .evaluate_expression(&second_sheet_id, "SUM(Sheet1!A1:B1)")
+            .unwrap(),
+        num(30.0),
+    );
+}
+
 // -------------------------------------------------------------------
 // query_range regression tests (range query unification)
 // -------------------------------------------------------------------

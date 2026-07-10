@@ -44,6 +44,7 @@
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::eval_bridge::MirrorCellRefResolver;
 use crate::formula_text::{FormulaTextDepIndex, FormulaTextDepTarget, FormulaTextProvider};
 use crate::graph::{DepTarget, DependencyGraph, GraphBuilder, RangeAccess};
 use crate::mirror::{CellMirror, MirrorPositionLookup};
@@ -59,8 +60,10 @@ use compute_functions::helpers::sumifs_result_cache::{
     SumifsCacheDomain, SumifsCacheEpoch, new_cache_domain,
 };
 use compute_parser::ASTNode;
-use compute_parser::{CellRefResolver, IdentityResolver, parse_formula};
-use formula_types::{CellRef, IdentityFormula};
+use compute_parser::{IdentityResolver, parse_formula};
+#[cfg(test)]
+use formula_types::CellRef;
+use formula_types::IdentityFormula;
 #[cfg(test)]
 use value_types::CellArray;
 use value_types::{CellError, CellValue, ComputeError};
@@ -112,7 +115,7 @@ use dep_extract::extract_dependencies;
 use dep_extract::extract_deps_and_volatility;
 #[cfg(feature = "native")]
 use resolvers::ConcurrentIdentityResolver;
-use resolvers::{CoreIdentityResolver, CoreResolver};
+use resolvers::CoreIdentityResolver;
 use value_utils::{truncate_chars, values_equal};
 
 /// Stream A′ trust marker — see `region_guard::WriteTrust` for full docs.

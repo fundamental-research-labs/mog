@@ -335,9 +335,16 @@ export abstract class WorksheetImplCellReadApi extends WorksheetImplCellWriteApi
     }
 
     if (this.workbook) {
-      const target = await this.workbook.findSheet(String(sheet));
-      if (target) {
-        return target.sheetId;
+      const targetByName = await this.workbook.findSheet(String(sheet));
+      if (targetByName) {
+        return targetByName.sheetId;
+      }
+
+      const targetById = (await this.workbook.getSheets()).find(
+        (candidate) => candidate.sheetId === sheet,
+      );
+      if (targetById) {
+        return targetById.sheetId;
       }
     }
 

@@ -710,7 +710,7 @@ impl ComputeCore {
                 continue;
             };
 
-            let resolver = CoreResolver {
+            let resolver = MirrorCellRefResolver {
                 mirror,
                 current_sheet: sheet_id,
             };

@@ -1,44 +1,10 @@
-//! Cell reference resolvers for formula parsing.
+//! Identity resolvers for formula persistence.
 //!
-//! `CoreResolver` resolves existing cell references (immutable mirror access).
-//! `CoreIdentityResolver` creates new cell IDs for empty cells (mutable mirror access).
+//! Immutable parse-time cell references use the shared
+//! [`MirrorCellRefResolver`](crate::eval_bridge::MirrorCellRefResolver).
+//! These resolvers create stable identities for empty referenced cells.
 
 use super::*;
-
-// ---------------------------------------------------------------------------
-// CellRefResolver implementation for ComputeCore
-// ---------------------------------------------------------------------------
-
-/// Resolver that wraps CellMirror for resolving cell references at parse time.
-pub(super) struct CoreResolver<'a> {
-    pub mirror: &'a CellMirror,
-    pub current_sheet: SheetId,
-}
-
-impl<'a> CellRefResolver for CoreResolver<'a> {
-    fn resolve(&self, sheet: &SheetId, row: u32, col: u32) -> CellRef {
-        match self.mirror.resolve_cell_id(sheet, SheetPos::new(row, col)) {
-            Some(cell_id) if !cell_id.is_virtual() => CellRef::Resolved(cell_id),
-            // Large Range-backed cells use deterministic virtual CellIds that
-            // are intentionally not all registered in the mirror. A
-            // CellRef::Resolved endpoint must be reversible during evaluation,
-            // so keep range-resident references positional.
-            Some(_) | None => CellRef::Positional {
-                sheet: *sheet,
-                row,
-                col,
-            },
-        }
-    }
-
-    fn resolve_sheet_name(&self, name: &str) -> Option<SheetId> {
-        self.mirror.sheet_by_name(name)
-    }
-
-    fn current_sheet(&self) -> SheetId {
-        self.current_sheet
-    }
-}
 
 // ---------------------------------------------------------------------------
 // IdentityResolver implementation for ComputeCore

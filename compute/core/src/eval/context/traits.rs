@@ -140,6 +140,8 @@ pub trait DataSource {
 /// Positional / structural metadata — synchronous queries passed to functions.
 pub trait EvalMetadata {
     fn current_cell(&self) -> CellId;
+    /// Worksheet context for references that are not tied to a materialized cell.
+    fn current_sheet(&self) -> SheetId;
     fn resolve_position(&self, cell_id: &CellId) -> Option<(SheetId, u32, u32)>;
     fn resolve_cell_id(&self, sheet: &SheetId, row: u32, col: u32) -> Option<CellId>;
     fn resolve_defined_name(&self, name: &str) -> Option<ResolvedName>;

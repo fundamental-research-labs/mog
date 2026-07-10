@@ -33,11 +33,7 @@ impl<M: EvalMetadata> compute_parser::CellRefResolver for EvalRefResolver<'_, M>
     }
 
     fn current_sheet(&self) -> SheetId {
-        let cell_id = self.meta.current_cell();
-        self.meta
-            .resolve_position(&cell_id)
-            .map(|(sheet, _, _)| sheet)
-            .unwrap_or_else(|| SheetId::from_raw(0))
+        self.meta.current_sheet()
     }
 }
 

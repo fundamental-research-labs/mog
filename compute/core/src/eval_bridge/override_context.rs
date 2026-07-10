@@ -227,6 +227,10 @@ impl<'a> EvalMetadata for OverrideContext<'a> {
         self.access.current_cell()
     }
 
+    fn current_sheet(&self) -> SheetId {
+        self.access.current_sheet
+    }
+
     fn resolve_position(&self, cell_id: &CellId) -> Option<(SheetId, u32, u32)> {
         self.access.resolve_position(cell_id)
     }

@@ -1,6 +1,8 @@
 //! Cross-type approximate match, binary search text, null lookup, formula variables.
 
 use super::*;
+use crate::mirror::CellMirror;
+use crate::snapshot::{CellData, SheetSnapshot, WorkbookSnapshot};
 
 // -----------------------------------------------------------------------
 // Cross-type approximate match tests (VLOOKUP, HLOOKUP, MATCH)
@@ -580,6 +582,50 @@ fn test_formula_variable_with_function() {
     let ctx = make_ctx(&m, s);
     let node = ident("SumVar");
     assert_eq!(eval(&node, &ctx), CellValue::number(6.0));
+}
+
+#[test]
+fn test_formula_variable_uses_explicit_sheet_context_without_a_current_cell() {
+    let snapshot = WorkbookSnapshot {
+        sheets: vec![SheetSnapshot {
+            id: TEST_SHEET_UUID.to_string(),
+            name: "Inputs".to_string(),
+            rows: 100,
+            cols: 26,
+            cells: vec![
+                CellData {
+                    cell_id: cell_uuid(0, 9),
+                    row: 0,
+                    col: 9,
+                    value: CellValue::number(7.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+                CellData {
+                    cell_id: cell_uuid(1, 9),
+                    row: 1,
+                    col: 9,
+                    value: CellValue::number(5.0),
+                    formula: None,
+                    identity_formula: None,
+                    array_ref: None,
+                },
+            ],
+            ranges: vec![],
+        }],
+        named_ranges: vec![NamedRangeDef::from_expression(
+            "InputPair".to_string(),
+            Scope::Workbook,
+            "=SUM(J1:J2)".to_string(),
+        )],
+        ..Default::default()
+    };
+    let mirror = CellMirror::from_snapshot(snapshot).unwrap();
+    let sheet_id = mirror.sheet_by_name("Inputs").unwrap();
+    let ctx = MirrorContext::new(&mirror, CellId::from_raw(0), sheet_id);
+
+    assert_eq!(eval(&ident("InputPair"), &ctx), CellValue::number(12.0));
 }
 
 #[test]

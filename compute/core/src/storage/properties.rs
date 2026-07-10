@@ -59,6 +59,10 @@ pub use crate::engine_types::formatting::*;
 #[cfg(test)]
 use cascade::apply_format_range_layer;
 pub use cascade::{get_effective_format, get_effective_format_preloaded, get_positional_format};
+pub(crate) use cascade::{
+    get_effective_format_from_preloaded_layers_with_range, get_workbook_base_format,
+};
+pub(crate) use cell::{PreloadedCellFormatLayers, get_cell_format_layers_for_ids};
 pub use cell::{
     clear_cell_format, clear_cell_formats, clear_formula_cache_metadata,
     clear_formula_cache_metadata_for_cell_ids, clear_properties, get_all_properties,

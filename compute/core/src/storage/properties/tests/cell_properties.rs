@@ -356,6 +356,77 @@ fn test_set_cell_formats_preserves_compact_palette_format() {
 }
 
 #[test]
+fn preloaded_cell_format_layers_intern_compact_palette_styles_and_materialize_defaults() {
+    use cell_types::CellId;
+
+    let (storage, sid, _gi) = storage_with_sheet();
+    let doc = storage.doc();
+    let workbook = storage.workbook_map().clone();
+    let sheets = storage.sheets().clone();
+    let first_id = CellId::from_raw(0xA1);
+    let second_id = CellId::from_raw(0xB1);
+
+    let palette_format = CellFormat {
+        bold: Some(true),
+        font_family: Some("Calibri".to_string()),
+        ..Default::default()
+    };
+    let palette_json = serde_json::to_string(&palette_format).unwrap();
+    {
+        let mut txn = doc.transact_mut();
+        let palette_prelim: MapPrelim = vec![(
+            "7",
+            Any::String(std::sync::Arc::from(palette_json.as_str())),
+        )]
+        .into_iter()
+        .collect();
+        workbook.insert(
+            &mut txn,
+            compute_document::schema::KEY_STYLE_PALETTE,
+            palette_prelim,
+        );
+
+        let sheet_hex = id_to_hex(sid.as_u128());
+        let sheet_map = match sheets.get(&txn, &sheet_hex) {
+            Some(Out::YMap(map)) => map,
+            _ => panic!("sheet map not found"),
+        };
+        let props_map = match sheet_map.get(&txn, KEY_CELL_PROPERTIES) {
+            Some(Out::YMap(map)) => map,
+            _ => panic!("cell properties map not found"),
+        };
+        for cell_id in [first_id, second_id] {
+            props_map.insert(
+                &mut txn,
+                id_to_hex(cell_id.as_u128()),
+                Any::String(std::sync::Arc::from(r#"{"s":7}"#)),
+            );
+        }
+    }
+
+    let layers = get_cell_format_layers_for_ids(
+        doc,
+        &workbook,
+        &sheets,
+        &sid,
+        &[second_id, first_id, second_id],
+    );
+    let first = layers.get(&first_id).expect("first compact style");
+    let second = layers.get(&second_id).expect("second compact style");
+    assert!(
+        std::ptr::eq(first, second),
+        "shared style must be interned once"
+    );
+    assert_eq!(first.bold, Some(true));
+    assert_eq!(first.number_format.as_deref(), Some("General"));
+    assert_eq!(
+        first.horizontal_align,
+        Some(ooxml_types::styles::HorizontalAlign::General)
+    );
+    assert_eq!(first.wrap_text, Some(false));
+}
+
+#[test]
 fn test_clear_formula_cache_metadata_preserves_unrelated_properties() {
     let (storage, sid, _gi) = storage_with_sheet();
     let (doc, workbook, sheets) = (storage.doc(), storage.workbook_map(), storage.sheets());

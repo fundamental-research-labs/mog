@@ -16,6 +16,7 @@ mod test_core;
 mod test_cross_sheet_regressions;
 mod test_data_bounds;
 mod test_deferred_xlsx_import;
+mod test_displayed_format_projection;
 mod test_formatting;
 mod test_formula_format_inheritance;
 mod test_imported_autofilter_metadata;

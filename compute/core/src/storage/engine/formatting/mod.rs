@@ -522,3 +522,18 @@ impl YrsComputeEngine {
         schemas::validate_cell_value(self, sheet_id, row, col, value)
     }
 }
+
+impl YrsComputeEngine {
+    /// Resolve displayed formats for an ordered list of cell positions.
+    ///
+    /// The result is palette-compressed with `u32` IDs aligned one-for-one to
+    /// `positions`. This Rust-native bulk API intentionally avoids the bridge's
+    /// dense-range and `u16` viewport-palette constraints.
+    pub fn get_displayed_formats_for_cells(
+        &self,
+        sheet_id: &SheetId,
+        positions: &[(u32, u32)],
+    ) -> crate::engine_types::DisplayedFormatProjection {
+        displayed::get_displayed_formats_for_cells(self, sheet_id, positions)
+    }
+}
